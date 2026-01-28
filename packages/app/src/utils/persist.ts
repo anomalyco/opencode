@@ -16,6 +16,135 @@ type PersistTarget = {
 
 const LEGACY_STORAGE = "default.dat"
 const GLOBAL_STORAGE = "opencode.global.dat"
+const LOCAL_PREFIX = "opencode."
+const fallback = { disabled: false }
+
+const CACHE_MAX_ENTRIES = 500
+const CACHE_MAX_BYTES = 8 * 1024 * 1024
+
+type CacheEntry = { value: string; bytes: number }
+const cache = new Map<string, CacheEntry>()
+const cacheTotal = { bytes: 0 }
+
+function cacheDelete(key: string) {
+  const entry = cache.get(key)
+  if (!entry) return
+  cacheTotal.bytes -= entry.bytes
+  cache.delete(key)
+}
+
+function cachePrune() {
+  for (;;) {
+    if (cache.size <= CACHE_MAX_ENTRIES && cacheTotal.bytes <= CACHE_MAX_BYTES) return
+    const oldest = cache.keys().next().value as string | undefined
+    if (!oldest) return
+    cacheDelete(oldest)
+  }
+}
+
+function cacheSet(key: string, value: string) {
+  const bytes = value.length * 2
+  if (bytes > CACHE_MAX_BYTES) {
+    cacheDelete(key)
+    return
+  }
+
+  const entry = cache.get(key)
+  if (entry) cacheTotal.bytes -= entry.bytes
+  cache.delete(key)
+  cache.set(key, { value, bytes })
+  cacheTotal.bytes += bytes
+  cachePrune()
+}
+
+function cacheGet(key: string) {
+  const entry = cache.get(key)
+  if (!entry) return
+  cache.delete(key)
+  cache.set(key, entry)
+  return entry.value
+}
+
+function quota(error: unknown) {
+  if (error instanceof DOMException) {
+    if (error.name === "QuotaExceededError") return true
+    if (error.name === "NS_ERROR_DOM_QUOTA_REACHED") return true
+    if (error.name === "QUOTA_EXCEEDED_ERR") return true
+    if (error.code === 22 || error.code === 1014) return true
+    return false
+  }
+
+  if (!error || typeof error !== "object") return false
+  const name = (error as { name?: string }).name
+  if (name === "QuotaExceededError" || name === "NS_ERROR_DOM_QUOTA_REACHED") return true
+  if (name && /quota/i.test(name)) return true
+
+  const code = (error as { code?: number }).code
+  if (code === 22 || code === 1014) return true
+
+  const message = (error as { message?: string }).message
+  if (typeof message !== "string") return false
+  if (/quota/i.test(message)) return true
+  return false
+}
+
+type Evict = { key: string; size: number }
+
+function evict(storage: Storage, keep: string, value: string) {
+  const total = storage.length
+  const indexes = Array.from({ length: total }, (_, index) => index)
+  const items: Evict[] = []
+
+  for (const index of indexes) {
+    const name = storage.key(index)
+    if (!name) continue
+    if (!name.startsWith(LOCAL_PREFIX)) continue
+    if (name === keep) continue
+    const stored = storage.getItem(name)
+    items.push({ key: name, size: stored?.length ?? 0 })
+  }
+
+  items.sort((a, b) => b.size - a.size)
+
+  for (const item of items) {
+    storage.removeItem(item.key)
+    cacheDelete(item.key)
+
+    try {
+      storage.setItem(keep, value)
+      cacheSet(keep, value)
+      return true
+    } catch (error) {
+      if (!quota(error)) throw error
+    }
+  }
+
+  return false
+}
+
+function write(storage: Storage, key: string, value: string) {
+  try {
+    storage.setItem(key, value)
+    cacheSet(key, value)
+    return true
+  } catch (error) {
+    if (!quota(error)) throw error
+  }
+
+  try {
+    storage.removeItem(key)
+    cacheDelete(key)
+    storage.setItem(key, value)
+    cacheSet(key, value)
+    return true
+  } catch (error) {
+    if (!quota(error)) throw error
+  }
+
+  const ok = evict(storage, key, value)
+  if (!ok) cacheSet(key, value)
+  return ok
+}
 
 function snapshot(value: unknown) {
   return JSON.parse(JSON.stringify(value)) as unknown
@@ -67,10 +196,88 @@ function workspaceStorage(dir: string) {
 
 function localStorageWithPrefix(prefix: string): SyncStorage {
   const base = `${prefix}:`
+  const item = (key: string) => base + key
   return {
-    getItem: (key) => localStorage.getItem(base + key),
-    setItem: (key, value) => localStorage.setItem(base + key, value),
-    removeItem: (key) => localStorage.removeItem(base + key),
+    getItem: (key) => {
+      const name = item(key)
+      const cached = cacheGet(name)
+      if (fallback.disabled && cached !== undefined) return cached
+
+      const stored = (() => {
+        try {
+          return localStorage.getItem(name)
+        } catch {
+          fallback.disabled = true
+          return null
+        }
+      })()
+      if (stored === null) return cached ?? null
+      cacheSet(name, stored)
+      return stored
+    },
+    setItem: (key, value) => {
+      const name = item(key)
+      cacheSet(name, value)
+      if (fallback.disabled) return
+      try {
+        if (write(localStorage, name, value)) return
+      } catch {
+        fallback.disabled = true
+        return
+      }
+      fallback.disabled = true
+    },
+    removeItem: (key) => {
+      const name = item(key)
+      cacheDelete(name)
+      if (fallback.disabled) return
+      try {
+        localStorage.removeItem(name)
+      } catch {
+        fallback.disabled = true
+      }
+    },
+  }
+}
+
+function localStorageDirect(): SyncStorage {
+  return {
+    getItem: (key) => {
+      const cached = cacheGet(key)
+      if (fallback.disabled && cached !== undefined) return cached
+
+      const stored = (() => {
+        try {
+          return localStorage.getItem(key)
+        } catch {
+          fallback.disabled = true
+          return null
+        }
+      })()
+      if (stored === null) return cached ?? null
+      cacheSet(key, stored)
+      return stored
+    },
+    setItem: (key, value) => {
+      cacheSet(key, value)
+      if (fallback.disabled) return
+      try {
+        if (write(localStorage, key, value)) return
+      } catch {
+        fallback.disabled = true
+        return
+      }
+      fallback.disabled = true
+    },
+    removeItem: (key) => {
+      cacheDelete(key)
+      if (fallback.disabled) return
+      try {
+        localStorage.removeItem(key)
+      } catch {
+        fallback.disabled = true
+      }
+    },
   }
 }
 
@@ -99,7 +306,7 @@ export function removePersisted(target: { storage?: string; key: string }) {
   }
 
   if (!target.storage) {
-    localStorage.removeItem(target.key)
+    localStorageDirect().removeItem(target.key)
     return
   }
 
@@ -120,12 +327,12 @@ export function persisted<T>(
 
   const currentStorage = (() => {
     if (isDesktop) return platform.storage?.(config.storage)
-    if (!config.storage) return localStorage
+    if (!config.storage) return localStorageDirect()
     return localStorageWithPrefix(config.storage)
   })()
 
   const legacyStorage = (() => {
-    if (!isDesktop) return localStorage
+    if (!isDesktop) return localStorageDirect()
     if (!config.storage) return platform.storage?.()
     return platform.storage?.(LEGACY_STORAGE)
   })()
