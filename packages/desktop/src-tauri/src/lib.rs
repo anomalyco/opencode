@@ -252,7 +252,7 @@ pub fn run() {
 
     #[cfg(all(target_os = "macos", not(debug_assertions)))]
     let _ = std::process::Command::new("killall")
-        .arg("opencode-cli")
+        .arg("opencode")
         .output();
 
     let mut builder = tauri::Builder::default()

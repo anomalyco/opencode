@@ -20,7 +20,18 @@
       "Bash(bun list:*)",
       "Bash(npx playwright install:*)",
       "Bash(bun x:*)",
-      "Bash(powershell.exe:*)"
+      "Bash(powershell.exe:*)",
+      "Bash(git push:*)",
+      "Bash(findstr:*)",
+      "Bash(bun --verbose run:*)",
+      "Bash(netsh:*)",
+      "Bash($env:LOCAL_FRONTEND=1)",
+      "Bash(node:*)",
+      "Bash(strings:*)",
+      "Bash(cmd.exe:*)",
+      "Bash(.build-desktop.bat)",
+      "Bash(cmd:*)",
+      "Bash(git add:*)"
     ]
   }
 }

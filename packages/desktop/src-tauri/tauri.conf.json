@@ -41,7 +41,7 @@
     ],
     "active": true,
     "targets": ["deb", "rpm", "dmg", "nsis", "app"],
-    "externalBin": ["sidecars/opencode-cli"],
+    "externalBin": ["sidecars/opencode"],
     "macOS": {
       "entitlements": "./entitlements.plist"
     },

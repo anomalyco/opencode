@@ -110,6 +110,11 @@ export namespace Server {
               if (input.startsWith("http://127.0.0.1:")) return input
               if (input === "tauri://localhost" || input === "http://tauri.localhost") return input
 
+              // Allow local network IPs: 192.168.x.x, 10.x.x.x, 172.16.x.x-172.31.x.x
+              if (/^https?:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/.test(input)) {
+                return input
+              }
+
               // *.opencode.ai (https only, adjust if needed)
               if (/^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)) {
                 return input
@@ -120,6 +125,7 @@ export namespace Server {
 
               return
             },
+            credentials: true,
           }),
         )
         .route("/global", GlobalRoutes())
@@ -530,9 +536,61 @@ export namespace Server {
           },
         )
         .all("/*", async (c) => {
-          const path = c.req.path
+          const reqPath = c.req.path
 
-          const response = await proxy(`https://app.opencode.ai${path}`, {
+          // Check if local frontend mode is enabled
+          if (process.env.LOCAL_FRONTEND === "1") {
+            // Serve local frontend assets from packages/app/dist
+            const distPath = import.meta.dir.replace(/[/\\]src[/\\].*$/, "") + "/app/dist"
+            const filePath = reqPath === "/" ? "/index.html" : reqPath
+            const fullPath = distPath + filePath
+
+            // Log for debugging
+            if (reqPath === "/") {
+              log.info("LOCAL_FRONTEND mode enabled", { distPath, fullPath })
+            }
+
+            try {
+              const file = Bun.file(fullPath)
+              const exists = await file.exists()
+
+              if (exists) {
+                if (reqPath === "/") {
+                  log.info("Serving local index.html", { size: file.size })
+                }
+                // Set proper content type based on file extension
+                const ext = filePath.split(".").pop()?.toLowerCase()
+                const contentTypes: Record<string, string> = {
+                  html: "text/html; charset=utf-8",
+                  js: "application/javascript; charset=utf-8",
+                  css: "text/css; charset=utf-8",
+                  json: "application/json; charset=utf-8",
+                  png: "image/png",
+                  svg: "image/svg+xml",
+                  ico: "image/x-icon",
+                  woff: "font/woff",
+                  woff2: "font/woff2",
+                  ttf: "font/ttf",
+                  aac: "audio/aac",
+                }
+                const contentType = contentTypes[ext ?? ""] || "application/octet-stream"
+
+                return new Response(file, {
+                  headers: {
+                    "Content-Type": contentType,
+                    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' data: ws: wss:;",
+                  },
+                })
+              } else {
+                log.warn("Local file not found, will proxy to remote", { fullPath, path: reqPath })
+              }
+            } catch (error) {
+              log.error("Failed to serve local file", { path: reqPath, fullPath, error })
+            }
+          }
+
+          // Default: proxy to remote app
+          const response = await proxy(`https://app.opencode.ai${reqPath}`, {
             ...c.req,
             headers: {
               ...c.req.raw.headers,
@@ -541,7 +599,7 @@ export namespace Server {
           })
           response.headers.set(
             "Content-Security-Policy",
-            "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' data:",
+            "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' data: ws: wss:",
           )
           return response
         }) as unknown as Hono,
