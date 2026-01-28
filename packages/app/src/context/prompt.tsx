@@ -44,6 +44,7 @@ export type FileContextItem = {
   selection?: FileSelection
   comment?: string
   commentID?: string
+  commentOrigin?: "review" | "file"
   preview?: string
 }
 
