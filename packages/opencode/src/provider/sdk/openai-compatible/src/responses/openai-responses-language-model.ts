@@ -19,7 +19,7 @@ import {
   postJsonToApi,
 } from "@ai-sdk/provider-utils"
 import { z } from "zod/v4"
-import type { OpenAIConfig } from "./openai-config"
+import { OPENAI_COMPATIBLE_SUPPORTED_URLS, type OpenAIConfig } from "./openai-config"
 import { openaiFailedResponseHandler } from "./openai-error"
 import { codeInterpreterInputSchema, codeInterpreterOutputSchema } from "./tool/code-interpreter"
 import { fileSearchOutputSchema } from "./tool/file-search"
@@ -140,10 +140,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
     this.config = config
   }
 
-  readonly supportedUrls: Record<string, RegExp[]> = {
-    "image/*": [/^https?:\/\/.*$/],
-    "application/pdf": [/^https?:\/\/.*$/],
-  }
+  readonly supportedUrls = OPENAI_COMPATIBLE_SUPPORTED_URLS
 
   get provider(): string {
     return this.config.provider

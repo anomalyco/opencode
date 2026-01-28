@@ -16,10 +16,10 @@ import {
   postJsonToApi,
 } from "@ai-sdk/provider-utils"
 import { z } from "zod/v4"
-import type { CopilotChatConfig } from "./copilot-chat-config"
 import { copilotChatChunkSchema, copilotChatResponseSchema, copilotChatUsageSchema } from "./copilot-chat-api-types"
 import { convertToCopilotChatMessages } from "./convert-to-copilot-chat-input"
 import { openaiFailedResponseHandler } from "../responses/openai-error"
+import { OPENAI_COMPATIBLE_SUPPORTED_URLS, type OpenAIConfig } from "../responses/openai-config"
 import { ProviderTransform } from "@/provider/transform"
 
 type CopilotChatChunk = z.infer<typeof copilotChatChunkSchema>
@@ -29,13 +29,10 @@ type ToolState = { id: string; name: string; args: string; started: boolean }
 export class CopilotChatLanguageModel implements LanguageModelV2 {
   readonly specificationVersion = "v2"
   readonly modelId: string
-  readonly supportedUrls: Record<string, RegExp[]> = {
-    "image/*": [/^https?:\/\/.*$/],
-    "application/pdf": [/^https?:\/\/.*$/],
-  }
-  private readonly config: CopilotChatConfig
+  readonly supportedUrls = OPENAI_COMPATIBLE_SUPPORTED_URLS
+  private readonly config: OpenAIConfig
 
-  constructor(modelId: string, config: CopilotChatConfig) {
+  constructor(modelId: string, config: OpenAIConfig) {
     this.modelId = modelId
     this.config = config
   }

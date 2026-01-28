@@ -7,12 +7,17 @@ export type OpenAIConfig = {
   fetch?: FetchFunction
   generateId?: () => string
   /**
-   * File ID prefixes used to identify file IDs in Responses API.
-   * When undefined, all file data is treated as base64 content.
-   *
-   * Examples:
-   * - OpenAI: ['file-'] for IDs like 'file-abc123'
-   * - Azure OpenAI: ['assistant-'] for IDs like 'assistant-abc123'
-   */
+ * File ID prefixes used to identify file IDs in Responses API.
+ * When undefined, all file data is treated as base64 content.
+ *
+ * Examples:
+ * - OpenAI: ['file-'] for IDs like 'file-abc123'
+ * - Azure OpenAI: ['assistant-'] for IDs like 'assistant-abc123'
+ */
   fileIdPrefixes?: readonly string[]
+}
+
+export const OPENAI_COMPATIBLE_SUPPORTED_URLS: Record<string, RegExp[]> = {
+  "image/*": [/^https?:\/\/.*$/],
+  "application/pdf": [/^https?:\/\/.*$/],
 }
