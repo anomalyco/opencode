@@ -5,10 +5,12 @@ import { Select } from "@opencode-ai/ui/select"
 import { Icon } from "@opencode-ai/ui/icon"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { Dialog } from "@opencode-ai/ui/dialog"
 import type { Repo, RepoBranchList } from "@opencode-ai/sdk/v2/client"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { CloneDialog } from "./clone-dialog"
+import { formatRepoError, formatRepoErrorWithContext } from "./repo-errors"
 
 interface RepoSelectorProps {
   currentPath?: string
@@ -27,34 +29,45 @@ export function RepoSelector(props: RepoSelectorProps) {
   const [repoListState, setRepoListState] = createStore({ error: "" })
   const [branchListState, setBranchListState] = createStore({ error: "" })
 
-  const errorMessage = (err: unknown) => {
-    if (err && typeof err === "object" && "data" in err) {
-      const data = (err as { data?: { error?: { message?: string } } }).data
-      if (data?.error?.message) return data.error.message
-      if (data && typeof data === "object" && "message" in data) {
-        const message = (data as { message?: string }).message
-        if (message) return message
-      }
-    }
-    if (err instanceof Error) return err.message
-    return "Request failed"
-  }
+  const errorMessage = (err: unknown) => formatRepoError(err)
 
   const branchErrorMessage = (err: unknown) => {
     if (err && typeof err === "object" && "data" in err) {
       const data = (err as { data?: { error?: { code?: string; message?: string } } }).data
       const code = data?.error?.code
       if (code && ["repo_missing_path", "repo_invalid", "repo_malformed"].includes(code)) {
-        return data?.error?.message ?? "Repository record is invalid or missing a path. Remove and re-add it."
+        const fallback = "Repository record is invalid or missing a path. Remove and re-add it."
+        const message = data?.error?.message ?? fallback
+        return formatRepoErrorWithContext(err, message)
       }
       if (data && typeof data === "object" && "name" in data) {
         const name = (data as { name?: string }).name
         if (name === "NotFoundError") {
-          return "Repository record not found. Remove and re-add the repository."
+          const message = "Repository record not found. Remove and re-add the repository."
+          return formatRepoErrorWithContext(err, message)
         }
       }
     }
     return errorMessage(err)
+  }
+
+  const showErrorDialog = (title: string, err: unknown) => {
+    const message = formatRepoError(err)
+    const details = formatRepoErrorWithContext(err, message)
+    dialog.show(() => (
+      <Dialog title={title} description="Details from the server response." class="max-w-[640px]">
+        <div class="flex flex-col gap-3 px-2 pb-3">
+          <pre class="whitespace-pre-wrap rounded-md border border-border-weak-base bg-surface-raised-base p-3 text-12-regular text-text-weak">
+            {details}
+          </pre>
+          <div class="flex justify-end">
+            <Button size="large" variant="ghost" onClick={() => dialog.close()}>
+              Close
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    ))
   }
 
   const normalizePath = (value: string) => value.replace(/[\\/]+$/, "")
@@ -146,7 +159,7 @@ export function RepoSelector(props: RepoSelectorProps) {
       if (info?.code === "repo_dirty") {
         setMaybeDirtyWarning({ branch, files: info.files ?? [] })
       } else {
-        showToast({ title: "Failed to switch branch", description: errorMessage(err) })
+        showErrorDialog("Failed to switch branch", err)
       }
     } finally {
       setSwitching(false)

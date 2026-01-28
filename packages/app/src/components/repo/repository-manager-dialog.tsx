@@ -14,6 +14,7 @@ import type { Repo } from "@opencode-ai/sdk/v2/client"
 import { CloneDialog } from "./clone-dialog"
 import { RepoSettingsDialog } from "./repo-settings-dialog"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
+import { formatRepoError } from "./repo-errors"
 
 interface RepositoryManagerDialogProps {
   onOpenRepo?: (repo: Repo) => void
@@ -76,7 +77,7 @@ export function RepositoryManagerDialog(props: RepositoryManagerDialogProps) {
     } catch (err) {
       showToast({
         title: "Failed to add repository",
-        description: err instanceof Error ? err.message : "Unknown error",
+        description: formatRepoError(err),
       })
     }
   }

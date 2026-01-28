@@ -8,6 +8,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useGlobalSDK } from "@/context/global-sdk"
 import type { Repo, RepoBranchList } from "@opencode-ai/sdk/v2/client"
+import { formatRepoError, formatRepoErrorWithContext } from "./repo-errors"
 
 interface RepoSettingsDialogProps {
   repo: Repo
@@ -42,13 +43,25 @@ export function RepoSettingsDialog(props: RepoSettingsDialogProps) {
     if (current) setSelectedBranch(current)
   })
 
-  const errorMessage = (err: unknown) => {
-    if (err && typeof err === "object" && "data" in err) {
-      const data = (err as { data?: { error?: { message?: string } } }).data
-      if (data?.error?.message) return data.error.message
-    }
-    if (err instanceof Error) return err.message
-    return "Request failed"
+  const errorMessage = (err: unknown) => formatRepoError(err)
+
+  const showErrorDialog = (title: string, err: unknown) => {
+    const message = formatRepoError(err)
+    const details = formatRepoErrorWithContext(err, message)
+    dialog.show(() => (
+      <Dialog title={title} description="Details from the server response." class="max-w-[640px]">
+        <div class="flex flex-col gap-3 px-2 pb-3">
+          <pre class="whitespace-pre-wrap rounded-md border border-border-weak-base bg-surface-raised-base p-3 text-12-regular text-text-weak">
+            {details}
+          </pre>
+          <div class="flex justify-end">
+            <Button size="large" variant="ghost" onClick={() => dialog.close()}>
+              Close
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    ))
   }
 
   const branchOptions = createMemo(() => branches()?.branches ?? [])
@@ -69,7 +82,7 @@ export function RepoSettingsDialog(props: RepoSettingsDialogProps) {
       if (info?.code === "repo_dirty") {
         setMaybeDirtyWarning({ branch, files: info.files ?? [] })
       } else {
-        showToast({ title: "Failed to switch branch", description: errorMessage(err) })
+        showErrorDialog("Failed to switch branch", err)
       }
     } finally {
       setSwitching(false)
