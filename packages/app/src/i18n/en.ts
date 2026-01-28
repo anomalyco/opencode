@@ -8,6 +8,7 @@ export const dict = {
   "command.category.theme": "Theme",
   "command.category.language": "Language",
   "command.category.file": "File",
+  "command.category.context": "Context",
   "command.category.terminal": "Terminal",
   "command.category.model": "Model",
   "command.category.mcp": "MCP",
@@ -42,7 +43,10 @@ export const dict = {
   "command.session.new": "New session",
   "command.file.open": "Open file",
   "command.file.open.description": "Search files and commands",
+  "command.context.addSelection": "Add selection to context",
+  "command.context.addSelection.description": "Add selected lines from the current file",
   "command.terminal.toggle": "Toggle terminal",
+  "command.fileTree.toggle": "Toggle file tree",
   "command.review.toggle": "Toggle review",
   "command.terminal.new": "New terminal",
   "command.terminal.new.description": "Create a new terminal tab",
@@ -87,9 +91,13 @@ export const dict = {
   "dialog.provider.group.popular": "Popular",
   "dialog.provider.group.other": "Other",
   "dialog.provider.tag.recommended": "Recommended",
-  "dialog.provider.anthropic.note": "Connect with Claude Pro/Max or API key",
-  "dialog.provider.openai.note": "Connect with ChatGPT Pro/Plus or API key",
-  "dialog.provider.copilot.note": "Connect with Copilot or API key",
+  "dialog.provider.opencode.note": "Curated models including Claude, GPT, Gemini and more",
+  "dialog.provider.anthropic.note": "Direct access to Claude models, including Pro and Max",
+  "dialog.provider.copilot.note": "Claude models for coding assistance",
+  "dialog.provider.openai.note": "GPT models for fast, capable general AI tasks",
+  "dialog.provider.google.note": "Gemini models for fast, structured responses",
+  "dialog.provider.openrouter.note": "Access all supported models from one provider",
+  "dialog.provider.vercel.note": "Unified access to AI models with smart routing",
 
   "dialog.model.select.title": "Select model",
   "dialog.model.search.placeholder": "Search models",
@@ -158,7 +166,8 @@ export const dict = {
   "model.tooltip.context": "Context limit {{limit}}",
 
   "common.search.placeholder": "Search",
-  "common.goBack": "Go back",
+  "common.goBack": "Back",
+  "common.goForward": "Forward",
   "common.loading": "Loading",
   "common.loading.ellipsis": "...",
   "common.cancel": "Cancel",
@@ -172,6 +181,8 @@ export const dict = {
 
   "prompt.placeholder.shell": "Enter shell command...",
   "prompt.placeholder.normal": 'Ask anything... "{{example}}"',
+  "prompt.placeholder.summarizeComments": "Summarize comments…",
+  "prompt.placeholder.summarizeComment": "Summarize comment…",
   "prompt.mode.shell": "Shell",
   "prompt.mode.shell.exit": "esc to exit",
 
@@ -342,6 +353,10 @@ export const dict = {
   "toast.model.none.description": "Connect a provider to summarize this session",
 
   "toast.file.loadFailed.title": "Failed to load file",
+  "toast.file.listFailed.title": "Failed to list files",
+
+  "toast.context.noLineSelection.title": "No line selection",
+  "toast.context.noLineSelection.description": "Select a line range in a file tab first.",
 
   "toast.session.share.copyFailed.title": "Failed to copy URL to clipboard",
   "toast.session.share.success.title": "Session shared",
@@ -417,8 +432,15 @@ export const dict = {
   "session.tab.context": "Context",
   "session.panel.reviewAndFiles": "Review and files",
   "session.review.filesChanged": "{{count}} Files Changed",
+  "session.review.change.one": "Change",
+  "session.review.change.other": "Changes",
   "session.review.loadingChanges": "Loading changes...",
   "session.review.empty": "No changes in this session yet",
+  "session.review.noChanges": "No changes",
+
+  "session.files.selectToOpen": "Select a file to open",
+  "session.files.all": "All files",
+
   "session.messages.renderEarlier": "Render earlier messages",
   "session.messages.loadingEarlier": "Loading earlier messages...",
   "session.messages.loadEarlier": "Load earlier messages",
@@ -495,6 +517,8 @@ export const dict = {
   "sidebar.project.recentSessions": "Recent sessions",
   "sidebar.project.viewAllSessions": "View all sessions",
 
+  "app.name.desktop": "OpenCode Desktop",
+
   "settings.section.desktop": "Desktop",
   "settings.section.server": "Server",
   "settings.tab.general": "General",
@@ -502,6 +526,7 @@ export const dict = {
 
   "settings.general.section.appearance": "Appearance",
   "settings.general.section.notifications": "System notifications",
+  "settings.general.section.updates": "Updates",
   "settings.general.section.sounds": "Sound effects",
 
   "settings.general.row.language.title": "Language",
@@ -512,6 +537,18 @@ export const dict = {
   "settings.general.row.theme.description": "Customise how OpenCode is themed.",
   "settings.general.row.font.title": "Font",
   "settings.general.row.font.description": "Customise the mono font used in code blocks",
+
+  "settings.general.row.releaseNotes.title": "Release notes",
+  "settings.general.row.releaseNotes.description": "Show What's New popups after updates",
+
+  "settings.updates.row.startup.title": "Check for updates on startup",
+  "settings.updates.row.startup.description": "Automatically check for updates when OpenCode launches",
+  "settings.updates.row.check.title": "Check for updates",
+  "settings.updates.row.check.description": "Manually check for updates and install if available",
+  "settings.updates.action.checkNow": "Check now",
+  "settings.updates.action.checking": "Checking...",
+  "settings.updates.toast.latest.title": "You're up to date",
+  "settings.updates.toast.latest.description": "You're running the latest version of OpenCode.",
   "font.option.ibmPlexMono": "IBM Plex Mono",
   "font.option.cascadiaCode": "Cascadia Code",
   "font.option.firaCode": "Fira Code",
@@ -678,6 +715,7 @@ export const dict = {
   "workspace.reset.failed.title": "Failed to reset workspace",
   "workspace.reset.success.title": "Workspace reset",
   "workspace.reset.success.description": "Workspace now matches the default branch.",
+  "workspace.error.stillPreparing": "Workspace is still preparing",
   "workspace.status.checking": "Checking for unmerged changes...",
   "workspace.status.error": "Unable to verify git status.",
   "workspace.status.clean": "No unmerged changes detected.",
