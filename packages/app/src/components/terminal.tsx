@@ -102,10 +102,16 @@ export const Terminal = (props: TerminalProps) => {
 
   createEffect(() => {
     const font = monoFontFamily(settings.appearance.font())
-    if (!term) return
-    const setOption = (term as unknown as { setOption?: (key: string, value: string) => void }).setOption
-    if (!setOption) return
-    setOption("fontFamily", font)
+    if (!term?.renderer) return
+    term.renderer.setFontFamily(font)
+    fitAddon?.fit()
+  })
+
+  createEffect(() => {
+    const size = settings.appearance.fontSize()
+    if (!term?.renderer) return
+    term.renderer.setFontSize(size)
+    fitAddon?.fit()
   })
 
   const focusTerminal = () => {
@@ -143,7 +149,7 @@ export const Terminal = (props: TerminalProps) => {
       const t = new mod.Terminal({
         cursorBlink: true,
         cursorStyle: "bar",
-        fontSize: 14,
+        fontSize: settings.appearance.fontSize(),
         fontFamily: monoFontFamily(settings.appearance.font()),
         allowTransparency: true,
         theme: terminalColors(),

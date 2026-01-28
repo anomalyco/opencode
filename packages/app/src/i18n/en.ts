@@ -537,6 +537,10 @@ export const dict = {
   "settings.general.row.theme.description": "Customise how OpenCode is themed.",
   "settings.general.row.font.title": "Font",
   "settings.general.row.font.description": "Customise the mono font used in code blocks",
+  "settings.general.row.fontSize.title": "Font size",
+  "settings.general.row.fontSize.description": "Customise the font size used in code blocks",
+  "settings.general.row.lineHeight.title": "Line height",
+  "settings.general.row.lineHeight.description": "Customise the line height used in code blocks",
 
   "settings.general.row.releaseNotes.title": "Release notes",
   "settings.general.row.releaseNotes.description": "Show What's New popups after updates",

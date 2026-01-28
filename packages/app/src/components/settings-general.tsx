@@ -1,6 +1,7 @@
 import { Component, createMemo, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
+import { NumberStepper } from "@opencode-ai/ui/number-stepper"
 import { Select } from "@opencode-ai/ui/select"
 import { Switch } from "@opencode-ai/ui/switch"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
@@ -230,6 +231,34 @@ export const SettingsGeneral: Component = () => {
                   </span>
                 )}
               </Select>
+            </SettingsRow>
+
+            <SettingsRow
+              title={language.t("settings.general.row.fontSize.title")}
+              description={language.t("settings.general.row.fontSize.description")}
+            >
+              <NumberStepper
+                value={settings.appearance.fontSize()}
+                onChange={settings.appearance.setFontSize}
+                min={10}
+                max={24}
+                step={1}
+                format={(v) => v.toFixed(0)}
+              />
+            </SettingsRow>
+
+            <SettingsRow
+              title={language.t("settings.general.row.lineHeight.title")}
+              description={language.t("settings.general.row.lineHeight.description")}
+            >
+              <NumberStepper
+                value={settings.appearance.lineHeight()}
+                onChange={settings.appearance.setLineHeight}
+                min={1.2}
+                max={4}
+                step={0.1}
+                format={(v) => v.toFixed(1)}
+              />
             </SettingsRow>
           </div>
         </div>

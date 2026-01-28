@@ -3,6 +3,8 @@
   --font-family-sans--font-feature-settings: "ss03" 1;
   --font-family-mono: "IBM Plex Mono", "IBM Plex Mono Fallback";
   --font-family-mono--font-feature-settings: "ss01" 1;
+  --font-size-mono: 14px;
+  --line-height-mono: 1.6;
 
   --font-size-small: 13px;
   --font-size-base: 14px;

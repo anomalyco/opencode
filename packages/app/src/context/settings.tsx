@@ -25,6 +25,7 @@ export interface Settings {
   }
   appearance: {
     fontSize: number
+    lineHeight: number
     font: string
   }
   keybinds: Record<string, string>
@@ -45,6 +46,7 @@ const defaultSettings: Settings = {
   },
   appearance: {
     fontSize: 14,
+    lineHeight: 1.6,
     font: "ibm-plex-mono",
   },
   keybinds: {},
@@ -93,6 +95,14 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     createEffect(() => {
       if (typeof document === "undefined") return
       document.documentElement.style.setProperty("--font-family-mono", monoFontFamily(store.appearance?.font))
+      document.documentElement.style.setProperty(
+        "--font-size-mono",
+        `${store.appearance?.fontSize ?? defaultSettings.appearance.fontSize}px`,
+      )
+      document.documentElement.style.setProperty(
+        "--line-height-mono",
+        `${store.appearance?.lineHeight ?? defaultSettings.appearance.lineHeight}`,
+      )
     })
 
     return {
@@ -120,6 +130,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         fontSize: createMemo(() => store.appearance?.fontSize ?? defaultSettings.appearance.fontSize),
         setFontSize(value: number) {
           setStore("appearance", "fontSize", value)
+        },
+        lineHeight: createMemo(() => store.appearance?.lineHeight ?? defaultSettings.appearance.lineHeight),
+        setLineHeight(value: number) {
+          setStore("appearance", "lineHeight", value)
         },
         font: createMemo(() => store.appearance?.font ?? defaultSettings.appearance.font),
         setFont(value: string) {
