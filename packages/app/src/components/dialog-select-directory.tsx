@@ -22,12 +22,12 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const [state, setState] = createStore({ error: "" })
 
   const home = createMemo(() => sync.data.path.home)
-  const root = createMemo(() => sync.data.path.home || sync.data.path.directory)
+  const root = createMemo(() => sync.data.path.directory)
   const isSingleSelect = createMemo(() => !props.multiple)
 
   type DirectoryEntry =
-    | { kind: "parent"; name: string; path: string }
-    | { kind: "directory"; name: string; path: string }
+    | { kind: "parent"; name: string; path: string; absolute: string }
+    | { kind: "directory"; name: string; path: string; absolute: string }
 
   function join(base: string | undefined, rel: string) {
     const b = (base ?? "").replace(/[\\/]+$/, "")
@@ -53,13 +53,17 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     return (value ?? "").replace(/[\\/]+$/, "")
   }
 
-  function parentDirectory(value: string) {
+  function parentRelative(value: string) {
     const normalized = normalizePath(value)
     if (!normalized) return ""
-    const parent = getDirectory(normalized)
-    const cleaned = normalizePath(parent)
-    if (!cleaned || cleaned === normalized) return ""
-    return cleaned
+    const parts = normalized.split(/[\\/]+/).filter(Boolean)
+    if (parts.length <= 1) return ""
+    return parts.slice(0, -1).join("/")
+  }
+
+  function resolveAbsolute(value: string) {
+    if (value.startsWith("/") || /^[A-Za-z]:[\\/]/.test(value)) return value
+    return join(root(), value)
   }
 
   function normalizeQuery(query: string) {
@@ -93,13 +97,20 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     return { results: [], error: "Unable to load folders. Check the dev proxy configuration." }
   }
 
-  function normalizeFileListResponse(input: unknown): { results: { name: string; absolute: string; ignored: boolean; type: string }[]; error: string } {
+  function normalizeFileListResponse(
+    input: unknown,
+  ): { results: { name: string; path: string; absolute: string; ignored: boolean; type: string }[]; error: string } {
     if (Array.isArray(input)) return { results: input, error: "" }
     if (!input || typeof input !== "object") {
       return { results: [], error: "Unable to load folders. Check the server connection." }
     }
     const maybeData = (input as { data?: unknown }).data
-    if (Array.isArray(maybeData)) return { results: maybeData as { name: string; absolute: string; ignored: boolean; type: string }[], error: "" }
+    if (Array.isArray(maybeData)) {
+      return {
+        results: maybeData as { name: string; path: string; absolute: string; ignored: boolean; type: string }[],
+        error: "",
+      }
+    }
     console.error("Unexpected file.list response shape", { input })
     return { results: [], error: "Unable to load folders. Check the server connection." }
   }
@@ -125,20 +136,19 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     return fetchDirs(query)
   }
 
-  const [currentPath, setCurrentPath] = createSignal(root() ?? "")
+  const [currentPath, setCurrentPath] = createSignal("")
 
   createEffect(() => {
     const base = root()
     if (!base) return
-    if (!currentPath() || !normalizePath(currentPath()).startsWith(normalizePath(base))) {
-      setCurrentPath(base)
+    if (!currentPath()) {
+      setCurrentPath("")
     }
   })
 
   const [directoryNodes] = createResource(
     () => (isSingleSelect() ? currentPath() : ""),
     async (path) => {
-      if (!path) return [] as { name: string; absolute: string; ignored: boolean; type: string }[]
       setState({ error: "" })
       try {
         const response = await sdk.client.file.list({ path })
@@ -154,17 +164,26 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
 
   const directoryItems = createMemo(() => {
     const items: DirectoryEntry[] = []
-    const base = normalizePath(root())
     const current = normalizePath(currentPath())
-    const parent = parentDirectory(current)
-    if (parent && (!base || parent.startsWith(base))) {
-      items.push({ kind: "parent", name: "..", path: parent })
+    const parent = parentRelative(current)
+    if (current && parent !== current) {
+      items.push({
+        kind: "parent",
+        name: "..",
+        path: parent,
+        absolute: resolveAbsolute(parent),
+      })
     }
     const nodes = directoryNodes() ?? []
     for (const node of nodes) {
       if (node.type !== "directory") continue
       if (node.ignored) continue
-      items.push({ kind: "directory", name: node.name, path: node.absolute })
+      items.push({
+        kind: "directory",
+        name: node.name,
+        path: node.path,
+        absolute: node.absolute,
+      })
     }
     return items
   })
@@ -211,7 +230,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
       >
         <div class="flex flex-col gap-3">
           <div class="text-12-regular text-text-weak">
-            Current folder: <span class="text-text-strong">{display(currentPath())}</span>
+            Current folder: <span class="text-text-strong">{display(resolveAbsolute(currentPath()))}</span>
           </div>
           <List
             search={{ placeholder: "Search folders", autofocus: true }}
@@ -225,7 +244,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
             }}
           >
             {(item) => {
-              const path = display(item.path)
+              const path = display(item.absolute)
               return (
                 <div class="w-full flex items-center justify-between rounded-md">
                   <div class="flex items-center gap-x-3 grow min-w-0">
@@ -252,7 +271,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
               onClick={() => {
                 const selected = currentPath()
                 if (!selected) return
-                props.onSelect(props.multiple ? [selected] : selected)
+                props.onSelect(props.multiple ? [resolveAbsolute(selected)] : resolveAbsolute(selected))
                 dialog.close()
               }}
             >
