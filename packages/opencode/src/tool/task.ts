@@ -160,7 +160,10 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         },
         parts: promptParts,
       })
-      unsub()
+      .finally(() => {
+        unsub()
+      })
+
       const messages = await Session.messages({ sessionID: session.id })
       const summary = messages
         .filter((x) => x.info.role === "assistant")
