@@ -166,8 +166,8 @@ export const dict = {
   "model.tooltip.context": "Context limit {{limit}}",
 
   "common.search.placeholder": "Search",
-  "common.goBack": "Go back",
-  "common.goForward": "Go forward",
+  "common.goBack": "Back",
+  "common.goForward": "Forward",
   "common.loading": "Loading",
   "common.loading.ellipsis": "...",
   "common.cancel": "Cancel",
@@ -337,6 +337,7 @@ export const dict = {
   "language.ar": "العربية",
   "language.no": "Norsk",
   "language.br": "Português (Brasil)",
+  "language.th": "ไทย",
 
   "toast.language.title": "Language",
   "toast.language.description": "Switched to {{language}}",
