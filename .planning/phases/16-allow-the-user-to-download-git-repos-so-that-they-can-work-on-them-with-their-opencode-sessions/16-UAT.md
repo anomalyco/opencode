@@ -1,9 +1,9 @@
 ---
-status: complete
+status: diagnosed
 phase: 16-allow-the-user-to-download-git-repos-so-that-they-can-work-on-them-with-their-opencode-sessions
 source: [16-01-SUMMARY.md, 16-04-SUMMARY.md, 16-05-SUMMARY.md]
 started: 2026-01-28T15:34:50Z
-updated: 2026-01-28T16:19:05Z
+updated: 2026-01-28T16:25:39Z
 ---
 
 ## Current Test
@@ -62,19 +62,43 @@ skipped: 2
   reason: "User reported: The UX is confusing: it shows a text input for a local repo path. Needs a file selector or clearer guidance that the path must be on the host machine."
   severity: major
   test: 2
-  artifacts: []
-  missing: []
+  root_cause: "Repository manager uses a plain text path input instead of the directory picker, creating inconsistent UX and unclear path requirements."
+  artifacts:
+    - path: "packages/app/src/components/repo/repository-manager-dialog.tsx"
+      issue: "Add local flow uses manual path input only."
+  missing:
+    - "Add a directory picker button or integrate DialogSelectDirectory/openDirectoryPickerDialog."
+    - "Clarify host-machine path requirement in helper copy."
+  debug_session: ".planning/debug/add-local-ux.md"
 - truth: "The clone dialog accepts a repo URL (and optional branch), shows progress while cloning, and adds the repo on success."
   status: failed
   reason: "User reported: Cloning succeeds but branch selector errors: Request Failed GET /repo/:id/branches 500."
   severity: blocker
   test: 3
-  artifacts: []
-  missing: []
+  root_cause: "Branches endpoint only handles CloneError; invalid/corrupt repo records or missing repo.path throw non-CloneError exceptions and return 500."
+  artifacts:
+    - path: "packages/opencode/src/server/routes/repo.ts"
+      issue: "Branches endpoint only catches CloneError."
+    - path: "packages/opencode/src/repo/repo.ts"
+      issue: "Repo.get does not validate records; listBranches assumes repo.path."
+    - path: "packages/opencode/src/storage/storage.ts"
+      issue: "Malformed JSON errors propagate as generic 500."
+  missing:
+    - "Validate repo records and map invalid entries to 400/404."
+    - "Treat missing repo.path as CloneError/NotFound in branches handler."
+  debug_session: ".planning/debug/repo-branches-500-uat2.md"
 - truth: "The new session view shows the repo selector, allows choosing a repo, and updates branches for the selected repo."
   status: failed
   reason: "User reported: UI renders, but branch selector still errors: GET /repo/:id/branches 500."
   severity: major
   test: 6
-  artifacts: []
-  missing: []
+  root_cause: "Same branch list failure as clone workflow; RepoSelector calls /repo/:id/branches and receives 500 when repo record/path is invalid."
+  artifacts:
+    - path: "packages/app/src/components/repo/repo-selector.tsx"
+      issue: "Branch list call fails with 500; UI surfaces generic error."
+    - path: "packages/opencode/src/server/routes/repo.ts"
+      issue: "Branches endpoint returns 500 for invalid repo records."
+  missing:
+    - "Return structured 4xx for invalid repo paths."
+    - "Surface branch error details in selector copy."
+  debug_session: ".planning/debug/new-session-branch-selector.md"
