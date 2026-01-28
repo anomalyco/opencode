@@ -68,12 +68,15 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                 // Completions API
                 if (body?.messages) {
                   const last = body.messages[body.messages.length - 1]
+                  // check for sneaky anthropic tool_result
+                  const hasToolResult =
+                    Array.isArray(last?.content) && last.content.some((part: any) => part.type === "tool_result")
                   return {
                     isVision: body.messages.some(
                       (msg: any) =>
                         Array.isArray(msg.content) && msg.content.some((part: any) => part.type === "image_url"),
                     ),
-                    isAgent: last?.role !== "user",
+                    isAgent: hasToolResult || last?.role !== "user",
                   }
                 }
 
@@ -88,7 +91,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                     isAgent: last?.role !== "user",
                   }
                 }
-              } catch {}
+              } catch { }
               return { isVision: false, isAgent: false }
             })
 
