@@ -3,7 +3,7 @@ import { cmd } from "./cmd"
 import * as prompts from "@clack/prompts"
 import { UI } from "../ui"
 import { ModelsDev } from "../../provider/models"
-import { map, pipe, sortBy, values } from "remeda"
+import { filter, fromEntries, map, pipe, sortBy, values } from "remeda"
 import path from "path"
 import os from "os"
 import { Config } from "../../config/config"
@@ -13,6 +13,16 @@ import { Instance } from "../../project/instance"
 import type { Hooks } from "@opencode-ai/plugin"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
+
+export function authPlugin(plugins: Hooks[], provider: string): PluginAuth | undefined {
+  const auths = pipe(
+    plugins,
+    filter((x) => x.auth?.provider !== undefined),
+    map((x) => [x.auth!.provider, x.auth!] as const),
+    fromEntries(),
+  )
+  return auths[provider]
+}
 
 /**
  * Handle plugin-based authentication flow.
@@ -307,9 +317,9 @@ export const AuthLoginCommand = cmd({
 
         if (prompts.isCancel(provider)) throw new UI.CancelledError()
 
-        const plugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
-        if (plugin && plugin.auth) {
-          const handled = await handlePluginAuth({ auth: plugin.auth }, provider)
+        const auth = await Plugin.list().then((x) => authPlugin(x, provider))
+        if (auth) {
+          const handled = await handlePluginAuth({ auth }, provider)
           if (handled) return
         }
 
@@ -323,9 +333,9 @@ export const AuthLoginCommand = cmd({
           if (prompts.isCancel(provider)) throw new UI.CancelledError()
 
           // Check if a plugin provides auth for this custom provider
-          const customPlugin = await Plugin.list().then((x) => x.find((x) => x.auth?.provider === provider))
-          if (customPlugin && customPlugin.auth) {
-            const handled = await handlePluginAuth({ auth: customPlugin.auth }, provider)
+          const custom = await Plugin.list().then((x) => authPlugin(x, provider))
+          if (custom) {
+            const handled = await handlePluginAuth({ auth: custom }, provider)
             if (handled) return
           }
 
