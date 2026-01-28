@@ -171,7 +171,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey))
-  const view = createMemo(() => layout.view(sessionKey))
 
   const commentInReview = (path: string) => {
     const sessionID = params.id
@@ -187,20 +186,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     const focus = { file: item.path, id: item.commentID }
     comments.setActive(focus)
-    view().reviewPanel.open()
 
-    if (item.commentOrigin === "review") {
-      tabs().open("review")
+    const wantsReview = item.commentOrigin === "review" || (item.commentOrigin !== "file" && commentInReview(item.path))
+    if (wantsReview) {
+      layout.fileTree.setTab("changes")
+      if (!layout.fileTree.opened()) tabs().open("review")
       requestAnimationFrame(() => comments.setFocus(focus))
       return
     }
 
-    if (item.commentOrigin !== "file" && commentInReview(item.path)) {
-      tabs().open("review")
-      requestAnimationFrame(() => comments.setFocus(focus))
-      return
-    }
-
+    layout.fileTree.setTab("all")
     const tab = files.tab(item.path)
     tabs().open(tab)
     files.load(item.path)
@@ -1563,13 +1558,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       })
 
       const timeoutMs = 5 * 60 * 1000
+      const timer = { id: undefined as number | undefined }
       const timeout = new Promise<Awaited<ReturnType<typeof WorktreeState.wait>>>((resolve) => {
-        setTimeout(() => {
+        timer.id = window.setTimeout(() => {
           resolve({ status: "failed", message: language.t("workspace.error.stillPreparing") })
         }, timeoutMs)
       })
 
-      const result = await Promise.race([WorktreeState.wait(sessionDirectory), abort, timeout])
+      const result = await Promise.race([WorktreeState.wait(sessionDirectory), abort, timeout]).finally(() => {
+        if (timer.id === undefined) return
+        clearTimeout(timer.id)
+      })
       pending.delete(session.id)
       if (controller.signal.aborted) return false
       if (result.status === "failed") throw new Error(result.message)

@@ -286,6 +286,7 @@
   --icon-diff-add-active: var(--mint-light-12);
   --icon-diff-delete-base: var(--ember-light-10);
   --icon-diff-delete-hover: var(--ember-light-11);
+  --icon-diff-modified-base: var(--icon-warning-base);
   --syntax-comment: var(--text-weak);
   --syntax-regexp: var(--text-base);
   --syntax-string: #006656;
@@ -543,6 +544,7 @@
     --icon-diff-add-active: var(--mint-dark-11);
     --icon-diff-delete-base: var(--ember-dark-9);
     --icon-diff-delete-hover: var(--ember-dark-10);
+    --icon-diff-modified-base: var(--icon-warning-base);
     --syntax-comment: var(--text-weak);
     --syntax-regexp: var(--text-base);
     --syntax-string: #00ceb9;

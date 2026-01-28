@@ -81,10 +81,12 @@ You can also access our models through the following API endpoints.
 | Claude Opus 4.1    | claude-opus-4-1    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
 | Gemini 3 Pro       | gemini-3-pro       | `https://opencode.ai/zen/v1/models/gemini-3-pro`   | `@ai-sdk/google`            |
 | Gemini 3 Flash     | gemini-3-flash     | `https://opencode.ai/zen/v1/models/gemini-3-flash` | `@ai-sdk/google`            |
+| MiniMax M2.1       | minimax-m2.1       | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | GLM 4.7            | glm-4.7            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | GLM 4.6            | glm-4.6            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Kimi K2            | kimi-k2            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2.5          | kimi-k2.5          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Kimi K2 Thinking   | kimi-k2-thinking   | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2            | kimi-k2            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Qwen3 Coder 480B   | qwen3-coder        | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Big Pickle         | big-pickle         | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 
@@ -111,10 +113,12 @@ We support a pay-as-you-go model. Below are the prices **per 1M tokens**.
 | Model                             | Input  | Output | Cached Read | Cached Write |
 | --------------------------------- | ------ | ------ | ----------- | ------------ |
 | Big Pickle                        | Free   | Free   | Free        | -            |
+| MiniMax M2.1                      | $0.30  | $1.20  | $0.10       | -            |
 | GLM 4.7                           | $0.60  | $2.20  | $0.10       | -            |
 | GLM 4.6                           | $0.60  | $2.20  | $0.10       | -            |
-| Kimi K2                           | $0.40  | $2.50  | -           | -            |
+| Kimi K2.5                         | $0.60  | $3.00  | $0.10       | -            |
 | Kimi K2 Thinking                  | $0.40  | $2.50  | -           | -            |
+| Kimi K2                           | $0.40  | $2.50  | -           | -            |
 | Qwen3 Coder 480B                  | $0.45  | $1.50  | -           | -            |
 | Claude Sonnet 4.5 (≤ 200K tokens) | $3.00  | $15.00 | $0.30       | $3.75        |
 | Claude Sonnet 4.5 (> 200K tokens) | $6.00  | $22.50 | $0.60       | $7.50        |

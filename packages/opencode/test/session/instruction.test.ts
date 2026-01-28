@@ -18,7 +18,7 @@ describe("InstructionPrompt.resolve", () => {
         const system = await InstructionPrompt.systemPaths()
         expect(system.has(path.join(tmp.path, "AGENTS.md"))).toBe(true)
 
-        const results = await InstructionPrompt.resolve([], path.join(tmp.path, "src", "file.ts"))
+        const results = await InstructionPrompt.resolve([], path.join(tmp.path, "src", "file.ts"), "test-message-1")
         expect(results).toEqual([])
       },
     })
@@ -37,7 +37,11 @@ describe("InstructionPrompt.resolve", () => {
         const system = await InstructionPrompt.systemPaths()
         expect(system.has(path.join(tmp.path, "subdir", "AGENTS.md"))).toBe(false)
 
-        const results = await InstructionPrompt.resolve([], path.join(tmp.path, "subdir", "nested", "file.ts"))
+        const results = await InstructionPrompt.resolve(
+          [],
+          path.join(tmp.path, "subdir", "nested", "file.ts"),
+          "test-message-2",
+        )
         expect(results.length).toBe(1)
         expect(results[0].filepath).toBe(path.join(tmp.path, "subdir", "AGENTS.md"))
       },

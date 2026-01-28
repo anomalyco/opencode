@@ -809,3 +809,20 @@
     display: none;
   }
 }
+
+[data-component="tool-loaded-file"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0 4px 28px;
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-large);
+  color: var(--text-weak);
+
+  [data-component="icon"] {
+    flex-shrink: 0;
+    color: var(--icon-weak);
+  }
+}
