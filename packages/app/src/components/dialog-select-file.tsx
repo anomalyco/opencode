@@ -24,16 +24,18 @@ type Entry = {
   path?: string
 }
 
-export function DialogSelectFile() {
+type DialogSelectFileMode = "all" | "files"
+
+export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFile?: (path: string) => void }) {
   const command = useCommand()
   const language = useLanguage()
   const layout = useLayout()
   const file = useFile()
   const dialog = useDialog()
   const params = useParams()
+  const filesOnly = () => props.mode === "files"
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey))
-  const view = createMemo(() => layout.view(sessionKey))
   const state = { cleanup: undefined as (() => void) | void, committed: false }
   const [grouped, setGrouped] = createSignal(false)
   const common = [
@@ -42,15 +44,16 @@ export function DialogSelectFile() {
     "session.previous",
     "session.next",
     "terminal.toggle",
-    "review.toggle",
+    "fileTree.toggle",
   ]
   const limit = 5
 
-  const allowed = createMemo(() =>
-    command.options.filter(
+  const allowed = createMemo(() => {
+    if (filesOnly()) return []
+    return command.options.filter(
       (option) => !option.disabled && !option.id.startsWith("suggested.") && option.id !== "file.open",
-    ),
-  )
+    )
+  })
 
   const commandItem = (option: CommandOption): Entry => ({
     id: "command:" + option.id,
@@ -99,10 +102,50 @@ export function DialogSelectFile() {
     return items.slice(0, limit)
   })
 
-  const items = async (filter: string) => {
-    const query = filter.trim()
+  const root = createMemo(() => {
+    const nodes = file.tree.children("")
+    const paths = nodes
+      .filter((node) => node.type === "file")
+      .map((node) => node.path)
+      .sort((a, b) => a.localeCompare(b))
+    return paths.slice(0, limit).map(fileItem)
+  })
+
+  const unique = (items: Entry[]) => {
+    const seen = new Set<string>()
+    const out: Entry[] = []
+    for (const item of items) {
+      if (seen.has(item.id)) continue
+      seen.add(item.id)
+      out.push(item)
+    }
+    return out
+  }
+
+  const items = async (text: string) => {
+    const query = text.trim()
     setGrouped(query.length > 0)
+
+    if (!query && filesOnly()) {
+      const loaded = file.tree.state("")?.loaded
+      const pending = loaded ? Promise.resolve() : file.tree.list("")
+      const next = unique([...recent(), ...root()])
+
+      if (loaded || next.length > 0) {
+        void pending
+        return next
+      }
+
+      await pending
+      return unique([...recent(), ...root()])
+    }
+
     if (!query) return [...picks(), ...recent()]
+
+    if (filesOnly()) {
+      const files = await file.searchFiles(query)
+      return files.map(fileItem)
+    }
     const files = await file.searchFiles(query)
     const entries = files.map(fileItem)
     return [...list(), ...entries]
@@ -119,7 +162,8 @@ export function DialogSelectFile() {
     const value = file.tab(path)
     tabs().open(value)
     file.load(path)
-    view().reviewPanel.open()
+    layout.fileTree.setTab("all")
+    props.onOpenFile?.(path)
   }
 
   const handleSelect = (item: Entry | undefined) => {
@@ -143,10 +187,12 @@ export function DialogSelectFile() {
   })
 
   return (
-    <Dialog class="pt-3 pb-0 !max-h-[480px]">
+    <Dialog class="pt-3 pb-0 !max-h-[480px]" transition>
       <List
         search={{
-          placeholder: language.t("palette.search.placeholder"),
+          placeholder: filesOnly()
+            ? language.t("session.header.searchFiles")
+            : language.t("palette.search.placeholder"),
           autofocus: true,
           hideIcon: true,
           class: "pl-3 pr-2 !mb-0",
