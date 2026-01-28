@@ -63,7 +63,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const agent = (() => {
-      const list = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent" && !x.hidden))
+      const list = createMemo(() => {
+        const agents = sync.data.agent
+        if (!Array.isArray(agents)) {
+          console.error("Unexpected agent list shape", { agents })
+          return []
+        }
+        return agents.filter((x) => x.mode !== "subagent" && !x.hidden)
+      })
       const [store, setStore] = createStore<{
         current?: string
       }>({

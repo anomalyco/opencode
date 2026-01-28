@@ -32,15 +32,24 @@ export function RepoSelector(props: RepoSelectorProps) {
     }
   })
 
+  const repoList = createMemo(() => {
+    const value = repos()
+    if (!Array.isArray(value)) {
+      console.error("Unexpected repo list shape", { value })
+      return []
+    }
+    return value
+  })
+
   createEffect(() => {
     const path = props.currentPath
     if (!path) return
     if (selectedRepoId()) return
-    const match = repos()?.find((repo) => repo.path === path)
+    const match = repoList().find((repo) => repo.path === path)
     if (match) setSelectedRepoId(match.id)
   })
 
-  const selectedRepo = createMemo(() => repos()?.find((repo) => repo.id === selectedRepoId()))
+  const selectedRepo = createMemo(() => repoList().find((repo) => repo.id === selectedRepoId()))
 
   const [branches, { refetch: refetchBranches }] = createResource(
     () => selectedRepo()?.id,
@@ -134,7 +143,7 @@ export function RepoSelector(props: RepoSelectorProps) {
       <div class="flex items-center gap-2">
         <Icon name="folder" size="small" />
         <Select
-          options={repos() ?? []}
+          options={repoList()}
           current={selectedRepo()}
           value={(repo) => repo.id}
           label={(repo) => repo.name}

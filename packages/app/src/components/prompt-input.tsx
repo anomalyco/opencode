@@ -372,11 +372,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   type AtOption = { type: "agent"; name: string; display: string } | { type: "file"; path: string; display: string }
 
-  const agentList = createMemo(() =>
-    sync.data.agent
+  const agentList = createMemo(() => {
+    const agents = sync.data.agent
+    if (!Array.isArray(agents)) {
+      console.error("Unexpected agent list shape", { agents })
+      return []
+    }
+    return agents
       .filter((agent) => !agent.hidden && agent.mode !== "primary")
-      .map((agent): AtOption => ({ type: "agent", name: agent.name, display: agent.name })),
-  )
+      .map((agent): AtOption => ({ type: "agent", name: agent.name, display: agent.name }))
+  })
+
+  const commandList = createMemo(() => {
+    const commands = sync.data.command
+    if (!Array.isArray(commands)) {
+      console.error("Unexpected command list shape", { commands })
+      return []
+    }
+    return commands
+  })
 
   const handleAtSelect = (option: AtOption | undefined) => {
     if (!option) return
@@ -422,7 +436,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         type: "builtin" as const,
       }))
 
-    const custom = sync.data.command.map((cmd) => ({
+    const custom = commandList().map((cmd) => ({
       id: `custom.${cmd.name}`,
       trigger: cmd.name,
       title: cmd.name,
@@ -522,7 +536,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   createEffect(
     on(
-      () => sync.data.command,
+      () => commandList(),
       () => slashRefetch(),
       { defer: true },
     ),
@@ -1107,7 +1121,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (text.startsWith("/")) {
       const [cmdName, ...args] = text.split(" ")
       const commandName = cmdName.slice(1)
-      const customCommand = sync.data.command.find((c) => c.name === commandName)
+      const customCommand = commandList().find((c) => c.name === commandName)
       if (customCommand) {
         clearInput()
         client.session

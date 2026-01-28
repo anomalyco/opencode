@@ -57,13 +57,29 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     return query
   }
 
+  function normalizeFindFilesResponse(
+    input: unknown,
+  ): string[] {
+    if (Array.isArray(input)) return input
+    if (!input || typeof input !== "object") return []
+
+    const maybeData = (input as { data?: unknown }).data
+    if (Array.isArray(maybeData)) return maybeData
+    if (maybeData && typeof maybeData === "object") {
+      const nested = (maybeData as { data?: unknown }).data
+      if (Array.isArray(nested)) return nested
+    }
+    console.error("Unexpected find.files response shape", { input })
+    return []
+  }
+
   async function fetchDirs(query: string) {
     const directory = root()
     if (!directory) return [] as string[]
 
     const results = await sdk.client.find
       .files({ directory, query, type: "directory", limit: 50 })
-      .then((x) => x.data ?? [])
+      .then((x) => normalizeFindFilesResponse(x))
       .catch(() => [])
 
     return results.map((x) => x.replace(/[\\/]+$/, ""))
