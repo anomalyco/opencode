@@ -999,7 +999,16 @@ export namespace Provider {
       }
 
       if (!options["baseURL"]) options["baseURL"] = model.api.url
-      if (options["apiKey"] === undefined && provider.key) options["apiKey"] = provider.key
+      if (options["apiKey"] === undefined && provider.key) {
+        // For Anthropic OAuth tokens (sk-ant-oat-), use authToken instead of apiKey
+        // This matches pi-ai stealth mode: new Anthropic({ apiKey: null, authToken: oauthToken })
+        if (model.api.npm === "@ai-sdk/anthropic" && provider.key.includes("sk-ant-oat")) {
+          options["apiKey"] = null
+          options["authToken"] = provider.key
+        } else {
+          options["apiKey"] = provider.key
+        }
+      }
       if (model.headers)
         options["headers"] = {
           ...options["headers"],

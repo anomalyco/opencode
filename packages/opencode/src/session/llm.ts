@@ -63,8 +63,15 @@ export namespace LLM {
       Auth.get(input.model.providerID),
     ])
     const isCodex = provider.id === "openai" && auth?.type === "oauth"
+    // Calculate OAuth status early - needed for system prompt identity injection and stealth headers
+    const isOAuth = auth?.type === "oauth" || (provider.key?.includes("sk-ant-oat") ?? false)
+    const isAnthropic = input.model.providerID === "anthropic" || input.model.api.npm === "@ai-sdk/anthropic"
 
     const system = []
+    // For Anthropic OAuth (Claude Max), prepend Claude Code identity to match pi-ai stealth mode
+    if (isOAuth && isAnthropic) {
+      system.push("You are Claude Code, Anthropic's official CLI for Claude.")
+    }
     system.push(
       [
         // use agent prompt otherwise provider prompt
@@ -148,6 +155,18 @@ export namespace LLM {
       },
     )
 
+    // Build stealth headers for Anthropic OAuth (Claude Max) - mimic pi-ai exactly
+    const stealthHeaders: Record<string, string> = {}
+    if (isOAuth && isAnthropic) {
+      stealthHeaders["accept"] = "application/json"
+      stealthHeaders["anthropic-dangerous-direct-browser-access"] = "true"
+      stealthHeaders["x-app"] = "cli"
+      stealthHeaders["User-Agent"] = Installation.USER_AGENT
+      // Add oauth beta flag to existing anthropic-beta header
+      stealthHeaders["anthropic-beta"] =
+        "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14"
+    }
+
     const maxOutputTokens =
       isCodex || provider.id.includes("github-copilot") ? undefined : ProviderTransform.maxOutputTokens(input.model)
 
@@ -223,6 +242,7 @@ export namespace LLM {
               }
             : undefined),
         ...input.model.headers,
+        ...stealthHeaders,
         ...headers,
       },
       maxRetries: input.retries ?? 0,

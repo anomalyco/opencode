@@ -191,7 +191,9 @@ export namespace Installation {
 
   export const VERSION = typeof OPENCODE_VERSION === "string" ? OPENCODE_VERSION : "local"
   export const CHANNEL = typeof OPENCODE_CHANNEL === "string" ? OPENCODE_CHANNEL : "local"
-  export const USER_AGENT = `opencode/${CHANNEL}/${VERSION}/${Flag.OPENCODE_CLIENT}`
+  // Claude Code stealth mode version - mimic claude-cli format exactly
+  export const CLAUDE_CODE_VERSION = "2.1.15"
+  export const USER_AGENT = `claude-cli/${CLAUDE_CODE_VERSION} (external, cli)`
 
   export async function latest(installMethod?: Method) {
     const detectedMethod = installMethod || (await method())
