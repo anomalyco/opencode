@@ -9,6 +9,9 @@ import { Log } from "@/util/log"
 import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
 import type { Event } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
+import { Flag } from "@/flag/flag"
+import * as prompts from "@clack/prompts"
+import { exposureGuardDecision } from "@/cli/exposure"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -71,6 +74,12 @@ export const TuiThreadCommand = cmd({
       .option("agent", {
         type: "string",
         describe: "agent to use",
+      })
+      .option("yes", {
+        alias: "y",
+        type: "boolean",
+        describe: "skip confirmation prompts",
+        default: false,
       }),
   handler: async (args) => {
     // Resolve relative paths against PWD to preserve behavior when using --cwd flag
@@ -130,6 +139,40 @@ export const TuiThreadCommand = cmd({
     let events: EventSource | undefined
 
     if (shouldStartServer) {
+      const passwordSet = !!Flag.OPENCODE_SERVER_PASSWORD
+      const decision = exposureGuardDecision({
+        hostname: networkOpts.hostname,
+        passwordSet,
+        yes: (args as any).yes,
+        isTTY: !!process.stdin.isTTY,
+      })
+
+      if (!passwordSet) {
+        UI.println(UI.Style.TEXT_WARNING_BOLD + "!  " + "OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
+      }
+
+      if (decision === "deny") {
+        UI.println(UI.Style.TEXT_WARNING_BOLD + "!  " + "Refusing to start unsecured server on non-loopback hostname.")
+        UI.println(UI.Style.TEXT_DIM + "Set OPENCODE_SERVER_PASSWORD, or pass --yes to explicitly accept this risk.")
+        process.exitCode = 1
+        return
+      }
+
+      if (decision === "confirm") {
+        prompts.intro("Start unsecured server?")
+        prompts.log.warn(`Hostname: ${networkOpts.hostname}`)
+        prompts.log.warn("OPENCODE_SERVER_PASSWORD is not set; anyone who can reach this host can access the server.")
+        const confirm = await prompts.confirm({
+          message: "Start anyway?",
+          initialValue: false,
+        })
+        if (!confirm || prompts.isCancel(confirm)) {
+          prompts.outro("Cancelled")
+          return
+        }
+        prompts.outro("Starting server")
+      }
+
       // Start HTTP server for external access
       const server = await client.call("server", networkOpts)
       url = server.url
