@@ -1,7 +1,7 @@
 import { createStore } from "solid-js/store"
 import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { Portal, useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
-import type { TextareaRenderable } from "@opentui/core"
+import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core"
 import { useKeybind } from "../../context/keybind"
 import { useTheme, selectedForeground } from "../../context/theme"
 import type { PermissionRequest } from "@opencode-ai/sdk/v2"
@@ -69,7 +69,7 @@ function EditBody(props: { request: PermissionRequest }) {
         <text fg={theme.textMuted}>Edit {normalizePath(filepath())}</text>
       </box>
       <Show when={diff()}>
-        <scrollbox height="100%">
+        <scrollbox height="100%" ref={(r: ScrollBoxRenderable) => (sharedScrollRef = r)}>
           <diff
             diff={diff()}
             view={view()}
@@ -370,6 +370,9 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
   )
 }
 
+// Shared scroll ref that EditBody can set and Prompt can use
+let sharedScrollRef: ScrollBoxRenderable | undefined
+
 function Prompt<const T extends Record<string, string>>(props: {
   title: string
   body: JSX.Element
@@ -405,6 +408,36 @@ function Prompt<const T extends Record<string, string>>(props: {
       const idx = keys.indexOf(store.selected)
       const next = keys[(idx + 1) % keys.length]
       setStore("selected", next)
+    }
+
+    if (evt.name === "up" || evt.name === "k") {
+      evt.preventDefault()
+      sharedScrollRef?.scrollBy(-1)
+    }
+
+    if (evt.name === "down" || evt.name === "j") {
+      evt.preventDefault()
+      sharedScrollRef?.scrollBy(1)
+    }
+
+    if (evt.name === "pageup") {
+      evt.preventDefault()
+      if (sharedScrollRef) sharedScrollRef.scrollBy(-sharedScrollRef.height / 2)
+    }
+
+    if (evt.name === "pagedown") {
+      evt.preventDefault()
+      if (sharedScrollRef) sharedScrollRef.scrollBy(sharedScrollRef.height / 2)
+    }
+
+    if (evt.name === "home") {
+      evt.preventDefault()
+      sharedScrollRef?.scrollTo(0)
+    }
+
+    if (evt.name === "end") {
+      evt.preventDefault()
+      if (sharedScrollRef) sharedScrollRef.scrollTo(sharedScrollRef.scrollHeight)
     }
 
     if (evt.name === "return") {
@@ -487,6 +520,11 @@ function Prompt<const T extends Record<string, string>>(props: {
           <Show when={props.fullscreen}>
             <text fg={theme.text}>
               {"ctrl+f"} <span style={{ fg: theme.textMuted }}>{hint()}</span>
+            </text>
+          </Show>
+          <Show when={sharedScrollRef}>
+            <text fg={theme.text}>
+              {"↑↓"} <span style={{ fg: theme.textMuted }}>scroll</span>
             </text>
           </Show>
           <text fg={theme.text}>

@@ -1,6 +1,8 @@
 import { useSync } from "@tui/context/sync"
 import { createMemo, For, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
+import { useKeyboard } from "@opentui/solid"
+import type { ScrollBoxRenderable } from "@opentui/core"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
 import path from "path"
@@ -19,6 +21,18 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
+  let scroll: ScrollBoxRenderable | undefined
+
+  useKeyboard((evt) => {
+    if (evt.ctrl && evt.shift && evt.name === "up") {
+      evt.preventDefault()
+      scroll?.scrollBy(-1)
+    }
+    if (evt.ctrl && evt.shift && evt.name === "down") {
+      evt.preventDefault()
+      scroll?.scrollBy(1)
+    }
+  })
 
   const [expanded, setExpanded] = createStore({
     mcp: true,
@@ -80,7 +94,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
         paddingRight={2}
         position={props.overlay ? "absolute" : "relative"}
       >
-        <scrollbox flexGrow={1}>
+        <scrollbox flexGrow={1} ref={(r: ScrollBoxRenderable) => (scroll = r)}>
           <box flexShrink={0} gap={1} paddingRight={1}>
             <box paddingRight={1}>
               <text fg={theme.text}>

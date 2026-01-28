@@ -1,6 +1,6 @@
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
-import { TextAttributes } from "@opentui/core"
+import { type ScrollBoxRenderable, TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
 import { Installation } from "@/installation"
@@ -703,11 +703,7 @@ function ErrorComponent(props: {
     props.onExit()
   }
 
-  useKeyboard((evt) => {
-    if (evt.ctrl && evt.name === "c") {
-      handleExit()
-    }
-  })
+  let scroll: ScrollBoxRenderable | undefined
   const [copied, setCopied] = createSignal(false)
 
   const issueURL = new URL("https://github.com/anomalyco/opencode/issues/new?template=bug-report.yml")
@@ -740,6 +736,57 @@ function ErrorComponent(props: {
     })
   }
 
+  useKeyboard((evt) => {
+    if (evt.ctrl && evt.name === "c") {
+      handleExit()
+    }
+
+    if (evt.name === "x" || evt.name === "escape") {
+      evt.preventDefault()
+      handleExit()
+    }
+
+    if (evt.name === "r") {
+      evt.preventDefault()
+      props.reset()
+    }
+
+    if (evt.name === "c") {
+      evt.preventDefault()
+      copyIssueURL()
+    }
+
+    if (evt.name === "up" || evt.name === "k") {
+      evt.preventDefault()
+      scroll?.scrollBy(-1)
+    }
+
+    if (evt.name === "down" || evt.name === "j") {
+      evt.preventDefault()
+      scroll?.scrollBy(1)
+    }
+
+    if (evt.name === "pageup") {
+      evt.preventDefault()
+      if (scroll) scroll.scrollBy(-scroll.height / 2)
+    }
+
+    if (evt.name === "pagedown") {
+      evt.preventDefault()
+      if (scroll) scroll.scrollBy(scroll.height / 2)
+    }
+
+    if (evt.name === "home") {
+      evt.preventDefault()
+      scroll?.scrollTo(0)
+    }
+
+    if (evt.name === "end") {
+      evt.preventDefault()
+      if (scroll) scroll.scrollTo(scroll.scrollHeight)
+    }
+  })
+
   return (
     <box flexDirection="column" gap={1} backgroundColor={colors.bg}>
       <box flexDirection="row" gap={1} alignItems="center">
@@ -748,7 +795,7 @@ function ErrorComponent(props: {
         </text>
         <box onMouseUp={copyIssueURL} backgroundColor={colors.primary} padding={1}>
           <text attributes={TextAttributes.BOLD} fg={colors.bg}>
-            Copy issue URL (exception info pre-filled)
+            C̲opy issue URL (exception info pre-filled)
           </text>
         </box>
         {copied() && <text fg={colors.muted}>Successfully copied</text>}
@@ -756,13 +803,13 @@ function ErrorComponent(props: {
       <box flexDirection="row" gap={2} alignItems="center">
         <text fg={colors.text}>A fatal error occurred!</text>
         <box onMouseUp={props.reset} backgroundColor={colors.primary} padding={1}>
-          <text fg={colors.bg}>Reset TUI</text>
+          <text fg={colors.bg}>R̲eset TUI</text>
         </box>
         <box onMouseUp={handleExit} backgroundColor={colors.primary} padding={1}>
-          <text fg={colors.bg}>Exit</text>
+          <text fg={colors.bg}>Ex̲it</text>
         </box>
       </box>
-      <scrollbox height={Math.floor(term().height * 0.7)}>
+      <scrollbox height={Math.floor(term().height * 0.7)} ref={(r: ScrollBoxRenderable) => (scroll = r)}>
         <text fg={colors.muted}>{props.error.stack}</text>
       </scrollbox>
       <text fg={colors.text}>{props.error.message}</text>
