@@ -5,6 +5,9 @@ export type Platform = {
   /** Platform discriminator */
   platform: "web" | "desktop"
 
+  /** Desktop OS (Tauri only) */
+  os?: "macos" | "windows" | "linux"
+
   /** App version */
   version?: string
 
@@ -13,6 +16,12 @@ export type Platform = {
 
   /** Restart the app  */
   restart(): Promise<void>
+
+  /** Navigate back in history */
+  back(): void
+
+  /** Navigate forward in history */
+  forward(): void
 
   /** Send a system notification (optional deep link) */
   notify(title: string, description?: string, href?: string): Promise<void>
@@ -38,11 +47,14 @@ export type Platform = {
   /** Fetch override */
   fetch?: typeof fetch
 
-  /** Get the configured default server URL (desktop only) */
-  getDefaultServerUrl?(): Promise<string | null>
+  /** Get the configured default server URL (platform-specific) */
+  getDefaultServerUrl?(): Promise<string | null> | string | null
 
-  /** Set the default server URL to use on app startup (desktop only) */
-  setDefaultServerUrl?(url: string | null): Promise<void>
+  /** Set the default server URL to use on app startup (platform-specific) */
+  setDefaultServerUrl?(url: string | null): Promise<void> | void
+
+  /** Parse markdown to HTML using native parser (desktop only, returns unprocessed code blocks) */
+  parseMarkdown?(markdown: string): Promise<string>
 }
 
 export const { use: usePlatform, provider: PlatformProvider } = createSimpleContext({

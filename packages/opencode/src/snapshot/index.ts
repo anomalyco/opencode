@@ -6,9 +6,46 @@ import { Global } from "../global"
 import z from "zod"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
+import { Scheduler } from "../scheduler"
 
 export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
+  const hour = 60 * 60 * 1000
+  const prune = "7.days"
+
+  export function init() {
+    Scheduler.register({
+      id: "snapshot.cleanup",
+      interval: hour,
+      run: cleanup,
+      scope: "instance",
+    })
+  }
+
+  export async function cleanup() {
+    if (Instance.project.vcs !== "git") return
+    const cfg = await Config.get()
+    if (cfg.snapshot === false) return
+    const git = gitdir()
+    const exists = await fs
+      .stat(git)
+      .then(() => true)
+      .catch(() => false)
+    if (!exists) return
+    const result = await $`git --git-dir ${git} --work-tree ${Instance.worktree} gc --prune=${prune}`
+      .quiet()
+      .cwd(Instance.directory)
+      .nothrow()
+    if (result.exitCode !== 0) {
+      log.warn("cleanup failed", {
+        exitCode: result.exitCode,
+        stderr: result.stderr.toString(),
+        stdout: result.stdout.toString(),
+      })
+      return
+    }
+    log.info("cleanup", { prune })
+  }
 
   export async function track() {
     if (Instance.project.vcs !== "git") return
@@ -48,7 +85,7 @@ export namespace Snapshot {
     const git = gitdir()
     await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
     const result =
-      await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --name-only ${hash} -- .`
+      await $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --name-only ${hash} -- .`
         .quiet()
         .cwd(Instance.directory)
         .nothrow()
@@ -126,7 +163,7 @@ export namespace Snapshot {
     const git = gitdir()
     await $`git --git-dir ${git} --work-tree ${Instance.worktree} add .`.quiet().cwd(Instance.directory).nothrow()
     const result =
-      await $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff ${hash} -- .`
+      await $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff ${hash} -- .`
         .quiet()
         .cwd(Instance.worktree)
         .nothrow()
@@ -159,7 +196,7 @@ export namespace Snapshot {
   export async function diffFull(from: string, to: string): Promise<FileDiff[]> {
     const git = gitdir()
     const result: FileDiff[] = []
-    for await (const line of $`git -c core.autocrlf=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --no-renames --numstat ${from} ${to} -- .`
+    for await (const line of $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --no-renames --numstat ${from} ${to} -- .`
       .quiet()
       .cwd(Instance.directory)
       .nothrow()

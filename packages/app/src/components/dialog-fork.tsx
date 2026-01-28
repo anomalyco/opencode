@@ -9,6 +9,7 @@ import { List } from "@opencode-ai/ui/list"
 import { extractPromptFromParts } from "@/utils/prompt"
 import type { TextPart as SDKTextPart } from "@opencode-ai/sdk/v2/client"
 import { base64Encode } from "@opencode-ai/util/encode"
+import { useLanguage } from "@/context/language"
 
 interface ForkableMessage {
   id: string
@@ -27,6 +28,7 @@ export const DialogFork: Component = () => {
   const sdk = useSDK()
   const prompt = usePrompt()
   const dialog = useDialog()
+  const language = useLanguage()
 
   const messages = createMemo((): ForkableMessage[] => {
     const sessionID = params.id
@@ -59,7 +61,10 @@ export const DialogFork: Component = () => {
     if (!sessionID) return
 
     const parts = sync.data.part[item.id] ?? []
-    const restored = extractPromptFromParts(parts, { directory: sdk.directory })
+    const restored = extractPromptFromParts(parts, {
+      directory: sdk.directory,
+      attachmentName: language.t("common.attachment"),
+    })
 
     dialog.close()
 
@@ -73,11 +78,11 @@ export const DialogFork: Component = () => {
   }
 
   return (
-    <Dialog title="Fork from message">
+    <Dialog title={language.t("command.session.fork")}>
       <List
         class="flex-1 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0"
-        search={{ placeholder: "Search", autofocus: true }}
-        emptyMessage="No messages to fork from"
+        search={{ placeholder: language.t("common.search.placeholder"), autofocus: true }}
+        emptyMessage={language.t("dialog.fork.empty")}
         key={(x) => x.id}
         items={messages}
         filterKeys={["text"]}
@@ -85,12 +90,8 @@ export const DialogFork: Component = () => {
       >
         {(item) => (
           <div class="w-full flex items-center gap-2">
-            <span class="truncate flex-1 min-w-0 text-left" style={{ "font-weight": "400" }}>
-              {item.text}
-            </span>
-            <span class="text-text-weak shrink-0" style={{ "font-weight": "400" }}>
-              {item.time}
-            </span>
+            <span class="truncate flex-1 min-w-0 text-left font-normal">{item.text}</span>
+            <span class="text-text-weak shrink-0 font-normal">{item.time}</span>
           </div>
         )}
       </List>

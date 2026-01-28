@@ -5,32 +5,27 @@
   inset: 0;
   z-index: 50;
   background-color: hsl(from var(--background-base) h s l / 0.2);
-
-  /* animation: overlayHide 250ms ease 100ms forwards; */
-  /**/
-  /* &[data-expanded] { */
-  /*   animation: overlayShow 250ms ease; */
-  /* } */
 }
 
 [data-component="dialog"] {
   position: fixed;
   inset: 0;
-  margin-left: var(--dialog-left-margin);
   z-index: 50;
   display: flex;
   align-items: center;
   justify-content: center;
+  pointer-events: none;
 
   [data-slot="dialog-container"] {
     position: relative;
     z-index: 50;
-    width: min(calc(100vw - 16px), 480px);
+    width: min(calc(100vw - 16px), 640px);
     height: min(calc(100vh - 16px), 512px);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-items: start;
+    overflow: visible;
 
     [data-slot="dialog-content"] {
       display: flex;
@@ -40,28 +35,26 @@
       width: 100%;
       max-height: 100%;
       min-height: 280px;
+      overflow: auto;
+      pointer-events: auto;
+
+      /* Hide scrollbar */
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      &::-webkit-scrollbar {
+        display: none;
+      }
 
       /* padding: 8px; */
       /* padding: 8px 8px 0 8px; */
-      border: 1px solid
-        light-dark(
-          color-mix(in oklch, var(--border-base) 30%, transparent),
-          color-mix(in oklch, var(--border-base) 50%, transparent)
-        );
       border-radius: var(--radius-xl);
       background: var(--surface-raised-stronger-non-alpha);
       background-clip: padding-box;
-      box-shadow: var(--shadow-lg);
-
-      /* animation: contentHide 300ms ease-in forwards; */
-      /**/
-      /* &[data-expanded] { */
-      /*   animation: contentShow 300ms ease-out; */
-      /* } */
+      box-shadow: var(--shadow-lg-border-base);
 
       [data-slot="dialog-header"] {
         display: flex;
-        padding: 16px 16px 16px 24px;
+        padding: 20px;
         justify-content: space-between;
         align-items: center;
         flex-shrink: 0;
@@ -109,7 +102,7 @@
         display: flex;
         flex-direction: column;
         flex: 1;
-        overflow-y: auto;
+        overflow: hidden;
 
         &:focus-visible {
           outline: none;
@@ -119,10 +112,34 @@
         outline: none;
       }
     }
+  }
 
-    &:focus-visible {
-      outline: none;
+  &[data-fit] {
+    [data-slot="dialog-container"] {
+      height: auto;
+
+      [data-slot="dialog-content"] {
+        min-height: 0;
+      }
     }
+  }
+
+  &[data-size="large"] [data-slot="dialog-container"] {
+    width: min(calc(100vw - 32px), 800px);
+    height: min(calc(100vh - 32px), 600px);
+  }
+
+  &[data-size="x-large"] [data-slot="dialog-container"] {
+    width: min(calc(100vw - 32px), 960px);
+    height: min(calc(100vh - 32px), 600px);
+  }
+}
+
+[data-component="dialog"][data-transition] [data-slot="dialog-content"] {
+  animation: contentHide 100ms ease-in forwards;
+
+  &[data-expanded] {
+    animation: contentShow 150ms ease-out;
   }
 }
 
@@ -145,7 +162,7 @@
 @keyframes contentShow {
   from {
     opacity: 0;
-    transform: scale(0.96);
+    transform: scale(0.98);
   }
   to {
     opacity: 1;
@@ -159,6 +176,6 @@
   }
   to {
     opacity: 0;
-    transform: scale(0.96);
+    transform: scale(0.98);
   }
 }
