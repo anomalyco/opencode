@@ -5,7 +5,6 @@ import { State } from "./state"
 import { iife } from "@/util/iife"
 import { GlobalBus } from "@/bus/global"
 import { Filesystem } from "@/util/filesystem"
-import { withTimeout } from "@/util/timeout"
 
 interface Context {
   directory: string
@@ -14,8 +13,6 @@ interface Context {
 }
 const context = Context.create<Context>("instance")
 const cache = new Map<string, Promise<Context>>()
-
-const DISPOSE_TIMEOUT_MS = 10_000
 
 const disposal = {
   all: undefined as Promise<void> | undefined,
@@ -92,8 +89,8 @@ export const Instance = {
       for (const [key, value] of entries) {
         if (cache.get(key) !== value) continue
 
-        const ctx = await withTimeout(value, DISPOSE_TIMEOUT_MS).catch((error) => {
-          Log.Default.warn("instance dispose timed out", { key, error })
+        const ctx = await value.catch((error) => {
+          Log.Default.warn("instance dispose failed", { key, error })
           return undefined
         })
 
