@@ -15,6 +15,7 @@ interface SessionInfo {
   gid?: number
   home?: string
   shell?: string
+  csrfToken?: string
 }
 
 /**
@@ -68,6 +69,9 @@ export const { use: useSession, provider: SessionProvider } = createSimpleContex
         if (res.ok) {
           const data = await res.json()
           setSessionInfo(data)
+          if (typeof data.csrfToken === "string") {
+            sessionStorage.setItem("opencode_csrf_token", data.csrfToken)
+          }
           setAuthRequired(false)
           setIsExpired(false)
         } else {

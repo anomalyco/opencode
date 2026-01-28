@@ -13,7 +13,9 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
 
 function getCsrfToken(): string | undefined {
   const match = document.cookie.match(/opencode_csrf=([^;]+)/)
-  return match ? match[1] : undefined
+  if (match) return match[1]
+  const stored = sessionStorage.getItem("opencode_csrf_token")
+  return stored ?? undefined
 }
 
 const csrfFetch: typeof fetch = Object.assign(

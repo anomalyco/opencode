@@ -2367,10 +2367,11 @@ export const AuthRoutes = lazy(() =>
           return c.json({ error: "Not authenticated" }, 401)
         }
 
-        const csrfToken = getCookie(c, CSRF_COOKIE_NAME)
+        let csrfToken = getCookie(c, CSRF_COOKIE_NAME)
         const hasValidCsrf = csrfToken ? validateCSRFToken(csrfToken, session.id, getCSRFSecret()) : false
         if (!hasValidCsrf) {
           setCSRFCookie(c, session.id)
+          csrfToken = getCookie(c, CSRF_COOKIE_NAME)
         }
 
         return c.json({
@@ -2382,6 +2383,7 @@ export const AuthRoutes = lazy(() =>
           gid: session.gid,
           home: session.home,
           shell: session.shell,
+          csrfToken,
         })
       },
     ),

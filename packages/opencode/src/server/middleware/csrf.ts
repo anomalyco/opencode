@@ -86,13 +86,6 @@ export const csrfMiddleware = createMiddleware(async (c, next) => {
     return next()
   }
 
-  // Get token from cookie (set by server after login)
-  const cookieToken = getCookie(c, CSRF_COOKIE_NAME)
-  if (!cookieToken) {
-    log.warn("CSRF validation failed: missing cookie", { path, method })
-    return c.json({ error: "csrf_required", message: "CSRF token required" }, 403)
-  }
-
   // Get token from header or body
   let requestToken = c.req.header(CSRF_HEADER_NAME)
 
@@ -112,13 +105,19 @@ export const csrfMiddleware = createMiddleware(async (c, next) => {
     }
   }
 
-  if (!requestToken) {
-    log.warn("CSRF validation failed: missing request token", { path, method })
+  // Get token from cookie (set by server after login)
+  let cookieToken = getCookie(c, CSRF_COOKIE_NAME)
+  if (!cookieToken && !requestToken) {
+    log.warn("CSRF validation failed: missing cookie and request token", { path, method })
     return c.json({ error: "csrf_required", message: "CSRF token required" }, 403)
   }
 
+  if (!requestToken && cookieToken) {
+    requestToken = cookieToken
+  }
+
   // Tokens must match (double-submit pattern)
-  if (cookieToken !== requestToken) {
+  if (cookieToken && cookieToken !== requestToken) {
     log.warn("CSRF validation failed: token mismatch", { path, method })
     return c.json({ error: "csrf_invalid", message: "Invalid CSRF token" }, 403)
   }
@@ -131,7 +130,13 @@ export const csrfMiddleware = createMiddleware(async (c, next) => {
   }
 
   const secret = getCSRFSecret()
-  const isValid = validateCSRFToken(cookieToken, sessionId, secret)
+  const tokenToValidate = requestToken ?? cookieToken
+  if (!tokenToValidate) {
+    log.warn("CSRF validation failed: missing token after parsing", { path, method })
+    return c.json({ error: "csrf_required", message: "CSRF token required" }, 403)
+  }
+
+  const isValid = validateCSRFToken(tokenToValidate, sessionId, secret)
 
   if (!isValid) {
     log.warn("CSRF validation failed: invalid signature", { path, method, sessionId })
@@ -142,6 +147,16 @@ export const csrfMiddleware = createMiddleware(async (c, next) => {
       : "Invalid CSRF token"
 
     return c.json({ error: "csrf_invalid", message }, 403)
+  }
+
+  if (!cookieToken && requestToken) {
+    const isHttps = c.req.url.startsWith("https://")
+    setCookie(c, CSRF_COOKIE_NAME, requestToken, {
+      httpOnly: false,
+      secure: isHttps,
+      sameSite: "Lax",
+      path: "/",
+    })
   }
 
   // Validation passed
