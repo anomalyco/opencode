@@ -1216,9 +1216,8 @@ export namespace Config {
       if (data.plugin) {
         for (let i = 0; i < data.plugin.length; i++) {
           const plugin = data.plugin[i]
-          try {
-            data.plugin[i] = import.meta.resolve!(plugin, configFilepath)
-          } catch (err) {}
+          const resolved = await Bun.resolve(plugin, path.dirname(configFilepath)).catch(() => {})
+          if (resolved) data.plugin[i] = resolved
         }
       }
       return data
