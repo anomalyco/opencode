@@ -89,12 +89,17 @@ export function AppInterface(props: { defaultUrl?: string }) {
   const defaultServerUrl = () => {
     if (props.defaultUrl) return props.defaultUrl
     if (location.hostname.includes("opencode.ai")) return "http://localhost:4096"
-    if (import.meta.env.DEV) {
-      const host = import.meta.env.VITE_OPENCODE_SERVER_HOST ?? location.hostname
-      const port = import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "9999"
+
+    // For both dev and production, use configured backend or current hostname
+    const host = import.meta.env.VITE_OPENCODE_SERVER_HOST ?? location.hostname
+    const port = import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "9999"
+
+    // If it's a local IP address or localhost, use HTTP
+    if (host === "localhost" || host === "127.0.0.1" || /^192\.168\./.test(host) || /^10\./.test(host)) {
       return `http://${host}:${port}`
     }
 
+    // For production domains (like opencode.ai), use HTTPS with the current origin
     return window.location.origin
   }
 
