@@ -20,33 +20,90 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
 
-      - name: Install dependencies
+      - name: Verify Bun installation
         run: |
-          cd packages/desktop
-          bun install
+          echo "Bun version:"
+          bun --version
+          echo "Node version:"
+          node --version
+
+      - name: Install dependencies
+        working-directory: packages/desktop
+        run: bun install
+
+      - name: Verify dependencies
+        working-directory: packages/desktop
+        run: |
+          echo "Checking if tauri-cli is installed..."
+          bun pm ls | grep -i tauri || echo "Tauri CLI not found in dependencies"
 
       - name: Build frontend
+        working-directory: packages/desktop
         run: |
-          cd packages/desktop
+          echo "Building frontend..."
           bun run build
+          echo "Frontend build completed!"
+          echo "Build output:"
+          ls -la dist/
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
 
-      - name: Build Tauri (debug)
+      - name: Verify Rust installation
         run: |
-          cd packages/desktop
-          bun run tauri build --debug --verbose
+          echo "Rust version:"
+          rustc --version
+          echo "Cargo version:"
+          cargo --version
+
+      - name: Build Tauri (development)
+        working-directory: packages/desktop
+        run: |
+          echo "Starting Tauri build..."
+          bun run tauri build --debug --verbose 2>&1 | tee build.log
+          echo "Build process finished!"
+          echo "Exit code: $?"
         env:
           TAURI_PRIVATE_KEY: ''
           TAURI_KEY_PASSWORD: ''
+
+      - name: Check build output
+        working-directory: packages/desktop
+        run: |
+          echo "Checking for build output..."
+          if [ -d "src-tauri/target/debug" ]; then
+            echo "Debug target directory exists"
+            ls -la src-tauri/target/debug/
+          else
+            echo "Debug target directory NOT found"
+          fi
+
+          if [ -d "src-tauri/target/debug/bundle" ]; then
+            echo "Bundle directory exists!"
+            echo "Bundle contents:"
+            find src-tauri/target/debug/bundle -type f -name "*.exe" -o -name "*.msi" -o -name "*.nsis" || echo "No installer files found"
+          else
+            echo "Bundle directory NOT found"
+            echo "Target directory structure:"
+            ls -R src-tauri/target/ || true
+          fi
+
+      - name: Upload build log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-log
+          path: packages/desktop/build.log
+          if-no-files-found: ignore
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: windows-test
-          path: packages/desktop/src-tauri/target/debug/bundle/*/*
+          path: |
+            packages/desktop/src-tauri/target/debug/bundle/*/*
+            packages/desktop/src-tauri/target/debug/*.exe
           if-no-files-found: warn
