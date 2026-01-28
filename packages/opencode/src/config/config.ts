@@ -2,6 +2,7 @@ import { Log } from "../util/log"
 import path from "path"
 import { pathToFileURL } from "url"
 import os from "os"
+import { createHash } from "crypto"
 import z from "zod"
 import { Filesystem } from "../util/filesystem"
 import { ModelsDev } from "../provider/models"
@@ -32,6 +33,19 @@ import { Event } from "../server/event"
 export namespace Config {
   const log = Log.create({ service: "config" })
 
+  const WELLKNOWN_TIMEOUT_MS = Flag.OPENCODE_WELLKNOWN_TIMEOUT_MS ?? 15_000
+
+  function wellknownCacheFile(url: string) {
+    const hash = createHash("sha256").update(url).digest("hex")
+    return path.join(Global.Path.cache, "wellknown", `${hash}.json`)
+  }
+
+  async function fetchWellKnown(url: string) {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), WELLKNOWN_TIMEOUT_MS)
+    return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer))
+  }
+
   // Custom merge function that concatenates array fields instead of replacing them
   function mergeConfigConcatArrays(target: Info, source: Info): Info {
     const merged = mergeDeep(target, source)
@@ -53,20 +67,39 @@ export namespace Config {
     for (const [key, value] of Object.entries(auth)) {
       if (value.type === "wellknown") {
         process.env[value.key] = value.token
-        log.debug("fetching remote config", { url: `${key}/.well-known/opencode` })
-        const response = await fetch(`${key}/.well-known/opencode`)
-        if (!response.ok) {
-          throw new Error(`failed to fetch remote config from ${key}: ${response.status}`)
+
+        const url = `${key}/.well-known/opencode`
+        const cacheFile = wellknownCacheFile(key)
+
+        log.debug("fetching remote config", { url })
+
+        const response = await fetchWellKnown(url).catch(() => undefined)
+        const fetched = await response
+          ?.json()
+          .then((x) => (x as any).config ?? {})
+          .catch(() => undefined)
+
+        if (response?.ok && fetched) {
+          if (!fetched.$schema) fetched.$schema = "https://opencode.ai/config.json"
+          await fs.mkdir(path.dirname(cacheFile), { recursive: true }).catch(() => {})
+          await Bun.write(cacheFile, JSON.stringify(fetched)).catch(() => {})
+          result = mergeConfigConcatArrays(result, await loadFile(cacheFile))
+          log.debug("loaded remote config from well-known", { url: key })
+          continue
         }
-        const wellknown = (await response.json()) as any
-        const remoteConfig = wellknown.config ?? {}
-        // Add $schema to prevent load() from trying to write back to a non-existent file
-        if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
-        result = mergeConfigConcatArrays(
-          result,
-          await load(JSON.stringify(remoteConfig), `${key}/.well-known/opencode`),
-        )
-        log.debug("loaded remote config from well-known", { url: key })
+
+        const cached = await loadFile(cacheFile).catch(() => undefined)
+        if (cached) {
+          log.warn("failed to fetch remote config, using cached well-known config", {
+            url,
+            cacheFile,
+            status: response?.status,
+          })
+          result = mergeConfigConcatArrays(result, cached)
+          continue
+        }
+
+        throw new Error(`failed to fetch remote config from ${key}: ${response?.status ?? "unknown"}`)
       }
     }
 
