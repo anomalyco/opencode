@@ -10,13 +10,13 @@ See: .planning/PROJECT.md (updated 2026-01-19)
 ## Current Position
 
 **Milestone 1:** Complete (Phases 1-11)
-**Phase:** 11 of 11 (Documentation) - Complete
-**Next Phase:** 17 - Make the client boundary the only place where "unknown" exists, then validate and normalize into strict types so the rest of the UI can't represent invalid shapes. Concrete pattern: Typed API layer: Expose functions like findFiles(): Promise<string[]> (no { data }, no unknown), and only allow those in UI code. Don't export the raw SDK client outside this layer. Runtime validation: Parse server responses with a schema (zod, valibot, io-ts). If validation fails, throw or return a typed error. This makes "wrong shape" impossible to flow into components. Normalization at the boundary: If the SDK can return { data } or raw arrays, normalize there and return the canonical type. No any/unknown past boundary: The rest of the app should only see string[] or a typed error union. This fully applies "illegal states unrepresentable": UI code can't accidentally access .map on a non-array because it never sees non-array values.
-**Plan:** 4 of 4 - Complete
-**Status:** Milestone complete, UAT verified
-**Last activity:** 2026-01-26 - Completed UAT verification
+**Phase:** 16 of 17 (Repo downloads) - In progress
+**Next Phase:** 16 - Plan 05 (Repo manager entry)
+**Plan:** 04 of 05 - Complete (gap closures; plans 02-03 pending)
+**Status:** Phase in progress
+**Last activity:** 2026-01-28 - Completed 16-04 plan
 
-Progress: [████████████] 100% (Milestone 1)
+Progress: [█████████░] 96% (48/50 plans complete)
 
 ## Performance Metrics
 
@@ -194,10 +194,10 @@ From research summary (Phase 2, 3 flags):
 
 ## Session Continuity
 
-Last session: 2026-01-26
-Stopped at: Milestone 1 complete - All 11 phases finished and verified
+Last session: 2026-01-28
+Stopped at: Completed 16-04-PLAN.md
 Resume file: None
-Next: Ready to plan next milestone (Phases 12-15) or start new project cycle
+Next: Complete 16-05, then finish Phase 16 plans 02-03
 
 ## Phase 6 Progress
 
