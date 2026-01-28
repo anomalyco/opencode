@@ -44,6 +44,7 @@ export function NewSessionView(props: NewSessionViewProps) {
   })
 
   const currentRepoPath = createMemo(() => sync.project?.worktree)
+  const showManageHint = createMemo(() => !currentRepoPath())
 
   const openRepo = (repo: Repo) => {
     layout.projects.open(repo.path)
@@ -88,6 +89,11 @@ export function NewSessionView(props: NewSessionViewProps) {
           Manage repos
         </Button>
       </div>
+      <Show when={showManageHint()}>
+        <div class="text-12-regular text-text-weak">
+          No repositories yet. Manage repos to add or clone one.
+        </div>
+      </Show>
       <div class="flex justify-center items-center gap-1">
         <Icon name="branch" size="small" />
         <Select
