@@ -188,6 +188,11 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     return items
   })
 
+  const parentPath = createMemo(() => {
+    const current = normalizePath(currentPath())
+    return parentRelative(current)
+  })
+
   function resolve(rel: string) {
     const absolute = join(root(), rel)
     props.onSelect(props.multiple ? [absolute] : absolute)
@@ -229,8 +234,22 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
         }
       >
         <div class="flex flex-col gap-3">
-          <div class="text-12-regular text-text-weak">
-            Current folder: <span class="text-text-strong">{display(resolveAbsolute(currentPath()))}</span>
+          <div class="flex items-center justify-between gap-3">
+            <div class="text-12-regular text-text-weak">
+              Current folder: <span class="text-text-strong">{display(resolveAbsolute(currentPath()))}</span>
+            </div>
+            <Button
+              size="normal"
+              variant="ghost"
+              disabled={!parentPath()}
+              onClick={() => {
+                const next = parentPath()
+                if (!next && next !== "") return
+                setCurrentPath(next)
+              }}
+            >
+              Up one level
+            </Button>
           </div>
           <List
             search={{ placeholder: "Search folders", autofocus: true }}
