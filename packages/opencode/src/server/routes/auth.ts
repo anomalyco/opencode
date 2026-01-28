@@ -5,6 +5,7 @@ import z from "zod"
 import { UserSession } from "../../session/user-session"
 import { clearSessionCookie, setSessionCookie, type AuthEnv } from "../middleware/auth"
 import { setCSRFCookie, clearCSRFCookie } from "../middleware/csrf"
+import { CSRF_COOKIE_NAME, getCSRFSecret, validateCSRFToken } from "../security/csrf"
 import { lazy } from "../../util/lazy"
 import { BrokerClient, type UserInfo } from "../../auth/broker-client"
 import { getUserInfo } from "../../auth/user-info"
@@ -2365,6 +2366,13 @@ export const AuthRoutes = lazy(() =>
         if (!session) {
           return c.json({ error: "Not authenticated" }, 401)
         }
+
+        const csrfToken = getCookie(c, CSRF_COOKIE_NAME)
+        const hasValidCsrf = csrfToken ? validateCSRFToken(csrfToken, session.id, getCSRFSecret()) : false
+        if (!hasValidCsrf) {
+          setCSRFCookie(c, session.id)
+        }
+
         return c.json({
           id: session.id,
           username: session.username,
