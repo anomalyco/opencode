@@ -34,7 +34,10 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git ls-files:*)",
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "Bash(cargo check:*)",
+      "Bash(cargo metadata:*)",
+      "Bash(gh run list:*)"
     ]
   }
 }
