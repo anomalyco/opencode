@@ -6,8 +6,7 @@ Arguments:
 - session_id (required): Session ID to read
 - query (optional): Filter messages containing this text (case-insensitive)
 - include_todos (optional): Include todo list if available (default: false)
-- include_transcript (optional): Include transcript log if available (default: false)
-- limit (optional): Maximum number of messages to return (default: all)
+- limit (optional): Maximum number of messages to return (default: 30)
 
 Example output:
 Session: ses_abc123

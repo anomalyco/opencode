@@ -8,10 +8,6 @@ import SESSION_READ_DESCRIPTION from "./session-read.txt"
 import SESSION_SEARCH_DESCRIPTION from "./session-search.txt"
 import SESSION_INFO_DESCRIPTION from "./session-info.txt"
 
-function formatDate(timestamp: number) {
-  return new Date(timestamp).toISOString().split("T")[0]
-}
-
 function formatDateTime(timestamp: number) {
   return new Date(timestamp).toISOString().replace("T", " ").slice(0, 19)
 }
@@ -50,6 +46,8 @@ export const SessionListTool = Tool.define("session_list", {
     const maxResults = params.limit ?? 5
     const fromTimestamp = params.from_date ? new Date(params.from_date).getTime() : undefined
     const toTimestamp = params.to_date ? new Date(params.to_date).getTime() : undefined
+    if (fromTimestamp !== undefined && isNaN(fromTimestamp)) throw new Error(`Invalid from_date: ${params.from_date}`)
+    if (toTimestamp !== undefined && isNaN(toTimestamp)) throw new Error(`Invalid to_date: ${params.to_date}`)
     const queryLower = params.query?.toLowerCase()
 
     const sessions: Array<{ info: Session.Info; messageCount: number; lastMessage?: number }> = []
@@ -95,7 +93,6 @@ export const SessionReadTool = Tool.define("session_read", {
     session_id: z.string().describe("Session ID to read"),
     query: z.string().optional().describe("Filter messages containing this text (case-insensitive)"),
     include_todos: z.boolean().optional().describe("Include todo list if available (default: false)"),
-    include_transcript: z.boolean().optional().describe("Include transcript log if available (default: false)"),
     limit: z.coerce.number().optional().describe("Maximum messages to return (default: 30)"),
   }),
   async execute(params, ctx) {
@@ -107,6 +104,7 @@ export const SessionReadTool = Tool.define("session_read", {
     })
 
     const session = await Session.get(params.session_id)
+    if (!session) throw new Error(`Session not found: ${params.session_id}`)
     const allMsgs = await Session.messages({ sessionID: params.session_id })
     const maxMsgs = params.limit ?? 30
 
@@ -273,6 +271,7 @@ export const SessionInfoTool = Tool.define("session_info", {
     })
 
     const session = await Session.get(params.session_id)
+    if (!session) throw new Error(`Session not found: ${params.session_id}`)
     const msgs = await Session.messages({ sessionID: params.session_id })
     const todos = await Todo.get(params.session_id)
 
