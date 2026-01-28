@@ -98,6 +98,10 @@ export const dict = {
   "dialog.provider.anthropic.note": "使用 Claude Pro/Max 或 API 密钥连接",
   "dialog.provider.openai.note": "使用 ChatGPT Pro/Plus 或 API 密钥连接",
   "dialog.provider.copilot.note": "使用 Copilot 或 API 密钥连接",
+  "dialog.provider.opencode.note": "使用 OpenCode Zen 或 API 密钥连接",
+  "dialog.provider.google.note": "使用 Google 账号或 API 密钥连接",
+  "dialog.provider.openrouter.note": "使用 OpenRouter 账号或 API 密钥连接",
+  "dialog.provider.vercel.note": "使用 Vercel 账号或 API 密钥连接",
 
   "dialog.model.select.title": "选择模型",
   "dialog.model.search.placeholder": "搜索模型",
@@ -522,6 +526,8 @@ export const dict = {
   "settings.general.row.theme.description": "自定义 OpenCode 的主题。",
   "settings.general.row.font.title": "字体",
   "settings.general.row.font.description": "自定义代码块使用的等宽字体",
+  "settings.general.row.releaseNotes.title": "发行说明",
+  "settings.general.row.releaseNotes.description": "更新后显示“新功能”弹窗",
 
   "settings.general.row.releaseNotes.title": "发行说明",
   "settings.general.row.releaseNotes.description": "更新后显示“新功能”弹窗",
