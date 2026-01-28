@@ -4,10 +4,13 @@ import { useSync } from "@/context/sync"
 import { Icon } from "@opencode-ai/ui/icon"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { Select } from "@opencode-ai/ui/select"
+import { Button } from "@opencode-ai/ui/button"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLayout } from "@/context/layout"
 import { useNavigate } from "@solidjs/router"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { RepoSelector } from "@/components/repo/repo-selector"
+import { RepositoryManagerDialog } from "@/components/repo/repository-manager-dialog"
 import { useServer } from "@/context/server"
 import type { Repo } from "@opencode-ai/sdk/v2/client"
 
@@ -22,6 +25,7 @@ interface NewSessionViewProps {
 export function NewSessionView(props: NewSessionViewProps) {
   const sync = useSync()
   const layout = useLayout()
+  const dialog = useDialog()
   const server = useServer()
   const navigate = useNavigate()
 
@@ -45,6 +49,10 @@ export function NewSessionView(props: NewSessionViewProps) {
     layout.projects.open(repo.path)
     server.projects.touch(repo.path)
     navigate(`/${base64Encode(repo.path)}/session`)
+  }
+
+  const openRepoManager = () => {
+    dialog.show(() => <RepositoryManagerDialog onOpenRepo={openRepo} />)
   }
 
   const label = (value: string) => {
@@ -74,6 +82,12 @@ export function NewSessionView(props: NewSessionViewProps) {
         </div>
       </div>
       <RepoSelector currentPath={currentRepoPath()} onOpenRepo={openRepo} />
+      <div class="flex items-center gap-2">
+        <Button size="normal" variant="ghost" onClick={openRepoManager}>
+          <Icon name="branch" size="small" />
+          Manage repos
+        </Button>
+      </div>
       <div class="flex justify-center items-center gap-1">
         <Icon name="branch" size="small" />
         <Select
