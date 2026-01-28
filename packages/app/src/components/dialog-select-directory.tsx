@@ -135,12 +135,18 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   }
 
   const [currentPath, setCurrentPath] = createSignal("")
+  const [lastRoot, setLastRoot] = createSignal("")
 
   createEffect(() => {
     const base = normalizePath(root())
     if (!base) return
-    if (!currentPath() || normalizePath(currentPath()) === "") {
+    const current = normalizePath(currentPath())
+    const previous = lastRoot()
+    if (!current || current === previous) {
       setCurrentPath(base)
+    }
+    if (previous !== base) {
+      setLastRoot(base)
     }
   })
 
@@ -241,7 +247,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
               Current folder: <span class="text-text-strong">{display(currentPath())}</span>
             </div>
             <Button
-              size="normal"
+              size="large"
               variant="ghost"
               disabled={!parentPath()}
               onClick={() => {
