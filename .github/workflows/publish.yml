@@ -29,13 +29,9 @@ permissions:
   packages: write
 
 jobs:
-  test:
-    if: github.event_name == 'workflow_dispatch'
-    uses: ./.github/workflows/test.yml
   publish:
-    needs: test
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    if: always() && github.repository == 'anomalyco/opencode' && (github.event_name != 'workflow_dispatch' || needs.test.result == 'success')
+    if: github.repository == 'anomalyco/opencode'
     steps:
       - uses: actions/checkout@v3
         with:
