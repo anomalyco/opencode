@@ -361,6 +361,9 @@ export const RepoRoutes = lazy(() =>
           const branches = await Repo.listBranches(repo)
           return c.json(branches)
         } catch (error) {
+          if (error instanceof Repo.InvalidRecordError) {
+            return c.json({ error: error.info }, 400)
+          }
           if (error instanceof Repo.CloneError) {
             return c.json({ error: cloneErrorInfo(error) }, 400)
           }
