@@ -344,11 +344,14 @@ export namespace File {
     }
 
     const nodes: Node[] = []
-    for (const entry of await fs.promises
-      .readdir(resolved, {
-        withFileTypes: true,
-      })
-      .catch(() => [])) {
+    let entries: fs.Dirent[] = []
+    try {
+      entries = await fs.promises.readdir(resolved, { withFileTypes: true })
+    } catch (error) {
+      log.error("list_failed", { path: resolved, error: error instanceof Error ? error.message : String(error) })
+      throw new Error(`Unable to list directory: ${resolved}`)
+    }
+    for (const entry of entries) {
       if (exclude.includes(entry.name)) continue
       const fullPath = path.join(resolved, entry.name)
       const relativePath = path.relative(Instance.directory, fullPath)
