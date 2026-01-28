@@ -57,6 +57,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
 
   const openContext = () => {
     if (!params.id) return
+    layout.fileTree.open()
     layout.fileTree.setTab("all")
     tabs().open("context")
     tabs().setActive("context")
