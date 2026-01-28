@@ -113,7 +113,14 @@ export default defineConfig({
 
         {
           label: "Develop",
-          items: ["sdk", "server", "server-architecture", "plugins", "ecosystem"],
+          items: [
+            "sdk",
+            "server",
+            "server-architecture",
+            "plugins",
+            "oh-my-opencode-ralph-loop",
+            "ecosystem",
+          ],
         },
       ],
       components: {

@@ -1,0 +1,204 @@
+---
+title: Ralph Loop（oh-my-opencode 插件）
+description: 深入解析 Ralph Loop 的实现细节、工作流程，以及它如何通过 OpenCode 插件机制完成自循环。
+---
+
+Ralph Loop 是 **oh-my-opencode** 插件提供的“自我续航”任务循环：模型需要在完成任务后输出
+`<promise>...</promise>` 标记，否则插件会在会话空闲时自动注入续写提示，直到完成或达到最大轮数。
+它并不在 OpenCode 核心中实现，而是依赖 **OpenCode 的插件钩子 + 会话/事件 API** 来驱动。
+
+下面以源码为依据，完整拆解其设计与与 OpenCode 的协同方式。
+
+---
+
+## 组件地图（实现位置）
+
+**核心实现（oh-my-opencode）：**
+- `src/hooks/ralph-loop/index.ts`：循环主逻辑（启动、检测、续写、终止）
+- `src/hooks/ralph-loop/storage.ts`：状态持久化（frontmatter + body）
+- `src/hooks/ralph-loop/constants.ts`：默认参数（状态文件路径、默认 Promise、最大轮数）
+- `src/hooks/ralph-loop/types.ts`：状态与配置类型
+- `src/features/builtin-commands/templates/ralph-loop.ts`：/ralph-loop 与 /ulw-loop 指令模板
+- `src/features/builtin-commands/commands.ts`：内置命令注册
+
+**配套依赖（oh-my-opencode）：**
+- `src/hooks/claude-code-hooks/transcript.ts`：Claude Code 兼容的 JSONL transcript，用于完成检测
+- `src/features/hook-message-injector/*`：在缺失 agent/model 信息时用于兜底
+- `src/shared/system-directive.ts`：系统指令前缀（用于标记续写提示）
+- `src/config/schema.ts`：`ralph_loop` 配置项
+
+**OpenCode 核心协同点（opencode）：**
+- `packages/opencode/src/plugin/index.ts`：加载插件并转发事件
+- `packages/opencode/src/session/prompt.ts`：触发 `chat.message`、`tool.execute.before/after`
+- `packages/opencode/src/session/status.ts`：发出 `session.idle` 事件（兼容旧事件）
+
+---
+
+## 数据与状态设计
+
+Ralph Loop 采用 **本地状态文件** 作为循环存根，默认写入：
+
+```
+.sisyphus/ralph-loop.local.md
+```
+
+文件结构为 frontmatter + 原始任务体：
+
+```yaml
+---
+active: true
+iteration: 1
+max_iterations: 100
+completion_promise: "DONE"
+started_at: "2026-01-28T12:34:56Z"
+session_id: "ses_..."
+ultrawork: true
+---
+<原始任务文本>
+```
+
+这使得循环可恢复、可观测，也允许人为检查/清理状态。
+
+---
+
+## 启动流程（从 /ralph-loop 到写状态）
+
+Ralph Loop 的启动由 **内置斜杠命令**触发：
+
+1) 用户输入 `/ralph-loop "任务" --max-iterations=50` 或 `/ulw-loop ...`
+2) `slashcommand` 工具返回对应模板（包含 `<user-task>` 段落）
+3) oh-my-opencode 在 `chat.message` 与 `tool.execute.before` 中解析：
+   - 提取任务文本
+   - 解析 `--max-iterations` 与 `--completion-promise`
+   - 调用 `startLoop()` 写入状态文件
+
+`/ulw-loop` 与 `/ralph-loop` 共享模板，但多带一个 `ultrawork` 标记，用于后续 prompt 生成。
+
+---
+
+## 运行流程（session.idle 驱动的自循环）
+
+Ralph Loop 依赖 **OpenCode 的事件总线**：当会话进入空闲状态（`session.idle`）时，插件开始检查是否需要继续。
+
+核心流程如下：
+
+```
+用户输入 /ralph-loop
+        ↓
+slashcommand 返回模板
+        ↓
+chat.message / tool.execute.before -> startLoop 写状态
+        ↓
+OpenCode 会话执行完成 -> session.idle
+        ↓
+ralph-loop 读取状态，检测完成
+        ↓
+未完成 → 注入 continuation prompt → 新一轮执行
+完成/超限/取消 → 清理状态并提示
+```
+
+### 1) 完成检测（两级策略）
+
+1. **优先检查 transcript 文件**（Claude Code 兼容 JSONL）：
+   - 位置：`~/.claude/transcripts/{sessionId}.jsonl`（或 `CLAUDE_CONFIG_DIR`）
+   - 扫描非 user 行，匹配 `<promise>...</promise>`
+
+2. **API 回退检测**：
+   - 调用 `ctx.client.session.messages()` 读取会话消息
+   - 取最后一条 assistant 消息内容并匹配 `<promise>`
+
+这种双路径降低了对 API 的依赖，同时对 Claude Code 兼容场景更稳定。
+
+### 2) 继续迭代（注入 continuation prompt）
+
+未完成时：
+- 递增 `iteration`
+- 生成 continuation prompt：
+  - 带系统指令前缀 `[SYSTEM DIRECTIVE: OH-MY-OPENCODE - RALPH LOOP]`
+  - 包含原始任务
+  - 要求“完成后输出 `<promise>`”
+- 如果是 `ulw-loop`，会在 prompt 前加 `ultrawork`
+- 使用 `ctx.client.session.prompt()` 注入新 prompt
+- 用 Toast 在 TUI 中提示当前轮次
+
+为了保持一致性，插件会尝试 **延续原会话的 agent/model**：
+- 首选从 `session.messages` 中取最新的 agent/model
+- 失败时，从 hook-message-injector 的本地 message 存储中兜底
+
+### 3) 终止条件
+
+- **检测到 `<promise>`**：清理状态并弹出成功提示
+- **达到 `max_iterations`**：清理状态并弹出警告
+- **/cancel-ralph**：用户显式取消
+- **session.deleted 或 MessageAbortedError**：自动清理
+
+同时，为避免错误事件造成的重复触发，`session.error` 会进入 5 秒恢复期（`isRecovering`）。
+
+---
+
+## 与 OpenCode 的协同机制
+
+Ralph Loop 的核心依赖点来自 OpenCode 插件体系：
+
+1) **插件初始化**
+- OpenCode 在启动时通过 `packages/opencode/src/plugin/index.ts` 创建 `PluginInput`
+- 将 `client / directory / worktree / serverUrl / Bun.$` 注入插件
+
+2) **事件转发**
+- `Plugin.init()` 订阅事件总线，转发 `session.*` 到 `hook.event`
+- `session.idle` 由 `SessionStatus.set(... idle)` 触发（兼容旧事件）
+
+3) **消息与工具钩子**
+- `chat.message`：在 `session/prompt.ts` 里创建消息后触发
+- `tool.execute.before/after`：工具调用前后触发，供插件拦截 `/ralph-loop`
+
+4) **驱动下一轮**
+- `ctx.client.session.prompt()` 会在同一 session 中注入新的 user message
+- OpenCode 的 session loop 会自然处理并进入下一次 `session.idle`
+
+这套机制让 Ralph Loop 既保持 **插件级隔离**，又能与 OpenCode 的会话生命周期紧密协同。
+
+---
+
+## 配置与启用
+
+Ralph Loop 默认关闭，需要在 **oh-my-opencode 配置**中启用：
+
+```jsonc title=".opencode/oh-my-opencode.json"
+{
+  "ralph_loop": {
+    "enabled": true,
+    "default_max_iterations": 100
+  }
+}
+```
+
+如需自定义状态文件路径，可设置 `state_dir`（相对项目根目录，建议传完整文件路径）。
+常用命令：
+
+```
+/ralph-loop "Build a REST API with auth"
+/ralph-loop "Refactor payments" --max-iterations=50 --completion-promise=FINISHED
+/ulw-loop "Ship it" --max-iterations=20
+/cancel-ralph
+```
+
+---
+
+## 设计要点小结
+
+- **状态驱动**：通过 `.sisyphus/ralph-loop.local.md` 把循环“固定下来”
+- **事件驱动**：以 `session.idle` 为心跳，决定是否继续
+- **完成检测双路径**：优先 transcript，失败再走 API
+- **上下文连续性**：尽量延续 agent/model，避免跑偏
+- **安全停止**：max iterations、cancel、session 删除/中断均可收束
+
+如果你希望进一步定制（如替换 completion 规则、不同的 continuation prompt 结构），
+核心入口就是 `src/hooks/ralph-loop/index.ts` 中的 `CONTINUATION_PROMPT` 和检测逻辑。
+
+---
+
+### 相关链接
+
+- [oh-my-opencode](https://github.com/code-yeongyu/oh-my-opencode)（Ralph Loop 实现所在）
+- [OpenCode 插件体系文档](/docs/plugins)
