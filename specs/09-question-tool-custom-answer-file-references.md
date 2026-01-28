@@ -17,13 +17,6 @@ This fixes the case where the custom answer input couldn’t (or couldn’t easi
 5. To submit the custom answer:
    - press `enter` again (with autocomplete closed) to confirm/advance, as before.
 
-## Behavior notes
-
-- `enter` is context-sensitive:
-  - When autocomplete is open: it selects.
-  - When autocomplete is closed: it submits/advances.
-- The final value sent is plain text containing `@...` (it does not automatically attach file parts).
-
 ## Implementation location
 
 - `question` tool UI (TUI): `packages/opencode/src/cli/cmd/tui/routes/session/question.tsx`
