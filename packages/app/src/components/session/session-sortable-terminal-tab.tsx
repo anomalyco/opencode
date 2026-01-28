@@ -146,7 +146,7 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
             />
           }
         >
-          <span onDblClick={edit} style={{ visibility: store.editing ? "hidden" : "visible" }}>
+          <span onDblClick={edit} classList={{ invisible: store.editing }}>
             {label()}
           </span>
         </Tabs.Trigger>
@@ -167,8 +167,8 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
         <DropdownMenu open={store.menuOpen} onOpenChange={(open) => setStore("menuOpen", open)}>
           <DropdownMenu.Portal>
             <DropdownMenu.Content
+              class="fixed"
               style={{
-                position: "fixed",
                 left: `${store.menuPosition.x}px`,
                 top: `${store.menuPosition.y}px`,
               }}

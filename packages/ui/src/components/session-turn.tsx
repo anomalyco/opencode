@@ -565,7 +565,7 @@ export function SessionTurn(
                                   viewBox="0 0 10 10"
                                   fill="none"
                                   xmlns="http://www.w3.org/2000/svg"
-                                  class="text-icon-base"
+                                  data-slot="session-turn-trigger-icon"
                                 >
                                   <path
                                     d="M8.125 1.875H1.875L5 8.125L8.125 1.875Z"

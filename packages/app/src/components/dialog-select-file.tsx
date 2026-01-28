@@ -26,7 +26,7 @@ type Entry = {
 
 type DialogSelectFileMode = "all" | "files"
 
-export function DialogSelectFile(props: { mode?: DialogSelectFileMode }) {
+export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFile?: (path: string) => void }) {
   const command = useCommand()
   const language = useLanguage()
   const layout = useLayout()
@@ -36,7 +36,6 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode }) {
   const filesOnly = () => props.mode === "files"
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey))
-  const view = createMemo(() => layout.view(sessionKey))
   const state = { cleanup: undefined as (() => void) | void, committed: false }
   const [grouped, setGrouped] = createSignal(false)
   const common = [
@@ -45,7 +44,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode }) {
     "session.previous",
     "session.next",
     "terminal.toggle",
-    "review.toggle",
+    "fileTree.toggle",
   ]
   const limit = 5
 
@@ -163,7 +162,8 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode }) {
     const value = file.tab(path)
     tabs().open(value)
     file.load(path)
-    view().reviewPanel.open()
+    layout.fileTree.setTab("all")
+    props.onOpenFile?.(path)
   }
 
   const handleSelect = (item: Entry | undefined) => {
