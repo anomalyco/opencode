@@ -10,6 +10,14 @@ export default defineConfig({
     // Proxy API requests to backend server for development
     // This avoids CORS and cookie issues with cross-origin requests
     proxy: {
+      "/agent": {
+        target: "http://localhost:4096",
+        changeOrigin: true,
+      },
+      "/command": {
+        target: "http://localhost:4096",
+        changeOrigin: true,
+      },
       "/auth": {
         target: "http://localhost:4096",
         changeOrigin: true,
