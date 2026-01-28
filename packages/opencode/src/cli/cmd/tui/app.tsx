@@ -27,7 +27,7 @@ import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
 import { DialogAlert } from "./ui/dialog-alert"
 import { ToastProvider, useToast } from "./ui/toast"
-import { ExitProvider, useExit } from "./context/exit"
+import { ExitProvider, useExit, destroyRenderer } from "./context/exit"
 import { Session as SessionApi } from "@/session"
 import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
@@ -110,7 +110,18 @@ export function tui(input: {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
     const mode = await getTerminalBackgroundColor()
+
+    // Handle SIGINT (Ctrl+C) to ensure proper terminal cleanup on Windows
+    // This is critical because the default SIGINT behavior may not give
+    // the renderer enough time to send mouse tracking disable sequences
+    const sigintHandler = () => {
+      destroyRenderer()
+      process.exit(0)
+    }
+    process.on("SIGINT", sigintHandler)
+
     const onExit = async () => {
+      process.off("SIGINT", sigintHandler)
       await input.onExit?.()
       resolve()
     }
@@ -695,11 +706,9 @@ function ErrorComponent(props: {
   mode?: "dark" | "light"
 }) {
   const term = useTerminalDimensions()
-  const renderer = useRenderer()
 
   const handleExit = async () => {
-    renderer.setTerminalTitle("")
-    renderer.destroy()
+    destroyRenderer()
     props.onExit()
   }
 
