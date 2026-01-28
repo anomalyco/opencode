@@ -23,6 +23,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
+import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { useCodeComponent } from "@opencode-ai/ui/context/code"
@@ -1096,11 +1097,12 @@ export default function Page() {
     }, 0)
   }
 
+  const reviewTab = createMemo(() => isDesktop() && !layout.fileTree.opened())
   const contextOpen = createMemo(() => tabs().active() === "context" || tabs().all().includes("context"))
   const openedTabs = createMemo(() =>
     tabs()
       .all()
-      .filter((tab) => tab !== "context"),
+      .filter((tab) => tab !== "context" && tab !== "review"),
   )
 
   const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
@@ -1125,6 +1127,46 @@ export default function Page() {
     if (fileTreeTab() !== "changes") return
     setFileTreeTab("all")
   }
+
+  const reviewPanel = () => (
+    <div class="flex flex-col h-full overflow-hidden bg-background-stronger contain-strict">
+      <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
+        <Switch>
+          <Match when={hasReview()}>
+            <Show
+              when={diffsReady()}
+              fallback={<div class="px-6 py-4 text-text-weak">{language.t("session.review.loadingChanges")}</div>}
+            >
+              <SessionReviewTab
+                diffs={diffs}
+                view={view}
+                diffStyle={layout.review.diffStyle()}
+                onDiffStyleChange={layout.review.setDiffStyle}
+                onScrollRef={setReviewScroll}
+                focusedFile={activeDiff()}
+                onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+                comments={comments.all()}
+                focusedComment={comments.focus()}
+                onFocusedCommentChange={comments.setFocus}
+                onViewFile={(path) => {
+                  showAllFiles()
+                  const value = file.tab(path)
+                  tabs().open(value)
+                  file.load(path)
+                }}
+              />
+            </Show>
+          </Match>
+          <Match when={true}>
+            <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
+              <Mark class="w-14 opacity-10" />
+              <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.empty")}</div>
+            </div>
+          </Match>
+        </Switch>
+      </div>
+    </div>
+  )
 
   createEffect(
     on(
@@ -1229,29 +1271,56 @@ export default function Page() {
   const activeTab = createMemo(() => {
     const active = tabs().active()
     if (active === "context") return "context"
+    if (active === "review" && reviewTab()) return "review"
     if (active && file.pathFromTab(active)) return normalizeTab(active)
 
     const first = openedTabs()[0]
     if (first) return first
     if (contextOpen()) return "context"
+    if (reviewTab() && hasReview()) return "review"
     return "empty"
   })
 
   createEffect(() => {
     if (!layout.ready()) return
     if (tabs().active()) return
-    if (openedTabs().length === 0 && !contextOpen()) return
+    if (openedTabs().length === 0 && !contextOpen() && !(reviewTab() && hasReview())) return
 
     const next = activeTab()
     if (next === "empty") return
     tabs().setActive(next)
   })
 
+  createEffect(
+    on(
+      () => layout.fileTree.opened(),
+      (opened, prev) => {
+        if (prev === undefined) return
+        if (!isDesktop()) return
+
+        if (opened) {
+          const active = tabs().active()
+          const tab = active === "review" || (!active && hasReview()) ? "changes" : "all"
+          layout.fileTree.setTab(tab)
+          return
+        }
+
+        if (fileTreeTab() !== "changes") return
+        tabs().setActive("review")
+      },
+      { defer: true },
+    ),
+  )
+
   createEffect(() => {
     const id = params.id
     if (!id) return
 
-    const wants = isDesktop() ? fileTreeTab() === "changes" : store.mobileTab === "changes"
+    const wants = isDesktop()
+      ? layout.fileTree.opened()
+        ? fileTreeTab() === "changes"
+        : activeTab() === "review"
+      : store.mobileTab === "changes"
     if (!wants) return
     if (sync.data.session_diff[id] !== undefined) return
     if (sync.status === "loading") return
@@ -2114,7 +2183,7 @@ export default function Page() {
           >
             <div class="flex-1 min-w-0 h-full">
               <Show
-                when={fileTreeTab() === "changes"}
+                when={layout.fileTree.opened() && fileTreeTab() === "changes"}
                 fallback={
                   <DragDropProvider
                     onDragStart={handleDragStart}
@@ -2127,6 +2196,23 @@ export default function Page() {
                     <Tabs value={activeTab()} onChange={openTab}>
                       <div class="sticky top-0 shrink-0 flex">
                         <Tabs.List>
+                          <Show when={reviewTab()}>
+                            <Tabs.Trigger value="review" classes={{ button: "!pl-6" }}>
+                              <div class="flex items-center gap-3">
+                                <Show when={hasReview() && diffsReady()}>
+                                  <DiffChanges changes={diffs()} variant="bars" />
+                                </Show>
+                                <div class="flex items-center gap-1.5">
+                                  <div>{language.t("session.tab.review")}</div>
+                                  <Show when={hasReview()}>
+                                    <div class="text-12-medium text-text-strong h-4 px-2 flex flex-col items-center justify-center rounded-full bg-surface-base">
+                                      {reviewCount()}
+                                    </div>
+                                  </Show>
+                                </div>
+                              </div>
+                            </Tabs.Trigger>
+                          </Show>
                           <Show when={contextOpen()}>
                             <Tabs.Trigger
                               value="context"
@@ -2174,6 +2260,12 @@ export default function Page() {
                           </StickyAddButton>
                         </Tabs.List>
                       </div>
+
+                      <Show when={reviewTab()}>
+                        <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
+                          <Show when={activeTab() === "review"}>{reviewPanel()}</Show>
+                        </Tabs.Content>
+                      </Show>
 
                       <Tabs.Content value="empty" class="flex flex-col h-full overflow-hidden contain-strict">
                         <Show when={activeTab() === "empty"}>
@@ -2710,47 +2802,7 @@ export default function Page() {
                   </DragDropProvider>
                 }
               >
-                <div class="flex flex-col h-full overflow-hidden bg-background-stronger contain-strict">
-                  <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-                    <Switch>
-                      <Match when={hasReview()}>
-                        <Show
-                          when={diffsReady()}
-                          fallback={
-                            <div class="px-6 py-4 text-text-weak">{language.t("session.review.loadingChanges")}</div>
-                          }
-                        >
-                          <SessionReviewTab
-                            diffs={diffs}
-                            view={view}
-                            diffStyle={layout.review.diffStyle()}
-                            onDiffStyleChange={layout.review.setDiffStyle}
-                            onScrollRef={setReviewScroll}
-                            focusedFile={activeDiff()}
-                            onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
-                            comments={comments.all()}
-                            focusedComment={comments.focus()}
-                            onFocusedCommentChange={comments.setFocus}
-                            onViewFile={(path) => {
-                              showAllFiles()
-                              const value = file.tab(path)
-                              tabs().open(value)
-                              file.load(path)
-                            }}
-                          />
-                        </Show>
-                      </Match>
-                      <Match when={true}>
-                        <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
-                          <Mark class="w-14 opacity-10" />
-                          <div class="text-14-regular text-text-weak max-w-56">
-                            {language.t("session.review.empty")}
-                          </div>
-                        </div>
-                      </Match>
-                    </Switch>
-                  </div>
-                </div>
+                {reviewPanel()}
               </Show>
             </div>
 

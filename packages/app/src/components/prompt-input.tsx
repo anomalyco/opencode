@@ -190,6 +190,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const wantsReview = item.commentOrigin === "review" || (item.commentOrigin !== "file" && commentInReview(item.path))
     if (wantsReview) {
       layout.fileTree.setTab("changes")
+      if (!layout.fileTree.opened()) tabs().open("review")
       requestAnimationFrame(() => comments.setFocus(focus))
       return
     }
