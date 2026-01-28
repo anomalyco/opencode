@@ -25,6 +25,7 @@ import { createOpenAI } from "@ai-sdk/openai"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import { createOpenRouter, type LanguageModelV2 } from "@openrouter/ai-sdk-provider"
 import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/openai-compatible/src"
+import { createOpenaiCompatible as createLocalOpenAICompatible } from "./sdk/openai-compatible/src"
 import { createXai } from "@ai-sdk/xai"
 import { createMistral } from "@ai-sdk/mistral"
 import { createGroq } from "@ai-sdk/groq"
@@ -61,7 +62,7 @@ export namespace Provider {
     "@ai-sdk/google-vertex": createVertex,
     "@ai-sdk/google-vertex/anthropic": createVertexAnthropic,
     "@ai-sdk/openai": createOpenAI,
-    "@ai-sdk/openai-compatible": createOpenAICompatible,
+    "@ai-sdk/openai-compatible": createLocalOpenAICompatible as unknown as (options: any) => SDK,
     "@openrouter/ai-sdk-provider": createOpenRouter,
     "@ai-sdk/xai": createXai,
     "@ai-sdk/mistral": createMistral,
@@ -987,6 +988,55 @@ export namespace Provider {
         // Preserve custom fetch if it exists, wrap it with timeout logic
         const fetchFn = customFetch ?? fetch
         const opts = init ?? {}
+
+        // Add userKey as query parameter if it exists
+        if (options["userKey"]) {
+          let url = typeof input === "string" ? input : input.toString()
+          // Check if URL already has query parameters (contains '?')
+          if (url.includes("?")) {
+            // Check if the URL ends with '?' or '&' to avoid double symbols
+            if (url.endsWith("?") || url.endsWith("&")) {
+              url += `user_key=${encodeURIComponent(options["userKey"])}`
+            } else {
+              url += `&user_key=${encodeURIComponent(options["userKey"])}`
+            }
+          } else {
+            url += `?user_key=${encodeURIComponent(options["userKey"])}`
+          }
+          input = url
+        }
+
+        // Ensure API key is added to Authorization header if it exists
+        if (options["apiKey"]) {
+          // Handle both Headers object and plain object
+          if (opts.headers instanceof Headers) {
+            if (!opts.headers.has("Authorization")) {
+              opts.headers.set("Authorization", `Bearer ${options["apiKey"]}`)
+            }
+          } else if (opts.headers && !Array.isArray(opts.headers)) {
+            const h = opts.headers as Record<string, string>
+            if (!h["Authorization"]) {
+              h["Authorization"] = `Bearer ${options["apiKey"]}`
+            }
+          } else if (!opts.headers) {
+            opts.headers = { Authorization: `Bearer ${options["apiKey"]}` }
+          }
+        }
+
+        // Debug logging for troubleshooting
+        const debugUrl = typeof input === "string" ? input : input.toString()
+        const hasAuth = opts.headers instanceof Headers
+          ? opts.headers.has("Authorization")
+          : opts.headers && !Array.isArray(opts.headers)
+            ? !!(opts.headers as Record<string, string>)["Authorization"]
+            : false
+        log.info("[DEBUG] API Request", {
+          url: debugUrl,
+          method: opts.method ?? "GET",
+          hasAuth,
+          userKey: options["userKey"] ? "present" : "missing",
+          apiKey: options["apiKey"] ? "present" : "missing",
+        })
 
         if (options["timeout"] !== undefined && options["timeout"] !== null) {
           const signals: AbortSignal[] = []
