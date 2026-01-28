@@ -21,17 +21,13 @@ export const NumberStepper: Component<NumberStepperProps> = (props) => {
     props.onChange(Math.round(next * 10) / 10)
   }
 
-  const handleInput = (e: InputEvent) => {
+  const handleBlur = (e: FocusEvent) => {
     const target = e.target as HTMLInputElement
     const parsed = parseFloat(target.value)
     if (!isNaN(parsed)) {
       const clamped = Math.min(props.max, Math.max(props.min, parsed))
       props.onChange(Math.round(clamped * 10) / 10)
     }
-  }
-
-  const handleBlur = (e: FocusEvent) => {
-    const target = e.target as HTMLInputElement
     target.value = props.format(props.value)
   }
 
@@ -50,7 +46,6 @@ export const NumberStepper: Component<NumberStepperProps> = (props) => {
         inputMode="decimal"
         class="w-14 h-8 text-14-mono text-text-base text-center border-x border-border-weak-base bg-transparent outline-none"
         value={props.format(props.value)}
-        onInput={handleInput}
         onBlur={handleBlur}
       />
       <button
