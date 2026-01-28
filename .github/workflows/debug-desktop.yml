@@ -1,0 +1,175 @@
+name: Debug Desktop Build Step by Step
+
+on:
+  workflow_dispatch:
+
+jobs:
+  debug-build:
+    runs-on: windows-latest
+    steps:
+      - name: Enable Git long paths
+        run: git config --global core.longpaths true
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      # Step 1: Check project structure
+      - name: Check project structure
+        run: |
+          echo "=== Checking project structure ==="
+          echo "Root directory:"
+          Get-ChildItem -Force | Select-Object Name, Mode
+          echo ""
+          echo "Packages directory:"
+          Get-ChildItem packages -Force | Select-Object Name, Mode
+          echo ""
+          echo "Desktop package:"
+          Get-ChildItem packages/desktop -Force | Select-Object Name, Mode
+
+      # Step 2: Check desktop package.json
+      - name: Check package.json
+        run: |
+          echo "=== Desktop package.json ==="
+          Get-Content packages/desktop/package.json
+
+      # Step 3: Install dependencies
+      - name: Install dependencies
+        working-directory: packages/desktop
+        run: |
+          echo "=== Installing dependencies ==="
+          bun install
+          echo ""
+          echo "=== Checking node_modules ==="
+          if (Test-Path "node_modules") {
+            Write-Host "node_modules exists"
+            Get-ChildItem node_modules -Directory | Measure-Object
+          } else {
+            Write-Host "node_modules NOT found"
+          }
+
+      # Step 4: Try to build frontend
+      - name: Build frontend
+        id: build-frontend
+        working-directory: packages/desktop
+        continue-on-error: true
+        run: |
+          echo "=== Building frontend ==="
+          bun run build
+          echo ""
+          echo "=== Checking dist folder ==="
+          if (Test-Path "dist") {
+            Write-Host "dist folder exists"
+            Get-ChildItem dist -Recurse -File | Select-Object -First 20
+          } else {
+            Write-Host "dist folder NOT found"
+            exit 1
+          }
+
+      - name: Frontend build result
+        run: |
+          if ("${{ steps.build-frontend.outcome }}" -eq "failure") {
+            echo "❌ Frontend build FAILED"
+            exit 1
+          } else {
+            echo "✅ Frontend build SUCCEEDED"
+          }
+
+      # Step 5: Setup Rust
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      # Step 6: Check Tauri config
+      - name: Check Tauri configuration
+        run: |
+          echo "=== Checking Tauri config ==="
+          if (Test-Path "packages/desktop/src-tauri") {
+            Write-Host "src-tauri directory exists"
+            Get-ChildItem packages/desktop/src-tauri -Force | Select-Object Name, Mode
+            echo ""
+            if (Test-Path "packages/desktop/src-tauri/Cargo.toml") {
+              Write-Host "Cargo.toml found"
+              Get-Content packages/desktop/src-tauri/Cargo.toml
+            }
+            echo ""
+            if (Test-Path "packages/desktop/src-tauri/tauri.conf.json") {
+              Write-Host "tauri.conf.json found"
+              Get-Content packages/desktop/src-tauri/tauri.conf.json
+            }
+          } else {
+            Write-Host "src-tauri directory NOT found"
+            exit 1
+          }
+
+      # Step 7: Install Tauri CLI
+      - name: Install Tauri CLI
+        run: |
+          echo "=== Installing Tauri CLI ==="
+          cargo install tauri-cli --version "^2.0.0"
+          echo ""
+          echo "=== Verifying installation ==="
+          cargo tauri --version
+
+      # Step 8: Try to build Tauri (with full error output)
+      - name: Build Tauri
+        id: build-tauri
+        working-directory: packages/desktop
+        continue-on-error: true
+        run: |
+          echo "=== Building Tauri app ==="
+          $env:TAURI_PRIVATE_KEY = ""
+          $env:TAURI_KEY_PASSWORD = ""
+          cargo tauri build --debug 2>&1 | Tee-Object -FilePath tauri-build.log
+          echo ""
+          echo "=== Build exit code: $LASTEXITCODE ==="
+
+      - name: Tauri build result
+        run: |
+          if ("${{ steps.build-tauri.outcome }}" -eq "failure") {
+            echo "❌ Tauri build FAILED"
+            echo "=== Build log ==="
+            Get-Content packages/desktop/tauri-build.log
+          } else {
+            echo "✅ Tauri build SUCCEEDED"
+          }
+
+      # Step 9: Check build output
+      - name: Check for build artifacts
+        run: |
+          echo "=== Checking for build artifacts ==="
+          if (Test-Path "packages/desktop/src-tauri/target/debug") {
+            Write-Host "Debug target directory exists"
+            Get-ChildItem packages/desktop/src-tauri/target/debug -File | Select-Object Name, Length
+          } else {
+            Write-Host "Debug target directory NOT found"
+          }
+          echo ""
+          if (Test-Path "packages/desktop/src-tauri/target/debug/bundle") {
+            Write-Host "Bundle directory exists!"
+            Get-ChildItem packages/desktop/src-tauri/target/debug/bundle -Recurse -File | Select-Object FullName
+          } else {
+            Write-Host "Bundle directory NOT found"
+            Write-Host "Contents of target directory:"
+            Get-ChildItem packages/desktop/src-tauri/target -Recurse | Select-Object -First 30 FullName
+          }
+
+      # Step 10: Upload logs
+      - name: Upload Tauri build log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tauri-build-log
+          path: packages/desktop/tauri-build.log
+          if-no-files-found: ignore
+
+      - name: Upload dist folder
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-dist
+          path: packages/desktop/dist/**/*
+          if-no-files-found: ignore
