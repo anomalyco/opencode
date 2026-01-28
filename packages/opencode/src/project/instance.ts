@@ -17,6 +17,10 @@ const cache = new Map<string, Promise<Context>>()
 
 const DISPOSE_TIMEOUT_MS = 10_000
 
+const disposal = {
+  all: undefined as Promise<void> | undefined,
+}
+
 export const Instance = {
   async provide<R>(input: { directory: string; init?: () => Promise<any>; fn: () => R }): Promise<R> {
     let existing = cache.get(input.directory)
@@ -80,20 +84,34 @@ export const Instance = {
     })
   },
   async disposeAll() {
-    Log.Default.info("disposing all instances")
-    for (const [key, value] of cache) {
-      const ctx = await withTimeout(value, DISPOSE_TIMEOUT_MS).catch((error) => {
-        Log.Default.warn("instance dispose timed out", { key, error })
-        return undefined
-      })
-      if (!ctx) {
-        cache.delete(key)
-        continue
+    if (disposal.all) return disposal.all
+
+    disposal.all = iife(async () => {
+      Log.Default.info("disposing all instances")
+      const entries = [...cache.entries()]
+      for (const [key, value] of entries) {
+        if (cache.get(key) !== value) continue
+
+        const ctx = await withTimeout(value, DISPOSE_TIMEOUT_MS).catch((error) => {
+          Log.Default.warn("instance dispose timed out", { key, error })
+          return undefined
+        })
+
+        if (!ctx) {
+          if (cache.get(key) === value) cache.delete(key)
+          continue
+        }
+
+        if (cache.get(key) !== value) continue
+
+        await context.provide(ctx, async () => {
+          await Instance.dispose()
+        })
       }
-      await context.provide(ctx, async () => {
-        await Instance.dispose()
-      })
-    }
-    cache.clear()
+    }).finally(() => {
+      disposal.all = undefined
+    })
+
+    return disposal.all
   },
 }
