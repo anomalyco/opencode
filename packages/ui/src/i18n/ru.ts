@@ -5,6 +5,14 @@ export const dict = {
   "ui.sessionReview.expandAll": "Развернуть всё",
   "ui.sessionReview.collapseAll": "Свернуть всё",
 
+  "ui.sessionReview.change.added": "Добавлено",
+  "ui.sessionReview.change.removed": "Удалено",
+  "ui.lineComment.label.prefix": "Комментарий к ",
+  "ui.lineComment.label.suffix": "",
+  "ui.lineComment.editorLabel.prefix": "Комментирование: ",
+  "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.placeholder": "Добавить комментарий",
+  "ui.lineComment.submit": "Комментировать",
   "ui.sessionTurn.steps.show": "Показать шаги",
   "ui.sessionTurn.steps.hide": "Скрыть шаги",
   "ui.sessionTurn.summary.response": "Ответ",
@@ -40,11 +48,13 @@ export const dict = {
   "ui.messageNav.newMessage": "Новое сообщение",
 
   "ui.textField.copyToClipboard": "Копировать в буфер обмена",
+  "ui.textField.copyLink": "Копировать ссылку",
   "ui.textField.copied": "Скопировано",
 
   "ui.imagePreview.alt": "Предпросмотр изображения",
 
   "ui.tool.read": "Чтение",
+  "ui.tool.loaded": "Загружено",
   "ui.tool.list": "Список",
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
