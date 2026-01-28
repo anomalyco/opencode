@@ -27,6 +27,14 @@ export function createOpencodeClient(config?: Config & { directory?: string }) {
     }
   }
 
+  // Forward ORCH_WORKER env var as header for worker session detection
+  if (process.env.ORCH_WORKER) {
+    config.headers = {
+      ...config.headers,
+      "x-opencode-env-ORCH_WORKER": process.env.ORCH_WORKER,
+    }
+  }
+
   const client = createClient(config)
   return new OpencodeClient({ client })
 }
