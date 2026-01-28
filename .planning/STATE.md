@@ -11,7 +11,7 @@ See: .planning/PROJECT.md (updated 2026-01-19)
 
 **Milestone 1:** Complete (Phases 1-11)
 **Phase:** 11 of 11 (Documentation) - Complete
-**Next Phase:** 16 - Allow the user to download git repos so that they can work on them with their opencode sessions
+**Next Phase:** 17 - Make the client boundary the only place where "unknown" exists, then validate and normalize into strict types so the rest of the UI can't represent invalid shapes. Concrete pattern: Typed API layer: Expose functions like findFiles(): Promise<string[]> (no { data }, no unknown), and only allow those in UI code. Don't export the raw SDK client outside this layer. Runtime validation: Parse server responses with a schema (zod, valibot, io-ts). If validation fails, throw or return a typed error. This makes "wrong shape" impossible to flow into components. Normalization at the boundary: If the SDK can return { data } or raw arrays, normalize there and return the canonical type. No any/unknown past boundary: The rest of the app should only see string[] or a typed error union. This fully applies "illegal states unrepresentable": UI code can't accidentally access .map on a non-array because it never sees non-array values.
 **Plan:** 4 of 4 - Complete
 **Status:** Milestone complete, UAT verified
 **Last activity:** 2026-01-26 - Completed UAT verification
@@ -173,6 +173,7 @@ Recent decisions affecting current work:
 - Phase 14 added: Persistent Session Storage - add persistent session storage for multi-instance deployments
 - Phase 15 added: Update docs to use opencode fork (pRizz) - point documentation to https://github.com/pRizz/opencode which has the auth implementation
 - Phase 16 added: Allow the user to download git repos so that they can work on them with their opencode sessions
+- Phase 17 added: Make the client boundary the only place where "unknown" exists, then validate and normalize into strict types so the rest of the UI can't represent invalid shapes. Concrete pattern: Typed API layer: Expose functions like findFiles(): Promise<string[]> (no { data }, no unknown), and only allow those in UI code. Don't export the raw SDK client outside this layer. Runtime validation: Parse server responses with a schema (zod, valibot, io-ts). If validation fails, throw or return a typed error. This makes "wrong shape" impossible to flow into components. Normalization at the boundary: If the SDK can return { data } or raw arrays, normalize there and return the canonical type. No any/unknown past boundary: The rest of the app should only see string[] or a typed error union. This fully applies "illegal states unrepresentable": UI code can't accidentally access .map on a non-array because it never sees non-array values.
 
 ### Pending Todos
 
