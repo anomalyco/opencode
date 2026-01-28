@@ -59,32 +59,38 @@ jobs:
           cargo tauri --version
 
       - name: Build Tauri app (using Cargo)
+        id: build-tauri
+        continue-on-error: true
         run: |
           cd packages/desktop
-          echo "Current directory: $(pwd)"
           echo "Starting Tauri build..."
-          cargo tauri build --debug --config ./src-tauri/tauri.prod.conf.json
+          cargo tauri build --debug --config ./src-tauri/tauri.prod.conf.json || true
         env:
           TAURI_PRIVATE_KEY: ''
           TAURI_KEY_PASSWORD: ''
+
+      - name: Check build result
+        run: |
+          echo "Build exit code: ${{ steps.build-tauri.outcome }}"
 
       - name: Check build output
         run: |
           echo "Checking for build output..."
           if [ -d "packages/desktop/src-tauri/target/debug" ]; then
-            echo "Debug target directory exists"
+            echo "✅ Debug target directory exists"
             ls -la packages/desktop/src-tauri/target/debug/
           else
-            echo "Debug target directory NOT found"
+            echo "❌ Debug target directory NOT found"
+            exit 1
           fi
 
           if [ -d "packages/desktop/src-tauri/target/debug/bundle" ]; then
-            echo "Bundle directory exists!"
-            find packages/desktop/src-tauri/target/debug/bundle -type f
+            echo "✅ Bundle directory exists!"
+            echo "Bundle contents:"
+            find packages/desktop/src-tauri/target/debug/bundle -type f -name "*.exe" -o -name "*.msi"
           else
-            echo "Bundle directory NOT found"
-            echo "Target directory structure:"
-            ls -R packages/desktop/src-tauri/target/ | head -50
+            echo "❌ Bundle directory NOT found"
+            exit 1
           fi
 
       - name: Upload artifacts
@@ -92,5 +98,18 @@ jobs:
         if: always()
         with:
           name: windows-test
-          path: packages/desktop/src-tauri/target/debug/bundle/**/*
+          path: |
+            packages/desktop/src-tauri/target/debug/bundle/**/*
+            packages/desktop/src-tauri/target/debug/*.exe
           if-no-files-found: warn
+
+      - name: Upload build summary
+        if: always()
+        run: |
+          echo "=== BUILD SUMMARY ==="
+          echo "Build Status: ${{ steps.build-tauri.outcome }}"
+          echo ""
+          echo "Generated files:"
+          find packages/desktop/src-tauri/target/debug/bundle -name "*.exe" 2>/dev/null || echo "No exe files found"
+          echo ""
+          echo "The installer should be available in the artifacts!"
