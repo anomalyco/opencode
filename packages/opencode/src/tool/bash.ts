@@ -16,6 +16,9 @@ import { Shell } from "@/shell/shell"
 
 import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncation"
+import { Server } from "@/server/server"
+import { Bus } from "@/bus"
+import { Browser } from "@/browser"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
@@ -154,12 +157,20 @@ export const BashTool = Tool.define("bash", async () => {
         })
       }
 
+      let env = { ...process.env };
+      if (Server.listening()) {
+        const serverUrl = new URL(Server.url())
+        if (Flag.OPENCODE_SERVER_PASSWORD) {
+          serverUrl.username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
+          serverUrl.password = Flag.OPENCODE_SERVER_PASSWORD
+        }
+        env.BROWSER = `${process.execPath} browser-callback ${JSON.stringify(serverUrl.toString())} ${ctx.sessionID} ${ctx.messageID}`
+      }
+
       const proc = spawn(params.command, {
         shell,
         cwd,
-        env: {
-          ...process.env,
-        },
+        env,
         stdio: ["ignore", "pipe", "pipe"],
         detached: process.platform !== "win32",
       })
@@ -191,6 +202,7 @@ export const BashTool = Tool.define("bash", async () => {
       let timedOut = false
       let aborted = false
       let exited = false
+      let browserUrl: string | undefined
 
       const kill = () => Shell.killTree(proc, { exited: () => exited })
 
@@ -215,7 +227,15 @@ export const BashTool = Tool.define("bash", async () => {
         const cleanup = () => {
           clearTimeout(timeoutTimer)
           ctx.abort.removeEventListener("abort", abortHandler)
+          unsubscribeBrowser()
         }
+
+        const unsubscribeBrowser = Bus.subscribe(Browser.OpenRequested, (evt) => {
+          if (evt.properties.sessionID !== ctx.sessionID || evt.properties.messageID !== ctx.messageID) return
+          browserUrl = evt.properties.url
+          cleanup()
+          resolve()
+        })
 
         proc.once("exit", () => {
           exited = true
@@ -231,6 +251,12 @@ export const BashTool = Tool.define("bash", async () => {
       })
 
       const resultMetadata: string[] = []
+
+      if (browserUrl) {
+        resultMetadata.push(`Process requested to open browser at: ${browserUrl}. Take a look with agent-browser or playwright-cli.`)
+        resultMetadata.push(`Process is still running in background with PID: ${proc.pid}`)
+        resultMetadata.push(`To terminate the process, run: kill ${proc.pid}`)
+      }
 
       if (timedOut) {
         resultMetadata.push(`bash tool terminated command after exceeding timeout ${timeout} ms`)
