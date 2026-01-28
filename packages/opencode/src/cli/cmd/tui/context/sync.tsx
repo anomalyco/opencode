@@ -73,6 +73,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       formatter: FormatterStatus[]
       vcs: VcsInfo | undefined
       path: Path
+      config_generation: number
     }>({
       provider_next: {
         all: [],
@@ -100,6 +101,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       formatter: [],
       vcs: undefined,
       path: { state: "", config: "", worktree: "", directory: "" },
+      config_generation: 0,
     })
 
     const sdk = useSDK()
@@ -393,6 +395,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               setStore("provider_next", reconcile(providerList))
               setStore("agent", reconcile(agents))
               setStore("config", reconcile(config))
+              setStore("config_generation", (g) => g + 1)
               if (sessions !== undefined) setStore("session", reconcile(sessions))
             })
           })
