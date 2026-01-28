@@ -15,6 +15,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     fetch?: typeof fetch
     headers?: RequestInit["headers"]
     events?: EventSource
+    onOpenWebUI?: () => Promise<string>
   }) => {
     const abort = new AbortController()
     const sdk = createOpencodeClient({
@@ -96,6 +97,6 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       if (timer) clearTimeout(timer)
     })
 
-    return { client: sdk, event: emitter, url: props.url }
+    return { client: sdk, event: emitter, url: props.url, onOpenWebUI: props.onOpenWebUI }
   },
 })

@@ -107,6 +107,7 @@ export function tui(input: {
   headers?: RequestInit["headers"]
   events?: EventSource
   onExit?: () => Promise<void>
+  onOpenWebUI?: () => Promise<string>
 }) {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
@@ -133,6 +134,7 @@ export function tui(input: {
                         fetch={input.fetch}
                         headers={input.headers}
                         events={input.events}
+                        onOpenWebUI={input.onOpenWebUI}
                       >
                         <SyncProvider>
                           <ThemeProvider mode={mode}>
@@ -536,6 +538,24 @@ function App() {
         renderer.toggleDebugOverlay()
         dialog.clear()
       },
+    },
+        {
+      title: "Open WebUI",
+      value: "webui.open",
+      onSelect: async () => {
+        try {
+          const urlToOpen = sdk.onOpenWebUI ? await sdk.onOpenWebUI() : sdk.url
+          await open(urlToOpen)
+        } catch (error) {
+          toast.show({
+            variant: "error",
+            message: "Failed to open WebUI",
+            duration: 3000,
+          })
+        }
+        dialog.clear()
+      },
+      category: "System",
     },
     {
       title: "Toggle console",
