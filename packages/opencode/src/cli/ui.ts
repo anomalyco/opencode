@@ -1,15 +1,9 @@
 import z from "zod"
 import { EOL } from "os"
 import { NamedError } from "@opencode-ai/util/error"
+import { logo as glyphs } from "./logo"
 
 export namespace UI {
-  // Logo with shadow markers matching brand guidelines (PR #8584)
-  // _ = space with shadow background
-  // ^ = ▀ with foreground + shadow background
-  // ~ = ▀ in shadow color only
-  const LOGO_LEFT = [`                   `, `█▀▀█ █▀▀█ █▀▀█ █▀▀▄`, `█__█ █__█ █^^^ █__█`, `▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀~~▀`]
-  const LOGO_RIGHT = [`             ▄     `, `█▀▀▀ █▀▀█ █▀▀█ █▀▀█`, `█___ █__█ █__█ █^^^`, `▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀`]
-
   export const CancelledError = NamedError.create("UICancelledError", z.void())
 
   export const Style = {
@@ -46,42 +40,51 @@ export namespace UI {
     blank = true
   }
 
-  // Render a logo line, replacing shadow markers with ANSI escape codes
-  // _ = space with dim background
-  // ^ = ▀ with foreground + dim background
-  // ~ = ▀ in dim/shadow color
-  function renderLine(line: string, color: string): string {
-    const reset = "\x1b[0m"
-    const dimBg = "\x1b[48;5;236m" // dark gray background for shadow
-    const dimFg = "\x1b[38;5;236m" // dark gray foreground for shadow
-    let result = ""
-    for (const char of line) {
-      if (char === "_") {
-        result += dimBg + " " + reset + color
-      } else if (char === "^") {
-        result += dimBg + "▀" + reset + color
-      } else if (char === "~") {
-        result += dimFg + "▀" + reset + color
-      } else {
-        result += char
-      }
-    }
-    return result
-  }
-
   export function logo(pad?: string) {
-    const result = []
-    const gray = Bun.color("gray", "ansi") ?? ""
+    const result: string[] = []
     const reset = "\x1b[0m"
-    for (let i = 0; i < LOGO_LEFT.length; i++) {
-      if (pad) result.push(pad)
-      result.push(gray)
-      result.push(renderLine(LOGO_LEFT[i], gray))
-      result.push(reset)
-      result.push(" ") // space between "open" and "code"
-      result.push(renderLine(LOGO_RIGHT[i], reset))
-      result.push(EOL)
+    const left = {
+      fg: Bun.color("gray", "ansi") ?? "",
+      shadow: "\x1b[38;5;235m",
+      bg: "\x1b[48;5;235m",
     }
+    const right = {
+      fg: reset,
+      shadow: "\x1b[38;5;238m",
+      bg: "\x1b[48;5;238m",
+    }
+    const gap = " "
+    const draw = (line: string, fg: string, shadow: string, bg: string) => {
+      const parts: string[] = []
+      for (const char of line) {
+        if (char === "_") {
+          parts.push(bg, " ", reset)
+          continue
+        }
+        if (char === "^") {
+          parts.push(fg, bg, "▀", reset)
+          continue
+        }
+        if (char === "~") {
+          parts.push(shadow, "▀", reset)
+          continue
+        }
+        if (char === " ") {
+          parts.push(" ")
+          continue
+        }
+        parts.push(fg, char, reset)
+      }
+      return parts.join("")
+    }
+    glyphs.left.forEach((row, index) => {
+      if (pad) result.push(pad)
+      result.push(draw(row, left.fg, left.shadow, left.bg))
+      result.push(gap)
+      const other = glyphs.right[index] ?? ""
+      result.push(draw(other, right.fg, right.shadow, right.bg))
+      result.push(EOL)
+    })
     return result.join("").trimEnd()
   }
 
