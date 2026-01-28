@@ -343,14 +343,29 @@ export const RepoRoutes = lazy(() =>
               },
             },
           },
+          400: {
+            description: "Invalid repository path",
+            content: {
+              "application/json": {
+                schema: resolver(RepoErrorResponse),
+              },
+            },
+          },
           ...errors(404),
         },
       }),
       validator("param", z.object({ repoID: z.string() })),
       async (c) => {
-        const repo = await Repo.get(c.req.valid("param").repoID)
-        const branches = await Repo.listBranches(repo)
-        return c.json(branches)
+        try {
+          const repo = await Repo.get(c.req.valid("param").repoID)
+          const branches = await Repo.listBranches(repo)
+          return c.json(branches)
+        } catch (error) {
+          if (error instanceof Repo.CloneError) {
+            return c.json({ error: cloneErrorInfo(error) }, 400)
+          }
+          throw error
+        }
       },
     )
     .post(
