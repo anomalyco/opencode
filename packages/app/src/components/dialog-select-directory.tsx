@@ -4,6 +4,7 @@ import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { List } from "@opencode-ai/ui/list"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { createMemo } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 
@@ -17,6 +18,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const sync = useGlobalSync()
   const sdk = useGlobalSDK()
   const dialog = useDialog()
+  const [state, setState] = createStore({ error: "" })
 
   const home = createMemo(() => sync.data.path.home)
   const root = createMemo(() => sync.data.path.home || sync.data.path.directory)
@@ -57,32 +59,34 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     return query
   }
 
-  function normalizeFindFilesResponse(
-    input: unknown,
-  ): string[] {
-    if (Array.isArray(input)) return input
-    if (!input || typeof input !== "object") return []
+  function normalizeFindFilesResponse(input: unknown): { results: string[]; error: string } {
+    if (Array.isArray(input)) return { results: input, error: "" }
+    if (!input || typeof input !== "object") return { results: [], error: "Unable to load folders. Check the server connection." }
 
     const maybeData = (input as { data?: unknown }).data
-    if (Array.isArray(maybeData)) return maybeData
+    if (Array.isArray(maybeData)) return { results: maybeData, error: "" }
     if (maybeData && typeof maybeData === "object") {
       const nested = (maybeData as { data?: unknown }).data
-      if (Array.isArray(nested)) return nested
+      if (Array.isArray(nested)) return { results: nested, error: "" }
     }
     console.error("Unexpected find.files response shape", { input })
-    return []
+    return { results: [], error: "Unable to load folders. Check the dev proxy configuration." }
   }
 
   async function fetchDirs(query: string) {
     const directory = root()
     if (!directory) return [] as string[]
 
-    const results = await sdk.client.find
-      .files({ directory, query, type: "directory", limit: 50 })
-      .then((x) => normalizeFindFilesResponse(x))
-      .catch(() => [])
-
-    return results.map((x) => x.replace(/[\\/]+$/, ""))
+    setState({ error: "" })
+    try {
+      const response = await sdk.client.find.files({ directory, query, type: "directory", limit: 50 })
+      const { results, error } = normalizeFindFilesResponse(response)
+      if (error) setState({ error })
+      return results.map((x) => x.replace(/[\\/]+$/, ""))
+    } catch {
+      setState({ error: "Unable to load folders. Check the server connection or dev proxy." })
+      return []
+    }
   }
 
   const directories = async (filter: string) => {
@@ -100,7 +104,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     <Dialog title={props.title ?? "Open project"}>
       <List
         search={{ placeholder: "Search folders", autofocus: true }}
-        emptyMessage="No folders found"
+        emptyMessage={state.error || "No folders found"}
         items={directories}
         key={(x) => x}
         onSelect={(path) => {

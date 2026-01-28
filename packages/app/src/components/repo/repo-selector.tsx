@@ -1,4 +1,5 @@
 import { createEffect, createMemo, createResource, createSignal, Show, For } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { Select } from "@opencode-ai/ui/select"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -23,22 +24,33 @@ export function RepoSelector(props: RepoSelectorProps) {
   const [switching, setSwitching] = createSignal(false)
   const [maybeDirtyWarning, setMaybeDirtyWarning] = createSignal<{ branch: string; files: string[] } | null>(null)
   const [selectedBranch, setSelectedBranch] = createSignal<string | undefined>(undefined)
+  const [repoListState, setRepoListState] = createStore({ error: "" })
+
+  const errorMessage = (err: unknown) => {
+    if (err && typeof err === "object" && "data" in err) {
+      const data = (err as { data?: { error?: { message?: string } } }).data
+      if (data?.error?.message) return data.error.message
+    }
+    if (err instanceof Error) return err.message
+    return "Request failed"
+  }
 
   const [repos, { refetch }] = createResource(async () => {
+    setRepoListState({ error: "" })
     try {
-      return (await globalSDK.client.repo.list()).data ?? []
-    } catch {
+      const data = (await globalSDK.client.repo.list()).data
+      if (Array.isArray(data)) return data
+      console.error("Unexpected repo list shape", { data })
+      setRepoListState({ error: "Unable to load repositories. Check the server connection." })
+      return []
+    } catch (err) {
+      setRepoListState({ error: errorMessage(err) })
       return []
     }
   })
 
   const repoList = createMemo(() => {
-    const value = repos()
-    if (!Array.isArray(value)) {
-      console.error("Unexpected repo list shape", { value })
-      return []
-    }
-    return value
+    return repos() ?? []
   })
 
   createEffect(() => {
@@ -67,15 +79,6 @@ export function RepoSelector(props: RepoSelectorProps) {
     const current = branches()?.current
     if (current) setSelectedBranch(current)
   })
-
-  const errorMessage = (err: unknown) => {
-    if (err && typeof err === "object" && "data" in err) {
-      const data = (err as { data?: { error?: { message?: string } } }).data
-      if (data?.error?.message) return data.error.message
-    }
-    if (err instanceof Error) return err.message
-    return "Request failed"
-  }
 
   const switchBranch = async (branch: string, force?: boolean) => {
     const repo = selectedRepo()
@@ -166,6 +169,17 @@ export function RepoSelector(props: RepoSelectorProps) {
           Clone
         </Button>
       </div>
+
+      <Show when={repoListState.error}>
+        {(message) => (
+          <div class="flex items-center justify-between gap-3 rounded-md border border-border-weak-base bg-surface-warning-base/30 px-3 py-2 text-12-regular text-text-weak">
+            <span>{message()}</span>
+            <Button size="normal" variant="ghost" onClick={() => refetch()}>
+              Retry
+            </Button>
+          </div>
+        )}
+      </Show>
 
       <Show when={selectedRepo()}>
         <div class="flex items-center gap-2">
