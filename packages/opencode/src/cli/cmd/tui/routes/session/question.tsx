@@ -1,7 +1,7 @@
 import { createStore } from "solid-js/store"
 import { createMemo, For, Show } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
-import type { TextareaRenderable } from "@opentui/core"
+import type { BoxRenderable, TextareaRenderable } from "@opentui/core"
 import { useKeybind } from "../../context/keybind"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
@@ -9,10 +9,11 @@ import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../component/border"
 import { useTextareaKeybindings } from "../../component/textarea-keybindings"
 import { useDialog } from "../../ui/dialog"
+import { Autocomplete, type AutocompleteRef } from "../../component/prompt/autocomplete"
 
 export function QuestionPrompt(props: { request: QuestionRequest }) {
   const sdk = useSDK()
-  const { theme } = useTheme()
+  const { theme, syntax } = useTheme()
   const keybind = useKeybind()
   const bindings = useTextareaKeybindings()
 
@@ -23,11 +24,18 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     tab: 0,
     answers: [] as QuestionAnswer[],
     custom: [] as string[],
+    draft: "",
     selected: 0,
     editing: false,
   })
 
   let textarea: TextareaRenderable | undefined
+  let anchor: BoxRenderable | undefined
+  let autocomplete: AutocompleteRef | undefined
+  let promptPartTypeId = 0
+
+  const fileStyleId = syntax().getStyleId("extmark.file")!
+  const agentStyleId = syntax().getStyleId("extmark.agent")!
 
   const question = createMemo(() => questions()[store.tab])
   const confirm = createMemo(() => !single() && store.tab === questions().length)
@@ -99,6 +107,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
   function selectOption() {
     if (other()) {
       if (!multi()) {
+        setStore("draft", input())
         setStore("editing", true)
         return
       }
@@ -107,6 +116,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
         toggle(value)
         return
       }
+      setStore("draft", input())
       setStore("editing", true)
       return
     }
@@ -127,9 +137,13 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
 
     // When editing custom answer textarea
     if (store.editing && !confirm()) {
+      if (textarea) autocomplete?.onKeyDown(evt)
+      if (autocomplete?.visible && evt.defaultPrevented) return
+
       if (evt.name === "escape") {
         evt.preventDefault()
         setStore("editing", false)
+        setStore("draft", "")
         return
       }
       if (keybind.match("input_clear", evt)) {
@@ -137,14 +151,16 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
         const text = textarea?.plainText ?? ""
         if (!text) {
           setStore("editing", false)
+          setStore("draft", "")
           return
         }
         textarea?.setText("")
+        setStore("draft", "")
         return
       }
       if (evt.name === "return") {
         evt.preventDefault()
-        const text = textarea?.plainText?.trim() ?? ""
+        const text = store.draft.trim()
         const prev = store.custom[store.tab]
 
         if (!text) {
@@ -158,6 +174,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
             setStore("answers", answers)
           }
           setStore("editing", false)
+          setStore("draft", "")
           return
         }
 
@@ -177,11 +194,13 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
           answers[store.tab] = next
           setStore("answers", answers)
           setStore("editing", false)
+          setStore("draft", "")
           return
         }
 
         pick(text, true)
         setStore("editing", false)
+        setStore("draft", "")
         return
       }
       // Let textarea handle all other keys
@@ -256,6 +275,20 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
       borderColor={theme.accent}
       customBorderChars={SplitBorder.customBorderChars}
     >
+      <Show when={store.editing}>
+        <Autocomplete
+          sessionID={props.request.sessionID}
+          ref={(r) => (autocomplete = r)}
+          anchor={() => anchor!}
+          input={() => textarea!}
+          setPrompt={() => {}}
+          setExtmark={() => {}}
+          value={store.draft}
+          fileStyleId={fileStyleId}
+          agentStyleId={agentStyleId}
+          promptPartTypeId={() => promptPartTypeId}
+        />
+      </Show>
       <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1}>
         <Show when={!single()}>
           <box flexDirection="row" gap={1} paddingLeft={1}>
@@ -363,16 +396,19 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                     </Show>
                   </box>
                   <Show when={store.editing}>
-                    <box paddingLeft={3}>
+                    <box paddingLeft={3} ref={(r) => (anchor = r)}>
                       <textarea
                         ref={(val: TextareaRenderable) => {
                           textarea = val
+                          if (promptPartTypeId === 0) {
+                            promptPartTypeId = val.extmarks.registerType("prompt-part")
+                          }
                           queueMicrotask(() => {
                             val.focus()
                             val.gotoLineEnd()
                           })
                         }}
-                        initialValue={input()}
+                        initialValue={store.draft}
                         placeholder="Type your own answer"
                         minHeight={1}
                         maxHeight={6}
@@ -380,6 +416,13 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                         focusedTextColor={theme.text}
                         cursorColor={theme.primary}
                         keyBindings={bindings()}
+                        onContentChange={() => {
+                          const value = textarea?.plainText ?? ""
+                          setStore("draft", value)
+                          autocomplete?.onInput(value)
+                        }}
+                        syntaxStyle={syntax()}
+                        focusedBackgroundColor={theme.backgroundElement}
                       />
                     </box>
                   </Show>
