@@ -32,6 +32,10 @@ jobs:
     runs-on: ${{ matrix.settings.host }}
 
     steps:
+      - name: Enable Git long paths (Windows only)
+        if: matrix.settings.host == 'windows-latest'
+        run: git config --global core.longpaths true
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
