@@ -1,4 +1,5 @@
 import { createEffect, createMemo, createResource, createSignal, For, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { Button } from "@opencode-ai/ui/button"
 import { Select } from "@opencode-ai/ui/select"
@@ -18,11 +19,20 @@ export function RepoSettingsDialog(props: RepoSettingsDialogProps) {
   const [switching, setSwitching] = createSignal(false)
   const [selectedBranch, setSelectedBranch] = createSignal<string | undefined>(undefined)
   const [maybeDirtyWarning, setMaybeDirtyWarning] = createSignal<{ branch: string; files: string[] } | null>(null)
+  const [branchListState, setBranchListState] = createStore({ error: "" })
 
   const [branches, { refetch }] = createResource(async () => {
+    setBranchListState({ error: "" })
     try {
-      return (await globalSDK.client.repo.branches({ repoID: props.repo.id })).data as RepoBranchList
-    } catch {
+      const data = (await globalSDK.client.repo.branches({ repoID: props.repo.id })).data
+      if (data && typeof data === "object" && Array.isArray((data as RepoBranchList).branches)) {
+        return data as RepoBranchList
+      }
+      console.error("Unexpected branch list shape", { data })
+      setBranchListState({ error: "Unable to load branches. Check the server connection." })
+      return undefined
+    } catch (err) {
+      setBranchListState({ error: errorMessage(err) })
       return undefined
     }
   })
@@ -75,26 +85,44 @@ export function RepoSettingsDialog(props: RepoSettingsDialogProps) {
         </div>
 
         <Show
-          when={branchOptions().length > 0}
-          fallback={<div class="text-12-regular text-text-weak">Loading branches...</div>}
+          when={branchListState.error}
+          fallback={
+            <Show
+              when={branchOptions().length > 0}
+              fallback={
+                <div class="text-12-regular text-text-weak">
+                  {branches.loading ? "Loading branches..." : "No branches found."}
+                </div>
+              }
+            >
+              <div class="flex items-center gap-2">
+                <Icon name="branch" size="small" />
+                <Select
+                  options={branchOptions()}
+                  current={branchOptions().find((item) => item.name === selectedBranch())}
+                  value={(item) => item.name}
+                  label={(item) => item.name}
+                  onSelect={(item) => {
+                    if (!item) return
+                    if (item.name === selectedBranch()) return
+                    void switchBranch(item.name)
+                  }}
+                  size="normal"
+                  variant="ghost"
+                  class="text-12-medium"
+                />
+              </div>
+            </Show>
+          }
         >
-          <div class="flex items-center gap-2">
-            <Icon name="branch" size="small" />
-            <Select
-              options={branchOptions()}
-              current={branchOptions().find((item) => item.name === selectedBranch())}
-              value={(item) => item.name}
-              label={(item) => item.name}
-              onSelect={(item) => {
-                if (!item) return
-                if (item.name === selectedBranch()) return
-                void switchBranch(item.name)
-              }}
-              size="normal"
-              variant="ghost"
-              class="text-12-medium"
-            />
-          </div>
+          {(message) => (
+            <div class="flex items-center justify-between gap-3 rounded-md border border-border-weak-base bg-surface-warning-base/30 px-3 py-2 text-12-regular text-text-weak">
+              <span>{message()}</span>
+              <Button size="normal" variant="ghost" onClick={() => refetch()}>
+                Retry
+              </Button>
+            </div>
+          )}
         </Show>
 
         <Show when={maybeDirtyWarning()}>

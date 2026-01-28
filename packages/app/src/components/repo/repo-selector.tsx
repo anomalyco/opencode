@@ -25,6 +25,7 @@ export function RepoSelector(props: RepoSelectorProps) {
   const [maybeDirtyWarning, setMaybeDirtyWarning] = createSignal<{ branch: string; files: string[] } | null>(null)
   const [selectedBranch, setSelectedBranch] = createSignal<string | undefined>(undefined)
   const [repoListState, setRepoListState] = createStore({ error: "" })
+  const [branchListState, setBranchListState] = createStore({ error: "" })
 
   const errorMessage = (err: unknown) => {
     if (err && typeof err === "object" && "data" in err) {
@@ -67,13 +68,27 @@ export function RepoSelector(props: RepoSelectorProps) {
     () => selectedRepo()?.id,
     async (repoId) => {
       if (!repoId) return undefined
+      setBranchListState({ error: "" })
       try {
-        return (await globalSDK.client.repo.branches({ repoID: repoId })).data as RepoBranchList
-      } catch {
+        const data = (await globalSDK.client.repo.branches({ repoID: repoId })).data
+        if (data && typeof data === "object" && Array.isArray((data as RepoBranchList).branches)) {
+          return data as RepoBranchList
+        }
+        console.error("Unexpected branch list shape", { data })
+        setBranchListState({ error: "Unable to load branches. Check the server connection." })
+        return undefined
+      } catch (err) {
+        setBranchListState({ error: errorMessage(err) })
         return undefined
       }
     },
   )
+
+  createEffect(() => {
+    if (!selectedRepo()?.id) {
+      setBranchListState({ error: "" })
+    }
+  })
 
   createEffect(() => {
     const current = branches()?.current
@@ -200,6 +215,17 @@ export function RepoSelector(props: RepoSelectorProps) {
             class="text-12-medium"
           />
         </div>
+      </Show>
+
+      <Show when={selectedRepo() && branchListState.error}>
+        {(message) => (
+          <div class="flex items-center justify-between gap-3 rounded-md border border-border-weak-base bg-surface-warning-base/30 px-3 py-2 text-12-regular text-text-weak">
+            <span>{message()}</span>
+            <Button size="normal" variant="ghost" onClick={() => refetchBranches()}>
+              Retry
+            </Button>
+          </div>
+        )}
       </Show>
 
       <Show when={maybeDirtyWarning()}>
