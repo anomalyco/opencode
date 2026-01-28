@@ -68,12 +68,6 @@ export function createOpenaiCompatible(options: OpenaiCompatibleProviderSettings
     ...options.headers,
   }
 
-  // Debug log the configuration
-  console.log("[DEBUG] OpenAI Compatible Provider Config:", {
-    baseURL,
-    hasApiKey: !!options.apiKey,
-    hasUserKey: !!options.userKey,
-  })
 
   // Create custom fetch that forces correct headers and filters unsupported params
   const customFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -101,19 +95,11 @@ export function createOpenaiCompatible(options: OpenaiCompatibleProviderSettings
       }
     }
     
-    console.log("[DEBUG] Custom Fetch URL:", url)
-    console.log("[DEBUG] Custom Fetch Body:", body?.toString().substring(0, 300))
-    
     const res = await fetch(url, {
       ...init,
       headers,
       body,
     })
-    console.log("[DEBUG] Response:", res.status, res.statusText)
-    if (res.status >= 400) {
-      const text = await res.clone().text()
-      console.log("[DEBUG] Error body:", text.substring(0, 500))
-    }
     return res
   }
 
@@ -141,7 +127,6 @@ export function createOpenaiCompatible(options: OpenaiCompatibleProviderSettings
             return `${url}?user_key=${encodeURIComponent(options.userKey)}`
           }
         })()
-        console.log("[DEBUG] Chat Model URL:", finalUrl)
         return finalUrl
       },
       fetch: (async (input, init) => {
