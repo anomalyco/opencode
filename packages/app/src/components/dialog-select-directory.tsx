@@ -1,9 +1,10 @@
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
+import { Button } from "@opencode-ai/ui/button"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { List } from "@opencode-ai/ui/list"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { createMemo } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
@@ -22,6 +23,11 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
 
   const home = createMemo(() => sync.data.path.home)
   const root = createMemo(() => sync.data.path.home || sync.data.path.directory)
+  const isSingleSelect = createMemo(() => !props.multiple)
+
+  type DirectoryEntry =
+    | { kind: "parent"; name: string; path: string }
+    | { kind: "directory"; name: string; path: string }
 
   function join(base: string | undefined, rel: string) {
     const b = (base ?? "").replace(/[\\/]+$/, "")
@@ -31,8 +37,9 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     return b + "/" + r
   }
 
-  function display(rel: string) {
-    const full = join(root(), rel)
+  function display(value: string) {
+    const isAbsolute = value.startsWith("/") || /^[A-Za-z]:[\\/]/.test(value)
+    const full = isAbsolute ? value : join(root(), value)
     const h = home()
     if (!h) return full
     if (full === h) return "~"
@@ -40,6 +47,19 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
       return "~" + full.slice(h.length)
     }
     return full
+  }
+
+  function normalizePath(value: string | undefined) {
+    return (value ?? "").replace(/[\\/]+$/, "")
+  }
+
+  function parentDirectory(value: string) {
+    const normalized = normalizePath(value)
+    if (!normalized) return ""
+    const parent = getDirectory(normalized)
+    const cleaned = normalizePath(parent)
+    if (!cleaned || cleaned === normalized) return ""
+    return cleaned
   }
 
   function normalizeQuery(query: string) {
@@ -73,6 +93,17 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     return { results: [], error: "Unable to load folders. Check the dev proxy configuration." }
   }
 
+  function normalizeFileListResponse(input: unknown): { results: { name: string; absolute: string; ignored: boolean; type: string }[]; error: string } {
+    if (Array.isArray(input)) return { results: input, error: "" }
+    if (!input || typeof input !== "object") {
+      return { results: [], error: "Unable to load folders. Check the server connection." }
+    }
+    const maybeData = (input as { data?: unknown }).data
+    if (Array.isArray(maybeData)) return { results: maybeData as { name: string; absolute: string; ignored: boolean; type: string }[], error: "" }
+    console.error("Unexpected file.list response shape", { input })
+    return { results: [], error: "Unable to load folders. Check the server connection." }
+  }
+
   async function fetchDirs(query: string) {
     const directory = root()
     if (!directory) return [] as string[]
@@ -94,6 +125,50 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     return fetchDirs(query)
   }
 
+  const [currentPath, setCurrentPath] = createSignal(root() ?? "")
+
+  createEffect(() => {
+    const base = root()
+    if (!base) return
+    if (!currentPath() || !normalizePath(currentPath()).startsWith(normalizePath(base))) {
+      setCurrentPath(base)
+    }
+  })
+
+  const [directoryNodes] = createResource(
+    () => (isSingleSelect() ? currentPath() : ""),
+    async (path) => {
+      if (!path) return [] as { name: string; absolute: string; ignored: boolean; type: string }[]
+      setState({ error: "" })
+      try {
+        const response = await sdk.client.file.list({ path })
+        const { results, error } = normalizeFileListResponse(response)
+        if (error) setState({ error })
+        return results
+      } catch {
+        setState({ error: "Unable to load folders. Check the server connection or dev proxy." })
+        return []
+      }
+    },
+  )
+
+  const directoryItems = createMemo(() => {
+    const items: DirectoryEntry[] = []
+    const base = normalizePath(root())
+    const current = normalizePath(currentPath())
+    const parent = parentDirectory(current)
+    if (parent && (!base || parent.startsWith(base))) {
+      items.push({ kind: "parent", name: "..", path: parent })
+    }
+    const nodes = directoryNodes() ?? []
+    for (const node of nodes) {
+      if (node.type !== "directory") continue
+      if (node.ignored) continue
+      items.push({ kind: "directory", name: node.name, path: node.absolute })
+    }
+    return items
+  })
+
   function resolve(rel: string) {
     const absolute = join(root(), rel)
     props.onSelect(props.multiple ? [absolute] : absolute)
@@ -102,33 +177,90 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
 
   return (
     <Dialog title={props.title ?? "Open project"}>
-      <List
-        search={{ placeholder: "Search folders", autofocus: true }}
-        emptyMessage={state.error || "No folders found"}
-        items={directories}
-        key={(x) => x}
-        onSelect={(path) => {
-          if (!path) return
-          resolve(path)
-        }}
-      >
-        {(rel) => {
-          const path = display(rel)
-          return (
-            <div class="w-full flex items-center justify-between rounded-md">
-              <div class="flex items-center gap-x-3 grow min-w-0">
-                <FileIcon node={{ path: rel, type: "directory" }} class="shrink-0 size-4" />
-                <div class="flex items-center text-14-regular min-w-0">
-                  <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
-                    {getDirectory(path)}
-                  </span>
-                  <span class="text-text-strong whitespace-nowrap">{getFilename(path)}</span>
+      <Show
+        when={isSingleSelect()}
+        fallback={
+          <List
+            search={{ placeholder: "Search folders", autofocus: true }}
+            emptyMessage={state.error || "No folders found"}
+            items={directories}
+            key={(x) => x}
+            onSelect={(path) => {
+              if (!path) return
+              resolve(path)
+            }}
+          >
+            {(rel) => {
+              const path = display(rel)
+              return (
+                <div class="w-full flex items-center justify-between rounded-md">
+                  <div class="flex items-center gap-x-3 grow min-w-0">
+                    <FileIcon node={{ path: rel, type: "directory" }} class="shrink-0 size-4" />
+                    <div class="flex items-center text-14-regular min-w-0">
+                      <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
+                        {getDirectory(path)}
+                      </span>
+                      <span class="text-text-strong whitespace-nowrap">{getFilename(path)}</span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          )
-        }}
-      </List>
+              )
+            }}
+          </List>
+        }
+      >
+        <div class="flex flex-col gap-3">
+          <div class="text-12-regular text-text-weak">
+            Current folder: <span class="text-text-strong">{display(currentPath())}</span>
+          </div>
+          <List
+            search={{ placeholder: "Search folders", autofocus: true }}
+            emptyMessage={state.error || "No folders found"}
+            items={directoryItems()}
+            key={(item) => item.path}
+            filterKeys={["name"]}
+            onSelect={(item) => {
+              if (!item) return
+              setCurrentPath(item.path)
+            }}
+          >
+            {(item) => {
+              const path = display(item.path)
+              return (
+                <div class="w-full flex items-center justify-between rounded-md">
+                  <div class="flex items-center gap-x-3 grow min-w-0">
+                    <FileIcon node={{ path: item.path, type: "directory" }} class="shrink-0 size-4" />
+                    <div class="flex items-center text-14-regular min-w-0">
+                      <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
+                        {getDirectory(path)}
+                      </span>
+                      <span class="text-text-strong whitespace-nowrap">
+                        {item.kind === "parent" ? ".." : getFilename(path)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )
+            }}
+          </List>
+          <div class="flex justify-end gap-2">
+            <Button size="normal" variant="ghost" onClick={() => dialog.close()}>
+              Cancel
+            </Button>
+            <Button
+              size="normal"
+              onClick={() => {
+                const selected = currentPath()
+                if (!selected) return
+                props.onSelect(props.multiple ? [selected] : selected)
+                dialog.close()
+              }}
+            >
+              Select this folder
+            </Button>
+          </div>
+        </div>
+      </Show>
     </Dialog>
   )
 }

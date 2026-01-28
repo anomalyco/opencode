@@ -43,10 +43,27 @@ export function RepositoryManagerDialog(props: RepositoryManagerDialogProps) {
     navigate(`/${base64Encode(repo.path)}/session`)
   }
 
-  const handleAddLocal = async () => {
-    const path = localPath().trim()
+  const openDirectoryPicker = (onPick: (path: string) => void) => {
+    dialog.show(() => (
+      <DialogSelectDirectory
+        title="Add local repository"
+        multiple={false}
+        onSelect={(result) => {
+          const path = Array.isArray(result) ? result[0] : result
+          if (!path) return
+          onPick(path)
+        }}
+      />
+    ))
+  }
+
+  const addLocalRepo = async (maybePath?: string) => {
+    const path = (maybePath ?? localPath()).trim()
     if (!path) {
-      showToast({ title: "Path required", description: "Enter a local path to add a repository." })
+      openDirectoryPicker((selected) => {
+        setLocalPath(selected)
+        void addLocalRepo(selected)
+      })
       return
     }
     try {
@@ -77,17 +94,7 @@ export function RepositoryManagerDialog(props: RepositoryManagerDialogProps) {
   }
 
   const handleSelectDirectory = () => {
-    dialog.show(() => (
-      <DialogSelectDirectory
-        title="Add local repository"
-        multiple={false}
-        onSelect={(result) => {
-          const path = Array.isArray(result) ? result[0] : result
-          if (!path) return
-          setLocalPath(path)
-        }}
-      />
-    ))
+    openDirectoryPicker((path) => setLocalPath(path))
   }
 
   const handleSettings = (repo: Repo) => {
@@ -122,7 +129,7 @@ export function RepositoryManagerDialog(props: RepositoryManagerDialogProps) {
               <Icon name="download" size="small" />
               Clone from URL
             </Button>
-            <Button size="normal" onClick={handleAddLocal}>
+            <Button size="normal" onClick={() => addLocalRepo()}>
               <Icon name="plus-small" size="small" />
               Add local repo
             </Button>

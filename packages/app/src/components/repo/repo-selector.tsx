@@ -57,6 +57,18 @@ export function RepoSelector(props: RepoSelectorProps) {
     return errorMessage(err)
   }
 
+  const normalizePath = (value: string) => value.replace(/[\\/]+$/, "")
+
+  const matchesPath = (repoPath: string, currentPath: string) => {
+    const repo = normalizePath(repoPath)
+    const current = normalizePath(currentPath)
+    if (!repo || !current) return false
+    if (repo === current) return true
+    if (current.startsWith(repo + "/")) return true
+    if (repo.startsWith(current + "/")) return true
+    return false
+  }
+
   const [repos, { refetch }] = createResource(async () => {
     setRepoListState({ error: "" })
     try {
@@ -79,7 +91,7 @@ export function RepoSelector(props: RepoSelectorProps) {
     const path = props.currentPath
     if (!path) return
     if (selectedRepoId()) return
-    const match = repoList().find((repo) => repo.path === path)
+    const match = repoList().find((repo) => matchesPath(repo.path, path))
     if (match) setSelectedRepoId(match.id)
   })
 
