@@ -478,6 +478,12 @@ export default function Page() {
     const targetIndex = currentIndex === -1 ? (offset > 0 ? 0 : msgs.length - 1) : currentIndex + offset
     if (targetIndex < 0 || targetIndex >= msgs.length) return
 
+    if (targetIndex === msgs.length - 1) {
+      resumeScroll()
+      return
+    }
+
+    autoScroll.pause()
     scrollToMessage(msgs[targetIndex], "auto")
   }
 
@@ -523,6 +529,8 @@ export default function Page() {
   let scroller: HTMLDivElement | undefined
 
   const scrollGestureWindowMs = 250
+
+  let touchGesture: number | undefined
 
   const markScrollGesture = (target?: EventTarget | null) => {
     const root = scroller
@@ -1246,8 +1254,18 @@ export default function Page() {
     const wants = isDesktop() ? fileTreeTab() === "changes" : store.mobileTab === "changes"
     if (!wants) return
     if (sync.data.session_diff[id] !== undefined) return
+    if (sync.status === "loading") return
 
-    sync.session.diff(id)
+    void sync.session.diff(id)
+  })
+
+  createEffect(() => {
+    if (!isDesktop()) return
+    if (!layout.fileTree.opened()) return
+    if (sync.status === "loading") return
+
+    fileTreeTab()
+    void file.tree.list("")
   })
 
   const autoScroll = createAutoScroll({
@@ -1255,9 +1273,15 @@ export default function Page() {
     overflowAnchor: "dynamic",
   })
 
+  const clearMessageHash = () => {
+    if (!window.location.hash) return
+    window.history.replaceState(null, "", window.location.href.replace(/#.*$/, ""))
+  }
+
   const resumeScroll = () => {
     setStore("messageId", undefined)
     autoScroll.forceScrollToBottom()
+    clearMessageHash()
   }
 
   // When the user returns to the bottom, treat the active message as "latest".
@@ -1267,6 +1291,7 @@ export default function Page() {
       (scrolled) => {
         if (scrolled) return
         setStore("messageId", undefined)
+        clearMessageHash()
       },
       { defer: true },
     ),
@@ -1341,7 +1366,8 @@ export default function Page() {
 
     requestAnimationFrame(() => {
       const delta = el.scrollHeight - beforeHeight
-      if (delta) el.scrollTop = beforeTop + delta
+      if (!delta) return
+      el.scrollTop = beforeTop + delta
     })
 
     scheduleTurnBackfill()
@@ -1472,6 +1498,7 @@ export default function Page() {
 
     const match = hash.match(/^message-(.+)$/)
     if (match) {
+      autoScroll.pause()
       const msg = visibleUserMessages().find((m) => m.id === match[1])
       if (msg) {
         scrollToMessage(msg, behavior)
@@ -1485,6 +1512,7 @@ export default function Page() {
 
     const target = document.getElementById(hash)
     if (target) {
+      autoScroll.pause()
       scrollToElement(target, behavior)
       return
     }
@@ -1581,6 +1609,7 @@ export default function Page() {
     const msg = visibleUserMessages().find((m) => m.id === targetId)
     if (!msg) return
     if (ui.pendingMessage === targetId) setUi("pendingMessage", undefined)
+    autoScroll.pause()
     requestAnimationFrame(() => scrollToMessage(msg, "auto"))
   })
 
@@ -1761,27 +1790,102 @@ export default function Page() {
                       >
                         <button
                           class="pointer-events-auto size-8 flex items-center justify-center rounded-full bg-background-base border border-border-base shadow-sm text-text-base hover:bg-background-stronger transition-colors"
-                          onClick={() => {
-                            setStore("messageId", undefined)
-                            autoScroll.forceScrollToBottom()
-                            window.history.replaceState(null, "", window.location.href.replace(/#.*$/, ""))
-                          }}
+                          onClick={resumeScroll}
                         >
                           <Icon name="arrow-down-to-line" />
                         </button>
                       </div>
                       <div
                         ref={setScrollRef}
-                        onWheel={(e) => markScrollGesture(e.target)}
-                        onTouchMove={(e) => markScrollGesture(e.target)}
+                        onWheel={(e) => {
+                          const root = e.currentTarget
+                          const target = e.target instanceof Element ? e.target : undefined
+                          const nested = target?.closest("[data-scrollable]")
+                          if (!nested || nested === root) {
+                            markScrollGesture(root)
+                            return
+                          }
+
+                          if (!(nested instanceof HTMLElement)) {
+                            markScrollGesture(root)
+                            return
+                          }
+
+                          const max = nested.scrollHeight - nested.clientHeight
+                          if (max <= 1) {
+                            markScrollGesture(root)
+                            return
+                          }
+
+                          const delta =
+                            e.deltaMode === 1
+                              ? e.deltaY * 40
+                              : e.deltaMode === 2
+                                ? e.deltaY * root.clientHeight
+                                : e.deltaY
+                          if (!delta) return
+
+                          if (delta < 0) {
+                            if (nested.scrollTop + delta <= 0) markScrollGesture(root)
+                            return
+                          }
+
+                          const remaining = max - nested.scrollTop
+                          if (delta > remaining) markScrollGesture(root)
+                        }}
+                        onTouchStart={(e) => {
+                          touchGesture = e.touches[0]?.clientY
+                        }}
+                        onTouchMove={(e) => {
+                          const next = e.touches[0]?.clientY
+                          const prev = touchGesture
+                          touchGesture = next
+                          if (next === undefined || prev === undefined) return
+
+                          const delta = prev - next
+                          if (!delta) return
+
+                          const root = e.currentTarget
+                          const target = e.target instanceof Element ? e.target : undefined
+                          const nested = target?.closest("[data-scrollable]")
+                          if (!nested || nested === root) {
+                            markScrollGesture(root)
+                            return
+                          }
+
+                          if (!(nested instanceof HTMLElement)) {
+                            markScrollGesture(root)
+                            return
+                          }
+
+                          const max = nested.scrollHeight - nested.clientHeight
+                          if (max <= 1) {
+                            markScrollGesture(root)
+                            return
+                          }
+
+                          if (delta < 0) {
+                            if (nested.scrollTop + delta <= 0) markScrollGesture(root)
+                            return
+                          }
+
+                          const remaining = max - nested.scrollTop
+                          if (delta > remaining) markScrollGesture(root)
+                        }}
+                        onTouchEnd={() => {
+                          touchGesture = undefined
+                        }}
+                        onTouchCancel={() => {
+                          touchGesture = undefined
+                        }}
                         onPointerDown={(e) => {
                           if (e.target !== e.currentTarget) return
-                          markScrollGesture(e.target)
+                          markScrollGesture(e.currentTarget)
                         }}
                         onScroll={(e) => {
-                          autoScroll.handleScroll()
                           if (!hasScrollGesture()) return
-                          markScrollGesture(e.target)
+                          autoScroll.handleScroll()
+                          markScrollGesture(e.currentTarget)
                           if (isDesktop()) scheduleScrollSpy(e.currentTarget)
                         }}
                         onClick={autoScroll.handleInteraction}
