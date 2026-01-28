@@ -31,9 +31,30 @@ export function RepoSelector(props: RepoSelectorProps) {
     if (err && typeof err === "object" && "data" in err) {
       const data = (err as { data?: { error?: { message?: string } } }).data
       if (data?.error?.message) return data.error.message
+      if (data && typeof data === "object" && "message" in data) {
+        const message = (data as { message?: string }).message
+        if (message) return message
+      }
     }
     if (err instanceof Error) return err.message
     return "Request failed"
+  }
+
+  const branchErrorMessage = (err: unknown) => {
+    if (err && typeof err === "object" && "data" in err) {
+      const data = (err as { data?: { error?: { code?: string; message?: string } } }).data
+      const code = data?.error?.code
+      if (code && ["repo_missing_path", "repo_invalid", "repo_malformed"].includes(code)) {
+        return data?.error?.message ?? "Repository record is invalid or missing a path. Remove and re-add it."
+      }
+      if (data && typeof data === "object" && "name" in data) {
+        const name = (data as { name?: string }).name
+        if (name === "NotFoundError") {
+          return "Repository record not found. Remove and re-add the repository."
+        }
+      }
+    }
+    return errorMessage(err)
   }
 
   const [repos, { refetch }] = createResource(async () => {
@@ -78,7 +99,7 @@ export function RepoSelector(props: RepoSelectorProps) {
         setBranchListState({ error: "Unable to load branches. Check the server connection." })
         return undefined
       } catch (err) {
-        setBranchListState({ error: errorMessage(err) })
+        setBranchListState({ error: branchErrorMessage(err) })
         return undefined
       }
     },
