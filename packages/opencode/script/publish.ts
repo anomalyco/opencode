@@ -7,21 +7,25 @@ import { fileURLToPath } from "url"
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
 
+const prefix = process.env["OPENCODE_BINARY_PREFIX"] ?? pkg.name
+const publishName = process.env["OPENCODE_PUBLISH_NAME"] ?? `${pkg.name}-ai`
+const skipRelease = process.env["OPENCODE_SKIP_RELEASE"] === "1"
+
 const { binaries } = await import("./build.ts")
 {
-  const name = `${pkg.name}-${process.platform}-${process.arch}`
+  const name = `${prefix}-${process.platform}-${process.arch}`
   console.log(`smoke test: running dist/${name}/bin/opencode --version`)
   await $`./dist/${name}/bin/opencode --version`
 }
 
-await $`mkdir -p ./dist/${pkg.name}`
-await $`cp -r ./bin ./dist/${pkg.name}/bin`
-await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
+await $`mkdir -p ./dist/${publishName}`
+await $`cp -r ./bin ./dist/${publishName}/bin`
+await $`cp ./script/postinstall.mjs ./dist/${publishName}/postinstall.mjs`
 
-await Bun.file(`./dist/${pkg.name}/package.json`).write(
+await Bun.file(`./dist/${publishName}/package.json`).write(
   JSON.stringify(
     {
-      name: pkg.name + "-ai",
+      name: publishName,
       bin: {
         [pkg.name]: `./bin/${pkg.name}`,
       },
@@ -49,10 +53,10 @@ const tasks = Object.entries(binaries).map(async ([name]) => {
 })
 await Promise.all(tasks)
 for (const tag of tags) {
-  await $`cd ./dist/${pkg.name} && bun pm pack && npm publish *.tgz --access public --tag ${tag}`
+  await $`cd ./dist/${publishName} && bun pm pack && npm publish *.tgz --access public --tag ${tag}`
 }
 
-if (!Script.preview) {
+if (!Script.preview && !skipRelease) {
   // Create archives for GitHub release
   for (const key of Object.keys(binaries)) {
     if (key.includes("linux")) {

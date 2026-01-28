@@ -232,8 +232,10 @@ export namespace SessionPrompt {
   }
 
   function start(sessionID: string) {
+    // 1) 作用: 检查并初始化会话状态；解释: 已存在则直接返回，避免重复启动
     const s = state()
     if (s[sessionID]) return
+    // 2) 作用: 建立可取消信号；解释: 存入全局状态供 loop 与外部取消使用
     const controller = new AbortController()
     s[sessionID] = {
       abort: controller,
@@ -243,20 +245,24 @@ export namespace SessionPrompt {
   }
 
   export function cancel(sessionID: string) {
+    // 1) 作用: 终止会话运行；解释: 触发中断并清空挂起回调
     log.info("cancel", { sessionID })
     const s = state()
     const match = s[sessionID]
     if (!match) return
+    // 2) 作用: 主动中断并通知等待者；解释: abort + reject，避免悬挂
     match.abort.abort()
     for (const item of match.callbacks) {
       item.reject()
     }
+    // 3) 作用: 释放状态并恢复空闲；解释: 删除缓存条目并设置 idle
     delete s[sessionID]
     SessionStatus.set(sessionID, { type: "idle" })
     return
   }
 
   export const loop = fn(Identifier.schema("session"), async (sessionID) => {
+    // 1) 作用: 启动或复用会话循环；解释: 若已有执行则挂起等待现有循环产出结果
     const abort = start(sessionID)
     if (!abort) {
       return new Promise<MessageV2.WithParts>((resolve, reject) => {
@@ -265,34 +271,47 @@ export namespace SessionPrompt {
       })
     }
 
+    // 2) 作用: 确保退出时清理状态；解释: 无论成功或异常都撤销占用并恢复 idle
     using _ = defer(() => cancel(sessionID))
 
+    // 3) 作用: 初始化迭代状态；解释: 记录步数并获取会话快照
     let step = 0
     const session = await Session.get(sessionID)
     while (true) {
+      // 4) 作用: 标记与记录循环状态；解释: 设置 busy、打点日志、处理中断
       SessionStatus.set(sessionID, { type: "busy" })
       log.info("loop", { step, sessionID })
       if (abort.aborted) break
+      // 5) 作用: 拉取消息并定位关键节点；解释: 过滤压缩边界并获取可见消息流
       let msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
 
+      // 6) 作用: 准备扫描结果；解释: 记录最近 user/assistant/完成节点与挂起任务队列
       let lastUser: MessageV2.User | undefined
       let lastAssistant: MessageV2.Assistant | undefined
       let lastFinished: MessageV2.Assistant | undefined
       let tasks: (MessageV2.CompactionPart | MessageV2.SubtaskPart)[] = []
       for (let i = msgs.length - 1; i >= 0; i--) {
+        // 7) 作用: 从最新消息向前扫；解释: 优先定位最近轮次的关键信息
         const msg = msgs[i]
+        // 8) 作用: 捕捉最近 user；解释: 作为本轮处理锚点
         if (!lastUser && msg.info.role === "user") lastUser = msg.info as MessageV2.User
+        // 9) 作用: 捕捉最近 assistant；解释: 用于判断是否已结束
         if (!lastAssistant && msg.info.role === "assistant") lastAssistant = msg.info as MessageV2.Assistant
+        // 10) 作用: 捕捉最近已完成 assistant；解释: 用来确定任务挂起区间
         if (!lastFinished && msg.info.role === "assistant" && msg.info.finish)
           lastFinished = msg.info as MessageV2.Assistant
+        // 11) 作用: 提前结束扫描；解释: 已拿到 user + 完成节点即可停止
         if (lastUser && lastFinished) break
+        // 12) 作用: 收集任务片段；解释: 仅在未遇到已完成节点前累积 subtask/compaction
         const task = msg.parts.filter((part) => part.type === "compaction" || part.type === "subtask")
         if (task && !lastFinished) {
           tasks.push(...task)
         }
       }
 
+      // 13) 作用: 保护不变量；解释: 任何时刻都必须存在用户消息作为锚点
       if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
+      // 14) 作用: 判断是否收敛完成；解释: assistant 已完成且不需继续工具调用则退出循环
       if (
         lastAssistant?.finish &&
         !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
@@ -302,6 +321,7 @@ export namespace SessionPrompt {
         break
       }
 
+      // 15) 作用: 推进步数并做首步初始化；解释: 首次迭代尝试生成会话标题
       step++
       if (step === 1)
         ensureTitle({
@@ -311,12 +331,14 @@ export namespace SessionPrompt {
           history: msgs,
         })
 
+      // 16) 作用: 解析模型与任务；解释: 选择本轮模型并取出待处理的子任务/压缩任务
       const model = await Provider.getModel(lastUser.model.providerID, lastUser.model.modelID)
       const task = tasks.pop()
 
       // pending subtask
       // TODO: centralize "invoke tool" logic
       if (task?.type === "subtask") {
+        // 17) 作用: 执行子任务；解释: 构建 assistant + tool 记录，触发 TaskTool 并落盘结果
         const taskTool = await TaskTool.init()
         const taskModel = task.model ? await Provider.getModel(task.model.providerID, task.model.modelID) : model
         const assistantMessage = (await Session.updateMessage({
@@ -420,6 +442,7 @@ export namespace SessionPrompt {
           },
           result,
         )
+        // 17.1) 作用: 标记工具调用完成形态；解释: subtask 分支用 tool-calls 作为 finish 原因
         assistantMessage.finish = "tool-calls"
         assistantMessage.time.completed = Date.now()
         await Session.updateMessage(assistantMessage)
@@ -486,6 +509,7 @@ export namespace SessionPrompt {
 
       // pending compaction
       if (task?.type === "compaction") {
+        // 18) 作用: 执行压缩任务；解释: 根据任务指令生成压缩摘要并回到循环
         const result = await SessionCompaction.process({
           messages: msgs,
           parentID: lastUser.id,
@@ -503,6 +527,7 @@ export namespace SessionPrompt {
         lastFinished.summary !== true &&
         (await SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model }))
       ) {
+        // 19) 作用: 处理上下文溢出；解释: 自动创建压缩任务并等待下轮处理
         await SessionCompaction.create({
           sessionID,
           agent: lastUser.agent,
@@ -513,6 +538,7 @@ export namespace SessionPrompt {
       }
 
       // normal processing
+      // 20) 作用: 准备常规对话处理；解释: 读取 agent 步数限制并注入提醒文本
       const agent = await Agent.get(lastUser.agent)
       const maxSteps = agent.steps ?? Infinity
       const isLastStep = step >= maxSteps
@@ -522,7 +548,9 @@ export namespace SessionPrompt {
         session,
       })
 
+      // 21) 作用: 创建本轮 assistant 容器；解释: 生成新消息并初始化 SessionProcessor
       const processor = SessionProcessor.create({
+        // 21.1) 作用: 生成 assistant 消息；解释: 先写入存储，后续流式输出复用此 message
         assistantMessage: (await Session.updateMessage({
           id: Identifier.ascending("message"),
           parentID: lastUser.id,
@@ -533,6 +561,7 @@ export namespace SessionPrompt {
             cwd: Instance.directory,
             root: Instance.worktree,
           },
+          // 21.2) 作用: 初始化计费与 token 统计；解释: 随流式输出逐步累计
           cost: 0,
           tokens: {
             input: 0,
@@ -547,15 +576,18 @@ export namespace SessionPrompt {
           },
           sessionID,
         })) as MessageV2.Assistant,
+        // 21.3) 作用: 绑定处理上下文；解释: 传入会话/模型/中断信号供 processor 使用
         sessionID: sessionID,
         model,
         abort,
       })
 
       // Check if user explicitly invoked an agent via @ in this turn
+      // 22) 作用: 解析显式 agent 调用；解释: 若用户 @agent 则绕过默认 agent 校验
       const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
       const bypassAgentCheck = lastUserMsg?.parts.some((p) => p.type === "agent") ?? false
 
+      // 23) 作用: 解析可用工具；解释: 结合 agent、权限与模型组装工具列表
       const tools = await resolveTools({
         agent,
         session,
@@ -567,16 +599,19 @@ export namespace SessionPrompt {
       })
 
       if (step === 1) {
+        // 24) 作用: 生成会话摘要；解释: 首轮完成后异步构建摘要供后续使用
         SessionSummary.summarize({
           sessionID: sessionID,
           messageID: lastUser.id,
         })
       }
 
+      // 25) 作用: 保护原始消息流；解释: 克隆以便对临时提示做就地改写
       const sessionMessages = clone(msgs)
 
       // Ephemerally wrap queued user messages with a reminder to stay on track
       if (step > 1 && lastFinished) {
+        // 26) 作用: 强化后续用户输入；解释: 给未处理的 user 消息包一层系统提醒
         for (const msg of sessionMessages) {
           if (msg.info.role !== "user" || msg.info.id <= lastFinished.id) continue
           for (const part of msg.parts) {
@@ -594,8 +629,10 @@ export namespace SessionPrompt {
         }
       }
 
+      // 27) 作用: 允许插件变换消息；解释: 提供扩展点修改最终送入模型的 messages
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
+      // 28) 作用: 调用模型处理；解释: 组合 system、messages、tools 并执行推理
       const result = await processor.process({
         user: lastUser,
         agent,
@@ -618,6 +655,7 @@ export namespace SessionPrompt {
       })
       if (result === "stop") break
       if (result === "compact") {
+        // 29) 作用: 模型触发压缩；解释: 根据返回值创建压缩任务进入下一轮
         await SessionCompaction.create({
           sessionID,
           agent: lastUser.agent,
@@ -627,6 +665,7 @@ export namespace SessionPrompt {
       }
       continue
     }
+    // 30) 作用: 收尾与回调；解释: 清理多余压缩消息并唤醒等待中的请求
     SessionCompaction.prune({ sessionID })
     for await (const item of MessageV2.stream(sessionID)) {
       if (item.info.role === "user") continue
@@ -655,9 +694,11 @@ export namespace SessionPrompt {
     bypassAgentCheck: boolean
     messages: MessageV2.WithParts[]
   }) {
+    // 1) 作用: 记录耗时并准备容器；解释: 统计工具解析成本并构建工具映射
     using _ = log.time("resolveTools")
     const tools: Record<string, AITool> = {}
 
+    // 2) 作用: 构造统一上下文；解释: 为所有工具注入权限、元信息与消息访问
     const context = (args: any, options: ToolCallOptions): Tool.Context => ({
       sessionID: input.session.id,
       abort: options.abortSignal!,
@@ -693,6 +734,7 @@ export namespace SessionPrompt {
       },
     })
 
+    // 3) 作用: 注册内置工具；解释: 按模型适配 schema 并包装执行钩子
     for (const item of await ToolRegistry.tools(
       { modelID: input.model.api.id, providerID: input.model.providerID },
       input.agent,
@@ -730,6 +772,7 @@ export namespace SessionPrompt {
       })
     }
 
+    // 4) 作用: 注册 MCP 工具；解释: 包装执行流程、权限检查与内容格式化
     for (const [key, item] of Object.entries(await MCP.tools())) {
       const execute = item.execute
       if (!execute) continue
@@ -821,6 +864,7 @@ export namespace SessionPrompt {
       tools[key] = item
     }
 
+    // 5) 作用: 返回工具集合；解释: 供 processor 直接调用
     return tools
   }
 
@@ -1196,11 +1240,13 @@ export namespace SessionPrompt {
   }
 
   async function insertReminders(input: { messages: MessageV2.WithParts[]; agent: Agent.Info; session: Session.Info }) {
+    // 1) 作用: 定位用户消息；解释: 提醒内容只附着到最后一条 user 消息
     const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
     if (!userMessage) return input.messages
 
     // Original logic when experimental plan mode is disabled
     if (!Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE) {
+      // 2) 作用: 旧版计划模式提示；解释: 根据 plan/build 切换追加提示文本
       if (input.agent.name === "plan") {
         userMessage.parts.push({
           id: Identifier.ascending("part"),
@@ -1226,10 +1272,12 @@ export namespace SessionPrompt {
     }
 
     // New plan mode logic when flag is enabled
+    // 3) 作用: 新版计划模式定位；解释: 找到最新 assistant 以判断模式切换
     const assistantMessage = input.messages.findLast((msg) => msg.info.role === "assistant")
 
     // Switching from plan mode to build mode
     if (input.agent.name !== "plan" && assistantMessage?.info.agent === "plan") {
+      // 4) 作用: 从 plan 切到 build；解释: 若存在 plan 文件则提示按计划执行
       const plan = Session.plan(input.session)
       const exists = await Bun.file(plan).exists()
       if (exists) {
@@ -1249,6 +1297,7 @@ export namespace SessionPrompt {
 
     // Entering plan mode
     if (input.agent.name === "plan" && assistantMessage?.info.agent !== "plan") {
+      // 5) 作用: 进入 plan 模式；解释: 创建或提示 plan 文件并加系统约束
       const plan = Session.plan(input.session)
       const exists = await Bun.file(plan).exists()
       if (!exists) await fs.mkdir(path.dirname(plan), { recursive: true })
@@ -1332,6 +1381,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       userMessage.parts.push(part)
       return input.messages
     }
+    // 6) 作用: 默认返回；解释: 无需插入提醒时直接透传
     return input.messages
   }
 
@@ -1749,15 +1799,18 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     providerID: string
     modelID: string
   }) {
+    // 1) 作用: 判断是否需要生成标题；解释: 仅默认标题且非子会话才继续
     if (input.session.parentID) return
     if (!Session.isDefaultTitle(input.session.title)) return
 
     // Find first non-synthetic user message
+    // 2) 作用: 找到首条真实用户消息；解释: 过滤 synthetic 以避免噪声
     const firstRealUserIdx = input.history.findIndex(
       (m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic),
     )
     if (firstRealUserIdx === -1) return
 
+    // 3) 作用: 确认这是首轮用户交互；解释: 仅在第一条真实 user 时生成标题
     const isFirst =
       input.history.filter((m) => m.info.role === "user" && !m.parts.every((p) => "synthetic" in p && p.synthetic))
         .length === 1
@@ -1765,14 +1818,17 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
     // Gather all messages up to and including the first real user message for context
     // This includes any shell/subtask executions that preceded the user's first prompt
+    // 4) 作用: 收集上下文；解释: 包含首条真实 user 之前的执行信息
     const contextMessages = input.history.slice(0, firstRealUserIdx + 1)
     const firstRealUser = contextMessages[firstRealUserIdx]
 
     // For subtask-only messages (from command invocations), extract the prompt directly
     // since toModelMessage converts subtask parts to generic "The following tool was executed by the user"
+    // 5) 作用: 处理纯子任务场景；解释: 直接提取 subtask prompt 作为标题素材
     const subtaskParts = firstRealUser.parts.filter((p) => p.type === "subtask") as MessageV2.SubtaskPart[]
     const hasOnlySubtaskParts = subtaskParts.length > 0 && firstRealUser.parts.every((p) => p.type === "subtask")
 
+    // 6) 作用: 获取标题生成代理与模型；解释: 优先 title agent 模型，否则降级为小模型
     const agent = await Agent.get("title")
     if (!agent) return
     const model = await iife(async () => {
@@ -1781,6 +1837,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         (await Provider.getSmallModel(input.providerID)) ?? (await Provider.getModel(input.providerID, input.modelID))
       )
     })
+    // 7) 作用: 调用小模型生成标题；解释: 传入上下文消息并流式获取输出
     const result = await LLM.stream({
       agent,
       user: firstRealUser.info as MessageV2.User,
@@ -1801,6 +1858,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           : MessageV2.toModelMessages(contextMessages, model)),
       ],
     })
+    // 8) 作用: 清洗并写入标题；解释: 去除思考标签、截断过长并更新会话
     const text = await result.text.catch((err) => log.error("failed to generate title", { error: err }))
     if (text)
       return Session.update(

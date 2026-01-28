@@ -607,7 +607,9 @@ export namespace MessageV2 {
   }
 
   export const stream = fn(Identifier.schema("session"), async function* (sessionID) {
+    // 1) 作用: 读取消息索引；解释: 从存储列出该会话的所有 message key
     const list = await Array.fromAsync(await Storage.list(["message", sessionID]))
+    // 2) 作用: 逆序生成消息；解释: 从最新到最旧依次 yield 以匹配上层扫描逻辑
     for (let i = list.length - 1; i >= 0; i--) {
       yield await get({
         sessionID,
@@ -640,18 +642,24 @@ export namespace MessageV2 {
   )
 
   export async function filterCompacted(stream: AsyncIterable<MessageV2.WithParts>) {
+    // 1) 作用: 累积可见消息；解释: 从流中收集直到压缩边界
     const result = [] as MessageV2.WithParts[]
+    // 2) 作用: 跟踪已完成摘要；解释: 记录被压缩覆盖的 parentID
     const completed = new Set<string>()
     for await (const msg of stream) {
+      // 3) 作用: 追加当前消息；解释: 保持原始顺序供后续反转
       result.push(msg)
       if (
         msg.info.role === "user" &&
         completed.has(msg.info.id) &&
         msg.parts.some((part) => part.type === "compaction")
       )
+        // 4) 作用: 命中压缩边界；解释: 看到含 compaction 的 user 且其 parent 已被摘要覆盖即停止
         break
+      // 5) 作用: 标记摘要完成；解释: assistant summary + finish 表示覆盖其 parent
       if (msg.info.role === "assistant" && msg.info.summary && msg.info.finish) completed.add(msg.info.parentID)
     }
+    // 6) 作用: 恢复时间顺序；解释: 反转为从旧到新，便于常规处理
     result.reverse()
     return result
   }

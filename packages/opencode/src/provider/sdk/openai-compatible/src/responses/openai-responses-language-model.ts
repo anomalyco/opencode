@@ -1244,10 +1244,12 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
                 })
               }
             } else if (isResponseFinishedChunk(value)) {
+              // 1) 作用: 解析结束原因；解释: 将 OpenAI finish reason 映射为内部标准
               finishReason = mapOpenAIResponseFinishReason({
                 finishReason: value.response.incomplete_details?.reason,
                 hasFunctionCall,
               })
+              // 2) 作用: 记录用量指标；解释: 为后续 step-finish 计费与统计提供数据
               usage.inputTokens = value.response.usage.input_tokens
               usage.outputTokens = value.response.usage.output_tokens
               usage.totalTokens = value.response.usage.input_tokens + value.response.usage.output_tokens
@@ -1301,6 +1303,7 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV2 {
               providerMetadata.openai.serviceTier = serviceTier
             }
 
+            // 3) 作用: 发送 finish 事件；解释: 将 finishReason 与 usage 汇总推给上层
             controller.enqueue({
               type: "finish",
               finishReason,
