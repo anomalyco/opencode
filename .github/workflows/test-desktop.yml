@@ -1,0 +1,41 @@
+name: Test Desktop Build
+
+on:
+  push:
+    branches:
+      - feature/zflow
+  workflow_dispatch:
+
+jobs:
+  test-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: |
+          cd packages/desktop
+          bun install
+
+      - name: Build frontend
+        run: |
+          cd packages/desktop
+          bun run build
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Tauri
+        run: |
+          cd packages/desktop
+          bun run tauri build --debug
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-test
+          path: packages/desktop/src-tauri/target/debug/bundle/*/*
