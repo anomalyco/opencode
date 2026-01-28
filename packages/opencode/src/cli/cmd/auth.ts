@@ -6,6 +6,7 @@ import { ModelsDev } from "../../provider/models"
 import { map, pipe, sortBy, values } from "remeda"
 import path from "path"
 import os from "os"
+import z from "zod"
 import { Config } from "../../config/config"
 import { Global } from "../../global"
 import { Plugin } from "../../plugin"
@@ -13,6 +14,36 @@ import { Instance } from "../../project/instance"
 import type { Hooks } from "@opencode-ai/plugin"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
+
+const WellKnown = z.object({
+  auth: z.object({
+    command: z.string().array().min(1),
+    env: z.string().min(1),
+  }),
+})
+
+export function parseWellKnownAuth(input: unknown) {
+  const parsed = WellKnown.safeParse(input)
+  if (!parsed.success) throw new Error("Invalid well-known auth payload")
+  return parsed.data.auth
+}
+
+export function shouldConfirmWellKnownAuth(input: { yes?: boolean }) {
+  return !input.yes
+}
+
+function timeout() {
+  const value = process.env["OPENCODE_WELLKNOWN_TIMEOUT_MS"]
+  const num = value ? Number(value) : undefined
+  if (!num || !Number.isInteger(num) || num <= 0) return 15_000
+  return num
+}
+
+async function fetchWellKnown(url: string) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeout())
+  return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer))
+}
 
 /**
  * Handle plugin-based authentication flow.
@@ -221,18 +252,60 @@ export const AuthLoginCommand = cmd({
     yargs.positional("url", {
       describe: "opencode auth provider",
       type: "string",
+    }).option("yes", {
+      alias: "y",
+      type: "boolean",
+      describe: "skip confirmation prompts when logging in",
+      default: false,
     }),
-  async handler(args) {
+  async handler(args: { url?: string; yes?: boolean }) {
     await Instance.provide({
       directory: process.cwd(),
       async fn() {
         UI.empty()
         prompts.intro("Add credential")
         if (args.url) {
-          const wellknown = await fetch(`${args.url}/.well-known/opencode`).then((x) => x.json() as any)
-          prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
+          const url = `${args.url}/.well-known/opencode`
+          const response = await fetchWellKnown(url).catch(() => undefined)
+
+          if (!response?.ok) {
+            prompts.log.error(`Failed to fetch well-known config (${response?.status ?? "unknown"})`)
+            prompts.outro("Done")
+            return
+          }
+
+          const json = await response.json().catch(() => undefined)
+          if (!json) {
+            prompts.log.error("Invalid well-known response")
+            prompts.outro("Done")
+            return
+          }
+
+          const parsed = WellKnown.safeParse(json)
+          if (!parsed.success) {
+            prompts.log.error("Invalid well-known auth payload")
+            prompts.outro("Done")
+            return
+          }
+
+          const auth = parsed.data.auth
+          const cmd = auth.command.join(" ")
+          prompts.log.warn(`This will run a command provided by ${args.url}`)
+          prompts.log.info(`Command: \`${cmd}\``)
+
+          if (shouldConfirmWellKnownAuth({ yes: args.yes })) {
+            const confirm = await prompts.confirm({
+              message: "Run this command to complete login?",
+              initialValue: false,
+            })
+            if (!confirm || prompts.isCancel(confirm)) {
+              prompts.outro("Cancelled")
+              return
+            }
+          }
+
           const proc = Bun.spawn({
-            cmd: wellknown.auth.command,
+            cmd: auth.command,
             stdout: "pipe",
           })
           const exit = await proc.exited
@@ -244,7 +317,7 @@ export const AuthLoginCommand = cmd({
           const token = await new Response(proc.stdout).text()
           await Auth.set(args.url, {
             type: "wellknown",
-            key: wellknown.auth.env,
+            key: auth.env,
             token: token.trim(),
           })
           prompts.log.success("Logged into " + args.url)
