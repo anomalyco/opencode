@@ -1,0 +1,13 @@
+List all OpenCode sessions with optional filtering.
+
+Returns compact session list with ID, message count, last activity, and title. Current session is excluded.
+
+Arguments:
+- query (optional): Filter sessions by title (case-insensitive)
+- limit (optional): Maximum sessions to return (default: 5)
+- from_date (optional): Filter sessions from this date (ISO 8601)
+- to_date (optional): Filter sessions until this date (ISO 8601)
+
+Example output:
+ses_abc123 | 45 msgs | 2025-12-24 15:30:00 | Build session manager feature
+ses_def456 | 12 msgs | 2025-12-19 10:15:00 | Payment integration work

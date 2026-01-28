@@ -1,0 +1,16 @@
+Search for content within OpenCode session messages.
+
+Full-text search across sessions, returns matching excerpts. Current session excluded.
+
+Arguments:
+- query (required): Search query string
+- session_id (optional): Search within specific session only
+- case_sensitive (optional): Case-sensitive search (default: false)
+- limit (optional): Maximum results to return (default: 10)
+
+Example output:
+Found 3 matches in 2 sessions:
+
+[ses_abc123] (user): ...implement the **session manager** tool...
+[ses_abc123] (assistant): ...I'll create a **session manager** with...
+[ses_def456] (user): ...use the **session manager** to find...

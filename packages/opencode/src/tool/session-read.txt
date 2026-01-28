@@ -1,0 +1,23 @@
+Read messages and history from an OpenCode session.
+
+Returns a formatted view of session messages with role, timestamp, and content. Optionally filter by text query and include todos.
+
+Arguments:
+- session_id (required): Session ID to read
+- query (optional): Filter messages containing this text (case-insensitive)
+- include_todos (optional): Include todo list if available (default: false)
+- include_transcript (optional): Include transcript log if available (default: false)
+- limit (optional): Maximum number of messages to return (default: all)
+
+Example output:
+Session: ses_abc123
+Title: Build session manager feature
+Total Messages: 130
+Filtered: 8 messages matching "ui component"
+Date Range: 2025-12-20 to 2025-12-24
+
+[Message 1] user (2025-12-20 10:30:00)
+Can you create a new UI component for...
+
+[Message 2] assistant (2025-12-20 10:30:15)
+I'll create the UI component. Let me...
