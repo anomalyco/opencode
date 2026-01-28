@@ -20,6 +20,13 @@ export namespace Storage {
       message: z.string(),
     }),
   )
+  export const InvalidDataError = NamedError.create(
+    "StorageInvalidDataError",
+    z.object({
+      message: z.string(),
+      path: z.string().optional(),
+    }),
+  )
 
   const MIGRATIONS: Migration[] = [
     async (dir) => {
@@ -171,8 +178,15 @@ export namespace Storage {
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
       using _ = await Lock.read(target)
-      const result = await Bun.file(target).json()
-      return result as T
+      try {
+        const result = await Bun.file(target).json()
+        return result as T
+      } catch (error) {
+        if (error instanceof SyntaxError) {
+          throw new InvalidDataError({ message: "Invalid JSON data in storage.", path: target })
+        }
+        throw error
+      }
     })
   }
 
@@ -181,7 +195,15 @@ export namespace Storage {
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
       using _ = await Lock.write(target)
-      const content = await Bun.file(target).json()
+      let content: T
+      try {
+        content = await Bun.file(target).json()
+      } catch (error) {
+        if (error instanceof SyntaxError) {
+          throw new InvalidDataError({ message: "Invalid JSON data in storage.", path: target })
+        }
+        throw error
+      }
       fn(content)
       await Bun.write(target, JSON.stringify(content, null, 2))
       return content as T

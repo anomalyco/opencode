@@ -87,10 +87,25 @@ export namespace Repo {
     })
   export type CloneErrorInfo = z.infer<typeof CloneErrorInfo>
 
+  export const InvalidRecordInfo = z.object({
+    message: z.string(),
+    code: z.string().optional(),
+  })
+  export type InvalidRecordInfo = z.infer<typeof InvalidRecordInfo>
+
   export class CloneError extends Error {
     info: CloneErrorInfo
 
     constructor(info: CloneErrorInfo) {
+      super(info.message)
+      this.info = info
+    }
+  }
+
+  export class InvalidRecordError extends Error {
+    info: InvalidRecordInfo
+
+    constructor(info: InvalidRecordInfo) {
       super(info.message)
       this.info = info
     }
@@ -330,7 +345,32 @@ export namespace Repo {
   }
 
   export async function get(repoId: string) {
-    return Storage.read<Info>(["repo", repoId])
+    let record: unknown
+    try {
+      record = await Storage.read<Info>(["repo", repoId])
+    } catch (error) {
+      if (error instanceof Storage.InvalidDataError) {
+        throw new InvalidRecordError({
+          message: "Repository record is malformed. Remove and re-add the repository.",
+          code: "repo_malformed",
+        })
+      }
+      throw error
+    }
+
+    const parsed = Info.safeParse(record)
+    if (!parsed.success) {
+      const data = record as { path?: unknown } | null
+      const missingPath = !data || typeof data !== "object" || typeof data.path !== "string" || !data.path.trim()
+      throw new InvalidRecordError({
+        message: missingPath
+          ? "Repository record is missing a path. Remove and re-add the repository."
+          : "Repository record is invalid. Remove and re-add the repository.",
+        code: missingPath ? "repo_missing_path" : "repo_invalid",
+      })
+    }
+
+    return parsed.data
   }
 
   export async function add(input: { path: string; name?: string }) {
