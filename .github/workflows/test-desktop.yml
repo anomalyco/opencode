@@ -24,47 +24,36 @@ jobs:
         run: |
           echo "Bun version:"
           bun --version
-          echo "Node version:"
-          node --version
 
-      - name: Install dependencies
+      - name: Install frontend dependencies
         working-directory: packages/desktop
         run: bun install
-
-      - name: Verify dependencies
-        working-directory: packages/desktop
-        run: |
-          echo "Checking if tauri-cli is installed..."
-          bun pm ls | grep -i tauri || echo "Tauri CLI not found in dependencies"
 
       - name: Build frontend
         working-directory: packages/desktop
         run: |
           echo "Building frontend..."
           bun run build
-          echo "Frontend build completed!"
           echo "Build output:"
-          ls -la dist/
+          Get-ChildItem dist/ -Recurse | Select-Object FullName
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
 
-      - name: Verify Rust installation
+      - name: Install Tauri CLI via Cargo
         run: |
-          echo "Rust version:"
-          rustc --version
-          echo "Cargo version:"
-          cargo --version
+          echo "Installing Tauri CLI..."
+          cargo install tauri-cli --version "^2.0.0"
+          echo "Tauri CLI version:"
+          cargo tauri --version
 
-      - name: Build Tauri (development)
+      - name: Build Tauri app (using Cargo)
         working-directory: packages/desktop
         run: |
           echo "Starting Tauri build..."
-          bun run tauri build --debug --verbose 2>&1 | tee build.log
-          echo "Build process finished!"
-          echo "Exit code: $?"
+          cargo tauri build --debug --verbose
         env:
           TAURI_PRIVATE_KEY: ''
           TAURI_KEY_PASSWORD: ''
@@ -73,37 +62,26 @@ jobs:
         working-directory: packages/desktop
         run: |
           echo "Checking for build output..."
-          if [ -d "src-tauri/target/debug" ]; then
+          if (Test-Path "src-tauri/target/debug") {
             echo "Debug target directory exists"
-            ls -la src-tauri/target/debug/
-          else
+            Get-ChildItem src-tauri/target/debug/ -File
+          } else {
             echo "Debug target directory NOT found"
-          fi
+          }
 
-          if [ -d "src-tauri/target/debug/bundle" ]; then
+          if (Test-Path "src-tauri/target/debug/bundle") {
             echo "Bundle directory exists!"
-            echo "Bundle contents:"
-            find src-tauri/target/debug/bundle -type f -name "*.exe" -o -name "*.msi" -o -name "*.nsis" || echo "No installer files found"
-          else
+            Get-ChildItem src-tauri/target/debug/bundle/ -Recurse -File
+          } else {
             echo "Bundle directory NOT found"
             echo "Target directory structure:"
-            ls -R src-tauri/target/ || true
-          fi
-
-      - name: Upload build log
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: build-log
-          path: packages/desktop/build.log
-          if-no-files-found: ignore
+            Get-ChildItem src-tauri/target/ -Recurse -Directory | Select-Object -First 20
+          }
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: windows-test
-          path: |
-            packages/desktop/src-tauri/target/debug/bundle/*/*
-            packages/desktop/src-tauri/target/debug/*.exe
+          path: packages/desktop/src-tauri/target/debug/bundle/*/*
           if-no-files-found: warn
