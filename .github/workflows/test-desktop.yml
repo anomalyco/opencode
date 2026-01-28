@@ -9,6 +9,9 @@ on:
 jobs:
   test-windows:
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
     steps:
       # Enable Git long paths on Windows
       - name: Enable Git long paths
@@ -20,9 +23,6 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          # Don't use sparse checkout to avoid symlink issues
-          sparse-checkout: false
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -33,16 +33,18 @@ jobs:
           bun --version
 
       - name: Install frontend dependencies
-        working-directory: packages/desktop
-        run: bun install
+        run: |
+          cd packages/desktop
+          echo "Current directory: $(pwd)"
+          echo "Installing dependencies..."
+          bun install
 
       - name: Build frontend
-        working-directory: packages/desktop
         run: |
+          cd packages/desktop
+          echo "Current directory: $(pwd)"
           echo "Building frontend..."
           bun run build
-          echo "Build output:"
-          Get-ChildItem dist/ -Recurse | Select-Object FullName
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -57,38 +59,38 @@ jobs:
           cargo tauri --version
 
       - name: Build Tauri app (using Cargo)
-        working-directory: packages/desktop
         run: |
+          cd packages/desktop
+          echo "Current directory: $(pwd)"
           echo "Starting Tauri build..."
-          cargo tauri build --debug --verbose
+          cargo tauri build --debug
         env:
           TAURI_PRIVATE_KEY: ''
           TAURI_KEY_PASSWORD: ''
 
       - name: Check build output
-        working-directory: packages/desktop
         run: |
           echo "Checking for build output..."
-          if (Test-Path "src-tauri/target/debug") {
+          if [ -d "packages/desktop/src-tauri/target/debug" ]; then
             echo "Debug target directory exists"
-            Get-ChildItem src-tauri/target/debug/ -File
-          } else {
+            ls -la packages/desktop/src-tauri/target/debug/
+          else
             echo "Debug target directory NOT found"
-          }
+          fi
 
-          if (Test-Path "src-tauri/target/debug/bundle") {
+          if [ -d "packages/desktop/src-tauri/target/debug/bundle" ]; then
             echo "Bundle directory exists!"
-            Get-ChildItem src-tauri/target/debug/bundle/ -Recurse -File
-          } else {
+            find packages/desktop/src-tauri/target/debug/bundle -type f
+          else
             echo "Bundle directory NOT found"
             echo "Target directory structure:"
-            Get-ChildItem src-tauri/target/ -Recurse -Directory | Select-Object -First 20
-          }
+            ls -R packages/desktop/src-tauri/target/ | head -50
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: windows-test
-          path: packages/desktop/src-tauri/target/debug/bundle/*/*
+          path: packages/desktop/src-tauri/target/debug/bundle/**/*
           if-no-files-found: warn
