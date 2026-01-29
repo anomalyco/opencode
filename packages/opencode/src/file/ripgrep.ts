@@ -162,34 +162,32 @@ export namespace Ripgrep {
           })
       }
       if (config.extension === "zip") {
-        if (config.extension === "zip") {
-          const zipFileReader = new ZipReader(new BlobReader(new Blob([await Bun.file(archivePath).arrayBuffer()])))
-          const entries = await zipFileReader.getEntries()
-          let rgEntry: any
-          for (const entry of entries) {
-            if (entry.filename.endsWith("rg.exe")) {
-              rgEntry = entry
-              break
-            }
+        const zipFileReader = new ZipReader(new BlobReader(new Blob([await Bun.file(archivePath).arrayBuffer()])))
+        const entries = await zipFileReader.getEntries()
+        let rgEntry: any
+        for (const entry of entries) {
+          if (entry.filename.endsWith("rg.exe")) {
+            rgEntry = entry
+            break
           }
-
-          if (!rgEntry) {
-            throw new ExtractionFailedError({
-              filepath: archivePath,
-              stderr: "rg.exe not found in zip archive",
-            })
-          }
-
-          const rgBlob = await rgEntry.getData(new BlobWriter())
-          if (!rgBlob) {
-            throw new ExtractionFailedError({
-              filepath: archivePath,
-              stderr: "Failed to extract rg.exe from zip archive",
-            })
-          }
-          await Bun.write(filepath, await rgBlob.arrayBuffer())
-          await zipFileReader.close()
         }
+
+        if (!rgEntry) {
+          throw new ExtractionFailedError({
+            filepath: archivePath,
+            stderr: "rg.exe not found in zip archive",
+          })
+        }
+
+        const rgBlob = await rgEntry.getData(new BlobWriter())
+        if (!rgBlob) {
+          throw new ExtractionFailedError({
+            filepath: archivePath,
+            stderr: "Failed to extract rg.exe from zip archive",
+          })
+        }
+        await Bun.write(filepath, await rgBlob.arrayBuffer())
+        await zipFileReader.close()
       }
       await fs.unlink(archivePath)
       if (!platformKey.endsWith("-win32")) await fs.chmod(filepath, 0o755)
@@ -211,7 +209,10 @@ export namespace Ripgrep {
     hidden?: boolean
     follow?: boolean
     maxDepth?: number
+    signal?: AbortSignal
   }) {
+    input.signal?.throwIfAborted()
+
     const args = [await filepath(), "--files", "--glob=!.git/*"]
     if (input.follow !== false) args.push("--follow")
     if (input.hidden !== false) args.push("--hidden")
@@ -237,6 +238,7 @@ export namespace Ripgrep {
       stdout: "pipe",
       stderr: "ignore",
       maxBuffer: 1024 * 1024 * 20,
+      signal: input.signal,
     })
 
     const reader = proc.stdout.getReader()
@@ -245,6 +247,8 @@ export namespace Ripgrep {
 
     try {
       while (true) {
+        input.signal?.throwIfAborted()
+
         const { done, value } = await reader.read()
         if (done) break
 
@@ -263,11 +267,13 @@ export namespace Ripgrep {
       reader.releaseLock()
       await proc.exited
     }
+
+    input.signal?.throwIfAborted()
   }
 
-  export async function tree(input: { cwd: string; limit?: number }) {
+  export async function tree(input: { cwd: string; limit?: number; signal?: AbortSignal }) {
     log.info("tree", input)
-    const files = await Array.fromAsync(Ripgrep.files({ cwd: input.cwd }))
+    const files = await Array.fromAsync(Ripgrep.files({ cwd: input.cwd, signal: input.signal }))
     interface Node {
       path: string[]
       children: Node[]

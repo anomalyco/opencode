@@ -1,6 +1,5 @@
 import path from "path"
 import { Global } from "../global"
-import fs from "fs/promises"
 import z from "zod"
 
 export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
@@ -39,6 +38,28 @@ export namespace Auth {
     lastError: z.string().optional(),
   })
 
+  export const CodexUsageWindow = z.object({
+    usedPercent: z.number(),
+    windowMinutes: z.number(),
+    resetAt: z.number(),
+  })
+  export type CodexUsageWindow = z.infer<typeof CodexUsageWindow>
+
+  export const CodexAccountUsage = z.object({
+    planType: z.string().optional(),
+    primary: CodexUsageWindow.optional(),
+    secondary: CodexUsageWindow.optional(),
+    credits: z
+      .object({
+        hasCredits: z.boolean(),
+        unlimited: z.boolean(),
+        balance: z.string().optional(),
+      })
+      .optional(),
+    fetchedAt: z.number(),
+  })
+  export type CodexAccountUsage = z.infer<typeof CodexAccountUsage>
+
   export const CodexAccount = z.object({
     id: z.string(),
     email: z.string(),
@@ -47,6 +68,7 @@ export namespace Auth {
     expires: z.number(),
     accountId: z.string().optional(),
     rateLimit: CodexAccountRateLimit.optional(),
+    usage: CodexAccountUsage.optional(),
   })
   export type CodexAccount = z.infer<typeof CodexAccount>
 
@@ -71,8 +93,7 @@ export namespace Auth {
 
   async function writeRaw(data: Record<string, unknown>): Promise<void> {
     const file = Bun.file(filepath)
-    await Bun.write(file, JSON.stringify(data, null, 2))
-    await fs.chmod(file.name!, 0o600)
+    await Bun.write(file, JSON.stringify(data, null, 2), { mode: 0o600 })
   }
 
   export async function get(providerID: string) {
@@ -215,7 +236,9 @@ export namespace Auth {
     return auth.accounts[index]
   }
 
-  export async function setCodexAccount(account: Omit<CodexAccount, "id" | "rateLimit"> & { id?: string }): Promise<void> {
+  export async function setCodexAccount(
+    account: Omit<CodexAccount, "id" | "rateLimit"> & { id?: string },
+  ): Promise<void> {
     const { data, auth: existing } = await readCodexAuthAndData()
     const auth = existing ?? { type: "codex-multi", accounts: [], activeIndex: 0 }
 
@@ -234,7 +257,11 @@ export namespace Auth {
 
     if (existingIndex >= 0) {
       // Update existing account tokens
-      auth.accounts[existingIndex] = { ...auth.accounts[existingIndex], ...newAccount, id: auth.accounts[existingIndex].id }
+      auth.accounts[existingIndex] = {
+        ...auth.accounts[existingIndex],
+        ...newAccount,
+        id: auth.accounts[existingIndex].id,
+      }
       auth.activeIndex = existingIndex
     } else {
       // Add new account
@@ -369,7 +396,8 @@ export namespace Auth {
     }
 
     const account =
-      auth.accounts.find((a) => a.id === id) ?? (id === "legacy" && auth.accounts.length === 1 ? auth.accounts[0] : undefined)
+      auth.accounts.find((a) => a.id === id) ??
+      (id === "legacy" && auth.accounts.length === 1 ? auth.accounts[0] : undefined)
     if (!account) return
 
     account.access = tokens.access
@@ -377,6 +405,20 @@ export namespace Auth {
     account.expires = tokens.expires
     if (tokens.accountId) account.accountId = tokens.accountId
 
+    data["codex"] = auth
+    await writeRaw(data)
+  }
+
+  export async function updateCodexAccountUsage(id: string, usage: CodexAccountUsage): Promise<void> {
+    const { data, auth } = await readCodexAuthAndData()
+    if (!auth) return
+
+    const account =
+      auth.accounts.find((a) => a.id === id) ??
+      (id === "legacy" && auth.accounts.length === 1 ? auth.accounts[0] : undefined)
+    if (!account) return
+
+    account.usage = usage
     data["codex"] = auth
     await writeRaw(data)
   }

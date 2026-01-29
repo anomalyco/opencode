@@ -11,6 +11,7 @@ import { Global } from "../../global"
 import { Plugin } from "../../plugin"
 import { Instance } from "../../project/instance"
 import type { Hooks } from "@opencode-ai/plugin"
+import { fetchCodexUsage } from "../../plugin/codex"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
 
@@ -245,6 +246,91 @@ export const AuthSwitchCommand = cmd({
   },
 })
 
+function formatResetTime(resetAt: number): string {
+  const diff = resetAt - Date.now()
+  if (diff <= 0) return "now"
+  const hours = Math.floor(diff / 3600000)
+  const mins = Math.floor((diff % 3600000) / 60000)
+  if (hours > 24) return `${Math.floor(hours / 24)}d`
+  if (hours > 0) return `${hours}h ${mins}m`
+  return `${mins}m`
+}
+
+function formatUsageBar(usedPercent: number, width = 10): string {
+  const remaining = 100 - usedPercent
+  const filled = Math.round((remaining / 100) * width)
+  return "█".repeat(filled) + "░".repeat(width - filled)
+}
+
+export const AuthUsageCommand = cmd({
+  command: "usage",
+  describe: "show Codex usage status for all accounts",
+  async handler() {
+    UI.empty()
+    prompts.intro("Codex Usage")
+
+    const accounts = await Auth.getCodexAccounts()
+    if (accounts.length === 0) {
+      prompts.log.error("No ChatGPT accounts found")
+      prompts.outro("Done")
+      return
+    }
+
+    const codexAuth = await Auth.getCodexAuth()
+    const activeIndex = codexAuth?.activeIndex ?? 0
+
+    for (let i = 0; i < accounts.length; i++) {
+      const account = accounts[i]
+      const isActive = i === activeIndex
+      const activeMarker = isActive ? " *" : ""
+
+      prompts.log.info(`${account.email}${activeMarker}`)
+
+      const spinner = prompts.spinner()
+      spinner.start("Fetching usage...")
+
+      try {
+        const usage = await fetchCodexUsage(account)
+        spinner.stop("")
+
+        const planLabel = usage.planType ? ` (${usage.planType})` : ""
+        prompts.log.info(`  Plan: ${usage.planType || "unknown"}${planLabel}`)
+
+        if (usage.primary) {
+          const remaining = 100 - usage.primary.usedPercent
+          const bar = formatUsageBar(usage.primary.usedPercent)
+          const reset = formatResetTime(usage.primary.resetAt)
+          prompts.log.info(`  5h limit:  [${bar}] ${remaining}% left, resets in ${reset}`)
+        }
+
+        if (usage.secondary) {
+          const remaining = 100 - usage.secondary.usedPercent
+          const bar = formatUsageBar(usage.secondary.usedPercent)
+          const reset = formatResetTime(usage.secondary.resetAt)
+          prompts.log.info(`  Weekly:    [${bar}] ${remaining}% left, resets in ${reset}`)
+        }
+
+        if (usage.credits) {
+          if (usage.credits.unlimited) {
+            prompts.log.info("  Credits: unlimited")
+          } else if (usage.credits.balance) {
+            prompts.log.info(`  Credits: $${usage.credits.balance}`)
+          }
+        }
+      } catch (err) {
+        spinner.stop("Failed to fetch usage", 1)
+        prompts.log.error(`  Error: ${err instanceof Error ? err.message : String(err)}`)
+      }
+
+      if (i < accounts.length - 1) {
+        prompts.log.info("")
+      }
+    }
+
+    prompts.outro(`${accounts.length} account${accounts.length === 1 ? "" : "s"}`)
+  },
+})
+
 export const AuthCommand = cmd({
   command: "auth",
   describe: "manage credentials",
@@ -254,6 +340,7 @@ export const AuthCommand = cmd({
       .command(AuthLogoutCommand)
       .command(AuthListCommand)
       .command(AuthSwitchCommand)
+      .command(AuthUsageCommand)
       .demandCommand(),
   async handler() {},
 })

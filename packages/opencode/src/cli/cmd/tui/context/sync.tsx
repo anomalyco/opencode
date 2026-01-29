@@ -17,6 +17,7 @@ import type {
   ProviderListResponse,
   ProviderAuthMethod,
   VcsInfo,
+  ProviderCodexUsageResponse,
 } from "@opencode-ai/sdk/v2"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
@@ -73,6 +74,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       formatter: FormatterStatus[]
       vcs: VcsInfo | undefined
       path: Path
+      codex_usage: ProviderCodexUsageResponse | undefined
     }>({
       provider_next: {
         all: [],
@@ -100,6 +102,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       formatter: [],
       vcs: undefined,
       path: { state: "", config: "", worktree: "", directory: "" },
+      codex_usage: undefined,
     })
 
     const sdk = useSDK()
@@ -241,9 +244,27 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             event.properties.info.sessionID,
             produce((draft) => {
               draft.splice(result.index, 0, event.properties.info)
-              if (draft.length > 100) draft.shift()
             }),
           )
+          const updated = store.message[event.properties.info.sessionID]
+          if (updated.length > 100) {
+            const oldest = updated[0]
+            batch(() => {
+              setStore(
+                "message",
+                event.properties.info.sessionID,
+                produce((draft) => {
+                  draft.shift()
+                }),
+              )
+              setStore(
+                "part",
+                produce((draft) => {
+                  delete draft[oldest.id]
+                }),
+              )
+            })
+          }
           break
         }
         case "message.removed": {
@@ -315,32 +336,57 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       const start = Date.now() - 30 * 24 * 60 * 60 * 1000
       const sessionListPromise = sdk.client.session
         .list({ start: start })
-        .then((x) => setStore("session", reconcile((x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))))
+        .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
 
       // blocking - include session.list when continuing a session
+      const providersPromise = sdk.client.config.providers({}, { throwOnError: true })
+      const providerListPromise = sdk.client.provider.list({}, { throwOnError: true })
+      const agentsPromise = sdk.client.app.agents({}, { throwOnError: true })
+      const configPromise = sdk.client.config.get({}, { throwOnError: true })
       const blockingRequests: Promise<unknown>[] = [
-        sdk.client.config.providers({}, { throwOnError: true }).then((x) => {
-          batch(() => {
-            setStore("provider", reconcile(x.data!.providers))
-            setStore("provider_default", reconcile(x.data!.default))
-          })
-        }),
-        sdk.client.provider.list({}, { throwOnError: true }).then((x) => {
-          batch(() => {
-            setStore("provider_next", reconcile(x.data!))
-          })
-        }),
-        sdk.client.app.agents({}, { throwOnError: true }).then((x) => setStore("agent", reconcile(x.data ?? []))),
-        sdk.client.config.get({}, { throwOnError: true }).then((x) => setStore("config", reconcile(x.data!))),
+        providersPromise,
+        providerListPromise,
+        agentsPromise,
+        configPromise,
         ...(args.continue ? [sessionListPromise] : []),
       ]
 
       await Promise.all(blockingRequests)
         .then(() => {
+          const providersResponse = providersPromise.then((x) => x.data!)
+          const providerListResponse = providerListPromise.then((x) => x.data!)
+          const agentsResponse = agentsPromise.then((x) => x.data ?? [])
+          const configResponse = configPromise.then((x) => x.data!)
+          const sessionListResponse = args.continue ? sessionListPromise : undefined
+
+          return Promise.all([
+            providersResponse,
+            providerListResponse,
+            agentsResponse,
+            configResponse,
+            ...(sessionListResponse ? [sessionListResponse] : []),
+          ]).then((responses) => {
+            const providers = responses[0]
+            const providerList = responses[1]
+            const agents = responses[2]
+            const config = responses[3]
+            const sessions = responses[4]
+
+            batch(() => {
+              setStore("provider", reconcile(providers.providers))
+              setStore("provider_default", reconcile(providers.default))
+              setStore("provider_next", reconcile(providerList))
+              setStore("agent", reconcile(agents))
+              setStore("config", reconcile(config))
+              if (sessions !== undefined) setStore("session", reconcile(sessions))
+            })
+          })
+        })
+        .then(() => {
           if (store.status !== "complete") setStore("status", "partial")
           // non-blocking
           Promise.all([
-            ...(args.continue ? [] : [sessionListPromise]),
+            ...(args.continue ? [] : [sessionListPromise.then((sessions) => setStore("session", reconcile(sessions)))]),
             sdk.client.command.list().then((x) => setStore("command", reconcile(x.data ?? []))),
             sdk.client.lsp.status().then((x) => setStore("lsp", reconcile(x.data!))),
             sdk.client.mcp.status().then((x) => setStore("mcp", reconcile(x.data!))),
@@ -352,6 +398,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.provider.auth().then((x) => setStore("provider_auth", reconcile(x.data ?? {}))),
             sdk.client.vcs.get().then((x) => setStore("vcs", reconcile(x.data))),
             sdk.client.path.get().then((x) => setStore("path", reconcile(x.data!))),
+            sdk.client.provider.codex.usage().then((x) => setStore("codex_usage", reconcile(x.data))),
           ]).then(() => {
             setStore("status", "complete")
           })

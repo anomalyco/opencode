@@ -16,11 +16,11 @@ import { iife } from "@opencode-ai/util/iife"
 import { Binary } from "@opencode-ai/util/binary"
 import { NamedError } from "@opencode-ai/util/error"
 import { DateTime } from "luxon"
-import { SessionMessageRail } from "@opencode-ai/ui/session-message-rail"
 import { createStore } from "solid-js/store"
 import z from "zod"
 import NotFound from "../[...404]"
 import { Tabs } from "@opencode-ai/ui/tabs"
+import { MessageNav } from "@opencode-ai/ui/message-nav"
 import { preloadMultiFileDiff, PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { Diff as SSRDiff } from "@opencode-ai/ui/diff-ssr"
 import { clientOnly } from "@solidjs/start"
@@ -296,13 +296,13 @@ export default function () {
                                 {(message) => (
                                   <SessionTurn
                                     sessionID={data().sessionID}
+                                    sessionTitle={info().title}
                                     messageID={message.id}
                                     stepsExpanded={store.expandedSteps[message.id] ?? false}
                                     onStepsExpandedToggle={() => setStore("expandedSteps", message.id, (v) => !v)}
                                     classes={{
                                       root: "min-w-0 w-full relative",
-                                      content:
-                                        "flex flex-col justify-between !overflow-visible [&_[data-slot=session-turn-message-header]]:top-[-32px]",
+                                      content: "flex flex-col justify-between !overflow-visible",
                                       container: "px-4",
                                     }}
                                   />
@@ -353,26 +353,25 @@ export default function () {
                                 <div
                                   classList={{
                                     "@container relative shrink-0 pt-14 flex flex-col gap-10 min-h-0 w-full": true,
-                                    "mx-auto max-w-200": !wide(),
                                   }}
                                 >
                                   <div
                                     classList={{
-                                      "w-full flex justify-start items-start min-w-0": true,
-                                      "max-w-200 mx-auto px-6": wide(),
-                                      "pr-6 pl-18": !wide() && messages().length > 1,
-                                      "px-6": !wide() && messages().length === 1,
+                                      "w-full flex justify-start items-start min-w-0 px-6": true,
                                     }}
                                   >
                                     {title()}
                                   </div>
                                   <div class="flex items-start justify-start h-full min-h-0">
-                                    <SessionMessageRail
-                                      messages={messages()}
-                                      current={activeMessage()}
-                                      onMessageSelect={setActiveMessage}
-                                      wide={wide()}
-                                    />
+                                    <Show when={messages().length > 1}>
+                                      <MessageNav
+                                        class="sticky top-0 shrink-0 py-2 pl-4"
+                                        messages={messages()}
+                                        current={activeMessage()}
+                                        size="compact"
+                                        onMessageSelect={setActiveMessage}
+                                      />
+                                    </Show>
                                     <SessionTurn
                                       sessionID={data().sessionID}
                                       messageID={store.messageId ?? firstUserMessage()!.id!}
@@ -386,13 +385,7 @@ export default function () {
                                       classes={{
                                         root: "grow",
                                         content: "flex flex-col justify-between",
-                                        container:
-                                          "w-full pb-20 " +
-                                          (wide()
-                                            ? "max-w-200 mx-auto px-6"
-                                            : messages().length > 1
-                                              ? "pr-6 pl-18"
-                                              : "px-6"),
+                                        container: "w-full pb-20 px-6",
                                       }}
                                     >
                                       <div

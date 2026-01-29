@@ -2,14 +2,33 @@ import { TextAttributes } from "@opentui/core"
 import { useTheme } from "../context/theme"
 import { useSync } from "@tui/context/sync"
 import { For, Match, Switch, Show, createMemo } from "solid-js"
+import { Installation } from "@/installation"
 
 export type DialogStatusProps = {}
+
+function formatResetTime(resetAt: number): string {
+  const diff = resetAt - Date.now()
+  if (diff <= 0) return "now"
+  const hours = Math.floor(diff / 3600000)
+  const mins = Math.floor((diff % 3600000) / 60000)
+  if (hours > 24) return `${Math.floor(hours / 24)}d`
+  if (hours > 0) return `${hours}h ${mins}m`
+  return `${mins}m`
+}
+
+function usageBar(usedPercent: number, width = 10): string {
+  const remaining = 100 - usedPercent
+  const filled = Math.round((remaining / 100) * width)
+  return "█".repeat(filled) + "░".repeat(width - filled)
+}
 
 export function DialogStatus() {
   const sync = useSync()
   const { theme } = useTheme()
 
   const enabledFormatters = createMemo(() => sync.data.formatter.filter((f) => f.enabled))
+
+  const codexAccounts = createMemo(() => sync.data.codex_usage?.accounts ?? [])
 
   const plugins = createMemo(() => {
     const list = sync.data.config.plugin ?? []
@@ -44,6 +63,63 @@ export function DialogStatus() {
         </text>
         <text fg={theme.textMuted}>esc</text>
       </box>
+      <text fg={theme.textMuted}>OpenCode v{Installation.VERSION}</text>
+      <Show when={codexAccounts().length > 0}>
+        <box>
+          <text fg={theme.text}>{codexAccounts().length} Codex Accounts</text>
+          <For each={codexAccounts()}>
+            {(account) => {
+              const isRateLimited = account.usage?.primary && account.usage.primary.usedPercent >= 100
+              return (
+                <box>
+                  <box flexDirection="row" gap={1}>
+                    <text
+                      flexShrink={0}
+                      style={{
+                        fg: account.isActive ? theme.success : theme.textMuted,
+                      }}
+                    >
+                      {account.isActive ? "●" : "•"}
+                    </text>
+                    <text fg={theme.text} wrapMode="word">
+                      <b>{account.email}</b>{" "}
+                      <span style={{ fg: theme.textMuted }}>
+                        {account.usage?.planType ?? "unknown"}
+                        {isRateLimited && <span style={{ fg: theme.warning }}> [rate limited]</span>}
+                      </span>
+                    </text>
+                  </box>
+                  <Show when={account.usage?.primary}>
+                    {(primary) => {
+                      const remaining = 100 - primary().usedPercent
+                      return (
+                        <text fg={theme.textMuted}>
+                          {"  "}5h: [{usageBar(primary().usedPercent)}] {remaining}% left, resets in{" "}
+                          {formatResetTime(primary().resetAt)}
+                        </text>
+                      )
+                    }}
+                  </Show>
+                  <Show when={account.usage?.secondary}>
+                    {(secondary) => {
+                      const remaining = 100 - secondary().usedPercent
+                      return (
+                        <text fg={theme.textMuted}>
+                          {"  "}Weekly: [{usageBar(secondary().usedPercent)}] {remaining}% left, resets in{" "}
+                          {formatResetTime(secondary().resetAt)}
+                        </text>
+                      )
+                    }}
+                  </Show>
+                  <Show when={account.error}>
+                    <text fg={theme.error}>{"  "}Error: {account.error}</text>
+                  </Show>
+                </box>
+              )
+            }}
+          </For>
+        </box>
+      </Show>
       <Show when={Object.keys(sync.data.mcp).length > 0} fallback={<text fg={theme.text}>No MCP Servers</text>}>
         <box>
           <text fg={theme.text}>{Object.keys(sync.data.mcp).length} MCP Servers</text>

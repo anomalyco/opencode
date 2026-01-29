@@ -1,16 +1,19 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import { Log } from "../util/log"
+import { Installation } from "../installation"
 import { Auth, OAUTH_DUMMY_KEY } from "../auth"
-import { ProviderTransform } from "../provider/transform"
 import { Bus } from "../bus"
 import { TuiEvent } from "../cli/cmd/tui/event"
+import os from "os"
 
 const log = Log.create({ service: "plugin.codex" })
 
 const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const ISSUER = "https://auth.openai.com"
 const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses"
+const CODEX_USAGE_ENDPOINT = "https://chatgpt.com/backend-api/wham/usage"
 const OAUTH_PORT = 1455
+const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000
 
 interface PkceCodes {
   verifier: string
@@ -179,6 +182,149 @@ async function refreshAccessToken(refreshToken: string): Promise<TokenResponse> 
     throw new Error(`Token refresh failed: ${response.status}`)
   }
   return response.json()
+}
+
+interface CodexUsageApiResponse {
+  plan_type?: string
+  rate_limit?: {
+    allowed?: boolean
+    limit_reached?: boolean
+    primary_window?: {
+      used_percent: number
+      limit_window_seconds: number
+      reset_after_seconds?: number
+      reset_at?: number
+    }
+    secondary_window?: {
+      used_percent: number
+      limit_window_seconds: number
+      reset_after_seconds?: number
+      reset_at?: number
+    }
+  }
+  credits?: {
+    has_credits?: boolean
+    unlimited?: boolean
+    balance?: string
+  }
+}
+
+function parseUsageFromHeaders(headers: Headers): Auth.CodexAccountUsage | undefined {
+  const primaryUsed = headers.get("x-codex-primary-used-percent")
+  const primaryWindow = headers.get("x-codex-primary-window-minutes")
+  const primaryReset = headers.get("x-codex-primary-reset-at")
+
+  if (!primaryUsed || !primaryWindow || !primaryReset) return undefined
+
+  const secondaryUsed = headers.get("x-codex-secondary-used-percent")
+  const secondaryWindow = headers.get("x-codex-secondary-window-minutes")
+  const secondaryReset = headers.get("x-codex-secondary-reset-at")
+
+  const hasCredits = headers.get("x-codex-credits-has-credits")
+  const creditsBalance = headers.get("x-codex-credits-balance")
+
+  const usage: Auth.CodexAccountUsage = {
+    fetchedAt: Date.now(),
+    primary: {
+      usedPercent: parseInt(primaryUsed, 10),
+      windowMinutes: parseInt(primaryWindow, 10),
+      resetAt: parseInt(primaryReset, 10) * 1000,
+    },
+  }
+
+  if (secondaryUsed && secondaryWindow && secondaryReset) {
+    usage.secondary = {
+      usedPercent: parseInt(secondaryUsed, 10),
+      windowMinutes: parseInt(secondaryWindow, 10),
+      resetAt: parseInt(secondaryReset, 10) * 1000,
+    }
+  }
+
+  if (hasCredits !== null) {
+    usage.credits = {
+      hasCredits: hasCredits === "true",
+      unlimited: false,
+      balance: creditsBalance ?? undefined,
+    }
+  }
+
+  return usage
+}
+
+function parseUsageFromApiResponse(response: CodexUsageApiResponse): Auth.CodexAccountUsage {
+  const usage: Auth.CodexAccountUsage = {
+    planType: response.plan_type,
+    fetchedAt: Date.now(),
+  }
+
+  if (response.rate_limit?.primary_window) {
+    const pw = response.rate_limit.primary_window
+    usage.primary = {
+      usedPercent: pw.used_percent,
+      windowMinutes: Math.round(pw.limit_window_seconds / 60),
+      resetAt: pw.reset_at ? pw.reset_at * 1000 : Date.now() + (pw.reset_after_seconds ?? 0) * 1000,
+    }
+  }
+
+  if (response.rate_limit?.secondary_window) {
+    const sw = response.rate_limit.secondary_window
+    usage.secondary = {
+      usedPercent: sw.used_percent,
+      windowMinutes: Math.round(sw.limit_window_seconds / 60),
+      resetAt: sw.reset_at ? sw.reset_at * 1000 : Date.now() + (sw.reset_after_seconds ?? 0) * 1000,
+    }
+  }
+
+  if (response.credits) {
+    usage.credits = {
+      hasCredits: response.credits.has_credits ?? false,
+      unlimited: response.credits.unlimited ?? false,
+      balance: response.credits.balance,
+    }
+  }
+
+  return usage
+}
+
+export async function fetchCodexUsage(account: Auth.CodexAccount): Promise<Auth.CodexAccountUsage> {
+  let access = account.access
+  let refresh = account.refresh
+
+  // Refresh token if expired
+  if (account.expires < Date.now()) {
+    log.info("refreshing codex token for usage fetch", { email: account.email })
+    const tokens = await refreshAccessToken(account.refresh)
+    access = tokens.access_token
+    refresh = tokens.refresh_token ?? account.refresh
+    const expiresAt = Date.now() + (tokens.expires_in ?? 3600) * 1000
+    const accountId = extractAccountId(tokens) || account.accountId
+    await Auth.updateCodexAccountTokens(account.id, {
+      access,
+      refresh,
+      expires: expiresAt,
+      accountId,
+    })
+  }
+
+  const headers: HeadersInit = {
+    Authorization: `Bearer ${access}`,
+  }
+  if (account.accountId) {
+    headers["ChatGPT-Account-Id"] = account.accountId
+  }
+
+  const response = await fetch(CODEX_USAGE_ENDPOINT, { headers })
+  if (!response.ok) {
+    throw new Error(`Usage fetch failed: ${response.status}`)
+  }
+
+  const data: CodexUsageApiResponse = await response.json()
+  const usage = parseUsageFromApiResponse(data)
+
+  // Persist usage to storage
+  await Auth.updateCodexAccountUsage(account.id, usage)
+
+  return usage
 }
 
 const HTML_SUCCESS = `<!doctype html>
@@ -402,43 +548,17 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
         if (!hasLegacyOAuth && !hasCodexAccounts) return {}
 
         // Filter models to only allowed Codex models for OAuth
-        const allowedModels = new Set(["gpt-5.1-codex-max", "gpt-5.1-codex-mini", "gpt-5.2", "gpt-5.2-codex"])
+        const allowedModels = new Set([
+          "gpt-5.1-codex-max",
+          "gpt-5.1-codex-mini",
+          "gpt-5.2",
+          "gpt-5.2-codex",
+          "gpt-5.1-codex",
+        ])
         for (const modelId of Object.keys(provider.models)) {
           if (!allowedModels.has(modelId)) {
             delete provider.models[modelId]
           }
-        }
-
-        if (!provider.models["gpt-5.2-codex"]) {
-          const model = {
-            id: "gpt-5.2-codex",
-            providerID: "openai",
-            api: {
-              id: "gpt-5.2-codex",
-              url: "https://chatgpt.com/backend-api/codex",
-              npm: "@ai-sdk/openai",
-            },
-            name: "GPT-5.2 Codex",
-            capabilities: {
-              temperature: false,
-              reasoning: true,
-              attachment: true,
-              toolcall: true,
-              input: { text: true, audio: false, image: true, video: false, pdf: false },
-              output: { text: true, audio: false, image: false, video: false, pdf: false },
-              interleaved: false,
-            },
-            cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-            limit: { context: 400000, output: 128000 },
-            status: "active" as const,
-            options: {},
-            headers: {},
-            release_date: "2025-12-18",
-            variants: {} as Record<string, Record<string, any>>,
-            family: "gpt-codex",
-          }
-          model.variants = ProviderTransform.variants(model)
-          provider.models["gpt-5.2-codex"] = model
         }
 
         // Zero out costs for Codex (included with ChatGPT subscription)
@@ -538,9 +658,18 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
             headers,
           })
 
+          // Capture usage from response headers (non-blocking)
+          const headerUsage = parseUsageFromHeaders(response.headers)
+          if (headerUsage) {
+            Auth.updateCodexAccountUsage(account.id, headerUsage).catch(() => {})
+          }
+
           // Check for rate limit error and handle account switching
           if (!response.ok) {
-            const body = await response.clone().text().catch(() => undefined)
+            const body = await response
+              .clone()
+              .text()
+              .catch(() => undefined)
             if (isCodexRateLimitError(response, body)) {
               const resetTime = parseCodexResetTime(body)
               log.info("codex rate limit hit", { email: account.email, resetTime })
@@ -598,7 +727,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
       },
       methods: [
         {
-          label: "ChatGPT Pro/Plus",
+          label: "ChatGPT Pro/Plus (browser)",
           type: "oauth",
           authorize: async () => {
             const { redirectUri } = await startOAuthServer()
@@ -630,10 +759,99 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
           },
         },
         {
+          label: "ChatGPT Pro/Plus (headless)",
+          type: "oauth",
+          authorize: async () => {
+            const deviceResponse = await fetch(`${ISSUER}/api/accounts/deviceauth/usercode`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "User-Agent": `opencode/${Installation.VERSION}`,
+              },
+              body: JSON.stringify({ client_id: CLIENT_ID }),
+            })
+
+            if (!deviceResponse.ok) throw new Error("Failed to initiate device authorization")
+
+            const deviceData = (await deviceResponse.json()) as {
+              device_auth_id: string
+              user_code: string
+              interval: string
+            }
+            const interval = Math.max(parseInt(deviceData.interval) || 5, 1) * 1000
+
+            return {
+              url: `${ISSUER}/codex/device`,
+              instructions: `Enter code: ${deviceData.user_code}`,
+              method: "auto" as const,
+              async callback() {
+                while (true) {
+                  const response = await fetch(`${ISSUER}/api/accounts/deviceauth/token`, {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      "User-Agent": `opencode/${Installation.VERSION}`,
+                    },
+                    body: JSON.stringify({
+                      device_auth_id: deviceData.device_auth_id,
+                      user_code: deviceData.user_code,
+                    }),
+                  })
+
+                  if (response.ok) {
+                    const data = (await response.json()) as {
+                      authorization_code: string
+                      code_verifier: string
+                    }
+
+                    const tokenResponse = await fetch(`${ISSUER}/oauth/token`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                      body: new URLSearchParams({
+                        grant_type: "authorization_code",
+                        code: data.authorization_code,
+                        redirect_uri: `${ISSUER}/deviceauth/callback`,
+                        client_id: CLIENT_ID,
+                        code_verifier: data.code_verifier,
+                      }).toString(),
+                    })
+
+                    if (!tokenResponse.ok) {
+                      throw new Error(`Token exchange failed: ${tokenResponse.status}`)
+                    }
+
+                    const tokens: TokenResponse = await tokenResponse.json()
+
+                    return {
+                      type: "success" as const,
+                      refresh: tokens.refresh_token,
+                      access: tokens.access_token,
+                      expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
+                      accountId: extractAccountId(tokens),
+                    }
+                  }
+
+                  if (response.status !== 403 && response.status !== 404) {
+                    return { type: "failed" as const }
+                  }
+
+                  await Bun.sleep(interval + OAUTH_POLLING_SAFETY_MARGIN_MS)
+                }
+              },
+            }
+          },
+        },
+        {
           label: "Manually enter API Key",
           type: "api",
         },
       ],
+    },
+    "chat.headers": async (input, output) => {
+      if (input.model.providerID !== "openai") return
+      output.headers.originator = "opencode"
+      output.headers["User-Agent"] = `opencode/${Installation.VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`
+      output.headers.session_id = input.sessionID
     },
   }
 }

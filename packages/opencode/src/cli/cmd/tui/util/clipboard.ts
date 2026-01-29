@@ -5,6 +5,21 @@ import { lazy } from "../../../../util/lazy.js"
 import { tmpdir } from "os"
 import path from "path"
 
+/**
+ * Writes text to clipboard via OSC 52 escape sequence.
+ * This allows clipboard operations to work over SSH by having
+ * the terminal emulator handle the clipboard locally.
+ */
+function writeOsc52(text: string): void {
+  if (!process.stdout.isTTY) return
+  const base64 = Buffer.from(text).toString("base64")
+  const osc52 = `\x1b]52;c;${base64}\x07`
+  // tmux and screen require DCS passthrough wrapping
+  const passthrough = process.env["TMUX"] || process.env["STY"]
+  const sequence = passthrough ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
+  process.stdout.write(sequence)
+}
+
 export namespace Clipboard {
   export interface Content {
     data: string
@@ -110,9 +125,25 @@ export namespace Clipboard {
     if (os === "win32") {
       console.log("clipboard: using powershell")
       return async (text: string) => {
-        // need to escape backticks because powershell uses them as escape code
-        const escaped = text.replace(/"/g, '""').replace(/`/g, "``")
-        await $`powershell -NonInteractive -NoProfile -Command "Set-Clipboard -Value \"${escaped}\""`.nothrow().quiet()
+        // Pipe via stdin to avoid PowerShell string interpolation ($env:FOO, $(), etc.)
+        const proc = Bun.spawn(
+          [
+            "powershell.exe",
+            "-NonInteractive",
+            "-NoProfile",
+            "-Command",
+            "[Console]::InputEncoding = [System.Text.Encoding]::UTF8; Set-Clipboard -Value ([Console]::In.ReadToEnd())",
+          ],
+          {
+            stdin: "pipe",
+            stdout: "ignore",
+            stderr: "ignore",
+          },
+        )
+
+        proc.stdin.write(text)
+        proc.stdin.end()
+        await proc.exited.catch(() => {})
       }
     }
 
@@ -123,6 +154,7 @@ export namespace Clipboard {
   })
 
   export async function copy(text: string): Promise<void> {
+    writeOsc52(text)
     await getCopyMethod()(text)
   }
 }

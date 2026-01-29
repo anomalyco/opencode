@@ -17,6 +17,18 @@ export function Footer() {
     if (route.data.type !== "session") return []
     return sync.data.permission[route.data.sessionID] ?? []
   })
+
+  // Check if any Codex account is approaching limit (>90% used)
+  const codexLimitWarning = createMemo(() => {
+    const accounts = sync.data.codex_usage?.accounts ?? []
+    for (const account of accounts) {
+      if (account.usage?.primary && account.usage.primary.usedPercent >= 90) {
+        const remaining = 100 - account.usage.primary.usedPercent
+        return { email: account.email, remaining }
+      }
+    }
+    return null
+  })
   const directory = useDirectory()
   const connected = useConnected()
 
@@ -60,6 +72,13 @@ export function Footer() {
             </text>
           </Match>
           <Match when={connected()}>
+            <Show when={codexLimitWarning()}>
+              {(warning) => (
+                <text fg={theme.warning}>
+                  <span style={{ fg: theme.warning }}>!</span> Codex {warning().remaining}% left
+                </text>
+              )}
+            </Show>
             <Show when={permissions().length > 0}>
               <text fg={theme.warning}>
                 <span style={{ fg: theme.warning }}>△</span> {permissions().length} Permission
