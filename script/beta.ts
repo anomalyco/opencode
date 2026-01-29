@@ -50,11 +50,11 @@ async function main() {
 
     const cherryPick = await $`git cherry-pick ${pr.headRefOid} --no-commit`.nothrow()
     if (cherryPick.exitCode !== 0) {
-      console.log(`  PR #${pr.number} introduces conflicts, skipping`)
+      console.log(`  Cherry-pick failed for PR #${pr.number}`)
+      console.log(`  Error: ${cherryPick.stderr}`)
       await $`git cherry-pick --abort`.nothrow()
-      await $`git checkout -- .`.nothrow()
-      await $`git clean -fd`.nothrow()
-      skipped.push({ number: pr.number, reason: "Merge conflict" })
+      await $`git reset --hard HEAD`.nothrow()
+      skipped.push({ number: pr.number, reason: `Cherry-pick failed: ${cherryPick.stderr}` })
       continue
     }
 
