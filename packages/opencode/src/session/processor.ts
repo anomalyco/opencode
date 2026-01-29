@@ -397,6 +397,13 @@ export namespace SessionProcessor {
           if (needsCompaction) return "compact"
           if (blocked) return "stop"
           if (input.assistantMessage.error) return "stop"
+          // Stop when the model indicates it's done (finish_reason is not tool-calls/unknown)
+          if (
+            input.assistantMessage.finish &&
+            !["tool-calls", "unknown"].includes(input.assistantMessage.finish)
+          ) {
+            return "stop"
+          }
           return "continue"
         }
       },
