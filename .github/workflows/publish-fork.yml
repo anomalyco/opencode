@@ -1,0 +1,65 @@
+name: Build Forked Opencode
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build-core:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install Dependencies
+        run: bun install
+
+      - name: Build Project
+        run: |
+          cd packages/opencode
+          sed -i '/linux-arm64-musl/d' script/build.ts
+          bun run build
+
+      - name: Publish to NPM (Trusted Publishing / OIDC)
+        env:
+          NPM_CONFIG_WORKSPACES: "false"
+        run: |
+          set -euo pipefail
+
+          sudo npm install -g npm@11.5.1
+          
+          rm -rf "$HOME/opencode-release"
+          mkdir -p "$HOME/opencode-release"
+          cp -R packages/opencode/* "$HOME/opencode-release/"
+          cd "$HOME/opencode-release"
+
+          rm -f .npmrc
+          unset NODE_AUTH_TOKEN || true
+          unset NPM_TOKEN || true
+
+          jq '.name = "@baixiangcpp/opencode-ai" 
+              | .version = "1.0.${{ github.run_number }}" 
+              | .repository = { "type": "git", "url": "git+https://github.com/baixiangcpp/opencode.git" }
+              | del(.private) 
+              | del(.dependencies) 
+              | del(.devDependencies)' package.json > package.json.tmp
+          mv package.json.tmp package.json
+
+          cat > .npmignore <<EOF
+          test/
+          src/**/*.test.ts
+          *.tgz
+          dist/
+          EOF
+
+          npm publish --access public --provenance --no-git-checks
