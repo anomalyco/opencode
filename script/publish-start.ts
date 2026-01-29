@@ -4,8 +4,7 @@ import { $ } from "bun"
 import { Script } from "@opencode-ai/script"
 import { buildNotes, getLatestRelease } from "./changelog"
 
-const highlightsTemplate = `## Highlights
-
+const highlightsTemplate = `
 <!--
 Add highlights before publishing. Delete this section if no highlights.
 
