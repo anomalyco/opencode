@@ -15,6 +15,9 @@ process.chdir(dir)
 import pkg from "../package.json"
 import { Script } from "@opencode-ai/script"
 
+// Allow overriding package name via env var (e.g. NPM_PACKAGE=@adriancooney/opencode)
+const packageName = process.env.NPM_PACKAGE || pkg.name
+
 const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")
 const skipInstall = process.argv.includes("--skip-install")
@@ -108,7 +111,7 @@ if (!skipInstall) {
 }
 for (const item of targets) {
   const name = [
-    pkg.name,
+    packageName,
     // changing to win32 flags npm for some reason
     item.os === "win32" ? "windows" : item.os,
     item.arch,
@@ -117,8 +120,10 @@ for (const item of targets) {
   ]
     .filter(Boolean)
     .join("-")
+  // For scoped packages, create a safe directory name
+  const dirName = name.replace(/^@[^/]+\//, "")
   console.log(`building ${name}`)
-  await $`mkdir -p dist/${name}/bin`
+  await $`mkdir -p dist/${dirName}/bin`
 
   const parserWorker = fs.realpathSync(path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"))
   const workerPath = "./src/cli/cmd/tui/worker.ts"
@@ -138,8 +143,8 @@ for (const item of targets) {
       //@ts-ignore (bun types aren't up to date)
       autoloadTsconfig: true,
       autoloadPackageJson: true,
-      target: name.replace(pkg.name, "bun") as any,
-      outfile: `dist/${name}/bin/opencode`,
+      target: dirName.replace(pkg.name, "bun") as any,
+      outfile: `dist/${dirName}/bin/opencode`,
       execArgv: [`--user-agent=opencode/${Script.version}`, "--use-system-ca", "--"],
       windows: {},
     },
@@ -153,8 +158,8 @@ for (const item of targets) {
     },
   })
 
-  await $`rm -rf ./dist/${name}/bin/tui`
-  await Bun.file(`dist/${name}/package.json`).write(
+  await $`rm -rf ./dist/${dirName}/bin/tui`
+  await Bun.file(`dist/${dirName}/package.json`).write(
     JSON.stringify(
       {
         name,

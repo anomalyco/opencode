@@ -3,6 +3,9 @@ import {
   ClientFactoryOptions,
   Client,
   type RequestOptions,
+  createAuthenticatingFetchWithRetry,
+  type AuthenticationHandler,
+  JsonRpcTransportFactory,
 } from "@a2a-js/sdk/client"
 import type {
   AgentCard,
@@ -14,6 +17,9 @@ import type {
   TaskStatusUpdateEvent,
   TaskArtifactUpdateEvent,
 } from "@a2a-js/sdk"
+import { Log } from "../util/log"
+
+const log = Log.create({ service: "a2a.client" })
 
 export type StreamEvent =
   | { type: "task"; task: Task }
@@ -32,11 +38,37 @@ function getClientFactory(): ClientFactory {
   return clientFactory
 }
 
-async function getClient(agentCard: AgentCard): Promise<Client> {
-  const cacheKey = agentCard.url
+function createAuthHandler(accessToken: string): AuthenticationHandler {
+  return {
+    headers: async () => ({
+      Authorization: `Bearer ${accessToken}`,
+    }),
+    shouldRetryWithHeaders: async (_req, res) => {
+      if (res.status === 401) {
+        return undefined
+      }
+      return undefined
+    },
+  }
+}
+
+function getAuthenticatedClientFactory(accessToken: string): ClientFactory {
+  const authHandler = createAuthHandler(accessToken)
+  const authFetch = createAuthenticatingFetchWithRetry(fetch, authHandler)
+
+  const options = ClientFactoryOptions.createFrom(ClientFactoryOptions.default, {
+    transports: [new JsonRpcTransportFactory({ fetchImpl: authFetch })],
+  })
+
+  return new ClientFactory(options)
+}
+
+async function getClient(agentCard: AgentCard, accessToken?: string): Promise<Client> {
+  const cacheKey = accessToken ? `${agentCard.url}:${accessToken.slice(0, 16)}` : agentCard.url
   let client = clientCache.get(cacheKey)
   if (!client) {
-    client = await getClientFactory().createFromAgentCard(agentCard)
+    const factory = accessToken ? getAuthenticatedClientFactory(accessToken) : getClientFactory()
+    client = await factory.createFromAgentCard(agentCard)
     clientCache.set(cacheKey, client)
   }
   return client
@@ -51,6 +83,7 @@ export interface SendMessageParams {
   message: Message
   contextId?: string
   signal?: AbortSignal
+  accessToken?: string
 }
 
 export interface StreamMessageResult {
@@ -81,9 +114,9 @@ function isArtifactUpdate(obj: unknown): obj is TaskArtifactUpdateEvent {
 }
 
 export async function sendMessage(params: SendMessageParams): Promise<StreamMessageResult> {
-  const { agentCard, message, contextId, signal } = params
+  const { agentCard, message, contextId, signal, accessToken } = params
 
-  const client = await getClient(agentCard)
+  const client = await getClient(agentCard, accessToken)
   const options: RequestOptions = signal ? { signal } : {}
 
   const result = await client.sendMessage(
@@ -117,12 +150,13 @@ export interface StreamMessageParams {
   contextId?: string
   signal?: AbortSignal
   onEvent?: (event: StreamEvent) => void
+  accessToken?: string
 }
 
 export async function* streamMessage(params: StreamMessageParams): AsyncGenerator<StreamEvent> {
-  const { agentCard, message, contextId, signal, onEvent } = params
+  const { agentCard, message, contextId, signal, onEvent, accessToken } = params
 
-  const client = await getClient(agentCard)
+  const client = await getClient(agentCard, accessToken)
   const options: RequestOptions = signal ? { signal } : {}
 
   const stream = client.sendMessageStream(
@@ -147,7 +181,10 @@ export async function* streamMessage(params: StreamMessageParams): AsyncGenerato
 export function transformStreamEvent(
   data: Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent,
 ): StreamEvent | null {
+  log.info("raw data received", { kind: (data as any).kind, data })
+
   if (isTask(data)) {
+    log.info("transformed to task event")
     return { type: "task", task: data }
   }
 
@@ -156,6 +193,7 @@ export function transformStreamEvent(
       .filter(isTextPart)
       .map((p) => p.text)
       .join("")
+    log.info("transformed to message event", { textLength: text.length })
     return { type: "message", contextId: data.contextId ?? "", text }
   }
 
@@ -164,6 +202,7 @@ export function transformStreamEvent(
       ?.filter(isTextPart)
       .map((p) => p.text)
       .join("")
+    log.info("transformed to statusUpdate event", { state: data.status.state })
     return {
       type: "statusUpdate",
       taskId: data.taskId,
@@ -175,6 +214,7 @@ export function transformStreamEvent(
   }
 
   if (isArtifactUpdate(data)) {
+    log.info("transformed to artifact event", { name: data.artifact.name })
     return {
       type: "artifact",
       taskId: data.taskId,
@@ -183,6 +223,7 @@ export function transformStreamEvent(
     }
   }
 
+  log.warn("unknown event type, returning null", { data })
   return null
 }
 

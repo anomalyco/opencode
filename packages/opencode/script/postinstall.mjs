@@ -47,9 +47,20 @@ function detectPlatformAndArch() {
   return { platform, arch }
 }
 
+function getPackagePrefix() {
+  try {
+    const pkgPath = path.join(__dirname, "package.json")
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"))
+    return pkg.name
+  } catch {
+    return "opencode"
+  }
+}
+
 function findBinary() {
   const { platform, arch } = detectPlatformAndArch()
-  const packageName = `opencode-${platform}-${arch}`
+  const prefix = getPackagePrefix()
+  const packageName = `${prefix}-${platform}-${arch}`
   const binaryName = platform === "windows" ? "opencode.exe" : "opencode"
 
   try {
