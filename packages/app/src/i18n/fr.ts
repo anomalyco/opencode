@@ -333,6 +333,7 @@ export const dict = {
   "language.ar": "العربية",
   "language.no": "Norsk",
   "language.br": "Português (Brasil)",
+  "language.th": "ไทย",
 
   "toast.language.title": "Langue",
   "toast.language.description": "Passé à {{language}}",
@@ -526,6 +527,7 @@ export const dict = {
 
   "settings.general.section.appearance": "Apparence",
   "settings.general.section.notifications": "Notifications système",
+  "settings.general.section.updates": "Mises à jour",
   "settings.general.section.sounds": "Effets sonores",
 
   "settings.general.row.language.title": "Langue",
@@ -536,6 +538,18 @@ export const dict = {
   "settings.general.row.theme.description": "Personnaliser le thème d'OpenCode.",
   "settings.general.row.font.title": "Police",
   "settings.general.row.font.description": "Personnaliser la police mono utilisée dans les blocs de code",
+
+  "settings.general.row.releaseNotes.title": "Notes de version",
+  "settings.general.row.releaseNotes.description": 'Afficher des pop-ups "Quoi de neuf" après les mises à jour',
+
+  "settings.updates.row.startup.title": "Vérifier les mises à jour au démarrage",
+  "settings.updates.row.startup.description": "Vérifier automatiquement les mises à jour au lancement d'OpenCode",
+  "settings.updates.row.check.title": "Vérifier les mises à jour",
+  "settings.updates.row.check.description": "Vérifier manuellement les mises à jour et installer si disponible",
+  "settings.updates.action.checkNow": "Vérifier maintenant",
+  "settings.updates.action.checking": "Vérification...",
+  "settings.updates.toast.latest.title": "Vous êtes à jour",
+  "settings.updates.toast.latest.description": "Vous utilisez la dernière version d'OpenCode.",
 
   "font.option.ibmPlexMono": "IBM Plex Mono",
   "font.option.cascadiaCode": "Cascadia Code",
