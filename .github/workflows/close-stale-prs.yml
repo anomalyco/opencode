@@ -1,4 +1,4 @@
-name: Close stale PRs
+name: close-stale-prs
 
 on:
   workflow_dispatch:
