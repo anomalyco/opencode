@@ -1,4 +1,4 @@
-name: "Setup Bun"
+name: "Setuperth Bun"
 description: "Setup Bun with caching and install dependencies"
 runs:
   using: "composite"
