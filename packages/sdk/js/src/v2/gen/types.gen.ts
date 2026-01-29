@@ -1364,6 +1364,7 @@ export type PermissionConfig =
       codesearch?: PermissionActionConfig
       lsp?: PermissionRuleConfig
       doom_loop?: PermissionActionConfig
+      skill?: PermissionRuleConfig
       [key: string]: PermissionRuleConfig | Array<string> | PermissionActionConfig | undefined
     }
   | PermissionActionConfig
@@ -1634,11 +1635,11 @@ export type Config = {
     }
   }
   /**
-   * Additional skill folder paths to scan
+   * Additional skill folder paths
    */
   skills?: {
     /**
-     * Additional paths to skill folders to scan
+     * Additional paths to skill folders
      */
     paths?: Array<string>
   }
