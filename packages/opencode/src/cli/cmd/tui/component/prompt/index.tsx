@@ -3,6 +3,7 @@ import { createEffect, createMemo, type JSX, onMount, createSignal, onCleanup, S
 import "opentui-spinner/solid"
 import { useLocal } from "@tui/context/local"
 import { useTheme } from "@tui/context/theme"
+import { Flag } from "@/flag/flag"
 import { EmptyBorder } from "@tui/component/border"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
@@ -918,7 +919,7 @@ export function Prompt(props: PromptProps) {
                 const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
                 if (
                   (lineCount >= 3 || pastedContent.length > 150) &&
-                  !sync.data.config.experimental?.disable_paste_summary
+                  !(sync.data.config.experimental?.disable_paste_summary ?? Flag.OPENCODE_EXPERIMENTAL_DISABLE_PASTE_SUMMARY)
                 ) {
                   event.preventDefault()
                   pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)

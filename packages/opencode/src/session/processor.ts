@@ -15,6 +15,7 @@ import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
+import { Flag } from "@/flag/flag"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -45,7 +46,9 @@ export namespace SessionProcessor {
       async process(streamInput: LLM.StreamInput) {
         log.info("process")
         needsCompaction = false
-        const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
+        const config = await Config.get()
+        const continueOnDeny = config.experimental?.continue_loop_on_deny ?? Flag.OPENCODE_EXPERIMENTAL_CONTINUE_LOOP_ON_DENY
+        const shouldBreak = continueOnDeny !== true
         while (true) {
           try {
             let currentText: MessageV2.TextPart | undefined

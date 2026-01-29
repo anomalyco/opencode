@@ -1,4 +1,5 @@
 import { Config } from "../config/config"
+import { Flag } from "@/flag/flag"
 import z from "zod"
 import { Provider } from "../provider/provider"
 import { generateObject, streamObject, type ModelMessage } from "ai"
@@ -288,7 +289,7 @@ export namespace Agent {
 
     const params = {
       experimental_telemetry: {
-        isEnabled: cfg.experimental?.openTelemetry,
+        isEnabled: cfg.experimental?.openTelemetry ?? Flag.OPENCODE_ENABLE_OPENTELEMETRY,
         metadata: {
           userId: cfg.username ?? "unknown",
         },
