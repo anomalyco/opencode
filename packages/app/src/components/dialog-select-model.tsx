@@ -182,7 +182,7 @@ export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
         as={props.triggerAs ?? "div"}
         {...(props.triggerProps as any)}
       >
-        {props.children}
+        {typeof props.children === "function" ? props.children(store.open) : props.children}
       </Kobalte.Trigger>
       <Kobalte.Portal>
         <Kobalte.Content

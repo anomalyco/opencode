@@ -290,8 +290,8 @@ export const SessionReview = (props: SessionReviewProps) => {
         <div data-slot="session-review-title">{i18n.t("ui.sessionReview.title")}</div>
         <div data-slot="session-review-actions">
           <Show when={props.onDiffStyleChange}>
-            <RadioGroup
-              options={["unified", "split"] as const}
+            <RadioGroup<SessionReviewDiffStyle>
+              options={["unified", "split"]}
               current={diffStyle()}
               value={(style) => style}
               label={(style) =>

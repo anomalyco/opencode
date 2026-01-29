@@ -11,6 +11,11 @@
 	z-index: 100;
 	transform-origin: var(--kb-menu-content-transform-origin);
 
+	&:focus-within,
+	&:focus {
+		outline: none;
+	}
+
 	animation: dropdownMenuContentHide var(--transition-duration)
 		var(--transition-easing) forwards;
 

@@ -5,8 +5,12 @@ export interface MorphChevronProps {
   class?: string
 }
 
+const COLLAPSED = "M4 6L8 10L12 6"
+const EXPANDED = "M4 10L8 6L12 10"
+
 export function MorphChevron(props: MorphChevronProps) {
   const id = createUniqueId()
+  let path: SVGPathElement | undefined
   let expandAnim: SVGAnimateElement | undefined
   let collapseAnim: SVGAnimateElement | undefined
 
@@ -14,7 +18,11 @@ export function MorphChevron(props: MorphChevronProps) {
     on(
       () => props.expanded,
       (expanded, prev) => {
-        if (prev === undefined) return
+        if (prev === undefined) {
+          // Set initial state without animation
+          path?.setAttribute("d", expanded ? EXPANDED : COLLAPSED)
+          return
+        }
         if (expanded) {
           expandAnim?.beginElement()
         } else {
@@ -32,9 +40,11 @@ export function MorphChevron(props: MorphChevronProps) {
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
     >
-      <path d={props.expanded ? "M4 10L8 6L12 10" : "M4 6L8 10L12 6"} id={`morph-chevron-path-${id}`}>
+      <path ref={path} d={COLLAPSED} id={`morph-chevron-path-${id}`}>
         <animate
-          ref={(el) => (expandAnim = el)}
+          ref={(el) => {
+            expandAnim = el
+          }}
           id={`morph-expand-${id}`}
           attributeName="d"
           dur="200ms"
@@ -45,7 +55,9 @@ export function MorphChevron(props: MorphChevronProps) {
           begin="indefinite"
         />
         <animate
-          ref={(el) => (collapseAnim = el)}
+          ref={(el) => {
+            collapseAnim = el
+          }}
           id={`morph-collapse-${id}`}
           attributeName="d"
           dur="200ms"

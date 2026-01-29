@@ -1434,13 +1434,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     const optimisticParts = requestParts.map((part) => ({
       ...part,
-      sessionID: session?.id || '',
+      sessionID: session?.id || "",
       messageID,
     })) as unknown as Part[]
 
     const optimisticMessage: Message = {
       id: messageID,
-      sessionID: session?.id || '',
+      sessionID: session?.id || "",
       role: "user",
       time: { created: Date.now() },
       agent,
@@ -1451,9 +1451,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (sessionDirectory === projectDirectory) {
         sync.set(
           produce((draft) => {
-            const messages = draft.message[session?.id || '']
+            const messages = draft.message[session?.id || ""]
             if (!messages) {
-              draft.message[session?.id || ''] = [optimisticMessage]
+              draft.message[session?.id || ""] = [optimisticMessage]
             } else {
               const result = Binary.search(messages, messageID, (m) => m.id)
               messages.splice(result.index, 0, optimisticMessage)
@@ -1469,9 +1469,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
       globalSync.child(sessionDirectory)[1](
         produce((draft) => {
-          const messages = draft.message[session?.id || '']
+          const messages = draft.message[session?.id || ""]
           if (!messages) {
-            draft.message[session?.id || ''] = [optimisticMessage]
+            draft.message[session?.id || ""] = [optimisticMessage]
           } else {
             const result = Binary.search(messages, messageID, (m) => m.id)
             messages.splice(result.index, 0, optimisticMessage)
@@ -1488,7 +1488,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (sessionDirectory === projectDirectory) {
         sync.set(
           produce((draft) => {
-            const messages = draft.message[session?.id || '']
+            const messages = draft.message[session?.id || ""]
             if (messages) {
               const result = Binary.search(messages, messageID, (m) => m.id)
               if (result.found) messages.splice(result.index, 1)
@@ -1501,7 +1501,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
       globalSync.child(sessionDirectory)[1](
         produce((draft) => {
-          const messages = draft.message[session?.id || '']
+          const messages = draft.message[session?.id || ""]
           if (messages) {
             const result = Binary.search(messages, messageID, (m) => m.id)
             if (result.found) messages.splice(result.index, 1)
@@ -1547,7 +1547,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         restoreInput()
       }
 
-      pending.set(session?.id || '', { abort: controller, cleanup })
+      pending.set(session?.id || "", { abort: controller, cleanup })
 
       const abort = new Promise<Awaited<ReturnType<typeof WorktreeState.wait>>>((resolve) => {
         if (controller.signal.aborted) {
@@ -1575,7 +1575,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         if (timer.id === undefined) return
         clearTimeout(timer.id)
       })
-      pending.delete(session?.id || '')
+      pending.delete(session?.id || "")
       if (controller.signal.aborted) return false
       if (result.status === "failed") throw new Error(result.message)
       return true
@@ -1585,7 +1585,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const ok = await waitForWorktree()
       if (!ok) return
       await client.session.prompt({
-        sessionID: session?.id || '',
+        sessionID: session?.id || "",
         agent,
         model,
         messageID,
@@ -1595,7 +1595,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     void send().catch((err) => {
-      pending.delete(session?.id || '')
+      pending.delete(session?.id || "")
       if (sessionDirectory === projectDirectory && session?.id) {
         sync.set("session_status", session?.id, { type: "idle" })
       }
@@ -1620,8 +1620,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const currrentModelVariant = createMemo(() => {
-    const modelVariant = local.model.variant.current() ?? ''
-    return modelVariant === 'xhigh' ? 'xHigh' : (modelVariant.length > 0 ? modelVariant[0].toUpperCase() + modelVariant.slice(1) : 'Default')
+    const modelVariant = local.model.variant.current() ?? ""
+    return modelVariant === "xhigh"
+      ? "xHigh"
+      : modelVariant.length > 0
+        ? modelVariant[0].toUpperCase() + modelVariant.slice(1)
+        : "Default"
   })
 
   const reasoningPercentage = createMemo(() => {
@@ -1629,7 +1633,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const current = local.model.variant.current()
     const totalEntries = variants.length + 1
 
-    if (totalEntries <= 2 || current === 'Default') {
+    if (totalEntries <= 2 || current === "Default") {
       return 0
     }
 
@@ -1791,7 +1795,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       }}
                     >
                       <div class="flex items-center gap-1.5">
-                        <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-3.5" />
+                        <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-7" />
                         <div class="flex items-center text-11-regular min-w-0 font-medium">
                           <span class="text-text-strong whitespace-nowrap">{getFilenameTruncated(item.path, 14)}</span>
                           <Show when={item.selection}>
@@ -1808,7 +1812,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           type="button"
                           icon="close-small"
                           variant="ghost"
-                          class="ml-auto h-5 w-5 opacity-0 group-hover:opacity-100 transition-all"
+                          class="ml-auto size-7 opacity-0 group-hover:opacity-100 transition-all"
                           onClick={(e) => {
                             e.stopPropagation()
                             if (item.commentID) comments.remove(item.path, item.commentID)
@@ -1838,7 +1842,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     when={attachment.mime.startsWith("image/")}
                     fallback={
                       <div class="size-16 rounded-md bg-surface-base flex items-center justify-center border border-border-base">
-                        <Icon name="folder" class="size-6 text-text-weak" />
+                        <Icon name="folder" size="normal" class="size-6 text-text-base" />
                       </div>
                     }
                   >
@@ -1912,7 +1916,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           </Show>
         </div>
         <div class="relative p-3 flex items-center justify-between">
-          <div class="flex items-center justify-start gap-1">
+          <div class="flex items-center justify-start gap-2">
             <Switch>
               <Match when={store.mode === "shell"}>
                 <div class="flex items-center gap-2 px-2 h-6">
@@ -1943,7 +1947,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       title={language.t("command.model.choose")}
                       keybind={command.keybind("model.choose")}
                     >
-                      <Button as="div" variant="ghost" onClick={() => dialog.render(<DialogSelectModelUnpaid />, "select-model")}>
+                      <Button
+                        as="div"
+                        variant="ghost"
+                        class="px-2"
+                        onClick={() => dialog.render(<DialogSelectModelUnpaid />, "select-model")}
+                      >
                         <Show when={local.model.current()?.provider?.id}>
                           <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
                         </Show>
@@ -2021,7 +2030,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               </Match>
             </Switch>
           </div>
-          <div class="flex items-center gap-2 absolute right-3 bottom-3">
+          <div class="flex items-center gap-1 absolute right-3 bottom-3">
             <input
               ref={fileInputRef}
               type="file"
@@ -2033,18 +2042,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 e.currentTarget.value = ""
               }}
             />
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2.5">
               <SessionContextUsage />
               <Show when={store.mode === "normal"}>
                 <Tooltip placement="top" value={language.t("prompt.action.attachFile")}>
                   <Button
                     type="button"
                     variant="ghost"
-                    class="size-6"
+                    size="small"
+                    class="px-1"
                     onClick={() => fileInputRef.click()}
                     aria-label={language.t("prompt.action.attachFile")}
                   >
-                    <Icon name="photo" class="size-4.5 text-icon-base" />
+                    <Icon name="photo" class="size-6 text-icon-base" />
                   </Button>
                 </Tooltip>
               </Show>
@@ -2074,7 +2084,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 disabled={!prompt.dirty() && !working()}
                 icon={working() ? "stop" : "arrow-up"}
                 variant="primary"
-                class="h-6 w-5"
+                class="h-6 w-5.5"
                 aria-label={working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
               />
             </Tooltip>

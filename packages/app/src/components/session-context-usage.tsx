@@ -64,8 +64,8 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   }
 
   const circle = () => (
-    <div class="p-1 text-icon-base">
-      <ProgressCircle size={16} strokeWidth={1} percentage={context()?.percentage ?? 0} />
+    <div class="text-icon-base">
+      <ProgressCircle size={18} percentage={context()?.percentage ?? 0} />
     </div>
   )
 
@@ -101,7 +101,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
             <Button
               type="button"
               variant="ghost"
-              class="size-6 text-icon-base"
+              class="size-7 text-icon-base"
               onClick={openContext}
               aria-label={language.t("context.usage.view")}
             >
