@@ -3,6 +3,13 @@ function truthy(key: string) {
   return value === "true" || value === "1"
 }
 
+function number(key: string) {
+  const value = process.env[key]
+  if (!value) return undefined
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
+}
+
 export namespace Flag {
   export const OPENCODE_AUTO_SHARE = truthy("OPENCODE_AUTO_SHARE")
   export const OPENCODE_GIT_BASH_PATH = process.env["OPENCODE_GIT_BASH_PATH"]
@@ -54,13 +61,6 @@ export namespace Flag {
   export const OPENCODE_EXPERIMENTAL_CONTINUE_LOOP_ON_DENY =
     OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_CONTINUE_LOOP_ON_DENY")
   export const OPENCODE_EXPERIMENTAL_MCP_TIMEOUT_MS = number("OPENCODE_EXPERIMENTAL_MCP_TIMEOUT_MS")
-
-  function number(key: string) {
-    const value = process.env[key]
-    if (!value) return undefined
-    const parsed = Number(value)
-    return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
-  }
 }
 
 // Dynamic getter for OPENCODE_DISABLE_PROJECT_CONFIG
