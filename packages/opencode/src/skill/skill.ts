@@ -1,5 +1,6 @@
 import z from "zod"
 import path from "path"
+import os from "os"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
 import { NamedError } from "@opencode-ai/util/error"
@@ -119,6 +120,36 @@ export namespace Skill {
         followSymlinks: true,
       })) {
         await addSkill(match)
+      }
+    }
+
+    // Scan custom skill directories from config
+    const config = await Config.get()
+    if (config.skills) {
+      for (const skillPath of config.skills) {
+        const resolvedPath = (() => {
+          if (skillPath.startsWith("~/")) {
+            return path.join(os.homedir(), skillPath.slice(2))
+          }
+          if (path.isAbsolute(skillPath)) {
+            return skillPath
+          }
+          return path.resolve(Instance.directory, skillPath)
+        })()
+
+        if (!(await Filesystem.isDir(resolvedPath))) {
+          log.warn("custom skill directory not found", { path: resolvedPath })
+          continue
+        }
+
+        for await (const match of new Bun.Glob("**/SKILL.md").scan({
+          cwd: resolvedPath,
+          absolute: true,
+          onlyFiles: true,
+          followSymlinks: true,
+        })) {
+          await addSkill(match)
+        }
       }
     }
 
