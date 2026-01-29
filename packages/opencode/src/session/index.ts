@@ -39,6 +39,16 @@ export namespace Session {
     ).test(title)
   }
 
+  function getForkedTitle(title: string): string {
+    const match = title.match(/^(.+) \(fork #(\d+)\)$/)
+    if (match) {
+      const base = match[1]
+      const num = parseInt(match[2], 10)
+      return `${base} (fork #${num + 1})`
+    }
+    return `${title} (fork #1)`
+  }
+
   export const Info = z
     .object({
       id: Identifier.schema("session"),
@@ -151,8 +161,12 @@ export namespace Session {
       messageID: Identifier.schema("message").optional(),
     }),
     async (input) => {
+      const original = await get(input.sessionID)
+      if (!original) throw new Error("session not found")
+      const title = getForkedTitle(original.title)
       const session = await createNext({
         directory: Instance.directory,
+        title,
       })
       const msgs = await messages({ sessionID: input.sessionID })
       const idMap = new Map<string, string>()

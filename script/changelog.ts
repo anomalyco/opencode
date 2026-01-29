@@ -15,6 +15,7 @@ export const team = [
   "adamdotdevin",
   "iamdavidhill",
   "opencode-agent[bot]",
+  "R44VC0RP",
 ]
 
 export async function getLatestRelease() {
