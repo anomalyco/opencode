@@ -25,7 +25,7 @@ import { LSPServer } from "../lsp/server"
 import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
-import { constants, existsSync } from "fs"
+import { constants, existsSync, readFileSync } from "fs"
 import { Bus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
 import { Event } from "../server/event"
@@ -485,23 +485,67 @@ export namespace Config {
     return plugins
   }
 
+  function findPackageName(fp: string): string | undefined {
+    let dir = path.dirname(fp)
+    const root = path.parse(dir).root
+    for (let i = 0; i < 5 && dir !== root; i++) {
+      // Don't escape .opencode boundary — host project's package.json is irrelevant
+      if (path.basename(dir) === ".opencode") return undefined
+      const pkg = path.join(dir, "package.json")
+      if (existsSync(pkg)) {
+        try {
+          const data = JSON.parse(readFileSync(pkg, "utf-8"))
+          if (typeof data.name === "string") return data.name
+        } catch {}
+      }
+      dir = path.dirname(dir)
+    }
+    return undefined
+  }
+
   /**
    * Extracts a canonical plugin name from a plugin specifier.
-   * - For file:// URLs: extracts filename without extension
+   * - For file:// URLs:
+   *   1. Reads nearest package.json `name` field (walks up max 5 levels)
+   *   2. Falls back to filename if not "index"
+   *   3. For "index" entry points, walks up directories skipping
+   *      src/dist/lib/build/out/esm/cjs to find a meaningful name
    * - For npm packages: extracts package name without version
    *
    * @example
    * getPluginName("file:///path/to/plugin/foo.js") // "foo"
+   * getPluginName("file:///path/to/my-plugin/src/index.ts") // "my-plugin" (via package.json or dir heuristic)
+   * getPluginName("file:///path/to/oh-my-opencode/dist/index.js") // "oh-my-opencode"
    * getPluginName("oh-my-opencode@2.4.3") // "oh-my-opencode"
    * getPluginName("@scope/pkg@1.0.0") // "@scope/pkg"
    */
   export function getPluginName(plugin: string): string {
     if (plugin.startsWith("file://")) {
-      return path.parse(new URL(plugin).pathname).name
+      const fp = fileURLToPath(plugin)
+
+      // Best: use package.json name
+      const pkg = findPackageName(fp)
+      if (pkg) return pkg
+
+      // Fallback: use filename, skip generic names
+      const parsed = path.parse(fp)
+      if (parsed.name !== "index") return parsed.name
+
+      // Walk up to find a meaningful directory name
+      const skip = new Set(["src", "dist", "lib", "build", "out", "esm", "cjs"])
+      let dir = parsed.dir
+      const root = path.parse(dir).root
+      for (let i = 0; i < 5 && dir !== root; i++) {
+        const name = path.basename(dir)
+        if (!skip.has(name)) return name
+        dir = path.dirname(dir)
+      }
+
+      return parsed.name
     }
-    const lastAt = plugin.lastIndexOf("@")
-    if (lastAt > 0) {
-      return plugin.substring(0, lastAt)
+    const last = plugin.lastIndexOf("@")
+    if (last > 0) {
+      return plugin.substring(0, last)
     }
     return plugin
   }

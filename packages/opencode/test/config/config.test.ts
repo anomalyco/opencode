@@ -1715,6 +1715,59 @@ describe("getPluginName", () => {
     expect(Config.getPluginName("some-plugin")).toBe("some-plugin")
     expect(Config.getPluginName("@scope/pkg")).toBe("@scope/pkg")
   })
+
+  test("uses directory heuristic for index.ts in src/", () => {
+    expect(Config.getPluginName("file:///path/to/my-plugin/src/index.ts")).toBe("my-plugin")
+  })
+
+  test("skips dist/ for index.js entry points", () => {
+    expect(Config.getPluginName("file:///path/to/plugin/dist/index.js")).toBe("plugin")
+  })
+
+  test("skips build/out/esm/cjs for index entry points", () => {
+    expect(Config.getPluginName("file:///path/to/mypkg/build/index.js")).toBe("mypkg")
+    expect(Config.getPluginName("file:///path/to/mypkg/out/index.js")).toBe("mypkg")
+    expect(Config.getPluginName("file:///path/to/mypkg/esm/index.js")).toBe("mypkg")
+    expect(Config.getPluginName("file:///path/to/mypkg/cjs/index.js")).toBe("mypkg")
+  })
+
+  test(".opencode/plugin scripts use filename, not host package.json", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Filesystem.write(path.join(dir, "package.json"), JSON.stringify({ name: "my-app" }))
+        const pluginDir = path.join(dir, ".opencode", "plugin")
+        await fs.mkdir(pluginDir, { recursive: true })
+        await Filesystem.write(path.join(pluginDir, "a.js"), "export default {}")
+        await Filesystem.write(path.join(pluginDir, "b.js"), "export default {}")
+      },
+    })
+
+    const urlA = pathToFileURL(path.join(tmp.path, ".opencode", "plugin", "a.js")).href
+    const urlB = pathToFileURL(path.join(tmp.path, ".opencode", "plugin", "b.js")).href
+
+    expect(Config.getPluginName(urlA)).toBe("a")
+    expect(Config.getPluginName(urlB)).toBe("b")
+
+    const result = Config.deduplicatePlugins([urlA, urlB])
+    expect(result.length).toBe(2)
+  })
+
+  test("real plugin with package.json resolves to package name", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const pluginDir = path.join(dir, "my-plugin", "src")
+        await fs.mkdir(pluginDir, { recursive: true })
+        await Filesystem.write(
+          path.join(dir, "my-plugin", "package.json"),
+          JSON.stringify({ name: "my-plugin" }),
+        )
+        await Filesystem.write(path.join(pluginDir, "index.ts"), "export default {}")
+      },
+    })
+
+    const url = pathToFileURL(path.join(tmp.path, "my-plugin", "src", "index.ts")).href
+    expect(Config.getPluginName(url)).toBe("my-plugin")
+  })
 })
 
 describe("deduplicatePlugins", () => {
@@ -1737,6 +1790,19 @@ describe("deduplicatePlugins", () => {
 
     expect(result.length).toBe(1)
     expect(result[0]).toBe("file:///project/.opencode/plugin/oh-my-opencode.js")
+  })
+
+  test("keeps all index.js plugins from different directories", () => {
+    const plugins = [
+      "file:///path/to/alpha/src/index.ts",
+      "file:///path/to/beta/dist/index.js",
+      "file:///path/to/gamma/lib/index.js",
+    ]
+
+    const result = Config.deduplicatePlugins(plugins)
+
+    // Each has a distinct directory name, so all 3 should survive
+    expect(result.length).toBe(3)
   })
 
   test("preserves order of remaining plugins", () => {
