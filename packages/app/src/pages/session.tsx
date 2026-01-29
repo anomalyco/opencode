@@ -2963,7 +2963,54 @@ export default function Page() {
                   }}
                   class="!h-auto !flex-none"
                 >
-                  <Tabs.List class="h-10">
+                  <Tabs.List 
+                    class="h-10"
+                    ref={(el: HTMLDivElement) => {
+                      let scrollTimeout: number | undefined
+                      let prevScrollWidth = el.scrollWidth
+
+                      const handler = () => {
+                        if (scrollTimeout !== undefined) clearTimeout(scrollTimeout)
+                        scrollTimeout = window.setTimeout(() => {
+                          const scrollWidth = el.scrollWidth
+                          const clientWidth = el.clientWidth
+
+                          // Only scroll when a tab is added (width increased), not on removal
+                          if (scrollWidth > prevScrollWidth) {
+                            if (scrollWidth > clientWidth) {
+                              // Terminal tab was added, scroll to rightmost
+                              el.scrollTo({
+                                left: scrollWidth - clientWidth,
+                                behavior: "smooth",
+                              })
+                            }
+                          }
+                          // When width decreases (tab removed), don't scroll - let browser handle it naturally
+
+                          prevScrollWidth = scrollWidth
+                        }, 0)
+                      }
+
+                      const wheelHandler = (e: WheelEvent) => {
+                        // Enable horizontal scrolling with mouse wheel
+                        if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+                          el.scrollLeft += e.deltaY > 0 ? 50 : -50
+                          e.preventDefault()
+                        }
+                      }
+
+                      el.addEventListener("wheel", wheelHandler, { passive: false })
+
+                      const observer = new MutationObserver(handler)
+                      observer.observe(el, { childList: true })
+
+                      onCleanup(() => {
+                        el.removeEventListener("wheel", wheelHandler)
+                        observer.disconnect()
+                        if (scrollTimeout !== undefined) clearTimeout(scrollTimeout)
+                      })
+                    }}
+                  >
                     <SortableProvider ids={terminal.all().map((t: LocalPTY) => t.id)}>
                       <For each={terminal.all()}>
                         {(pty) => (
