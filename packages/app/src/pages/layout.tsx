@@ -19,7 +19,8 @@ import { A, useNavigate, useParams } from "@solidjs/router"
 import { useLayout, getAvatarColors, LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { Persist, persisted } from "@/utils/persist"
-import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode-ai/util/encode"
+import { decode64 } from "@/utils/base64"
 import { Avatar } from "@opencode-ai/ui/avatar"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Button } from "@opencode-ai/ui/button"
@@ -57,6 +58,7 @@ import { Binary } from "@opencode-ai/util/binary"
 import { retry } from "@opencode-ai/util/retry"
 import { playSound, soundSrc } from "@/utils/sound"
 import { Worktree as WorktreeState } from "@/utils/worktree"
+import { agentColor } from "@/utils/agent"
 
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
@@ -330,6 +332,7 @@ export default function Layout(props: ParentProps) {
     if (!platform.checkUpdate || !platform.update || !platform.restart) return
 
     let toastId: number | undefined
+    let interval: ReturnType<typeof setInterval> | undefined
 
     async function pollUpdate() {
       const { updateAvailable, version } = await platform.checkUpdate!()
@@ -356,9 +359,25 @@ export default function Layout(props: ParentProps) {
       }
     }
 
-    pollUpdate()
-    const interval = setInterval(pollUpdate, 10 * 60 * 1000)
-    onCleanup(() => clearInterval(interval))
+    createEffect(() => {
+      if (!settings.ready()) return
+
+      if (!settings.updates.startup()) {
+        if (interval === undefined) return
+        clearInterval(interval)
+        interval = undefined
+        return
+      }
+
+      if (interval !== undefined) return
+      void pollUpdate()
+      interval = setInterval(pollUpdate, 10 * 60 * 1000)
+    })
+
+    onCleanup(() => {
+      if (interval === undefined) return
+      clearInterval(interval)
+    })
   })
 
   onMount(() => {
@@ -419,7 +438,7 @@ export default function Layout(props: ParentProps) {
         }
       }
 
-      const currentDir = params.dir ? base64Decode(params.dir) : undefined
+      const currentDir = decode64(params.dir)
       const currentSession = params.id
       if (directory === currentDir && props.sessionID === currentSession) return
       if (directory === currentDir && session?.parentID === currentSession) return
@@ -448,7 +467,7 @@ export default function Layout(props: ParentProps) {
     onCleanup(unsub)
 
     createEffect(() => {
-      const currentDir = params.dir ? base64Decode(params.dir) : undefined
+      const currentDir = decode64(params.dir)
       const currentSession = params.id
       if (!currentDir || !currentSession) return
       const sessionKey = `${currentDir}:${currentSession}`
@@ -502,7 +521,7 @@ export default function Layout(props: ParentProps) {
   }
 
   const currentProject = createMemo(() => {
-    const directory = params.dir ? base64Decode(params.dir) : undefined
+    const directory = decode64(params.dir)
     if (!directory) return
 
     const projects = layout.projects.list()
@@ -557,7 +576,6 @@ export default function Layout(props: ParentProps) {
         openProject(next.worktree, false)
         navigateToProject(next.worktree)
       },
-      { defer: true },
     ),
   )
 
@@ -637,7 +655,7 @@ export default function Layout(props: ParentProps) {
     const compare = sortSessions(Date.now())
     if (workspaceSetting()) {
       const dirs = workspaceIds(project)
-      const activeDir = params.dir ? base64Decode(params.dir) : ""
+      const activeDir = decode64(params.dir) ?? ""
       const result: Session[] = []
       for (const dir of dirs) {
         const expanded = store.workspaceExpanded[dir] ?? dir === project.worktree
@@ -666,11 +684,33 @@ export default function Layout(props: ParentProps) {
     running: number
   }
 
-  const prefetchChunk = 600
+  const prefetchChunk = 200
   const prefetchConcurrency = 1
   const prefetchPendingLimit = 6
   const prefetchToken = { value: 0 }
   const prefetchQueues = new Map<string, PrefetchQueue>()
+
+  const PREFETCH_MAX_SESSIONS_PER_DIR = 10
+  const prefetchedByDir = new Map<string, Map<string, true>>()
+
+  const lruFor = (directory: string) => {
+    const existing = prefetchedByDir.get(directory)
+    if (existing) return existing
+    const created = new Map<string, true>()
+    prefetchedByDir.set(directory, created)
+    return created
+  }
+
+  const markPrefetched = (directory: string, sessionID: string) => {
+    const lru = lruFor(directory)
+    if (lru.has(sessionID)) lru.delete(sessionID)
+    lru.set(sessionID, true)
+    while (lru.size > PREFETCH_MAX_SESSIONS_PER_DIR) {
+      const oldest = lru.keys().next().value as string | undefined
+      if (!oldest) return
+      lru.delete(oldest)
+    }
+  }
 
   createEffect(() => {
     params.dir
@@ -763,6 +803,11 @@ export default function Layout(props: ParentProps) {
     const q = queueFor(directory)
     if (q.inflight.has(session.id)) return
     if (q.pendingSet.has(session.id)) return
+
+    const lru = lruFor(directory)
+    const known = lru.has(session.id)
+    if (!known && lru.size >= PREFETCH_MAX_SESSIONS_PER_DIR && priority !== "high") return
+    markPrefetched(directory, session.id)
 
     if (priority === "high") q.pending.unshift(session.id)
     if (priority !== "high") q.pending.push(session.id)
@@ -1187,7 +1232,7 @@ export default function Layout(props: ParentProps) {
     layout.projects.close(directory)
     layout.projects.open(root)
 
-    if (params.dir && base64Decode(params.dir) === directory) {
+    if (params.dir && decode64(params.dir) === directory) {
       navigateToProject(root)
     }
   }
@@ -1430,7 +1475,8 @@ export default function Layout(props: ParentProps) {
         const dir = value.dir
         const id = value.id
         if (!dir || !id) return
-        const directory = base64Decode(dir)
+        const directory = decode64(dir)
+        if (!directory) return
         setStore("lastSession", directory, id)
         notification.session.markViewed(id)
         const expanded = untrack(() => store.workspaceExpanded[directory])
@@ -1453,7 +1499,7 @@ export default function Layout(props: ParentProps) {
     if (!project) return
 
     if (workspaceSetting()) {
-      const activeDir = params.dir ? base64Decode(params.dir) : ""
+      const activeDir = decode64(params.dir) ?? ""
       const dirs = [project.worktree, ...(project.sandboxes ?? [])]
       for (const directory of dirs) {
         const expanded = store.workspaceExpanded[directory] ?? directory === project.worktree
@@ -1503,7 +1549,7 @@ export default function Layout(props: ParentProps) {
     const local = project.worktree
     const dirs = [local, ...(project.sandboxes ?? [])]
     const active = currentProject()
-    const directory = active?.worktree === project.worktree && params.dir ? base64Decode(params.dir) : undefined
+    const directory = active?.worktree === project.worktree ? decode64(params.dir) : undefined
     const extra = directory && directory !== local && !dirs.includes(directory) ? directory : undefined
     const pending = extra ? WorktreeState.get(extra)?.status === "pending" : false
 
@@ -1560,7 +1606,6 @@ export default function Layout(props: ParentProps) {
     const notifications = createMemo(() => notification.project.unseen(props.project.worktree))
     const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
     const name = createMemo(() => props.project.name || getFilename(props.project.worktree))
-    const mask = "radial-gradient(circle 5px at calc(100% - 4px) 4px, transparent 5px, black 5.5px)"
     const opencode = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
     return (
@@ -1571,11 +1616,7 @@ export default function Layout(props: ParentProps) {
             src={props.project.id === opencode ? "https://opencode.ai/favicon.svg" : props.project.icon?.override}
             {...getAvatarColors(props.project.icon?.color)}
             class="size-full rounded"
-            style={
-              notifications().length > 0 && props.notify
-                ? { "-webkit-mask-image": mask, "mask-image": mask }
-                : undefined
-            }
+            classList={{ "badge-mask": notifications().length > 0 && props.notify }}
           />
         </div>
         <Show when={notifications().length > 0 && props.notify}>
@@ -1639,7 +1680,7 @@ export default function Layout(props: ParentProps) {
       if (!user?.agent) return undefined
 
       const agent = sessionStore.agent.find((a) => a.name === user.agent)
-      return agent?.color
+      return agentColor(user.agent, agent?.color)
     })
 
     const hoverMessages = createMemo(() =>
@@ -1654,6 +1695,22 @@ export default function Layout(props: ParentProps) {
       pendingRename: false,
     })
 
+    const hoverPrefetch = { current: undefined as ReturnType<typeof setTimeout> | undefined }
+    const cancelHoverPrefetch = () => {
+      if (hoverPrefetch.current === undefined) return
+      clearTimeout(hoverPrefetch.current)
+      hoverPrefetch.current = undefined
+    }
+    const scheduleHoverPrefetch = () => {
+      if (hoverPrefetch.current !== undefined) return
+      hoverPrefetch.current = setTimeout(() => {
+        hoverPrefetch.current = undefined
+        prefetchSession(props.session)
+      }, 200)
+    }
+
+    onCleanup(cancelHoverPrefetch)
+
     const messageLabel = (message: Message) => {
       const parts = sessionStore.part[message.id] ?? []
       const text = parts.find((part): part is TextPart => part?.type === "text" && !part.synthetic && !part.ignored)
@@ -1664,7 +1721,10 @@ export default function Layout(props: ParentProps) {
       <A
         href={`${props.slug}/session/${props.session.id}`}
         class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] ${menu.open ? "pr-7" : ""} group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
-        onMouseEnter={() => prefetchSession(props.session, "high")}
+        onPointerEnter={scheduleHoverPrefetch}
+        onPointerLeave={cancelHoverPrefetch}
+        onMouseEnter={scheduleHoverPrefetch}
+        onMouseLeave={cancelHoverPrefetch}
         onFocus={() => prefetchSession(props.session, "high")}
         onClick={() => {
           setState("hoverSession", undefined)
@@ -1929,7 +1989,7 @@ export default function Layout(props: ParentProps) {
     })
     const local = createMemo(() => props.directory === props.project.worktree)
     const active = createMemo(() => {
-      const current = params.dir ? base64Decode(params.dir) : ""
+      const current = decode64(params.dir) ?? ""
       return current === props.directory
     })
     const workspaceValue = createMemo(() => {
@@ -1939,7 +1999,8 @@ export default function Layout(props: ParentProps) {
     })
     const open = createMemo(() => store.workspaceExpanded[props.directory] ?? local())
     const boot = createMemo(() => open() || active())
-    const loading = createMemo(() => open() && workspaceStore.status !== "complete" && sessions().length === 0)
+    const booted = createMemo((prev) => prev || workspaceStore.status === "complete", false)
+    const loading = createMemo(() => open() && !booted() && sessions().length === 0)
     const hasMore = createMemo(() => workspaceStore.sessionTotal > sessions().length)
     const busy = createMemo(() => isBusy(props.directory))
     const loadMore = async () => {
@@ -2130,7 +2191,7 @@ export default function Layout(props: ParentProps) {
   const SortableProject = (props: { project: LocalProject; mobile?: boolean }): JSX.Element => {
     const sortable = createSortable(props.project.worktree)
     const selected = createMemo(() => {
-      const current = params.dir ? base64Decode(params.dir) : ""
+      const current = decode64(params.dir) ?? ""
       return props.project.worktree === current || props.project.sandboxes?.includes(current)
     })
 
@@ -2331,7 +2392,8 @@ export default function Layout(props: ParentProps) {
       }
       return map
     })
-    const loading = createMemo(() => workspaceStore.status !== "complete" && sessions().length === 0)
+    const booted = createMemo((prev) => prev || workspaceStore.status === "complete", false)
+    const loading = createMemo(() => !booted() && sessions().length === 0)
     const hasMore = createMemo(() => workspaceStore.sessionTotal > sessions().length)
     const loadMore = async () => {
       setWorkspaceStore("limit", (limit) => limit + 5)
@@ -2343,8 +2405,7 @@ export default function Layout(props: ParentProps) {
         ref={(el) => {
           if (!props.mobile) scrollContainerRef = el
         }}
-        class="size-full flex flex-col py-2 overflow-y-auto no-scrollbar"
-        style={{ "overflow-anchor": "none" }}
+        class="size-full flex flex-col py-2 overflow-y-auto no-scrollbar [overflow-anchor:none]"
       >
         <nav class="flex flex-col gap-1 px-2">
           <Show when={loading()}>
@@ -2570,8 +2631,7 @@ export default function Layout(props: ParentProps) {
                         ref={(el) => {
                           if (!panelProps.mobile) scrollContainerRef = el
                         }}
-                        class="size-full flex flex-col py-2 gap-4 overflow-y-auto no-scrollbar"
-                        style={{ "overflow-anchor": "none" }}
+                        class="size-full flex flex-col py-2 gap-4 overflow-y-auto no-scrollbar [overflow-anchor:none]"
                       >
                         <SortableProvider ids={workspaces()}>
                           <For each={workspaces()}>
