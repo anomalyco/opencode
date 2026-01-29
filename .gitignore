@@ -21,6 +21,9 @@ a.out
 target
 .scripts
 .direnv/
+packages/opencode/python/*/venv/
+packages/opencode/python/*/__pycache__/
+packages/opencode/python/*/*.pyc
 
 # Local dev files
 opencode-dev

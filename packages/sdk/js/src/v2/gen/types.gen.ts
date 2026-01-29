@@ -881,6 +881,13 @@ export type EventWorktreeFailed = {
   }
 }
 
+export type EventVoiceUpdated = {
+  type: "voice.updated"
+  properties: {
+    available: boolean
+  }
+}
+
 export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
@@ -924,6 +931,7 @@ export type Event =
   | EventPtyDeleted
   | EventWorktreeReady
   | EventWorktreeFailed
+  | EventVoiceUpdated
 
 export type GlobalEvent = {
   directory: string
@@ -1149,6 +1157,10 @@ export type KeybindsConfig = {
    * Paste from clipboard
    */
   input_paste?: string
+  /**
+   * Voice input (tap to record, tap to stop)
+   */
+  voice_input?: string
   /**
    * Submit input
    */
@@ -4014,6 +4026,89 @@ export type ProviderOauthCallbackResponses = {
 }
 
 export type ProviderOauthCallbackResponse = ProviderOauthCallbackResponses[keyof ProviderOauthCallbackResponses]
+
+export type VoiceStatusData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/voice/status"
+}
+
+export type VoiceStatusResponses = {
+  /**
+   * Service status
+   */
+  200: {
+    available: boolean
+    config: {
+      enabled: boolean
+      model: string
+      device: "cuda" | "cpu" | "auto"
+      maxDuration: number
+      chunkDuration: number
+    }
+  }
+}
+
+export type VoiceStatusResponse = VoiceStatusResponses[keyof VoiceStatusResponses]
+
+export type VoiceTranscribeData = {
+  body?: {
+    /**
+     * Base64-encoded WAV audio data
+     */
+    audio: string
+    timestamps?: boolean
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/voice/transcribe"
+}
+
+export type VoiceTranscribeResponses = {
+  /**
+   * Transcription result
+   */
+  200: {
+    text: string
+    timestamps?: {
+      word: Array<{
+        start: number
+        end: number
+        word: string
+      }>
+      segment: Array<{
+        start: number
+        end: number
+        segment: string
+      }>
+    }
+  }
+}
+
+export type VoiceTranscribeResponse = VoiceTranscribeResponses[keyof VoiceTranscribeResponses]
+
+export type VoiceStreamData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/voice/stream"
+}
+
+export type VoiceStreamResponses = {
+  /**
+   * WebSocket connection established
+   */
+  200: boolean
+}
+
+export type VoiceStreamResponse = VoiceStreamResponses[keyof VoiceStreamResponses]
 
 export type FindTextData = {
   body?: never

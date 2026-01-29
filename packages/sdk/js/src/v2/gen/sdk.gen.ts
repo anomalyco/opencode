@@ -160,6 +160,9 @@ import type {
   TuiShowToastResponses,
   TuiSubmitPromptResponses,
   VcsGetResponses,
+  VoiceStatusResponses,
+  VoiceStreamResponses,
+  VoiceTranscribeResponses,
   WorktreeCreateErrors,
   WorktreeCreateInput,
   WorktreeCreateResponses,
@@ -2059,6 +2062,83 @@ export class Provider extends HeyApiClient {
   }
 }
 
+export class Voice extends HeyApiClient {
+  /**
+   * Get voice service status
+   *
+   * Check if the voice service is available and ready
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<VoiceStatusResponses, unknown, ThrowOnError>({
+      url: "/voice/status",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Transcribe audio file
+   *
+   * Submit a base64-encoded audio file for transcription
+   */
+  public transcribe<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      audio?: string
+      timestamps?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "audio" },
+            { in: "body", key: "timestamps" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<VoiceTranscribeResponses, unknown, ThrowOnError>({
+      url: "/voice/transcribe",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Stream audio for transcription
+   *
+   * Establish a WebSocket connection to stream audio chunks and receive real-time transcriptions
+   */
+  public stream<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<VoiceStreamResponses, unknown, ThrowOnError>({
+      url: "/voice/stream",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Find extends HeyApiClient {
   /**
    * Find text
@@ -3211,6 +3291,11 @@ export class OpencodeClient extends HeyApiClient {
   private _provider?: Provider
   get provider(): Provider {
     return (this._provider ??= new Provider({ client: this.client }))
+  }
+
+  private _voice?: Voice
+  get voice(): Voice {
+    return (this._voice ??= new Voice({ client: this.client }))
   }
 
   private _find?: Find

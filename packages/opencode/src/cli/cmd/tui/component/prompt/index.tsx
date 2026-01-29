@@ -31,6 +31,7 @@ import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
+import { VoiceRecorder, type VoiceRecorderStatus } from "@tui/util/voice-recorder"
 
 export type PromptProps = {
   sessionID?: string
@@ -128,6 +129,18 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
+  })
+
+  // Voice recording state
+  const [voiceStatus, setVoiceStatus] = createSignal<VoiceRecorderStatus>("idle")
+  let voiceRecorder: VoiceRecorder | null = null
+
+  onMount(() => {
+    voiceRecorder = new VoiceRecorder(sdk.client)
+  })
+
+  onCleanup(() => {
+    voiceRecorder?.cancel()
   })
 
   // Initialize agent/model/variant from last user message when session changes
@@ -788,6 +801,66 @@ export function Prompt(props: PromptProps) {
                   e.preventDefault()
                   return
                 }
+
+                // Handle voice input - toggle recording on backslash
+                if (e.name === "\\") {
+                  // Prevent default to avoid inserting backslash character
+                  e.preventDefault()
+
+                  // Only allow voice input if service is available
+                  if (!sync.data.voice?.available) {
+                    return
+                  }
+
+                  if (voiceStatus() === "idle" && voiceRecorder) {
+                    // Start recording
+                    try {
+                      await voiceRecorder.startRecording()
+                      setVoiceStatus(voiceRecorder.status)
+                    } catch (err) {
+                      toast.show({
+                        variant: "error",
+                        message: `Failed to start recording: ${err instanceof Error ? err.message : String(err)}`,
+                        duration: 3000,
+                      })
+                    }
+                  } else if (voiceStatus() === "recording" && voiceRecorder) {
+                    // Stop recording and transcribe
+                    setVoiceStatus("transcribing")
+
+                    try {
+                      const text = await voiceRecorder.stopRecordingAndTranscribe()
+                      setVoiceStatus(voiceRecorder.status)
+
+                      if (text) {
+                        // Insert transcribed text at cursor position
+                        input.insertText(text)
+                        setTimeout(() => {
+                          input.getLayoutNode().markDirty()
+                          renderer.requestRender()
+                        }, 0)
+                      } else {
+                        toast.show({
+                          variant: "warning",
+                          message: "No speech detected",
+                          duration: 3000,
+                        })
+                      }
+                    } catch (err) {
+                      setVoiceStatus("error")
+                      toast.show({
+                        variant: "error",
+                        message: `Transcription failed: ${err instanceof Error ? err.message : String(err)}`,
+                        duration: 5000,
+                      })
+                      // Reset status after error
+                      setTimeout(() => setVoiceStatus("idle"), 100)
+                    }
+                  }
+
+                  return
+                }
+
                 // Handle clipboard paste (Ctrl+V) - check for images first on Windows
                 // This is needed because Windows terminal doesn't properly send image data
                 // through bracketed paste, so we need to intercept the keypress and
@@ -1075,6 +1148,21 @@ export function Prompt(props: PromptProps) {
             <box gap={2} flexDirection="row">
               <Switch>
                 <Match when={store.mode === "normal"}>
+                  <Show when={sync.data.voice?.available && voiceStatus() === "recording"}>
+                    <text fg={theme.primary}>
+                      <span style={{ fg: theme.primary, bold: true }}>Recording... (\ to stop)</span>
+                    </text>
+                  </Show>
+                  <Show when={sync.data.voice?.available && voiceStatus() === "transcribing"}>
+                    <text fg={theme.warning}>
+                      <span style={{ fg: theme.warning, bold: true }}>Transcribing...</span>
+                    </text>
+                  </Show>
+                  <Show when={sync.data.voice?.available && voiceStatus() === "idle"}>
+                    <text fg={theme.text}>
+                      \ <span style={{ fg: theme.textMuted }}>voice</span>
+                    </text>
+                  </Show>
                   <Show when={local.model.variant.list().length > 0}>
                     <text fg={theme.text}>
                       {keybind.print("variant_cycle")} <span style={{ fg: theme.textMuted }}>variants</span>

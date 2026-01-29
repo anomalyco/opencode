@@ -705,6 +705,7 @@ export namespace Config {
       variant_cycle: z.string().optional().default("ctrl+t").describe("Cycle model variants"),
       input_clear: z.string().optional().default("ctrl+c").describe("Clear input field"),
       input_paste: z.string().optional().default("ctrl+v").describe("Paste from clipboard"),
+      voice_input: z.string().optional().default("\\").describe("Voice input (tap to record, tap to stop)"),
       input_submit: z.string().optional().default("return").describe("Submit input"),
       input_newline: z
         .string()

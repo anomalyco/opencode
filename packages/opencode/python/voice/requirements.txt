@@ -1,0 +1,6 @@
+# NeMo toolkit for ASR
+nemo_toolkit[asr]>=2.4.0
+
+# Core dependencies (usually installed with nemo_toolkit)
+torch>=2.0.0
+torchaudio>=2.0.0

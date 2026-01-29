@@ -10,6 +10,7 @@ import { GlobalBus } from "@/bus/global"
 import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
 import type { BunWebSocketData } from "hono/bun"
 import { Flag } from "@/flag/flag"
+import { VoiceService } from "@/voice/service"
 
 await Log.init({
   print: process.argv.includes("--print-logs"),
@@ -32,9 +33,11 @@ process.on("uncaughtException", (e) => {
   })
 })
 
-// Subscribe to global events and forward them via RPC
-GlobalBus.on("event", (event) => {
-  Rpc.emit("global.event", event)
+// Initialize transcription service (non-blocking)
+VoiceService.initialize().catch((error) => {
+  Log.Default.warn("voice service initialization failed", {
+    error: error instanceof Error ? error.message : String(error),
+  })
 })
 
 let server: Bun.Server<BunWebSocketData> | undefined
@@ -65,14 +68,7 @@ const startEventStream = (directory: string) => {
 
   ;(async () => {
     while (!signal.aborted) {
-      const events = await Promise.resolve(
-        sdk.event.subscribe(
-          {},
-          {
-            signal,
-          },
-        ),
-      ).catch(() => undefined)
+      const events = await Promise.resolve(sdk.global.event({ parseAs: "stream" })).catch(() => undefined)
 
       if (!events) {
         await Bun.sleep(250)
@@ -80,7 +76,7 @@ const startEventStream = (directory: string) => {
       }
 
       for await (const event of events.stream) {
-        Rpc.emit("event", event as Event)
+        Rpc.emit("event", event.payload as Event)
       }
 
       if (!signal.aborted) {

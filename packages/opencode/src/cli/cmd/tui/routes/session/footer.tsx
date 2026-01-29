@@ -82,6 +82,19 @@ export function Footer() {
                 {mcp()} MCP
               </text>
             </Show>
+            <Show when={sync.data.voice !== undefined}>
+              <text fg={theme.text}>
+                <Switch>
+                  <Match when={!sync.data.voice?.available}>
+                    <span style={{ fg: theme.warning }}>◉ </span>
+                  </Match>
+                  <Match when={sync.data.voice?.available}>
+                    <span style={{ fg: theme.success }}>◉ </span>
+                  </Match>
+                </Switch>
+                Voice
+              </text>
+            </Show>
             <text fg={theme.textMuted}>/status</text>
           </Match>
         </Switch>
