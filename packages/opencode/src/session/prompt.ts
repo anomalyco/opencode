@@ -64,6 +64,15 @@ export namespace SessionPrompt {
             resolve(input: MessageV2.WithParts): void
             reject(): void
           }[]
+          /**
+           * Guards against token blow-ups when the loop repeatedly injects reminder prompts
+           * for the same queued user message.
+           */
+          queuedReminder?: {
+            lastQueuedUserMsgID?: string
+            lastInjectAtMs?: number
+            backoffMs?: number
+          }
         }
       > = {}
       return data
@@ -238,8 +247,87 @@ export namespace SessionPrompt {
     s[sessionID] = {
       abort: controller,
       callbacks: [],
+      queuedReminder: undefined,
     }
     return controller.signal
+  }
+
+  // ---- Queued user reminder gating (token control) ---------------------------------------------
+  // Problem: wrapping queued user text into a <system-reminder> duplicates the user content and
+  // causes large input-token amplification when the session loop iterates frequently.
+  // Fix: keep user messages intact and inject a short system reminder at most occasionally,
+  // with per-session dedupe + throttle + backoff.
+
+  const QUEUED_REMINDER_MIN_INTERVAL_MS = 60_000
+  const QUEUED_REMINDER_BASE_BACKOFF_MS = 15_000
+  const QUEUED_REMINDER_MAX_BACKOFF_MS = 5 * 60_000
+
+  function getQueuedUserSummary(messages: MessageV2.WithParts[], afterAssistantID: string) {
+    let count = 0
+    let latestID: string | undefined
+
+    for (const msg of messages) {
+      if (msg.info.role !== "user") continue
+      if (msg.info.id <= afterAssistantID) continue
+
+      // Consider messages with any meaningful (non-synthetic/non-ignored) content.
+      const hasMeaningfulPart = msg.parts.some((p) => {
+        const anyP: any = p
+        if (anyP.synthetic === true) return false
+        if (anyP.ignored === true) return false
+        if (anyP.type === "text") return typeof anyP.text === "string" && anyP.text.trim().length > 0
+        if (anyP.type === "file") return true
+        if (anyP.type === "agent") return true
+        return false
+      })
+      if (!hasMeaningfulPart) continue
+
+      count++
+      latestID = msg.info.id
+    }
+
+    return { count, latestID }
+  }
+
+  function buildQueuedReminder(latestQueuedUserMsgID: string, count: number) {
+    // Keep this short and do NOT embed the user text to avoid token amplification.
+    return [
+      "<system-reminder>",
+      `There ${count === 1 ? "is" : "are"} ${count} new user message${count === 1 ? "" : "s"} waiting (latest id: ${latestQueuedUserMsgID}).`,
+      "Respond to the newest user message(s) before continuing other tasks.",
+      "</system-reminder>",
+    ].join("\n")
+  }
+
+  function shouldInjectQueuedReminder(sessionID: string, latestQueuedUserMsgID: string) {
+    const s = state()[sessionID]
+    if (!s) return true
+    const st = (s.queuedReminder ??= {})
+    const now = Date.now()
+
+    // New queued message: inject once immediately and reset backoff.
+    if (st.lastQueuedUserMsgID !== latestQueuedUserMsgID) {
+      st.lastQueuedUserMsgID = latestQueuedUserMsgID
+      st.lastInjectAtMs = now
+      st.backoffMs = QUEUED_REMINDER_BASE_BACKOFF_MS
+      return true
+    }
+
+    // Same queued message: throttle + exponential backoff.
+    const lastAt = st.lastInjectAtMs ?? 0
+    const backoff = st.backoffMs ?? QUEUED_REMINDER_BASE_BACKOFF_MS
+    if (now - lastAt < QUEUED_REMINDER_MIN_INTERVAL_MS) return false
+    if (now - lastAt < backoff) return false
+
+    st.lastInjectAtMs = now
+    st.backoffMs = Math.min(backoff * 2, QUEUED_REMINDER_MAX_BACKOFF_MS)
+    return true
+  }
+
+  function clearQueuedReminderState(sessionID: string) {
+    const s = state()[sessionID]
+    if (!s) return
+    delete s.queuedReminder
   }
 
   export function cancel(sessionID: string) {
@@ -576,22 +664,17 @@ export namespace SessionPrompt {
 
       const sessionMessages = clone(msgs)
 
-      // Ephemerally wrap queued user messages with a reminder to stay on track
+      // If the user queued new message(s) while the agent was mid-loop, inject a short reminder.
+      // Do NOT wrap/duplicate the user text; that creates token amplification.
+      const extraSystem: string[] = []
       if (step > 1 && lastFinished) {
-        for (const msg of sessionMessages) {
-          if (msg.info.role !== "user" || msg.info.id <= lastFinished.id) continue
-          for (const part of msg.parts) {
-            if (part.type !== "text" || part.ignored || part.synthetic) continue
-            if (!part.text.trim()) continue
-            part.text = [
-              "<system-reminder>",
-              "The user sent the following message:",
-              part.text,
-              "",
-              "Please address this message and continue with your tasks.",
-              "</system-reminder>",
-            ].join("\n")
+        const queued = getQueuedUserSummary(sessionMessages, lastFinished.id)
+        if (queued.count > 0 && queued.latestID) {
+          if (shouldInjectQueuedReminder(sessionID, queued.latestID)) {
+            extraSystem.push(buildQueuedReminder(queued.latestID, queued.count))
           }
+        } else {
+          clearQueuedReminderState(sessionID)
         }
       }
 
@@ -602,7 +685,7 @@ export namespace SessionPrompt {
         agent,
         abort,
         sessionID,
-        system: [...(await SystemPrompt.environment(model)), ...(await InstructionPrompt.system())],
+        system: [...(await SystemPrompt.environment(model)), ...(await InstructionPrompt.system()), ...extraSystem],
         messages: [
           ...MessageV2.toModelMessages(sessionMessages, model),
           ...(isLastStep
