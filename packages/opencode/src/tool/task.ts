@@ -205,13 +205,18 @@ async function executeRemoteAgent(params: z.infer<typeof parameters>, ctx: Tool.
 
   const { domain } = parsed
 
-  // Check trust
-  const isTrusted = await A2A.isTrusted(domain)
-  if (!isTrusted) {
+  // Check trust via permission system
+  const trustAction = await A2A.checkTrust(domain)
+  if (trustAction === "deny") {
+    throw new PermissionNext.DeniedError([
+      { permission: "remote_agent", pattern: domain, action: "deny" },
+    ])
+  }
+  if (trustAction === "ask") {
     await ctx.ask({
       permission: "remote_agent",
       patterns: [domain],
-      always: [],
+      always: [domain],
       metadata: {
         domain,
         description: params.description,

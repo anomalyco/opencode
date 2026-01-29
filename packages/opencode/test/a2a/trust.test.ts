@@ -1,6 +1,7 @@
 import { describe, expect, test, beforeEach, mock, spyOn } from "bun:test"
 import {
   isTrusted,
+  checkTrust,
   trustForSession,
   revokeSessionTrust,
   clearSessionTrust,
@@ -120,6 +121,113 @@ describe("a2a.trust", () => {
 
       const result = await isTrusted("example.com")
       expect(result).toBe(false)
+    })
+  })
+
+  describe("permission-based trust (checkTrust)", () => {
+    test("returns 'allow' for session-trusted domain", async () => {
+      trustForSession("example.com")
+
+      const result = await checkTrust("example.com")
+      expect(result).toBe("allow")
+    })
+
+    test("returns 'allow' when permission.remote_agent allows domain", async () => {
+      spyOn(Config, "get").mockResolvedValue({
+        permission: {
+          remote_agent: {
+            "trusted.com": "allow",
+          },
+        },
+      } as any)
+
+      const result = await checkTrust("trusted.com")
+      expect(result).toBe("allow")
+    })
+
+    test("returns 'deny' when permission.remote_agent denies domain", async () => {
+      spyOn(Config, "get").mockResolvedValue({
+        permission: {
+          remote_agent: {
+            "blocked.com": "deny",
+          },
+        },
+      } as any)
+
+      const result = await checkTrust("blocked.com")
+      expect(result).toBe("deny")
+    })
+
+    test("returns 'ask' when permission.remote_agent is set to ask", async () => {
+      spyOn(Config, "get").mockResolvedValue({
+        permission: {
+          remote_agent: {
+            "*": "ask",
+          },
+        },
+      } as any)
+
+      const result = await checkTrust("any-domain.com")
+      expect(result).toBe("ask")
+    })
+
+    test("uses wildcard patterns (last rule wins)", async () => {
+      // Note: rules are evaluated in order, last matching rule wins
+      spyOn(Config, "get").mockResolvedValue({
+        permission: {
+          remote_agent: {
+            "*": "deny",
+            "*.trusted.com": "allow",
+          },
+        },
+      } as any)
+
+      const trustedResult = await checkTrust("api.trusted.com")
+      expect(trustedResult).toBe("allow")
+
+      const untrustedResult = await checkTrust("untrusted.com")
+      expect(untrustedResult).toBe("deny")
+    })
+
+    test("falls back to remoteAgents.domains for legacy config", async () => {
+      spyOn(Config, "get").mockResolvedValue({
+        remoteAgents: { domains: ["legacy.com"] },
+      } as any)
+
+      const result = await checkTrust("legacy.com")
+      expect(result).toBe("allow")
+    })
+
+    test("returns 'ask' when no config matches", async () => {
+      spyOn(Config, "get").mockResolvedValue({} as any)
+
+      const result = await checkTrust("unknown.com")
+      expect(result).toBe("ask")
+    })
+
+    test("permission config takes precedence over remoteAgents.domains", async () => {
+      spyOn(Config, "get").mockResolvedValue({
+        permission: {
+          remote_agent: {
+            "example.com": "deny",
+          },
+        },
+        remoteAgents: { domains: ["example.com"] },
+      } as any)
+
+      const result = await checkTrust("example.com")
+      expect(result).toBe("deny")
+    })
+
+    test("supports string action for all domains", async () => {
+      spyOn(Config, "get").mockResolvedValue({
+        permission: {
+          remote_agent: "allow",
+        },
+      } as any)
+
+      const result = await checkTrust("any-domain.com")
+      expect(result).toBe("allow")
     })
   })
 })
