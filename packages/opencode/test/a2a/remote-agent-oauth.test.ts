@@ -60,8 +60,8 @@ const mockOAuthConfig = {
 }
 
 // Helper to create a fetch mock that only intercepts specific URLs
-function createSelectiveFetchMock(handlers: Record<string, () => Response>) {
-  return async (input: RequestInfo | URL, init?: RequestInit) => {
+function createSelectiveFetchMock(handlers: Record<string, () => Response>): typeof fetch {
+  const mockFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input.toString()
 
     for (const [pattern, handler] of Object.entries(handlers)) {
@@ -73,6 +73,9 @@ function createSelectiveFetchMock(handlers: Record<string, () => Response>) {
     // Pass through to real fetch for callback server
     return originalFetch(input, init)
   }
+  // Add preconnect stub for type compatibility
+  mockFetch.preconnect = () => {}
+  return mockFetch as typeof fetch
 }
 
 describe("a2a.remote-agent-oauth integration", () => {
