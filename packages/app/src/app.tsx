@@ -100,7 +100,9 @@ function AuthRedirect(props: { url: string | undefined }) {
 export function AppInterface(props: { defaultUrl?: string }) {
   const defaultServerUrl = () => {
     if (props.defaultUrl) return props.defaultUrl
-    if (location.hostname.includes("opencode.ai")) return "http://localhost:4096"
+    const envUrl = import.meta.env.VITE_OPENCODE_SERVER_URL
+    if (envUrl) return envUrl
+    if (location.hostname.includes("opencode.ai")) return "http://localhost:3001"
     // In dev mode, use current origin - Vite proxies API requests to backend
     // This avoids CORS and cookie issues with cross-origin requests
     if (import.meta.env.DEV) return window.location.origin
