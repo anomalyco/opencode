@@ -809,7 +809,7 @@ export namespace Provider {
       const mammouthModels = await getMammouthModels()
       for (const model of mammouthModels) {
         database["mammouth-ai"].models[model.id] = fromModelsDevModel(MAMMOUTH_PROVIDER, model)
-        console.log(`- Added Mammouth model: ${model.name} (${model?.cost?.input}/${model?.cost?.output} per token)`)
+        console.log(`- Added Mammouth model: ${model.id} (${model?.cost?.input}/${model?.cost?.output} per token)`)
       }
     }
 
