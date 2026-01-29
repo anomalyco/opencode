@@ -13,7 +13,7 @@ jobs:
     permissions:
       pull-requests: write
       issues: write
-    
+
     steps:
       - name: Add Contributor Label
         uses: actions/github-script@v8
