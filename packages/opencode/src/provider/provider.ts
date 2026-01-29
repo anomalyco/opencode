@@ -589,6 +589,106 @@ export namespace Provider {
         },
       }
     },
+    llmapi: async (input) => {
+      // Get API key from all sources (env, auth, config)
+      const apiKey = await (async () => {
+        const env = Env.all()
+        const envKey = input.env.map((item) => env[item]).find(Boolean)
+        if (envKey) return envKey
+
+        const auth = await Auth.get(input.id)
+        if (auth?.type === "api") return auth.key
+        if (auth?.type === "oauth") return auth.access
+
+        const config = await Config.get()
+        if (config.provider?.["llmapi"]?.options?.apiKey) return config.provider["llmapi"].options.apiKey
+
+        return undefined
+      })()
+
+      // Attempt dynamic model fetching (no auth required for /v1/models endpoint)
+      try {
+        const response = await fetch("https://internal.llmapi.ai/v1/models", {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          signal: AbortSignal.timeout(5000),
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          // Parse OpenAI-compatible response
+          if (data.data && Array.isArray(data.data)) {
+            for (const model of data.data) {
+              if (!input.models[model.id]) {
+                // Create model entry from API response
+                input.models[model.id] = {
+                  id: model.id,
+                  providerID: input.id,
+                  name: model.id,
+                  api: {
+                    id: model.id,
+                    url: "https://internal.llmapi.ai/v1",
+                    npm: "@ai-sdk/openai-compatible",
+                  },
+                  status: "active",
+                  capabilities: {
+                    temperature: true,
+                    reasoning: false,
+                    attachment: false,
+                    toolcall: true,
+                    input: { text: true, audio: false, image: false, video: false, pdf: false },
+                    output: { text: true, audio: false, image: false, video: false, pdf: false },
+                    interleaved: false,
+                  },
+                  cost: {
+                    input: 0,
+                    output: 0,
+                    cache: { read: 0, write: 0 },
+                  },
+                  limit: {
+                    context: 128000,
+                    output: 4096,
+                  },
+                  headers: {},
+                  options: {},
+                  family: "",
+                  release_date: new Date().toISOString().split("T")[0],
+                  variants: {},
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {
+        log.warn("Failed to fetch llmapi models dynamically", { error: e })
+        // Continue with manual config or empty models
+      }
+
+      // Auto-load if we have an API key OR successfully fetched models
+      const hasModels = Object.keys(input.models).length > 0
+      const shouldAutoload = !!apiKey || hasModels
+
+      return {
+        autoload: shouldAutoload,
+        options: apiKey
+          ? {
+              apiKey,
+              baseURL: "https://internal.llmapi.ai/v1",
+              headers: {
+                "HTTP-Referer": "https://opencode.ai/",
+                "X-Title": "opencode",
+              },
+            }
+          : {
+              baseURL: "https://internal.llmapi.ai/v1",
+              headers: {
+                "HTTP-Referer": "https://opencode.ai/",
+                "X-Title": "opencode",
+              },
+            },
+      }
+    },
   }
 
   export const Model = z
@@ -792,6 +892,18 @@ export namespace Provider {
           ...model,
           providerID: "github-copilot-enterprise",
         })),
+      }
+    }
+
+    // Add llmapi provider if not present
+    if (!database["llmapi"]) {
+      database["llmapi"] = {
+        id: "llmapi",
+        name: "LLM API",
+        source: "custom",
+        env: ["LLMAPI_API_KEY"],
+        options: {},
+        models: {}, // Will be populated dynamically or from config
       }
     }
 
