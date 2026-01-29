@@ -164,6 +164,55 @@ export namespace SessionSummary {
       userMsg.summary.title = result
       await Session.updateMessage(userMsg)
     }
+
+    // Generate summary body if assistant completed a step with file diffs
+    if (
+      diffs.length > 0 &&
+      messages.some(
+        (m) =>
+          m.info.role === "assistant" && m.parts.some((p) => p.type === "step-finish" && p.reason !== "tool-calls"),
+      )
+    ) {
+      // Prune tool outputs to reduce token usage
+      for (const msg of messages) {
+        for (const part of msg.parts) {
+          if (part.type === "tool" && part.state.status === "completed") {
+            part.state.output = "[TOOL OUTPUT PRUNED]"
+          }
+        }
+      }
+      const summaryAgent = await Agent.get("summary")
+      if (summaryAgent) {
+        const summaryModel = summaryAgent.model
+          ? await Provider.getModel(summaryAgent.model.providerID, summaryAgent.model.modelID)
+          : ((await Provider.getSmallModel(userMsg.model.providerID)) ??
+            (await Provider.getModel(userMsg.model.providerID, userMsg.model.modelID)))
+        const bodyStream = await LLM.stream({
+          agent: summaryAgent,
+          user: userMsg,
+          tools: {},
+          model: summaryModel,
+          small: true,
+          messages: [
+            ...MessageV2.toModelMessages(messages, summaryModel),
+            {
+              role: "user" as const,
+              content: `Summarize the above conversation according to your system prompts.`,
+            },
+          ],
+          abort: new AbortController().signal,
+          sessionID: userMsg.sessionID,
+          system: [],
+          retries: 3,
+        })
+        const bodyResult = await bodyStream.text
+        if (bodyResult) {
+          log.info("body", { body: bodyResult })
+          userMsg.summary.body = bodyResult
+        }
+      }
+      await Session.updateMessage(userMsg)
+    }
   }
 
   export const diff = fn(
