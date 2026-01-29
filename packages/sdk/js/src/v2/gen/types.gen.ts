@@ -480,6 +480,10 @@ export type AgentPart = {
   messageID: string
   type: "agent"
   name: string
+  model?: {
+    providerID: string
+    modelID: string
+  }
   source?: {
     value: string
     start: number
@@ -1743,6 +1747,10 @@ export type AgentPartInput = {
   id?: string
   type: "agent"
   name: string
+  model?: {
+    providerID: string
+    modelID: string
+  }
   source?: {
     value: string
     start: number

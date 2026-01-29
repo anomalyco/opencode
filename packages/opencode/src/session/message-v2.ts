@@ -185,6 +185,12 @@ export namespace MessageV2 {
   export const AgentPart = PartBase.extend({
     type: z.literal("agent"),
     name: z.string(),
+    model: z
+      .object({
+        providerID: z.string(),
+        modelID: z.string(),
+      })
+      .optional(),
     source: z
       .object({
         value: z.string(),

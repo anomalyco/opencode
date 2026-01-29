@@ -676,6 +676,13 @@ function getSyntaxRules(theme: Theme) {
       },
     },
     {
+      scope: ["extmark.model"],
+      style: {
+        foreground: theme.textMuted,
+        bold: true,
+      },
+    },
+    {
       scope: ["extmark.paste"],
       style: {
         foreground: theme.background,

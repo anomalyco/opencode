@@ -1269,6 +1269,7 @@ export namespace SessionPrompt {
           // Check if this agent would be denied by task permission
           const perm = PermissionNext.evaluate("task", part.name, agent.permission)
           const hint = perm.action === "deny" ? " . Invoked by user; guaranteed to exist." : ""
+          const modelHint = part.model ? ` Use model override: ${part.model.providerID}/${part.model.modelID}.` : ""
           return [
             {
               ...part,
@@ -1280,11 +1281,10 @@ export namespace SessionPrompt {
               sessionID: input.sessionID,
               type: "text",
               synthetic: true,
-              // An extra space is added here. Otherwise the 'Use' gets appended
-              // to user's last word; making a combined word
               text:
                 " Use the above message and context to generate a prompt and call the task tool with subagent: " +
                 part.name +
+                modelHint +
                 hint,
             },
           ]
