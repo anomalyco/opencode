@@ -1,0 +1,38 @@
+name: beta-sync
+
+on:
+  push:
+    branches: [dev]
+  pull_request_target:
+    types: [opened, synchronize, labeled, unlabeled]
+    branches: [dev]
+
+jobs:
+  sync-beta:
+    if: |
+      github.event_name == 'push' || 
+      (github.event_name == 'pull_request_target' && 
+       contains(github.event.pull_request.labels.*.name, 'contributor'))
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync beta branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bun script/beta-sync.ts
