@@ -36,8 +36,6 @@ jobs:
     if: github.repository == 'anomalyco/opencode'
     steps:
       - uses: actions/checkout@v3
-        with:
-          fetch-depth: 1
       - uses: ./.github/actions/setup-bun
       - id: version
         run: |
@@ -58,7 +56,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
         with:
-          fetch-depth: 1
           fetch-tags: true
 
       - uses: ./.github/actions/setup-bun
@@ -103,7 +100,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
         with:
-          fetch-depth: 1
           fetch-tags: true
 
       - uses: apple-actions/import-codesign-certs@v2
@@ -196,8 +192,8 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v3
-        with:
-          fetch-depth: 1
+
+      - uses: ./.github/actions/setup-bun
 
       - name: Install OpenCode
         if: inputs.bump || inputs.version
@@ -226,8 +222,6 @@ jobs:
           git config --global user.email "opencode@sst.dev"
           git config --global user.name "opencode"
           git remote set-url origin https://x-access-token:${{ secrets.SST_GITHUB_TOKEN }}@github.com/${{ github.repository }}
-
-      - uses: ./.github/actions/setup-bun
 
       - uses: actions/download-artifact@v4
         with:
