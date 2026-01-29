@@ -212,7 +212,8 @@ try {
   console.error(e)
   let msg = e
   if (e instanceof $.ShellError) {
-    msg = e.stderr.toString()
+    // Sanitize stderr to prevent leaking sensitive environment variables
+    msg = sanitizeErrorMessage(e.stderr.toString())
   } else if (e instanceof Error) {
     msg = e.message
   }
@@ -1035,6 +1036,66 @@ function buildPromptDataForPR(pr: GitHubPullRequest) {
     ...(reviewData.length > 0 ? ["<pull_request_reviews>", ...reviewData, "</pull_request_reviews>"] : []),
     "</pull_request>",
   ].join("\n")
+}
+
+function sanitizeErrorMessage(stderr: string): string {
+  // Remove sensitive environment variables and tokens from error messages
+  // This prevents leaking credentials in PR comments
+
+  let sanitized = stderr
+
+  // Remove base64-encoded tokens (common in HTTP auth headers)
+  // Match patterns like "Authorization: Basic <base64>" or "x-access-token:<base64>"
+  sanitized = sanitized.replace(/(Authorization:\s*(?:Bearer|Basic|token)\s*)[A-Za-z0-9+/=]+/gi, "$1[REDACTED]")
+  sanitized = sanitized.replace(/(x-access-token:)[A-Za-z0-9+/=]+/gi, "$1[REDACTED]")
+
+  // Remove GitHub tokens (40-character hex strings, common pattern)
+  sanitized = sanitized.replace(/gh[psor]_[A-Za-z0-9]{36,}/g, "[GITHUB_TOKEN_REDACTED]")
+
+  // Remove common environment variable patterns
+  const envVars = [
+    "GITHUB_TOKEN",
+    "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
+    "ACTIONS_ID_TOKEN_REQUEST_URL",
+    "ZHIPU_API_KEY",
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_SESSION_TOKEN",
+    "CODECOV_TOKEN",
+    "NPM_TOKEN",
+    "DOCKER_PASSWORD",
+    "HEROKU_API_KEY",
+    "SLACK_TOKEN",
+    "TELEGRAM_BOT_TOKEN",
+  ]
+
+  for (const envVar of envVars) {
+    // Remove the actual value after the variable name
+    const regex = new RegExp(`${envVar}[^\\w\\s]*\\s*[:=]\\s*[^\\s\\n]+`, "gi")
+    sanitized = sanitized.replace(regex, `${envVar}=[REDACTED]`)
+  }
+
+  // Remove URLs with embedded credentials (e.g., https://token@github.com)
+  sanitized = sanitized.replace(/https?:\/\/[^/\s@]+@/g, "https://[REDACTED]@")
+
+  // Remove quoted strings that look like secrets (32+ character alphanumeric)
+  sanitized = sanitized.replace(/["'][A-Za-z0-9+/=]{32,}["']/g, "[SECRET_REDACTED]")
+
+  // Truncate very long lines that might contain encoded secrets
+  sanitized = sanitized
+    .split("\n")
+    .map((line) => {
+      // If line is very long and contains base64-like patterns, truncate it
+      if (line.length > 200 && /[A-Za-z0-9+/=]{40,}/.test(line)) {
+        return line.slice(0, 100) + "...[LINE_TRUNCATED_FOR_SECURITY]"
+      }
+      return line
+    })
+    .join("\n")
+
+  return sanitized
 }
 
 async function revokeAppToken() {
