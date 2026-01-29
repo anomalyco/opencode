@@ -53,6 +53,7 @@ export namespace Agent {
     const defaults = PermissionNext.fromConfig({
       "*": "allow",
       doom_loop: "ask",
+      a2a_oauth: "ask",
       external_directory: {
         "*": "ask",
         [Truncate.DIR]: "allow",

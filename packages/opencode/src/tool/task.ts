@@ -34,12 +34,47 @@ export const TaskTool = Tool.define("task", async (ctx) => {
     ? agents.filter((a) => PermissionNext.evaluate("task", a.name, caller.permission).action !== "deny")
     : agents
 
-  const description = DESCRIPTION.replace(
-    "{agents}",
-    accessibleAgents
-      .map((a) => `- ${a.name}: ${a.description ?? "This subagent should only be called manually by the user."}`)
-      .join("\n"),
-  )
+  // Separate local and remote agents
+  const localAgents = accessibleAgents.filter((a) => !a.options?.remote)
+  const remoteAgents = accessibleAgents.filter((a) => a.options?.remote)
+
+  // Format local agents simply
+  const localAgentsList = localAgents
+    .map((a) => `- ${a.name}: ${a.description ?? "This subagent should only be called manually by the user."}`)
+    .join("\n")
+
+  // Format remote agents with their skills (like SkillTool)
+  const remoteAgentsList =
+    remoteAgents.length > 0
+      ? [
+          "",
+          "<remote_agents>",
+          ...remoteAgents.flatMap((a) => {
+            const card = a.options?.agentCard as A2A.AgentCard | undefined
+            const skills = card?.skills ?? []
+            return [
+              `  <agent name="${a.name}">`,
+              `    <description>${a.description}</description>`,
+              ...(skills.length > 0
+                ? [
+                    "    <skills>",
+                    ...skills.flatMap((s) => [
+                      `      <skill name="${s.name}">`,
+                      `        <description>${s.description}</description>`,
+                      ...(s.examples && s.examples.length > 0 ? [`        <examples>${s.examples.join(", ")}</examples>`] : []),
+                      "      </skill>",
+                    ]),
+                    "    </skills>",
+                  ]
+                : []),
+              "  </agent>",
+            ]
+          }),
+          "</remote_agents>",
+        ].join("\n")
+      : ""
+
+  const description = DESCRIPTION.replace("{agents}", localAgentsList + remoteAgentsList)
   return {
     description,
     parameters,
@@ -234,30 +269,32 @@ async function executeRemoteAgent(params: z.infer<typeof parameters>, ctx: Tool.
   if (A2A.requiresOAuth(agentCard)) {
     const oauthConfig = A2A.getOAuthConfig(agentCard)
     if (oauthConfig) {
-      // Check if we already have valid tokens
-      const hasValidTokens = await A2A.hasValidTokens(agentDomain)
-      if (!hasValidTokens) {
-        // Prepare OAuth flow to get authorization URL before asking for permission
-        const preparedFlow = await A2A.prepareOAuthFlow(agentDomain, oauthConfig)
-
-        // Prompt user with the authorization URL visible
-        await ctx.ask({
-          permission: "a2a_oauth",
-          patterns: [agentDomain],
-          always: [],
-          metadata: {
-            domain: agentDomain,
-            agent: agentCard.name,
-            authorizationUrl: preparedFlow.authorizationUrl,
-          },
-        })
-
-        // After approval, execute the OAuth flow (opens browser and waits for callback)
-        const result = await A2A.executeOAuthFlow(agentDomain, oauthConfig, preparedFlow)
-        accessToken = result.accessToken
-      } else {
-        // Have valid tokens, just get them
+      // Try to get existing valid token (may refresh if needed)
+      try {
         accessToken = await A2A.getAccessToken(agentDomain, oauthConfig)
+      } catch (err) {
+        // Authentication required - prompt user and start OAuth flow
+        if (err instanceof A2A.AuthenticationRequiredError) {
+          const preparedFlow = await A2A.prepareOAuthFlow(agentDomain, oauthConfig)
+
+          // Prompt user before opening browser
+          await ctx.ask({
+            permission: "a2a_oauth",
+            patterns: [agentDomain],
+            always: [],
+            metadata: {
+              domain: agentDomain,
+              agent: agentCard.name,
+              authorizationUrl: preparedFlow.authorizationUrl,
+            },
+          })
+
+          // After approval, execute the OAuth flow (opens browser and waits for callback)
+          const result = await A2A.executeOAuthFlow(agentDomain, oauthConfig, preparedFlow)
+          accessToken = result.accessToken
+        } else {
+          throw err
+        }
       }
     }
   }

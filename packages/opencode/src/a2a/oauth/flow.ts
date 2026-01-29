@@ -23,6 +23,13 @@ export interface PreparedOAuthFlow {
   state: string
 }
 
+export class AuthenticationRequiredError extends Error {
+  constructor(public domain: string) {
+    super(`Authentication required for ${domain}`)
+    this.name = "AuthenticationRequiredError"
+  }
+}
+
 export async function getAccessToken(domain: string, oauthConfig: OAuthConfig): Promise<string> {
   const entry = await A2AAuth.get(domain)
 
@@ -39,14 +46,13 @@ export async function getAccessToken(domain: string, oauthConfig: OAuthConfig): 
         const result = await refreshTokens(domain, oauthConfig, entry.tokens.refreshToken)
         return result.accessToken
       } catch (err) {
-        log.warn("refresh token failed, starting new auth flow", { domain, error: String(err) })
+        log.warn("refresh token failed, re-authentication required", { domain, error: String(err) })
+        throw new AuthenticationRequiredError(domain)
       }
     }
   }
 
-  log.info("no valid tokens found, starting oauth flow", { domain })
-  const result = await startOAuthFlow(domain, oauthConfig)
-  return result.accessToken
+  throw new AuthenticationRequiredError(domain)
 }
 
 export async function refreshTokens(
