@@ -17,7 +17,6 @@ import { McpServer, createServer } from "@modelcontextprotocol/sdk/server/mcp.js
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
 import { IncomingMessage, ServerResponse } from "http"
-import { Readable } from "stream"
 import {
 	CallToolResult,
 	ListToolsResult,
@@ -25,11 +24,11 @@ import {
 import { getDefaultModel } from "../../agent/model.js"
 import { zodToJsonSchema } from "zod-to-json-schema"
 import {
-	list,
+	listSessions,
+	switchSession,
 	createSession,
 	forkSession,
-Sessions,
-	switchSession	renameSession,
+	renameSession,
 	deleteSession,
 	getSessionInfo,
 	undoMessage,
@@ -51,16 +50,6 @@ const acpToolParameterSchema = z.object({
 })
 
 type AcpTool = z.infer<typeof acpToolParameterSchema>
-
-const acpToolResultSchema = z.object({
-	name: z.string(),
-	description: z.string(),
-	inputSchema: z.object({
-		type: z.literal("object"),
-		properties: z.record(z.any()),
-		required: z.array(z.string()).optional(),
-	}),
-})
 
 async function getAgentTools(agent: Agent): Promise<AcpTool[]> {
 	const result: AcpTool[] = []
