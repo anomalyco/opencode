@@ -17,6 +17,8 @@ import { PermissionNext } from "@/permission/next"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
 import path from "path"
+import * as A2A from "../a2a"
+import { Log } from "../util/log"
 
 export namespace Agent {
   export const Info = z
@@ -238,6 +240,27 @@ export namespace Agent {
         result[name].permission,
         PermissionNext.fromConfig({ external_directory: { [Truncate.DIR]: "allow", [Truncate.GLOB]: "allow" } }),
       )
+    }
+
+    // Discover remote agents from allowed domains
+    const log = Log.create({ service: "agent" })
+    const discovered = await A2A.discoverAgents()
+    for (const { domain, card } of discovered) {
+      const name = `@${domain}`
+      result[name] = {
+        name,
+        description: card.description,
+        mode: "subagent",
+        native: false,
+        hidden: false,
+        permission: PermissionNext.merge(defaults, user),
+        options: {
+          remote: true,
+          domain,
+          agentCard: card,
+        },
+      }
+      log.info("registered remote agent", { name, description: card.description })
     }
 
     return result
