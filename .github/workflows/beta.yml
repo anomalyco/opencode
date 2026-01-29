@@ -1,14 +1,13 @@
-name: beta-sync
+name: beta
 
 on:
   push:
     branches: [dev]
   pull_request_target:
     types: [opened, synchronize, labeled, unlabeled]
-    branches: [dev]
 
 jobs:
-  sync-beta:
+  sync:
     if: |
       github.event_name == 'push' || 
       (github.event_name == 'pull_request_target' && 
@@ -30,4 +29,4 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Sync beta branch
-        run: bun script/beta-sync.ts
+        run: bun script/beta.ts
