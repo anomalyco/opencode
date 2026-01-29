@@ -57,11 +57,20 @@ async function main() {
       continue
     }
 
+    const status = await $`git status --porcelain`.nothrow()
+    if (status.exitCode !== 0 || !status.stdout.trim()) {
+      console.log(`  No changes to commit for PR #${pr.number}, skipping`)
+      await $`git reset --hard HEAD`.nothrow()
+      skipped.push({ number: pr.number, reason: "No changes to commit" })
+      continue
+    }
+
     const commit = await $`git commit -m "Apply PR #${pr.number}: ${pr.title}"`.nothrow()
     if (commit.exitCode !== 0) {
-      console.log(`  Failed to commit PR #${pr.number}, skipping`)
+      console.log(`  Failed to commit PR #${pr.number}`)
+      console.log(`  Error: ${commit.stderr}`)
       await $`git reset --hard HEAD`.nothrow()
-      skipped.push({ number: pr.number, reason: "Failed to commit" })
+      skipped.push({ number: pr.number, reason: `Commit failed: ${commit.stderr}` })
       continue
     }
 
