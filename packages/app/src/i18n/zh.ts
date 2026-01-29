@@ -529,9 +529,6 @@ export const dict = {
   "settings.general.row.releaseNotes.title": "发行说明",
   "settings.general.row.releaseNotes.description": "更新后显示“新功能”弹窗",
 
-  "settings.general.row.releaseNotes.title": "发行说明",
-  "settings.general.row.releaseNotes.description": "更新后显示“新功能”弹窗",
-
   "settings.updates.row.startup.title": "启动时检查更新",
   "settings.updates.row.startup.description": "在 OpenCode 启动时自动检查更新",
   "settings.updates.row.check.title": "检查更新",
