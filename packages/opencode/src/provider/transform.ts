@@ -319,7 +319,14 @@ export namespace ProviderTransform {
     if (!model.capabilities.reasoning) return {}
 
     const id = model.id.toLowerCase()
-    if (id.includes("deepseek") || id.includes("minimax") || id.includes("glm") || id.includes("mistral")) return {}
+    if (
+      id.includes("deepseek") ||
+      id.includes("minimax") ||
+      id.includes("glm") ||
+      id.includes("mistral") ||
+      id.includes("kimi")
+    )
+      return {}
 
     // see: https://docs.x.ai/docs/guides/reasoning#control-how-hard-the-model-thinks
     if (id.includes("grok") && id.includes("grok-3-mini")) {
