@@ -1,6 +1,7 @@
 import { Log } from "../util/log"
 import path from "path"
 import fs from "fs/promises"
+import * as nodefs from "fs"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 import { lazy } from "../util/lazy"
@@ -11,6 +12,14 @@ import z from "zod"
 
 export namespace Storage {
   const log = Log.create({ service: "storage" })
+  async function delay(ms: number) {
+    await new Promise<void>((r) => setTimeout(r, ms))
+  }
+  function isTransientFsError(e: any) {
+    const code = (e as any)?.code as string | undefined
+    const msg = (e as any)?.message as string | undefined
+    return code === "EBUSY" || code === "EACCES" || code === "EPERM" || code === "UNKNOWN" || (msg ? msg.includes("UV_UNKNOWN") : false)
+  }
 
   type Migration = (dir: string) => Promise<void>
 
@@ -171,8 +180,30 @@ export namespace Storage {
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
       using _ = await Lock.read(target)
-      const result = await Bun.file(target).json()
-      return result as T
+      let lastErr: any
+      for (let i = 0; i < 6; i++) {
+        try {
+          const result = await Bun.file(target).json()
+          return result as T
+        } catch (e) {
+          lastErr = e
+          if (!isTransientFsError(e)) break
+          await delay(Math.min(1600, 50 * 2 ** i))
+        }
+      }
+      queueMicrotask(async () => {
+        using _w = await Lock.write(target)
+        const ts = Date.now()
+        const rel = path.relative(dir, target)
+        const dest = path.join(dir, "quarantine", String(ts), rel)
+        await fs.mkdir(path.dirname(dest), { recursive: true }).catch(() => {})
+        await fs.rename(target, dest).catch(async () => {
+          const content = await Bun.file(target).arrayBuffer().catch(() => new ArrayBuffer(0))
+          await Bun.write(dest, new Uint8Array(content))
+          await fs.rm(target, { force: true }).catch(() => {})
+        })
+      })
+      throw new NotFoundError({ message: `Resource not found: ${target}` })
     })
   }
 
@@ -183,7 +214,7 @@ export namespace Storage {
       using _ = await Lock.write(target)
       const content = await Bun.file(target).json()
       fn(content)
-      await Bun.write(target, JSON.stringify(content, null, 2))
+      await atomicWrite(target, JSON.stringify(content, null, 2))
       return content as T
     })
   }
@@ -193,7 +224,7 @@ export namespace Storage {
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
       using _ = await Lock.write(target)
-      await Bun.write(target, JSON.stringify(content, null, 2))
+      await atomicWrite(target, JSON.stringify(content, null, 2))
     })
   }
 
@@ -222,6 +253,69 @@ export namespace Storage {
       return result
     } catch {
       return []
+    }
+  }
+
+  async function atomicWrite(target: string, data: string) {
+    const dir = path.dirname(target)
+    await fs.mkdir(dir, { recursive: true })
+    const tmp = path.join(dir, `.oc-${path.basename(target)}.${process.pid}.${Date.now()}.tmp`)
+    const fh = await fs.open(tmp, "w")
+    try {
+      await fh.writeFile(data)
+      const syncFn = (fh as any).sync as (() => Promise<void>) | undefined
+      if (typeof syncFn === "function") {
+        await syncFn.call(fh)
+      } else {
+        const fd = (fh as any).fd as number | undefined
+        if (typeof fd === "number") {
+          await new Promise<void>((resolve, reject) => nodefs.fsync(fd, (err) => (err ? reject(err) : resolve())))
+        }
+      }
+    } finally {
+      await fh.close().catch(() => {})
+    }
+    let renamed = false
+    let lastErr: any
+    for (let i = 0; i < 6; i++) {
+      try {
+        await fs.rename(tmp, target)
+        const dirFh = await fs.open(dir, "r").catch(() => null as any)
+        try {
+          const dirSync = (dirFh as any)?.sync as (() => Promise<void>) | undefined
+          if (typeof dirSync === "function") await dirSync.call(dirFh)
+          else {
+            const dfd = (dirFh as any)?.fd as number | undefined
+            if (typeof dfd === "number") {
+              await new Promise<void>((resolve, reject) => nodefs.fsync(dfd, (err) => (err ? reject(err) : resolve())))
+            }
+          }
+        } finally {
+          await dirFh?.close?.().catch?.(() => {})
+        }
+        renamed = true
+        break
+      } catch (e) {
+        lastErr = e
+        if (!isTransientFsError(e)) break
+        await delay(Math.min(1600, 50 * 2 ** i))
+      }
+    }
+    if (!renamed) {
+      try {
+        const root = await state().then((x) => x.dir)
+        const rel = path.relative(root, target)
+        const dest = path.join(root, "quarantine", String(Date.now()), rel)
+        await fs.mkdir(path.dirname(dest), { recursive: true })
+        await fs.rename(tmp, dest).catch(async () => {
+          const content = await Bun.file(tmp).arrayBuffer().catch(() => new ArrayBuffer(0))
+          await Bun.write(dest, new Uint8Array(content))
+          await fs.rm(tmp, { force: true }).catch(() => {})
+        })
+      } catch {
+        await fs.rm(tmp, { force: true }).catch(() => {})
+      }
+      throw lastErr
     }
   }
 }
