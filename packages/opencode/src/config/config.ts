@@ -540,6 +540,7 @@ export namespace Config {
           codesearch: PermissionAction.optional(),
           lsp: PermissionRule.optional(),
           doom_loop: PermissionAction.optional(),
+          skill: PermissionRule.optional(),
         })
         .catchall(PermissionRule)
         .or(PermissionAction),
@@ -558,6 +559,11 @@ export namespace Config {
     subtask: z.boolean().optional(),
   })
   export type Command = z.infer<typeof Command>
+
+  export const Skills = z.object({
+    paths: z.array(z.string()).optional().describe("Additional paths to skill folders"),
+  })
+  export type Skills = z.infer<typeof Skills>
 
   export const Agent = z
     .object({
@@ -894,6 +900,7 @@ export namespace Config {
         .record(z.string(), Command)
         .optional()
         .describe("Command configuration, see https://opencode.ai/docs/commands"),
+      skills: Skills.optional().describe("Additional skill folder paths"),
       watcher: z
         .object({
           ignore: z.array(z.string()).optional(),
@@ -1104,20 +1111,23 @@ export namespace Config {
       mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.jsonc"))),
     )
 
-    await import(path.join(Global.Path.config, "config"), {
-      with: {
-        type: "toml",
-      },
-    })
-      .then(async (mod) => {
-        const { provider, model, ...rest } = mod.default
-        if (provider && model) result.model = `${provider}/${model}`
-        result["$schema"] = "https://opencode.ai/config.json"
-        result = mergeDeep(result, rest)
-        await Bun.write(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
-        await fs.unlink(path.join(Global.Path.config, "config"))
+    const legacy = path.join(Global.Path.config, "config")
+    if (existsSync(legacy)) {
+      await import(pathToFileURL(legacy).href, {
+        with: {
+          type: "toml",
+        },
       })
-      .catch(() => {})
+        .then(async (mod) => {
+          const { provider, model, ...rest } = mod.default
+          if (provider && model) result.model = `${provider}/${model}`
+          result["$schema"] = "https://opencode.ai/config.json"
+          result = mergeDeep(result, rest)
+          await Bun.write(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
+          await fs.unlink(legacy)
+        })
+        .catch(() => {})
+    }
 
     return result
   })
@@ -1341,24 +1351,35 @@ export namespace Config {
         throw new JsonError({ path: filepath }, { cause: err })
       })
 
-    if (!filepath.endsWith(".jsonc")) {
-      const existing = parseConfig(before, filepath)
-      await Bun.write(filepath, JSON.stringify(mergeDeep(existing, config), null, 2))
-    } else {
-      const next = patchJsonc(before, config)
-      parseConfig(next, filepath)
-      await Bun.write(filepath, next)
-    }
+    const next = await (async () => {
+      if (!filepath.endsWith(".jsonc")) {
+        const existing = parseConfig(before, filepath)
+        const merged = mergeDeep(existing, config)
+        await Bun.write(filepath, JSON.stringify(merged, null, 2))
+        return merged
+      }
+
+      const updated = patchJsonc(before, config)
+      const merged = parseConfig(updated, filepath)
+      await Bun.write(filepath, updated)
+      return merged
+    })()
 
     global.reset()
-    await Instance.disposeAll()
-    GlobalBus.emit("event", {
-      directory: "global",
-      payload: {
-        type: Event.Disposed.type,
-        properties: {},
-      },
-    })
+
+    void Instance.disposeAll()
+      .catch(() => undefined)
+      .finally(() => {
+        GlobalBus.emit("event", {
+          directory: "global",
+          payload: {
+            type: Event.Disposed.type,
+            properties: {},
+          },
+        })
+      })
+
+    return next
   }
 
   export async function directories() {
