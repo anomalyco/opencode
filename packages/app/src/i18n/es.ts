@@ -333,6 +333,7 @@ export const dict = {
   "language.ar": "العربية",
   "language.no": "Norsk",
   "language.br": "Português (Brasil)",
+  "language.th": "ไทย",
 
   "toast.language.title": "Idioma",
   "toast.language.description": "Cambiado a {{language}}",
@@ -519,6 +520,7 @@ export const dict = {
 
   "settings.general.section.appearance": "Apariencia",
   "settings.general.section.notifications": "Notificaciones del sistema",
+  "settings.general.section.updates": "Actualizaciones",
   "settings.general.section.sounds": "Efectos de sonido",
 
   "settings.general.row.language.title": "Idioma",
@@ -529,6 +531,19 @@ export const dict = {
   "settings.general.row.theme.description": "Personaliza el tema de OpenCode.",
   "settings.general.row.font.title": "Fuente",
   "settings.general.row.font.description": "Personaliza la fuente mono usada en bloques de código",
+
+  "settings.general.row.releaseNotes.title": "Notas de la versión",
+  "settings.general.row.releaseNotes.description":
+    'Mostrar ventanas emergentes de "Novedades" después de las actualizaciones',
+
+  "settings.updates.row.startup.title": "Buscar actualizaciones al iniciar",
+  "settings.updates.row.startup.description": "Buscar actualizaciones automáticamente cuando se inicia OpenCode",
+  "settings.updates.row.check.title": "Buscar actualizaciones",
+  "settings.updates.row.check.description": "Buscar actualizaciones manualmente e instalarlas si hay alguna",
+  "settings.updates.action.checkNow": "Buscar ahora",
+  "settings.updates.action.checking": "Buscando...",
+  "settings.updates.toast.latest.title": "Estás al día",
+  "settings.updates.toast.latest.description": "Estás usando la última versión de OpenCode.",
 
   "font.option.ibmPlexMono": "IBM Plex Mono",
   "font.option.cascadiaCode": "Cascadia Code",
