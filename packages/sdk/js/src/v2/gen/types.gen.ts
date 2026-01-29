@@ -233,6 +233,21 @@ export type TextPart = {
   }
 }
 
+export type SubtaskPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "subtask"
+  prompt: string
+  description: string
+  agent: string
+  model?: {
+    providerID: string
+    modelID: string
+  }
+  command?: string
+}
+
 export type ReasoningPart = {
   id: string
   sessionID: string
@@ -449,20 +464,7 @@ export type CompactionPart = {
 
 export type Part =
   | TextPart
-  | {
-      id: string
-      sessionID: string
-      messageID: string
-      type: "subtask"
-      prompt: string
-      description: string
-      agent: string
-      model?: {
-        providerID: string
-        modelID: string
-      }
-      command?: string
-    }
+  | SubtaskPart
   | ReasoningPart
   | FilePart
   | ToolPart
@@ -1362,6 +1364,7 @@ export type PermissionConfig =
       codesearch?: PermissionActionConfig
       lsp?: PermissionRuleConfig
       doom_loop?: PermissionActionConfig
+      skill?: PermissionRuleConfig
       [key: string]: PermissionRuleConfig | Array<string> | PermissionActionConfig | undefined
     }
   | PermissionActionConfig
@@ -1630,6 +1633,15 @@ export type Config = {
       model?: string
       subtask?: boolean
     }
+  }
+  /**
+   * Additional skill folder paths
+   */
+  skills?: {
+    /**
+     * Additional paths to skill folders
+     */
+    paths?: Array<string>
   }
   watcher?: {
     ignore?: Array<string>

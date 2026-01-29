@@ -6502,6 +6502,49 @@
         },
         "required": ["id", "sessionID", "messageID", "type", "text"]
       },
+      "SubtaskPart": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "messageID": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "const": "subtask"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "model": {
+            "type": "object",
+            "properties": {
+              "providerID": {
+                "type": "string"
+              },
+              "modelID": {
+                "type": "string"
+              }
+            },
+            "required": ["providerID", "modelID"]
+          },
+          "command": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "sessionID", "messageID", "type", "prompt", "description", "agent"]
+      },
       "ReasoningPart": {
         "type": "object",
         "properties": {
@@ -7125,47 +7168,7 @@
             "$ref": "#/components/schemas/TextPart"
           },
           {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "sessionID": {
-                "type": "string"
-              },
-              "messageID": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string",
-                "const": "subtask"
-              },
-              "prompt": {
-                "type": "string"
-              },
-              "description": {
-                "type": "string"
-              },
-              "agent": {
-                "type": "string"
-              },
-              "model": {
-                "type": "object",
-                "properties": {
-                  "providerID": {
-                    "type": "string"
-                  },
-                  "modelID": {
-                    "type": "string"
-                  }
-                },
-                "required": ["providerID", "modelID"]
-              },
-              "command": {
-                "type": "string"
-              }
-            },
-            "required": ["id", "sessionID", "messageID", "type", "prompt", "description", "agent"]
+            "$ref": "#/components/schemas/SubtaskPart"
           },
           {
             "$ref": "#/components/schemas/ReasoningPart"
@@ -8991,6 +8994,9 @@
               },
               "doom_loop": {
                 "$ref": "#/components/schemas/PermissionActionConfig"
+              },
+              "skill": {
+                "$ref": "#/components/schemas/PermissionRuleConfig"
               }
             },
             "additionalProperties": {
@@ -9501,6 +9507,19 @@
                 }
               },
               "required": ["template"]
+            }
+          },
+          "skills": {
+            "description": "Additional skill folder paths",
+            "type": "object",
+            "properties": {
+              "paths": {
+                "description": "Additional paths to skill folders",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
             }
           },
           "watcher": {
