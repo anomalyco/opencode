@@ -3,13 +3,15 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tag } from "@opencode-ai/ui/tag"
 import { showToast } from "@opencode-ai/ui/toast"
-import type { IconName } from "@opencode-ai/ui/icons/provider"
+import { iconNames, type IconName } from "@opencode-ai/ui/icons/provider"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { createMemo, type Component, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useGlobalSDK } from "@/context/global-sdk"
+import { useGlobalSync } from "@/context/global-sync"
 import { DialogConnectProvider } from "./dialog-connect-provider"
 import { DialogSelectProvider } from "./dialog-select-provider"
+import { DialogCustomProvider } from "./dialog-custom-provider"
 
 type ProviderSource = "env" | "api" | "config" | "custom"
 type ProviderMeta = { source?: ProviderSource }
@@ -18,7 +20,13 @@ export const SettingsProviders: Component = () => {
   const dialog = useDialog()
   const language = useLanguage()
   const globalSDK = useGlobalSDK()
+  const globalSync = useGlobalSync()
   const providers = useProviders()
+
+  const icon = (id: string): IconName => {
+    if (iconNames.includes(id as IconName)) return id as IconName
+    return "synthetic"
+  }
 
   const connected = createMemo(() => {
     return providers
@@ -42,14 +50,53 @@ export const SettingsProviders: Component = () => {
     const current = source(item)
     if (current === "env") return language.t("settings.providers.tag.environment")
     if (current === "api") return language.t("provider.connect.method.apiKey")
-    if (current === "config") return language.t("settings.providers.tag.config")
+    if (current === "config") {
+      const id = (item as { id?: string }).id
+      if (id && isConfigCustom(id)) return language.t("settings.providers.tag.custom")
+      return language.t("settings.providers.tag.config")
+    }
     if (current === "custom") return language.t("settings.providers.tag.custom")
     return language.t("settings.providers.tag.other")
   }
 
   const canDisconnect = (item: unknown) => source(item) !== "env"
 
+  const isConfigCustom = (providerID: string) => {
+    const provider = globalSync.data.config.provider?.[providerID]
+    if (!provider) return false
+    if (provider.npm !== "@ai-sdk/openai-compatible") return false
+    if (!provider.models || Object.keys(provider.models).length === 0) return false
+    return true
+  }
+
+  const disableProvider = async (providerID: string, name: string) => {
+    const before = globalSync.data.config.disabled_providers ?? []
+    const next = before.includes(providerID) ? before : [...before, providerID]
+    globalSync.set("config", "disabled_providers", next)
+
+    await globalSync
+      .updateConfig({ disabled_providers: next })
+      .then(() => {
+        showToast({
+          variant: "success",
+          icon: "circle-check",
+          title: language.t("provider.disconnect.toast.disconnected.title", { provider: name }),
+          description: language.t("provider.disconnect.toast.disconnected.description", { provider: name }),
+        })
+      })
+      .catch((err: unknown) => {
+        globalSync.set("config", "disabled_providers", before)
+        const message = err instanceof Error ? err.message : String(err)
+        showToast({ title: language.t("common.requestFailed"), description: message })
+      })
+  }
+
   const disconnect = async (providerID: string, name: string) => {
+    if (isConfigCustom(providerID)) {
+      await globalSDK.client.auth.remove({ providerID }).catch(() => undefined)
+      await disableProvider(providerID, name)
+      return
+    }
     await globalSDK.client.auth
       .remove({ providerID })
       .then(async () => {
@@ -68,7 +115,7 @@ export const SettingsProviders: Component = () => {
   }
 
   return (
-    <div class="flex flex-col h-full overflow-y-auto no-scrollbar" style={{ padding: "0 40px 40px 40px" }}>
+    <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 pt-6 pb-8 max-w-[720px]">
           <h2 class="text-16-medium text-text-strong">{language.t("settings.providers.title")}</h2>
@@ -89,9 +136,9 @@ export const SettingsProviders: Component = () => {
             >
               <For each={connected()}>
                 {(item) => (
-                  <div class="group flex items-center justify-between gap-4 h-16 border-b border-border-weak-base last:border-none">
+                  <div class="group flex flex-wrap items-center justify-between gap-4 min-h-16 py-3 border-b border-border-weak-base last:border-none">
                     <div class="flex items-center gap-3 min-w-0">
-                      <ProviderIcon id={item.id as IconName} class="size-5 shrink-0 icon-strong-base" />
+                      <ProviderIcon id={icon(item.id)} class="size-5 shrink-0 icon-strong-base" />
                       <span class="text-14-medium text-text-strong truncate">{item.name}</span>
                       <Tag>{type(item)}</Tag>
                     </div>
@@ -119,10 +166,10 @@ export const SettingsProviders: Component = () => {
           <div class="bg-surface-raised-base px-4 rounded-lg">
             <For each={popular()}>
               {(item) => (
-                <div class="flex items-center justify-between gap-4 h-16 border-b border-border-weak-base last:border-none">
+                <div class="flex flex-wrap items-center justify-between gap-4 min-h-16 py-3 border-b border-border-weak-base last:border-none">
                   <div class="flex flex-col min-w-0">
                     <div class="flex items-center gap-x-3">
-                      <ProviderIcon id={item.id as IconName} class="size-5 shrink-0 icon-strong-base" />
+                      <ProviderIcon id={icon(item.id)} class="size-5 shrink-0 icon-strong-base" />
                       <span class="text-14-medium text-text-strong">{item.name}</span>
                       <Show when={item.id === "opencode"}>
                         <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
@@ -177,6 +224,27 @@ export const SettingsProviders: Component = () => {
                 </div>
               )}
             </For>
+
+            <div class="flex items-center justify-between gap-4 h-16 border-b border-border-weak-base last:border-none">
+              <div class="flex flex-col min-w-0">
+                <div class="flex items-center gap-x-3">
+                  <ProviderIcon id={icon("synthetic")} class="size-5 shrink-0 icon-strong-base" />
+                  <span class="text-14-medium text-text-strong">Custom provider</span>
+                  <Tag>{language.t("settings.providers.tag.custom")}</Tag>
+                </div>
+                <span class="text-12-regular text-text-weak pl-8">Add an OpenAI-compatible provider by base URL.</span>
+              </div>
+              <Button
+                size="large"
+                variant="secondary"
+                icon="plus-small"
+                onClick={() => {
+                  dialog.show(() => <DialogCustomProvider back="close" />)
+                }}
+              >
+                {language.t("common.connect")}
+              </Button>
+            </div>
           </div>
 
           <Button
