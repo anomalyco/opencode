@@ -3,6 +3,7 @@ import "./webview-zoom"
 import { render } from "solid-js/web"
 import { AppBaseProviders, AppInterface, PlatformProvider, Platform } from "@opencode-ai/app"
 import { open, save } from "@tauri-apps/plugin-dialog"
+import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { type as ostype } from "@tauri-apps/plugin-os"
 import { check, Update } from "@tauri-apps/plugin-updater"
@@ -41,6 +42,22 @@ window.getComputedStyle = ((elt: Element, pseudoElt?: string | null) => {
 }) as typeof window.getComputedStyle
 
 let update: Update | null = null
+
+const deepLinkEvent = "opencode:deep-link"
+
+const emitDeepLinks = (urls: string[]) => {
+  if (urls.length === 0) return
+  window.__OPENCODE__ ??= {}
+  const pending = window.__OPENCODE__.deepLinks ?? []
+  window.__OPENCODE__.deepLinks = [...pending, ...urls]
+  window.dispatchEvent(new CustomEvent(deepLinkEvent, { detail: { urls } }))
+}
+
+const listenForDeepLinks = async () => {
+  const startUrls = await getCurrent().catch(() => null)
+  if (startUrls?.length) emitDeepLinks(startUrls)
+  await onOpenUrl((urls) => emitDeepLinks(urls)).catch(() => undefined)
+}
 
 const createPlatform = (password: Accessor<string | null>): Platform => ({
   platform: "desktop",
@@ -332,6 +349,7 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
 })
 
 createMenu()
+void listenForDeepLinks()
 
 render(() => {
   const [serverPassword, setServerPassword] = createSignal<string | null>(null)
