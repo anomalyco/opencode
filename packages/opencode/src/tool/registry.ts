@@ -40,7 +40,6 @@ export namespace ToolRegistry {
         cwd: dir,
         absolute: true,
         followSymlinks: true,
-        dot: true,
       })) {
         const namespace = path.basename(match, path.extname(match))
         const mod = await import(match)

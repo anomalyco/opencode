@@ -97,7 +97,6 @@ export namespace Skill {
             absolute: true,
             onlyFiles: true,
             followSymlinks: true,
-            dot: true,
           }),
         ).catch((error) => {
           log.error("failed .claude directory scan for skills", { dir, error })
