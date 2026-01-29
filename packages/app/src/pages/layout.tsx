@@ -1096,15 +1096,8 @@ export default function Layout(props: ParentProps) {
   const parseDeepLink = (input: string) => {
     if (!input.startsWith("opencode://")) return
     const url = new URL(input)
-    if (url.hostname !== "file") return
-    let directory = decodeURIComponent(url.pathname)
-    if (/^\/[A-Za-z]:/.test(directory)) {
-      directory = directory.slice(1)
-    }
-    directory = directory.replace(/\/$/, "")
-    if (platform.os === "windows") {
-      directory = directory.replace(/\//g, "\\")
-    }
+    if (url.hostname !== "open-project") return
+    const directory = url.searchParams.get("directory")
     if (!directory) return
     return directory
   }
