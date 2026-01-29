@@ -20,6 +20,7 @@ import { Script } from "@opencode-ai/script"
 const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")
 const skipInstall = process.argv.includes("--skip-install")
+const buildUiFlag = process.argv.includes("--build-ui")
 
 const allTargets: {
   os: string
@@ -103,10 +104,14 @@ const targets = singleFlag
 
 await $`rm -rf dist`
 
-console.log("building web UI")
-await $`bun run build`.cwd(appDir)
-if (!fs.existsSync(appDistDir)) {
-  throw new Error(`Web UI build output not found at ${appDistDir}`)
+let shouldBundleUi = false
+if (buildUiFlag) {
+  console.log("building web UI")
+  await $`bun run build`.cwd(appDir)
+  if (!fs.existsSync(appDistDir)) {
+    throw new Error(`Web UI build output not found at ${appDistDir}`)
+  }
+  shouldBundleUi = true
 }
 
 const binaries: Record<string, string> = {}
@@ -127,9 +132,11 @@ for (const item of targets) {
     .join("-")
   console.log(`building ${name}`)
   await $`mkdir -p dist/${name}/bin`
-  const uiTargetDir = path.resolve(dir, "dist", name, "ui")
-  fs.rmSync(uiTargetDir, { recursive: true, force: true })
-  fs.cpSync(appDistDir, uiTargetDir, { recursive: true })
+  if (shouldBundleUi) {
+    const uiTargetDir = path.resolve(dir, "dist", name, "ui")
+    fs.rmSync(uiTargetDir, { recursive: true, force: true })
+    fs.cpSync(appDistDir, uiTargetDir, { recursive: true })
+  }
 
   const parserWorker = fs.realpathSync(path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"))
   const workerPath = "./src/cli/cmd/tui/worker.ts"
