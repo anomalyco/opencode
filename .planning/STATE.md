@@ -178,7 +178,7 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-None yet.
+- Fix site manifest 401
 
 ### Blockers/Concerns
 
