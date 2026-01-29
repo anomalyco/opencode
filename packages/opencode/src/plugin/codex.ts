@@ -10,6 +10,7 @@ const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const ISSUER = "https://auth.openai.com"
 const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses"
 const OAUTH_PORT = 1455
+const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000
 
 interface PkceCodes {
   verifier: string
@@ -461,7 +462,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
       },
       methods: [
         {
-          label: "ChatGPT Pro/Plus",
+          label: "ChatGPT Pro/Plus (browser)",
           type: "oauth",
           authorize: async () => {
             const { redirectUri } = await startOAuthServer()
@@ -485,6 +486,89 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
                   access: tokens.access_token,
                   expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
                   accountId,
+                }
+              },
+            }
+          },
+        },
+        {
+          label: "ChatGPT Pro/Plus (headless)",
+          type: "oauth",
+          authorize: async () => {
+            const deviceResponse = await fetch(`${ISSUER}/api/accounts/deviceauth/usercode`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "User-Agent": `opencode/${Installation.VERSION}`,
+              },
+              body: JSON.stringify({ client_id: CLIENT_ID }),
+            })
+
+            if (!deviceResponse.ok) throw new Error("Failed to initiate device authorization")
+
+            const deviceData = (await deviceResponse.json()) as {
+              device_auth_id: string
+              user_code: string
+              interval: string
+            }
+            const interval = Math.max(parseInt(deviceData.interval) || 5, 1) * 1000
+
+            return {
+              url: `${ISSUER}/codex/device`,
+              instructions: `Enter code: ${deviceData.user_code}`,
+              method: "auto" as const,
+              async callback() {
+                while (true) {
+                  const response = await fetch(`${ISSUER}/api/accounts/deviceauth/token`, {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      "User-Agent": `opencode/${Installation.VERSION}`,
+                    },
+                    body: JSON.stringify({
+                      device_auth_id: deviceData.device_auth_id,
+                      user_code: deviceData.user_code,
+                    }),
+                  })
+
+                  if (response.ok) {
+                    const data = (await response.json()) as {
+                      authorization_code: string
+                      code_verifier: string
+                    }
+
+                    const tokenResponse = await fetch(`${ISSUER}/oauth/token`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                      body: new URLSearchParams({
+                        grant_type: "authorization_code",
+                        code: data.authorization_code,
+                        redirect_uri: `${ISSUER}/deviceauth/callback`,
+                        client_id: CLIENT_ID,
+                        code_verifier: data.code_verifier,
+                      }).toString(),
+                    })
+
+                    if (!tokenResponse.ok) {
+                      throw new Error(`Token exchange failed: ${tokenResponse.status}`)
+                    }
+
+                    const tokens: TokenResponse = await tokenResponse.json()
+
+                    return {
+                      type: "success" as const,
+                      refresh: tokens.refresh_token,
+                      access: tokens.access_token,
+                      expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
+                      accountId: extractAccountId(tokens),
+                    }
+                  }
+
+                  if (response.status !== 403 && response.status !== 404) {
+                    return { type: "failed" as const }
+                  }
+
+                  await Bun.sleep(interval + OAUTH_POLLING_SAFETY_MARGIN_MS)
                 }
               },
             }

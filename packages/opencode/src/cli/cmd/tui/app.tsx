@@ -570,6 +570,16 @@ function App() {
         dialog.clear()
       },
     },
+    {
+      title: kv.get("diff_wrap_mode", "word") === "word" ? "Disable diff wrapping" : "Enable diff wrapping",
+      value: "app.toggle.diffwrap",
+      category: "System",
+      onSelect: (dialog) => {
+        const current = kv.get("diff_wrap_mode", "word")
+        kv.set("diff_wrap_mode", current === "word" ? "none" : "word")
+        dialog.clear()
+      },
+    },
   ])
 
   createEffect(() => {
