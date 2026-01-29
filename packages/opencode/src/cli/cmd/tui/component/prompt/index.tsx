@@ -69,6 +69,18 @@ export function Prompt(props: PromptProps) {
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
+  const [elapsed, setElapsed] = createSignal(0)
+  createEffect(() => {
+    const s = status()
+    if (s.type === "busy") {
+      const now = Date.now()
+      setElapsed(0)
+      const timer = setInterval(() => {
+        setElapsed(Math.floor((Date.now() - now) / 1000))
+      }, 1000)
+      onCleanup(() => clearInterval(timer))
+    }
+  })
   const history = usePromptHistory()
   const stash = usePromptStash()
   const command = useCommandDialog()
@@ -1055,6 +1067,9 @@ export function Prompt(props: PromptProps) {
                     <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
                   </Show>
                 </box>
+                <Show when={elapsed() > 0}>
+                  <text fg={theme.textMuted}>{formatDuration(elapsed())}</text>
+                </Show>
                 <box flexDirection="row" gap={1} flexShrink={0}>
                   {(() => {
                     const retry = createMemo(() => {
