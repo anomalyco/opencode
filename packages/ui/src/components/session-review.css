@@ -54,6 +54,13 @@
     background-color: var(--background-stronger) !important;
   }
 
+  [data-slot="session-review-accordion-item"][data-selected] {
+    [data-slot="session-review-accordion-content"] {
+      box-shadow: var(--shadow-xs-border-select);
+      border-radius: var(--radius-lg);
+    }
+  }
+
   [data-slot="accordion-item"] {
     [data-slot="accordion-content"] {
       display: none;

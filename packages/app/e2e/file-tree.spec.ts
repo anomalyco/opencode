@@ -3,9 +3,10 @@ import { test, expect } from "./fixtures"
 test("file tree can expand folders and open a file", async ({ page, gotoSession }) => {
   await gotoSession()
 
-  await page.getByRole("button", { name: "Toggle file tree" }).click()
-
+  const toggle = page.getByRole("button", { name: "Toggle file tree" })
   const treeTabs = page.locator('[data-component="tabs"][data-variant="pill"][data-scope="filetree"]')
+
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click()
   await expect(treeTabs).toBeVisible()
 
   await treeTabs.locator('[data-slot="tabs-trigger"]').nth(1).click()

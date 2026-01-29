@@ -145,8 +145,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
                         <Avatar
                           fallback={store.name || defaultName()}
                           {...getAvatarColors(store.color)}
-                          class="size-full"
-                          style={{ "font-size": "32px" }}
+                          class="size-full text-[32px]"
                         />
                       </div>
                     }
@@ -159,39 +158,19 @@ export function DialogEditProject(props: { project: LocalProject }) {
                   </Show>
                 </div>
                 <div
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "64px",
-                    height: "64px",
-                    background: "rgba(0,0,0,0.6)",
-                    "border-radius": "6px",
-                    "z-index": 10,
-                    "pointer-events": "none",
-                    opacity: store.iconHover && !store.iconUrl ? 1 : 0,
-                    display: "flex",
-                    "align-items": "center",
-                    "justify-content": "center",
+                  class="absolute inset-0 size-16 bg-black/60 rounded-[6px] z-10 pointer-events-none flex items-center justify-center transition-opacity"
+                  classList={{
+                    "opacity-100": store.iconHover && !store.iconUrl,
+                    "opacity-0": !(store.iconHover && !store.iconUrl),
                   }}
                 >
                   <Icon name="cloud-upload" size="large" class="text-icon-invert-base" />
                 </div>
                 <div
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "64px",
-                    height: "64px",
-                    background: "rgba(0,0,0,0.6)",
-                    "border-radius": "6px",
-                    "z-index": 10,
-                    "pointer-events": "none",
-                    opacity: store.iconHover && store.iconUrl ? 1 : 0,
-                    display: "flex",
-                    "align-items": "center",
-                    "justify-content": "center",
+                  class="absolute inset-0 size-16 bg-black/60 rounded-[6px] z-10 pointer-events-none flex items-center justify-center transition-opacity"
+                  classList={{
+                    "opacity-100": store.iconHover && !!store.iconUrl,
+                    "opacity-0": !(store.iconHover && !!store.iconUrl),
                   }}
                 >
                   <Icon name="trash" size="large" class="text-icon-invert-base" />
