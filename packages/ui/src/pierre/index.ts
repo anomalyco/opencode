@@ -35,21 +35,34 @@ const unsafeCSS = `
   --diffs-selection-base: var(--surface-warning-strong);
   --diffs-selection-border: var(--border-warning-base);
   --diffs-selection-number-fg: #1c1917;
-  --diffs-bg-selection: var(--diffs-bg-selection-override, color-mix(in oklch, var(--surface-warning-base) 65%, transparent));
-  --diffs-bg-selection-number: var(--diffs-bg-selection-number-override, color-mix(in oklch, var(--surface-warning-base) 85%, transparent));
-  --diffs-bg-selection-text: color-mix(in oklch, var(--surface-warning-strong) 20%, transparent);
+  /* Use explicit alpha instead of color-mix(..., transparent) to avoid Safari's non-premultiplied interpolation bugs. */
+  --diffs-bg-selection: var(--diffs-bg-selection-override, rgb(from var(--surface-warning-base) r g b / 0.65));
+  --diffs-bg-selection-number: var(
+    --diffs-bg-selection-number-override,
+    rgb(from var(--surface-warning-base) r g b / 0.85)
+  );
+  --diffs-bg-selection-text: rgb(from var(--surface-warning-strong) r g b / 0.2);
+}
+
+:host([data-color-scheme='dark']) [data-diffs] {
+  --diffs-selection-number-fg: #fdfbfb;
+  --diffs-bg-selection: var(--diffs-bg-selection-override, rgb(from var(--solaris-dark-6) r g b / 0.65));
+  --diffs-bg-selection-number: var(
+    --diffs-bg-selection-number-override,
+    rgb(from var(--solaris-dark-6) r g b / 0.85)
+  );
 }
 
 [data-diffs] ::selection {
   background-color: var(--diffs-bg-selection-text);
 }
 
-[data-diffs] [data-comment-selected] {
-  background-color: var(--diffs-bg-selection);
+[data-diffs] [data-comment-selected]:not([data-selected-line]) [data-column-content] {
+  box-shadow: inset 0 0 0 9999px var(--diffs-bg-selection);
 }
 
-[data-diffs] [data-comment-selected] [data-column-number] {
-  background-color: var(--diffs-bg-selection-number);
+[data-diffs] [data-comment-selected]:not([data-selected-line]) [data-column-number] {
+  box-shadow: inset 0 0 0 9999px var(--diffs-bg-selection-number);
   color: var(--diffs-selection-number-fg);
 }
 
@@ -73,15 +86,9 @@ const unsafeCSS = `
 /* The deletion word-diff emphasis is stronger than additions; soften it while selected so the selection highlight reads consistently. */
 [data-diffs] [data-line-type='change-deletion'][data-selected-line] {
   --diffs-bg-deletion-emphasis: light-dark(
-    rgb(from var(--diffs-deletion-base) r g b / 0.15),
+    rgb(from var(--diffs-deletion-base) r g b / 0.07),
     rgb(from var(--diffs-deletion-base) r g b / 0.1)
   );
-}
-
-:host-context([data-color-scheme='dark']) [data-diffs] {
-  --diffs-selection-number-fg: #fdfbfb;
-  --diffs-bg-selection: var(--diffs-bg-selection-override, color-mix(in oklch, var(--solaris-dark-6) 65%, transparent));
-  --diffs-bg-selection-number: var(--diffs-bg-selection-number-override, color-mix(in oklch, var(--solaris-dark-6) 85%, transparent));
 }
 
 [data-diffs-header],
