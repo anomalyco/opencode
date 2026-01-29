@@ -38,7 +38,7 @@ const archMap = {
 
 function getPackagePrefix() {
   try {
-    const pkgPath = path.join(scriptDir, "package.json")
+    const pkgPath = path.join(scriptDir, "..", "package.json")
     const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"))
     return pkg.name
   } catch {
