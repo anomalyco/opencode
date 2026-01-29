@@ -571,6 +571,7 @@ OpenCode can be configured using environment variables.
 | `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | Disable loading `.claude/skills`                  |
 | `OPENCODE_CLIENT`                     | string  | Client identifier (defaults to `cli`)             |
 | `OPENCODE_ENABLE_EXA`                 | boolean | Enable Exa web search tools                       |
+| `OPENCODE_ENABLE_OPENTELEMETRY`       | boolean | Enable OpenTelemetry spans for AI SDK calls       |
 | `OPENCODE_SERVER_PASSWORD`            | string  | Enable basic auth for `serve`/`web`               |
 | `OPENCODE_SERVER_USERNAME`            | string  | Override basic auth username (default `opencode`) |
 
@@ -587,6 +588,7 @@ These environment variables enable experimental features that may change or be r
 | `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | Disable copy on select in TUI           |
 | `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | Default timeout for bash commands in ms |
 | `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | Max output tokens for LLM responses     |
+| `OPENCODE_EXPERIMENTAL_MCP_TIMEOUT_MS`          | number  | Timeout in ms for MCP requests          |
 | `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | Enable file watcher for entire dir      |
 | `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | Enable oxfmt formatter                  |
 | `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | Enable experimental LSP tool            |
@@ -595,3 +597,6 @@ These environment variables enable experimental features that may change or be r
 | `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | Enable experimental LSP type checking   |
 | `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolean | Enable experimental markdown features   |
 | `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Enable plan mode                        |
+| `OPENCODE_EXPERIMENTAL_DISABLE_PASTE_SUMMARY`   | boolean | Disable paste summary in TUI            |
+| `OPENCODE_EXPERIMENTAL_BATCH_TOOL`              | boolean | Enable batch tool                       |
+| `OPENCODE_EXPERIMENTAL_CONTINUE_LOOP_ON_DENY`   | boolean | Continue loop when tool call is denied  |
