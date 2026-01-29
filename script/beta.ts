@@ -48,13 +48,12 @@ async function main() {
       continue
     }
 
-    const merge = await $`git merge pr-${pr.number} --no-commit --no-ff`.nothrow()
+    const merge = await $`git merge --squash pr-${pr.number}`.nothrow()
     if (merge.exitCode !== 0) {
-      console.log(`  Merge failed for PR #${pr.number}`)
+      console.log(`  Squash merge failed for PR #${pr.number}`)
       console.log(`  Error: ${merge.stderr}`)
-      await $`git merge --abort`.nothrow()
       await $`git reset --hard HEAD`.nothrow()
-      skipped.push({ number: pr.number, reason: `Merge failed: ${merge.stderr}` })
+      skipped.push({ number: pr.number, reason: `Squash merge failed: ${merge.stderr}` })
       continue
     }
 
