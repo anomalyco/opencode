@@ -14,7 +14,8 @@ import type { Hooks } from "@opencode-ai/plugin"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
 
-export function authPlugin(plugins: Hooks[], provider: string): PluginAuth | undefined {
+export function authPlugin(plugins: Hooks[], provider: string | symbol): PluginAuth | undefined {
+  if (typeof provider !== "string") return
   const auths = pipe(
     plugins,
     filter((x) => x.auth?.provider !== undefined),
