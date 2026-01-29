@@ -1,8 +1,5 @@
-import Agent from "../../agent/index.js"
-import Global from "../../global/index.js"
-import * as Type from "../../type/index.js"
-import * as acpt from "./session-types.js"
-import { getCurrentSession, loadSession, Session } from "../../session/index.js"
+import Session from "../../session/index.js"
+import { getCurrentSession, loadSession } from "../../session/index.js"
 import bus from "../../bus/index.js"
 import id from "../../id/index.js"
 import project from "../../project/index.js"
@@ -601,21 +598,116 @@ export async function createRepl(agent: Agent): Promise<void> {
 	}
 }
 
-// SESSION MANAGEMENT METHODS FOR ACP
+// SESSION MANAGEMENT TYPES FOR ACP
 // Issue #8931: Expose TUI Session Management Commands via ACP
+
+export interface SessionInfo {
+	id: string
+	title: string
+	createdAt: string
+	updatedAt: string
+	projectPath?: string
+	messageCount: number
+}
+
+export interface SessionListParams {
+	limit?: number
+	projectPath?: string
+}
+
+export interface SessionListResult {
+	sessions: SessionInfo[]
+}
+
+export interface SessionSwitchParams {
+	sessionId: string
+}
+
+export interface SessionCreateParams {
+	title?: string
+	projectPath?: string
+}
+
+export interface SessionForkParams {
+	sessionId: string
+	messageId: string
+	title?: string
+}
+
+export interface SessionRenameParams {
+	sessionId: string
+	title: string
+}
+
+export interface SessionDeleteParams {
+	sessionId: string
+}
+
+export interface SessionInfoParams {
+	sessionId: string
+}
+
+export interface SessionUndoParams {
+	sessionId?: string
+}
+
+export interface SessionRedoParams {
+	sessionId?: string
+}
+
+export interface SessionCompactParams {
+	sessionId?: string
+}
+
+export interface SessionExportParams {
+	sessionId?: string
+	format?: "text" | "json" | "markdown"
+}
+
+export interface SessionExportResult {
+	content: string
+	filename: string
+}
+
+export interface SessionJumpParams {
+	sessionId: string
+	messageId: string
+}
+
+export interface SessionDuplicateParams {
+	sessionId: string
+	title?: string
+}
+
+// Session storage location reference
+export const SESSION_STORAGE_PATH = "~/.local/share/opencode/storage/session/"
+
+// Helper to format session for API response
+function formatSessionInfo(session: any): SessionInfo {
+	return {
+		id: session.id,
+		title: session.title ?? `Session ${session.id?.slice(0, 8) ?? "unknown"}`,
+		createdAt: session.createdAt ?? new Date().toISOString(),
+		updatedAt: session.updatedAt ?? new Date().toISOString(),
+		projectPath: session.projectPath,
+		messageCount: session.messages?.length ?? 0,
+	}
+}
+
+// SESSION MANAGEMENT HANDLERS
 
 /**
  * List all available sessions
  */
-async function listSessions(
-	params: acpt.SessionListParams,
-): Promise<acpt.SessionListResult> {
+export async function listSessions(
+	params: SessionListParams = {},
+): Promise<SessionListResult> {
 	const sessionDir = path.join(
 		os.home(),
 		".local/share/opencode/storage/session",
 	)
 
-	const sessions: acpt.SessionInfo[] = []
+	const sessions: SessionInfo[] = []
 
 	if (fs.existsSync(sessionDir)) {
 		const entries = fs.readdirSync(sessionDir)
@@ -641,16 +733,7 @@ async function listSessions(
 							continue
 						}
 
-						sessions.push({
-							id: sessionData.id ?? entry,
-							title:
-								sessionData.title ??
-								`Session ${entry.slice(0, 8)}`,
-							createdAt: sessionData.createdAt ?? new Date().toISOString(),
-							updatedAt: sessionData.updatedAt ?? new Date().toISOString(),
-							projectPath: sessionData.projectPath,
-							messageCount: sessionData.messages?.length ?? 0,
-						})
+						sessions.push(formatSessionInfo(sessionData))
 					}
 				} catch {
 					// Skip invalid sessions
@@ -671,8 +754,8 @@ async function listSessions(
 /**
  * Switch to an existing session
  */
-async function switchSession(
-	params: acpt.SessionSwitchParams,
+export async function switchSession(
+	params: SessionSwitchParams,
 ): Promise<{ success: boolean; sessionId: string }> {
 	const { sessionId } = params
 
@@ -704,9 +787,9 @@ async function switchSession(
 /**
  * Create a new session
  */
-async function createSession(
-	params: acpt.SessionCreateParams,
-): Promise<acpt.SessionInfo> {
+export async function createSession(
+	params: SessionCreateParams = {},
+): Promise<SessionInfo> {
 	const { title, projectPath } = params
 
 	const session = await loadSession({
@@ -714,26 +797,19 @@ async function createSession(
 		updatedAt: new Date(),
 		title: title ?? "New Session",
 		id: id.generate(),
-		agent: await agent.clone(),
+		agent: undefined,
 		workingDirectory: projectPath ?? process.cwd(),
 	})
 
-	return {
-		id: session.id,
-		title: session.title ?? `Session ${session.id.slice(0, 8)}`,
-		createdAt: session.createdAt?.toISOString() ?? new Date().toISOString(),
-		updatedAt: session.updatedAt?.toISOString() ?? new Date().toISOString(),
-		projectPath: session.projectPath,
-		messageCount: session.messages?.length ?? 0,
-	}
+	return formatSessionInfo(session)
 }
 
 /**
  * Fork a session from a specific message
  */
-async function forkSession(
-	params: acpt.SessionForkParams,
-): Promise<acpt.SessionInfo> {
+export async function forkSession(
+	params: SessionForkParams,
+): Promise<SessionInfo> {
 	const { sessionId, messageId, title } = params
 
 	// Load the source session
@@ -772,7 +848,7 @@ async function forkSession(
 			title ??
 			`${sessionData.title ?? "Fork"} (${new Date().toLocaleDateString()})`,
 		id: id.generate(),
-		agent: await agent.clone(),
+		agent: undefined,
 		workingDirectory: sessionData.projectPath ?? process.cwd(),
 		messages: messages.map((m: any) => ({
 			...m,
@@ -782,21 +858,14 @@ async function forkSession(
 		})),
 	})
 
-	return {
-		id: newSession.id,
-		title: newSession.title ?? `Session ${newSession.id.slice(0, 8)}`,
-		createdAt: newSession.createdAt?.toISOString() ?? new Date().toISOString(),
-		updatedAt: newSession.updatedAt?.toISOString() ?? new Date().toISOString(),
-		projectPath: newSession.projectPath,
-		messageCount: newSession.messages?.length ?? 0,
-	}
+	return formatSessionInfo(newSession)
 }
 
 /**
  * Rename a session
  */
-async function renameSession(
-	params: acpt.SessionRenameParams,
+export async function renameSession(
+	params: SessionRenameParams,
 ): Promise<{ success: boolean; sessionId: string }> {
 	const { sessionId, title } = params
 
@@ -833,8 +902,8 @@ async function renameSession(
 /**
  * Delete a session
  */
-async function deleteSession(
-	params: acpt.SessionDeleteParams,
+export async function deleteSession(
+	params: SessionDeleteParams,
 ): Promise<{ success: boolean; sessionId: string }> {
 	const { sessionId } = params
 
@@ -861,9 +930,9 @@ async function deleteSession(
 /**
  * Get information about a specific session
  */
-async function getSessionInfo(
-	params: acpt.SessionInfoParams,
-): Promise<acpt.SessionInfo> {
+export async function getSessionInfo(
+	params: SessionInfoParams,
+): Promise<SessionInfo> {
 	const { sessionId } = params
 
 	if (!sessionId) {
@@ -884,21 +953,14 @@ async function getSessionInfo(
 	const content = fs.readFileSync(sessionPath, "utf-8")
 	const sessionData = JSON.parse(content)
 
-	return {
-		id: sessionData.id ?? sessionId,
-		title: sessionData.title ?? `Session ${sessionId.slice(0, 8)}`,
-		createdAt: sessionData.createdAt ?? new Date().toISOString(),
-		updatedAt: sessionData.updatedAt ?? new Date().toISOString(),
-		projectPath: sessionData.projectPath,
-		messageCount: sessionData.messages?.length ?? 0,
-	}
+	return formatSessionInfo(sessionData)
 }
 
 /**
  * Undo the last message in a session
  */
-async function undoMessage(
-	params: acpt.SessionUndoParams,
+export async function undoMessage(
+	params: SessionUndoParams = {},
 ): Promise<{ success: boolean; sessionId: string }> {
 	const { sessionId } = params
 
@@ -945,8 +1007,8 @@ async function undoMessage(
 /**
  * Redo a message in a session
  */
-async function redoMessage(
-	params: acpt.SessionRedoParams,
+export async function redoMessage(
+	params: SessionRedoParams = {},
 ): Promise<{ success: boolean; sessionId: string }> {
 	const { sessionId } = params
 
@@ -966,8 +1028,8 @@ async function redoMessage(
 /**
  * Compact a session
  */
-async function compactSession(
-	params: acpt.SessionCompactParams,
+export async function compactSession(
+	params: SessionCompactParams = {},
 ): Promise<{ success: boolean; sessionId: string }> {
 	const { sessionId } = params
 
@@ -1004,9 +1066,9 @@ async function compactSession(
 /**
  * Export a session
  */
-async function exportSession(
-	params: acpt.SessionExportParams,
-): Promise<acpt.SessionExportResult> {
+export async function exportSession(
+	params: SessionExportParams = {},
+): Promise<SessionExportResult> {
 	const { sessionId, format = "markdown" } = params
 
 	const currentSession = getCurrentSession()
@@ -1073,8 +1135,8 @@ async function exportSession(
 /**
  * Jump to a specific message in a session
  */
-async function jumpToMessage(
-	params: acpt.SessionJumpParams,
+export async function jumpToMessage(
+	params: SessionJumpParams,
 ): Promise<{ success: boolean; sessionId: string }> {
 	const { sessionId, messageId } = params
 
@@ -1119,9 +1181,9 @@ async function jumpToMessage(
 /**
  * Duplicate a session
  */
-async function duplicateSession(
-	params: acpt.SessionDuplicateParams,
-): Promise<acpt.SessionInfo> {
+export async function duplicateSession(
+	params: SessionDuplicateParams,
+): Promise<SessionInfo> {
 	const { sessionId, title } = params
 
 	if (!sessionId) {
@@ -1150,35 +1212,10 @@ async function duplicateSession(
 			title ??
 			`${sessionData.title ?? "Copy"} (${new Date().toLocaleDateString()})`,
 		id: id.generate(),
-		agent: await agent.clone(),
+		agent: undefined,
 		workingDirectory: sessionData.projectPath ?? process.cwd(),
 		messages: sessionData.messages ?? [],
 	})
 
-	return {
-		id: newSession.id,
-		title: newSession.title ?? `Session ${newSession.id.slice(0, 8)}`,
-		createdAt: newSession.createdAt?.toISOString() ?? new Date().toISOString(),
-		updatedAt: newSession.updatedAt?.toISOString() ?? new Date().toISOString(),
-		projectPath: newSession.projectPath,
-		messageCount: newSession.messages?.length ?? 0,
-	}
-}
-
-export default {
-	createAcpServer,
-	createRepl,
-	listSessions,
-	switchSession,
-	createSession,
-	forkSession,
-	renameSession,
-	deleteSession,
-	getSessionInfo,
-	undoMessage,
-	redoMessage,
-	compactSession,
-	exportSession,
-	jumpToMessage,
-	duplicateSession,
+	return formatSessionInfo(newSession)
 }
