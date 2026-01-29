@@ -332,6 +332,7 @@ export const dict = {
   "language.ar": "العربية",
   "language.no": "Norsk",
   "language.br": "Português (Brasil)",
+  "language.th": "ไทย",
 
   "toast.language.title": "Sprog",
   "toast.language.description": "Skiftede til {{language}}",
@@ -516,6 +517,7 @@ export const dict = {
 
   "settings.general.section.appearance": "Udseende",
   "settings.general.section.notifications": "Systemmeddelelser",
+  "settings.general.section.updates": "Opdateringer",
   "settings.general.section.sounds": "Lydeffekter",
 
   "settings.general.row.language.title": "Sprog",
@@ -526,6 +528,18 @@ export const dict = {
   "settings.general.row.theme.description": "Tilpas hvordan OpenCode er temabestemt.",
   "settings.general.row.font.title": "Skrifttype",
   "settings.general.row.font.description": "Tilpas mono-skrifttypen brugt i kodeblokke",
+
+  "settings.general.row.releaseNotes.title": "Udgivelsesnoter",
+  "settings.general.row.releaseNotes.description": 'Vis "Hvad er nyt"-popups efter opdateringer',
+
+  "settings.updates.row.startup.title": "Tjek for opdateringer ved opstart",
+  "settings.updates.row.startup.description": "Tjek automatisk for opdateringer, når OpenCode starter",
+  "settings.updates.row.check.title": "Tjek for opdateringer",
+  "settings.updates.row.check.description": "Tjek manuelt for opdateringer og installer, hvis tilgængelig",
+  "settings.updates.action.checkNow": "Tjek nu",
+  "settings.updates.action.checking": "Tjekker...",
+  "settings.updates.toast.latest.title": "Du er opdateret",
+  "settings.updates.toast.latest.description": "Du kører den nyeste version af OpenCode.",
 
   "font.option.ibmPlexMono": "IBM Plex Mono",
   "font.option.cascadiaCode": "Cascadia Code",

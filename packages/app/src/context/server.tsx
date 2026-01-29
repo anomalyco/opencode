@@ -95,10 +95,11 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     const isReady = createMemo(() => ready() && !!state.active)
 
     const check = (url: string) => {
+      const signal = (AbortSignal as unknown as { timeout?: (ms: number) => AbortSignal }).timeout?.(3000)
       const sdk = createOpencodeClient({
         baseUrl: url,
         fetch: platform.fetch,
-        signal: AbortSignal.timeout(3000),
+        signal,
       })
       return sdk.global
         .health()
