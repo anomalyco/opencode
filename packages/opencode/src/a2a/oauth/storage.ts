@@ -2,6 +2,11 @@ import path from "path"
 import fs from "fs/promises"
 import z from "zod"
 import { Global } from "../../global"
+import { Instance } from "../../project/instance"
+import { Filesystem } from "../../util/filesystem"
+import { Log } from "../../util/log"
+
+const log = Log.create({ service: "a2a.auth" })
 
 export namespace A2AAuth {
   export const Tokens = z.object({
@@ -20,29 +25,62 @@ export namespace A2AAuth {
   })
   export type Entry = z.infer<typeof Entry>
 
-  const filepath = path.join(Global.Path.data, "a2a-auth.json")
+  const userFilepath = path.join(Global.Path.data, "a2a-auth.json")
+
+  function getProjectFilepath(): string | undefined {
+    try {
+      return path.join(Instance.directory, ".opencode", "a2a-auth.json")
+    } catch {
+      return undefined
+    }
+  }
+
+  async function loadFile(filepath: string): Promise<Record<string, Entry>> {
+    const file = Bun.file(filepath)
+    return file.json().catch(() => ({}))
+  }
 
   export async function get(domain: string): Promise<Entry | undefined> {
     const data = await all()
     return data[domain]
   }
 
+  /**
+   * Load auth entries from all sources with layered precedence.
+   * Project-level (.opencode/a2a-auth.json) takes precedence over user-level.
+   */
   export async function all(): Promise<Record<string, Entry>> {
-    const file = Bun.file(filepath)
-    return file.json().catch(() => ({}))
+    const userData = await loadFile(userFilepath)
+
+    const projectFilepath = getProjectFilepath()
+    if (!projectFilepath) {
+      return userData
+    }
+
+    const projectData = await loadFile(projectFilepath)
+
+    // Merge with project > user precedence
+    return { ...userData, ...projectData }
+  }
+
+  /**
+   * Load only from user-level storage (for writes).
+   */
+  async function userAll(): Promise<Record<string, Entry>> {
+    return loadFile(userFilepath)
   }
 
   export async function set(domain: string, entry: Entry): Promise<void> {
-    const file = Bun.file(filepath)
-    const data = await all()
+    const file = Bun.file(userFilepath)
+    const data = await userAll()
     entry.domain = domain
     await Bun.write(file, JSON.stringify({ ...data, [domain]: entry }, null, 2))
     await fs.chmod(file.name!, 0o600)
   }
 
   export async function remove(domain: string): Promise<void> {
-    const file = Bun.file(filepath)
-    const data = await all()
+    const file = Bun.file(userFilepath)
+    const data = await userAll()
     delete data[domain]
     await Bun.write(file, JSON.stringify(data, null, 2))
     await fs.chmod(file.name!, 0o600)

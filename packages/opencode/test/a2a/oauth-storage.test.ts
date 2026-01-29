@@ -1,5 +1,9 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test"
 import { A2AAuth } from "../../src/a2a/oauth/storage"
+import { Instance } from "../../src/project/instance"
+import fs from "fs/promises"
+import path from "path"
+import os from "os"
 
 describe("a2a.oauth.storage", () => {
   const testDomain = "test-storage-domain.com"
@@ -146,6 +150,128 @@ describe("a2a.oauth.storage", () => {
 
       const state = await A2AAuth.getOAuthState(testDomain)
       expect(state).toBeUndefined()
+    })
+  })
+
+  describe("layered loading", () => {
+    const projectDomain = "project-domain.com"
+    const userDomain = "user-domain.com"
+    const sharedDomain = "shared-domain.com"
+
+    test("project auth takes precedence over user auth for same domain", async () => {
+      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "a2a-test-"))
+      const projectAuthDir = path.join(tmpDir, ".opencode")
+      const projectAuthFile = path.join(projectAuthDir, "a2a-auth.json")
+
+      try {
+        await fs.mkdir(projectAuthDir, { recursive: true })
+
+        // First store user-level auth
+        await A2AAuth.updateTokens(sharedDomain, {
+          accessToken: "user-access-token",
+          refreshToken: "user-refresh-token",
+        })
+
+        // Create project-level auth with different token
+        const projectAuth = {
+          [sharedDomain]: {
+            domain: sharedDomain,
+            tokens: {
+              accessToken: "project-access-token",
+              refreshToken: "project-refresh-token",
+            },
+          },
+        }
+        await fs.writeFile(projectAuthFile, JSON.stringify(projectAuth))
+
+        // Run within Instance context to enable project-level loading
+        await Instance.provide({
+          directory: tmpDir,
+          fn: async () => {
+            const entry = await A2AAuth.get(sharedDomain)
+            // Project auth should take precedence
+            expect(entry?.tokens?.accessToken).toBe("project-access-token")
+            expect(entry?.tokens?.refreshToken).toBe("project-refresh-token")
+          },
+        })
+      } finally {
+        // Cleanup
+        await A2AAuth.remove(sharedDomain)
+        await fs.rm(tmpDir, { recursive: true, force: true })
+      }
+    })
+
+    test("merges entries from both user and project levels", async () => {
+      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "a2a-test-"))
+      const projectAuthDir = path.join(tmpDir, ".opencode")
+      const projectAuthFile = path.join(projectAuthDir, "a2a-auth.json")
+
+      try {
+        await fs.mkdir(projectAuthDir, { recursive: true })
+
+        // Store user-level auth for one domain
+        await A2AAuth.updateTokens(userDomain, {
+          accessToken: "user-only-token",
+        })
+
+        // Create project-level auth for a different domain
+        const projectAuth = {
+          [projectDomain]: {
+            domain: projectDomain,
+            tokens: {
+              accessToken: "project-only-token",
+            },
+          },
+        }
+        await fs.writeFile(projectAuthFile, JSON.stringify(projectAuth))
+
+        await Instance.provide({
+          directory: tmpDir,
+          fn: async () => {
+            const allEntries = await A2AAuth.all()
+
+            // Both domains should be present
+            expect(allEntries[userDomain]?.tokens?.accessToken).toBe("user-only-token")
+            expect(allEntries[projectDomain]?.tokens?.accessToken).toBe("project-only-token")
+          },
+        })
+      } finally {
+        await A2AAuth.remove(userDomain)
+        await fs.rm(tmpDir, { recursive: true, force: true })
+      }
+    })
+
+    test("writes always go to user level", async () => {
+      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "a2a-test-"))
+      const projectAuthDir = path.join(tmpDir, ".opencode")
+      const projectAuthFile = path.join(projectAuthDir, "a2a-auth.json")
+      const writeTestDomain = "write-test-domain.com"
+
+      try {
+        await fs.mkdir(projectAuthDir, { recursive: true })
+        await fs.writeFile(projectAuthFile, JSON.stringify({}))
+
+        await Instance.provide({
+          directory: tmpDir,
+          fn: async () => {
+            // Write new tokens
+            await A2AAuth.updateTokens(writeTestDomain, {
+              accessToken: "new-token",
+            })
+
+            // Verify project file wasn't modified
+            const projectContent = JSON.parse(await fs.readFile(projectAuthFile, "utf-8"))
+            expect(projectContent[writeTestDomain]).toBeUndefined()
+          },
+        })
+
+        // Verify user-level file has the token (outside Instance context)
+        const entry = await A2AAuth.get(writeTestDomain)
+        expect(entry?.tokens?.accessToken).toBe("new-token")
+      } finally {
+        await A2AAuth.remove(writeTestDomain)
+        await fs.rm(tmpDir, { recursive: true, force: true })
+      }
     })
   })
 })

@@ -88,13 +88,28 @@ Some remote agents require OAuth authentication. OpenCode supports OAuth 2.0 wit
    - Local callback server receives the authorization code
    - Code is exchanged for access/refresh tokens
 
-2. Tokens are stored securely at `~/.opencode/data/a2a-auth.json` (mode 0600)
+2. Tokens are stored securely (mode 0600)
 
 3. On subsequent invocations:
    - Valid tokens are used automatically
    - Expired tokens are refreshed using the refresh token
 
 ### Token Storage
+
+Auth tokens use layered loading with project-level precedence:
+
+| Source | Location | Precedence |
+|--------|----------|------------|
+| Project | `.opencode/a2a-auth.json` | Higher (overrides user) |
+| User | `~/.opencode/data/a2a-auth.json` | Lower (base layer) |
+
+**Read behavior:** Merges both sources; project tokens override user tokens for the same domain.
+
+**Write behavior:** New tokens always written to user level (`~/.opencode/data/a2a-auth.json`).
+
+This allows:
+- Teams to share project-level tokens (e.g., CI service accounts)
+- Users to maintain personal tokens that work across projects
 
 Per-domain storage includes:
 - `accessToken` - Bearer token for API calls
@@ -172,4 +187,3 @@ Remote agents expose their capabilities via an agent card (JSON):
 
 - [ ] Experimental flag to gate A2A features
 - [ ] Nickname/alias support (e.g., `@deploy` → `vercel.com/deploy-agent`)
-- [ ] Auth storage aligned with preference loading patterns
