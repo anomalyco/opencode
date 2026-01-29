@@ -150,20 +150,14 @@ export namespace LLM {
       },
     )
 
-    const maxOutputTokens = isCodex ? undefined : undefined
-    log.info("max_output_tokens", {
-      tokens: ProviderTransform.maxOutputTokens(
-        input.model.api.npm,
-        params.options,
-        input.model.limit.output,
-        OUTPUT_TOKEN_MAX,
-      ),
-      modelOptions: params.options,
-      outputLimit: input.model.limit.output,
-    })
-    // tokens = 32000
-    // outputLimit = 64000
-    // modelOptions={"reasoningEffort":"minimal"}
+    const maxOutputTokens = isCodex
+      ? undefined
+      : ProviderTransform.maxOutputTokens(
+          input.model.api.npm,
+          params.options,
+          input.model.limit.output,
+          OUTPUT_TOKEN_MAX,
+        )
 
     const tools = await resolveTools(input)
 
