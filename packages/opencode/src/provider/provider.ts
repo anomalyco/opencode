@@ -37,6 +37,7 @@ import { createPerplexity } from "@ai-sdk/perplexity"
 import { createVercel } from "@ai-sdk/vercel"
 import { createGitLab } from "@gitlab/gitlab-ai-provider"
 import { ProviderTransform } from "./transform"
+import { da } from "zod/v4/locales"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -506,6 +507,95 @@ export namespace Provider {
         },
       }
     },
+    "mammouth-ai": async () => {
+      return {
+        autoload: false,
+        options: {
+          headers: {
+            "HTTP-Referer": "https://opencode.ai/",
+            "X-Title": "opencode",
+          },
+        },
+      }
+    },
+  }
+
+  const ALLOWED_MODEL_FAMILIES = ["claude", "gpt", "gemini", "mistral", "deepseek", "grok", "llama", "kimi", "qwen"]
+
+  const extractModelsFromData = (data: any): ModelsDev.Model[] => {
+    if (!data?.data || !Array.isArray(data.data)) {
+      return []
+    }
+
+    const isAllowedModel = (modelName: string): boolean => {
+      const lowerName = modelName.toLowerCase()
+      return ALLOWED_MODEL_FAMILIES.some((family) => lowerName.startsWith(family))
+    }
+
+    return data.data
+      .filter((item: any) => isAllowedModel(item.model_name || ""))
+      .map((item: any): ModelsDev.Model => {
+        const info = item.model_info || {}
+        const inputModalities: ("text" | "audio" | "image" | "video" | "pdf")[] = ["text"]
+        const outputModalities: ("text" | "audio" | "image" | "video" | "pdf")[] = ["text"]
+
+        if (info.supports_vision) inputModalities.push("image")
+        if (info.supports_pdf_input) inputModalities.push("pdf")
+        if (info.supports_audio_input) inputModalities.push("audio")
+        if (info.supports_audio_output) outputModalities.push("audio")
+
+        return {
+          id: info.key || item.model_name,
+          name: item.model_name,
+          family: info.litellm_provider,
+          release_date: "",
+          attachment: info.supports_vision || info.supports_pdf_input || false,
+          reasoning: info.supports_reasoning || false,
+          temperature: true,
+          tool_call: info.supports_function_calling || info.supports_tool_choice || false,
+          cost: {
+            input: info.input_cost_per_token || 0,
+            output: info.output_cost_per_token || 0,
+            cache_read: info.cache_read_input_token_cost || undefined,
+            cache_write: info.cache_creation_input_token_cost || undefined,
+          },
+          limit: {
+            context: (info.max_input_tokens || 0) + (info.max_output_tokens || 0),
+            input: info.max_input_tokens,
+            output: info.max_output_tokens || 0,
+          },
+          modalities: {
+            input: inputModalities,
+            output: outputModalities,
+          },
+          options: {},
+        }
+      })
+  }
+
+  const getMammouthModels = async (): Promise<ModelsDev.Model[]> => {
+    try {
+      const response = await fetch("https://api.mammouth.ai/public/model/info")
+      if (!response.ok) {
+        throw new Error(`Failed to fetch Mammouth models: ${response.status} ${response.statusText}`)
+      }
+      const data = await response.json()
+      return extractModelsFromData(data)
+    } catch (error) {
+      log.error("Unknown error fetching Mammouth models")
+      log.error(error)
+      return []
+    }
+  }
+
+  // Mammouth AI - Our provider
+  const MAMMOUTH_PROVIDER: ModelsDev.Provider = {
+    id: "mammouth-ai",
+    name: "Mammouth AI",
+    api: "https://api.mammouth.ai/v1",
+    npm: "@ai-sdk/openai-compatible",
+    env: ["MAMMOUTH_API_KEY"],
+    models: {},
   }
 
   export const Model = z
@@ -709,6 +799,17 @@ export namespace Provider {
           ...model,
           providerID: "github-copilot-enterprise",
         })),
+      }
+    }
+
+    // Add Mammouth AI as built-in provider if not already in models.dev
+    if (!database["mammouth-ai"]) {
+      console.log("Adding Mammouth AI provider to database")
+      database["mammouth-ai"] = fromModelsDevProvider(MAMMOUTH_PROVIDER)
+      const mammouthModels = await getMammouthModels()
+      for (const model of mammouthModels) {
+        database["mammouth-ai"].models[model.id] = fromModelsDevModel(MAMMOUTH_PROVIDER, model)
+        console.log(`- Added Mammouth model: ${model.name} (${model?.cost?.input}/${model?.cost?.output} per token)`)
       }
     }
 
