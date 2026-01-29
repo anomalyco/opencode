@@ -1278,6 +1278,107 @@ export default function Page() {
     return "empty"
   })
 
+  // Tab scrolling functionality
+  const [tabContainer, setTabContainer] = createSignal<HTMLDivElement>()
+
+  const scrollActiveTabIntoView = () => {
+    const container = tabContainer()
+    if (!container) return
+
+    const active = activeTab()
+    if (!active || active === "empty") return
+
+    // Find the active tab element
+    const tabsList = container.querySelector('[data-slot="tabs-list"]')
+    if (!tabsList) return
+
+    // Look for the active tab trigger
+    const triggers = tabsList.querySelectorAll('[data-slot="tabs-trigger"]')
+    
+    // Find the selected/active trigger
+    const activeTabElement = Array.from(triggers).find(trigger => {
+      return trigger.getAttribute('data-selected') === 'true' ||
+             trigger.getAttribute('aria-selected') === 'true' ||
+             trigger.hasAttribute('data-selected')
+    })
+
+    if (!activeTabElement) return
+
+    // Check if the tab is actually hidden or partially hidden
+    const containerRect = container.getBoundingClientRect()
+    const tabRect = activeTabElement.getBoundingClientRect()
+    
+    // Find the add button to account for its width
+    const addButton = container.parentElement?.querySelector('[data-slot="tabs-trigger-close-button"], .sticky')
+    const addButtonWidth = addButton ? addButton.getBoundingClientRect().width + 8 : 60 // fallback width
+    
+    // Adjust the visible area to account for the add button
+    const visibleRight = containerRect.right - addButtonWidth
+    
+    // Check if tab is fully visible (not overlapping with add button)
+    const isFullyVisible = tabRect.left >= containerRect.left && 
+                          tabRect.right <= visibleRight
+
+    // Only scroll if the tab is not fully visible
+    if (!isFullyVisible) {
+      // Calculate how much to scroll to make the tab visible
+      if (tabRect.right > visibleRight) {
+        // Tab is cut off on the right, scroll right
+        const scrollAmount = tabRect.right - visibleRight + 16 // add some padding
+        container.scrollLeft += scrollAmount
+      } else if (tabRect.left < containerRect.left) {
+        // Tab is cut off on the left, scroll left
+        const scrollAmount = containerRect.left - tabRect.left
+        container.scrollLeft -= scrollAmount
+      }
+    }
+  }
+
+  createEffect(
+    on(
+      () => activeTab(),
+      () => {
+        // Delay to ensure DOM is updated
+        requestAnimationFrame(scrollActiveTabIntoView)
+      },
+      { defer: true }
+    )
+  )
+
+  // Also scroll when tabs are added/removed
+  createEffect(
+    on(
+      () => openedTabs().length,
+      (newLength, prevLength) => {
+        const container = tabContainer()
+        if (!container) return
+        
+        // If a new tab was added, ensure it's visible
+        if (prevLength !== undefined && newLength > prevLength) {
+          requestAnimationFrame(() => {
+            // Only scroll if there's overflow
+            if (container.scrollWidth > container.clientWidth) {
+              // Find the add button to account for its width
+              const addButton = container.parentElement?.querySelector('.sticky')
+              const addButtonWidth = addButton ? addButton.getBoundingClientRect().width + 8 : 60
+              
+              // Scroll to show the rightmost tabs, but leave space for the add button
+              const maxScroll = container.scrollWidth - container.clientWidth
+              const targetScroll = Math.max(0, container.scrollWidth - container.clientWidth - addButtonWidth)
+              container.scrollLeft = Math.min(maxScroll, targetScroll)
+            }
+          })
+        }
+        
+        // Also try to scroll active tab into view if needed
+        requestAnimationFrame(() => {
+          requestAnimationFrame(scrollActiveTabIntoView)
+        })
+      },
+      { defer: true }
+    )
+  )
+
   createEffect(() => {
     if (!layout.ready()) return
     if (tabs().active()) return
@@ -2183,53 +2284,59 @@ export default function Page() {
                     <ConstrainDragYAxis />
                     <Tabs value={activeTab()} onChange={openTab}>
                       <div class="sticky top-0 shrink-0 flex">
-                        <Tabs.List>
-                          <Show when={contextOpen()}>
-                            <Tabs.Trigger
-                              value="context"
-                              closeButton={
-                                <Tooltip value={language.t("common.closeTab")} placement="bottom">
-                                  <IconButton
-                                    icon="close-small"
-                                    variant="ghost"
-                                    class="h-5 w-5"
-                                    onClick={() => tabs().close("context")}
-                                    aria-label={language.t("common.closeTab")}
-                                  />
-                                </Tooltip>
-                              }
-                              hideCloseButton
-                              onMiddleClick={() => tabs().close("context")}
-                            >
-                              <div class="flex items-center gap-2">
-                                <SessionContextUsage variant="indicator" />
-                                <div>{language.t("session.tab.context")}</div>
-                              </div>
-                            </Tabs.Trigger>
-                          </Show>
-                          <SortableProvider ids={openedTabs()}>
-                            <For each={openedTabs()}>
-                              {(tab) => <SortableTab tab={tab} onTabClose={tabs().close} />}
-                            </For>
-                          </SortableProvider>
-                          <StickyAddButton>
-                            <TooltipKeybind
-                              title={language.t("command.file.open")}
-                              keybind={command.keybind("file.open")}
-                              class="flex items-center"
-                            >
-                              <IconButton
-                                icon="plus-small"
-                                variant="ghost"
-                                iconSize="large"
-                                onClick={() =>
-                                  dialog.show(() => <DialogSelectFile mode="files" onOpenFile={() => showAllFiles()} />)
+                        <div 
+                          ref={setTabContainer} 
+                          class="flex-1 min-w-0 overflow-x-auto no-scrollbar"
+                          style="scroll-behavior: smooth;"
+                        >
+                          <Tabs.List class="flex min-w-max">
+                            <Show when={contextOpen()}>
+                              <Tabs.Trigger
+                                value="context"
+                                closeButton={
+                                  <Tooltip value={language.t("common.closeTab")} placement="bottom">
+                                    <IconButton
+                                      icon="close-small"
+                                      variant="ghost"
+                                      class="h-5 w-5"
+                                      onClick={() => tabs().close("context")}
+                                      aria-label={language.t("common.closeTab")}
+                                    />
+                                  </Tooltip>
                                 }
-                                aria-label={language.t("command.file.open")}
-                              />
-                            </TooltipKeybind>
-                          </StickyAddButton>
-                        </Tabs.List>
+                                hideCloseButton
+                                onMiddleClick={() => tabs().close("context")}
+                              >
+                                <div class="flex items-center gap-2">
+                                  <SessionContextUsage variant="indicator" />
+                                  <div>{language.t("session.tab.context")}</div>
+                                </div>
+                              </Tabs.Trigger>
+                            </Show>
+                            <SortableProvider ids={openedTabs()}>
+                              <For each={openedTabs()}>
+                                {(tab) => <SortableTab tab={tab} onTabClose={tabs().close} />}
+                              </For>
+                            </SortableProvider>
+                          </Tabs.List>
+                        </div>
+                        <StickyAddButton>
+                          <TooltipKeybind
+                            title={language.t("command.file.open")}
+                            keybind={command.keybind("file.open")}
+                            class="flex items-center"
+                          >
+                            <IconButton
+                              icon="plus-small"
+                              variant="ghost"
+                              iconSize="large"
+                              onClick={() =>
+                                dialog.show(() => <DialogSelectFile mode="files" onOpenFile={() => showAllFiles()} />)
+                              }
+                              aria-label={language.t("command.file.open")}
+                            />
+                          </TooltipKeybind>
+                        </StickyAddButton>
                       </div>
 
                       <Tabs.Content value="empty" class="flex flex-col h-full overflow-hidden contain-strict">
