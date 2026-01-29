@@ -1458,7 +1458,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       const canonicalModelID = model.id.split("/").pop() || model.id
       const escapedName = model.name.replace(/'/g, "'\\''")
       modelInfo = { providerID: model.providerID, modelID: model.id, canonicalModelID, id: model.id, name: model.name }
-      envPrefix = `export OPENCODE_MODEL_ID='${model.id}' OPENCODE_CANONICAL_MODEL_ID='${canonicalModelID}' OPENCODE_PROVIDER_ID='${model.providerID}' OPENCODE_MODEL_FULL_ID='${model.providerID}/${model.id}' OPENCODE_MODEL_NAME='${escapedName}'; `
+      envPrefix = `export OPENCODE_MODEL_ID='${model.id}' OPENCODE_MODEL_CANONICAL_ID='${canonicalModelID}' OPENCODE_MODEL_PROVIDER_ID='${model.providerID}' OPENCODE_MODEL_FULL_ID='${model.providerID}/${model.id}' OPENCODE_MODEL_NAME='${escapedName}'; `
     } catch (error) {}
 
     const invocations: Record<string, { args: string[] }> = {
@@ -1511,8 +1511,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
     if (modelInfo) {
       env["OPENCODE_MODEL_ID"] = modelInfo.id
-      env["OPENCODE_CANONICAL_MODEL_ID"] = modelInfo.canonicalModelID
-      env["OPENCODE_PROVIDER_ID"] = modelInfo.providerID
+      env["OPENCODE_MODEL_CANONICAL_ID"] = modelInfo.canonicalModelID
+      env["OPENCODE_MODEL_PROVIDER_ID"] = modelInfo.providerID
       env["OPENCODE_MODEL_FULL_ID"] = `${modelInfo.providerID}/${modelInfo.id}`
       env["OPENCODE_MODEL_NAME"] = modelInfo.name
     }

@@ -192,8 +192,8 @@ export const BashTool = Tool.define("bash", async () => {
 
         const canonicalModelID = model.id.split("/").pop() || model.id
         env["OPENCODE_MODEL_ID"] = model.id
-        env["OPENCODE_CANONICAL_MODEL_ID"] = canonicalModelID
-        env["OPENCODE_PROVIDER_ID"] = model.providerID
+        env["OPENCODE_MODEL_CANONICAL_ID"] = canonicalModelID
+        env["OPENCODE_MODEL_PROVIDER_ID"] = model.providerID
         env["OPENCODE_MODEL_FULL_ID"] = `${model.providerID}/${model.id}`
         env["OPENCODE_MODEL_NAME"] = model.name
       } catch (error) {

@@ -29,6 +29,13 @@ export namespace Flag {
   export const OPENCODE_SERVER_PASSWORD = process.env["OPENCODE_SERVER_PASSWORD"]
   export const OPENCODE_SERVER_USERNAME = process.env["OPENCODE_SERVER_USERNAME"]
 
+  // added for branch:feature/model-env-vars
+  export const OPENCODE_MODEL_NAME = process.env["OPENCODE_MODEL_NAME"]
+  export const OPENCODE_MODEL_ID = process.env["OPENCODE_MODEL_ID"]
+  export const OPENCODE_MODEL_CANONICAL_ID = process.env["OPENCODE_MODEL_CANONICAL_ID"]
+  export const OPENCODE_MODEL_PROVIDER_ID = process.env["OPENCODE_MODEL_PROVIDER_ID"]
+  export const OPENCODE_MODEL_FULL_ID = process.env["OPENCODE_MODEL_FULL_ID"]
+
   // Experimental
   export const OPENCODE_EXPERIMENTAL = truthy("OPENCODE_EXPERIMENTAL")
   export const OPENCODE_EXPERIMENTAL_FILEWATCHER = truthy("OPENCODE_EXPERIMENTAL_FILEWATCHER")
