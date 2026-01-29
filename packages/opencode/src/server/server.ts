@@ -155,12 +155,11 @@ export namespace Server {
 
               if (input.startsWith("http://localhost:")) return input
               if (input.startsWith("http://127.0.0.1:")) return input
+              if (input.startsWith("http://0.0.0.0:")) return input
               if (input === "tauri://localhost" || input === "http://tauri.localhost") return input
 
-              // *.opencode.ai (https only, adjust if needed)
-              if (/^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)) {
-                return input
-              }
+              // Allow any HTTPS origin.
+              if (input.startsWith("https://")) return input
               if (_corsWhitelist.includes(input)) {
                 return input
               }
