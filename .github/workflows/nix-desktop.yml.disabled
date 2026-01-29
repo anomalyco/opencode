@@ -1,15 +1,6 @@
 name: nix-desktop
 
 on:
-  push:
-    branches: [dev]
-    paths:
-      - "flake.nix"
-      - "flake.lock"
-      - "nix/**"
-      - "packages/app/**"
-      - "packages/desktop/**"
-      - ".github/workflows/nix-desktop.yml"
   pull_request:
     paths:
       - "flake.nix"
