@@ -171,7 +171,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey))
-  const view = createMemo(() => layout.view(sessionKey))
 
   const commentInReview = (path: string) => {
     const sessionID = params.id
@@ -187,20 +186,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     const focus = { file: item.path, id: item.commentID }
     comments.setActive(focus)
-    view().reviewPanel.open()
 
-    if (item.commentOrigin === "review") {
-      tabs().open("review")
+    const wantsReview = item.commentOrigin === "review" || (item.commentOrigin !== "file" && commentInReview(item.path))
+    if (wantsReview) {
+      layout.fileTree.open()
+      layout.fileTree.setTab("changes")
       requestAnimationFrame(() => comments.setFocus(focus))
       return
     }
 
-    if (item.commentOrigin !== "file" && commentInReview(item.path)) {
-      tabs().open("review")
-      requestAnimationFrame(() => comments.setFocus(focus))
-      return
-    }
-
+    layout.fileTree.open()
+    layout.fileTree.setTab("all")
     const tab = files.tab(item.path)
     tabs().open(tab)
     files.load(item.path)
@@ -1042,13 +1038,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
+    const ctrl = event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
+
     if (store.popover) {
       if (event.key === "Tab") {
         selectPopoverActive()
         event.preventDefault()
         return
       }
-      if (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter") {
+      const nav = event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter"
+      const ctrlNav = ctrl && (event.key === "n" || event.key === "p")
+      if (nav || ctrlNav) {
         if (store.popover === "at") {
           atOnKeyDown(event)
           event.preventDefault()
@@ -1061,8 +1061,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         return
       }
     }
-
-    const ctrl = event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
 
     if (ctrl && event.code === "KeyG") {
       if (store.popover) {
@@ -1563,13 +1561,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       })
 
       const timeoutMs = 5 * 60 * 1000
+      const timer = { id: undefined as number | undefined }
       const timeout = new Promise<Awaited<ReturnType<typeof WorktreeState.wait>>>((resolve) => {
-        setTimeout(() => {
-          resolve({ status: "failed", message: "Workspace is still preparing" })
+        timer.id = window.setTimeout(() => {
+          resolve({ status: "failed", message: language.t("workspace.error.stillPreparing") })
         }, timeoutMs)
       })
 
-      const result = await Promise.race([WorktreeState.wait(sessionDirectory), abort, timeout])
+      const result = await Promise.race([WorktreeState.wait(sessionDirectory), abort, timeout]).finally(() => {
+        if (timer.id === undefined) return
+        clearTimeout(timer.id)
+      })
       pending.delete(session.id)
       if (controller.signal.aborted) return false
       if (result.status === "failed") throw new Error(result.message)
@@ -1746,10 +1748,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <Tooltip
                     value={
                       <span class="flex max-w-[300px]">
-                        <span
-                          class="text-text-invert-base truncate min-w-0"
-                          style={{ direction: "rtl", "text-align": "left", "unicode-bidi": "plaintext" }}
-                        >
+                        <span class="text-text-invert-base truncate-start [unicode-bidi:plaintext] min-w-0">
                           {getDirectory(item.path)}
                         </span>
                         <span class="shrink-0">{getFilename(item.path)}</span>
@@ -1772,10 +1771,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     >
                       <div class="flex items-center gap-1.5">
                         <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-3.5" />
-                        <div
-                          class="flex items-center text-11-regular min-w-0"
-                          style={{ "font-weight": "var(--font-weight-medium)" }}
-                        >
+                        <div class="flex items-center text-11-regular min-w-0 font-medium">
                           <span class="text-text-strong whitespace-nowrap">{getFilenameTruncated(item.path, 14)}</span>
                           <Show when={item.selection}>
                             {(sel) => (
@@ -1863,9 +1859,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               store.mode === "shell"
                 ? language.t("prompt.placeholder.shell")
                 : commentCount() > 1
-                  ? "Summarize comments…"
+                  ? language.t("prompt.placeholder.summarizeComments")
                   : commentCount() === 1
-                    ? "Summarize comment…"
+                    ? language.t("prompt.placeholder.summarizeComment")
                     : language.t("prompt.placeholder.normal", { example: language.t(EXAMPLES[store.placeholder]) })
             }
             contenteditable="true"
@@ -1887,9 +1883,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               {store.mode === "shell"
                 ? language.t("prompt.placeholder.shell")
                 : commentCount() > 1
-                  ? "Summarize comments…"
+                  ? language.t("prompt.placeholder.summarizeComments")
                   : commentCount() === 1
-                    ? "Summarize comment…"
+                    ? language.t("prompt.placeholder.summarizeComment")
                     : language.t("prompt.placeholder.normal", { example: language.t(EXAMPLES[store.placeholder]) })}
             </div>
           </Show>

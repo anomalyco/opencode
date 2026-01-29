@@ -1,7 +1,7 @@
 {
   "name": "@opencode-ai/desktop",
   "private": true,
-  "version": "1.1.36",
+  "version": "1.1.42",
   "type": "module",
   "license": "MIT",
   "scripts": {
@@ -15,8 +15,10 @@
   "dependencies": {
     "@opencode-ai/app": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
+    "@solid-primitives/i18n": "2.2.1",
     "@solid-primitives/storage": "catalog:",
     "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-deep-link": "~2",
     "@tauri-apps/plugin-dialog": "~2",
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-os": "~2",

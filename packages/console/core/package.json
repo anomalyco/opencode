@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/console-core",
-  "version": "1.1.36",
+  "version": "1.1.42",
   "private": true,
   "type": "module",
   "license": "MIT",
