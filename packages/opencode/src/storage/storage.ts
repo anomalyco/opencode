@@ -1,6 +1,7 @@
 import { Log } from "../util/log"
 import path from "path"
 import fs from "fs/promises"
+import { existsSync } from "fs"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 import { lazy } from "../util/lazy"
@@ -155,7 +156,7 @@ export namespace Storage {
         let totalCost = 0
         const messageDir = path.join(dir, "message", session.id)
 
-        if (await fs.exists(messageDir)) {
+        if (existsSync(messageDir)) {
           for await (const messagePath of new Bun.Glob("*.json").scan({
             cwd: messageDir,
             absolute: true,
