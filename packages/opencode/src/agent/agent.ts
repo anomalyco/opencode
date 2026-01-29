@@ -242,25 +242,26 @@ export namespace Agent {
       )
     }
 
-    // Discover remote agents from allowed domains
+    // Discover remote agents from allowed domains/paths
     const log = Log.create({ service: "agent" })
     const discovered = await A2A.discoverAgents()
-    for (const { domain, card } of discovered) {
-      const name = `@${domain}`
+    for (const { ref, card, requiresAuth } of discovered) {
+      const name = `@${ref}`
       result[name] = {
         name,
-        description: card.description,
+        description: card.description + (requiresAuth ? " (requires auth)" : ""),
         mode: "subagent",
         native: false,
         hidden: false,
         permission: PermissionNext.merge(defaults, user),
         options: {
           remote: true,
-          domain,
+          ref,
           agentCard: card,
+          requiresAuth,
         },
       }
-      log.info("registered remote agent", { name, description: card.description })
+      log.info("registered remote agent", { name, requiresAuth })
     }
 
     return result

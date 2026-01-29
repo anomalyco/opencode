@@ -1,11 +1,11 @@
 import { describe, expect, test, beforeEach, spyOn, mock } from "bun:test"
-import { getDiscoverableDomains, discoverAgents } from "../../src/a2a/discovery"
+import { getDiscoverableAgentRefs, discoverAgents } from "../../src/a2a/discovery"
 import { Config } from "../../src/config/config"
 import * as AgentCard from "../../src/a2a/agent-card"
 
 describe("a2a.discovery", () => {
-  describe("getDiscoverableDomains", () => {
-    test("returns domains from permission.remote_agent with allow action", async () => {
+  describe("getDiscoverableAgentRefs", () => {
+    test("returns refs from permission.remote_agent with allow action", async () => {
       spyOn(Config, "get").mockResolvedValue({
         permission: {
           remote_agent: {
@@ -16,10 +16,27 @@ describe("a2a.discovery", () => {
         },
       } as any)
 
-      const domains = await getDiscoverableDomains()
-      expect(domains).toContain("allowed.com")
-      expect(domains).not.toContain("ask-domain.com")
-      expect(domains).not.toContain("denied.com")
+      const refs = await getDiscoverableAgentRefs()
+      expect(refs).toContain("allowed.com")
+      expect(refs).not.toContain("ask-domain.com")
+      expect(refs).not.toContain("denied.com")
+    })
+
+    test("supports path-based agent refs", async () => {
+      spyOn(Config, "get").mockResolvedValue({
+        permission: {
+          remote_agent: {
+            "vercel.com": "allow",
+            "vercel.com/deploy-agent": "allow",
+            "vercel.com/review-agent": "allow",
+          },
+        },
+      } as any)
+
+      const refs = await getDiscoverableAgentRefs()
+      expect(refs).toContain("vercel.com")
+      expect(refs).toContain("vercel.com/deploy-agent")
+      expect(refs).toContain("vercel.com/review-agent")
     })
 
     test("excludes wildcard patterns", async () => {
@@ -33,10 +50,10 @@ describe("a2a.discovery", () => {
         },
       } as any)
 
-      const domains = await getDiscoverableDomains()
-      expect(domains).toContain("specific.com")
-      expect(domains).not.toContain("*")
-      expect(domains).not.toContain("*.example.com")
+      const refs = await getDiscoverableAgentRefs()
+      expect(refs).toContain("specific.com")
+      expect(refs).not.toContain("*")
+      expect(refs).not.toContain("*.example.com")
     })
 
     test("includes legacy remoteAgents.domains", async () => {
@@ -46,9 +63,9 @@ describe("a2a.discovery", () => {
         },
       } as any)
 
-      const domains = await getDiscoverableDomains()
-      expect(domains).toContain("legacy1.com")
-      expect(domains).toContain("legacy2.com")
+      const refs = await getDiscoverableAgentRefs()
+      expect(refs).toContain("legacy1.com")
+      expect(refs).toContain("legacy2.com")
     })
 
     test("combines permission and legacy config", async () => {
@@ -63,12 +80,12 @@ describe("a2a.discovery", () => {
         },
       } as any)
 
-      const domains = await getDiscoverableDomains()
-      expect(domains).toContain("new.com")
-      expect(domains).toContain("legacy.com")
+      const refs = await getDiscoverableAgentRefs()
+      expect(refs).toContain("new.com")
+      expect(refs).toContain("legacy.com")
     })
 
-    test("deduplicates domains", async () => {
+    test("deduplicates refs", async () => {
       spyOn(Config, "get").mockResolvedValue({
         permission: {
           remote_agent: {
@@ -80,15 +97,15 @@ describe("a2a.discovery", () => {
         },
       } as any)
 
-      const domains = await getDiscoverableDomains()
-      expect(domains.filter((d) => d === "same.com")).toHaveLength(1)
+      const refs = await getDiscoverableAgentRefs()
+      expect(refs.filter((d) => d === "same.com")).toHaveLength(1)
     })
 
     test("returns empty array when no config", async () => {
       spyOn(Config, "get").mockResolvedValue({} as any)
 
-      const domains = await getDiscoverableDomains()
-      expect(domains).toEqual([])
+      const refs = await getDiscoverableAgentRefs()
+      expect(refs).toEqual([])
     })
 
     test("handles string permission action", async () => {
@@ -98,13 +115,13 @@ describe("a2a.discovery", () => {
         },
       } as any)
 
-      const domains = await getDiscoverableDomains()
-      expect(domains).toEqual([])
+      const refs = await getDiscoverableAgentRefs()
+      expect(refs).toEqual([])
     })
   })
 
   describe("discoverAgents", () => {
-    test("fetches agent cards for discoverable domains", async () => {
+    test("fetches agent cards for discoverable refs", async () => {
       spyOn(Config, "get").mockResolvedValue({
         permission: {
           remote_agent: {
@@ -126,11 +143,73 @@ describe("a2a.discovery", () => {
       }
 
       spyOn(AgentCard, "fetchAgentCard").mockResolvedValue(mockCard as any)
+      spyOn(AgentCard, "requiresOAuth").mockReturnValue(false)
 
       const agents = await discoverAgents()
       expect(agents).toHaveLength(1)
-      expect(agents[0].domain).toBe("agent.example.com")
+      expect(agents[0].ref).toBe("agent.example.com")
       expect(agents[0].card).toBe(mockCard)
+      expect(agents[0].requiresAuth).toBe(false)
+    })
+
+    test("detects OAuth requirement", async () => {
+      spyOn(Config, "get").mockResolvedValue({
+        permission: {
+          remote_agent: {
+            "oauth-agent.com": "allow",
+          },
+        },
+      } as any)
+
+      const mockCard = {
+        name: "OAuth Agent",
+        description: "An agent requiring OAuth",
+        url: "https://oauth-agent.com/a2a",
+        version: "1.0.0",
+        protocolVersion: "1.0",
+        capabilities: {},
+        skills: [],
+        defaultInputModes: ["text"],
+        defaultOutputModes: ["text"],
+        securitySchemes: { oauth2: { type: "oauth2" } },
+        security: [{ oauth2: [] }],
+      }
+
+      spyOn(AgentCard, "fetchAgentCard").mockResolvedValue(mockCard as any)
+      spyOn(AgentCard, "requiresOAuth").mockReturnValue(true)
+
+      const agents = await discoverAgents()
+      expect(agents).toHaveLength(1)
+      expect(agents[0].requiresAuth).toBe(true)
+    })
+
+    test("discovers path-based agents", async () => {
+      spyOn(Config, "get").mockResolvedValue({
+        permission: {
+          remote_agent: {
+            "vercel.com/deploy": "allow",
+          },
+        },
+      } as any)
+
+      const mockCard = {
+        name: "Deploy Agent",
+        description: "Vercel deploy agent",
+        url: "https://vercel.com/deploy/a2a",
+        version: "1.0.0",
+        protocolVersion: "1.0",
+        capabilities: {},
+        skills: [],
+        defaultInputModes: ["text"],
+        defaultOutputModes: ["text"],
+      }
+
+      spyOn(AgentCard, "fetchAgentCard").mockResolvedValue(mockCard as any)
+      spyOn(AgentCard, "requiresOAuth").mockReturnValue(false)
+
+      const agents = await discoverAgents()
+      expect(agents).toHaveLength(1)
+      expect(agents[0].ref).toBe("vercel.com/deploy")
     })
 
     test("handles fetch errors gracefully", async () => {
@@ -161,13 +240,14 @@ describe("a2a.discovery", () => {
         }
         return mockCard as any
       })
+      spyOn(AgentCard, "requiresOAuth").mockReturnValue(false)
 
       const agents = await discoverAgents()
       expect(agents).toHaveLength(1)
-      expect(agents[0].domain).toBe("working.com")
+      expect(agents[0].ref).toBe("working.com")
     })
 
-    test("returns empty array when no domains configured", async () => {
+    test("returns empty array when no refs configured", async () => {
       spyOn(Config, "get").mockResolvedValue({} as any)
 
       const agents = await discoverAgents()
