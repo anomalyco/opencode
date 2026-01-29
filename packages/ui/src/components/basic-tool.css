@@ -1,97 +1,97 @@
 [data-component="tool-trigger"] {
-  content-visibility: auto;
-  width: 100%;
-  display: flex;
-  align-items: center;
-  align-self: stretch;
-  gap: 20px;
-  justify-content: space-between;
+	content-visibility: auto;
+	width: 100%;
+	display: flex;
+	align-items: center;
+	align-self: stretch;
+	gap: 20px;
+	justify-content: space-between;
 
-  [data-slot="basic-tool-tool-trigger-content"] {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    align-self: stretch;
-    gap: 20px;
-  }
+	[data-slot="basic-tool-tool-trigger-content"] {
+		width: 100%;
+		display: flex;
+		align-items: center;
+		align-self: stretch;
+		gap: 20px;
+	}
 
-  [data-slot="icon-svg"] {
-    flex-shrink: 0;
-  }
+	[data-slot="icon-svg"] {
+		flex-shrink: 0;
+	}
 
-  [data-slot="basic-tool-tool-info"] {
-    flex-grow: 1;
-    min-width: 0;
-  }
+	[data-slot="basic-tool-tool-info"] {
+		flex-grow: 1;
+		min-width: 0;
+	}
 
-  [data-slot="basic-tool-tool-info-structured"] {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    justify-content: space-between;
-  }
+	[data-slot="basic-tool-tool-info-structured"] {
+		width: 100%;
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		justify-content: space-between;
+	}
 
-  [data-slot="basic-tool-tool-info-main"] {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-    overflow: hidden;
-  }
+	[data-slot="basic-tool-tool-info-main"] {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		min-width: 0;
+		overflow: hidden;
+	}
 
-  [data-slot="basic-tool-tool-title"] {
-    flex-shrink: 0;
-    font-family: var(--font-family-sans);
-    font-size: var(--font-size-small);
-    font-style: normal;
-    font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
-    letter-spacing: var(--letter-spacing-normal);
-    color: var(--text-base);
+	[data-slot="basic-tool-tool-title"] {
+		flex-shrink: 0;
+		font-family: var(--font-family-sans);
+		font-size: var(--font-size-small);
+		font-style: normal;
+		font-weight: var(--font-weight-medium);
+		line-height: var(--line-height-large);
+		letter-spacing: var(--letter-spacing-normal);
+		color: var(--text-base);
 
-    &.capitalize {
-      text-transform: capitalize;
-    }
-  }
+		&.capitalize {
+			text-transform: capitalize;
+		}
+	}
 
-  [data-slot="basic-tool-tool-subtitle"] {
-    flex-shrink: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-family: var(--font-family-sans);
-    font-size: var(--font-size-small);
-    font-style: normal;
-    font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
-    letter-spacing: var(--letter-spacing-normal);
-    color: var(--text-weak);
+	[data-slot="basic-tool-tool-subtitle"] {
+		flex-shrink: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-family: var(--font-family-sans);
+		font-size: var(--font-size-small);
+		font-style: normal;
+		font-weight: var(--font-weight-medium);
+		line-height: var(--line-height-large);
+		letter-spacing: var(--letter-spacing-normal);
+		color: var(--text-weak);
 
-    &.clickable {
-      cursor: pointer;
-      text-decoration: underline;
-      transition: color 0.15s ease;
+		&.clickable {
+			cursor: pointer;
+			text-decoration: underline;
+			transition: color 0.15s ease;
 
-      &:hover {
-        color: var(--text-base);
-      }
-    }
-  }
+			&:hover {
+				color: var(--text-base);
+			}
+		}
+	}
 
-  [data-slot="basic-tool-tool-arg"] {
-    flex-shrink: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-family: var(--font-family-sans);
-    font-size: var(--font-size-small);
-    font-style: normal;
-    font-weight: var(--font-weight-regular);
-    line-height: var(--line-height-large);
-    letter-spacing: var(--letter-spacing-normal);
-    color: var(--text-weak);
-  }
+	[data-slot="basic-tool-tool-arg"] {
+		flex-shrink: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-family: var(--font-family-sans);
+		font-size: var(--font-size-small);
+		font-style: normal;
+		font-weight: var(--font-weight-regular);
+		line-height: var(--line-height-large);
+		letter-spacing: var(--letter-spacing-normal);
+		color: var(--text-weak);
+	}
 }

@@ -25,10 +25,16 @@ export function MorphChevron(props: MorphChevronProps) {
   )
 
   return (
-    <svg viewBox="0 0 16 16" data-slot="morph-chevron-svg" class={props.class} xmlns="http://www.w3.org/2000/svg">
+    <svg
+      viewBox="0 0 16 16"
+      data-slot="morph-chevron-svg"
+      class={props.class}
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
       <path d={props.expanded ? "M4 10L8 6L12 10" : "M4 6L8 10L12 6"} id={`morph-chevron-path-${id}`}>
         <animate
-          ref={expandAnim}
+          ref={(el) => (expandAnim = el)}
           id={`morph-expand-${id}`}
           attributeName="d"
           dur="200ms"
@@ -39,7 +45,7 @@ export function MorphChevron(props: MorphChevronProps) {
           begin="indefinite"
         />
         <animate
-          ref={collapseAnim}
+          ref={(el) => (collapseAnim = el)}
           id={`morph-collapse-${id}`}
           attributeName="d"
           dur="200ms"

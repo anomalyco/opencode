@@ -1,6 +1,6 @@
 [data-component="spinner"] {
-  color: inherit;
-  flex-shrink: 0;
-  width: 18px;
-  aspect-ratio: 1;
+	color: inherit;
+	flex-shrink: 0;
+	width: 18px;
+	aspect-ratio: 1;
 }
