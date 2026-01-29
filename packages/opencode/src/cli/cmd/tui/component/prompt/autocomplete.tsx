@@ -187,7 +187,7 @@ export function Autocomplete(props: {
         typeId: props.promptPartTypeId(),
       })
 
-      input.extmarks.create({
+      const modelExtmarkId = input.extmarks.create({
         start: modelStart,
         end: modelEnd,
         virtual: true,
@@ -204,6 +204,7 @@ export function Autocomplete(props: {
         const partIndex = draft.parts.length
         draft.parts.push(part)
         props.setExtmark(partIndex, agentExtmarkId)
+        props.setExtmark(partIndex, modelExtmarkId)
       })
     } else {
       const styleId = part.type === "file" ? props.fileStyleId : part.type === "agent" ? props.agentStyleId : undefined
@@ -260,7 +261,7 @@ export function Autocomplete(props: {
   const [files] = createResource(
     () => search(),
     async (query) => {
-      if (!store.visible || store.visible === "/") return []
+      if (!store.visible || store.visible === "/" || store.agentForModel) return []
 
       const { lineRange, baseQuery } = extractLineRange(query ?? "")
 
@@ -614,14 +615,16 @@ export function Autocomplete(props: {
           if (store.visible === "@" && !store.agentForModel) {
             const offset = props.input().cursorOffset
             const textAfterTrigger = value.slice(store.index + 1, offset)
-            const colonIndex = textAfterTrigger.indexOf(":")
-            if (colonIndex !== -1) {
-              const agentName = textAfterTrigger.slice(0, colonIndex)
-              const validAgent = sync.data.agent.find((a) => a.name === agentName && !a.hidden && a.mode !== "primary")
-              if (validAgent) {
-                setStore("agentForModel", agentName)
-                setStore("visible", "@:model")
-              }
+            // Match against known agent names followed by colon to handle agents with colons in their names
+            const validAgent = sync.data.agent.find(
+              (a) =>
+                !a.hidden &&
+                a.mode !== "primary" &&
+                textAfterTrigger.toLowerCase().startsWith(a.name.toLowerCase() + ":"),
+            )
+            if (validAgent) {
+              setStore("agentForModel", validAgent.name)
+              setStore("visible", "@:model")
             }
           }
           return
@@ -647,14 +650,14 @@ export function Autocomplete(props: {
           setStore("index", idx)
 
           const textAfterAt = between.slice(1)
-          const colonIndex = textAfterAt.indexOf(":")
-          if (colonIndex !== -1) {
-            const agentName = textAfterAt.slice(0, colonIndex)
-            const validAgent = sync.data.agent.find((a) => a.name === agentName && !a.hidden && a.mode !== "primary")
-            if (validAgent) {
-              setStore("agentForModel", agentName)
-              setStore("visible", "@:model")
-            }
+          // Match against known agent names followed by colon to handle agents with colons in their names
+          const validAgent = sync.data.agent.find(
+            (a) =>
+              !a.hidden && a.mode !== "primary" && textAfterAt.toLowerCase().startsWith(a.name.toLowerCase() + ":"),
+          )
+          if (validAgent) {
+            setStore("agentForModel", validAgent.name)
+            setStore("visible", "@:model")
           }
         }
       },

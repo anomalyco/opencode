@@ -25,6 +25,8 @@ export interface FileAttachmentPart extends PartBase {
 export interface AgentPart extends PartBase {
   type: "agent"
   name: string
+  // TODO: Add model override support for @agent:provider/model syntax
+  // Currently only supported in TUI. See packages/opencode/src/cli/cmd/tui/component/prompt/autocomplete.tsx
 }
 
 export interface ImageAttachmentPart {

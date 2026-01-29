@@ -894,3 +894,118 @@ describe("session.message-v2.fromError", () => {
     })
   })
 })
+
+describe("session.message-v2.AgentPart", () => {
+  test("parses AgentPart with model field", () => {
+    const part = {
+      id: "p1",
+      sessionID: "s1",
+      messageID: "m1",
+      type: "agent",
+      name: "explore",
+      model: {
+        providerID: "anthropic",
+        modelID: "claude-sonnet-4-20250514",
+      },
+    }
+    const result = MessageV2.AgentPart.parse(part)
+    expect(result.model).toEqual({
+      providerID: "anthropic",
+      modelID: "claude-sonnet-4-20250514",
+    })
+  })
+
+  test("parses AgentPart without model field", () => {
+    const part = {
+      id: "p1",
+      sessionID: "s1",
+      messageID: "m1",
+      type: "agent",
+      name: "explore",
+    }
+    const result = MessageV2.AgentPart.parse(part)
+    expect(result.model).toBeUndefined()
+  })
+
+  test("parses AgentPart with source field", () => {
+    const part = {
+      id: "p1",
+      sessionID: "s1",
+      messageID: "m1",
+      type: "agent",
+      name: "explore",
+      model: {
+        providerID: "openai",
+        modelID: "gpt-4o",
+      },
+      source: {
+        value: "@explore:openai/gpt-4o",
+        start: 0,
+        end: 22,
+      },
+    }
+    const result = MessageV2.AgentPart.parse(part)
+    expect(result.name).toBe("explore")
+    expect(result.model).toEqual({
+      providerID: "openai",
+      modelID: "gpt-4o",
+    })
+    expect(result.source).toEqual({
+      value: "@explore:openai/gpt-4o",
+      start: 0,
+      end: 22,
+    })
+  })
+
+  test("rejects AgentPart with invalid model field", () => {
+    const part = {
+      id: "p1",
+      sessionID: "s1",
+      messageID: "m1",
+      type: "agent",
+      name: "explore",
+      model: {
+        providerID: "anthropic",
+        // missing modelID
+      },
+    }
+    expect(() => MessageV2.AgentPart.parse(part)).toThrow()
+  })
+})
+
+describe("session.message-v2.SubtaskPart", () => {
+  test("parses SubtaskPart with model field", () => {
+    const part = {
+      id: "p1",
+      sessionID: "s1",
+      messageID: "m1",
+      type: "subtask",
+      prompt: "do something",
+      description: "task desc",
+      agent: "explore",
+      model: {
+        providerID: "anthropic",
+        modelID: "claude-sonnet-4-20250514",
+      },
+    }
+    const result = MessageV2.SubtaskPart.parse(part)
+    expect(result.model).toEqual({
+      providerID: "anthropic",
+      modelID: "claude-sonnet-4-20250514",
+    })
+  })
+
+  test("parses SubtaskPart without model field", () => {
+    const part = {
+      id: "p1",
+      sessionID: "s1",
+      messageID: "m1",
+      type: "subtask",
+      prompt: "do something",
+      description: "task desc",
+      agent: "explore",
+    }
+    const result = MessageV2.SubtaskPart.parse(part)
+    expect(result.model).toBeUndefined()
+  })
+})

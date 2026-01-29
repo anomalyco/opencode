@@ -1,0 +1,124 @@
+import { describe, expect, test } from "bun:test"
+import path from "path"
+import { TaskTool } from "../../src/tool/task"
+import { Instance } from "../../src/project/instance"
+import { tmpdir } from "../fixture/fixture"
+
+describe("tool.task", () => {
+  test("task tool schema includes model parameter", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const tool = await TaskTool.init()
+        const schema = tool.parameters
+
+        // Verify the model parameter exists and is optional
+        const shape = schema.shape
+        expect(shape.model).toBeDefined()
+
+        // Verify the model schema structure - unwrap optional
+        const modelShape = shape.model._def.innerType.shape
+        expect(modelShape.providerID).toBeDefined()
+        expect(modelShape.modelID).toBeDefined()
+      },
+    })
+  })
+
+  test("task tool description includes available models list", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      config: {
+        provider: {
+          anthropic: {
+            id: "anthropic",
+          },
+        },
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const tool = await TaskTool.init()
+
+        // Verify the description does not contain the placeholder
+        expect(tool.description).not.toContain("{models}")
+
+        // Verify the description mentions model parameter usage
+        expect(tool.description).toContain("model parameter")
+        expect(tool.description).toContain("Available models")
+      },
+    })
+  })
+
+  test("task tool accepts valid model parameter", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const tool = await TaskTool.init()
+
+        // Valid input with model should parse successfully
+        const result = tool.parameters.safeParse({
+          description: "test task",
+          prompt: "do something",
+          subagent_type: "explore",
+          model: {
+            providerID: "anthropic",
+            modelID: "claude-sonnet-4-20250514",
+          },
+        })
+        expect(result.success).toBe(true)
+        if (result.success) {
+          expect(result.data.model).toEqual({
+            providerID: "anthropic",
+            modelID: "claude-sonnet-4-20250514",
+          })
+        }
+      },
+    })
+  })
+
+  test("task tool accepts input without model parameter", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const tool = await TaskTool.init()
+
+        // Valid input without model should parse successfully
+        const result = tool.parameters.safeParse({
+          description: "test task",
+          prompt: "do something",
+          subagent_type: "explore",
+        })
+        expect(result.success).toBe(true)
+        if (result.success) {
+          expect(result.data.model).toBeUndefined()
+        }
+      },
+    })
+  })
+
+  test("task tool rejects invalid model parameter", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const tool = await TaskTool.init()
+
+        // Invalid model (missing modelID) should fail validation
+        const result = tool.parameters.safeParse({
+          description: "test task",
+          prompt: "do something",
+          subagent_type: "explore",
+          model: {
+            providerID: "anthropic",
+            // missing modelID
+          },
+        })
+        expect(result.success).toBe(false)
+      },
+    })
+  })
+})
