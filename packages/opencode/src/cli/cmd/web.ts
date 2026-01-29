@@ -5,6 +5,11 @@ import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { Flag } from "../../flag/flag"
 import open from "open"
 import { networkInterfaces } from "os"
+import path from "path"
+import { fileURLToPath } from "url"
+import { BunProc } from "../../bun"
+import { Filesystem } from "../../util/filesystem"
+import fs from "fs/promises"
 
 function getNetworkIPs() {
   const nets = networkInterfaces()
@@ -28,6 +33,75 @@ function getNetworkIPs() {
   return results
 }
 
+async function getLatestMtimeMs(startPath: string) {
+  const stat = await fs.stat(startPath)
+  if (!stat.isDirectory()) return stat.mtimeMs
+
+  let latest = stat.mtimeMs
+  const entries = await fs.readdir(startPath, { withFileTypes: true })
+  for (const entry of entries) {
+    const entryPath = path.join(startPath, entry.name)
+    if (entry.isDirectory()) {
+      const mtime = await getLatestMtimeMs(entryPath)
+      if (mtime > latest) latest = mtime
+      continue
+    }
+    if (entry.isFile()) {
+      const entryStat = await fs.stat(entryPath)
+      if (entryStat.mtimeMs > latest) latest = entryStat.mtimeMs
+    }
+  }
+  return latest
+}
+
+async function getPackagedUiDir() {
+  const execName = path.basename(process.execPath).toLowerCase()
+  const isExecutable = execName === "opencode" || execName === "opencode.exe"
+  if (!isExecutable) return undefined
+  const maybeUiDir = path.resolve(process.execPath, "..", "..", "ui")
+  const hasUiDir = await Filesystem.isDir(maybeUiDir)
+  return hasUiDir ? maybeUiDir : undefined
+}
+
+async function shouldRebuildUi(appDir: string, distDir: string) {
+  const hasDistDir = await Filesystem.isDir(distDir)
+  if (!hasDistDir) return true
+
+  const srcDir = path.join(appDir, "src")
+  const indexHtml = path.join(appDir, "index.html")
+  const sourceLatest = await Promise.all([getLatestMtimeMs(srcDir), getLatestMtimeMs(indexHtml)]).then((items) =>
+    Math.max(...items),
+  )
+  const distLatest = await getLatestMtimeMs(distDir)
+  return sourceLatest > distLatest
+}
+
+async function resolveLocalWebUiDir() {
+  const packagedUiDir = await getPackagedUiDir()
+  if (packagedUiDir) return packagedUiDir
+
+  const appDir = fileURLToPath(new URL("../../../../app", import.meta.url))
+  const distDir = path.join(appDir, "dist")
+  const hasAppDir = await Filesystem.isDir(appDir)
+  if (!hasAppDir) {
+    throw new Error(`Local web app directory not found at ${appDir}`)
+  }
+
+  const rebuild = await shouldRebuildUi(appDir, distDir)
+  if (rebuild) {
+    try {
+      await BunProc.run(["run", "build"], { cwd: appDir })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      throw new Error(`Failed to build local web UI: ${message}`)
+    }
+  }
+
+  const hasDistDir = await Filesystem.isDir(distDir)
+  if (!hasDistDir) throw new Error(`Expected build output directory not found at ${distDir}`)
+  return distDir
+}
+
 export const WebCommand = cmd({
   command: "web",
   builder: (yargs) => withNetworkOptions(yargs),
@@ -37,7 +111,8 @@ export const WebCommand = cmd({
       UI.println(UI.Style.TEXT_WARNING_BOLD + "!  " + "OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
     }
     const opts = await resolveNetworkOptions(args)
-    const server = await Server.listen(opts)
+    const uiDir = await resolveLocalWebUiDir()
+    const server = await Server.listen({ ...opts, uiDir })
     UI.empty()
     UI.println(UI.logo("  "))
     UI.empty()

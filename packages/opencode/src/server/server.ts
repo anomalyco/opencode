@@ -1,6 +1,7 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Log } from "../util/log"
+import { Filesystem } from "../util/filesystem"
 import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
@@ -35,7 +36,7 @@ import { lazy } from "../util/lazy"
 import { InstanceBootstrap } from "../project/bootstrap"
 import { Storage } from "../storage/storage"
 import type { ContentfulStatusCode } from "hono/utils/http-status"
-import { websocket } from "hono/bun"
+import { serveStatic, websocket } from "hono/bun"
 import { HTTPException } from "hono/http-exception"
 import { errors } from "./error"
 import { QuestionRoutes } from "./routes/question"
@@ -46,6 +47,7 @@ import { authMiddleware } from "./middleware/auth"
 import { csrfMiddleware } from "./middleware/csrf"
 import { MDNS } from "./mdns"
 import { ServerAuth } from "../config/server-auth"
+import path from "path"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -53,9 +55,12 @@ globalThis.AI_SDK_LOG_WARNINGS = false
 export namespace Server {
   const log = Log.create({ service: "server" })
   const defaultUiUrl = "https://app.opencode.ai"
+  const contentSecurityPolicy =
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'"
 
   let _url: URL | undefined
   let _corsWhitelist: string[] = []
+  let _uiDir: string | undefined
 
   export function url(): URL {
     return _url ?? new URL("http://localhost:4096")
@@ -67,6 +72,37 @@ export namespace Server {
   }
 
   const app = new Hono()
+
+  function withCsp(response: Response) {
+    response.headers.set("Content-Security-Policy", contentSecurityPolicy)
+    return response
+  }
+
+  function applyLocalUiCsp(_path: string, c: { header: (name: string, value: string) => void }) {
+    c.header("Content-Security-Policy", contentSecurityPolicy)
+  }
+
+  async function localIndexResponse() {
+    if (!_uiDir) return
+    const indexPath = path.join(_uiDir, "index.html")
+    const stat = await Bun.file(indexPath).stat().catch(() => undefined)
+    if (!stat || stat.isDirectory()) return
+    const response = new Response(Bun.file(indexPath))
+    response.headers.set("Content-Type", "text/html")
+    response.headers.set("Content-Security-Policy", contentSecurityPolicy)
+    return response
+  }
+
+  function isDocumentRequest(headers: Headers, pathname: string, method: string) {
+    if (method !== "GET" && method !== "HEAD") return false
+    if (path.extname(pathname)) return false
+    const fetchDest = headers.get("sec-fetch-dest")
+    if (fetchDest === "document") return true
+    const fetchMode = headers.get("sec-fetch-mode")
+    if (fetchMode === "navigate") return true
+    const accept = headers.get("accept") ?? ""
+    return accept.includes("text/html")
+  }
   export const App: () => Hono = lazy(
     () =>
       // TODO: Break server.ts into smaller route files to fix type inference
@@ -176,6 +212,27 @@ export namespace Server {
         .route("/question", QuestionRoutes())
         .route("/provider", ProviderRoutes())
         .route("/repo", RepoRoutes())
+        .use("/*", async (c, next) => {
+          if (!_uiDir) return next()
+          if (isDocumentRequest(c.req.raw.headers, c.req.path, c.req.method)) {
+            const response = await localIndexResponse()
+            if (response) return response
+          }
+          return next()
+        })
+        .use("/*", async (c, next) => {
+          if (!_uiDir) return next()
+          const requestPath = c.req.path
+          const relativePath = requestPath.replace(/^\/+/, "")
+          const filePath = path.join(_uiDir, relativePath)
+          if (!Filesystem.contains(_uiDir, filePath)) return next()
+          const stat = await Bun.file(filePath).stat().catch(() => undefined)
+          if (!stat || stat.isDirectory()) return next()
+          return serveStatic({
+            root: _uiDir,
+            onFound: applyLocalUiCsp,
+          })(c, next)
+        })
         .route("/", FileRoutes())
         .route("/mcp", McpRoutes())
         .route("/tui", TuiRoutes())
@@ -515,6 +572,13 @@ export namespace Server {
           },
         )
         .all("/*", async (c) => {
+          if (_uiDir) {
+            if (isDocumentRequest(c.req.raw.headers, c.req.path, c.req.method)) {
+              const response = await localIndexResponse()
+              if (response) return response
+            }
+            return new Response("Not found", { status: 404 })
+          }
           const config = await Config.get()
           const uiUrl = (config?.server?.uiUrl ?? defaultUiUrl).replace(/\/+$/, "")
           const targetUrl = new URL(c.req.path, `${uiUrl}/`)
@@ -525,11 +589,7 @@ export namespace Server {
               host: targetUrl.host,
             },
           })
-          response.headers.set(
-            "Content-Security-Policy",
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'",
-          )
-          return response
+          return withCsp(response)
         }) as unknown as Hono,
   )
 
@@ -548,11 +608,18 @@ export namespace Server {
     return result
   }
 
-  export async function listen(opts: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
+  export async function listen(opts: {
+    port: number
+    hostname: string
+    mdns?: boolean
+    cors?: string[]
+    uiDir?: string
+  }) {
     // Load auth config at server startup (before any requests)
     await ServerAuth.load()
 
     _corsWhitelist = opts.cors ?? []
+    _uiDir = opts.uiDir ? path.resolve(opts.uiDir) : undefined
 
     const args = {
       hostname: opts.hostname,

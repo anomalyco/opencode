@@ -9,6 +9,8 @@ import { fileURLToPath } from "url"
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const dir = path.resolve(__dirname, "..")
+const appDir = path.resolve(dir, "../app")
+const appDistDir = path.resolve(appDir, "dist")
 
 process.chdir(dir)
 
@@ -101,6 +103,12 @@ const targets = singleFlag
 
 await $`rm -rf dist`
 
+console.log("building web UI")
+await $`bun run build`.cwd(appDir)
+if (!fs.existsSync(appDistDir)) {
+  throw new Error(`Web UI build output not found at ${appDistDir}`)
+}
+
 const binaries: Record<string, string> = {}
 if (!skipInstall) {
   await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
@@ -119,6 +127,9 @@ for (const item of targets) {
     .join("-")
   console.log(`building ${name}`)
   await $`mkdir -p dist/${name}/bin`
+  const uiTargetDir = path.resolve(dir, "dist", name, "ui")
+  fs.rmSync(uiTargetDir, { recursive: true, force: true })
+  fs.cpSync(appDistDir, uiTargetDir, { recursive: true })
 
   const parserWorker = fs.realpathSync(path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"))
   const workerPath = "./src/cli/cmd/tui/worker.ts"
