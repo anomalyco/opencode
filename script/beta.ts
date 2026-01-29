@@ -57,6 +57,14 @@ async function main() {
       continue
     }
 
+    const add = await $`git add -A`.nothrow()
+    if (add.exitCode !== 0) {
+      console.log(`  Failed to stage changes for PR #${pr.number}`)
+      await $`git reset --hard HEAD`.nothrow()
+      skipped.push({ number: pr.number, reason: "Failed to stage" })
+      continue
+    }
+
     const status = await $`git status --porcelain`.nothrow()
     if (status.exitCode !== 0 || !status.stdout.trim()) {
       console.log(`  No changes to commit for PR #${pr.number}, skipping`)
