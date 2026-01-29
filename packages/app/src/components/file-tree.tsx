@@ -8,6 +8,7 @@ import {
   createMemo,
   For,
   Match,
+  Show,
   splitProps,
   Switch,
   untrack,
@@ -16,6 +17,8 @@ import {
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import type { FileNode } from "@opencode-ai/sdk/v2"
+
+type Kind = "add" | "del" | "mix"
 
 type Filter = {
   files: Set<string>
@@ -26,9 +29,11 @@ export default function FileTree(props: {
   path: string
   class?: string
   nodeClass?: string
+  active?: string
   level?: number
   allowed?: readonly string[]
   modified?: readonly string[]
+  kinds?: ReadonlyMap<string, Kind>
   draggable?: boolean
   tooltip?: boolean
   onFileClick?: (file: FileNode) => void
@@ -36,6 +41,7 @@ export default function FileTree(props: {
   _filter?: Filter
   _marks?: Set<string>
   _deeps?: Map<string, number>
+  _kinds?: ReadonlyMap<string, Kind>
 }) {
   const file = useFile()
   const level = props.level ?? 0
@@ -66,9 +72,16 @@ export default function FileTree(props: {
   const marks = createMemo(() => {
     if (props._marks) return props._marks
 
-    const modified = props.modified
-    if (!modified || modified.length === 0) return
-    return new Set(modified)
+    const out = new Set<string>()
+    for (const item of props.modified ?? []) out.add(item)
+    for (const item of props.kinds?.keys() ?? []) out.add(item)
+    if (out.size === 0) return
+    return out
+  })
+
+  const kinds = createMemo(() => {
+    if (props._kinds) return props._kinds
+    return props.kinds
   })
 
   const deeps = createMemo(() => {
@@ -136,7 +149,8 @@ export default function FileTree(props: {
       <Dynamic
         component={local.as ?? "div"}
         classList={{
-          "w-full min-w-0 h-6 flex items-center justify-start gap-x-1.5 rounded-md px-2 py-0 text-left hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors cursor-pointer": true,
+          "w-full min-w-0 h-6 flex items-center justify-start gap-x-1.5 rounded-md px-1.5 py-0 text-left hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors cursor-pointer": true,
+          "bg-surface-base-active": local.node.path === props.active,
           ...(local.classList ?? {}),
           [local.class ?? ""]: !!local.class,
           [props.nodeClass ?? ""]: !!props.nodeClass,
@@ -170,18 +184,65 @@ export default function FileTree(props: {
         {...rest}
       >
         {local.children}
-        <span
-          classList={{
-            "flex-1 min-w-0 text-12-medium whitespace-nowrap truncate": true,
-            "text-text-weaker": local.node.ignored,
-            "text-text-weak": !local.node.ignored,
-          }}
-        >
-          {local.node.name}
-        </span>
-        {local.node.type === "file" && marks()?.has(local.node.path) ? (
-          <div class="shrink-0 size-1.5 rounded-full bg-surface-warning-strong" />
-        ) : null}
+        {(() => {
+          const kind = kinds()?.get(local.node.path)
+          const marked = marks()?.has(local.node.path) ?? false
+          const active = !!kind && marked && !local.node.ignored
+          const color =
+            kind === "add"
+              ? "color: var(--icon-diff-add-base)"
+              : kind === "del"
+                ? "color: var(--icon-diff-delete-base)"
+                : kind === "mix"
+                  ? "color: var(--icon-diff-modified-base)"
+                  : undefined
+          return (
+            <span
+              classList={{
+                "flex-1 min-w-0 text-12-medium whitespace-nowrap truncate": true,
+                "text-text-weaker": local.node.ignored,
+                "text-text-weak": !local.node.ignored && !active,
+              }}
+              style={active ? color : undefined}
+            >
+              {local.node.name}
+            </span>
+          )
+        })()}
+        {(() => {
+          const kind = kinds()?.get(local.node.path)
+          if (!kind) return null
+          if (!marks()?.has(local.node.path)) return null
+
+          if (local.node.type === "file") {
+            const text = kind === "add" ? "A" : kind === "del" ? "D" : "M"
+            const color =
+              kind === "add"
+                ? "color: var(--icon-diff-add-base)"
+                : kind === "del"
+                  ? "color: var(--icon-diff-delete-base)"
+                  : "color: var(--icon-diff-modified-base)"
+
+            return (
+              <span class="shrink-0 w-4 text-center text-12-medium" style={color}>
+                {text}
+              </span>
+            )
+          }
+
+          if (local.node.type === "directory") {
+            const color =
+              kind === "add"
+                ? "background-color: var(--icon-diff-add-base)"
+                : kind === "del"
+                  ? "background-color: var(--icon-diff-delete-base)"
+                  : "background-color: var(--icon-diff-modified-base)"
+
+            return <div class="shrink-0 size-1.5 mr-1.5 rounded-full" style={color} />
+          }
+
+          return null
+        })()}
       </Dynamic>
     )
   }
@@ -194,8 +255,56 @@ export default function FileTree(props: {
           const deep = () => deeps().get(node.path) ?? -1
           const Wrapper = (p: ParentProps) => {
             if (!tooltip()) return p.children
+
+            const parts = node.path.split("/")
+            const leaf = parts[parts.length - 1] ?? node.path
+            const head = parts.slice(0, -1).join("/")
+            const prefix = head ? `${head}/` : ""
+
+            const kind = () => kinds()?.get(node.path)
+            const label = () => {
+              const k = kind()
+              if (!k) return
+              if (k === "add") return "Additions"
+              if (k === "del") return "Deletions"
+              return "Modifications"
+            }
+
+            const ignored = () => node.type === "directory" && node.ignored
+
             return (
-              <Tooltip forceMount={false} openDelay={2000} value={node.path} placement="right" class="w-full">
+              <Tooltip
+                forceMount={false}
+                openDelay={2000}
+                placement="bottom-start"
+                class="w-full"
+                contentStyle={{ "max-width": "480px", width: "fit-content" }}
+                value={
+                  <div class="flex items-center min-w-0 whitespace-nowrap text-12-regular">
+                    <span
+                      class="min-w-0 truncate text-text-invert-base"
+                      style={{ direction: "rtl", "unicode-bidi": "plaintext" }}
+                    >
+                      {prefix}
+                    </span>
+                    <span class="shrink-0 text-text-invert-strong">{leaf}</span>
+                    <Show when={label()}>
+                      {(t: () => string) => (
+                        <>
+                          <span class="mx-1 font-bold text-text-invert-strong">•</span>
+                          <span class="shrink-0 text-text-invert-strong">{t()}</span>
+                        </>
+                      )}
+                    </Show>
+                    <Show when={ignored()}>
+                      <>
+                        <span class="mx-1 font-bold text-text-invert-strong">•</span>
+                        <span class="shrink-0 text-text-invert-strong">Ignored</span>
+                      </>
+                    </Show>
+                  </div>
+                }
+              >
                 {p.children}
               </Tooltip>
             )
@@ -235,12 +344,15 @@ export default function FileTree(props: {
                       level={level + 1}
                       allowed={props.allowed}
                       modified={props.modified}
+                      kinds={props.kinds}
+                      active={props.active}
                       draggable={props.draggable}
                       tooltip={props.tooltip}
                       onFileClick={props.onFileClick}
                       _filter={filter()}
                       _marks={marks()}
                       _deeps={deeps()}
+                      _kinds={kinds()}
                     />
                   </Collapsible.Content>
                 </Collapsible>
