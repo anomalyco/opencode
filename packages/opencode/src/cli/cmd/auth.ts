@@ -277,6 +277,13 @@ export const AuthLoginCommand = cmd({
           openrouter: 5,
           vercel: 6,
         }
+
+        const hints: Record<string, string> = {
+          opencode: "recommended",
+          anthropic: "Claude Max or API key",
+          openai: "ChatGPT Plus/Pro or API key",
+          google: "Google AI Pro/Ultra or API key",
+        }
         let provider = await prompts.autocomplete({
           message: "Select provider",
           maxItems: 8,
@@ -291,11 +298,7 @@ export const AuthLoginCommand = cmd({
               map((x) => ({
                 label: x.name,
                 value: x.id,
-                hint: {
-                  opencode: "recommended",
-                  anthropic: "Claude Max or API key",
-                  openai: "ChatGPT Plus/Pro or API key",
-                }[x.id],
+                hint: hints[x.id],
               })),
             ),
             {
