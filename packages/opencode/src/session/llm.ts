@@ -158,19 +158,6 @@ export namespace LLM {
           input.model.limit.output,
           OUTPUT_TOKEN_MAX,
         )
-    log.info("max_output_tokens", {
-      tokens: ProviderTransform.maxOutputTokens(
-        input.model.api.npm,
-        params.options,
-        input.model.limit.output,
-        OUTPUT_TOKEN_MAX,
-      ),
-      modelOptions: params.options,
-      outputLimit: input.model.limit.output,
-    })
-    // tokens = 32000
-    // outputLimit = 64000
-    // modelOptions={"reasoningEffort":"minimal"}
 
     const tools = await resolveTools(input)
 
