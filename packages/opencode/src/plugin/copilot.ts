@@ -40,33 +40,37 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
               },
             }
 
+            // TODO: re-enable once messages api has higher rate limits
             // TODO: move some of this hacky-ness to models.dev presets once we have better grasp of things here...
-            const base = baseURL ?? model.api.url
-            const claude = model.id.includes("claude")
-            const url = iife(() => {
-              if (!claude) return base
-              if (base.endsWith("/v1")) return base
-              if (base.endsWith("/")) return `${base}v1`
-              return `${base}/v1`
-            })
+            // const base = baseURL ?? model.api.url
+            // const claude = model.id.includes("claude")
+            // const url = iife(() => {
+            //   if (!claude) return base
+            //   if (base.endsWith("/v1")) return base
+            //   if (base.endsWith("/")) return `${base}v1`
+            //   return `${base}/v1`
+            // })
 
-            model.api.url = url
-            model.api.npm = claude ? "@ai-sdk/anthropic" : "@ai-sdk/github-copilot"
+            // model.api.url = url
+            // model.api.npm = claude ? "@ai-sdk/anthropic" : "@ai-sdk/github-copilot"
+            model.api.npm = "@ai-sdk/github-copilot"
           }
         }
 
         return {
+          baseURL,
           apiKey: "",
           async fetch(request: RequestInfo | URL, init?: RequestInit) {
             const info = await getAuth()
             if (info.type !== "oauth") return fetch(request, init)
 
+            const url = request instanceof URL ? request.href : request.toString()
             const { isVision, isAgent } = iife(() => {
               try {
                 const body = typeof init?.body === "string" ? JSON.parse(init.body) : init?.body
 
                 // Completions API
-                if (body?.messages) {
+                if (body?.messages && url.includes("completions")) {
                   const last = body.messages[body.messages.length - 1]
                   return {
                     isVision: body.messages.some(
@@ -86,6 +90,28 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                         Array.isArray(item?.content) && item.content.some((part: any) => part.type === "input_image"),
                     ),
                     isAgent: last?.role !== "user",
+                  }
+                }
+
+                // Messages API
+                if (body?.messages) {
+                  const last = body.messages[body.messages.length - 1]
+                  const hasNonToolCalls =
+                    Array.isArray(last?.content) && last.content.some((part: any) => part?.type !== "tool_result")
+                  return {
+                    isVision: body.messages.some(
+                      (item: any) =>
+                        Array.isArray(item?.content) &&
+                        item.content.some(
+                          (part: any) =>
+                            part?.type === "image" ||
+                            // images can be nested inside tool_result content
+                            (part?.type === "tool_result" &&
+                              Array.isArray(part?.content) &&
+                              part.content.some((nested: any) => nested?.type === "image")),
+                        ),
+                    ),
+                    isAgent: !(last?.role === "user" && hasNonToolCalls),
                   }
                 }
               } catch {}

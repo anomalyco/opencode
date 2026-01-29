@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
 
-// import { Script } from "@opencode-ai/script"
+import { Script } from "@opencode-ai/script"
 import { $ } from "bun"
 
-// if (!Script.preview) {
-// await $`gh release edit v${Script.version} --draft=false`
-// }
+if (!Script.preview) {
+  await $`gh release edit v${Script.version} --draft=false`
+}
 
 await $`bun install`
 

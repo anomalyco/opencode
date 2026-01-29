@@ -54,6 +54,7 @@
 
     white-space: nowrap;
     flex-shrink: 0;
+    max-width: 280px;
     border-bottom: 1px solid var(--border-weak-base);
     border-right: 1px solid var(--border-weak-base);
     background-color: var(--background-base);
@@ -62,8 +63,11 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 14px 24px;
+      padding: 14px 24px 14px 12px;
       outline: none;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
 
       &:focus-visible {
         outline: none;
@@ -266,8 +270,10 @@
 
   &[data-variant="pill"][data-orientation="horizontal"][data-scope="filetree"] {
     [data-slot="tabs-list"] {
-      padding: 12px;
+      height: 48px;
+      padding-inline: 12px;
       gap: 8px;
+      align-items: center;
     }
 
     [data-slot="tabs-trigger-wrapper"] {
@@ -369,8 +375,13 @@
 
     &[data-variant="settings"] {
       [data-slot="tabs-list"] {
-        width: 200px;
-        min-width: 200px;
+        width: 150px;
+        min-width: 150px;
+
+        @media (min-width: 640px) {
+          width: 200px;
+          min-width: 200px;
+        }
         padding: 12px;
         gap: 0;
         background-color: var(--background-base);
