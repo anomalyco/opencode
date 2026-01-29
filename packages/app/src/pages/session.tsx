@@ -2184,7 +2184,7 @@ export default function Page() {
                     <Tabs value={activeTab()} onChange={openTab}>
                       <div class="sticky top-0 shrink-0 flex">
                         <Tabs.List
-                          ref={(el) => {
+                          ref={(el: HTMLDivElement) => {
                             let scrollTimeout: number | undefined
                             let prevScrollWidth = el.scrollWidth
                             let prevContextOpen = contextOpen()
