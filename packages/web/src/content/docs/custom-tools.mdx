@@ -120,11 +120,14 @@ export default tool({
   args: {},
   async execute(args, context) {
     // Access context information
-    const { agent, sessionID, messageID, directory } = context
-    return `Agent: ${agent}, Session: ${sessionID}, Message: ${messageID}, Directory: ${directory}`
+    const { agent, sessionID, messageID, directory, worktree } = context
+    return `Agent: ${agent}, Session: ${sessionID}, Message: ${messageID}, Directory: ${directory}, Worktree: ${worktree}`
   },
 })
 ```
+
+Use `context.directory` for the session working directory.
+Use `context.worktree` for the git worktree root.
 
 ---
 
@@ -157,7 +160,7 @@ export default tool({
     b: tool.schema.number().describe("Second number"),
   },
   async execute(args, context) {
-    const script = path.join(context.directory, ".opencode/tools/add.py")
+    const script = path.join(context.worktree, ".opencode/tools/add.py")
     const result = await Bun.$`python3 ${script} ${args.a} ${args.b}`.text()
     return result.trim()
   },
