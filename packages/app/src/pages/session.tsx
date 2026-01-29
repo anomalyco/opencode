@@ -2186,20 +2186,36 @@ export default function Page() {
                         <Tabs.List
                           ref={(el) => {
                             let scrollTimeout: number | undefined
+                            let prevScrollWidth = el.scrollWidth
+                            let prevContextOpen = contextOpen()
 
                             const handler = () => {
                               if (scrollTimeout !== undefined) clearTimeout(scrollTimeout)
                               scrollTimeout = window.setTimeout(() => {
                                 const scrollWidth = el.scrollWidth
                                 const clientWidth = el.clientWidth
+                                const currentContextOpen = contextOpen()
 
-                                // Only scroll if there's overflow
-                                if (scrollWidth > clientWidth) {
-                                  el.scrollTo({
-                                    left: scrollWidth - clientWidth,
-                                    behavior: "smooth",
-                                  })
+                                // Only scroll when a tab is added (width increased), not on removal
+                                if (scrollWidth > prevScrollWidth) {
+                                  if (!prevContextOpen && currentContextOpen) {
+                                    // Context tab was opened, scroll to first
+                                    el.scrollTo({
+                                      left: 0,
+                                      behavior: "smooth",
+                                    })
+                                  } else if (scrollWidth > clientWidth) {
+                                    // File tab was added, scroll to rightmost
+                                    el.scrollTo({
+                                      left: scrollWidth - clientWidth,
+                                      behavior: "smooth",
+                                    })
+                                  }
                                 }
+                                // When width decreases (tab removed), don't scroll - let browser handle it naturally
+
+                                prevScrollWidth = scrollWidth
+                                prevContextOpen = currentContextOpen
                               }, 0)
                             }
 
