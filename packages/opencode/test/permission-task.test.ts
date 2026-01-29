@@ -317,3 +317,139 @@ describe("permission.task with real config files", () => {
     })
   })
 })
+
+describe("PermissionNext.evaluate for permission.model", () => {
+  const createRuleset = (rules: Record<string, "allow" | "deny" | "ask">): PermissionNext.Ruleset =>
+    Object.entries(rules).map(([pattern, action]) => ({
+      permission: "model",
+      pattern,
+      action,
+    }))
+
+  test("returns ask when no match (default)", () => {
+    expect(PermissionNext.evaluate("model", "anthropic/claude-sonnet-4-20250514", []).action).toBe("ask")
+  })
+
+  test("returns deny for explicit deny", () => {
+    const ruleset = createRuleset({ "anthropic/claude-opus-4-20250514": "deny" })
+    expect(PermissionNext.evaluate("model", "anthropic/claude-opus-4-20250514", ruleset).action).toBe("deny")
+  })
+
+  test("returns allow for explicit allow", () => {
+    const ruleset = createRuleset({ "anthropic/claude-sonnet-4-20250514": "allow" })
+    expect(PermissionNext.evaluate("model", "anthropic/claude-sonnet-4-20250514", ruleset).action).toBe("allow")
+  })
+
+  test("matches provider wildcard patterns", () => {
+    const ruleset = createRuleset({ "anthropic/*": "allow", "openai/*": "deny" })
+    expect(PermissionNext.evaluate("model", "anthropic/claude-sonnet-4-20250514", ruleset).action).toBe("allow")
+    expect(PermissionNext.evaluate("model", "anthropic/claude-opus-4-20250514", ruleset).action).toBe("allow")
+    expect(PermissionNext.evaluate("model", "openai/gpt-4o", ruleset).action).toBe("deny")
+    expect(PermissionNext.evaluate("model", "openai/o1", ruleset).action).toBe("deny")
+  })
+
+  test("matches model name wildcard patterns", () => {
+    const ruleset = createRuleset({ "*/claude-opus-*": "deny", "*/o1*": "ask" })
+    expect(PermissionNext.evaluate("model", "anthropic/claude-opus-4-20250514", ruleset).action).toBe("deny")
+    expect(PermissionNext.evaluate("model", "openai/o1", ruleset).action).toBe("ask")
+    expect(PermissionNext.evaluate("model", "openai/o1-preview", ruleset).action).toBe("ask")
+  })
+
+  test("later rules take precedence (last match wins)", () => {
+    const ruleset = createRuleset({
+      "anthropic/*": "deny",
+      "anthropic/claude-sonnet-4-20250514": "allow",
+    })
+    expect(PermissionNext.evaluate("model", "anthropic/claude-sonnet-4-20250514", ruleset).action).toBe("allow")
+    expect(PermissionNext.evaluate("model", "anthropic/claude-opus-4-20250514", ruleset).action).toBe("deny")
+  })
+
+  test("matches global wildcard", () => {
+    expect(PermissionNext.evaluate("model", "any/model", createRuleset({ "*": "allow" })).action).toBe("allow")
+    expect(PermissionNext.evaluate("model", "any/model", createRuleset({ "*": "deny" })).action).toBe("deny")
+    expect(PermissionNext.evaluate("model", "any/model", createRuleset({ "*": "ask" })).action).toBe("ask")
+  })
+})
+
+describe("permission.model with real config files", () => {
+  test("loads model permissions from opencode.json config", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      config: {
+        permission: {
+          model: {
+            "*": "allow",
+            "anthropic/claude-opus-4-*": "deny",
+          },
+        },
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        const ruleset = PermissionNext.fromConfig(config.permission ?? {})
+        expect(PermissionNext.evaluate("model", "anthropic/claude-sonnet-4-20250514", ruleset).action).toBe("allow")
+        expect(PermissionNext.evaluate("model", "openai/gpt-4o", ruleset).action).toBe("allow")
+        expect(PermissionNext.evaluate("model", "anthropic/claude-opus-4-20250514", ruleset).action).toBe("deny")
+      },
+    })
+  })
+
+  test("loads model permissions with provider wildcards from config", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      config: {
+        permission: {
+          model: {
+            "*": "deny",
+            "anthropic/*": "allow",
+          },
+        },
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        const ruleset = PermissionNext.fromConfig(config.permission ?? {})
+        expect(PermissionNext.evaluate("model", "anthropic/claude-sonnet-4-20250514", ruleset).action).toBe("allow")
+        expect(PermissionNext.evaluate("model", "openai/gpt-4o", ruleset).action).toBe("deny")
+      },
+    })
+  })
+
+  test("mixed permission config with model and other tools", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      config: {
+        permission: {
+          bash: "allow",
+          task: {
+            "*": "allow",
+          },
+          model: {
+            "*": "allow",
+            "openai/o1*": "ask",
+          },
+        },
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        const ruleset = PermissionNext.fromConfig(config.permission ?? {})
+
+        // Verify model permissions
+        expect(PermissionNext.evaluate("model", "anthropic/claude-sonnet-4-20250514", ruleset).action).toBe("allow")
+        expect(PermissionNext.evaluate("model", "openai/o1", ruleset).action).toBe("ask")
+        expect(PermissionNext.evaluate("model", "openai/o1-preview", ruleset).action).toBe("ask")
+
+        // Verify other tool permissions still work
+        expect(PermissionNext.evaluate("bash", "*", ruleset).action).toBe("allow")
+        expect(PermissionNext.evaluate("task", "general", ruleset).action).toBe("allow")
+      },
+    })
+  })
+})

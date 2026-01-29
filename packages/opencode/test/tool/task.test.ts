@@ -3,6 +3,8 @@ import path from "path"
 import { TaskTool } from "../../src/tool/task"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
+import { PermissionNext } from "../../src/permission/next"
+import { Agent } from "../../src/agent/agent"
 
 describe("tool.task", () => {
   test("task tool schema includes model parameter", async () => {
@@ -118,6 +120,43 @@ describe("tool.task", () => {
           },
         })
         expect(result.success).toBe(false)
+      },
+    })
+  })
+
+  test("task tool filters models list based on agent permissions", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        // Create a mock agent with model permissions that deny all models
+        const agentWithAllModelsDenied: Agent.Info = {
+          name: "test-agent",
+          mode: "primary",
+          permission: [{ permission: "model", pattern: "*", action: "deny" }],
+          options: {},
+        }
+
+        // Initialize with the agent context - all models denied
+        const toolDenied = await TaskTool.init({ agent: agentWithAllModelsDenied })
+
+        // When all models are denied, the models list should be empty
+        expect(toolDenied.description).toContain("Available models for the model parameter:\n\n")
+
+        // Create a mock agent with no model restrictions
+        const agentWithNoRestrictions: Agent.Info = {
+          name: "test-agent",
+          mode: "primary",
+          permission: [],
+          options: {},
+        }
+
+        // Initialize with no restrictions - should have models
+        const toolAllowed = await TaskTool.init({ agent: agentWithNoRestrictions })
+
+        // With no restrictions, there should be models (not empty after the header)
+        expect(toolAllowed.description).not.toContain("Available models for the model parameter:\n\n")
+        expect(toolAllowed.description).toContain("Available models for the model parameter:")
       },
     })
   })

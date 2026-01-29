@@ -43,12 +43,15 @@ export const TaskTool = Tool.define("task", async (ctx) => {
     ? agents.filter((a) => PermissionNext.evaluate("task", a.name, caller.permission).action !== "deny")
     : agents
 
-  // Build models list from configured providers
-  const models = Object.entries(providers).flatMap(([providerID, provider]) =>
+  // Build models list from configured providers, filtered by caller permissions
+  const allModels = Object.entries(providers).flatMap(([providerID, provider]) =>
     Object.entries(provider.models)
       .filter(([_, info]) => info.status !== "deprecated")
       .map(([modelID]) => `${providerID}/${modelID}`),
   )
+  const models = caller
+    ? allModels.filter((m) => PermissionNext.evaluate("model", m, caller.permission).action !== "deny")
+    : allModels
 
   const description = DESCRIPTION.replace(
     "{agents}",
@@ -125,6 +128,20 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           modelID: msg.info.modelID,
           providerID: msg.info.providerID,
         }
+
+      // Check model permission when LLM explicitly overrides the model
+      if (params.model && !ctx.extra?.bypassModelCheck) {
+        const modelPattern = `${params.model.providerID}/${params.model.modelID}`
+        await ctx.ask({
+          permission: "model",
+          patterns: [modelPattern],
+          always: ["*"],
+          metadata: {
+            providerID: params.model.providerID,
+            modelID: params.model.modelID,
+          },
+        })
+      }
 
       ctx.metadata({
         title: params.description,
