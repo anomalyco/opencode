@@ -9,10 +9,18 @@ export const dict = {
   "ui.sessionReview.expandAll": "全部展开",
   "ui.sessionReview.collapseAll": "全部收起",
 
+  "ui.sessionReview.change.added": "已添加",
+  "ui.sessionReview.change.removed": "已移除",
+  "ui.lineComment.label.prefix": "评论 ",
+  "ui.lineComment.label.suffix": "",
+  "ui.lineComment.editorLabel.prefix": "正在评论 ",
+  "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.placeholder": "添加评论",
+  "ui.lineComment.submit": "评论",
   "ui.sessionTurn.steps.show": "显示步骤",
   "ui.sessionTurn.steps.hide": "隐藏步骤",
   "ui.sessionTurn.summary.response": "回复",
-  "ui.sessionTurn.diff.showMore": "显示更多更改 ({{count}})",
+  "ui.sessionTurn.diff.showMore": "显示更多更改（{{count}}）",
 
   "ui.sessionTurn.retry.retrying": "重试中",
   "ui.sessionTurn.retry.inSeconds": "{{seconds}} 秒后",
@@ -25,7 +33,7 @@ export const dict = {
   "ui.sessionTurn.status.makingEdits": "正在修改",
   "ui.sessionTurn.status.runningCommands": "正在运行命令",
   "ui.sessionTurn.status.thinking": "思考中",
-  "ui.sessionTurn.status.thinkingWithTopic": "思考 - {{topic}}",
+  "ui.sessionTurn.status.thinkingWithTopic": "思考：{{topic}}",
   "ui.sessionTurn.status.gatheringThoughts": "正在整理思路",
   "ui.sessionTurn.status.consideringNextSteps": "正在考虑下一步",
 
@@ -50,6 +58,7 @@ export const dict = {
   "ui.imagePreview.alt": "图片预览",
 
   "ui.tool.read": "读取",
+  "ui.tool.loaded": "已加载",
   "ui.tool.list": "列表",
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
