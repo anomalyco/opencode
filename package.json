@@ -76,6 +76,7 @@
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
+    "sambanova-ai-provider": "1.2.2",
     "typescript": "catalog:"
   },
   "repository": {
