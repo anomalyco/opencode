@@ -1633,6 +1633,15 @@ export type Config = {
       subtask?: boolean
     }
   }
+  /**
+   * Additional skill folder paths to scan
+   */
+  skills?: {
+    /**
+     * Additional paths to skill folders to scan
+     */
+    paths?: Array<string>
+  }
   watcher?: {
     ignore?: Array<string>
   }
