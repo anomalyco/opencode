@@ -3,7 +3,7 @@ import { Show, splitProps, type JSX } from "solid-js"
 import type { ComponentProps, ParentProps, Component } from "solid-js"
 
 export interface TabsProps extends ComponentProps<typeof Kobalte> {
-  variant?: "normal" | "alt" | "settings"
+  variant?: "normal" | "alt" | "pill" | "settings"
   orientation?: "horizontal" | "vertical"
 }
 export interface TabsListProps extends ComponentProps<typeof Kobalte.List> {}
@@ -75,7 +75,7 @@ function TabsTrigger(props: ParentProps<TabsTriggerProps>) {
       <Kobalte.Trigger
         {...rest}
         data-slot="tabs-trigger"
-        classList={{ "group/tab": true, [split.classes?.button ?? ""]: split.classes?.button }}
+        classList={{ [split.classes?.button ?? ""]: split.classes?.button }}
       >
         {split.children}
       </Kobalte.Trigger>

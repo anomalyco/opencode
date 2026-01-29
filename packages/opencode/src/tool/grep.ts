@@ -54,6 +54,7 @@ export const GrepTool = Tool.define("grep", {
     const proc = Bun.spawn([rgPath, ...args], {
       stdout: "pipe",
       stderr: "pipe",
+      signal: ctx.abort,
     })
 
     const output = await new Response(proc.stdout).text()
