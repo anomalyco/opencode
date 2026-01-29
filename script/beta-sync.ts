@@ -10,57 +10,15 @@ interface PR {
 }
 
 async function main() {
-  const token = process.env.GITHUB_TOKEN
-  if (!token) throw new Error("GITHUB_TOKEN not set")
-
-  const repo = process.env.GITHUB_REPOSITORY
-  if (!repo) throw new Error("GITHUB_REPOSITORY not set")
-
-  const [owner, repoName] = repo.split("/")
-
   console.log("Fetching open contributor PRs...")
 
-  const prsQuery = `
-    query($owner: String!, $repo: String!, $labels: [String!]) {
-      repository(owner: $owner, name: $repo) {
-        pullRequests(
-          states: OPEN, 
-          labels: $labels, 
-          first: 100, 
-          orderBy: {field: CREATED_AT, direction: ASC}
-        ) {
-          nodes {
-            number
-            headRefName
-            headRefOid
-            createdAt
-            isDraft
-            title
-          }
-        }
-      }
-    }
-  `
-
-  const queryResult = await fetch("https://api.github.com/graphql", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      query: prsQuery,
-      variables: { owner, repo: repoName, labels: ["contributor"] },
-    }),
-  }).then((x) => x.json())
-
-  if (queryResult.errors) {
-    console.error("GraphQL errors:", queryResult.errors)
-    throw new Error("Failed to fetch PRs")
+  const prsResult =
+    await $`gh pr list --label contributor --state open --json number,headRefName,headRefOid,createdAt,isDraft,title --limit 100`.nothrow()
+  if (prsResult.exitCode !== 0) {
+    throw new Error(`Failed to fetch PRs: ${prsResult.stderr}`)
   }
 
-  const allPRs: PR[] = queryResult.data.repository.pullRequests.nodes
-
+  const allPRs: PR[] = JSON.parse(prsResult.stdout)
   const prs = allPRs.filter((pr) => !pr.isDraft)
 
   console.log(`Found ${prs.length} open non-draft contributor PRs`)
