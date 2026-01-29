@@ -12,6 +12,7 @@ import { Instance } from "../project/instance"
 import { Ripgrep } from "./ripgrep"
 import fuzzysort from "fuzzysort"
 import { Global } from "../global"
+import { Config } from "../config/config"
 
 export namespace File {
   const log = Log.create({ service: "file" })
@@ -167,7 +168,8 @@ export namespace File {
       }
 
       const set = new Set<string>()
-      for await (const file of Ripgrep.files({ cwd: Instance.directory })) {
+      const cfg = await Config.get()
+      for await (const file of Ripgrep.files({ cwd: Instance.directory, noIgnore: cfg.respect_gitignore === false })) {
         result.files.push(file)
         let current = file
         while (true) {
