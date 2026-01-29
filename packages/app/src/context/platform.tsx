@@ -17,6 +17,12 @@ export type Platform = {
   /** Restart the app  */
   restart(): Promise<void>
 
+  /** Navigate back in history */
+  back(): void
+
+  /** Navigate forward in history */
+  forward(): void
+
   /** Send a system notification (optional deep link) */
   notify(title: string, description?: string, href?: string): Promise<void>
 
