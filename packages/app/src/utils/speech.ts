@@ -78,11 +78,32 @@ export function createSpeechRecognition(opts?: {
   let lastInterimSuffix = ""
   let shrinkCandidate: string | undefined
   let commitTimer: number | undefined
+  let restartTimer: number | undefined
 
   const cancelPendingCommit = () => {
     if (commitTimer === undefined) return
     clearTimeout(commitTimer)
     commitTimer = undefined
+  }
+
+  const clearRestart = () => {
+    if (restartTimer === undefined) return
+    window.clearTimeout(restartTimer)
+    restartTimer = undefined
+  }
+
+  const scheduleRestart = () => {
+    clearRestart()
+    if (!shouldContinue) return
+    if (!recognition) return
+    restartTimer = window.setTimeout(() => {
+      restartTimer = undefined
+      if (!shouldContinue) return
+      if (!recognition) return
+      try {
+        recognition.start()
+      } catch {}
+    }, 150)
   }
 
   const commitSegment = (segment: string) => {
@@ -214,17 +235,14 @@ export function createSpeechRecognition(opts?: {
     }
 
     recognition.onerror = (e: { error: string }) => {
+      clearRestart()
       cancelPendingCommit()
       lastInterimSuffix = ""
       shrinkCandidate = undefined
       if (e.error === "no-speech" && shouldContinue) {
         setStore("interim", "")
         if (opts?.onInterim) opts.onInterim("")
-        setTimeout(() => {
-          try {
-            recognition?.start()
-          } catch {}
-        }, 150)
+        scheduleRestart()
         return
       }
       shouldContinue = false
@@ -232,6 +250,7 @@ export function createSpeechRecognition(opts?: {
     }
 
     recognition.onstart = () => {
+      clearRestart()
       sessionCommitted = ""
       pendingHypothesis = ""
       cancelPendingCommit()
@@ -243,22 +262,20 @@ export function createSpeechRecognition(opts?: {
     }
 
     recognition.onend = () => {
+      clearRestart()
       cancelPendingCommit()
       lastInterimSuffix = ""
       shrinkCandidate = undefined
       setStore("isRecording", false)
       if (shouldContinue) {
-        setTimeout(() => {
-          try {
-            recognition?.start()
-          } catch {}
-        }, 150)
+        scheduleRestart()
       }
     }
   }
 
   const start = () => {
     if (!recognition) return
+    clearRestart()
     shouldContinue = true
     sessionCommitted = ""
     pendingHypothesis = ""
@@ -274,6 +291,7 @@ export function createSpeechRecognition(opts?: {
   const stop = () => {
     if (!recognition) return
     shouldContinue = false
+    clearRestart()
     promotePending()
     cancelPendingCommit()
     lastInterimSuffix = ""
@@ -287,6 +305,7 @@ export function createSpeechRecognition(opts?: {
 
   onCleanup(() => {
     shouldContinue = false
+    clearRestart()
     promotePending()
     cancelPendingCommit()
     lastInterimSuffix = ""

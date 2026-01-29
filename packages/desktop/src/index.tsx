@@ -18,15 +18,16 @@ import { createSignal, Show, Accessor, JSX, createResource, onMount, onCleanup }
 
 import { UPDATER_ENABLED } from "./updater"
 import { createMenu } from "./menu"
+import { initI18n, t } from "./i18n"
 import pkg from "../package.json"
 import "./styles.css"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
-  throw new Error(
-    "Root element not found. Did you forget to add it to your index.html? Or maybe the id attribute got misspelled?",
-  )
+  throw new Error(t("error.dev.rootNotFound"))
 }
+
+void initI18n()
 
 // Floating UI can call getComputedStyle with non-elements (e.g., null refs, virtual elements).
 // This happens on all platforms (WebView2 on Windows, WKWebView on macOS), not just Windows.
@@ -54,7 +55,7 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
     const result = await open({
       directory: true,
       multiple: opts?.multiple ?? false,
-      title: opts?.title ?? "Choose a folder",
+      title: opts?.title ?? t("desktop.dialog.chooseFolder"),
     })
     return result
   },
@@ -63,14 +64,14 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
     const result = await open({
       directory: false,
       multiple: opts?.multiple ?? false,
-      title: opts?.title ?? "Choose a file",
+      title: opts?.title ?? t("desktop.dialog.chooseFile"),
     })
     return result
   },
 
   async saveFilePickerDialog(opts) {
     const result = await save({
-      title: opts?.title ?? "Save file",
+      title: opts?.title ?? t("desktop.dialog.saveFile"),
       defaultPath: opts?.defaultPath,
     })
     return result
@@ -78,6 +79,14 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
 
   openLink(url: string) {
     void shellOpen(url).catch(() => undefined)
+  },
+
+  back() {
+    window.history.back()
+  },
+
+  forward() {
+    window.history.forward()
   },
 
   storage: (() => {
@@ -372,7 +381,7 @@ function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.
 
   const errorMessage = () => {
     const error = serverData.error
-    if (!error) return "Unknown error"
+    if (!error) return t("error.chain.unknown")
     if (typeof error === "string") return error
     if (error instanceof Error) return error.message
     return String(error)
@@ -402,16 +411,15 @@ function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.
       }
     >
       <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base gap-4 px-6">
-        <div class="text-16-semibold">OpenCode failed to start</div>
+        <div class="text-16-semibold">{t("desktop.error.serverStartFailed.title")}</div>
         <div class="text-12-regular opacity-70 text-center max-w-xl">
-          The local OpenCode server could not be started. Restart the app, or check your network settings (VPN/proxy)
-          and try again.
+          {t("desktop.error.serverStartFailed.description")}
         </div>
         <div class="w-full max-w-3xl rounded border border-border bg-background-base overflow-auto max-h-64">
           <pre class="p-3 whitespace-pre-wrap break-words text-11-regular">{errorMessage()}</pre>
         </div>
         <button class="px-3 py-2 rounded bg-primary text-primary-foreground" onClick={() => void restartApp()}>
-          Restart App
+          {t("error.page.action.restart")}
         </button>
         <div data-tauri-decorum-tb class="flex flex-row absolute top-0 right-0 z-10 h-10" />
       </div>
