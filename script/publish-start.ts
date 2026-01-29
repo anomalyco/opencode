@@ -4,9 +4,8 @@ import { $ } from "bun"
 import { Script } from "@opencode-ai/script"
 import { buildNotes, getLatestRelease } from "./changelog"
 
-const highlightsTemplate = `## Highlights
-
-<!-- 
+const highlightsTemplate = `
+<!--
 Add highlights before publishing. Delete this section if no highlights.
 
 - For multiple highlights, use multiple <highlight> tags
@@ -40,7 +39,7 @@ console.log("=== publishing ===\n")
 if (!Script.preview) {
   const previous = await getLatestRelease()
   notes = await buildNotes(previous, "HEAD")
-  notes.unshift(highlightsTemplate)
+  // notes.unshift(highlightsTemplate)
 }
 
 const pkgjsons = await Array.fromAsync(
