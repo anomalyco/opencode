@@ -1,8 +1,10 @@
 import {
   createContext,
+  createEffect,
   createRoot,
   createSignal,
   getOwner,
+  onCleanup,
   type Owner,
   type ParentProps,
   runWithOwner,
@@ -19,41 +21,71 @@ type Active = {
   dispose: () => void
   owner: Owner
   onClose?: () => void
+  setClosing: (closing: boolean) => void
 }
 
 const Context = createContext<ReturnType<typeof init>>()
 
 function init() {
   const [active, setActive] = createSignal<Active | undefined>()
+  let closing = false
 
   const close = () => {
     const current = active()
-    if (!current) return
+    if (!current || closing) return
+    closing = true
     current.onClose?.()
-    current.dispose()
-    setActive(undefined)
+    current.setClosing(true)
+    setTimeout(() => {
+      current.dispose()
+      setActive(undefined)
+      closing = false
+    }, 100)
   }
 
+  createEffect(() => {
+    if (!active()) return
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return
+      close()
+      event.preventDefault()
+      event.stopPropagation()
+    }
+
+    window.addEventListener("keydown", onKeyDown, true)
+    onCleanup(() => window.removeEventListener("keydown", onKeyDown, true))
+  })
+
   const show = (element: DialogElement, owner: Owner, onClose?: () => void) => {
-    close()
+    // Immediately dispose any existing dialog when showing a new one
+    const current = active()
+    if (current) {
+      current.dispose()
+      setActive(undefined)
+    }
+    closing = false
 
     const id = Math.random().toString(36).slice(2)
     let dispose: (() => void) | undefined
+    let setClosing: ((closing: boolean) => void) | undefined
 
     const node = runWithOwner(owner, () =>
-      createRoot((d) => {
+      createRoot((d: () => void) => {
         dispose = d
+        const [closing, setClosingSignal] = createSignal(false)
+        setClosing = setClosingSignal
         return (
           <Kobalte
             modal
-            open={true}
-            onOpenChange={(open) => {
+            open={!closing()}
+            onOpenChange={(open: boolean) => {
               if (open) return
               close()
             }}
           >
             <Kobalte.Portal>
-              <Kobalte.Overlay data-component="dialog-overlay" />
+              <Kobalte.Overlay data-component="dialog-overlay" onClick={close} />
               {element()}
             </Kobalte.Portal>
           </Kobalte>
@@ -61,9 +93,9 @@ function init() {
       }),
     )
 
-    if (!dispose) return
+    if (!dispose || !setClosing) return
 
-    setActive({ id, node, dispose, owner, onClose })
+    setActive({ id, node, dispose, owner, onClose, setClosing })
   }
 
   return {

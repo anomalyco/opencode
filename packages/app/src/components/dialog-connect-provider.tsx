@@ -27,6 +27,17 @@ export function DialogConnectProvider(props: { provider: string }) {
   const globalSDK = useGlobalSDK()
   const platform = usePlatform()
   const language = useLanguage()
+
+  const alive = { value: true }
+  const timer = { current: undefined as ReturnType<typeof setTimeout> | undefined }
+
+  onCleanup(() => {
+    alive.value = false
+    if (timer.current === undefined) return
+    clearTimeout(timer.current)
+    timer.current = undefined
+  })
+
   const provider = createMemo(() => globalSync.data.provider.all.find((x) => x.id === props.provider)!)
   const methods = createMemo(
     () =>
@@ -53,6 +64,11 @@ export function DialogConnectProvider(props: { provider: string }) {
   }
 
   async function selectMethod(index: number) {
+    if (timer.current !== undefined) {
+      clearTimeout(timer.current)
+      timer.current = undefined
+    }
+
     const method = methods()[index]
     setStore(
       produce((draft) => {
@@ -75,11 +91,15 @@ export function DialogConnectProvider(props: { provider: string }) {
           { throwOnError: true },
         )
         .then((x) => {
+          if (!alive.value) return
           const elapsed = Date.now() - start
           const delay = 1000 - elapsed
 
           if (delay > 0) {
-            setTimeout(() => {
+            if (timer.current !== undefined) clearTimeout(timer.current)
+            timer.current = setTimeout(() => {
+              timer.current = undefined
+              if (!alive.value) return
               setStore("state", "complete")
               setStore("authorization", x.data!)
             }, delay)
@@ -89,6 +109,7 @@ export function DialogConnectProvider(props: { provider: string }) {
           setStore("authorization", x.data!)
         })
         .catch((e) => {
+          if (!alive.value) return
           setStore("state", "error")
           setStore("error", String(e))
         })
@@ -143,7 +164,17 @@ export function DialogConnectProvider(props: { provider: string }) {
   }
 
   return (
-    <Dialog title={<IconButton tabIndex={-1} icon="arrow-left" variant="ghost" onClick={goBack} />}>
+    <Dialog
+      title={
+        <IconButton
+          tabIndex={-1}
+          icon="arrow-left"
+          variant="ghost"
+          onClick={goBack}
+          aria-label={language.t("common.goBack")}
+        />
+      }
+    >
       <div class="flex flex-col gap-6 px-2.5 pb-3">
         <div class="px-2.5 flex gap-4 items-center">
           <ProviderIcon id={props.provider as IconName} class="size-5 shrink-0 icon-strong-base" />
@@ -177,7 +208,7 @@ export function DialogConnectProvider(props: { provider: string }) {
                   {(i) => (
                     <div class="w-full flex items-center gap-x-2">
                       <div class="w-4 h-2 rounded-[1px] bg-input-base shadow-xs-border-base flex items-center justify-center">
-                        <div class="w-2.5 h-0.5 bg-icon-strong-base hidden" data-slot="list-item-extra-icon" />
+                        <div class="w-2.5 h-0.5 ml-0 bg-icon-strong-base hidden" data-slot="list-item-extra-icon" />
                       </div>
                       <span>{methodLabel(i)}</span>
                     </div>
@@ -362,23 +393,33 @@ export function DialogConnectProvider(props: { provider: string }) {
                       return instructions
                     })
 
-                    onMount(async () => {
-                      const result = await globalSDK.client.provider.oauth
-                        .callback({
-                          providerID: props.provider,
-                          method: store.methodIndex,
-                        })
-                        .then((value) =>
-                          value.error ? { ok: false as const, error: value.error } : { ok: true as const },
-                        )
-                        .catch((error) => ({ ok: false as const, error }))
-                      if (!result.ok) {
-                        const message = result.error instanceof Error ? result.error.message : String(result.error)
-                        setStore("state", "error")
-                        setStore("error", message)
-                        return
-                      }
-                      await complete()
+                    onMount(() => {
+                      void (async () => {
+                        if (store.authorization?.url) {
+                          platform.openLink(store.authorization.url)
+                        }
+
+                        const result = await globalSDK.client.provider.oauth
+                          .callback({
+                            providerID: props.provider,
+                            method: store.methodIndex,
+                          })
+                          .then((value) =>
+                            value.error ? { ok: false as const, error: value.error } : { ok: true as const },
+                          )
+                          .catch((error) => ({ ok: false as const, error }))
+
+                        if (!alive.value) return
+
+                        if (!result.ok) {
+                          const message = result.error instanceof Error ? result.error.message : String(result.error)
+                          setStore("state", "error")
+                          setStore("error", message)
+                          return
+                        }
+
+                        await complete()
+                      })()
                     })
 
                     return (
