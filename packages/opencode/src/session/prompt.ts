@@ -15,6 +15,7 @@ import { Instance } from "../project/instance"
 import { Bus } from "../bus"
 import { ProviderTransform } from "../provider/transform"
 import { SystemPrompt } from "./system"
+import { InstructionPrompt } from "./instruction"
 import { Plugin } from "../plugin"
 import { PluginCommandService } from "../plugin/command-service"
 import PROMPT_PLAN from "../session/prompt/plan.txt"
@@ -387,6 +388,7 @@ export namespace SessionPrompt {
           abort,
           callID: part.callID,
           extra: { bypassAgentCheck: true },
+          messages: msgs,
           async metadata(input) {
             await Session.updatePart({
               ...part,
@@ -550,6 +552,7 @@ export namespace SessionPrompt {
         model,
         abort,
       })
+      using _ = defer(() => InstructionPrompt.clear(processor.message.id))
 
       // Check if user explicitly invoked an agent via @ in this turn
       const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
@@ -562,6 +565,7 @@ export namespace SessionPrompt {
         tools: lastUser.tools,
         processor,
         bypassAgentCheck,
+        messages: msgs,
       })
 
       if (step === 1) {
@@ -599,7 +603,7 @@ export namespace SessionPrompt {
         agent,
         abort,
         sessionID,
-        system: [...(await SystemPrompt.environment()), ...(await SystemPrompt.custom())],
+        system: [...(await SystemPrompt.environment(model)), ...(await InstructionPrompt.system())],
         messages: [
           ...MessageV2.toModelMessages(sessionMessages, model),
           ...(isLastStep
@@ -651,6 +655,7 @@ export namespace SessionPrompt {
     tools?: Record<string, boolean>
     processor: SessionProcessor.Info
     bypassAgentCheck: boolean
+    messages: MessageV2.WithParts[]
   }) {
     using _ = log.time("resolveTools")
     const tools: Record<string, AITool> = {}
@@ -662,6 +667,7 @@ export namespace SessionPrompt {
       callID: options.toolCallId,
       extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck },
       agent: input.agent.name,
+      messages: input.messages,
       metadata: async (val: { title?: string; metadata?: any }) => {
         const match = input.processor.partFromToolCall(options.toolCallId)
         if (match && match.state.status === "running") {
@@ -835,6 +841,7 @@ export namespace SessionPrompt {
       system: input.system,
       variant: input.variant,
     }
+    using _ = defer(() => InstructionPrompt.clear(info.id))
 
     const parts = await Promise.all(
       input.parts.map(async (part): Promise<MessageV2.Part[]> => {
@@ -1009,6 +1016,7 @@ export namespace SessionPrompt {
                       agent: input.agent!,
                       messageID: info.id,
                       extra: { bypassCwdCheck: true, model },
+                      messages: [],
                       metadata: async () => {},
                       ask: async () => {},
                     }
@@ -1070,6 +1078,7 @@ export namespace SessionPrompt {
                   agent: input.agent!,
                   messageID: info.id,
                   extra: { bypassCwdCheck: true },
+                  messages: [],
                   metadata: async () => {},
                   ask: async () => {},
                 }
@@ -1350,7 +1359,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
     const session = await Session.get(input.sessionID)
     if (session.revert) {
-      SessionRevert.cleanup(session)
+      await SessionRevert.cleanup(session)
     }
     const agent = await Agent.get(input.agent)
     const model = input.model ?? agent.model ?? (await lastModel(input.sessionID))
