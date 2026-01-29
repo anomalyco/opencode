@@ -9,6 +9,7 @@ import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../component/border"
 import { useSync } from "../../context/sync"
 import { useTextareaKeybindings } from "../../component/textarea-keybindings"
+import { Link } from "../../ui/link"
 import path from "path"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import { Keybind } from "@/util/keybind"
@@ -112,6 +113,41 @@ function TextBody(props: { title: string; description?: string; icon?: string })
         </box>
       </Show>
     </>
+  )
+}
+
+function A2AOAuthBody(props: { request: PermissionRequest }) {
+  const { theme } = useTheme()
+  const domain = () => (props.request.metadata?.domain as string) ?? "unknown"
+  const agent = () => (props.request.metadata?.agent as string) ?? "unknown"
+  const authUrl = () => (props.request.metadata?.authorizationUrl as string) ?? ""
+
+  return (
+    <box flexDirection="column" gap={1}>
+      <box flexDirection="row" gap={1} paddingLeft={1}>
+        <text fg={theme.textMuted} flexShrink={0}>
+          {"◎"}
+        </text>
+        <text fg={theme.textMuted}>
+          Authenticate with remote agent "{agent()}" at {domain()}
+        </text>
+      </box>
+      <box paddingLeft={1}>
+        <text fg={theme.text}>This will open your browser to authorize access.</text>
+      </box>
+      <Show when={authUrl()}>
+        <box paddingLeft={1} flexDirection="column" gap={1}>
+          <text fg={theme.textMuted}>Authorization URL (click to open):</text>
+          <scrollbox maxHeight={3}>
+            <box paddingLeft={1}>
+              <Link href={authUrl()} fg={theme.primary}>
+                {authUrl()}
+              </Link>
+            </box>
+          </scrollbox>
+        </box>
+      </Show>
+    </box>
   )
 }
 
@@ -257,6 +293,16 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                   </Match>
                   <Match when={props.request.permission === "doom_loop"}>
                     <TextBody icon="⟳" title="Continue after repeated failures" />
+                  </Match>
+                  <Match when={props.request.permission === "remote_agent"}>
+                    <TextBody
+                      icon="◎"
+                      title={`Connect to remote agent at ${props.request.metadata?.domain ?? "unknown"}`}
+                      description={props.request.metadata?.description as string}
+                    />
+                  </Match>
+                  <Match when={props.request.permission === "a2a_oauth"}>
+                    <A2AOAuthBody request={props.request} />
                   </Match>
                   <Match when={true}>
                     <TextBody icon="⚙" title={`Call tool ` + props.request.permission} />

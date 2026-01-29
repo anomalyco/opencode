@@ -13,6 +13,9 @@ import { Config } from "../config/config"
 import { PermissionNext } from "@/permission/next"
 import * as A2A from "../a2a"
 import { Instance } from "../project/instance"
+import { Log } from "../util/log"
+
+const log = Log.create({ service: "task.remote" })
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
@@ -221,6 +224,39 @@ async function executeRemoteAgent(params: z.infer<typeof parameters>, ctx: Tool.
   const agentCard = await A2A.fetchAgentCard(agentRef)
   const agentDomain = A2A.getDomainFromAgentUrl(agentCard.url)
 
+  // Check if OAuth is required and get access token
+  let accessToken: string | undefined
+  if (A2A.requiresOAuth(agentCard)) {
+    const oauthConfig = A2A.getOAuthConfig(agentCard)
+    if (oauthConfig) {
+      // Check if we already have valid tokens
+      const hasValidTokens = await A2A.hasValidTokens(agentDomain)
+      if (!hasValidTokens) {
+        // Prepare OAuth flow to get authorization URL before asking for permission
+        const preparedFlow = await A2A.prepareOAuthFlow(agentDomain, oauthConfig)
+
+        // Prompt user with the authorization URL visible
+        await ctx.ask({
+          permission: "a2a_oauth",
+          patterns: [agentDomain],
+          always: [],
+          metadata: {
+            domain: agentDomain,
+            agent: agentCard.name,
+            authorizationUrl: preparedFlow.authorizationUrl,
+          },
+        })
+
+        // After approval, execute the OAuth flow (opens browser and waits for callback)
+        const result = await A2A.executeOAuthFlow(agentDomain, oauthConfig, preparedFlow)
+        accessToken = result.accessToken
+      } else {
+        // Have valid tokens, just get them
+        accessToken = await A2A.getAccessToken(agentDomain, oauthConfig)
+      }
+    }
+  }
+
   // Create session for tracking
   const session = await Session.create({
     parentID: ctx.sessionID,
@@ -280,14 +316,18 @@ async function executeRemoteAgent(params: z.infer<typeof parameters>, ctx: Tool.
   let savedContextId: string | undefined
 
   // Stream the response
+  log.info("starting stream", { agentDomain, existingContextId })
   for await (const event of A2A.streamMessage({
     agentCard,
     message: a2aMessage,
     contextId: existingContextId,
     signal: ctx.abort,
+    accessToken,
   })) {
+    log.info("event received", { type: event.type, event })
     switch (event.type) {
       case "task": {
+        log.info("task event", { contextId: event.task.contextId, status: event.task.status, artifacts: event.task.artifacts })
         if (event.task.contextId && !savedContextId) {
           savedContextId = event.task.contextId
           A2A.setContextId(ctx.sessionID, agentDomain, event.task.contextId)
@@ -296,6 +336,7 @@ async function executeRemoteAgent(params: z.infer<typeof parameters>, ctx: Tool.
       }
 
       case "statusUpdate": {
+        log.info("statusUpdate event", { state: event.state, message: event.message })
         if (event.contextId && !savedContextId) {
           savedContextId = event.contextId
           A2A.setContextId(ctx.sessionID, agentDomain, event.contextId)
@@ -341,6 +382,7 @@ async function executeRemoteAgent(params: z.infer<typeof parameters>, ctx: Tool.
       }
 
       case "artifact": {
+        log.info("artifact event", { name: event.artifact.name, partsCount: event.artifact.parts?.length, artifact: event.artifact })
         if (event.contextId && !savedContextId) {
           savedContextId = event.contextId
           A2A.setContextId(ctx.sessionID, agentDomain, event.contextId)
@@ -351,8 +393,10 @@ async function executeRemoteAgent(params: z.infer<typeof parameters>, ctx: Tool.
           .filter((p): p is A2A.TextPart => p.kind === "text")
           .map((p) => p.text)
           .join("")
+        log.info("artifact text extracted", { textLength: artifactText.length, preview: artifactText.substring(0, 200) })
 
         if (artifact.name === "response") {
+          log.info("processing response artifact", { textLength: artifactText.length })
           if (!currentTextPart) {
             currentTextPart = {
               id: Identifier.ascending("part"),
@@ -368,6 +412,7 @@ async function executeRemoteAgent(params: z.infer<typeof parameters>, ctx: Tool.
             await Session.updatePart({ part: currentTextPart, delta: artifactText })
           }
         } else if (artifact.name) {
+          log.info("non-response artifact", { name: artifact.name })
           // Tool output
           const existingPart = toolParts.get(artifact.name)
           if (existingPart && existingPart.state.status === "running") {
@@ -399,10 +444,18 @@ async function executeRemoteAgent(params: z.infer<typeof parameters>, ctx: Tool.
       }
 
       case "error": {
+        log.error("error event", { message: event.message, code: event.code })
         throw new Error(`Remote agent error: ${event.message} (${event.code})`)
+      }
+
+      case "message": {
+        log.info("message event", { textPreview: event.text?.substring(0, 200) })
+        break
       }
     }
   }
+
+  log.info("stream ended", { hasTextPart: !!currentTextPart, textLength: currentTextPart?.text?.length ?? 0 })
 
   if (currentTextPart && currentTextPart.time) {
     currentTextPart.time.end = Date.now()
@@ -413,6 +466,7 @@ async function executeRemoteAgent(params: z.infer<typeof parameters>, ctx: Tool.
   await Session.updateMessage(assistantMsg)
 
   const text = currentTextPart?.text ?? ""
+  log.info("returning output", { textLength: text.length, preview: text.substring(0, 100) })
   const output =
     text +
     "\n\n" +

@@ -11,6 +11,7 @@ import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
 import { Agent } from "../../agent/agent"
+import * as A2A from "../../a2a"
 
 const TOOL: Record<string, [string, string]> = {
   todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -91,6 +92,11 @@ export const RunCommand = cmd({
         type: "string",
         describe: "model variant (provider-specific reasoning effort, e.g., high, max, minimal)",
       })
+      .option("trust-domains", {
+        type: "string",
+        array: true,
+        describe: "domains to auto-trust for remote agents (e.g., localhost:3000)",
+      })
   },
   handler: async (args) => {
     let message = [...args.message, ...(args["--"] || [])]
@@ -131,6 +137,12 @@ export const RunCommand = cmd({
     if (message.trim().length === 0 && !args.command) {
       UI.error("You must provide a message or a command")
       process.exit(1)
+    }
+
+    if (args.trustDomains) {
+      for (const domain of args.trustDomains) {
+        A2A.trustForSession(domain)
+      }
     }
 
     const execute = async (sdk: OpencodeClient, sessionID: string) => {

@@ -7,6 +7,11 @@ Remote agents can also be invoked using the @domain.com or @domain.com/agent syn
 
 When using the Task tool, you must specify a subagent_type parameter to select which agent type to use. For remote agents, include the full @domain syntax (e.g., subagent_type: "@localhost:3000" or "@example.com/code-review").
 
+To discover a remote agent's capabilities before invoking it, fetch its agent card from:
+- @domain.com → https://domain.com/.well-known/a2a/agent-card
+- @domain.com/path → https://domain.com/path/agent-card.json
+- @localhost:PORT → http://localhost:PORT/.well-known/a2a/agent-card (uses http for localhost)
+
 When to use the Task tool:
 - When you are instructed to execute custom slash commands. Use the Task tool with the slash command invocation as the entire prompt. The slash command can take arguments. For example: Task(description="Check the file", prompt="/check-file path/to/file.py")
 
@@ -59,4 +64,20 @@ user: "Hello"
 Since the user is greeting, use the greeting-responder agent to respond with a friendly joke
 </commentary>
 assistant: "I'm going to use the Task tool to launch the with the greeting-responder agent"
+</example>
+
+<example>
+user: "What can @localhost:3000 do?"
+<commentary>
+User wants to know the capabilities of a remote agent. Fetch the agent card from the well-known URL.
+</commentary>
+assistant: Uses WebFetch to fetch http://localhost:3000/.well-known/a2a/agent-card to discover the agent's capabilities
+</example>
+
+<example>
+user: "Ask @example.com/assistant to help me write a poem"
+<commentary>
+User wants to invoke a remote agent to perform a task.
+</commentary>
+assistant: Uses the Task tool with subagent_type="@example.com/assistant" and prompt="Help me write a poem"
 </example>

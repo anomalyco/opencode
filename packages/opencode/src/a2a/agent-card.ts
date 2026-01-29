@@ -114,3 +114,40 @@ export function getDomainFromAgentUrl(agentUrl: string): string {
   const url = new URL(agentUrl)
   return url.host
 }
+
+export interface OAuth2AuthorizationCodeConfig {
+  authorizationUrl: string
+  tokenUrl: string
+  scopes: Record<string, string>
+}
+
+export function requiresOAuth(agentCard: AgentCard): boolean {
+  if (!agentCard.security || agentCard.security.length === 0) {
+    return false
+  }
+
+  return agentCard.security.some((requirement) => "oauth2" in requirement)
+}
+
+export function getOAuthConfig(agentCard: AgentCard): OAuth2AuthorizationCodeConfig | null {
+  if (!agentCard.securitySchemes) return null
+
+  const oauth2Scheme = agentCard.securitySchemes.oauth2
+  if (!oauth2Scheme || oauth2Scheme.type !== "oauth2") return null
+
+  const flows = oauth2Scheme.flows as {
+    authorizationCode?: {
+      authorizationUrl: string
+      tokenUrl: string
+      scopes: Record<string, string>
+    }
+  } | undefined
+
+  if (!flows?.authorizationCode) return null
+
+  return {
+    authorizationUrl: flows.authorizationCode.authorizationUrl,
+    tokenUrl: flows.authorizationCode.tokenUrl,
+    scopes: flows.authorizationCode.scopes,
+  }
+}
