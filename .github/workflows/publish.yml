@@ -6,6 +6,7 @@ on:
     branches:
       - ci
       - dev
+      - beta
       - snapshot-*
   workflow_dispatch:
     inputs:
