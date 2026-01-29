@@ -196,6 +196,7 @@ export namespace Session {
     directory: string
     permission?: PermissionNext.Ruleset
   }) {
+    console.log("[Persistent Context] Creating new session")
     const result: Info = {
       id: Identifier.descending("session", input.id),
       slug: Slug.create(),
@@ -240,6 +241,7 @@ export namespace Session {
   }
 
   export const get = fn(Identifier.schema("session"), async (id) => {
+    console.log(`[Persistent Context] Loading session ${id}`)
     const read = await Storage.read<Info>(["session", Instance.project.id, id])
     return read as Info
   })
@@ -340,7 +342,7 @@ export namespace Session {
       for (const child of await children(sessionID)) {
         await remove(child.id)
       }
-      await unshare(sessionID).catch(() => {})
+      await unshare(sessionID).catch(() => { })
       for (const msg of await Storage.list(["message", sessionID])) {
         for (const part of await Storage.list(["part", msg.at(-1)!])) {
           await Storage.remove(part)

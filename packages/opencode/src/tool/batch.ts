@@ -123,6 +123,7 @@ export const BatchTool = Tool.define("batch", async () => {
         }
       }
 
+      console.log(`[Parallel Processing] Executing batch with ${toolCalls.length} tools`)
       const results = await Promise.all(toolCalls.map((call) => executeCall(call)))
 
       // Add discarded calls as errors

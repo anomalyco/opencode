@@ -29,6 +29,7 @@ export namespace SlidingWindow {
         })
 
         const total = sized.reduce((acc, item) => acc + item.tokens, 0)
+        console.log(`[Smart Context] Checking context window. Total tokens: ${total}, Available: ${available}`)
 
         if (total <= available) {
             return messages
