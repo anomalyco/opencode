@@ -1,15 +1,17 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
+import path from "path"
+import { fileURLToPath } from "url"
 
-const rootDir = new URL("../../..", import.meta.url).pathname
+const rootDir = fileURLToPath(new URL("../../..", import.meta.url))
 process.chdir(rootDir)
 
 const reg = process.env.REGISTRY ?? "ghcr.io/anomalyco"
 const tag = process.env.TAG ?? "24.04"
 const push = process.argv.includes("--push") || process.env.PUSH === "1"
 
-const root = new URL("package.json", new URL(rootDir)).pathname
+const root = path.join(rootDir, "package.json")
 const pkg = await Bun.file(root).json()
 const manager = pkg.packageManager ?? ""
 const bun = manager.startsWith("bun@") ? manager.slice(4) : ""
