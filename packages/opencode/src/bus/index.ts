@@ -50,25 +50,14 @@ export namespace Bus {
       type: def.type,
     })
     const pending = []
-    try {
-      for (const key of [def.type, "*"]) {
-        const match = state().subscriptions.get(key)
-        for (const sub of match ?? []) {
-          pending.push(sub(payload))
-        }
+    for (const key of [def.type, "*"]) {
+      const match = state().subscriptions.get(key)
+      for (const sub of match ?? []) {
+        pending.push(sub(payload))
       }
-    } catch (e) {
-      // No instance context - skip instance-scoped subscriptions
     }
-    const directory = (() => {
-      try {
-        return Instance.directory
-      } catch (e) {
-        return ""
-      }
-    })()
     GlobalBus.emit("event", {
-      directory,
+      directory: Instance.directory,
       payload,
     })
     return Promise.all(pending)

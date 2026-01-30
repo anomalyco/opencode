@@ -1,5 +1,5 @@
 import { WhisperEngine, type WhisperModelSize } from "./whisper-engine"
-import { Bus } from "@/bus"
+import { GlobalBus } from "@/bus/global"
 import { Voice } from "./event"
 import { Log } from "@/util/log"
 import { Global } from "@/global"
@@ -40,7 +40,13 @@ class VoiceServiceImpl {
       return { status: "error" as const, error: "Engine failed to initialize" }
     })()
 
-    Bus.publish(Voice.Event.Updated, { status })
+    GlobalBus.emit("event", {
+      directory: "",
+      payload: {
+        type: Voice.Event.Updated.type,
+        properties: { status },
+      },
+    })
   }
 
   async initialize(): Promise<void> {
