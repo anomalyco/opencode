@@ -619,7 +619,7 @@ export namespace Config {
       color: z
         .union([
           z.string().regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color format"),
-          z.enum(["primary", "secondary", "accent", "success", "warning", "error"]),
+          z.enum(["primary", "secondary", "accent", "success", "warning", "error", "info"]),
         ])
         .optional()
         .describe("Hex color code (e.g., #FF5733) or theme color (e.g., primary)"),

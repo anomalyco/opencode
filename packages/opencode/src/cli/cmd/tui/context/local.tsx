@@ -48,6 +48,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         theme.warning,
         theme.primary,
         theme.error,
+        theme.info,
       ])
       return {
         list() {
