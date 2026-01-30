@@ -1,5 +1,5 @@
-import { test, expect } from "./fixtures"
-import { modKey, promptSelector } from "./utils"
+import { test, expect } from "../fixtures"
+import { modKey, promptSelector } from "../utils"
 
 test("smoke providers settings opens provider selector", async ({ page, gotoSession }) => {
   await gotoSession()
