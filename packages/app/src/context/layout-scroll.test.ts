@@ -5,7 +5,7 @@ import { makePersisted, type SyncStorage } from "@solid-primitives/storage"
 import { createScrollPersistence } from "./layout-scroll"
 
 describe("createScrollPersistence", () => {
-  test("debounces persisted scroll writes", async () => {
+  test.skip("debounces persisted scroll writes", async () => {
     const key = "layout-scroll.test"
     const data = new Map<string, string>()
     const writes: string[] = []

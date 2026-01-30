@@ -1953,6 +1953,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     keybind={command.keybind("model.variant.cycle")}
                   >
                     <Button
+                      data-action="model-variant-cycle"
                       variant="ghost"
                       class="text-text-base _hidden group-hover/prompt-input:inline-block capitalize text-12-regular"
                       onClick={() => local.model.variant.cycle()}

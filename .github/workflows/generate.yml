@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - dev
+  pull_request:
   workflow_dispatch:
 
 jobs:
@@ -15,13 +16,16 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
 
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
+
+      - name: Setup git committer
+        id: committer
+        uses: ./.github/actions/setup-git-committer
+        with:
+          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
       - name: Generate
         run: ./script/generate.ts
@@ -32,10 +36,8 @@ jobs:
             echo "No changes to commit"
             exit 0
           fi
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
           git add -A
-          git commit -m "chore: generate"
+          git commit -m "chore: generate" --allow-empty
           git push origin HEAD:${{ github.ref_name }} --no-verify
           # if ! git push origin HEAD:${{ github.event.pull_request.head.ref || github.ref_name }} --no-verify; then
           #   echo ""
