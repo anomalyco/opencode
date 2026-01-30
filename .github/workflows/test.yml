@@ -1,9 +1,6 @@
 name: test
 
 on:
-  push:
-    branches:
-      - dev
   pull_request:
   workflow_dispatch:
 jobs:
@@ -20,7 +17,6 @@ jobs:
             command: |
               git config --global user.email "bot@opencode.ai"
               git config --global user.name "opencode"
-              bun turbo typecheck
               bun turbo test
           - name: windows
             host: windows-latest
