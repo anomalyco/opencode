@@ -41,6 +41,10 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
+      - name: Install OpenCode
+        if: inputs.bump || inputs.version
+        run: bun i -g opencode-ai
+
       - id: version
         run: |
           ./script/version.ts
@@ -209,10 +213,6 @@ jobs:
           fetch-depth: 0
 
       - uses: ./.github/actions/setup-bun
-
-      - name: Install OpenCode
-        if: inputs.bump || inputs.version
-        run: bun i -g opencode-ai
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
