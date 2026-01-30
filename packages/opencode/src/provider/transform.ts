@@ -594,9 +594,12 @@ export namespace ProviderTransform {
         result["reasoningEffort"] = "medium"
       }
 
+      // Only set textVerbosity for non-chat gpt-5.x models
+      // Chat models (e.g. gpt-5.2-chat-latest) only support "medium" verbosity
       if (
         input.model.api.id.includes("gpt-5.") &&
         !input.model.api.id.includes("codex") &&
+        !input.model.api.id.includes("-chat") &&
         input.model.providerID !== "azure"
       ) {
         result["textVerbosity"] = "low"
