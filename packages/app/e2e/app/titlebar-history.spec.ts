@@ -1,5 +1,6 @@
 import { test, expect } from "../fixtures"
-import { modKey, promptSelector } from "../utils"
+import { openSidebar } from "../actions"
+import { promptSelector } from "../selectors"
 
 test("titlebar back/forward navigates between sessions", async ({ page, slug, sdk, gotoSession }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
@@ -14,12 +15,7 @@ test("titlebar back/forward navigates between sessions", async ({ page, slug, sd
   try {
     await gotoSession(one.id)
 
-    const main = page.locator("main")
-    const collapsed = ((await main.getAttribute("class")) ?? "").includes("xl:border-l")
-    if (collapsed) {
-      await page.keyboard.press(`${modKey}+B`)
-      await expect(main).not.toHaveClass(/xl:border-l/)
-    }
+    await openSidebar(page)
 
     const link = page.locator(`[data-session-id="${two.id}"] a`).first()
     await expect(link).toBeVisible()

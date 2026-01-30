@@ -1,5 +1,5 @@
 import { test, expect } from "../fixtures"
-import { promptSelector } from "../utils"
+import { promptSelector } from "../selectors"
 
 test("can open an existing session and type into the prompt", async ({ page, sdk, gotoSession }) => {
   const title = `e2e smoke ${Date.now()}`
