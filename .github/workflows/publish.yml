@@ -37,6 +37,13 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/setup-bun
+
+      - name: Setup git committer
+        id: committer
+        uses: ./.github/actions/setup-git-committer
+        with:
+          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
       - id: version
         run: |
           ./script/version.ts
@@ -155,7 +162,7 @@ jobs:
           bun ./scripts/prepare.ts
         env:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
-          GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.committer.outputs.token }}
           RUST_TARGET: ${{ matrix.settings.target }}
           GH_TOKEN: ${{ github.token }}
           GITHUB_RUN_ID: ${{ github.run_id }}
@@ -228,11 +235,16 @@ jobs:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Setup Git Identity
+      - name: Setup git committer
+        id: committer
+        uses: ./.github/actions/setup-git-committer
+        with:
+          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+
+      - name: Setup Git remote
         run: |
-          git config --global user.email "opencode@sst.dev"
-          git config --global user.name "opencode"
-          git remote set-url origin https://x-access-token:${{ secrets.SST_GITHUB_TOKEN }}@github.com/${{ github.repository }}
+          git remote set-url origin https://x-access-token:${{ steps.committer.outputs.token }}@github.com/${{ github.repository }}
 
       - uses: actions/download-artifact@v4
         with:
@@ -263,6 +275,6 @@ jobs:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
           AUR_KEY: ${{ secrets.AUR_KEY }}
-          GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.committer.outputs.token }}
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           NPM_CONFIG_PROVENANCE: false
