@@ -145,7 +145,7 @@ jobs:
           cd packages/desktop
           bun ./scripts/prepare.ts
         env:
-          OPENCODE_VERSION: ${{ needs.publish.outputs.version }}
+          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
           RUST_TARGET: ${{ matrix.settings.target }}
           GH_TOKEN: ${{ github.token }}
