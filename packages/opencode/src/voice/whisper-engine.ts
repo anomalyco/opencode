@@ -1,4 +1,4 @@
-import { pipeline, env } from "@huggingface/transformers"
+import { pipeline } from "@huggingface/transformers"
 import { Log } from "@/util/log"
 import { Global } from "@/global"
 import path from "path"
@@ -7,8 +7,6 @@ import os from "os"
 import { WaveFile } from "wavefile"
 import { exec } from "child_process"
 import { promisify } from "util"
-
-env.backends.onnx.logSeverityLevel = 4
 
 const execAsync = promisify(exec)
 
