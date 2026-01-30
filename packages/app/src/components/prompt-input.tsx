@@ -1987,6 +1987,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     keybind={command.keybind("model.variant.cycle")}
                   >
                     <Button
+                      data-action="model-variant-cycle"
                       variant="ghost"
                       class="text-text-strong text-12-regular"
                       onClick={() => local.model.variant.cycle()}
