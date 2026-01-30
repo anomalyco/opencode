@@ -146,15 +146,22 @@ export namespace File {
           .readdir(Instance.directory, { withFileTypes: true })
           .catch(() => [] as fs.Dirent[])
 
+        const isDir = async (entry: fs.Dirent, base: string) => {
+          if (entry.isDirectory()) return true
+          if (!entry.isSymbolicLink()) return false
+          const stat = await fs.promises.stat(path.join(base, entry.name)).catch(() => undefined)
+          return stat?.isDirectory() ?? false
+        }
+
         for (const entry of top) {
-          if (!entry.isDirectory()) continue
+          if (!(await isDir(entry, Instance.directory))) continue
           if (shouldIgnore(entry.name)) continue
           dirs.add(entry.name + "/")
 
           const base = path.join(Instance.directory, entry.name)
           const children = await fs.promises.readdir(base, { withFileTypes: true }).catch(() => [] as fs.Dirent[])
           for (const child of children) {
-            if (!child.isDirectory()) continue
+            if (!(await isDir(child, base))) continue
             if (shouldIgnoreNested(child.name)) continue
             dirs.add(entry.name + "/" + child.name + "/")
           }
@@ -348,15 +355,16 @@ export namespace File {
     }
 
     const nodes: Node[] = []
-    for (const entry of await fs.promises
-      .readdir(resolved, {
-        withFileTypes: true,
-      })
-      .catch(() => [])) {
+    const entries = await fs.promises.readdir(resolved, { withFileTypes: true }).catch(() => [])
+    for (const entry of entries) {
       if (exclude.includes(entry.name)) continue
       const fullPath = path.join(resolved, entry.name)
       const relativePath = path.relative(Instance.directory, fullPath)
-      const type = entry.isDirectory() ? "directory" : "file"
+      let type: "directory" | "file" = entry.isDirectory() ? "directory" : "file"
+      if (type === "file" && entry.isSymbolicLink()) {
+        const stat = await fs.promises.stat(fullPath).catch(() => undefined)
+        if (stat?.isDirectory()) type = "directory"
+      }
       nodes.push({
         name: entry.name,
         path: relativePath,
