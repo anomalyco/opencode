@@ -135,7 +135,7 @@ export namespace MCP {
         return client.callTool(
           {
             name: mcpTool.name,
-            arguments: args as Record<string, unknown>,
+            arguments: (args || {}) as Record<string, unknown>,
           },
           CallToolResultSchema,
           {
@@ -412,7 +412,7 @@ export namespace MCP {
       const [cmd, ...args] = mcp.command
       const cwd = Instance.directory
       const transport = new StdioClientTransport({
-        stderr: "ignore",
+        stderr: "pipe",
         command: cmd,
         args,
         cwd,
@@ -421,6 +421,9 @@ export namespace MCP {
           ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
           ...mcp.environment,
         },
+      })
+      transport.stderr?.on("data", (chunk: Buffer) => {
+        log.info(`mcp stderr: ${chunk.toString()}`, { key })
       })
 
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
