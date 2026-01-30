@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.1.36",
+  "version": "1.1.45",
   "name": "opencode",
   "type": "module",
   "license": "MIT",
@@ -49,7 +49,7 @@
   "dependencies": {
     "@actions/core": "1.11.1",
     "@actions/github": "6.0.1",
-    "@agentclientprotocol/sdk": "0.12.0",
+    "@agentclientprotocol/sdk": "0.13.0",
     "@ai-sdk/amazon-bedrock": "3.0.73",
     "@ai-sdk/anthropic": "2.0.57",
     "@ai-sdk/azure": "2.0.91",

@@ -324,6 +324,7 @@ export default function Page() {
   }
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
+  const centered = createMemo(() => isDesktop() && !layout.fileTree.opened())
 
   function normalizeTab(tab: string) {
     if (!tab.startsWith("file://")) return tab
@@ -729,8 +730,8 @@ export default function Page() {
       onSelect: () => view().terminal.toggle(),
     },
     {
-      id: "fileTree.toggle",
-      title: language.t("command.fileTree.toggle"),
+      id: "review.toggle",
+      title: language.t("command.review.toggle"),
       description: "",
       category: language.t("command.category.view"),
       keybind: "mod+shift+r",
@@ -1126,6 +1127,46 @@ export default function Page() {
     setFileTreeTab("all")
   }
 
+  const reviewPanel = () => (
+    <div class="flex flex-col h-full overflow-hidden bg-background-stronger contain-strict">
+      <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
+        <Switch>
+          <Match when={hasReview()}>
+            <Show
+              when={diffsReady()}
+              fallback={<div class="px-6 py-4 text-text-weak">{language.t("session.review.loadingChanges")}</div>}
+            >
+              <SessionReviewTab
+                diffs={diffs}
+                view={view}
+                diffStyle={layout.review.diffStyle()}
+                onDiffStyleChange={layout.review.setDiffStyle}
+                onScrollRef={setReviewScroll}
+                focusedFile={activeDiff()}
+                onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+                comments={comments.all()}
+                focusedComment={comments.focus()}
+                onFocusedCommentChange={comments.setFocus}
+                onViewFile={(path) => {
+                  showAllFiles()
+                  const value = file.tab(path)
+                  tabs().open(value)
+                  file.load(path)
+                }}
+              />
+            </Show>
+          </Match>
+          <Match when={true}>
+            <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
+              <Mark class="w-14 opacity-10" />
+              <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.empty")}</div>
+            </div>
+          </Match>
+        </Switch>
+      </div>
+    </div>
+  )
+
   createEffect(
     on(
       () => tabs().active(),
@@ -1251,7 +1292,7 @@ export default function Page() {
     const id = params.id
     if (!id) return
 
-    const wants = isDesktop() ? fileTreeTab() === "changes" : store.mobileTab === "changes"
+    const wants = isDesktop() ? layout.fileTree.opened() && fileTreeTab() === "changes" : store.mobileTab === "changes"
     if (!wants) return
     if (sync.data.session_diff[id] !== undefined) return
     if (sync.status === "loading") return
@@ -1720,10 +1761,11 @@ export default function Page() {
         <div
           classList={{
             "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger": true,
-            "flex-1 md:flex-none pt-6 md:pt-3": true,
+            "flex-1 pt-6 md:pt-3": true,
+            "md:flex-none": layout.fileTree.opened(),
           }}
           style={{
-            width: isDesktop() ? `${layout.session.width()}px` : "100%",
+            width: isDesktop() && layout.fileTree.opened() ? `${layout.session.width()}px` : "100%",
             "--prompt-height": store.promptHeight ? `${store.promptHeight}px` : undefined,
           }}
         >
@@ -1898,6 +1940,7 @@ export default function Page() {
                               "sticky top-0 z-30 bg-background-stronger": true,
                               "w-full": true,
                               "px-4 md:px-6": true,
+                              "md:max-w-200 md:mx-auto": centered(),
                             }}
                           >
                             <div class="h-10 flex items-center gap-1">
@@ -1922,7 +1965,13 @@ export default function Page() {
                         <div
                           ref={autoScroll.contentRef}
                           role="log"
-                          class="flex flex-col gap-32 items-start justify-start w-full mt-0 pb-[calc(var(--prompt-height,8rem)+64px)] md:pb-[calc(var(--prompt-height,10rem)+64px)] transition-[margin]"
+                          class="flex flex-col gap-32 items-start justify-start pb-[calc(var(--prompt-height,8rem)+64px)] md:pb-[calc(var(--prompt-height,10rem)+64px)] transition-[margin]"
+                          classList={{
+                            "w-full": true,
+                            "md:max-w-200 md:mx-auto": centered(),
+                            "mt-0.5": centered(),
+                            "mt-0": !centered(),
+                          }}
                         >
                           <Show when={store.turnStart > 0}>
                             <div class="w-full flex justify-center">
@@ -1970,7 +2019,10 @@ export default function Page() {
                                 <div
                                   id={anchor(message.id)}
                                   data-message-id={message.id}
-                                  class="min-w-0 w-full max-w-full"
+                                  classList={{
+                                    "min-w-0 w-full max-w-full": true,
+                                    "md:max-w-200": centered(),
+                                  }}
                                 >
                                   <SessionTurn
                                     sessionID={params.id!}
@@ -2023,7 +2075,12 @@ export default function Page() {
             ref={(el) => (promptDock = el)}
             class="absolute inset-x-0 bottom-0 pt-12 pb-4 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none"
           >
-            <div class="w-full px-4 pointer-events-auto">
+            <div
+              classList={{
+                "w-full px-4 pointer-events-auto": true,
+                "md:max-w-200 md:mx-auto": centered(),
+              }}
+            >
               <Show when={request()} keyed>
                 {(perm) => (
                   <div data-component="tool-part-wrapper" data-permission="true" class="mb-3">
@@ -2094,7 +2151,7 @@ export default function Page() {
             </div>
           </div>
 
-          <Show when={isDesktop()}>
+          <Show when={isDesktop() && layout.fileTree.opened()}>
             <ResizeHandle
               direction="horizontal"
               size={layout.session.width()}
@@ -2106,7 +2163,7 @@ export default function Page() {
         </div>
 
         {/* Desktop side panel - hidden on mobile */}
-        <Show when={isDesktop()}>
+        <Show when={isDesktop() && layout.fileTree.opened()}>
           <aside
             id="review-panel"
             aria-label={language.t("session.panel.reviewAndFiles")}
@@ -2126,7 +2183,62 @@ export default function Page() {
                     <ConstrainDragYAxis />
                     <Tabs value={activeTab()} onChange={openTab}>
                       <div class="sticky top-0 shrink-0 flex">
-                        <Tabs.List>
+                        <Tabs.List
+                          ref={(el: HTMLDivElement) => {
+                            let scrollTimeout: number | undefined
+                            let prevScrollWidth = el.scrollWidth
+                            let prevContextOpen = contextOpen()
+
+                            const handler = () => {
+                              if (scrollTimeout !== undefined) clearTimeout(scrollTimeout)
+                              scrollTimeout = window.setTimeout(() => {
+                                const scrollWidth = el.scrollWidth
+                                const clientWidth = el.clientWidth
+                                const currentContextOpen = contextOpen()
+
+                                // Only scroll when a tab is added (width increased), not on removal
+                                if (scrollWidth > prevScrollWidth) {
+                                  if (!prevContextOpen && currentContextOpen) {
+                                    // Context tab was opened, scroll to first
+                                    el.scrollTo({
+                                      left: 0,
+                                      behavior: "smooth",
+                                    })
+                                  } else if (scrollWidth > clientWidth) {
+                                    // File tab was added, scroll to rightmost
+                                    el.scrollTo({
+                                      left: scrollWidth - clientWidth,
+                                      behavior: "smooth",
+                                    })
+                                  }
+                                }
+                                // When width decreases (tab removed), don't scroll - let browser handle it naturally
+
+                                prevScrollWidth = scrollWidth
+                                prevContextOpen = currentContextOpen
+                              }, 0)
+                            }
+
+                            const wheelHandler = (e: WheelEvent) => {
+                              // Enable horizontal scrolling with mouse wheel
+                              if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+                                el.scrollLeft += e.deltaY > 0 ? 50 : -50
+                                e.preventDefault()
+                              }
+                            }
+
+                            el.addEventListener("wheel", wheelHandler, { passive: false })
+
+                            const observer = new MutationObserver(handler)
+                            observer.observe(el, { childList: true })
+
+                            onCleanup(() => {
+                              el.removeEventListener("wheel", wheelHandler)
+                              observer.disconnect()
+                              if (scrollTimeout !== undefined) clearTimeout(scrollTimeout)
+                            })
+                          }}
+                        >
                           <Show when={contextOpen()}>
                             <Tabs.Trigger
                               value="context"
@@ -2710,47 +2822,7 @@ export default function Page() {
                   </DragDropProvider>
                 }
               >
-                <div class="flex flex-col h-full overflow-hidden bg-background-stronger contain-strict">
-                  <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-                    <Switch>
-                      <Match when={hasReview()}>
-                        <Show
-                          when={diffsReady()}
-                          fallback={
-                            <div class="px-6 py-4 text-text-weak">{language.t("session.review.loadingChanges")}</div>
-                          }
-                        >
-                          <SessionReviewTab
-                            diffs={diffs}
-                            view={view}
-                            diffStyle={layout.review.diffStyle()}
-                            onDiffStyleChange={layout.review.setDiffStyle}
-                            onScrollRef={setReviewScroll}
-                            focusedFile={activeDiff()}
-                            onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
-                            comments={comments.all()}
-                            focusedComment={comments.focus()}
-                            onFocusedCommentChange={comments.setFocus}
-                            onViewFile={(path) => {
-                              showAllFiles()
-                              const value = file.tab(path)
-                              tabs().open(value)
-                              file.load(path)
-                            }}
-                          />
-                        </Show>
-                      </Match>
-                      <Match when={true}>
-                        <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
-                          <Mark class="w-14 opacity-10" />
-                          <div class="text-14-regular text-text-weak max-w-56">
-                            {language.t("session.review.empty")}
-                          </div>
-                        </div>
-                      </Match>
-                    </Switch>
-                  </div>
-                </div>
+                {reviewPanel()}
               </Show>
             </div>
 

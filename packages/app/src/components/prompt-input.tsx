@@ -189,11 +189,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     const wantsReview = item.commentOrigin === "review" || (item.commentOrigin !== "file" && commentInReview(item.path))
     if (wantsReview) {
+      layout.fileTree.open()
       layout.fileTree.setTab("changes")
       requestAnimationFrame(() => comments.setFocus(focus))
       return
     }
 
+    layout.fileTree.open()
     layout.fileTree.setTab("all")
     const tab = files.tab(item.path)
     tabs().open(tab)
@@ -1036,13 +1038,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
+    const ctrl = event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
+
     if (store.popover) {
       if (event.key === "Tab") {
         selectPopoverActive()
         event.preventDefault()
         return
       }
-      if (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter") {
+      const nav = event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter"
+      const ctrlNav = ctrl && (event.key === "n" || event.key === "p")
+      if (nav || ctrlNav) {
         if (store.popover === "at") {
           atOnKeyDown(event)
           event.preventDefault()
@@ -1055,8 +1061,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         return
       }
     }
-
-    const ctrl = event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
 
     if (ctrl && event.code === "KeyG") {
       if (store.popover) {
@@ -1949,6 +1953,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     keybind={command.keybind("model.variant.cycle")}
                   >
                     <Button
+                      data-action="model-variant-cycle"
                       variant="ghost"
                       class="text-text-base _hidden group-hover/prompt-input:inline-block capitalize text-12-regular"
                       onClick={() => local.model.variant.cycle()}
