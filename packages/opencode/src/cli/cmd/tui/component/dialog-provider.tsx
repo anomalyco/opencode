@@ -281,11 +281,6 @@ function ApiMethod(props: ApiMethodProps) {
         })
         await sdk.client.instance.dispose()
         await sync.bootstrap()
-        if (props.providerID === "mammouth-ai") {
-          local.model.set({ providerID: props.providerID, modelID: "claude-haiku-4-5" }, { recent: true })
-          dialog.clear()
-          return
-        }
         dialog.replace(() => <DialogModel providerID={props.providerID} />)
       }}
     />
