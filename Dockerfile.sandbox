@@ -1,32 +1,35 @@
 # OpenCode Sandbox Container
 # Multi-stage build for security and minimal image size
 
-FROM alpine:latest AS base
+FROM ubuntu:22.04 AS base
 
 # Disable the runtime transpiler cache
 ENV BUN_RUNTIME_TRANSPILER_CACHE_PATH=0
 
 # Install required system dependencies
-RUN apk add --no-cache \
+RUN apt-get update && apt-get install -y \
     git \
     ripgrep \
     curl \
     ca-certificates \
-    libgcc \
-    libstdc++ \
-    openssh-client
+    openssh-client \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for security
-RUN addgroup -g 1000 sandbox && \
-    adduser -u 1000 -G sandbox -s /bin/sh -D sandbox
+RUN groupadd -g 1000 sandbox && \
+    useradd -u 1000 -g sandbox -s /bin/sh -d /home/sandbox sandbox && \
+    mkdir -p /home/sandbox && \
+    chown sandbox:sandbox /home/sandbox
 
 # Build stage for AMD64
 FROM base AS build-amd64
-COPY ../opencode/dist/opencode-linux-x64-baseline-musl/bin/opencode /usr/local/bin/opencode
+COPY ./packages/opencode/dist/opencode-linux-x64/bin/opencode /usr/local/bin/opencode
+RUN chmod +x /usr/local/bin/opencode
 
 # Build stage for ARM64
 FROM base AS build-arm64
-COPY ../opencode/dist/opencode-linux-arm64-musl/bin/opencode /usr/local/bin/opencode
+COPY ./packages/opencode/dist/opencode-linux-arm64/bin/opencode /usr/local/bin/opencode
+RUN chmod +x /usr/local/bin/opencode
 
 # Final stage - select based on target architecture
 ARG TARGETARCH

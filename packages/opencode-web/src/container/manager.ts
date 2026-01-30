@@ -30,10 +30,42 @@ export namespace ContainerManager {
     const { sessionId, workspaceVolume } = input
     const authToken = randomBytes(32).toString("hex")
     const containerName = `opencode-sandbox-${sessionId.slice(0, 12)}`
+    const networkName = `opencode-net-${sessionId.slice(0, 12)}`
+
+    // Clean up any existing container with the same name
+    try {
+      const existingContainers = await docker.listContainers({
+        all: true,
+        filters: { name: [containerName] }
+      })
+      for (const containerInfo of existingContainers) {
+        console.log(`Removing existing container: ${containerName}`)
+        const container = docker.getContainer(containerInfo.Id)
+        await container.stop({ t: 0 }).catch(() => {})
+        await container.remove({ force: true }).catch(() => {})
+      }
+    } catch (error) {
+      console.error("Error cleaning up existing container:", error)
+    }
+
+    // Clean up any existing network with the same name
+    try {
+      const existingNetworks = await docker.listNetworks({
+        filters: { name: [networkName] }
+      })
+      for (const netInfo of existingNetworks) {
+        if (netInfo.Name === networkName) {
+          console.log(`Removing existing network: ${networkName}`)
+          const network = docker.getNetwork(netInfo.Id)
+          await network.remove().catch(() => {})
+        }
+      }
+    } catch (error) {
+      console.error("Error cleaning up existing network:", error)
+    }
 
     try {
       // Create isolated network for this container
-      const networkName = `opencode-net-${sessionId.slice(0, 12)}`
       let network: Docker.Network
 
       try {
