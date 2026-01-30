@@ -190,7 +190,7 @@ class VoiceServiceImpl {
 
     const models: WhisperModelSize[] = ["tiny", "base", "small"]
     for (const model of models) {
-      const modelPath = path.join(cacheDir, `Xenova_whisper-${model}.en`)
+      const modelPath = path.join(cacheDir, `whisper-${model}.en`)
       const exists = await Bun.file(path.join(modelPath, "config.json")).exists()
       if (exists) {
         downloaded.push(model)
