@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - dev
-  pull_request:
-  workflow_dispatch:
 
 jobs:
   generate:
