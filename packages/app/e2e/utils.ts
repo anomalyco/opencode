@@ -14,6 +14,8 @@ export const promptSelector = '[data-component="prompt-input"]'
 export const terminalSelector = '[data-component="terminal"]'
 export const modelVariantCycleSelector = '[data-action="model-variant-cycle"]'
 
+export const settingsLanguageSelectSelector = '[data-action="settings-language"]'
+
 export function createSdk(directory?: string) {
   return createOpencodeClient({ baseUrl: serverUrl, directory, throwOnError: true })
 }

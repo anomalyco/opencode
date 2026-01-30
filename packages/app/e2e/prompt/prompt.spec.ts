@@ -1,5 +1,5 @@
-import { test, expect } from "./fixtures"
-import { promptSelector } from "./utils"
+import { test, expect } from "../fixtures"
+import { promptSelector } from "../utils"
 
 function sessionIDFromUrl(url: string) {
   const match = /\/session\/([^/?#]+)/.exec(url)
