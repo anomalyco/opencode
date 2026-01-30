@@ -17,6 +17,7 @@ import {
   type VcsInfo,
   type PermissionRequest,
   type QuestionRequest,
+  type AppSkillsResponse,
   createOpencodeClient,
 } from "@opencode-ai/sdk/v2/client"
 import { createStore, produce, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
@@ -56,10 +57,13 @@ type ProjectMeta = {
   }
 }
 
+export type Skill = AppSkillsResponse[number]
+
 type State = {
   status: "loading" | "partial" | "complete"
   agent: Agent[]
   command: Command[]
+  skill: Skill[]
   project: string
   projectMeta: ProjectMeta | undefined
   icon: string | undefined
@@ -388,6 +392,7 @@ function createGlobalSync() {
           status: "loading" as const,
           agent: [],
           command: [],
+          skill: [],
           session: [],
           sessionTotal: 0,
           session_status: {},
@@ -528,6 +533,7 @@ function createGlobalSync() {
       Promise.all([
         sdk.path.get().then((x) => setStore("path", x.data!)),
         sdk.command.list().then((x) => setStore("command", x.data ?? [])),
+        sdk.app.skills().then((x) => setStore("skill", x.data ?? [])),
         sdk.session.status().then((x) => setStore("session_status", x.data!)),
         loadSessions(directory),
         sdk.mcp.status().then((x) => setStore("mcp", x.data!)),
