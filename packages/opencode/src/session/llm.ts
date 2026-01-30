@@ -1,4 +1,3 @@
-import os from "os"
 import { Installation } from "@/installation"
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
@@ -9,7 +8,6 @@ import {
   type StreamTextResult,
   type Tool,
   type ToolSet,
-  extractReasoningMiddleware,
   tool,
   jsonSchema,
 } from "ai"
@@ -261,7 +259,6 @@ export namespace LLM {
               return args.params
             },
           },
-          extractReasoningMiddleware({ tagName: "think", startWithReasoning: false }),
         ],
       }),
       experimental_telemetry: {

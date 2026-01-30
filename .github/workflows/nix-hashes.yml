@@ -36,13 +36,15 @@ jobs:
           ref: ${{ github.head_ref || github.ref_name }}
           repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
 
+      - name: Setup git committer
+        id: committer
+        uses: ./.github/actions/setup-git-committer
+        with:
+          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+
       - name: Setup Nix
         uses: nixbuild/nix-quick-install-action@v34
-
-      - name: Configure git
-        run: |
-          git config --global user.email "action@github.com"
-          git config --global user.name "Github Action"
 
       - name: Pull latest changes
         env:
