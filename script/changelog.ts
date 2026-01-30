@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
-import { createOpencode } from "@opencode-ai/sdk"
+import { createOpencode } from "@opencode-ai/sdk/v2"
 import { parseArgs } from "util"
 
 export const team = [
@@ -153,9 +153,9 @@ async function summarizeCommit(opencode: Awaited<ReturnType<typeof createOpencod
   console.log("summarizing commit:", message)
   const session = await opencode.client.session.create()
   const result = await opencode.client.session
-    .prompt({
-      path: { id: session.data!.id },
-      body: {
+    .prompt(
+      {
+        sessionID: session.data!.id,
         model: { providerID: "opencode", modelID: "claude-sonnet-4-5" },
         tools: {
           "*": false,
@@ -169,8 +169,10 @@ Commit: ${message}`,
           },
         ],
       },
-      signal: AbortSignal.timeout(120_000),
-    })
+      {
+        signal: AbortSignal.timeout(120_000),
+      },
+    )
     .then((x) => x.data?.parts?.find((y) => y.type === "text")?.text ?? message)
   return result.trim()
 }
@@ -238,7 +240,7 @@ export async function buildNotes(from: string, to: string) {
 
   console.log("generating changelog since " + from)
 
-  const opencode = await createOpencode({ port: 5044 })
+  const opencode = await createOpencode({ port: 0 })
   const notes: string[] = []
 
   try {
@@ -258,8 +260,9 @@ export async function buildNotes(from: string, to: string) {
       throw error
     }
   } finally {
-    opencode.server.close()
+    await opencode.server.close()
   }
+  console.log("changelog generation complete")
 
   const contributors = await getContributors(from, to)
 
