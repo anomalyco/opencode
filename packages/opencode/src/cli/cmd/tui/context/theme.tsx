@@ -328,7 +328,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
             if (store.active === "system") {
               setStore(
                 produce((draft) => {
-                  draft.active = "opencode" // Fallback to opencode theme if system colors can't be determined
+                  draft.active = "opencode"
                   draft.ready = true
                 }),
               )
@@ -353,7 +353,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     })
 
     const values = createMemo(() => {
-      return resolveTheme(store.themes[store.active] ?? store.themes.system, store.mode)
+      return resolveTheme(store.themes[store.active] ?? store.themes.opencode, store.mode)
     })
 
     const syntax = createMemo(() => generateSyntax(values()))
