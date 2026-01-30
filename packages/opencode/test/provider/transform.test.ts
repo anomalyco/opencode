@@ -959,7 +959,7 @@ describe("ProviderTransform.message - providerOptions key remapping", () => {
     expect(result[0].providerOptions?.openai).toBeUndefined()
   })
 
-  test("openai with github-copilot npm remaps providerID to 'openai'", () => {
+  test("github-copilot npm remaps providerID to 'openai' key", () => {
     const model = createModel("github-copilot", "@ai-sdk/github-copilot")
     const msgs = [
       {
