@@ -36,6 +36,9 @@ jobs:
     if: github.repository == 'anomalyco/opencode'
     steps:
       - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
       - uses: ./.github/actions/setup-bun
 
       - id: version
