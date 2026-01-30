@@ -124,6 +124,15 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
+      - name: Cache apt packages
+        if: contains(matrix.settings.host, 'ubuntu')
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: ${{ runner.os }}-${{ matrix.settings.target }}-apt-${{ hashFiles('.github/workflows/publish.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.settings.target }}-apt-
+
       - name: install dependencies (ubuntu only)
         if: contains(matrix.settings.host, 'ubuntu')
         run: |
@@ -229,6 +238,14 @@ jobs:
         with:
           name: opencode-cli
           path: packages/opencode/dist
+
+      - name: Cache apt packages (AUR)
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: ${{ runner.os }}-apt-aur-${{ hashFiles('.github/workflows/publish.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-apt-aur-
 
       - name: Setup SSH for AUR
         run: |
