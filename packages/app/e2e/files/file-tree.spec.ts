@@ -1,4 +1,4 @@
-import { test, expect } from "./fixtures"
+import { test, expect } from "../fixtures"
 
 test.skip("file tree can expand folders and open a file", async ({ page, gotoSession }) => {
   await gotoSession()
