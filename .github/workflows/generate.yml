@@ -25,6 +25,7 @@ jobs:
         uses: ./.github/actions/setup-bun
 
       - name: Setup git committer
+        id: committer
         uses: ./.github/actions/setup-git-committer
         with:
           opencode-app-id: ${{ vars.OPENCODE_APP_ID }}

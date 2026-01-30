@@ -242,10 +242,6 @@ jobs:
           opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
           opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
-      - name: Setup Git remote
-        run: |
-          git remote set-url origin https://x-access-token:${{ steps.committer.outputs.token }}@github.com/${{ github.repository }}
-
       - uses: actions/download-artifact@v4
         with:
           name: opencode-cli
