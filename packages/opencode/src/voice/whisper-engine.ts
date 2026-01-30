@@ -1,4 +1,4 @@
-import { pipeline, type PipelineType } from "@xenova/transformers"
+import { pipeline, env } from "@huggingface/transformers"
 import { Log } from "@/util/log"
 import { Global } from "@/global"
 import path from "path"
@@ -7,69 +7,10 @@ import os from "os"
 import { WaveFile } from "wavefile"
 import { exec } from "child_process"
 import { promisify } from "util"
-import { openSync, closeSync } from "fs"
-import { dlopen, FFIType, suffix } from "bun:ffi"
+
+env.backends.onnx.logSeverityLevel = 4
 
 const execAsync = promisify(exec)
-
-// Suppress ONNX runtime warnings globally
-process.env.ORT_LOGGING_LEVEL = "4"
-process.env.ONNX_LOGGING_LEVEL = "4"
-
-// HACK: Suppress ONNX Runtime warnings that bypass JavaScript stderr
-//
-// ONNX Runtime emits warnings directly to file descriptor 2 (stderr) from C++ code
-// during model loading, specifically "CleanUnusedInitializersAndNodeArgs" warnings.
-// These warnings:
-// - Don't respect ORT_LOGGING_LEVEL environment variable
-// - Can't be suppressed via process.stderr.write override
-// - Are not actionable for end users (they're about internal graph optimization)
-// - Clutter the terminal output when enabling voice mode
-//
-// See: https://github.com/microsoft/onnxruntime/issues/19141
-//
-// This workaround uses FFI to call dup2() syscall to temporarily redirect stderr
-// to /dev/null at the OS level during model initialization, then restores it.
-// This is the only reliable way to suppress these warnings without patching ONNX Runtime.
-//
-// Platform support: Linux only (gracefully skipped on macOS/Windows)
-// TODO: Remove this hack if/when ONNX Runtime properly respects logging levels
-
-function redirectStderr() {
-  // Only attempt stderr redirection on Linux
-  if (process.platform !== "linux") {
-    return () => {}
-  }
-
-  try {
-    const libc = dlopen("/lib/x86_64-linux-gnu/libc.so.6", {
-      dup: {
-        args: [FFIType.i32],
-        returns: FFIType.i32,
-      },
-      dup2: {
-        args: [FFIType.i32, FFIType.i32],
-        returns: FFIType.i32,
-      },
-    })
-
-    const devNull = openSync("/dev/null", "w")
-    const stderrBackup = libc.symbols.dup(2)
-
-    libc.symbols.dup2(devNull, 2)
-    closeSync(devNull)
-
-    return () => {
-      libc.symbols.dup2(stderrBackup, 2)
-      try {
-        closeSync(stderrBackup)
-      } catch {}
-    }
-  } catch (error) {
-    // FFI loading failed - continue without stderr suppression
-    return () => {}
-  }
-}
 
 export type WhisperModelSize = "tiny" | "base" | "small"
 
@@ -99,27 +40,24 @@ export class WhisperEngine {
     try {
       this.status = "loading"
 
-      // Redirect stderr to suppress ONNX warnings during model loading
-      const restoreStderr = redirectStderr()
-
-      try {
-        this.transcriber = await pipeline("automatic-speech-recognition", modelId, {
-          quantized: true,
-          device: this.device === "auto" ? undefined : this.device,
-          cache_dir: cacheDir,
-          progress_callback: (progress: any) => {
-            if (progress.status === "downloading") {
-              const percent = progress.progress ? Math.round(progress.progress) : 0
-              if (percent !== this.downloadProgress) {
-                this.downloadProgress = percent
-                this.log.debug("model download progress", { percent })
-              }
+      this.transcriber = await pipeline("automatic-speech-recognition", modelId, {
+        session_options: {
+          log_severity_level: 4,
+        },
+        dtype: "fp32",
+        quantized: true,
+        device: this.device === "auto" ? undefined : this.device,
+        cache_dir: cacheDir,
+        progress_callback: (progress: any) => {
+          if (progress.status === "downloading") {
+            const percent = progress.progress ? Math.round(progress.progress) : 0
+            if (percent !== this.downloadProgress) {
+              this.downloadProgress = percent
+              this.log.debug("model download progress", { percent })
             }
-          },
-        } as any)
-      } finally {
-        restoreStderr()
-      }
+          }
+        },
+      } as any)
 
       this.status = "ready"
       this.log.debug("whisper engine ready", { modelSize: this.modelSize })
