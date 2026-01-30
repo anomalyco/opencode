@@ -5,6 +5,19 @@ interface PR {
   title: string
 }
 
+interface Repo {
+  nameWithOwner: string
+}
+
+interface HeadRepo {
+  nameWithOwner: string
+}
+
+interface PRHead {
+  headRefName: string
+  headRepository: HeadRepo
+}
+
 async function main() {
   console.log("Fetching open contributor PRs...")
 
@@ -15,6 +28,12 @@ async function main() {
 
   const prs: PR[] = JSON.parse(prsResult.stdout)
   console.log(`Found ${prs.length} open contributor PRs`)
+
+  const repoResult = await $`gh repo view --json nameWithOwner`.nothrow()
+  if (repoResult.exitCode !== 0) {
+    throw new Error(`Failed to fetch repo info: ${repoResult.stderr}`)
+  }
+  const repo: Repo = JSON.parse(repoResult.stdout)
 
   console.log("Fetching latest dev branch...")
   const fetchDev = await $`git fetch origin dev`.nothrow()
@@ -34,9 +53,18 @@ async function main() {
   for (const pr of prs) {
     console.log(`\nProcessing PR #${pr.number}: ${pr.title}`)
 
-    // Get the diff from GitHub
+    const headResult = await $`gh pr view ${pr.number} --json headRefName,headRepository`.nothrow()
+    if (headResult.exitCode !== 0) {
+      console.log(`  Failed to get head info`)
+      skipped.push({ number: pr.number, reason: `Failed to get head info: ${headResult.stderr}` })
+      continue
+    }
+    const head: PRHead = JSON.parse(headResult.stdout)
+
+    // Get the diff from GitHub compare API
     console.log(`  Getting diff...`)
-    const diffResult = await $`gh pr diff ${pr.number}`.nothrow()
+    const compare = `${repo.nameWithOwner}/compare/dev...${head.headRepository.nameWithOwner}:${head.headRefName}`
+    const diffResult = await $`gh api -H Accept:application/vnd.github.v3.diff repos/${compare}`.nothrow()
     if (diffResult.exitCode !== 0) {
       console.log(`  Failed to get diff`)
       skipped.push({ number: pr.number, reason: `Failed to get diff: ${diffResult.stderr}` })
@@ -80,7 +108,7 @@ async function main() {
     const commitMsg = `Apply PR #${pr.number}: ${pr.title}`
     const commit = await $`git commit -m ${commitMsg}`.nothrow()
     if (commit.exitCode !== 0) {
-      console.log(`  Failed to commit`)
+      console.log(`  Failed to commit: ${commit.stderr}`)
       await $`git checkout -- .`.nothrow()
       await $`git clean -fd`.nothrow()
       skipped.push({ number: pr.number, reason: `Commit failed: ${commit.stderr}` })
