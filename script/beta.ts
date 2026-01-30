@@ -49,9 +49,9 @@ async function main() {
       continue
     }
 
-    // Try to squash merge the PR directly
+    // Try to squash merge the PR directly (allow unrelated histories since beta starts fresh from dev)
     console.log(`  Attempting to merge PR #${pr.number}...`)
-    const merge = await $`git merge --squash pr-${pr.number}`.nothrow()
+    const merge = await $`git merge --squash --allow-unrelated-histories pr-${pr.number}`.nothrow()
     if (merge.exitCode !== 0) {
       console.log(`  Squash merge failed for PR #${pr.number}`)
       console.log(`  Error: ${merge.stderr}`)
