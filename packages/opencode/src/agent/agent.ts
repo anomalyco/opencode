@@ -40,6 +40,17 @@ export namespace Agent {
       prompt: z.string().optional(),
       options: z.record(z.string(), z.any()),
       steps: z.number().int().positive().optional(),
+      modelTiers: z
+        .object({
+          quick: z.object({ modelID: z.string(), providerID: z.string(), variant: z.string().optional() }).optional(),
+          standard: z
+            .object({ modelID: z.string(), providerID: z.string(), variant: z.string().optional() })
+            .optional(),
+          advanced: z
+            .object({ modelID: z.string(), providerID: z.string(), variant: z.string().optional() })
+            .optional(),
+        })
+        .optional(),
     })
     .meta({
       ref: "Agent",
@@ -225,6 +236,16 @@ export namespace Agent {
       item.steps = value.steps ?? item.steps
       item.options = mergeDeep(item.options, value.options ?? {})
       item.permission = PermissionNext.merge(item.permission, PermissionNext.fromConfig(value.permission ?? {}))
+
+      if (value.model_tiers) {
+        const modelTiers: Partial<Record<Provider.ModelTier, Provider.ModelReference>> = {}
+
+        for (const [tier, tierConfig] of Object.entries(value.model_tiers)) {
+          modelTiers[tier as Provider.ModelTier] = Provider.parseTierConfig(tierConfig)
+        }
+
+        item.modelTiers = modelTiers as Record<Provider.ModelTier, Provider.ModelReference>
+      }
     }
 
     // Ensure Truncate.DIR is allowed unless explicitly configured
@@ -331,5 +352,23 @@ export namespace Agent {
 
     const result = await generateObject(params)
     return result.object
+  }
+
+  export async function resolveModel(
+    agent: Info,
+    tier?: Provider.ModelTier,
+    parentSessionModel?: Provider.ModelReference,
+  ): Promise<Provider.ModelReference> {
+    const config = await Config.get()
+
+    if (agent?.model) return agent.model
+
+    if (tier) {
+      if (agent?.modelTiers?.[tier]) return agent.modelTiers[tier]
+
+      if (config?.model_tiers?.[tier]) return Provider.parseTierConfig(config?.model_tiers?.[tier])
+    }
+
+    return parentSessionModel ?? (await Provider.defaultModel())
   }
 }

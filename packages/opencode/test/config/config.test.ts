@@ -2,6 +2,7 @@ import { test, expect, describe, mock, afterEach } from "bun:test"
 import { Config } from "../../src/config/config"
 import { Instance } from "../../src/project/instance"
 import { Auth } from "../../src/auth"
+import { Provider } from "../../src/provider/provider"
 import { tmpdir } from "../fixture/fixture"
 import path from "path"
 import fs from "fs/promises"
@@ -1687,4 +1688,116 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
       }
     }
   })
+})
+
+test("global model_tiers config is parsed correctly", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      model_tiers: {
+        quick: { model: "anthropic/claude-haiku-4-5" },
+        standard: { model: "anthropic/claude-sonnet-4-5" },
+        advanced: { model: "anthropic/claude-opus-4-5" },
+      },
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+
+      expect(config.model_tiers).toBeDefined()
+      expect(config.model_tiers?.quick?.model).toBe("anthropic/claude-haiku-4-5")
+      expect(config.model_tiers?.standard?.model).toBe("anthropic/claude-sonnet-4-5")
+      expect(config.model_tiers?.advanced?.model).toBe("anthropic/claude-opus-4-5")
+    },
+  })
+})
+
+test("agent-level model_tiers config is parsed correctly", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      model_tiers: {
+        quick: { model: "anthropic/claude-haiku-4-5" },
+      },
+      agent: {
+        code_review: {
+          model_tiers: {
+            quick: { model: "anthropic/claude-sonnet-4-5" },
+          },
+        },
+      },
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+
+      expect(config.agent?.code_review?.model_tiers?.quick?.model).toBe("anthropic/claude-sonnet-4-5")
+    },
+  })
+})
+
+test("global model_tiers config parses variant correctly", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      model_tiers: {
+        quick: { model: "anthropic/claude-haiku-4-5", variant: "minimal" },
+        standard: { model: "anthropic/claude-sonnet-4-5", variant: "high" },
+        advanced: { model: "anthropic/claude-opus-4-5", variant: "max" },
+      },
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+
+      expect(config.model_tiers?.quick?.variant).toBe("minimal")
+      expect(config.model_tiers?.standard?.variant).toBe("high")
+      expect(config.model_tiers?.advanced?.variant).toBe("max")
+    },
+  })
+})
+
+test("agent-level model_tiers config parses variant correctly", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      agent: {
+        code_review: {
+          model_tiers: {
+            quick: { model: "anthropic/claude-sonnet-4-5", variant: "high" },
+          },
+          variant: "medium",
+        },
+      },
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+
+      expect(config.agent?.code_review?.model_tiers?.quick?.variant).toBe("high")
+      expect(config.agent?.code_review?.variant).toBe("medium")
+    },
+  })
+})
+
+test("parseTierConfig extracts variant from tier config", () => {
+  const result = Provider.parseTierConfig({ model: "openai/gpt-4o-mini", variant: "minimal" })
+  expect(result.modelID).toBe("gpt-4o-mini")
+  expect(result.providerID).toBe("openai")
+  expect(result.variant).toBe("minimal")
+})
+
+test("parseTierConfig works without variant", () => {
+  const result = Provider.parseTierConfig({ model: "openai/gpt-4o-mini" })
+  expect(result.modelID).toBe("gpt-4o-mini")
+  expect(result.providerID).toBe("openai")
+  expect(result.variant).toBeUndefined()
 })

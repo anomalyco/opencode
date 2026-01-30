@@ -618,6 +618,14 @@ export namespace Config {
         .describe("Maximum number of agentic iterations before forcing text-only response"),
       maxSteps: z.number().int().positive().optional().describe("@deprecated Use 'steps' field instead."),
       permission: Permission.optional(),
+      model_tiers: z
+        .object({
+          quick: z.object({ model: z.string(), variant: z.string().optional() }).optional(),
+          standard: z.object({ model: z.string(), variant: z.string().optional() }).optional(),
+          advanced: z.object({ model: z.string(), variant: z.string().optional() }).optional(),
+        })
+        .optional()
+        .describe("Model tier mappings for this agent"),
     })
     .catchall(z.any())
     .transform((agent, ctx) => {
@@ -637,6 +645,7 @@ export namespace Config {
         "permission",
         "disable",
         "tools",
+        "model_tiers",
       ])
 
       // Extract unknown properties into options
@@ -959,6 +968,14 @@ export namespace Config {
         .string()
         .describe("Small model to use for tasks like title generation in the format of provider/model")
         .optional(),
+      model_tiers: z
+        .object({
+          quick: z.object({ model: z.string(), variant: z.string().optional() }).optional(),
+          standard: z.object({ model: z.string(), variant: z.string().optional() }).optional(),
+          advanced: z.object({ model: z.string(), variant: z.string().optional() }).optional(),
+        })
+        .optional()
+        .describe("Global model tier mappings"),
       default_agent: z
         .string()
         .optional()

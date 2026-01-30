@@ -1193,11 +1193,29 @@ export namespace Provider {
     }
   }
 
+  export type ModelReference = { modelID: string; providerID: string; variant?: string }
+
+  export type ModelTier = "quick" | "standard" | "advanced"
+
   export function parseModel(model: string) {
     const [providerID, ...rest] = model.split("/")
     return {
       providerID: providerID,
       modelID: rest.join("/"),
+    }
+  }
+
+  export const ModelTierConfig = z.object({
+    model: z.string().describe("Model ID in format provider/model"),
+    variant: z.string().optional().describe("Variant for this tier"),
+  })
+
+  export type ModelTierConfig = z.infer<typeof ModelTierConfig>
+
+  export function parseTierConfig(tierConfig: ModelTierConfig): ModelReference {
+    return {
+      ...parseModel(tierConfig.model),
+      variant: tierConfig.variant,
     }
   }
 

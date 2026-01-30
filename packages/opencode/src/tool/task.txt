@@ -5,7 +5,10 @@ Available agent types and the tools they have access to:
 
 When using the Task tool, you must specify a subagent_type parameter to select which agent type to use.
 
-When to use the Task tool:
+Optionally, you can also specify a model_tier parameter to control which model the subagent uses. `quick` for fast and inexpensive model for simple tasks, `standard` for balanced model for most tasks, `advanced` for powerful model for complex tasks.
+If not specified, the agent's configured model or parent session's model is used.
+
+When to use Task tool:
 - When you are instructed to execute custom slash commands. Use the Task tool with the slash command invocation as the entire prompt. The slash command can take arguments. For example: Task(description="Check the file", prompt="/check-file path/to/file.py")
 
 When NOT to use the Task tool:
@@ -15,20 +18,20 @@ When NOT to use the Task tool:
 - Other tasks that are not related to the agent descriptions above
 
 
-Usage notes:
+Usage Notes:
 1. Launch multiple agents concurrently whenever possible, to maximize performance; to do that, use a single message with multiple tool uses
 2. When the agent is done, it will return a single message back to you. The result returned by the agent is not visible to the user. To show the user the result, you should send a text message back to the user with a concise summary of the result.
 3. Each agent invocation is stateless unless you provide a session_id. Your prompt should contain a highly detailed task description for the agent to perform autonomously and you should specify exactly what information the agent should return back to you in its final and only message to you.
 4. The agent's outputs should generally be trusted
 5. Clearly tell the agent whether you expect it to write code or just to do research (search, file reads, web fetches, etc.), since it is not aware of the user's intent
-6. If the agent description mentions that it should be used proactively, then you should try your best to use it without the user having to ask for it first. Use your judgement.
+6. If the agent description mentions that it should be used proactively, then you should try your best to use it without the user having to ask for it first. Use your judgment.
 
 Example usage (NOTE: The agents below are fictional examples for illustration only - use the actual agents listed above):
 
 <example_agent_descriptions>
 "code-reviewer": use this agent after you are done writing a significant piece of code
 "greeting-responder": use this agent when to respond to user greetings with a friendly joke
-</example_agent_description>
+</example_agent_descriptions>
 
 <example>
 user: "Please write a function that checks if a number is prime"
