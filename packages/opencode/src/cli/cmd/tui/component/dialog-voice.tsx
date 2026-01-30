@@ -5,7 +5,6 @@ import { DialogSelect, type DialogSelectRef, type DialogSelectOption } from "@tu
 import { useTheme } from "../context/theme"
 import { Keybind } from "@/util/keybind"
 import { TextAttributes } from "@opentui/core"
-import { useSDK } from "@tui/context/sdk"
 
 function Status(props: { status: string; loading: boolean }) {
   const { theme } = useTheme()
@@ -33,7 +32,6 @@ function Status(props: { status: string; loading: boolean }) {
 export function DialogVoice() {
   const local = useLocal()
   const sync = useSync()
-  const sdk = useSDK()
   const [, setRef] = createSignal<DialogSelectRef<unknown>>()
   const [loading, setLoading] = createSignal<string | null>(null)
 
@@ -89,22 +87,7 @@ export function DialogVoice() {
         if (value === "toggle") {
           setLoading("toggle")
           try {
-            const currentStatus = voiceStatus()
-            if (currentStatus === "disabled" || currentStatus === "idle") {
-              await sdk.client.voice.enable()
-              const currentModel = voiceModel()
-              local.voice.set({
-                enabled: true,
-                model: currentModel ? (currentModel as "tiny" | "base" | "small") : "base",
-              })
-            } else {
-              await sdk.client.voice.disable()
-              local.voice.set({ enabled: false })
-            }
-            const statusRes = await sdk.client.voice.status()
-            if (statusRes.data) {
-              sync.set("voice", statusRes.data)
-            }
+            await local.voice.toggle()
           } catch (error) {
             console.error("Failed to toggle voice:", error)
           } finally {
@@ -117,12 +100,7 @@ export function DialogVoice() {
           const modelName = value.replace("model:", "") as "tiny" | "base" | "small"
           setLoading(modelName)
           try {
-            await sdk.client.voice.switchModel({ model: modelName })
-            local.voice.set({ model: modelName })
-            const statusRes = await sdk.client.voice.status()
-            if (statusRes.data) {
-              sync.set("voice", statusRes.data)
-            }
+            await local.voice.switchModel(modelName)
           } catch (error) {
             console.error("Failed to switch voice model:", error)
           } finally {

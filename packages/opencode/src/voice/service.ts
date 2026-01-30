@@ -14,6 +14,17 @@ class VoiceServiceImpl {
   private currentModel: WhisperModelSize = "base"
   private enabled = false
 
+  private async saveToDisk() {
+    await Config.updateGlobal({
+      voice: {
+        enabled: this.enabled,
+        model: this.currentModel,
+        device: "auto",
+      },
+    })
+    this.log.debug("voice settings saved to config", { enabled: this.enabled, model: this.currentModel })
+  }
+
   private publishStatus() {
     const status = (() => {
       if (!this.enabled) return { status: "disabled" as const }
@@ -33,14 +44,12 @@ class VoiceServiceImpl {
   }
 
   async initialize(): Promise<void> {
-    const cfg = await Config.get()
-    const file = Bun.file(path.join(Global.Path.state, "voice.json"))
-    const local = await file.json().catch(() => ({}))
+    const cfg = await Config.getGlobal()
 
-    this.log.info("voice initialization", { local, config: cfg.voice })
+    this.log.info("voice initialization", { config: cfg.voice })
 
-    this.enabled = local.enabled ?? cfg.voice?.enabled ?? false
-    this.currentModel = local.model ?? cfg.voice?.model ?? "base"
+    this.enabled = cfg.voice?.enabled ?? false
+    this.currentModel = cfg.voice?.model ?? "base"
 
     this.log.info("voice enabled state", { enabled: this.enabled, model: this.currentModel })
 
@@ -62,13 +71,14 @@ class VoiceServiceImpl {
     }
 
     this.enabled = true
+    await this.saveToDisk()
     this.publishStatus()
 
     if (this.engine) {
       return this.engine.isReady()
     }
 
-    this.log.info("enabling voice engine", { model: this.currentModel })
+    this.log.debug("enabling voice engine", { model: this.currentModel })
     this.engine = new WhisperEngine(this.currentModel, "auto")
     this.publishStatus()
 
@@ -80,12 +90,13 @@ class VoiceServiceImpl {
       return false
     }
 
-    this.log.info("voice service enabled successfully")
+    this.log.debug("voice service enabled successfully")
     return true
   }
 
   async disable(): Promise<void> {
     this.enabled = false
+    await this.saveToDisk()
     if (this.engine) {
       await this.engine.stop()
       this.engine = null
@@ -101,6 +112,7 @@ class VoiceServiceImpl {
 
     this.log.info("switching voice model", { from: this.currentModel, to: model })
     this.currentModel = model
+    await this.saveToDisk()
 
     if (this.engine) {
       await this.engine.stop()

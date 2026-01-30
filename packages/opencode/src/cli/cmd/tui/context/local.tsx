@@ -374,77 +374,19 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       },
     }
 
-    const voice = iife(() => {
-      const [voiceStore, setVoiceStore] = createStore<{
-        ready: boolean
-        enabled: boolean
-        model: "tiny" | "base" | "small"
-      }>({
-        ready: false,
-        enabled: false,
-        model: "base",
-      })
-
-      const file = Bun.file(path.join(Global.Path.state, "voice.json"))
-      const state = {
-        pending: false,
-      }
-
-      function save() {
-        if (!voiceStore.ready) {
-          state.pending = true
-          return
+    const voice = {
+      async toggle() {
+        const status = sync.data.voice
+        if (status?.status === "ready") {
+          await sdk.client.voice.disable()
+        } else {
+          await sdk.client.voice.enable()
         }
-        state.pending = false
-        Bun.write(
-          file,
-          JSON.stringify({
-            enabled: voiceStore.enabled,
-            model: voiceStore.model,
-          }),
-        )
-      }
-
-      file
-        .json()
-        .then((x) => {
-          if (typeof x.enabled === "boolean") setVoiceStore("enabled", x.enabled)
-          if (x.model === "tiny" || x.model === "base" || x.model === "small") setVoiceStore("model", x.model)
-        })
-        .catch(() => {})
-        .finally(() => {
-          setVoiceStore("ready", true)
-          if (state.pending) save()
-        })
-
-      return {
-        enabled() {
-          return voiceStore.enabled
-        },
-        model() {
-          return voiceStore.model
-        },
-        setEnabled(enabled: boolean) {
-          batch(() => {
-            setVoiceStore("enabled", enabled)
-            save()
-          })
-        },
-        setModel(model: "tiny" | "base" | "small") {
-          batch(() => {
-            setVoiceStore("model", model)
-            save()
-          })
-        },
-        set(opts: { enabled?: boolean; model?: "tiny" | "base" | "small" }) {
-          batch(() => {
-            if (opts.enabled !== undefined) setVoiceStore("enabled", opts.enabled)
-            if (opts.model !== undefined) setVoiceStore("model", opts.model)
-            save()
-          })
-        },
-      }
-    })
+      },
+      async switchModel(model: "tiny" | "base" | "small") {
+        await sdk.client.voice.switchModel({ model })
+      },
+    }
 
     // Automatically update model when agent changes
     createEffect(() => {

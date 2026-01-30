@@ -7,8 +7,62 @@ import os from "os"
 import { WaveFile } from "wavefile"
 import { exec } from "child_process"
 import { promisify } from "util"
+import { openSync, closeSync } from "fs"
+import { dlopen, FFIType, suffix } from "bun:ffi"
 
 const execAsync = promisify(exec)
+
+// Suppress ONNX runtime warnings globally
+process.env.ORT_LOGGING_LEVEL = "4"
+process.env.ONNX_LOGGING_LEVEL = "4"
+
+// HACK: Suppress ONNX Runtime warnings that bypass JavaScript stderr
+//
+// ONNX Runtime emits warnings directly to file descriptor 2 (stderr) from C++ code
+// during model loading, specifically "CleanUnusedInitializersAndNodeArgs" warnings.
+// These warnings:
+// - Don't respect ORT_LOGGING_LEVEL environment variable
+// - Can't be suppressed via process.stderr.write override
+// - Are not actionable for end users (they're about internal graph optimization)
+// - Clutter the terminal output when enabling voice mode
+//
+// See: https://github.com/microsoft/onnxruntime/issues/19141
+//
+// This workaround uses FFI to call dup2() syscall to temporarily redirect stderr
+// to /dev/null at the OS level during model initialization, then restores it.
+// This is the only reliable way to suppress these warnings without patching ONNX Runtime.
+//
+// TODO: Remove this hack if/when ONNX Runtime properly respects logging levels
+
+const libc = dlopen("/lib/x86_64-linux-gnu/libc.so.6", {
+  dup: {
+    args: [FFIType.i32],
+    returns: FFIType.i32,
+  },
+  dup2: {
+    args: [FFIType.i32, FFIType.i32],
+    returns: FFIType.i32,
+  },
+})
+
+function redirectStderr() {
+  try {
+    const devNull = openSync("/dev/null", "w")
+    const stderrBackup = libc.symbols.dup(2)
+
+    libc.symbols.dup2(devNull, 2)
+    closeSync(devNull)
+
+    return () => {
+      libc.symbols.dup2(stderrBackup, 2)
+      try {
+        closeSync(stderrBackup)
+      } catch {}
+    }
+  } catch (error) {
+    return () => {}
+  }
+}
 
 export type WhisperModelSize = "tiny" | "base" | "small"
 
@@ -30,7 +84,7 @@ export class WhisperEngine {
     if (this.status === "downloading" || this.status === "loading") return false
 
     this.status = "downloading"
-    this.log.info("initializing whisper engine", { modelSize: this.modelSize, device: this.device })
+    this.log.debug("initializing whisper engine", { modelSize: this.modelSize, device: this.device })
 
     const modelId = `Xenova/whisper-${this.modelSize}.en`
     const cacheDir = path.join(Global.Path.cache, "voice-models")
@@ -38,16 +92,8 @@ export class WhisperEngine {
     try {
       this.status = "loading"
 
-      process.env.ORT_LOGGING_LEVEL = "4"
-
-      const originalStderrWrite = process.stderr.write.bind(process.stderr)
-      let stderrBuffer = ""
-
-      process.stderr.write = ((chunk: any): boolean => {
-        const str = chunk.toString()
-        stderrBuffer += str
-        return true
-      }) as any
+      // Redirect stderr to suppress ONNX warnings during model loading
+      const restoreStderr = redirectStderr()
 
       try {
         this.transcriber = await pipeline("automatic-speech-recognition", modelId, {
@@ -65,11 +111,11 @@ export class WhisperEngine {
           },
         } as any)
       } finally {
-        process.stderr.write = originalStderrWrite
+        restoreStderr()
       }
 
       this.status = "ready"
-      this.log.info("whisper engine ready", { modelSize: this.modelSize })
+      this.log.debug("whisper engine ready", { modelSize: this.modelSize })
       return true
     } catch (error) {
       this.status = "error"

@@ -128,7 +128,7 @@ export function Home() {
               {connectedMcpCount()} MCP
             </text>
           </Show>
-          <Show when={sync.data.voice !== undefined}>
+          <Show when={sync.data.voice !== undefined && sync.data.voice.status !== "disabled"}>
             <text fg={theme.text}>
               <Switch>
                 <Match when={sync.data.voice?.status !== "ready"}>
