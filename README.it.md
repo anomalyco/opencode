@@ -23,6 +23,7 @@
   <a href="README.es.md">Español</a> |
   <a href="README.fr.md">Français</a> |
   <a href="README.it.md">Italiano</a> |
+  <a href="README.hu.md">Magyar</a> |
   <a href="README.da.md">Dansk</a> |
   <a href="README.ja.md">日本語</a> |
   <a href="README.pl.md">Polski</a> |
