@@ -15,11 +15,11 @@ const ctx = {
 }
 
 describe("tool.question", () => {
-  let askSpy: any;
+  let askSpy: any
 
   beforeEach(() => {
     askSpy = spyOn(QuestionModule.Question, "ask").mockImplementation(async () => {
-        return []
+      return []
     })
   })
 
@@ -43,10 +43,7 @@ describe("tool.question", () => {
 
     askSpy.mockResolvedValueOnce([["Red"]])
 
-    const result = await tool.execute(
-      { questions },
-      ctx,
-    )
+    const result = await tool.execute({ questions }, ctx)
     expect(askSpy).toHaveBeenCalledTimes(1)
     expect(result.title).toBe("Asked 1 question")
   })
@@ -60,7 +57,7 @@ describe("tool.question", () => {
         options: [{ label: "Dog", description: "Man's best friend" }],
       },
     ]
-    
+
     askSpy.mockResolvedValueOnce([["Dog"]])
 
     const result = await tool.execute({ questions }, ctx)
@@ -92,7 +89,9 @@ describe("tool.question", () => {
       {
         question: "A question with a very long label",
         header: "Long Label",
-        options: [{ label: "This is a very, very, very long label that will exceed the limit", description: "A description" }],
+        options: [
+          { label: "This is a very, very, very long label that will exceed the limit", description: "A description" },
+        ],
       },
     ]
     try {
@@ -105,4 +104,3 @@ describe("tool.question", () => {
     }
   })
 })
-
