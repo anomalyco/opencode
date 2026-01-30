@@ -1,4 +1,5 @@
-import { Component, For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import { Component, For, Show, createMemo, onCleanup, onMount } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -111,24 +112,26 @@ export const SettingsKeybinds: Component = () => {
   const language = useLanguage()
   const settings = useSettings()
 
-  const [active, setActive] = createSignal<string | null>(null)
-  const [filter, setFilter] = createSignal("")
+  const [store, setStore] = createStore({
+    active: null as string | null,
+    filter: "",
+  })
 
   const stop = () => {
-    if (!active()) return
-    setActive(null)
+    if (!store.active) return
+    setStore("active", null)
     command.keybinds(true)
   }
 
   const start = (id: string) => {
-    if (active() === id) {
+    if (store.active === id) {
       stop()
       return
     }
 
-    if (active()) stop()
+    if (store.active) stop()
 
-    setActive(id)
+    setStore("active", id)
     command.keybinds(false)
   }
 
@@ -203,7 +206,7 @@ export const SettingsKeybinds: Component = () => {
   })
 
   const filtered = createMemo(() => {
-    const query = filter().toLowerCase().trim()
+    const query = store.filter.toLowerCase().trim()
     if (!query) return grouped()
 
     const map = list()
@@ -285,7 +288,7 @@ export const SettingsKeybinds: Component = () => {
 
   onMount(() => {
     const handle = (event: KeyboardEvent) => {
-      const id = active()
+      const id = store.active
       if (!id) return
 
       event.preventDefault()
@@ -345,18 +348,12 @@ export const SettingsKeybinds: Component = () => {
   })
 
   onCleanup(() => {
-    if (active()) command.keybinds(true)
+    if (store.active) command.keybinds(true)
   })
 
   return (
-    <div class="flex flex-col h-full overflow-y-auto no-scrollbar" style={{ padding: "0 40px 40px 40px" }}>
-      <div
-        class="sticky top-0 z-10"
-        style={{
-          background:
-            "linear-gradient(to bottom, var(--surface-raised-stronger-non-alpha) calc(100% - 24px), transparent)",
-        }}
-      >
+    <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
+      <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-4 pt-6 pb-6 max-w-[720px]">
           <div class="flex items-center justify-between gap-4">
             <h2 class="text-16-medium text-text-strong">{language.t("settings.shortcuts.title")}</h2>
@@ -370,8 +367,8 @@ export const SettingsKeybinds: Component = () => {
             <TextField
               variant="ghost"
               type="text"
-              value={filter()}
-              onChange={setFilter}
+              value={store.filter}
+              onChange={(v) => setStore("filter", v)}
               placeholder={language.t("settings.shortcuts.search.placeholder")}
               spellcheck={false}
               autocorrect="off"
@@ -379,8 +376,8 @@ export const SettingsKeybinds: Component = () => {
               autocapitalize="off"
               class="flex-1"
             />
-            <Show when={filter()}>
-              <IconButton icon="circle-x" variant="ghost" onClick={() => setFilter("")} />
+            <Show when={store.filter}>
+              <IconButton icon="circle-x" variant="ghost" onClick={() => setStore("filter", "")} />
             </Show>
           </div>
         </div>
@@ -402,13 +399,13 @@ export const SettingsKeybinds: Component = () => {
                           classList={{
                             "h-8 px-3 rounded-md text-12-regular": true,
                             "bg-surface-base text-text-subtle hover:bg-surface-raised-base-hover active:bg-surface-raised-base-active":
-                              active() !== id,
-                            "border border-border-weak-base bg-surface-inset-base text-text-weak": active() === id,
+                              store.active !== id,
+                            "border border-border-weak-base bg-surface-inset-base text-text-weak": store.active === id,
                           }}
                           onClick={() => start(id)}
                         >
                           <Show
-                            when={active() === id}
+                            when={store.active === id}
                             fallback={command.keybind(id) || language.t("settings.shortcuts.unassigned")}
                           >
                             {language.t("settings.shortcuts.pressKeys")}
@@ -423,11 +420,11 @@ export const SettingsKeybinds: Component = () => {
           )}
         </For>
 
-        <Show when={filter() && !hasResults()}>
+        <Show when={store.filter && !hasResults()}>
           <div class="flex flex-col items-center justify-center py-12 text-center">
             <span class="text-14-regular text-text-weak">{language.t("settings.shortcuts.search.empty")}</span>
-            <Show when={filter()}>
-              <span class="text-14-regular text-text-strong mt-1">"{filter()}"</span>
+            <Show when={store.filter}>
+              <span class="text-14-regular text-text-strong mt-1">"{store.filter}"</span>
             </Show>
           </div>
         </Show>
