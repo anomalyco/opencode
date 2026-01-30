@@ -106,12 +106,17 @@ async function main() {
     }
 
     const commitMsg = `Apply PR #${pr.number}: ${pr.title}`
-    const commit = await $`git commit -m ${commitMsg}`.nothrow()
-    if (commit.exitCode !== 0) {
-      console.log(`  Failed to commit: ${commit.stderr}`)
+    const commit = await Bun.spawn(["git", "commit", "-m", commitMsg], {
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const commitExit = await commit.exited
+    const commitStderr = await Bun.readableStreamToText(commit.stderr)
+    if (commitExit !== 0) {
+      console.log(`  Failed to commit: ${commitStderr}`)
       await $`git checkout -- .`.nothrow()
       await $`git clean -fd`.nothrow()
-      skipped.push({ number: pr.number, reason: `Commit failed: ${commit.stderr}` })
+      skipped.push({ number: pr.number, reason: `Commit failed: ${commitStderr}` })
       continue
     }
 
