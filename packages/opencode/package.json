@@ -51,7 +51,7 @@
     "@actions/github": "6.0.1",
     "@agentclientprotocol/sdk": "0.13.0",
     "@ai-sdk/amazon-bedrock": "3.0.73",
-    "@ai-sdk/anthropic": "2.0.57",
+    "@ai-sdk/anthropic": "2.0.58",
     "@ai-sdk/azure": "2.0.91",
     "@ai-sdk/cerebras": "1.0.34",
     "@ai-sdk/cohere": "2.0.22",
