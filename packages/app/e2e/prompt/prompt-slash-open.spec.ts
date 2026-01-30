@@ -1,5 +1,5 @@
-import { test, expect } from "./fixtures"
-import { promptSelector } from "./utils"
+import { test, expect } from "../fixtures"
+import { promptSelector } from "../utils"
 
 test("smoke /open opens file picker dialog", async ({ page, gotoSession }) => {
   await gotoSession()

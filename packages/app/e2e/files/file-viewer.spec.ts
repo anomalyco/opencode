@@ -1,5 +1,5 @@
-import { test, expect } from "./fixtures"
-import { modKey } from "./utils"
+import { test, expect } from "../fixtures"
+import { modKey } from "../utils"
 
 test("smoke file viewer renders real file content", async ({ page, gotoSession }) => {
   await gotoSession()

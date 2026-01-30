@@ -1,5 +1,5 @@
-import { test, expect } from "./fixtures"
-import { serverName } from "./utils"
+import { test, expect } from "../fixtures"
+import { serverName } from "../utils"
 
 test("home renders and shows core entrypoints", async ({ page }) => {
   await page.goto("/")

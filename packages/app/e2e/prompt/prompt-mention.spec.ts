@@ -1,5 +1,5 @@
-import { test, expect } from "./fixtures"
-import { promptSelector } from "./utils"
+import { test, expect } from "../fixtures"
+import { promptSelector } from "../utils"
 
 test("smoke @mention inserts file pill token", async ({ page, gotoSession }) => {
   await gotoSession()
