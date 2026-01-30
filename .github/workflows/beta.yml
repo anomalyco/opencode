@@ -23,12 +23,14 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
-      - name: Configure Git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+      - name: Setup Git Committer
+        id: setup-git-committer
+        uses: ./.github/actions/setup-git-committer
+        with:
+          opencode-app-id: ${{ secrets.OPENCODE_APP_ID }}
+          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
       - name: Sync beta branch
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.setup-git-committer.outputs.token }}
         run: bun script/beta.ts
