@@ -41,53 +41,32 @@ async function main() {
   for (const pr of prs) {
     console.log(`\nProcessing PR #${pr.number}: ${pr.title}`)
 
-    // Try to update PR branch via GitHub API (rebase onto base branch)
-    console.log(`  Attempting to rebase PR #${pr.number} via GitHub API...`)
-    const updateBranch = await $`gh pr update-branch ${pr.number} --rebase`.nothrow()
-    if (updateBranch.exitCode !== 0) {
+    // Fetch the PR
+    const fetchPR = await $`git fetch origin pull/${pr.number}/head:pr-${pr.number}`.nothrow()
+    if (fetchPR.exitCode !== 0) {
+      console.log(`  Failed to fetch PR #${pr.number}, skipping`)
+      skipped.push({ number: pr.number, reason: "Failed to fetch" })
+      continue
+    }
+
+    // Try to rebase onto current beta branch
+    console.log(`  Attempting to rebase PR #${pr.number}...`)
+    const rebase = await $`git rebase beta pr-${pr.number}`.nothrow()
+    if (rebase.exitCode !== 0) {
       console.log(`  Rebase failed for PR #${pr.number} (has conflicts)`)
-      console.log(`  Error: ${updateBranch.stderr}`)
+      await $`git rebase --abort`.nothrow()
+      await $`git checkout beta`.nothrow()
       skipped.push({ number: pr.number, reason: "Rebase failed (conflicts)" })
       continue
     }
 
-    console.log(`  Rebase initiated for PR #${pr.number}`)
+    // Move rebased commits to pr-${pr.number} branch and checkout back to beta
+    await $`git checkout -B pr-${pr.number}`.nothrow()
+    await $`git checkout beta`.nothrow()
 
-    // Wait for rebase to complete by polling PR state
-    console.log(`  Waiting for rebase to complete...`)
-    let rebaseComplete = false
-    let attempts = 0
-    const maxAttempts = 30
+    console.log(`  Successfully rebased PR #${pr.number}`)
 
-    while (!rebaseComplete && attempts < maxAttempts) {
-      await Bun.sleep(2000) // Wait 2 seconds
-      attempts++
-
-      const prCheck = await $`gh pr view ${pr.number} --json mergeStateStatus,headRefOid`.nothrow()
-      if (prCheck.exitCode === 0) {
-        const prData = JSON.parse(prCheck.stdout)
-        // mergeStateStatus will be "clean" when rebase is complete and no conflicts
-        if (prData.mergeStateStatus === "clean") {
-          rebaseComplete = true
-          console.log(`  Rebase completed for PR #${pr.number}`)
-        }
-      }
-    }
-
-    if (!rebaseComplete) {
-      console.log(`  Timeout waiting for rebase on PR #${pr.number}`)
-      skipped.push({ number: pr.number, reason: "Timeout waiting for rebase" })
-      continue
-    }
-
-    // Fetch the rebased PR
-    const fetchPR = await $`git fetch origin pull/${pr.number}/head:pr-${pr.number}`.nothrow()
-    if (fetchPR.exitCode !== 0) {
-      console.log(`  Failed to fetch PR #${pr.number} after rebase, skipping`)
-      skipped.push({ number: pr.number, reason: "Failed to fetch after rebase" })
-      continue
-    }
-
+    // Now squash merge the rebased PR
     const merge = await $`git merge --squash pr-${pr.number}`.nothrow()
     if (merge.exitCode !== 0) {
       console.log(`  Squash merge failed for PR #${pr.number}`)
