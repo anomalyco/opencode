@@ -6,6 +6,7 @@ import { Identifier } from "../id/id"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
 import { MCP } from "../mcp"
+import { Flag } from "../flag/flag"
 
 export namespace Command {
   export const Event = {
@@ -53,6 +54,7 @@ export namespace Command {
   export const Default = {
     INIT: "init",
     REVIEW: "review",
+    ENV: "env",
   } as const
 
   const state = Instance.state(async () => {
@@ -75,6 +77,15 @@ export namespace Command {
         },
         subtask: true,
         hints: hints(PROMPT_REVIEW),
+      },
+      // added for branch:feature/model-env-vars
+      [Default.ENV]: {
+        name: Default.ENV,
+        description: "display Opencode environment variables",
+        get template() {
+          return `echo $(env | grep OPENCODE_)`
+        },
+        hints: [],
       },
     }
 

@@ -5,6 +5,9 @@ on:
     branches:
       - dev
 
+permissions:
+  contents: write
+
 jobs:
   generate:
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -29,6 +32,7 @@ jobs:
         run: ./script/generate.ts
 
       - name: Commit and push
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         run: |
           if [ -z "$(git status --porcelain)" ]; then
             echo "No changes to commit"
@@ -37,15 +41,19 @@ jobs:
           git add -A
           git commit -m "chore: generate" --allow-empty
           git push origin HEAD:${{ github.ref_name }} --no-verify
-          # if ! git push origin HEAD:${{ github.event.pull_request.head.ref || github.ref_name }} --no-verify; then
-          #   echo ""
-          #   echo "============================================"
-          #   echo "Failed to push generated code."
-          #   echo "Please run locally and push:"
-          #   echo ""
-          #   echo "  ./script/generate.ts"
-          #   echo "  git add -A && git commit -m \"chore: generate\" && git push"
-          #   echo ""
-          #   echo "============================================"
-          #   exit 1
-          # fi
+
+      - name: Check for generated changes
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo ""
+            echo "============================================"
+            echo "There are uncommitted generated changes."
+            echo "Please run locally and push:"
+            echo ""
+            echo "  ./script/generate.ts"
+            echo "  git add -A && git commit -m \"chore: generate\" && git push"
+            echo ""
+            echo "============================================"
+            exit 1
+          fi
