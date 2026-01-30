@@ -1,6 +1,7 @@
 import { useMarked } from "../context/marked"
 import { useI18n } from "../context/i18n"
 import DOMPurify from "dompurify"
+import morphdom from "morphdom"
 import { checksum } from "@opencode-ai/util/encode"
 import { ComponentProps, createEffect, createResource, createSignal, onCleanup, splitProps } from "solid-js"
 import { isServer } from "solid-js/web"
@@ -194,18 +195,61 @@ export function Markdown(
     { initialValue: "" },
   )
 
+  let copySetupTimer: ReturnType<typeof setTimeout> | undefined
+  let copyCleanup: (() => void) | undefined
+
   createEffect(() => {
     const container = root()
     const content = html()
     if (!container) return
-    if (!content) return
     if (isServer) return
-    const cleanup = setupCodeCopy(container, {
-      copy: i18n.t("ui.message.copy"),
-      copied: i18n.t("ui.message.copied"),
+
+    if (!content) {
+      container.innerHTML = ""
+      return
+    }
+
+    const temp = document.createElement("div")
+    temp.innerHTML = content
+
+    morphdom(container, temp, {
+      childrenOnly: true,
+      onBeforeElUpdated: (fromEl, toEl) => {
+        if (fromEl.isEqualNode(toEl)) return false
+        if (fromEl.getAttribute("data-component") === "markdown-code") {
+          const fromPre = fromEl.querySelector("pre")
+          const toPre = toEl.querySelector("pre")
+          if (fromPre && toPre && !fromPre.isEqualNode(toPre)) {
+            morphdom(fromPre, toPre)
+          }
+          return false
+        }
+        return true
+      },
+      onBeforeNodeDiscarded: (node) => {
+        if (node instanceof Element) {
+          if (node.getAttribute("data-slot") === "markdown-copy-button") return false
+          if (node.getAttribute("data-component") === "markdown-code") return false
+        }
+        return true
+      },
     })
-    onCleanup(cleanup)
+
+    if (copySetupTimer) clearTimeout(copySetupTimer)
+    copySetupTimer = setTimeout(() => {
+      if (copyCleanup) copyCleanup()
+      copyCleanup = setupCodeCopy(container, {
+        copy: i18n.t("ui.message.copy"),
+        copied: i18n.t("ui.message.copied"),
+      })
+    }, 150)
   })
+
+  onCleanup(() => {
+    if (copySetupTimer) clearTimeout(copySetupTimer)
+    if (copyCleanup) copyCleanup()
+  })
+
   return (
     <div
       data-component="markdown"
@@ -213,7 +257,6 @@ export function Markdown(
         ...(local.classList ?? {}),
         [local.class ?? ""]: !!local.class,
       }}
-      innerHTML={html.latest}
       ref={setRoot}
       {...others}
     />

@@ -77,6 +77,8 @@ export const stripeWebhook = new stripe.WebhookEndpoint("StripeWebhookEndpoint",
     "checkout.session.expired",
     "charge.refunded",
     "invoice.payment_succeeded",
+    "invoice.payment_failed",
+    "invoice.payment_action_required",
     "customer.created",
     "customer.deleted",
     "customer.updated",
@@ -131,6 +133,8 @@ const ZEN_MODELS = [
   new sst.Secret("ZEN_MODELS6"),
   new sst.Secret("ZEN_MODELS7"),
   new sst.Secret("ZEN_MODELS8"),
+  new sst.Secret("ZEN_MODELS9"),
+  new sst.Secret("ZEN_MODELS10"),
 ]
 const STRIPE_SECRET_KEY = new sst.Secret("STRIPE_SECRET_KEY")
 const STRIPE_PUBLISHABLE_KEY = new sst.Secret("STRIPE_PUBLISHABLE_KEY")

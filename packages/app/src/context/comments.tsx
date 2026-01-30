@@ -1,4 +1,4 @@
-import { batch, createMemo, createRoot, createSignal, onCleanup } from "solid-js"
+import { batch, createMemo, createRoot, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useParams } from "@solidjs/router"
@@ -37,7 +37,16 @@ function createCommentSession(dir: string, id: string | undefined) {
     }),
   )
 
-  const [focus, setFocus] = createSignal<CommentFocus | null>(null)
+  const [state, setState] = createStore({
+    focus: null as CommentFocus | null,
+    active: null as CommentFocus | null,
+  })
+
+  const setFocus = (value: CommentFocus | null | ((value: CommentFocus | null) => CommentFocus | null)) =>
+    setState("focus", value)
+
+  const setActive = (value: CommentFocus | null | ((value: CommentFocus | null) => CommentFocus | null)) =>
+    setState("active", value)
 
   const list = (file: string) => store.comments[file] ?? []
 
@@ -73,9 +82,12 @@ function createCommentSession(dir: string, id: string | undefined) {
     all,
     add,
     remove,
-    focus: createMemo(() => focus()),
+    focus: createMemo(() => state.focus),
     setFocus,
     clearFocus: () => setFocus(null),
+    active: createMemo(() => state.active),
+    setActive,
+    clearActive: () => setActive(null),
   }
 }
 
@@ -135,6 +147,9 @@ export const { use: useComments, provider: CommentsProvider } = createSimpleCont
       focus: () => session().focus(),
       setFocus: (focus: CommentFocus | null) => session().setFocus(focus),
       clearFocus: () => session().clearFocus(),
+      active: () => session().active(),
+      setActive: (active: CommentFocus | null) => session().setActive(active),
+      clearActive: () => session().clearActive(),
     }
   },
 })

@@ -1,5 +1,7 @@
 import { test as base, expect } from "@playwright/test"
-import { createSdk, dirSlug, getWorktree, promptSelector, sessionPath } from "./utils"
+import { seedProjects } from "./actions"
+import { promptSelector } from "./selectors"
+import { createSdk, dirSlug, getWorktree, sessionPath } from "./utils"
 
 type TestFixtures = {
   sdk: ReturnType<typeof createSdk>
@@ -29,6 +31,18 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     await use(createSdk(directory))
   },
   gotoSession: async ({ page, directory }, use) => {
+    await seedProjects(page, { directory })
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "opencode.global.dat:model",
+        JSON.stringify({
+          recent: [{ providerID: "opencode", modelID: "big-pickle" }],
+          user: [],
+          variant: {},
+        }),
+      )
+    })
+
     const gotoSession = async (sessionID?: string) => {
       await page.goto(sessionPath(directory, sessionID))
       await expect(page.locator(promptSelector)).toBeVisible()

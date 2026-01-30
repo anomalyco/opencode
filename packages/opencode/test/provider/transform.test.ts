@@ -103,6 +103,78 @@ describe("ProviderTransform.options - setCacheKey", () => {
   })
 })
 
+describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
+  const sessionID = "test-session-123"
+
+  const createGpt5Model = (apiId: string) =>
+    ({
+      id: `openai/${apiId}`,
+      providerID: "openai",
+      api: {
+        id: apiId,
+        url: "https://api.openai.com",
+        npm: "@ai-sdk/openai",
+      },
+      name: apiId,
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0.03, output: 0.06, cache: { read: 0.001, write: 0.002 } },
+      limit: { context: 128000, output: 4096 },
+      status: "active",
+      options: {},
+      headers: {},
+    }) as any
+
+  test("gpt-5.2 should have textVerbosity set to low", () => {
+    const model = createGpt5Model("gpt-5.2")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.textVerbosity).toBe("low")
+  })
+
+  test("gpt-5.1 should have textVerbosity set to low", () => {
+    const model = createGpt5Model("gpt-5.1")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.textVerbosity).toBe("low")
+  })
+
+  test("gpt-5.2-chat-latest should NOT have textVerbosity set (only supports medium)", () => {
+    const model = createGpt5Model("gpt-5.2-chat-latest")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.textVerbosity).toBeUndefined()
+  })
+
+  test("gpt-5.1-chat-latest should NOT have textVerbosity set (only supports medium)", () => {
+    const model = createGpt5Model("gpt-5.1-chat-latest")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.textVerbosity).toBeUndefined()
+  })
+
+  test("gpt-5.2-chat should NOT have textVerbosity set", () => {
+    const model = createGpt5Model("gpt-5.2-chat")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.textVerbosity).toBeUndefined()
+  })
+
+  test("gpt-5-chat should NOT have textVerbosity set", () => {
+    const model = createGpt5Model("gpt-5-chat")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.textVerbosity).toBeUndefined()
+  })
+
+  test("gpt-5.2-codex should NOT have textVerbosity set (codex models excluded)", () => {
+    const model = createGpt5Model("gpt-5.2-codex")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.textVerbosity).toBeUndefined()
+  })
+})
+
 describe("ProviderTransform.maxOutputTokens", () => {
   test("returns 32k when modelLimit > 32k", () => {
     const modelLimit = 100000
@@ -1056,8 +1128,8 @@ describe("ProviderTransform.variants", () => {
       cache: { read: 0.0001, write: 0.0002 },
     },
     limit: {
-      context: 128000,
-      output: 8192,
+      context: 200_000,
+      output: 64_000,
     },
     status: "active",
     options: {},
@@ -1221,6 +1293,102 @@ describe("ProviderTransform.variants", () => {
       expect(Object.keys(result)).toEqual(["none", "minimal", "low", "medium", "high", "xhigh"])
       expect(result.low).toEqual({ reasoningEffort: "low" })
       expect(result.high).toEqual({ reasoningEffort: "high" })
+    })
+  })
+
+  describe("@ai-sdk/github-copilot", () => {
+    test("standard models return low, medium, high", () => {
+      const model = createMockModel({
+        id: "gpt-4.5",
+        providerID: "github-copilot",
+        api: {
+          id: "gpt-4.5",
+          url: "https://api.githubcopilot.com",
+          npm: "@ai-sdk/github-copilot",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+      expect(result.low).toEqual({
+        reasoningEffort: "low",
+        reasoningSummary: "auto",
+        include: ["reasoning.encrypted_content"],
+      })
+    })
+
+    test("gpt-5.1-codex-max includes xhigh", () => {
+      const model = createMockModel({
+        id: "gpt-5.1-codex-max",
+        providerID: "github-copilot",
+        api: {
+          id: "gpt-5.1-codex-max",
+          url: "https://api.githubcopilot.com",
+          npm: "@ai-sdk/github-copilot",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh"])
+    })
+
+    test("gpt-5.1-codex-mini does not include xhigh", () => {
+      const model = createMockModel({
+        id: "gpt-5.1-codex-mini",
+        providerID: "github-copilot",
+        api: {
+          id: "gpt-5.1-codex-mini",
+          url: "https://api.githubcopilot.com",
+          npm: "@ai-sdk/github-copilot",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+    })
+
+    test("gpt-5.1-codex does not include xhigh", () => {
+      const model = createMockModel({
+        id: "gpt-5.1-codex",
+        providerID: "github-copilot",
+        api: {
+          id: "gpt-5.1-codex",
+          url: "https://api.githubcopilot.com",
+          npm: "@ai-sdk/github-copilot",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+    })
+
+    test("gpt-5.2 includes xhigh", () => {
+      const model = createMockModel({
+        id: "gpt-5.2",
+        providerID: "github-copilot",
+        api: {
+          id: "gpt-5.2",
+          url: "https://api.githubcopilot.com",
+          npm: "@ai-sdk/github-copilot",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh"])
+      expect(result.xhigh).toEqual({
+        reasoningEffort: "xhigh",
+        reasoningSummary: "auto",
+        include: ["reasoning.encrypted_content"],
+      })
+    })
+
+    test("gpt-5.2-codex includes xhigh", () => {
+      const model = createMockModel({
+        id: "gpt-5.2-codex",
+        providerID: "github-copilot",
+        api: {
+          id: "gpt-5.2-codex",
+          url: "https://api.githubcopilot.com",
+          npm: "@ai-sdk/github-copilot",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh"])
     })
   })
 

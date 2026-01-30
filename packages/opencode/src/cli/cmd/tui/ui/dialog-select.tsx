@@ -144,12 +144,13 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     let next = store.selected + direction
     if (next < 0) next = flat().length - 1
     if (next >= flat().length) next = 0
-    moveTo(next)
+    moveTo(next, true)
   }
 
   function moveTo(next: number, center = false) {
     setStore("selected", next)
-    props.onMove?.(selected()!)
+    const option = selected()
+    if (option) props.onMove?.(option)
     if (!scroll) return
     const target = scroll.getChildren().find((child) => {
       return child.id === JSON.stringify(selected()?.value)
@@ -240,7 +241,11 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
             focusedTextColor={theme.textMuted}
             ref={(r) => {
               input = r
-              setTimeout(() => input.focus(), 1)
+              setTimeout(() => {
+                if (!input) return
+                if (input.isDestroyed) return
+                input.focus()
+              }, 1)
             }}
             placeholder={props.placeholder ?? "Search"}
           />
