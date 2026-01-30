@@ -31,7 +31,7 @@ jobs:
         run: ./script/generate.ts
 
       - name: Commit and push
-        if: github.repository == 'anomalyco/opencode'
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         run: |
           if [ -z "$(git status --porcelain)" ]; then
             echo "No changes to commit"
@@ -44,7 +44,7 @@ jobs:
           git push origin HEAD:${{ github.ref_name }} --no-verify
 
       - name: Check for generated changes
-        if: github.repository != 'anomalyco/opencode'
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
         run: |
           if [ -n "$(git status --porcelain)" ]; then
             echo ""
