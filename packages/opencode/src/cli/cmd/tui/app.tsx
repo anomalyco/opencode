@@ -1,4 +1,5 @@
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
+import "opentui-spinner/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
