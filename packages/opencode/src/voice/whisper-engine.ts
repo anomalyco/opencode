@@ -34,7 +34,7 @@ export class WhisperEngine {
     this.status = "downloading"
     this.log.debug("initializing whisper engine", { modelSize: this.modelSize, device: this.device })
 
-    const modelId = `Xenova/whisper-${this.modelSize}.en`
+    const modelId = `whisper-${this.modelSize}.en`
     const cacheDir = path.join(Global.Path.cache, "models")
 
     try {
