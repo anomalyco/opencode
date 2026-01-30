@@ -12,7 +12,7 @@ if (!Script.preview) {
   const previous = await getLatestRelease(Script.version)
   const notes = await buildNotes(previous, "HEAD")
   const body = notes.join("\n") || "No notable changes"
-  await $`gh release edit v${Script.version} --draft=false --title "v${Script.version}" --notes ${body}`
+  await $`gh release edit v${Script.version} --title "v${Script.version}" --notes ${body}`
   output.push(`release=${release.id}`)
   output.push(`tag=${release.tagName}`)
 }
