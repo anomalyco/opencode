@@ -76,7 +76,9 @@
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
-    "typescript": "catalog:"
+    "sharp": "0.34.5",
+    "typescript": "catalog:",
+    "wavefile": "11.0.0"
   },
   "repository": {
     "type": "git",
@@ -96,7 +98,8 @@
   ],
   "overrides": {
     "@types/bun": "catalog:",
-    "@types/node": "catalog:"
+    "@types/node": "catalog:",
+    "sharp": "0.34.5"
   },
   "patchedDependencies": {
     "ghostty-web@0.3.0": "patches/ghostty-web@0.3.0.patch"

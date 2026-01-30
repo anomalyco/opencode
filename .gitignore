@@ -22,6 +22,7 @@ target
 .scripts
 .direnv/
 
+
 # Local dev files
 opencode-dev
 logs/
