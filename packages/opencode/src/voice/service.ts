@@ -46,21 +46,16 @@ class VoiceServiceImpl {
   async initialize(): Promise<void> {
     const cfg = await Config.getGlobal()
 
-    this.log.info("voice initialization", { config: cfg.voice })
-
     this.enabled = cfg.voice?.enabled ?? false
     this.currentModel = cfg.voice?.model ?? "base"
 
-    this.log.info("voice enabled state", { enabled: this.enabled, model: this.currentModel })
+    this.log.debug("voice service initialized", { enabled: this.enabled, model: this.currentModel })
 
     this.publishStatus()
 
     if (!this.enabled) {
-      this.log.info("voice service disabled")
       return
     }
-
-    this.log.info("voice service initialized", { model: this.currentModel, enabled: this.enabled })
 
     await this.enable(this.currentModel)
   }
@@ -102,7 +97,7 @@ class VoiceServiceImpl {
       this.engine = null
     }
     this.publishStatus()
-    this.log.info("voice service disabled")
+    this.log.debug("voice service disabled")
   }
 
   async switchModel(model: WhisperModelSize): Promise<boolean> {
@@ -110,7 +105,7 @@ class VoiceServiceImpl {
       return true
     }
 
-    this.log.info("switching voice model", { from: this.currentModel, to: model })
+    this.log.debug("switching voice model", { from: this.currentModel, to: model })
     this.currentModel = model
     await this.saveToDisk()
 

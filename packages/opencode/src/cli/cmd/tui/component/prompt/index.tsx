@@ -827,7 +827,10 @@ export function Prompt(props: PromptProps) {
                         duration: 3000,
                       })
                     }
-                  } else if (voiceStatus() === "recording" && voiceRecorder) {
+                    return
+                  }
+
+                  if (voiceStatus() === "recording" && voiceRecorder) {
                     // Stop recording and transcribe
                     setVoiceStatus("transcribing")
 
@@ -835,20 +838,21 @@ export function Prompt(props: PromptProps) {
                       const text = await voiceRecorder.stopRecordingAndTranscribe()
                       setVoiceStatus(voiceRecorder.status)
 
-                      if (text) {
-                        // Insert transcribed text at cursor position
-                        input.insertText(text)
-                        setTimeout(() => {
-                          input.getLayoutNode().markDirty()
-                          renderer.requestRender()
-                        }, 0)
-                      } else {
+                      if (!text) {
                         toast.show({
                           variant: "warning",
                           message: "No speech detected",
                           duration: 3000,
                         })
+                        return
                       }
+
+                      // Insert transcribed text at cursor position
+                      input.insertText(text)
+                      setTimeout(() => {
+                        input.getLayoutNode().markDirty()
+                        renderer.requestRender()
+                      }, 0)
                     } catch (err) {
                       setVoiceStatus("error")
                       toast.show({
@@ -859,6 +863,7 @@ export function Prompt(props: PromptProps) {
                       // Reset status after error
                       setTimeout(() => setVoiceStatus("idle"), 100)
                     }
+                    return
                   }
 
                   return
