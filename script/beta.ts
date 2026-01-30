@@ -49,9 +49,18 @@ async function main() {
       continue
     }
 
-    // Get diff from dev to PR head (PR's changes)
+    // Find merge base and get diff from base to PR head (just the PR's changes)
+    console.log(`  Finding merge base for PR #${pr.number}...`)
+    const mergeBaseResult = await $`git merge-base dev pr-${pr.number}`.nothrow()
+    if (mergeBaseResult.exitCode !== 0 || !mergeBaseResult.stdout.trim()) {
+      console.log(`  Failed to find merge base for PR #${pr.number}`)
+      skipped.push({ number: pr.number, reason: "Failed to find merge base" })
+      continue
+    }
+    const mergeBase = mergeBaseResult.stdout.trim()
+
     console.log(`  Getting diff for PR #${pr.number}...`)
-    const diff = await $`git diff dev..pr-${pr.number}`.nothrow()
+    const diff = await $`git diff ${mergeBase}..pr-${pr.number}`.nothrow()
     if (diff.exitCode !== 0) {
       console.log(`  Failed to get diff for PR #${pr.number}`)
       console.log(`  Error: ${diff.stderr}`)
