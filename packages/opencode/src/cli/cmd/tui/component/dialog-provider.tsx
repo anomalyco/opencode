@@ -1,4 +1,5 @@
 import { createMemo, createSignal, onMount, Show } from "solid-js"
+import { useLocal } from "@tui/context/local"
 import { useSync } from "@tui/context/sync"
 import { map, pipe, sortBy } from "remeda"
 import { DialogSelect } from "@tui/ui/dialog-select"
@@ -234,6 +235,7 @@ function ApiMethod(props: ApiMethodProps) {
   const dialog = useDialog()
   const sdk = useSDK()
   const sync = useSync()
+  const local = useLocal()
   const { theme } = useTheme()
 
   const description = () => {
@@ -279,6 +281,11 @@ function ApiMethod(props: ApiMethodProps) {
         })
         await sdk.client.instance.dispose()
         await sync.bootstrap()
+        if (props.providerID === "mammouth-ai") {
+          local.model.set({ providerID: props.providerID, modelID: "claude-haiku-4-5" }, { recent: true })
+          dialog.clear()
+          return
+        }
         dialog.replace(() => <DialogModel providerID={props.providerID} />)
       }}
     />
