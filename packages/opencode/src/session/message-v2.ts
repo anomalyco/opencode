@@ -441,6 +441,16 @@ export namespace MessageV2 {
 
     const toModelOutput = (output: unknown) => {
       if (typeof output === "string") {
+        // Try to parse as JSON - if successful and it's an object/array,
+        // return as json type to satisfy Bedrock's requirement for JSON objects
+        try {
+          const parsed = JSON.parse(output)
+          if (typeof parsed === "object" && parsed !== null) {
+            return { type: "json", value: parsed }
+          }
+        } catch {
+          // Not valid JSON, fall through to text
+        }
         return { type: "text", value: output }
       }
 
