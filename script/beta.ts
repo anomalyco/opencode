@@ -34,6 +34,18 @@ async function main() {
     throw new Error(`Failed to checkout beta branch: ${checkoutBeta.stderr}`)
   }
 
+  const shallow = await run(["git", "rev-parse", "--is-shallow-repository"])
+  if (shallow.exitCode !== 0) {
+    throw new Error(`Failed to check shallow state: ${shallow.stderr}`)
+  }
+  if (shallow.stdout.trim() === "true") {
+    console.log("Unshallowing repository...")
+    const unshallow = await run(["git", "fetch", "--unshallow"])
+    if (unshallow.exitCode !== 0) {
+      throw new Error(`Failed to unshallow repository: ${unshallow.stderr}`)
+    }
+  }
+
   const applied: number[] = []
   const skipped: Array<{ number: number; reason: string }> = []
 
