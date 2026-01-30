@@ -37,8 +37,14 @@ jobs:
     steps:
       - uses: actions/checkout@v3
         with:
-          fetch-depth: 1
+          fetch-depth: 0
+
       - uses: ./.github/actions/setup-bun
+
+      - name: Install OpenCode
+        if: inputs.bump || inputs.version
+        run: bun i -g opencode-ai
+
       - id: version
         run: |
           ./script/version.ts
@@ -46,6 +52,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           OPENCODE_BUMP: ${{ inputs.bump }}
           OPENCODE_VERSION: ${{ inputs.version }}
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
     outputs:
       version: ${{ steps.version.outputs.version }}
       release: ${{ steps.version.outputs.release }}
@@ -58,7 +65,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
         with:
-          fetch-depth: 1
           fetch-tags: true
 
       - uses: ./.github/actions/setup-bun
@@ -103,7 +109,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
         with:
-          fetch-depth: 1
           fetch-tags: true
 
       - uses: apple-actions/import-codesign-certs@v2
@@ -128,6 +133,15 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
+      - name: Cache apt packages
+        if: contains(matrix.settings.host, 'ubuntu')
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: ${{ runner.os }}-${{ matrix.settings.target }}-apt-${{ hashFiles('.github/workflows/publish.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.settings.target }}-apt-
+
       - name: install dependencies (ubuntu only)
         if: contains(matrix.settings.host, 'ubuntu')
         run: |
@@ -149,8 +163,8 @@ jobs:
           cd packages/desktop
           bun ./scripts/prepare.ts
         env:
-          OPENCODE_VERSION: ${{ needs.publish.outputs.version }}
-          GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
+          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
+          GITHUB_TOKEN: ${{ steps.committer.outputs.token }}
           RUST_TARGET: ${{ matrix.settings.target }}
           GH_TOKEN: ${{ github.token }}
           GITHUB_RUN_ID: ${{ github.run_id }}
@@ -196,12 +210,8 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v3
-        with:
-          fetch-depth: 1
 
-      - name: Install OpenCode
-        if: inputs.bump || inputs.version
-        run: bun i -g opencode-ai
+      - uses: ./.github/actions/setup-bun
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
@@ -221,18 +231,25 @@ jobs:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Setup Git Identity
-        run: |
-          git config --global user.email "opencode@sst.dev"
-          git config --global user.name "opencode"
-          git remote set-url origin https://x-access-token:${{ secrets.SST_GITHUB_TOKEN }}@github.com/${{ github.repository }}
-
-      - uses: ./.github/actions/setup-bun
+      - name: Setup git committer
+        id: committer
+        uses: ./.github/actions/setup-git-committer
+        with:
+          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
       - uses: actions/download-artifact@v4
         with:
           name: opencode-cli
           path: packages/opencode/dist
+
+      - name: Cache apt packages (AUR)
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: ${{ runner.os }}-apt-aur-${{ hashFiles('.github/workflows/publish.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-apt-aur-
 
       - name: Setup SSH for AUR
         run: |
@@ -250,6 +267,5 @@ jobs:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
           AUR_KEY: ${{ secrets.AUR_KEY }}
-          GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GITHUB_TOKEN: ${{ steps.committer.outputs.token }}
           NPM_CONFIG_PROVENANCE: false

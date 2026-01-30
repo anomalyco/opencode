@@ -41,6 +41,7 @@ async function main() {
   for (const pr of prs) {
     console.log(`\nProcessing PR #${pr.number}: ${pr.title}`)
 
+    // Fetch the PR
     const fetchPR = await $`git fetch origin pull/${pr.number}/head:pr-${pr.number}`.nothrow()
     if (fetchPR.exitCode !== 0) {
       console.log(`  Failed to fetch PR #${pr.number}, skipping`)
@@ -48,7 +49,9 @@ async function main() {
       continue
     }
 
-    const merge = await $`git merge --squash pr-${pr.number}`.nothrow()
+    // Try to squash merge the PR directly (allow unrelated histories since beta starts fresh from dev)
+    console.log(`  Attempting to merge PR #${pr.number}...`)
+    const merge = await $`git merge --squash --allow-unrelated-histories pr-${pr.number}`.nothrow()
     if (merge.exitCode !== 0) {
       console.log(`  Squash merge failed for PR #${pr.number}`)
       console.log(`  Error: ${merge.stderr}`)
