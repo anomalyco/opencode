@@ -32,21 +32,27 @@ process.env.ONNX_LOGGING_LEVEL = "4"
 // to /dev/null at the OS level during model initialization, then restores it.
 // This is the only reliable way to suppress these warnings without patching ONNX Runtime.
 //
+// Platform support: Linux only (gracefully skipped on macOS/Windows)
 // TODO: Remove this hack if/when ONNX Runtime properly respects logging levels
 
-const libc = dlopen("/lib/x86_64-linux-gnu/libc.so.6", {
-  dup: {
-    args: [FFIType.i32],
-    returns: FFIType.i32,
-  },
-  dup2: {
-    args: [FFIType.i32, FFIType.i32],
-    returns: FFIType.i32,
-  },
-})
-
 function redirectStderr() {
+  // Only attempt stderr redirection on Linux
+  if (process.platform !== "linux") {
+    return () => {}
+  }
+
   try {
+    const libc = dlopen("/lib/x86_64-linux-gnu/libc.so.6", {
+      dup: {
+        args: [FFIType.i32],
+        returns: FFIType.i32,
+      },
+      dup2: {
+        args: [FFIType.i32, FFIType.i32],
+        returns: FFIType.i32,
+      },
+    })
+
     const devNull = openSync("/dev/null", "w")
     const stderrBackup = libc.symbols.dup(2)
 
@@ -60,6 +66,7 @@ function redirectStderr() {
       } catch {}
     }
   } catch (error) {
+    // FFI loading failed - continue without stderr suppression
     return () => {}
   }
 }
