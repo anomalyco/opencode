@@ -1,0 +1,42 @@
+name: "Setup Git Committer"
+description: "Create app token and configure git user"
+inputs:
+  opencode-app-id:
+    description: "OpenCode GitHub App ID"
+    required: true
+  opencode-app-secret:
+    description: "OpenCode GitHub App private key"
+    required: true
+outputs:
+  token:
+    description: "GitHub App token"
+    value: ${{ steps.app-token.outputs.token }}
+  app-slug:
+    description: "GitHub App slug"
+    value: ${{ steps.app-token.outputs.app-slug }}
+  user-id:
+    description: "GitHub App user id"
+    value: ${{ steps.get-user-id.outputs.user-id }}
+runs:
+  using: "composite"
+  steps:
+    - name: Create app token
+      id: app-token
+      uses: actions/create-github-app-token@v2
+      with:
+        app-id: ${{ inputs.opencode-app-id }}
+        private-key: ${{ inputs.opencode-app-secret }}
+
+    - name: Get GitHub App user id
+      id: get-user-id
+      run: |
+        echo "user-id=$(gh api \"/users/${{ steps.app-token.outputs.app-slug }}[bot]\" --jq .id)" >> "$GITHUB_OUTPUT"
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+    - name: Configure git user
+      run: |
+        git config --global user.name "${{ steps.app-token.outputs.app-slug }}[bot]"
+        git config --global user.email "${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com"
+      shell: bash
