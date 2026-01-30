@@ -503,6 +503,10 @@ export function Prompt(props: PromptProps) {
       promptModelWarning()
       return
     }
+    const currentAgent = local.agent.current()
+    if (!currentAgent) {
+      return
+    }
     const sessionID = props.sessionID
       ? props.sessionID
       : await (async () => {
@@ -538,7 +542,7 @@ export function Prompt(props: PromptProps) {
     if (store.mode === "shell") {
       sdk.client.session.shell({
         sessionID,
-        agent: local.agent.current().name,
+        agent: currentAgent.name,
         model: {
           providerID: selectedModel.providerID,
           modelID: selectedModel.modelID,
@@ -565,7 +569,7 @@ export function Prompt(props: PromptProps) {
         sessionID,
         command: command.slice(1),
         arguments: args,
-        agent: local.agent.current().name,
+        agent: currentAgent.name,
         model: `${selectedModel.providerID}/${selectedModel.modelID}`,
         messageID,
         variant,
@@ -582,7 +586,7 @@ export function Prompt(props: PromptProps) {
           sessionID,
           ...selectedModel,
           messageID,
-          agent: local.agent.current().name,
+          agent: currentAgent.name,
           model: selectedModel,
           variant,
           parts: [
@@ -703,7 +707,9 @@ export function Prompt(props: PromptProps) {
   const highlight = createMemo(() => {
     if (keybind.leader) return theme.border
     if (store.mode === "shell") return theme.primary
-    return local.agent.color(local.agent.current().name)
+    const currentAgent = local.agent.current()
+    if (!currentAgent) return theme.border
+    return local.agent.color(currentAgent.name)
   })
 
   const showVariant = createMemo(() => {
@@ -714,7 +720,8 @@ export function Prompt(props: PromptProps) {
   })
 
   const spinnerDef = createMemo(() => {
-    const color = local.agent.color(local.agent.current().name)
+    const currentAgent = local.agent.current()
+    const color = currentAgent ? local.agent.color(currentAgent.name) : theme.border
     return {
       frames: createFrames({
         color,
@@ -952,7 +959,7 @@ export function Prompt(props: PromptProps) {
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
               <text fg={highlight()}>
-                {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
+                {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current()?.name ?? "")}{" "}
               </text>
               <Show when={store.mode === "normal"}>
                 <box flexDirection="row" gap={1}>
