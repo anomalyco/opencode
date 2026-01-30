@@ -269,13 +269,17 @@ If this is not set, the agent will continue to iterate until the model chooses t
     "quick-thinker": {
       "description": "Fast reasoning with limited iterations",
       "prompt": "You are a quick thinker. Solve problems with minimal steps.",
-      "maxSteps": 5
+      "steps": 5
     }
   }
 }
 ```
 
 When the limit is reached, the agent receives a special system prompt instructing it to respond with a summarization of its work and recommended remaining tasks.
+
+:::caution
+The legacy `maxSteps` field is deprecated. Use `steps` instead.
+:::
 
 ---
 
