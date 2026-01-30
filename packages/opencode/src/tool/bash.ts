@@ -20,6 +20,9 @@ import { Truncate } from "./truncation"
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
 
+// Session storage for CWD persistence
+const sessions = new Map<string, { cwd: string }>()
+
 export const log = Log.create({ service: "bash-tool" })
 
 const resolveWasm = (asset: string) => {
@@ -73,9 +76,17 @@ export const BashTool = Tool.define("bash", async () => {
         .describe(
           "Clear, concise description of what this command does in 5-10 words. Examples:\nInput: ls\nOutput: Lists files in current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: mkdir foo\nOutput: Creates directory 'foo'",
         ),
+      session: z.string().describe("Optional session name to persist CWD between commands").optional(),
     }),
     async execute(params, ctx) {
-      const cwd = params.workdir || Instance.directory
+      let cwd = params.workdir || Instance.directory
+      if (params.session) {
+        const session = sessions.get(params.session)
+        if (session) {
+          cwd = session.cwd
+        }
+      }
+
       if (params.timeout !== undefined && params.timeout < 0) {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
@@ -113,6 +124,14 @@ export const BashTool = Tool.define("bash", async () => {
 
         // not an exhaustive list, but covers most common cases
         if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown", "cat"].includes(command[0])) {
+          // Safety Guardrails
+          if (command[0] === "rm" && command.includes("-rf") && command.includes("/")) {
+             throw new Error("Safety Block: 'rm -rf /' is not allowed.")
+          }
+          if (command[0] === "chmod" && command.includes("777")) {
+             throw new Error("Safety Block: 'chmod 777' is discouraged. Please use specific permissions.")
+          }
+
           for (const arg of command.slice(1)) {
             if (arg.startsWith("-") || (command[0] === "chmod" && arg.startsWith("+"))) continue
             const resolved = await $`realpath ${arg}`
@@ -129,6 +148,27 @@ export const BashTool = Tool.define("bash", async () => {
                   ? resolved.replace(/^\/([a-z])\//, (_, drive) => `${drive.toUpperCase()}:\\`).replace(/\//g, "\\")
                   : resolved
               if (!Instance.containsPath(normalized)) directories.add(normalized)
+            }
+          }
+          
+          // Session CWD Persistence for 'cd'
+          if (command[0] === "cd" && params.session) {
+            const targetArg = command[1] || "~"
+            // Resolve the new CWD
+            try {
+              const newCwd = await $`realpath ${targetArg}`
+                .cwd(cwd)
+                .quiet()
+                .nothrow()
+                .text()
+                .then((x) => x.trim())
+              
+              if (newCwd) {
+                sessions.set(params.session, { cwd: newCwd })
+                log.info("updated session cwd", { session: params.session, cwd: newCwd })
+              }
+            } catch (e) {
+              log.warn("failed to resolve session cwd", { error: e })
             }
           }
         }
