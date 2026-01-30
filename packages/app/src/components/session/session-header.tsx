@@ -130,7 +130,7 @@ export function SessionHeader() {
           <Portal mount={mount()}>
             <button
               type="button"
-              class="hidden md:flex w-[320px] p-1 pl-1.5 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-raised-base transition-colors cursor-default hover:bg-surface-raised-base-hover focus-visible:bg-surface-raised-base-hover active:bg-surface-raised-base-active"
+              class="hidden md:flex w-[320px] max-w-full min-w-0 p-1 pl-1.5 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-raised-base transition-colors cursor-default hover:bg-surface-raised-base-hover focus-visible:bg-surface-raised-base-hover active:bg-surface-raised-base-active"
               onClick={() => command.trigger("file.open")}
               aria-label={language.t("session.header.searchFiles")}
             >
@@ -280,17 +280,14 @@ export function SessionHeader() {
                 </TooltipKeybind>
               </div>
               <div class="hidden md:block shrink-0">
-                <TooltipKeybind
-                  title={language.t("command.fileTree.toggle")}
-                  keybind={command.keybind("fileTree.toggle")}
-                >
+                <TooltipKeybind title={language.t("command.review.toggle")} keybind={command.keybind("review.toggle")}>
                   <Button
                     variant="ghost"
                     class="group/file-tree-toggle size-6 p-0"
                     onClick={() => layout.fileTree.toggle()}
-                    aria-label={language.t("command.fileTree.toggle")}
+                    aria-label={language.t("command.review.toggle")}
                     aria-expanded={layout.fileTree.opened()}
-                    aria-controls="file-tree-panel"
+                    aria-controls="review-panel"
                   >
                     <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
                       <Icon

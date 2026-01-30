@@ -33,8 +33,10 @@
 @import "../components/markdown.css" layer(components);
 @import "../components/message-part.css" layer(components);
 @import "../components/message-nav.css" layer(components);
+@import "../components/morph-chevron.css" layer(components);
 @import "../components/popover.css" layer(components);
 @import "../components/progress-circle.css" layer(components);
+@import "../components/reasoning-icon.css" layer(components);
 @import "../components/radio-group.css" layer(components);
 @import "../components/resize-handle.css" layer(components);
 @import "../components/select.css" layer(components);
