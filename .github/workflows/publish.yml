@@ -63,12 +63,10 @@ jobs:
     container:
       image: ghcr.io/anomalyco/build/bun-node:24.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-tags: true
-
-      - name: Mark workspace as safe
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          set-safe-directory: true
 
       - uses: ./.github/actions/setup-bun
 
@@ -106,39 +104,15 @@ jobs:
     container:
       image: ghcr.io/anomalyco/build/tauri-linux:24.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-tags: true
-
-      - name: Mark workspace as safe
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-
-      - uses: apple-actions/import-codesign-certs@v2
-        if: ${{ runner.os == 'macOS' }}
-        with:
-          keychain: build
-          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
-          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-
-      - name: Verify Certificate
-        if: ${{ runner.os == 'macOS' }}
-        run: |
-          CERT_INFO=$(security find-identity -v -p codesigning build.keychain | grep "Developer ID Application")
-          CERT_ID=$(echo "$CERT_INFO" | awk -F'"' '{print $2}')
-          echo "CERT_ID=$CERT_ID" >> $GITHUB_ENV
-          echo "Certificate imported."
-
-      - name: Setup Apple API Key
-        if: ${{ runner.os == 'macOS' }}
-        run: |
-          echo "${{ secrets.APPLE_API_KEY_PATH }}" > $RUNNER_TEMP/apple-api-key.p8
+          set-safe-directory: true
 
       - uses: ./.github/actions/setup-bun
 
-      - name: install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.settings.target }}
+      - name: add Rust target
+        run: rustup target add ${{ matrix.settings.target }}
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -169,7 +143,7 @@ jobs:
         with:
           projectPath: packages/desktop
           uploadWorkflowArtifacts: true
-          tauriScript: ${{ (contains(matrix.settings.host, 'ubuntu') && 'cargo tauri') || '' }}
+          tauriScript: cargo tauri
           args: --target ${{ matrix.settings.target }} --config ./src-tauri/tauri.prod.conf.json --verbose
           updaterJsonPreferNsis: true
           releaseId: ${{ needs.version.outputs.release }}
@@ -181,12 +155,6 @@ jobs:
           TAURI_BUNDLER_NEW_APPIMAGE_FORMAT: true
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ env.CERT_ID }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_KEY_PATH: ${{ runner.temp }}/apple-api-key.p8
 
   build-tauri:
     needs:
