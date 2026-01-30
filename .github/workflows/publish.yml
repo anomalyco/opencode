@@ -187,6 +187,8 @@ jobs:
   publish:
     needs:
       - version
+      - build-cli
+      # - build-tauri
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v3
