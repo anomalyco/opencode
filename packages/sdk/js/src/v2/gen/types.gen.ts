@@ -1365,6 +1365,7 @@ export type PermissionConfig =
       codesearch?: PermissionActionConfig
       lsp?: PermissionRuleConfig
       doom_loop?: PermissionActionConfig
+      skill?: PermissionRuleConfig
       [key: string]: PermissionRuleConfig | Array<string> | PermissionActionConfig | undefined
     }
   | PermissionActionConfig
@@ -1633,6 +1634,15 @@ export type Config = {
       model?: string
       subtask?: boolean
     }
+  }
+  /**
+   * Additional skill folder paths
+   */
+  skills?: {
+    /**
+     * Additional paths to skill folders
+     */
+    paths?: Array<string>
   }
   watcher?: {
     ignore?: Array<string>
