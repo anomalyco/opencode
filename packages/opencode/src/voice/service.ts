@@ -179,7 +179,7 @@ class VoiceServiceImpl {
   }
 
   async getDownloadedModels(): Promise<WhisperModelSize[]> {
-    const cacheDir = path.join(Global.Path.cache, "voice-models")
+    const cacheDir = path.join(Global.Path.cache, "models")
     const downloaded: WhisperModelSize[] = []
 
     const models: WhisperModelSize[] = ["tiny", "base", "small"]

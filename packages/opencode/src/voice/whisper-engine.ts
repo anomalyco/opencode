@@ -87,7 +87,7 @@ export class WhisperEngine {
     this.log.debug("initializing whisper engine", { modelSize: this.modelSize, device: this.device })
 
     const modelId = `Xenova/whisper-${this.modelSize}.en`
-    const cacheDir = path.join(Global.Path.cache, "voice-models")
+    const cacheDir = path.join(Global.Path.cache, "models")
 
     try {
       this.status = "loading"
