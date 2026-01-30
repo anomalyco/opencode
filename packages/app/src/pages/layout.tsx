@@ -1136,6 +1136,46 @@ export default function Layout(props: ParentProps) {
     if (navigate) navigateToProject(directory)
   }
 
+  const deepLinkEvent = "opencode:deep-link"
+
+  const parseDeepLink = (input: string) => {
+    if (!input.startsWith("opencode://")) return
+    const url = new URL(input)
+    if (url.hostname !== "open-project") return
+    const directory = url.searchParams.get("directory")
+    if (!directory) return
+    return directory
+  }
+
+  const handleDeepLinks = (urls: string[]) => {
+    if (!server.isLocal()) return
+    for (const input of urls) {
+      const directory = parseDeepLink(input)
+      if (!directory) continue
+      openProject(directory)
+    }
+  }
+
+  const drainDeepLinks = () => {
+    const pending = window.__OPENCODE__?.deepLinks ?? []
+    if (pending.length === 0) return
+    if (window.__OPENCODE__) window.__OPENCODE__.deepLinks = []
+    handleDeepLinks(pending)
+  }
+
+  onMount(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ urls: string[] }>).detail
+      const urls = detail?.urls ?? []
+      if (urls.length === 0) return
+      handleDeepLinks(urls)
+    }
+
+    drainDeepLinks()
+    window.addEventListener(deepLinkEvent, handler as EventListener)
+    onCleanup(() => window.removeEventListener(deepLinkEvent, handler as EventListener))
+  })
+
   const displayName = (project: LocalProject) => project.name || getFilename(project.worktree)
 
   async function renameProject(project: LocalProject, next: string) {
