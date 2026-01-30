@@ -1,4 +1,4 @@
-import { Match, Show, Switch, createMemo } from "solid-js"
+import { Match, Show, Switch, createMemo, createSignal, onCleanup } from "solid-js"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { ProgressCircle } from "@opencode-ai/ui/progress-circle"
 import { Button } from "@opencode-ai/ui/button"
@@ -13,11 +13,17 @@ interface SessionContextUsageProps {
   variant?: "button" | "indicator"
 }
 
+const isTouch = () => window.matchMedia("(hover: none)").matches
+
 export function SessionContextUsage(props: SessionContextUsageProps) {
   const sync = useSync()
   const params = useParams()
   const layout = useLayout()
   const language = useLanguage()
+  const [touchTooltip, setTouchTooltip] = createSignal(false)
+  let tooltipTimer: number | undefined
+
+  onCleanup(() => clearTimeout(tooltipTimer))
 
   const variant = createMemo(() => props.variant ?? "button")
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
@@ -42,10 +48,30 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   const openContext = () => {
     if (!params.id) return
     if (!view().reviewPanel.opened()) view().reviewPanel.open()
-    layout.fileTree.open()
     layout.fileTree.setTab("all")
+    layout.fileTree.open()
+    view().mobileTab.set("context")
     tabs().open("context")
     tabs().setActive("context")
+  }
+
+  const handleClick = () => {
+    if (variant() === "indicator") return
+    if (isTouch() && !touchTooltip()) {
+      setTouchTooltip(true)
+      clearTimeout(tooltipTimer)
+      tooltipTimer = window.setTimeout(() => setTouchTooltip(false), 3000)
+      return
+    }
+    setTouchTooltip(false)
+    openContext()
+  }
+
+  const handleOpenChange = (open: boolean) => {
+    // On touch devices, we control the tooltip state ourselves via handleClick
+    // Ignore Kobalte's attempts to close it
+    if (isTouch()) return
+    setTouchTooltip(open)
   }
 
   const circle = () => (
@@ -79,7 +105,12 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
 
   return (
     <Show when={params.id}>
-      <Tooltip value={tooltipValue()} placement="top">
+      <Tooltip
+        value={tooltipValue()}
+        placement="top"
+        open={touchTooltip() || undefined}
+        onOpenChange={handleOpenChange}
+      >
         <Switch>
           <Match when={variant() === "indicator"}>{circle()}</Match>
           <Match when={true}>
@@ -87,7 +118,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
               type="button"
               variant="ghost"
               class="size-6"
-              onClick={openContext}
+              onClick={handleClick}
               aria-label={language.t("context.usage.view")}
             >
               {circle()}

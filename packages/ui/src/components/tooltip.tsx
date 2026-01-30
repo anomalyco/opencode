@@ -9,6 +9,8 @@ export interface TooltipProps extends ComponentProps<typeof KobalteTooltip> {
   contentStyle?: JSX.CSSProperties
   inactive?: boolean
   forceOpen?: boolean
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
 export interface TooltipKeybindProps extends Omit<TooltipProps, "value"> {
@@ -32,7 +34,7 @@ export function TooltipKeybind(props: TooltipKeybindProps) {
 }
 
 export function Tooltip(props: TooltipProps) {
-  const [open, setOpen] = createSignal(false)
+  const [internalOpen, setInternalOpen] = createSignal(false)
   const [local, others] = splitProps(props, [
     "children",
     "class",
@@ -40,7 +42,18 @@ export function Tooltip(props: TooltipProps) {
     "contentStyle",
     "inactive",
     "forceOpen",
+    "open",
+    "onOpenChange",
   ])
+
+  const open = () => local.open ?? internalOpen()
+  const setOpen = (value: boolean) => {
+    if (local.onOpenChange) {
+      local.onOpenChange(value)
+    } else {
+      setInternalOpen(value)
+    }
+  }
 
   const c = children(() => local.children)
 

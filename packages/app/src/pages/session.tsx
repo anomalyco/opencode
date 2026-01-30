@@ -565,7 +565,6 @@ export default function Page() {
     expanded: {} as Record<string, boolean>,
     messageId: undefined as string | undefined,
     turnStart: 0,
-    mobileTab: "session" as "session" | "changes",
     changes: "session" as "session" | "turn",
     newSessionWorktree: "main",
     promptHeight: 0,
@@ -888,7 +887,8 @@ export default function Page() {
       .filter((tab) => tab !== "context" && tab !== "review"),
   )
 
-  const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
+  const mobileChanges = createMemo(() => !isDesktop() && view().mobileTab.value() === "changes")
+  const mobileContext = createMemo(() => !isDesktop() && view().mobileTab.value() === "context")
   const reviewTab = createMemo(() => isDesktop() && !layout.fileTree.opened())
 
   const fileTreeTab = () => layout.fileTree.tab()
@@ -1220,7 +1220,7 @@ export default function Page() {
 
     const wants = isDesktop()
       ? desktopFileTreeOpen() || (desktopReviewOpen() && activeTab() === "review")
-      : store.mobileTab === "changes"
+      : view().mobileTab.value() === "changes"
     if (!wants) return
     if (sync.data.session_diff[id] !== undefined) return
     if (sync.status === "loading") return
@@ -1534,14 +1534,31 @@ export default function Page() {
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
-        <SessionMobileTabs
-          open={!isDesktop() && !!params.id}
-          hasReview={hasReview()}
-          reviewCount={reviewCount()}
-          onSession={() => setStore("mobileTab", "session")}
-          onChanges={() => setStore("mobileTab", "changes")}
-          t={language.t as (key: string, vars?: Record<string, string | number | boolean>) => string}
-        />
+        {/* Mobile tab bar - only shown on mobile when there's a session */}
+        <Show when={!isDesktop() && params.id}>
+          <Tabs
+            class="h-auto"
+            value={view().mobileTab.value()}
+            onChange={(value) => view().mobileTab.set(value as "session" | "changes" | "context")}
+          >
+            <Tabs.List>
+              <Tabs.Trigger value="session" class="w-1/3" classes={{ button: "w-full" }}>
+                {language.t("session.tab.session")}
+              </Tabs.Trigger>
+              <Tabs.Trigger value="changes" class="w-1/3" classes={{ button: "w-full" }}>
+                <Switch>
+                  <Match when={hasReview()}>
+                    {language.t("session.review.filesChanged", { count: reviewCount() })}
+                  </Match>
+                  <Match when={true}>{language.t("session.review.change.other")}</Match>
+                </Switch>
+              </Tabs.Trigger>
+              <Tabs.Trigger value="context" class="w-1/3 !border-r-0" classes={{ button: "w-full" }}>
+                {language.t("session.tab.context")}
+              </Tabs.Trigger>
+            </Tabs.List>
+          </Tabs>
+        </Show>
 
         {/* Session panel */}
         <div
@@ -1559,79 +1576,93 @@ export default function Page() {
             <Switch>
               <Match when={params.id}>
                 <Show when={activeMessage()}>
-                  <MessageTimeline
-                    mobileChanges={mobileChanges()}
-                    mobileFallback={reviewContent({
-                      diffStyle: "unified",
-                      classes: {
-                        root: "pb-[calc(var(--prompt-height,8rem)+32px)]",
-                        header: "px-4",
-                        container: "px-4",
-                      },
-                      loadingClass: "px-4 py-4 text-text-weak",
-                      emptyClass: "h-full px-4 pb-30 flex flex-col items-center justify-center text-center gap-6",
-                    })}
-                    scroll={ui.scroll}
-                    onResumeScroll={resumeScroll}
-                    setScrollRef={setScrollRef}
-                    onScheduleScrollState={scheduleScrollState}
-                    onAutoScrollHandleScroll={autoScroll.handleScroll}
-                    onMarkScrollGesture={markScrollGesture}
-                    hasScrollGesture={hasScrollGesture}
-                    isDesktop={isDesktop()}
-                    onScrollSpyScroll={scrollSpy.onScroll}
-                    onAutoScrollInteraction={autoScroll.handleInteraction}
-                    showHeader={!!(info()?.title || info()?.parentID)}
-                    centered={centered()}
-                    title={info()?.title}
-                    parentID={info()?.parentID}
-                    openTitleEditor={openTitleEditor}
-                    closeTitleEditor={closeTitleEditor}
-                    saveTitleEditor={saveTitleEditor}
-                    titleRef={(el) => {
-                      titleRef = el
-                    }}
-                    titleState={title}
-                    onTitleDraft={(value) => setTitle("draft", value)}
-                    onTitleMenuOpen={(open) => setTitle("menuOpen", open)}
-                    onTitlePendingRename={(value) => setTitle("pendingRename", value)}
-                    onNavigateParent={() => {
-                      navigate(`/${params.dir}/session/${info()?.parentID}`)
-                    }}
-                    sessionID={params.id!}
-                    onArchiveSession={(sessionID) => void archiveSession(sessionID)}
-                    onDeleteSession={(sessionID) => dialog.show(() => <DialogDeleteSession sessionID={sessionID} />)}
-                    t={language.t as (key: string, vars?: Record<string, string | number | boolean>) => string}
-                    setContentRef={(el) => {
-                      content = el
-                      autoScroll.contentRef(el)
+                  <Switch>
+                    <Match when={mobileContext()}>
+                      <div class="relative h-full overflow-hidden">
+                        <SessionContextTab
+                          messages={messages}
+                          visibleUserMessages={visibleUserMessages}
+                          view={view}
+                          info={info}
+                        />
+                      </div>
+                    </Match>
+                    <Match when={true}>
+                      <MessageTimeline
+                        mobileChanges={mobileChanges()}
+                        mobileFallback={reviewContent({
+                          diffStyle: "unified",
+                          classes: {
+                            root: "pb-[calc(var(--prompt-height,8rem)+32px)]",
+                            header: "px-4",
+                            container: "px-4",
+                          },
+                          loadingClass: "px-4 py-4 text-text-weak",
+                          emptyClass: "h-full px-4 pb-30 flex flex-col items-center justify-center text-center gap-6",
+                        })}
+                        scroll={ui.scroll}
+                        onResumeScroll={resumeScroll}
+                        setScrollRef={setScrollRef}
+                        onScheduleScrollState={scheduleScrollState}
+                        onAutoScrollHandleScroll={autoScroll.handleScroll}
+                        onMarkScrollGesture={markScrollGesture}
+                        hasScrollGesture={hasScrollGesture}
+                        isDesktop={isDesktop()}
+                        onScrollSpyScroll={scrollSpy.onScroll}
+                        onAutoScrollInteraction={autoScroll.handleInteraction}
+                        showHeader={!!(info()?.title || info()?.parentID)}
+                        centered={centered()}
+                        title={info()?.title}
+                        parentID={info()?.parentID}
+                        openTitleEditor={openTitleEditor}
+                        closeTitleEditor={closeTitleEditor}
+                        saveTitleEditor={saveTitleEditor}
+                        titleRef={(el) => {
+                          titleRef = el
+                        }}
+                        titleState={title}
+                        onTitleDraft={(value) => setTitle("draft", value)}
+                        onTitleMenuOpen={(open) => setTitle("menuOpen", open)}
+                        onTitlePendingRename={(value) => setTitle("pendingRename", value)}
+                        onNavigateParent={() => {
+                          navigate(`/${params.dir}/session/${info()?.parentID}`)
+                        }}
+                        sessionID={params.id!}
+                        onArchiveSession={(sessionID) => void archiveSession(sessionID)}
+                        onDeleteSession={(sessionID) => dialog.show(() => <DialogDeleteSession sessionID={sessionID} />)}
+                        t={language.t as (key: string, vars?: Record<string, string | number | boolean>) => string}
+                        setContentRef={(el) => {
+                          content = el
+                          autoScroll.contentRef(el)
 
-                      const root = scroller
-                      if (root) scheduleScrollState(root)
-                    }}
-                    turnStart={store.turnStart}
-                    onRenderEarlier={() => setStore("turnStart", 0)}
-                    historyMore={historyMore()}
-                    historyLoading={historyLoading()}
-                    onLoadEarlier={() => {
-                      const id = params.id
-                      if (!id) return
-                      setStore("turnStart", 0)
-                      sync.session.history.loadMore(id)
-                    }}
-                    renderedUserMessages={renderedUserMessages()}
-                    anchor={anchor}
-                    onRegisterMessage={scrollSpy.register}
-                    onUnregisterMessage={scrollSpy.unregister}
-                    onFirstTurnMount={() => {
-                      const id = params.id
-                      if (!id) return
-                      navMark({ dir: params.dir, to: id, name: "session:first-turn-mounted" })
-                    }}
-                    lastUserMessageID={lastUserMessage()?.id}
-                    expanded={store.expanded}
-                    onToggleExpanded={(id) => setStore("expanded", id, (open: boolean | undefined) => !open)}
-                  />
+                          const root = scroller
+                          if (root) scheduleScrollState(root)
+                        }}
+                        turnStart={store.turnStart}
+                        onRenderEarlier={() => setStore("turnStart", 0)}
+                        historyMore={historyMore()}
+                        historyLoading={historyLoading()}
+                        onLoadEarlier={() => {
+                          const id = params.id
+                          if (!id) return
+                          setStore("turnStart", 0)
+                          sync.session.history.loadMore(id)
+                        }}
+                        renderedUserMessages={renderedUserMessages()}
+                        anchor={anchor}
+                        onRegisterMessage={scrollSpy.register}
+                        onUnregisterMessage={scrollSpy.unregister}
+                        onFirstTurnMount={() => {
+                          const id = params.id
+                          if (!id) return
+                          navMark({ dir: params.dir, to: id, name: "session:first-turn-mounted" })
+                        }}
+                        lastUserMessageID={lastUserMessage()?.id}
+                        expanded={store.expanded}
+                        onToggleExpanded={(id) => setStore("expanded", id, (open: boolean | undefined) => !open)}
+                      />
+                    </Match>
+                  </Switch>
                 </Show>
               </Match>
               <Match when={true}>

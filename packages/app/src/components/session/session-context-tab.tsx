@@ -334,14 +334,14 @@ export function SessionContextTab(props: SessionContextTabProps) {
 
   return (
     <div
-      class="@container h-full overflow-y-auto no-scrollbar pb-10"
+      class="@container h-full overflow-y-auto no-scrollbar md:pb-10 pb-[calc(var(--prompt-height,6rem)+32px)]"
       ref={(el) => {
         scroll = el
         restoreScroll()
       }}
       onScroll={handleScroll}
     >
-      <div class="px-6 pt-4 flex flex-col gap-10">
+      <div class="px-4 md:px-6 pt-4 flex flex-col gap-10">
         <div class="grid grid-cols-1 @[32rem]:grid-cols-2 gap-4">
           <For each={stats()}>{(stat) => <Stat label={stat.label} value={stat.value} />}</For>
         </div>

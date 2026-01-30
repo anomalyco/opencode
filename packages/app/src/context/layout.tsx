@@ -172,6 +172,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         mobileSidebar: {
           opened: false,
         },
+        mobileTab: "session" as "session" | "changes" | "context",
         sessionTabs: {} as Record<string, SessionTabs>,
         sessionView: {} as Record<string, SessionView>,
         handoff: {
@@ -723,6 +724,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
               if (same(current.reviewOpen, open)) return
               setStore("sessionView", session, "reviewOpen", open)
+            },
+          },
+          mobileTab: {
+            value: createMemo(() => store.mobileTab),
+            set(tab: "session" | "changes" | "context") {
+              setStore("mobileTab", tab)
             },
           },
         }
