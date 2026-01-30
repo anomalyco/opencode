@@ -225,9 +225,9 @@ export const SettingsProviders: Component = () => {
               )}
             </For>
 
-            <div class="flex items-center justify-between gap-4 h-16 border-b border-border-weak-base last:border-none">
+            <div class="flex flex-wrap items-center justify-between gap-4 min-h-16 py-3 border-b border-border-weak-base last:border-none">
               <div class="flex flex-col min-w-0">
-                <div class="flex items-center gap-x-3">
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <ProviderIcon id={icon("synthetic")} class="size-5 shrink-0 icon-strong-base" />
                   <span class="text-14-medium text-text-strong">Custom provider</span>
                   <Tag>{language.t("settings.providers.tag.custom")}</Tag>
