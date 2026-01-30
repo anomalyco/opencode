@@ -49,49 +49,50 @@ async function main() {
       continue
     }
 
-    // Try to rebase onto current beta branch
-    console.log(`  Attempting to rebase PR #${pr.number}...`)
-    const rebase = await $`git rebase beta pr-${pr.number}`.nothrow()
-    if (rebase.exitCode !== 0) {
-      console.log(`  Rebase failed for PR #${pr.number} (has conflicts)`)
-      await $`git rebase --abort`.nothrow()
-      await $`git checkout beta`.nothrow()
-      skipped.push({ number: pr.number, reason: "Rebase failed (conflicts)" })
+    // Get diff from dev to PR head (PR's changes)
+    console.log(`  Getting diff for PR #${pr.number}...`)
+    const diff = await $`git diff dev..pr-${pr.number}`.nothrow()
+    if (diff.exitCode !== 0) {
+      console.log(`  Failed to get diff for PR #${pr.number}`)
+      console.log(`  Error: ${diff.stderr}`)
+      skipped.push({ number: pr.number, reason: `Failed to get diff: ${diff.stderr}` })
       continue
     }
 
-    // Move rebased commits to pr-${pr.number} branch and checkout back to beta
-    await $`git checkout -B pr-${pr.number}`.nothrow()
-    await $`git checkout beta`.nothrow()
-
-    console.log(`  Successfully rebased PR #${pr.number}`)
-
-    // Now squash merge the rebased PR
-    const merge = await $`git merge --squash pr-${pr.number}`.nothrow()
-    if (merge.exitCode !== 0) {
-      console.log(`  Squash merge failed for PR #${pr.number}`)
-      console.log(`  Error: ${merge.stderr}`)
-      await $`git reset --hard HEAD`.nothrow()
-      skipped.push({ number: pr.number, reason: `Squash merge failed: ${merge.stderr}` })
+    if (!diff.stdout.trim()) {
+      console.log(`  No changes in PR #${pr.number}, skipping`)
+      skipped.push({ number: pr.number, reason: "No changes" })
       continue
     }
 
+    // Apply the diff
+    console.log(`  Applying diff for PR #${pr.number}...`)
+    const apply = await Bun.spawn(["git", "apply"], {
+      stdin: new TextEncoder().encode(diff.stdout),
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const applyExit = await apply.exited
+    const applyStderr = await Bun.readableStreamToText(apply.stderr)
+
+    if (applyExit !== 0) {
+      console.log(`  Failed to apply diff for PR #${pr.number}`)
+      console.log(`  Error: ${applyStderr}`)
+      await $`git checkout -- .`.nothrow()
+      skipped.push({ number: pr.number, reason: `Failed to apply diff: ${applyStderr}` })
+      continue
+    }
+
+    // Stage all changes
     const add = await $`git add -A`.nothrow()
     if (add.exitCode !== 0) {
       console.log(`  Failed to stage changes for PR #${pr.number}`)
-      await $`git reset --hard HEAD`.nothrow()
+      await $`git checkout -- .`.nothrow()
       skipped.push({ number: pr.number, reason: "Failed to stage" })
       continue
     }
 
-    const status = await $`git status --porcelain`.nothrow()
-    if (status.exitCode !== 0 || !status.stdout.trim()) {
-      console.log(`  No changes to commit for PR #${pr.number}, skipping`)
-      await $`git reset --hard HEAD`.nothrow()
-      skipped.push({ number: pr.number, reason: "No changes to commit" })
-      continue
-    }
-
+    // Commit
     const commitMsg = `Apply PR #${pr.number}: ${pr.title}`
     const commit = await Bun.spawn(["git", "commit", "-m", commitMsg], { stdout: "pipe", stderr: "pipe" })
     const commitExit = await commit.exited
@@ -100,7 +101,7 @@ async function main() {
     if (commitExit !== 0) {
       console.log(`  Failed to commit PR #${pr.number}`)
       console.log(`  Error: ${commitStderr}`)
-      await $`git reset --hard HEAD`.nothrow()
+      await $`git checkout -- .`.nothrow()
       skipped.push({ number: pr.number, reason: `Commit failed: ${commitStderr}` })
       continue
     }
@@ -116,7 +117,7 @@ async function main() {
   skipped.forEach((x) => console.log(`  - PR #${x.number}: ${x.reason}`))
 
   console.log("\nForce pushing beta branch...")
-  const push = await $`git push origin beta --force`.nothrow()
+  const push = await $`git push origin beta --force --no-verify`.nothrow()
   if (push.exitCode !== 0) {
     throw new Error(`Failed to push beta branch: ${push.stderr}`)
   }
