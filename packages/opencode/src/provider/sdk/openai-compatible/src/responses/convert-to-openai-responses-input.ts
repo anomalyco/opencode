@@ -65,15 +65,24 @@ export async function convertToOpenAIResponsesInput({
       }
 
       case "user": {
+        const supportedImageTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"]
+        const filteredContent = content.filter((part) => {
+          if (part.type === "text") return true
+          if (part.type === "file") {
+            return supportedImageTypes.includes(part.mediaType) || part.mediaType === "application/pdf"
+          }
+          return false
+        })
+
         input.push({
           role: "user",
-          content: content.map((part, index) => {
+          content: filteredContent.map((part, index) => {
             switch (part.type) {
               case "text": {
                 return { type: "input_text", text: part.text }
               }
               case "file": {
-                if (part.mediaType.startsWith("image/")) {
+                if (supportedImageTypes.includes(part.mediaType)) {
                   const mediaType = part.mediaType === "image/*" ? "image/jpeg" : part.mediaType
 
                   return {
@@ -103,10 +112,6 @@ export async function convertToOpenAIResponsesInput({
                           file_data: `data:application/pdf;base64,${convertToBase64(part.data)}`,
                         }),
                   }
-                } else {
-                  throw new UnsupportedFunctionalityError({
-                    functionality: `file part media type ${part.mediaType}`,
-                  })
                 }
               }
             }
