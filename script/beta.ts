@@ -49,24 +49,8 @@ async function main() {
       continue
     }
 
-    // Try to rebase onto current beta branch
-    console.log(`  Attempting to rebase PR #${pr.number}...`)
-    const rebase = await $`git rebase beta pr-${pr.number}`.nothrow()
-    if (rebase.exitCode !== 0) {
-      console.log(`  Rebase failed for PR #${pr.number} (has conflicts)`)
-      await $`git rebase --abort`.nothrow()
-      await $`git checkout beta`.nothrow()
-      skipped.push({ number: pr.number, reason: "Rebase failed (conflicts)" })
-      continue
-    }
-
-    // Move rebased commits to pr-${pr.number} branch and checkout back to beta
-    await $`git checkout -B pr-${pr.number}`.nothrow()
-    await $`git checkout beta`.nothrow()
-
-    console.log(`  Successfully rebased PR #${pr.number}`)
-
-    // Now squash merge the rebased PR
+    // Try to squash merge the PR directly
+    console.log(`  Attempting to merge PR #${pr.number}...`)
     const merge = await $`git merge --squash pr-${pr.number}`.nothrow()
     if (merge.exitCode !== 0) {
       console.log(`  Squash merge failed for PR #${pr.number}`)
