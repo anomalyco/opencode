@@ -66,7 +66,7 @@ export function DialogVoice() {
       result.push({
         value: `model:${model.name}`,
         title: `${model.name} (${model.size})`,
-        description: model.description + (isCurrent ? " (current)" : ""),
+        description: model.description,
         footer: loadingModel === model.name ? <span>⋯ Loading</span> : isCurrent ? <span>✓ Active</span> : undefined,
         category: "Models",
       })
