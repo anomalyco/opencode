@@ -118,19 +118,56 @@ export function ScrollFade(props: ScrollFadeProps) {
 
     updateFade()
 
-    containerRef.addEventListener("scroll", updateFade, { passive: true })
+    let rafId: number | undefined
+    let isPolling = false
+    let pollTimeout: number | undefined
+
+    const startPolling = () => {
+      if (isPolling) return
+      isPolling = true
+
+      const pollScroll = () => {
+        updateFade()
+        rafId = requestAnimationFrame(pollScroll)
+      }
+      rafId = requestAnimationFrame(pollScroll)
+    }
+
+    const stopPolling = () => {
+      if (!isPolling) return
+      isPolling = false
+      if (rafId !== undefined) {
+        cancelAnimationFrame(rafId)
+        rafId = undefined
+      }
+    }
+
+    const schedulePollingStop = () => {
+      if (pollTimeout !== undefined) clearTimeout(pollTimeout)
+      pollTimeout = setTimeout(stopPolling, 1000)
+    }
+
+    const onActivity = () => {
+      updateFade()
+      if (local.trackTransformSelector) {
+        startPolling()
+        schedulePollingStop()
+      }
+    }
+
+    containerRef.addEventListener("scroll", onActivity, { passive: true })
 
     const resizeObserver = new ResizeObserver(() => {
       lastScrollSize = 0
       lastClientSize = 0
-      updateFade()
+      onActivity()
     })
     resizeObserver.observe(containerRef)
 
     const mutationObserver = new MutationObserver(() => {
       lastScrollSize = 0
       lastClientSize = 0
-      requestAnimationFrame(updateFade)
+      requestAnimationFrame(onActivity)
     })
     mutationObserver.observe(containerRef, {
       childList: true,
@@ -138,18 +175,12 @@ export function ScrollFade(props: ScrollFadeProps) {
       characterData: true,
     })
 
-    let rafId: number
-    const pollScroll = () => {
-      updateFade()
-      rafId = requestAnimationFrame(pollScroll)
-    }
-    rafId = requestAnimationFrame(pollScroll)
-
     onCleanup(() => {
-      containerRef?.removeEventListener("scroll", updateFade)
+      containerRef?.removeEventListener("scroll", onActivity)
       resizeObserver.disconnect()
       mutationObserver.disconnect()
-      cancelAnimationFrame(rafId)
+      stopPolling()
+      if (pollTimeout !== undefined) clearTimeout(pollTimeout)
     })
   })
 

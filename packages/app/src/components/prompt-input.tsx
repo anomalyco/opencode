@@ -1255,7 +1255,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       clearInput()
       client.session
         .shell({
-          sessionID: session.id,
+          sessionID: session?.id || "",
           agent,
           model,
           command: text,
@@ -1278,7 +1278,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         clearInput()
         client.session
           .command({
-            sessionID: session.id,
+            sessionID: session?.id || "",
             command: commandName,
             arguments: args.join(" "),
             agent,

@@ -35,10 +35,6 @@ function init() {
     const current = active()
     if (!current || closing) return
     closing = true
-    setRenders((renders) => {
-      const { [current.id]: _, ...rest } = renders
-      return rest
-    })
     current.onClose?.()
     current.setClosing(true)
     setTimeout(() => {
