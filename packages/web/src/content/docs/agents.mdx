@@ -568,6 +568,42 @@ Users can always invoke any subagent directly via the `@` autocomplete menu, eve
 
 ---
 
+### Color
+
+Customize the agent's visual appearance in the UI with the `color` option. This affects how the agent appears in the interface.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "creative": {
+      "color": "#ff6b6b"
+    }
+  }
+}
+```
+
+Must be a valid hex color code like `#FF5733`.
+
+---
+
+### Top P
+
+Control response diversity with the `top_p` option. Alternative to temperature for controlling randomness.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "brainstorm": {
+      "top_p": 0.9
+    }
+  }
+}
+```
+
+Values range from 0.0 to 1.0. Lower values are more focused, higher values more diverse.
+
+---
+
 ### Additional
 
 Any other options you specify in your agent configuration will be **passed through directly** to the provider as model options. This allows you to use provider-specific features and parameters.
