@@ -2,24 +2,35 @@
 
 import { $ } from "bun"
 
-const dir = new URL("..", import.meta.url).pathname
-process.chdir(dir)
+const rootDir = new URL("../../..", import.meta.url).pathname
+process.chdir(rootDir)
 
 const reg = process.env.REGISTRY ?? "ghcr.io/anomalyco"
 const tag = process.env.TAG ?? "24.04"
 const push = process.argv.includes("--push") || process.env.PUSH === "1"
+
+const root = new URL("package.json", new URL(rootDir)).pathname
+const pkg = await Bun.file(root).json()
+const manager = pkg.packageManager ?? ""
+const bun = manager.startsWith("bun@") ? manager.slice(4) : ""
+if (!bun) throw new Error("packageManager must be bun@<version>")
 
 const images = ["base", "bun-node", "rust", "tauri-linux", "publish"]
 
 for (const name of images) {
   const image = `${reg}/build/${name}:${tag}`
   const file = `packages/containers/${name}/Dockerfile`
-  const arg = name === "base" ? "" : `--build-arg REGISTRY=${reg}`
-  console.log(`docker build -f ${file} -t ${image} ${arg} .`)
-  if (arg) {
-    await $`docker build -f ${file} -t ${image} --build-arg REGISTRY=${reg} .`
-  } else {
+  if (name === "base") {
+    console.log(`docker build -f ${file} -t ${image} .`)
     await $`docker build -f ${file} -t ${image} .`
+  }
+  if (name === "bun-node") {
+    console.log(`docker build -f ${file} -t ${image} --build-arg REGISTRY=${reg} --build-arg BUN_VERSION=${bun} .`)
+    await $`docker build -f ${file} -t ${image} --build-arg REGISTRY=${reg} --build-arg BUN_VERSION=${bun} .`
+  }
+  if (name !== "base" && name !== "bun-node") {
+    console.log(`docker build -f ${file} -t ${image} --build-arg REGISTRY=${reg} .`)
+    await $`docker build -f ${file} -t ${image} --build-arg REGISTRY=${reg} .`
   }
 
   if (push) {

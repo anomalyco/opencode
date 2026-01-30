@@ -2,7 +2,7 @@ ARG REGISTRY=ghcr.io/anomalyco
 FROM ${REGISTRY}/build/base:24.04
 
 ARG NODE_VERSION=24.4.0
-ARG BUN_VERSION=1.2.4
+ARG BUN_VERSION=1.3.5
 
 ENV BUN_INSTALL=/opt/bun
 ENV PATH=/opt/bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
