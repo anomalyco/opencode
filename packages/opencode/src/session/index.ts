@@ -246,10 +246,22 @@ export namespace Session {
     return result
   }
 
-  export function plan(input: { slug: string; time: { created: number } }) {
-    const base = Instance.project.vcs
-      ? path.join(Instance.worktree, ".opencode", "plans")
-      : path.join(Global.Path.data, "plans")
+  export async function plan(input: { slug: string; time: { created: number } }) {
+    const cfg = await Config.get()
+    const configuredPath = cfg.plan?.path
+
+    let base: string
+    if (configuredPath) {
+      // If path is absolute, use it directly; otherwise resolve relative to worktree
+      base = path.isAbsolute(configuredPath)
+        ? configuredPath
+        : path.join(Instance.worktree, configuredPath)
+    } else {
+      // Default behavior: use .opencode/plans in VCS projects, or global data directory
+      base = Instance.project.vcs
+        ? path.join(Instance.worktree, ".opencode", "plans")
+        : path.join(Global.Path.data, "plans")
+    }
     return path.join(base, [input.time.created, input.slug].join("-") + ".md")
   }
 

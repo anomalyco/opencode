@@ -1076,6 +1076,16 @@ export namespace Config {
           prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
         })
         .optional(),
+      plan: z
+        .object({
+          path: z
+            .string()
+            .optional()
+            .describe(
+              "Path where plan files are saved. Can be relative to project root or absolute. Defaults to '.opencode/plans/' in VCS projects or '~/.local/share/opencode/plans/' otherwise.",
+            ),
+        })
+        .optional(),
       experimental: z
         .object({
           hook: z

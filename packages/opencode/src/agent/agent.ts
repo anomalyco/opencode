@@ -49,6 +49,22 @@ export namespace Agent {
   const state = Instance.state(async () => {
     const cfg = await Config.get()
 
+    // Compute the configured plan path for permission rules
+    const configuredPlanPath = cfg.plan?.path
+    const planEditPaths: Record<string, string> = {}
+    const planExternalDirs: Record<string, string> = {}
+
+    if (configuredPlanPath) {
+      // If path is absolute, use it directly; otherwise resolve relative to worktree
+      const resolvedPlanPath = path.isAbsolute(configuredPlanPath)
+        ? configuredPlanPath
+        : path.join(Instance.worktree, configuredPlanPath)
+      // Allow editing .md files in the configured plan directory
+      planEditPaths[path.join(path.dirname(resolvedPlanPath), "*.md")] = "allow"
+      // Allow external directory access to the configured plan directory
+      planExternalDirs[path.join(path.dirname(resolvedPlanPath), "*")] = "allow"
+    }
+
     const defaults = PermissionNext.fromConfig({
       "*": "allow",
       doom_loop: "ask",
@@ -97,11 +113,13 @@ export namespace Agent {
             plan_exit: "allow",
             external_directory: {
               [path.join(Global.Path.data, "plans", "*")]: "allow",
+              ...planExternalDirs,
             },
             edit: {
               "*": "deny",
               [path.join(".opencode", "plans", "*.md")]: "allow",
               [path.relative(Instance.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]: "allow",
+              ...planEditPaths,
             },
           }),
           user,
