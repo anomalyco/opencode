@@ -799,7 +799,69 @@ export const SettingsGeneral: Component = () => {
 
         <SoundsSection />
 
-        <UpdatesSection />
+            <SettingsRow
+              title={language.t("settings.general.row.font.title")}
+              description={language.t("settings.general.row.font.description")}
+            >
+              <Select
+                options={fontOptionsList}
+                current={fontOptionsList.find((o) => o.value === settings.appearance.font())}
+                value={(o) => o.value}
+                label={(o) => language.t(o.label)}
+                onSelect={(option) => option && settings.appearance.setFont(option.value)}
+                variant="secondary"
+                size="small"
+                triggerVariant="settings"
+                triggerStyle={{ "font-family": monoFontFamily(settings.appearance.font()), "min-width": "180px" }}
+              >
+                {(option) => (
+                  <span style={{ "font-family": monoFontFamily(option?.value) }}>
+                    {option ? language.t(option.label) : ""}
+                  </span>
+                )}
+              </Select>
+            </SettingsRow>
+
+            <SettingsRow
+              title="Message Font Size"
+              description="Adjust the font size for user and assistant messages"
+            >
+              <div class="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => {
+                    const current = settings.appearance.fontSize()
+                    if (current > 10) {
+                      settings.appearance.setFontSize(current - 1)
+                    }
+                  }}
+                  disabled={settings.appearance.fontSize() <= 10}
+                  aria-label="Decrease font size"
+                >
+                  −
+                </Button>
+                <span class="text-14-regular text-text-strong min-w-[48px] text-center">
+                  {settings.appearance.fontSize()}px
+                </span>
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => {
+                    const current = settings.appearance.fontSize()
+                    if (current < 24) {
+                      settings.appearance.setFontSize(current + 1)
+                    }
+                  }}
+                  disabled={settings.appearance.fontSize() >= 24}
+                  aria-label="Increase font size"
+                >
+                  +
+                </Button>
+              </div>
+            </SettingsRow>
+          </div>
+        </div>
 
         <DisplaySection />
 

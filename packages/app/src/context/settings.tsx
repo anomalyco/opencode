@@ -38,9 +38,8 @@ export interface Settings {
   }
   appearance: {
     fontSize: number
-    mono: string
-    sans: string
-    terminal: string
+    font: string
+    zoomLevel: number
   }
   keybinds: Record<string, string>
   permissions: {
@@ -123,9 +122,8 @@ const defaultSettings: Settings = {
   },
   appearance: {
     fontSize: 14,
-    mono: "",
-    sans: "",
-    terminal: "",
+    font: "ibm-plex-mono",
+    zoomLevel: 1,
   },
   keybinds: {},
   permissions: {
@@ -165,6 +163,12 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     createEffect(() => {
       if (store.general?.followup !== "queue") return
       setStore("general", "followup", "steer")
+    })
+
+    createEffect(() => {
+      if (typeof document === "undefined") return
+      const fontSize = store.appearance?.fontSize ?? defaultSettings.appearance.fontSize
+      document.documentElement.style.setProperty("--font-size-base", `${fontSize}px`)
     })
 
     return {
@@ -259,6 +263,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         terminalFont: withFallback(() => store.appearance?.terminal, defaultSettings.appearance.terminal),
         setTerminalFont(value: string) {
           setStore("appearance", "terminal", value.trim() ? value : "")
+        },
+        zoomLevel: createMemo(() => store.appearance?.zoomLevel ?? defaultSettings.appearance.zoomLevel),
+        setZoomLevel(value: number) {
+          setStore("appearance", "zoomLevel", value)
         },
       },
       keybinds: {
