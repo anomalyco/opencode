@@ -7,18 +7,20 @@ import { ZenData } from "../src/model"
 
 const root = path.resolve(process.cwd(), "..", "..", "..")
 const models = await $`bun sst secret list`.cwd(root).text()
-const PARTS = 8
+const PARTS = 10
 
 // read the line starting with "ZEN_MODELS"
 const lines = models.split("\n")
 const oldValues = Array.from({ length: PARTS }, (_, i) => {
   const value = lines
-    .find((line) => line.startsWith(`ZEN_MODELS${i + 1}`))
+    .find((line) => line.startsWith(`ZEN_MODELS${i + 1}=`))
     ?.split("=")
     .slice(1)
     .join("=")
-  if (!value) throw new Error(`ZEN_MODELS${i + 1} not found`)
-  return value
+  // TODO
+  //if (!value) throw new Error(`ZEN_MODELS${i + 1} not found`)
+  //return value
+  return value ?? ""
 })
 
 // store the prettified json to a temp file
@@ -38,6 +40,6 @@ const newValues = Array.from({ length: PARTS }, (_, i) =>
   newValue.slice(chunk * i, i === PARTS - 1 ? undefined : chunk * (i + 1)),
 )
 
-for (let i = 0; i < PARTS; i++) {
-  await $`bun sst secret set ZEN_MODELS${i + 1} -- ${newValues[i]}`
-}
+const envFile = Bun.file(path.join(os.tmpdir(), `models-${Date.now()}.env`))
+await envFile.write(newValues.map((v, i) => `ZEN_MODELS${i + 1}=${v}`).join("\n"))
+await $`bun sst secret load ${envFile.name}`.cwd(root)
