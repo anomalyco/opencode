@@ -109,8 +109,6 @@ export class WhisperEngine {
 
       const result = await this.transcriber(audioData, {
         return_timestamps: timestamps,
-        language: "en",
-        task: "transcribe",
         chunk_length_s: 30,
         stride_length_s: 5,
       })
