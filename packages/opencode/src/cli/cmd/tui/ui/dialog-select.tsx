@@ -282,7 +282,11 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
               if (props.initialFilter) {
                 input.value = props.initialFilter
               }
-              setTimeout(() => input.focus(), 1)
+              setTimeout(() => {
+                if (!input) return
+                if (input.isDestroyed) return
+                input.focus()
+              }, 1)
             }}
             placeholder={props.placeholder ?? "Search"}
           />

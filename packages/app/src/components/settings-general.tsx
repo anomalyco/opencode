@@ -130,7 +130,7 @@ export const SettingsGeneral: Component = () => {
   const soundOptions = [...SOUND_OPTIONS]
 
   return (
-    <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-10 pb-10">
+    <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 pt-6 pb-8">
           <h2 class="text-16-medium text-text-strong">{language.t("settings.tab.general")}</h2>
@@ -406,8 +406,8 @@ interface SettingsRowProps {
 
 const SettingsRow: Component<SettingsRowProps> = (props) => {
   return (
-    <div class="flex items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
-      <div class="flex flex-col gap-0.5">
+    <div class="flex flex-wrap items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
+      <div class="flex flex-col gap-0.5 min-w-0">
         <span class="text-14-medium text-text-strong">{props.title}</span>
         <span class="text-12-regular text-text-weak">{props.description}</span>
       </div>
