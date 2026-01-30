@@ -186,6 +186,56 @@ async function launchBrowserWithTimeout(
   ])
 }
 
+/**
+ * Kill any existing browser processes using the given profile directory.
+ * This ensures we can launch a new browser even if a previous one crashed or hung.
+ */
+async function killExistingBrowser(profilePath: string): Promise<void> {
+  const profileName = path.basename(profilePath)
+  log.info("killing existing browser for profile", { profileName })
+
+  // 1. Remove Chrome's SingletonLock file
+  try {
+    const lockFile = path.join(profilePath, "SingletonLock")
+    await fs.rm(lockFile, { force: true })
+    log.info("removed SingletonLock file")
+  } catch {
+    // Lock file might not exist
+  }
+
+  // 2. Kill any Chrome/Chromium processes using this profile
+  try {
+    const { execSync } = await import("child_process")
+    const platform = process.platform
+
+    if (platform === "darwin") {
+      // macOS: Use pkill with pattern matching
+      execSync(`pkill -9 -f "${profileName}" 2>/dev/null || true`, { stdio: "ignore" })
+    } else if (platform === "linux") {
+      // Linux: Similar approach
+      execSync(`pkill -9 -f "${profileName}" 2>/dev/null || true`, { stdio: "ignore" })
+    } else if (platform === "win32") {
+      // Windows: Use taskkill
+      execSync(`taskkill /F /IM chrome.exe /FI "COMMANDLINE eq *${profileName}*" 2>nul || exit 0`, { stdio: "ignore" })
+    }
+
+    // Wait a bit for processes to terminate
+    await new Promise((r) => setTimeout(r, 500))
+  } catch {
+    // pkill/taskkill might fail if no matching processes - that's fine
+  }
+
+  // 3. Clean up any remaining lock files
+  try {
+    const lockFiles = ["SingletonLock", "SingletonCookie", "SingletonSocket"]
+    for (const file of lockFiles) {
+      await fs.rm(path.join(profilePath, file), { force: true }).catch(() => {})
+    }
+  } catch {
+    // Ignore cleanup errors
+  }
+}
+
 export interface OAuthTokens {
   access: string
   refresh: string
@@ -357,6 +407,9 @@ export namespace AuthBrowser {
     const profilePath = getProfilePath(recordId)
     await ensureDir(profilePath)
 
+    // Kill any existing browser using this profile (prevents "already running" errors)
+    await killExistingBrowser(profilePath)
+
     // Ensure puppeteer is available (auto-installs if needed)
     const puppeteer = await ensurePuppeteer(onProgress)
 
@@ -508,13 +561,8 @@ export namespace AuthBrowser {
 
     const profilePath = getProfilePath(recordId)
 
-    // Kill any existing Chrome processes using this profile
-    try {
-      const lockFile = path.join(profilePath, "SingletonLock")
-      await fs.rm(lockFile, { force: true })
-    } catch {
-      // Lock file might not exist
-    }
+    // Kill any existing browser using this profile (prevents "already running" errors)
+    await killExistingBrowser(profilePath)
 
     // Ensure puppeteer is available
     const puppeteer = await ensurePuppeteer()
@@ -530,27 +578,11 @@ export namespace AuthBrowser {
       browser = await launchBrowserWithTimeout(puppeteer, launchOptions)
     } catch (launchError) {
       const msg = launchError instanceof Error ? launchError.message : String(launchError)
-      if (msg.includes("already running") || msg.includes("SingletonLock")) {
-        log.warn("Browser profile locked, attempting to kill stale processes", { recordId })
-        // Try to kill any chrome processes and retry
-        try {
-          const { execSync } = await import("child_process")
-          execSync(`pkill -9 -f "chrome.*${path.basename(profilePath)}"`, { stdio: "ignore" })
-          await new Promise((r) => setTimeout(r, 1000))
-          // Also remove lock file
-          const lockFile = path.join(profilePath, "SingletonLock")
-          await fs.rm(lockFile, { force: true })
-        } catch {
-          // pkill might fail if no matching processes
-        }
-        // Retry launch with timeout
-        browser = await launchBrowserWithTimeout(puppeteer, launchOptions)
-      } else if (msg.includes("timed out")) {
+      if (msg.includes("timed out")) {
         log.error("Browser launch timed out", { recordId })
         throw new Error(`Browser launch timed out for record ${recordId}. Chrome might be stuck.`)
-      } else {
-        throw launchError
       }
+      throw launchError
     }
 
     const page = await browser.newPage()
