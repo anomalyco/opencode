@@ -30,7 +30,7 @@ runs:
     - name: Get GitHub App user id
       id: get-user-id
       run: |
-        echo "user-id=$(gh api \"/users/${{ steps.app-token.outputs.app-slug }}[bot]\" --jq .id)" >> "$GITHUB_OUTPUT"
+        echo "user-id=$(gh api \"/users/${{ steps.app-token.outputs.app-slug }}%5Bbot%5D\" --jq .id)" >> "$GITHUB_OUTPUT"
       shell: bash
       env:
         GH_TOKEN: ${{ steps.app-token.outputs.token }}
