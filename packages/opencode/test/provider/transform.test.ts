@@ -1056,8 +1056,8 @@ describe("ProviderTransform.variants", () => {
       cache: { read: 0.0001, write: 0.0002 },
     },
     limit: {
-      context: 128000,
-      output: 8192,
+      context: 200_000,
+      output: 64_000,
     },
     status: "active",
     options: {},

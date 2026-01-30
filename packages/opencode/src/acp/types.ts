@@ -10,6 +10,7 @@ export interface ACPSessionState {
     providerID: string
     modelID: string
   }
+  variant?: string
   modeId?: string
 }
 
