@@ -1,11 +1,4 @@
-import {
-  type JSX,
-  createEffect,
-  createSignal,
-  onCleanup,
-  onMount,
-  splitProps,
-} from "solid-js"
+import { type JSX, createEffect, createSignal, onCleanup, onMount, splitProps } from "solid-js"
 import "./scroll-fade.css"
 
 export interface ScrollFadeProps extends JSX.HTMLAttributes<HTMLDivElement> {
@@ -120,7 +113,7 @@ export function ScrollFade(props: ScrollFadeProps) {
 
     let rafId: number | undefined
     let isPolling = false
-    let pollTimeout: number | undefined
+    let pollTimeout: ReturnType<typeof setTimeout> | undefined
 
     const startPolling = () => {
       if (isPolling) return
