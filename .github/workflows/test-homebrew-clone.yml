@@ -34,6 +34,12 @@ jobs:
 
       - name: Clone homebrew tap
         run: |
+          echo "Testing old URL pattern"
+          old="https://${GITHUB_TOKEN}@github.com/sst/homebrew-tap.git"
+          git clone "${old}" ./dist/homebrew-tap-old
+          rm -rf ./dist/homebrew-tap-old
+
+          echo "Testing new URL pattern"
           tap="https://x-access-token:${GITHUB_TOKEN}@github.com/anomalyco/homebrew-tap.git"
           git clone "${tap}" ./dist/homebrew-tap
           cd ./dist/homebrew-tap
