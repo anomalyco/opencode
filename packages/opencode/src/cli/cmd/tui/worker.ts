@@ -10,7 +10,6 @@ import { GlobalBus } from "@/bus/global"
 import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
 import type { BunWebSocketData } from "hono/bun"
 import { Flag } from "@/flag/flag"
-import { VoiceService } from "@/voice/service"
 
 await Log.init({
   print: process.argv.includes("--print-logs"),
@@ -30,13 +29,6 @@ process.on("unhandledRejection", (e) => {
 process.on("uncaughtException", (e) => {
   Log.Default.error("exception", {
     e: e instanceof Error ? e.message : e,
-  })
-})
-
-// Initialize transcription service (non-blocking)
-VoiceService.initialize().catch((error) => {
-  Log.Default.warn("voice service initialization failed", {
-    error: error instanceof Error ? error.message : String(error),
   })
 })
 

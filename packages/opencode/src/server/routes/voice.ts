@@ -2,7 +2,7 @@ import { Hono } from "hono"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import { upgradeWebSocket } from "hono/bun"
 import z from "zod"
-import { VoiceService } from "../../voice/service"
+import { VoiceService, Voice } from "../../voice/service"
 import { AudioBuffer } from "../../voice/audio-buffer"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
@@ -13,23 +13,99 @@ export const VoiceRoutes = lazy(() =>
       "/status",
       describeRoute({
         summary: "Get voice service status",
-        description: "Check if the voice service is available and ready",
+        description: "Check the current status of the voice transcription service",
         operationId: "voice.status",
         responses: {
           200: {
             description: "Service status",
             content: {
               "application/json": {
+                schema: resolver(Voice.Status),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        return c.json(VoiceService.getStatus())
+      },
+    )
+    .post(
+      "/enable",
+      describeRoute({
+        summary: "Enable voice transcription",
+        description: "Enable voice transcription with optional model selection",
+        operationId: "voice.enable",
+        responses: {
+          200: {
+            description: "Enable result",
+            content: {
+              "application/json": {
                 schema: resolver(
                   z.object({
-                    available: z.boolean(),
-                    config: z.object({
-                      enabled: z.boolean(),
-                      model: z.string(),
-                      device: z.enum(["cuda", "cpu", "auto"]),
-                      maxDuration: z.number(),
-                      chunkDuration: z.number(),
-                    }),
+                    success: z.boolean(),
+                  }),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          model: z.enum(["tiny", "base", "small"]).optional(),
+        }),
+      ),
+      async (c) => {
+        const { model } = c.req.valid("json")
+        const success = await VoiceService.enable(model)
+        return c.json({ success })
+      },
+    )
+    .post(
+      "/disable",
+      describeRoute({
+        summary: "Disable voice transcription",
+        description: "Disable voice transcription service",
+        operationId: "voice.disable",
+        responses: {
+          200: {
+            description: "Disabled successfully",
+            content: {
+              "application/json": {
+                schema: resolver(z.object({ success: z.boolean() })),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        await VoiceService.disable()
+        return c.json({ success: true })
+      },
+    )
+    .get(
+      "/models",
+      describeRoute({
+        summary: "List available models",
+        description: "Get list of available Whisper models",
+        operationId: "voice.models",
+        responses: {
+          200: {
+            description: "Available models",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    available: z.array(
+                      z.object({
+                        name: z.enum(["tiny", "base", "small"]),
+                        size: z.string(),
+                      }),
+                    ),
+                    downloaded: z.array(z.enum(["tiny", "base", "small"])),
+                    current: z.enum(["tiny", "base", "small"]),
                   }),
                 ),
               },
@@ -38,10 +114,43 @@ export const VoiceRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        return c.json({
-          available: VoiceService.isAvailable(),
-          config: VoiceService.getConfig(),
-        })
+        const available = await VoiceService.getAvailableModels()
+        const downloaded = await VoiceService.getDownloadedModels()
+        const current = VoiceService.getCurrentModel()
+        return c.json({ available, downloaded, current })
+      },
+    )
+    .post(
+      "/switch-model",
+      describeRoute({
+        summary: "Switch to a different model",
+        description: "Switch the voice transcription model",
+        operationId: "voice.switchModel",
+        responses: {
+          200: {
+            description: "Model switch result",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    success: z.boolean(),
+                  }),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          model: z.enum(["tiny", "base", "small"]),
+        }),
+      ),
+      async (c) => {
+        const { model } = c.req.valid("json")
+        const success = await VoiceService.switchModel(model)
+        return c.json({ success })
       },
     )
     .post(
@@ -58,11 +167,13 @@ export const VoiceRoutes = lazy(() =>
                 schema: resolver(
                   z.object({
                     text: z.string(),
-                    timestamps: z
-                      .object({
-                        word: z.array(z.object({ start: z.number(), end: z.number(), word: z.string() })),
-                        segment: z.array(z.object({ start: z.number(), end: z.number(), segment: z.string() })),
-                      })
+                    chunks: z
+                      .array(
+                        z.object({
+                          text: z.string(),
+                          timestamp: z.tuple([z.number(), z.number()]),
+                        }),
+                      )
                       .optional(),
                   }),
                 ),
@@ -80,8 +191,8 @@ export const VoiceRoutes = lazy(() =>
         }),
       ),
       async (c) => {
-        if (!VoiceService.isAvailable()) {
-          return c.json({ error: "Transcription service not available" }, 503)
+        if (!VoiceService.isReady()) {
+          return c.json({ error: "Transcription service not ready" }, 503)
         }
 
         const { audio, timestamps } = c.req.valid("json")
@@ -120,12 +231,13 @@ export const VoiceRoutes = lazy(() =>
         },
       }),
       upgradeWebSocket(() => {
-        if (!VoiceService.isAvailable()) {
-          throw new Error("Transcription service not available")
+        if (!VoiceService.isReady()) {
+          throw new Error("Transcription service not ready")
         }
 
         const buffer = new AudioBuffer(16000, 1)
-        const config = VoiceService.getConfig()
+        const maxDuration = 300
+        const chunkDuration = 3
         let isProcessing = false
         let isClosed = false
 
@@ -134,7 +246,7 @@ export const VoiceRoutes = lazy(() =>
             ws.send(
               JSON.stringify({
                 type: "ready",
-                maxDuration: config.maxDuration,
+                maxDuration,
               }),
             )
           },
@@ -162,7 +274,7 @@ export const VoiceRoutes = lazy(() =>
                         JSON.stringify({
                           type: "transcription",
                           text: result.text,
-                          timestamps: result.timestamps,
+                          chunks: result.chunks,
                           final: true,
                         }),
                       )
@@ -196,11 +308,11 @@ export const VoiceRoutes = lazy(() =>
                 buffer.append(chunk)
 
                 // Check if we've exceeded max duration
-                if (buffer.getDuration() > config.maxDuration) {
+                if (buffer.getDuration() > maxDuration) {
                   ws.send(
                     JSON.stringify({
                       type: "error",
-                      message: `Maximum recording duration (${config.maxDuration}s) exceeded`,
+                      message: `Maximum recording duration (${maxDuration}s) exceeded`,
                     }),
                   )
                   ws.close()
@@ -216,7 +328,7 @@ export const VoiceRoutes = lazy(() =>
                 )
 
                 // Optional: Perform intermediate transcription every chunkDuration seconds
-                if (buffer.getDuration() >= config.chunkDuration && !isProcessing) {
+                if (buffer.getDuration() >= chunkDuration && !isProcessing) {
                   isProcessing = true
 
                   try {

@@ -160,8 +160,12 @@ import type {
   TuiShowToastResponses,
   TuiSubmitPromptResponses,
   VcsGetResponses,
+  VoiceDisableResponses,
+  VoiceEnableResponses,
+  VoiceModelsResponses,
   VoiceStatusResponses,
   VoiceStreamResponses,
+  VoiceSwitchModelResponses,
   VoiceTranscribeResponses,
   WorktreeCreateErrors,
   WorktreeCreateInput,
@@ -2066,7 +2070,7 @@ export class Voice extends HeyApiClient {
   /**
    * Get voice service status
    *
-   * Check if the voice service is available and ready
+   * Check the current status of the voice transcription service
    */
   public status<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -2079,6 +2083,114 @@ export class Voice extends HeyApiClient {
       url: "/voice/status",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Enable voice transcription
+   *
+   * Enable voice transcription with optional model selection
+   */
+  public enable<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      model?: "tiny" | "base" | "small"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "model" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<VoiceEnableResponses, unknown, ThrowOnError>({
+      url: "/voice/enable",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Disable voice transcription
+   *
+   * Disable voice transcription service
+   */
+  public disable<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).post<VoiceDisableResponses, unknown, ThrowOnError>({
+      url: "/voice/disable",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List available models
+   *
+   * Get list of available Whisper models
+   */
+  public models<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<VoiceModelsResponses, unknown, ThrowOnError>({
+      url: "/voice/models",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Switch to a different model
+   *
+   * Switch the voice transcription model
+   */
+  public switchModel<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      model?: "tiny" | "base" | "small"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "model" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<VoiceSwitchModelResponses, unknown, ThrowOnError>({
+      url: "/voice/switch-model",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 

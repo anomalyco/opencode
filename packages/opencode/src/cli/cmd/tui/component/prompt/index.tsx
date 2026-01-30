@@ -808,7 +808,7 @@ export function Prompt(props: PromptProps) {
                   e.preventDefault()
 
                   // Only allow voice input if service is available
-                  if (!sync.data.voice?.available) {
+                  if (sync.data.voice?.status !== "ready") {
                     return
                   }
 
@@ -1148,17 +1148,17 @@ export function Prompt(props: PromptProps) {
             <box gap={2} flexDirection="row">
               <Switch>
                 <Match when={store.mode === "normal"}>
-                  <Show when={sync.data.voice?.available && voiceStatus() === "recording"}>
+                  <Show when={sync.data.voice?.status === "ready" && voiceStatus() === "recording"}>
                     <text fg={theme.primary}>
                       <span style={{ fg: theme.primary, bold: true }}>Recording... (\ to stop)</span>
                     </text>
                   </Show>
-                  <Show when={sync.data.voice?.available && voiceStatus() === "transcribing"}>
+                  <Show when={sync.data.voice?.status === "ready" && voiceStatus() === "transcribing"}>
                     <text fg={theme.warning}>
                       <span style={{ fg: theme.warning, bold: true }}>Transcribing...</span>
                     </text>
                   </Show>
-                  <Show when={sync.data.voice?.available && voiceStatus() === "idle"}>
+                  <Show when={sync.data.voice?.status === "ready" && voiceStatus() === "idle"}>
                     <text fg={theme.text}>
                       \ <span style={{ fg: theme.textMuted }}>voice</span>
                     </text>

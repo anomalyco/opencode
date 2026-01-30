@@ -85,10 +85,10 @@ export function Footer() {
             <Show when={sync.data.voice !== undefined}>
               <text fg={theme.text}>
                 <Switch>
-                  <Match when={!sync.data.voice?.available}>
+                  <Match when={sync.data.voice?.status !== "ready"}>
                     <span style={{ fg: theme.warning }}>◉ </span>
                   </Match>
-                  <Match when={sync.data.voice?.available}>
+                  <Match when={sync.data.voice?.status === "ready"}>
                     <span style={{ fg: theme.success }}>◉ </span>
                   </Match>
                 </Switch>

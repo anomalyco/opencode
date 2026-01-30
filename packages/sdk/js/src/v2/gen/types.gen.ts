@@ -881,10 +881,33 @@ export type EventWorktreeFailed = {
   }
 }
 
+export type VoiceStatus =
+  | {
+      status: "disabled"
+    }
+  | {
+      status: "idle"
+    }
+  | {
+      status: "downloading"
+      progress: number
+    }
+  | {
+      status: "loading"
+    }
+  | {
+      status: "ready"
+      model: string
+    }
+  | {
+      status: "error"
+      error: string
+    }
+
 export type EventVoiceUpdated = {
   type: "voice.updated"
   properties: {
-    available: boolean
+    status: VoiceStatus
   }
 }
 
@@ -1608,6 +1631,24 @@ export type McpRemoteConfig = {
 }
 
 /**
+ * Voice transcription configuration
+ */
+export type VoiceConfig = {
+  /**
+   * Enable or disable voice transcription
+   */
+  enabled?: boolean
+  /**
+   * Whisper model size: tiny (75MB), base (142MB), or small (466MB)
+   */
+  model?: "tiny" | "base" | "small"
+  /**
+   * Device to run the model on: cpu, gpu, or auto
+   */
+  device?: "cpu" | "gpu" | "auto"
+}
+
+/**
  * @deprecated Always uses stretch layout.
  */
 export type LayoutConfig = "auto" | "stretch"
@@ -1737,6 +1778,7 @@ export type Config = {
           enabled: boolean
         }
   }
+  voice?: VoiceConfig
   formatter?:
     | false
     | {
@@ -4040,19 +4082,99 @@ export type VoiceStatusResponses = {
   /**
    * Service status
    */
-  200: {
-    available: boolean
-    config: {
-      enabled: boolean
-      model: string
-      device: "cuda" | "cpu" | "auto"
-      maxDuration: number
-      chunkDuration: number
-    }
-  }
+  200: VoiceStatus
 }
 
 export type VoiceStatusResponse = VoiceStatusResponses[keyof VoiceStatusResponses]
+
+export type VoiceEnableData = {
+  body?: {
+    model?: "tiny" | "base" | "small"
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/voice/enable"
+}
+
+export type VoiceEnableResponses = {
+  /**
+   * Enable result
+   */
+  200: {
+    success: boolean
+  }
+}
+
+export type VoiceEnableResponse = VoiceEnableResponses[keyof VoiceEnableResponses]
+
+export type VoiceDisableData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/voice/disable"
+}
+
+export type VoiceDisableResponses = {
+  /**
+   * Disabled successfully
+   */
+  200: {
+    success: boolean
+  }
+}
+
+export type VoiceDisableResponse = VoiceDisableResponses[keyof VoiceDisableResponses]
+
+export type VoiceModelsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/voice/models"
+}
+
+export type VoiceModelsResponses = {
+  /**
+   * Available models
+   */
+  200: {
+    available: Array<{
+      name: "tiny" | "base" | "small"
+      size: string
+    }>
+    downloaded: Array<"tiny" | "base" | "small">
+    current: "tiny" | "base" | "small"
+  }
+}
+
+export type VoiceModelsResponse = VoiceModelsResponses[keyof VoiceModelsResponses]
+
+export type VoiceSwitchModelData = {
+  body?: {
+    model: "tiny" | "base" | "small"
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/voice/switch-model"
+}
+
+export type VoiceSwitchModelResponses = {
+  /**
+   * Model switch result
+   */
+  200: {
+    success: boolean
+  }
+}
+
+export type VoiceSwitchModelResponse = VoiceSwitchModelResponses[keyof VoiceSwitchModelResponses]
 
 export type VoiceTranscribeData = {
   body?: {
@@ -4075,18 +4197,10 @@ export type VoiceTranscribeResponses = {
    */
   200: {
     text: string
-    timestamps?: {
-      word: Array<{
-        start: number
-        end: number
-        word: string
-      }>
-      segment: Array<{
-        start: number
-        end: number
-        segment: string
-      }>
-    }
+    chunks?: Array<{
+      text: string
+      timestamp: [number, number]
+    }>
   }
 }
 
