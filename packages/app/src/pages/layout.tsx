@@ -2692,7 +2692,12 @@ export default function Layout(props: ParentProps) {
           )}
         </Show>
         <Show when={providers.all().length > 0 && providers.paid().length === 0}>
-          <div class="shrink-0 px-2 py-3 border-t border-border-weak-base">
+          <div
+            classList={{
+              "shrink-0 px-2 py-3": true,
+              "border-t border-border-weak-base": !!panelProps.project,
+            }}
+          >
             <div class="rounded-md bg-background-base shadow-xs-border-base">
               <div class="p-3 flex flex-col gap-2">
                 <div class="text-12-medium text-text-strong">{language.t("sidebar.gettingStarted.title")}</div>
