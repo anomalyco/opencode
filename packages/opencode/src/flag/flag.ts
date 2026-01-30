@@ -25,7 +25,7 @@ export namespace Flag {
     OPENCODE_DISABLE_CLAUDE_CODE || truthy("MAMMOUTH_DISABLE_CLAUDE_CODE_SKILLS")
   export declare const OPENCODE_DISABLE_PROJECT_CONFIG: boolean
   export const OPENCODE_FAKE_VCS = process.env["MAMMOUTH_FAKE_VCS"]
-  export const OPENCODE_CLIENT = process.env["MAMMOUTH_CLIENT"] ?? "mammouth-cli"
+  export const OPENCODE_CLIENT = process.env["MAMMOUTH_CLIENT"] ?? "opencode"
   export const OPENCODE_SERVER_PASSWORD = process.env["MAMMOUTH_SERVER_PASSWORD"]
   export const OPENCODE_SERVER_USERNAME = process.env["MAMMOUTH_SERVER_USERNAME"]
 

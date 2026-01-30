@@ -232,7 +232,7 @@ export namespace LLM {
             }
           : input.model.providerID !== "anthropic"
             ? {
-                "User-Agent": `mammouth-cli/${Installation.VERSION}`,
+                "User-Agent": `opencode/${Installation.VERSION}`,
               }
             : undefined),
         ...input.model.headers,

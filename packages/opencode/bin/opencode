@@ -44,8 +44,8 @@ let arch = archMap[os.arch()]
 if (!arch) {
   arch = os.arch()
 }
-const base = "mammouth-cli-" + platform + "-" + arch
-const binary = platform === "windows" ? "mammouth-cli.exe" : "mammouth-cli"
+const base = "opencode-" + platform + "-" + arch
+const binary = platform === "windows" ? "opencode.exe" : "opencode"
 
 function findBinary(startDir) {
   let current = startDir

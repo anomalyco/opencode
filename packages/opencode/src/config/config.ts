@@ -81,7 +81,7 @@ export namespace Config {
 
     // Project config has highest precedence (overrides global and remote)
     if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
-      for (const file of ["mammouth-cli.jsonc", "mammouth-cli.json"]) {
+      for (const file of ["opencode.jsonc", "opencode.json"]) {
         const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
         for (const resolved of found.toReversed()) {
           result = mergeConfigConcatArrays(result, await loadFile(resolved))
@@ -105,7 +105,7 @@ export namespace Config {
       ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
         ? await Array.fromAsync(
             Filesystem.up({
-              targets: [".mammouth-cli"],
+              targets: [".opencode"],
               start: Instance.directory,
               stop: Instance.worktree,
             }),
@@ -114,7 +114,7 @@ export namespace Config {
       // Always scan ~/.mammouth-cli/ (user home directory)
       ...(await Array.fromAsync(
         Filesystem.up({
-          targets: [".mammouth-cli"],
+          targets: [".opencode"],
           start: Global.Path.home,
           stop: Global.Path.home,
         }),
@@ -127,7 +127,7 @@ export namespace Config {
     }
 
     for (const dir of unique(directories)) {
-      if (dir.endsWith(".mammouth-cli") || dir === Flag.OPENCODE_CONFIG_DIR) {
+      if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
         for (const file of ["opencode.jsonc", "opencode.json"]) {
           log.debug(`loading config from ${path.join(dir, file)}`)
           result = mergeConfigConcatArrays(result, await loadFile(path.join(dir, file)))
@@ -257,7 +257,7 @@ export namespace Config {
       })
       if (!md) continue
 
-      const patterns = ["/.mammouth-cli/command/", "/.mammouth-cli/commands/", "/command/", "/commands/"]
+      const patterns = ["/.opencode/command/", "/.opencode/commands/", "/command/", "/commands/"]
       const file = rel(item, patterns) ?? path.basename(item)
       const name = trim(file)
 
@@ -297,7 +297,7 @@ export namespace Config {
       })
       if (!md) continue
 
-      const patterns = ["/.mammouth-cli/agent/", "/.mammouth-cli/agents/", "/agent/", "/agents/"]
+      const patterns = ["/.opencode/agent/", "/.opencode/agents/", "/agent/", "/agents/"]
       const file = rel(item, patterns) ?? path.basename(item)
       const agentName = trim(file)
 
