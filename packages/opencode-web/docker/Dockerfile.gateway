@@ -1,0 +1,51 @@
+# OpenCode Web API Gateway Dockerfile
+FROM oven/bun:1.1-alpine AS base
+
+WORKDIR /app
+
+# Install production dependencies
+FROM base AS deps
+COPY package.json bun.lock* ./
+RUN bun install --frozen-lockfile --production
+
+# Build stage
+FROM base AS build
+COPY package.json bun.lock* ./
+RUN bun install --frozen-lockfile
+COPY . .
+RUN bun run build
+
+# Production stage
+FROM base AS production
+
+# Install curl for health checks
+RUN apk add --no-cache curl
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S opencode -u 1001 -G nodejs
+
+WORKDIR /app
+
+# Copy built files and dependencies
+COPY --from=deps --chown=opencode:nodejs /app/node_modules ./node_modules
+COPY --from=build --chown=opencode:nodejs /app/dist ./dist
+COPY --chown=opencode:nodejs package.json ./
+
+# Create workspace directory
+RUN mkdir -p /var/lib/opencode/workspaces && \
+    chown -R opencode:nodejs /var/lib/opencode
+
+USER opencode
+
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOST=0.0.0.0
+
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3000/health || exit 1
+
+CMD ["bun", "run", "dist/index.js"]

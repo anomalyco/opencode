@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "opencode-web",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target bun",
+    "start": "bun run dist/index.js",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "hono": "^4.10.7",
+    "@hono/zod-validator": "^0.4.3",
+    "drizzle-orm": "^0.39.0",
+    "postgres": "^3.4.5",
+    "bullmq": "^5.34.0",
+    "ioredis": "^5.4.2",
+    "dockerode": "^4.0.4",
+    "jose": "^6.0.0",
+    "zod": "^3.24.0",
+    "nanoid": "^5.0.9"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/dockerode": "^3.3.32",
+    "drizzle-kit": "^0.30.0",
+    "typescript": "^5.8.0"
+  }
+}

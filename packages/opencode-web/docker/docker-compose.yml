@@ -1,0 +1,81 @@
+version: "3.8"
+
+services:
+  # API Gateway
+  gateway:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.gateway
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - HOST=0.0.0.0
+      - DATABASE_URL=postgres://opencode:opencode@postgres:5432/opencode
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET:-development-secret-key-at-least-32-chars}
+      - JWT_EXPIRES_IN=7d
+      - JWT_REFRESH_EXPIRES_IN=30d
+      - DOCKER_SOCKET=/var/run/docker.sock
+      - SANDBOX_IMAGE=opencode-sandbox:latest
+      - SANDBOX_MEMORY_LIMIT=2147483648
+      - SANDBOX_CPU_LIMIT=2
+      - SANDBOX_IDLE_TIMEOUT=1800000
+      - WORKSPACE_BASE_PATH=/var/lib/opencode/workspaces
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - workspaces:/var/lib/opencode/workspaces
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: opencode
+      POSTGRES_PASSWORD: opencode
+      POSTGRES_DB: opencode
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opencode -d opencode"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Redis for BullMQ
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  workspaces:
+
+networks:
+  default:
+    name: opencode-network

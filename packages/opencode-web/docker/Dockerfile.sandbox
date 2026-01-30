@@ -1,0 +1,62 @@
+# OpenCode Sandbox Container
+# Multi-stage build for security and minimal image size
+
+FROM alpine:3.20 AS base
+
+# Disable the runtime transpiler cache
+ENV BUN_RUNTIME_TRANSPILER_CACHE_PATH=0
+
+# Install required system dependencies
+RUN apk add --no-cache \
+    git \
+    ripgrep \
+    curl \
+    ca-certificates \
+    libgcc \
+    libstdc++ \
+    openssh-client
+
+# Create non-root user for security
+RUN addgroup -g 1000 sandbox && \
+    adduser -u 1000 -G sandbox -s /bin/sh -D sandbox
+
+# Build stage for AMD64
+FROM base AS build-amd64
+COPY dist/opencode-linux-x64-baseline-musl/bin/opencode /usr/local/bin/opencode
+
+# Build stage for ARM64
+FROM base AS build-arm64
+COPY dist/opencode-linux-arm64-musl/bin/opencode /usr/local/bin/opencode
+
+# Final stage - select based on target architecture
+ARG TARGETARCH
+FROM build-${TARGETARCH} AS final
+
+# Create workspace directory
+RUN mkdir -p /workspace && chown sandbox:sandbox /workspace
+
+# Create data directory for opencode
+RUN mkdir -p /home/sandbox/.opencode && chown sandbox:sandbox /home/sandbox/.opencode
+
+# Volume for project files
+VOLUME /workspace
+
+# Environment variables
+ENV OPENCODE_SERVER_HOSTNAME=0.0.0.0
+ENV OPENCODE_SERVER_PORT=4096
+ENV OPENCODE_DATA_DIR=/home/sandbox/.opencode
+ENV HOME=/home/sandbox
+
+# Switch to non-root user
+USER sandbox
+WORKDIR /workspace
+
+# Health check
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -sf http://localhost:4096/path || exit 1
+
+# Expose opencode server port
+EXPOSE 4096
+
+# Start opencode server
+ENTRYPOINT ["opencode", "serve", "--hostname", "0.0.0.0", "--port", "4096"]
