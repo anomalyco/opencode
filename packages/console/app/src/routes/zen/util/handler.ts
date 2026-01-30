@@ -605,26 +605,26 @@ export async function handler(
         ? modelInfo.cost200K
         : modelInfo.cost
 
-    const inputCost = modelCost.input * inputTokens * 100
-    const outputCost = modelCost.output * outputTokens * 100
+    const inputCost = (modelCost.input / 1_000_000) * inputTokens * 100
+    const outputCost = (modelCost.output / 1_000_000) * outputTokens * 100
     const reasoningCost = (() => {
       if (!reasoningTokens) return undefined
-      return modelCost.output * reasoningTokens * 100
+      return (modelCost.output / 1_000_000) * reasoningTokens * 100
     })()
     const cacheReadCost = (() => {
       if (!cacheReadTokens) return undefined
       if (!modelCost.cacheRead) return undefined
-      return modelCost.cacheRead * cacheReadTokens * 100
+      return (modelCost.cacheRead / 1_000_000) * cacheReadTokens * 100
     })()
     const cacheWrite5mCost = (() => {
       if (!cacheWrite5mTokens) return undefined
       if (!modelCost.cacheWrite5m) return undefined
-      return modelCost.cacheWrite5m * cacheWrite5mTokens * 100
+      return (modelCost.cacheWrite5m / 1_000_000) * cacheWrite5mTokens * 100
     })()
     const cacheWrite1hCost = (() => {
       if (!cacheWrite1hTokens) return undefined
       if (!modelCost.cacheWrite1h) return undefined
-      return modelCost.cacheWrite1h * cacheWrite1hTokens * 100
+      return (modelCost.cacheWrite1h / 1_000_000) * cacheWrite1hTokens * 100
     })()
     const totalCostInCent =
       inputCost +
