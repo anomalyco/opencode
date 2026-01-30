@@ -1,0 +1,82 @@
+[data-component="scroll-fade"] {
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  box-sizing: border-box;
+  color: inherit;
+  font: inherit;
+  -ms-overflow-style: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
+  &[data-direction="horizontal"] {
+    overflow-x: auto;
+    overflow-y: hidden;
+
+    /* Both fades */
+    &[data-fade-start][data-fade-end] {
+      mask-image: linear-gradient(
+        to right,
+        transparent,
+        black var(--scroll-fade-start),
+        black calc(100% - var(--scroll-fade-end)),
+        transparent
+      );
+      -webkit-mask-image: linear-gradient(
+        to right,
+        transparent,
+        black var(--scroll-fade-start),
+        black calc(100% - var(--scroll-fade-end)),
+        transparent
+      );
+    }
+
+    /* Only start fade */
+    &[data-fade-start]:not([data-fade-end]) {
+      mask-image: linear-gradient(to right, transparent, black var(--scroll-fade-start), black 100%);
+      -webkit-mask-image: linear-gradient(to right, transparent, black var(--scroll-fade-start), black 100%);
+    }
+
+    /* Only end fade */
+    &:not([data-fade-start])[data-fade-end] {
+      mask-image: linear-gradient(to right, black 0%, black calc(100% - var(--scroll-fade-end)), transparent);
+      -webkit-mask-image: linear-gradient(to right, black 0%, black calc(100% - var(--scroll-fade-end)), transparent);
+    }
+  }
+
+  &[data-direction="vertical"] {
+    overflow-y: auto;
+    overflow-x: hidden;
+
+    &[data-fade-start][data-fade-end] {
+      mask-image: linear-gradient(
+        to bottom,
+        transparent,
+        black var(--scroll-fade-start),
+        black calc(100% - var(--scroll-fade-end)),
+        transparent
+      );
+      -webkit-mask-image: linear-gradient(
+        to bottom,
+        transparent,
+        black var(--scroll-fade-start),
+        black calc(100% - var(--scroll-fade-end)),
+        transparent
+      );
+    }
+
+    /* Only start fade */
+    &[data-fade-start]:not([data-fade-end]) {
+      mask-image: linear-gradient(to bottom, transparent, black var(--scroll-fade-start), black 100%);
+      -webkit-mask-image: linear-gradient(to bottom, transparent, black var(--scroll-fade-start), black 100%);
+    }
+
+    /* Only end fade */
+    &:not([data-fade-start])[data-fade-end] {
+      mask-image: linear-gradient(to bottom, black 0%, black calc(100% - var(--scroll-fade-end)), transparent);
+      -webkit-mask-image: linear-gradient(to bottom, black 0%, black calc(100% - var(--scroll-fade-end)), transparent);
+    }
+  }
+}
