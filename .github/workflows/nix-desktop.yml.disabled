@@ -1,4 +1,4 @@
-name: nix desktop
+name: nix-desktop
 
 on:
   push:
@@ -21,7 +21,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-desktop:
+  nix-desktop:
     strategy:
       fail-fast: false
       matrix:
