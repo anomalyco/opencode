@@ -1,4 +1,4 @@
-name: Build Forked Opencode
+name: Build Forked Opencode (Fix JQ Null)
 
 on:
   workflow_dispatch:
@@ -27,7 +27,10 @@ jobs:
       - name: Build Project
         run: |
           cd packages/opencode
+          # Fix Musl build issue
           sed -i '/linux-arm64-musl/d' script/build.ts
+          
+          # Build normally
           bun run build
 
       - name: Publish to NPM (Trusted Publishing / OIDC)
@@ -47,12 +50,15 @@ jobs:
           unset NODE_AUTH_TOKEN || true
           unset NPM_TOKEN || true
 
+          # FIX: Added 'if . then ... else . end' checks.
+          # This prevents jq from crashing if 'dependencies' or 'optionalDependencies' is missing (null).
           jq '.name = "@baixiangcpp/opencode-ai" 
               | .version = "1.0.${{ github.run_number }}" 
               | .repository = { "type": "git", "url": "git+https://github.com/baixiangcpp/opencode.git" }
               | del(.private) 
-              | del(.dependencies) 
-              | del(.devDependencies)' package.json > package.json.tmp
+              | del(.devDependencies)
+              | .dependencies |= (if . then map_values(if (tostring | test("^(catalog:|workspace:)")) then "latest" else . end) else . end)
+              | .optionalDependencies |= (if . then map_values(if (tostring | test("^(catalog:|workspace:)")) then "latest" else . end) else . end)' package.json > package.json.tmp
           mv package.json.tmp package.json
 
           cat > .npmignore <<EOF
