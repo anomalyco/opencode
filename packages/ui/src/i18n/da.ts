@@ -5,6 +5,14 @@ export const dict = {
   "ui.sessionReview.expandAll": "Udvid alle",
   "ui.sessionReview.collapseAll": "Skjul alle",
 
+  "ui.sessionReview.change.added": "Tilføjet",
+  "ui.sessionReview.change.removed": "Fjernet",
+  "ui.lineComment.label.prefix": "Kommenter på ",
+  "ui.lineComment.label.suffix": "",
+  "ui.lineComment.editorLabel.prefix": "Kommenterer på ",
+  "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.placeholder": "Tilføj kommentar",
+  "ui.lineComment.submit": "Kommenter",
   "ui.sessionTurn.steps.show": "Vis trin",
   "ui.sessionTurn.steps.hide": "Skjul trin",
   "ui.sessionTurn.summary.response": "Svar",
@@ -33,17 +41,20 @@ export const dict = {
 
   "ui.list.loading": "Indlæser",
   "ui.list.empty": "Ingen resultater",
+  "ui.list.clearFilter": "Ryd filter",
   "ui.list.emptyWithFilter.prefix": "Ingen resultater for",
   "ui.list.emptyWithFilter.suffix": "",
 
   "ui.messageNav.newMessage": "Ny besked",
 
   "ui.textField.copyToClipboard": "Kopier til udklipsholder",
+  "ui.textField.copyLink": "Kopier link",
   "ui.textField.copied": "Kopieret",
 
   "ui.imagePreview.alt": "Billedforhåndsvisning",
 
   "ui.tool.read": "Læs",
+  "ui.tool.loaded": "Indlæst",
   "ui.tool.list": "Liste",
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
@@ -64,6 +75,7 @@ export const dict = {
   "ui.common.cancel": "Annuller",
   "ui.common.confirm": "Bekræft",
   "ui.common.dismiss": "Afvis",
+  "ui.common.close": "Luk",
   "ui.common.next": "Næste",
   "ui.common.submit": "Indsend",
 
