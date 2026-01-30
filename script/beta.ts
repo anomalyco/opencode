@@ -41,10 +41,50 @@ async function main() {
   for (const pr of prs) {
     console.log(`\nProcessing PR #${pr.number}: ${pr.title}`)
 
+    // Try to update PR branch via GitHub API (rebase onto base branch)
+    console.log(`  Attempting to rebase PR #${pr.number} via GitHub API...`)
+    const updateBranch = await $`gh pr update-branch ${pr.number} --rebase`.nothrow()
+    if (updateBranch.exitCode !== 0) {
+      console.log(`  Rebase failed for PR #${pr.number} (has conflicts)`)
+      console.log(`  Error: ${updateBranch.stderr}`)
+      skipped.push({ number: pr.number, reason: "Rebase failed (conflicts)" })
+      continue
+    }
+
+    console.log(`  Rebase initiated for PR #${pr.number}`)
+
+    // Wait for rebase to complete by polling PR state
+    console.log(`  Waiting for rebase to complete...`)
+    let rebaseComplete = false
+    let attempts = 0
+    const maxAttempts = 30
+
+    while (!rebaseComplete && attempts < maxAttempts) {
+      await Bun.sleep(2000) // Wait 2 seconds
+      attempts++
+
+      const prCheck = await $`gh pr view ${pr.number} --json mergeStateStatus,headRefOid`.nothrow()
+      if (prCheck.exitCode === 0) {
+        const prData = JSON.parse(prCheck.stdout)
+        // mergeStateStatus will be "clean" when rebase is complete and no conflicts
+        if (prData.mergeStateStatus === "clean") {
+          rebaseComplete = true
+          console.log(`  Rebase completed for PR #${pr.number}`)
+        }
+      }
+    }
+
+    if (!rebaseComplete) {
+      console.log(`  Timeout waiting for rebase on PR #${pr.number}`)
+      skipped.push({ number: pr.number, reason: "Timeout waiting for rebase" })
+      continue
+    }
+
+    // Fetch the rebased PR
     const fetchPR = await $`git fetch origin pull/${pr.number}/head:pr-${pr.number}`.nothrow()
     if (fetchPR.exitCode !== 0) {
-      console.log(`  Failed to fetch PR #${pr.number}, skipping`)
-      skipped.push({ number: pr.number, reason: "Failed to fetch" })
+      console.log(`  Failed to fetch PR #${pr.number} after rebase, skipping`)
+      skipped.push({ number: pr.number, reason: "Failed to fetch after rebase" })
       continue
     }
 
