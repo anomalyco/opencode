@@ -6,6 +6,7 @@
   "permissions": [
     "core:default",
     "opener:default",
+    "deep-link:default",
     "core:window:allow-start-dragging",
     "core:window:allow-set-theme",
     "core:webview:allow-set-webview-zoom",
