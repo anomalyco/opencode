@@ -24,7 +24,7 @@
   h5,
   h6 {
     font-size: var(--font-size-base);
-    color: var(--text-strong);
+    color: var(--markdown-heading, var(--text-strong));
     font-weight: var(--font-weight-medium);
     margin-top: 2rem;
     margin-bottom: 0.75rem;
@@ -34,8 +34,14 @@
   /* Emphasis & Strong: Neutral strong color */
   strong,
   b {
-    color: var(--text-strong);
+    color: var(--markdown-strong, var(--text-strong));
     font-weight: var(--font-weight-medium);
+  }
+
+  em,
+  i {
+    color: var(--markdown-emph, var(--text-base));
+    font-style: italic;
   }
 
   /* Paragraphs */
@@ -45,7 +51,7 @@
 
   /* Links */
   a {
-    color: var(--text-interactive-base);
+    color: var(--markdown-link, var(--text-interactive-base));
     text-decoration: none;
     font-weight: inherit;
   }
@@ -87,7 +93,7 @@
   }
 
   li::marker {
-    color: var(--text-weak);
+    color: var(--markdown-list-item, var(--text-weak));
   }
 
   /* Nested lists spacing */
@@ -103,7 +109,7 @@
     border-left: 2px solid var(--border-weak-base);
     margin: 1.5rem 0;
     padding-left: 0.5rem;
-    color: var(--text-weak);
+    color: var(--markdown-block-quote, var(--text-weak));
     font-style: normal;
   }
 
@@ -164,7 +170,7 @@
   :not(pre) > code {
     font-family: var(--font-family-mono);
     font-feature-settings: var(--font-family-mono--font-feature-settings);
-    color: var(--syntax-string);
+    color: var(--markdown-code, var(--syntax-string));
     font-weight: var(--font-weight-medium);
     /* font-size: 13px; */
 
