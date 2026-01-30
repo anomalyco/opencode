@@ -8,14 +8,11 @@ runs:
       with:
         bun-version-file: package.json
 
-    - name: Cache ~/.bun
-      id: cache-bun
-      uses: actions/cache@v4
+    - name: Mount Bun Cache
+      uses: useblacksmith/stickydisk@v1
       with:
+        key: ${{ github.repository }}-bun-cache
         path: ~/.bun
-        key: ${{ runner.os }}-bun-${{ hashFiles('package.json') }}-${{ hashFiles('bun.lockb', 'bun.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-bun-${{ hashFiles('package.json') }}-
 
     - name: Install dependencies
       run: bun install
