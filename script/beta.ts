@@ -2,26 +2,19 @@
 
 interface PR {
   number: number
-  headRefName: string
-  headRefOid: string
-  createdAt: string
-  isDraft: boolean
   title: string
 }
 
 async function main() {
   console.log("Fetching open contributor PRs...")
 
-  const prsResult =
-    await $`gh pr list --label contributor --state open --json number,headRefName,headRefOid,createdAt,isDraft,title --limit 100`.nothrow()
+  const prsResult = await $`gh pr list --label contributor --state open --json number,title --limit 100`.nothrow()
   if (prsResult.exitCode !== 0) {
     throw new Error(`Failed to fetch PRs: ${prsResult.stderr}`)
   }
 
-  const allPRs: PR[] = JSON.parse(prsResult.stdout)
-  const prs = allPRs.filter((pr) => !pr.isDraft)
-
-  console.log(`Found ${prs.length} open non-draft contributor PRs`)
+  const prs: PR[] = JSON.parse(prsResult.stdout)
+  console.log(`Found ${prs.length} open contributor PRs`)
 
   console.log("Fetching latest dev branch...")
   const fetchDev = await $`git fetch origin dev`.nothrow()
@@ -41,43 +34,25 @@ async function main() {
   for (const pr of prs) {
     console.log(`\nProcessing PR #${pr.number}: ${pr.title}`)
 
-    // Fetch the PR
-    const fetchPR = await $`git fetch origin pull/${pr.number}/head:pr-${pr.number}`.nothrow()
-    if (fetchPR.exitCode !== 0) {
-      console.log(`  Failed to fetch PR #${pr.number}, skipping`)
-      skipped.push({ number: pr.number, reason: "Failed to fetch" })
+    // Get the diff from GitHub
+    console.log(`  Getting diff...`)
+    const diffResult = await $`gh pr diff ${pr.number}`.nothrow()
+    if (diffResult.exitCode !== 0) {
+      console.log(`  Failed to get diff`)
+      skipped.push({ number: pr.number, reason: `Failed to get diff: ${diffResult.stderr}` })
       continue
     }
 
-    // Find merge base and get diff from base to PR head (just the PR's changes)
-    console.log(`  Finding merge base for PR #${pr.number}...`)
-    const mergeBaseResult = await $`git merge-base dev pr-${pr.number}`.nothrow()
-    if (mergeBaseResult.exitCode !== 0 || !mergeBaseResult.stdout.trim()) {
-      console.log(`  Failed to find merge base for PR #${pr.number}`)
-      skipped.push({ number: pr.number, reason: "Failed to find merge base" })
-      continue
-    }
-    const mergeBase = mergeBaseResult.stdout.trim()
-
-    console.log(`  Getting diff for PR #${pr.number}...`)
-    const diff = await $`git diff ${mergeBase}..pr-${pr.number}`.nothrow()
-    if (diff.exitCode !== 0) {
-      console.log(`  Failed to get diff for PR #${pr.number}`)
-      console.log(`  Error: ${diff.stderr}`)
-      skipped.push({ number: pr.number, reason: `Failed to get diff: ${diff.stderr}` })
-      continue
-    }
-
-    if (!diff.stdout.trim()) {
-      console.log(`  No changes in PR #${pr.number}, skipping`)
+    if (!diffResult.stdout.trim()) {
+      console.log(`  No changes, skipping`)
       skipped.push({ number: pr.number, reason: "No changes" })
       continue
     }
 
-    // Apply the diff
-    console.log(`  Applying diff for PR #${pr.number}...`)
-    const apply = await Bun.spawn(["git", "apply"], {
-      stdin: new TextEncoder().encode(diff.stdout),
+    // Try to apply the diff
+    console.log(`  Applying...`)
+    const apply = await Bun.spawn(["git", "apply", "--3way"], {
+      stdin: new TextEncoder().encode(diffResult.stdout),
       stdout: "pipe",
       stderr: "pipe",
     })
@@ -85,37 +60,34 @@ async function main() {
     const applyStderr = await Bun.readableStreamToText(apply.stderr)
 
     if (applyExit !== 0) {
-      console.log(`  Failed to apply diff for PR #${pr.number}`)
-      console.log(`  Error: ${applyStderr}`)
+      console.log(`  Failed to apply (conflicts)`)
       await $`git checkout -- .`.nothrow()
-      skipped.push({ number: pr.number, reason: `Failed to apply diff: ${applyStderr}` })
+      await $`git clean -fd`.nothrow()
+      skipped.push({ number: pr.number, reason: "Has conflicts" })
       continue
     }
 
-    // Stage all changes
+    // Stage and commit
     const add = await $`git add -A`.nothrow()
     if (add.exitCode !== 0) {
-      console.log(`  Failed to stage changes for PR #${pr.number}`)
+      console.log(`  Failed to stage`)
       await $`git checkout -- .`.nothrow()
+      await $`git clean -fd`.nothrow()
       skipped.push({ number: pr.number, reason: "Failed to stage" })
       continue
     }
 
-    // Commit
     const commitMsg = `Apply PR #${pr.number}: ${pr.title}`
-    const commit = await Bun.spawn(["git", "commit", "-m", commitMsg], { stdout: "pipe", stderr: "pipe" })
-    const commitExit = await commit.exited
-    const commitStderr = await Bun.readableStreamToText(commit.stderr)
-
-    if (commitExit !== 0) {
-      console.log(`  Failed to commit PR #${pr.number}`)
-      console.log(`  Error: ${commitStderr}`)
+    const commit = await $`git commit -m ${commitMsg}`.nothrow()
+    if (commit.exitCode !== 0) {
+      console.log(`  Failed to commit`)
       await $`git checkout -- .`.nothrow()
-      skipped.push({ number: pr.number, reason: `Commit failed: ${commitStderr}` })
+      await $`git clean -fd`.nothrow()
+      skipped.push({ number: pr.number, reason: `Commit failed: ${commit.stderr}` })
       continue
     }
 
-    console.log(`  Successfully applied PR #${pr.number}`)
+    console.log(`  Applied successfully`)
     applied.push(pr.number)
   }
 
