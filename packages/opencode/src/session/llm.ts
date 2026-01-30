@@ -73,7 +73,8 @@ export namespace LLM {
         // For Codex sessions, skip SystemPrompt.provider() and agent.prompt since they're sent via options.instructions
         ...(!isCodex && input.agent.prompt ? [input.agent.prompt] : isCodex ? [] : SystemPrompt.provider(input.model)),
         // any custom prompt passed into this call
-        ...input.system,
+        // For Codex sessions, skip input.system since it's sent via options.instructions
+        ...(!isCodex ? input.system : []),
         // any custom prompt from last user message
         ...(input.user.system ? [input.user.system] : []),
       ]
