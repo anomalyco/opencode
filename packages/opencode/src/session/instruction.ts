@@ -1,5 +1,4 @@
 import path from "path"
-import os from "os"
 import { Global } from "../global"
 import { Filesystem } from "../util/filesystem"
 import { Config } from "../config/config"
@@ -19,7 +18,7 @@ const FILES = [
 function globalFiles() {
   const files = [path.join(Global.Path.config, "AGENTS.md")]
   if (!Flag.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT) {
-    files.push(path.join(os.homedir(), ".claude", "CLAUDE.md"))
+    files.push(path.join(Global.Path.home, ".claude", "CLAUDE.md"))
   }
   if (Flag.OPENCODE_CONFIG_DIR) {
     files.push(path.join(Flag.OPENCODE_CONFIG_DIR, "AGENTS.md"))
@@ -92,12 +91,12 @@ export namespace InstructionPrompt {
       for (let instruction of config.instructions) {
         if (instruction.startsWith("https://") || instruction.startsWith("http://")) continue
         if (instruction.startsWith("~/")) {
-          instruction = path.join(os.homedir(), instruction.slice(2))
+          instruction = path.join(Global.Path.home, instruction.slice(2))
         }
         const matches = path.isAbsolute(instruction)
           ? await Array.fromAsync(
-              new Bun.Glob(path.basename(instruction)).scan({
-                cwd: path.dirname(instruction),
+              new Bun.Glob(instruction).scan({
+                cwd: instruction.includes("**/") ? path.resolve(path.dirname(instruction),"..") : path.dirname(instruction),
                 absolute: true,
                 onlyFiles: true,
               }),
