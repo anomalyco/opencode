@@ -68,6 +68,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
   onMount(() => {
     dialog.setSize("medium")
     setTimeout(() => {
+      if (!textarea || textarea.isDestroyed) return
       textarea.focus()
     }, 1)
     textarea.gotoLineEnd()
