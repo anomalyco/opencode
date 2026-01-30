@@ -49,33 +49,50 @@ async function main() {
       continue
     }
 
-    // Try to squash merge the PR directly (allow unrelated histories since beta starts fresh from dev)
-    console.log(`  Attempting to merge PR #${pr.number}...`)
-    const merge = await $`git merge --squash --allow-unrelated-histories pr-${pr.number}`.nothrow()
-    if (merge.exitCode !== 0) {
-      console.log(`  Squash merge failed for PR #${pr.number}`)
-      console.log(`  Error: ${merge.stderr}`)
-      await $`git reset --hard HEAD`.nothrow()
-      skipped.push({ number: pr.number, reason: `Squash merge failed: ${merge.stderr}` })
+    // Get diff from PR base to PR head and apply it
+    console.log(`  Getting diff for PR #${pr.number}...`)
+    const diff = await $`git diff HEAD...pr-${pr.number}`.nothrow()
+    if (diff.exitCode !== 0) {
+      console.log(`  Failed to get diff for PR #${pr.number}`)
+      console.log(`  Error: ${diff.stderr}`)
+      skipped.push({ number: pr.number, reason: `Failed to get diff: ${diff.stderr}` })
       continue
     }
 
+    if (!diff.stdout.trim()) {
+      console.log(`  No changes in PR #${pr.number}, skipping`)
+      skipped.push({ number: pr.number, reason: "No changes" })
+      continue
+    }
+
+    // Apply the diff
+    console.log(`  Applying diff for PR #${pr.number}...`)
+    const apply = await Bun.spawn(["git", "apply"], {
+      stdin: new TextEncoder().encode(diff.stdout),
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const applyExit = await apply.exited
+    const applyStderr = await Bun.readableStreamToText(apply.stderr)
+
+    if (applyExit !== 0) {
+      console.log(`  Failed to apply diff for PR #${pr.number}`)
+      console.log(`  Error: ${applyStderr}`)
+      await $`git checkout -- .`.nothrow()
+      skipped.push({ number: pr.number, reason: `Failed to apply diff: ${applyStderr}` })
+      continue
+    }
+
+    // Stage all changes
     const add = await $`git add -A`.nothrow()
     if (add.exitCode !== 0) {
       console.log(`  Failed to stage changes for PR #${pr.number}`)
-      await $`git reset --hard HEAD`.nothrow()
+      await $`git checkout -- .`.nothrow()
       skipped.push({ number: pr.number, reason: "Failed to stage" })
       continue
     }
 
-    const status = await $`git status --porcelain`.nothrow()
-    if (status.exitCode !== 0 || !status.stdout.trim()) {
-      console.log(`  No changes to commit for PR #${pr.number}, skipping`)
-      await $`git reset --hard HEAD`.nothrow()
-      skipped.push({ number: pr.number, reason: "No changes to commit" })
-      continue
-    }
-
+    // Commit
     const commitMsg = `Apply PR #${pr.number}: ${pr.title}`
     const commit = await Bun.spawn(["git", "commit", "-m", commitMsg], { stdout: "pipe", stderr: "pipe" })
     const commitExit = await commit.exited
@@ -84,7 +101,7 @@ async function main() {
     if (commitExit !== 0) {
       console.log(`  Failed to commit PR #${pr.number}`)
       console.log(`  Error: ${commitStderr}`)
-      await $`git reset --hard HEAD`.nothrow()
+      await $`git checkout -- .`.nothrow()
       skipped.push({ number: pr.number, reason: `Commit failed: ${commitStderr}` })
       continue
     }
