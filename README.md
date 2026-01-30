@@ -109,6 +109,10 @@ Learn more about [agents](https://opencode.ai/docs/agents).
 
 For more info on how to configure OpenCode [**head over to our docs**](https://opencode.ai/docs).
 
+### Custom Commands
+
+You can add command templates by placing Markdown files in `.opencode/commands` (project) or `~/.config/opencode/commands` (global). This PR adds `/record` for daily Q&A journaling.
+
 ### Contributing
 
 If you're interested in contributing to OpenCode, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.
