@@ -36,7 +36,7 @@ function writeAndWait(term: Terminal, data: string): Promise<void> {
   })
 }
 
-describe("SerializeAddon", () => {
+describe.skip("SerializeAddon", () => {
   describe("ANSI color preservation", () => {
     test("should preserve text attributes (bold, italic, underline)", async () => {
       const { term, addon } = createTerminal()

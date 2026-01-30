@@ -9034,6 +9034,9 @@
               },
               "doom_loop": {
                 "$ref": "#/components/schemas/PermissionActionConfig"
+              },
+              "skill": {
+                "$ref": "#/components/schemas/PermissionRuleConfig"
               }
             },
             "additionalProperties": {
@@ -9544,6 +9547,19 @@
                 }
               },
               "required": ["template"]
+            }
+          },
+          "skills": {
+            "description": "Additional skill folder paths",
+            "type": "object",
+            "properties": {
+              "paths": {
+                "description": "Additional paths to skill folders",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
             }
           },
           "watcher": {
