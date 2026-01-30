@@ -58,8 +58,6 @@ await $`bun install`
 await import(`../packages/sdk/js/script/build.ts`)
 
 if (Script.release) {
-  const previous = await getLatestRelease()
-  const notes = await buildNotes(previous, "HEAD")
   // notes.unshift(highlightsTemplate)
   await $`git commit -am "release: v${Script.version}"`
   await $`git tag v${Script.version}`
@@ -67,6 +65,9 @@ if (Script.release) {
   await $`git cherry-pick HEAD..origin/dev`.nothrow()
   await $`git push origin HEAD --tags --no-verify --force-with-lease`
   await new Promise((resolve) => setTimeout(resolve, 5_000))
+  const previous = await getLatestRelease()
+  console.log("previous", previous)
+  const notes = await buildNotes(previous, "dev")
   await $`gh release edit v${Script.version} --draft=false --title "v${Script.version}" --notes ${notes.join("\n") || "No notable changes"}`
 }
 
