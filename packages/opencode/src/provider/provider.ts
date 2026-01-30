@@ -520,16 +520,82 @@ export namespace Provider {
     },
   }
 
-  const ALLOWED_MODEL_FAMILIES = ["claude", "gpt", "gemini", "mistral", "deepseek", "grok", "llama", "kimi", "qwen"]
-
   const extractModelsFromData = (data: any): ModelsDev.Model[] => {
     if (!data?.data || !Array.isArray(data.data)) {
       return []
     }
 
+    const ALLOWED_MODEL_FAMILIES = [
+      "claude",
+      "gpt",
+      "o4",
+      "gemini",
+      "mistral",
+      "deepseek",
+      "grok",
+      "llama",
+      "kimi",
+      "qwen",
+    ]
+
     const isAllowedModel = (modelName: string): boolean => {
       const lowerName = modelName.toLowerCase()
       return ALLOWED_MODEL_FAMILIES.some((family) => lowerName.startsWith(family))
+    }
+
+    const DIGITS_ONLY = /^\d+$/
+    const VERSION_PART = /^\d+(\.\d+)*$/
+
+    // Filter out date suffixes (8-digit strings starting with "20")
+    // TODO: revisit in the 2100s :D
+    const isDateSuffix = (p: string): boolean => p.length === 8 && p.startsWith("20") && DIGITS_ONLY.test(p)
+
+    function capitalize(word: string): string {
+      return word ? word[0].toUpperCase() + word.slice(1) : word
+    }
+
+    function humanizeClaudeModelName(parts: string[]): string {
+      // Handle Claude model naming:
+      const filtered = parts.filter((p) => !isDateSuffix(p))
+
+      // Old format: claude-3-5-haiku
+      if (DIGITS_ONLY.test(filtered[1] ?? "")) {
+        const versionParts: string[] = []
+        let idx = 1
+
+        while (idx < filtered.length && DIGITS_ONLY.test(filtered[idx])) {
+          versionParts.push(filtered[idx])
+          idx++
+        }
+
+        const version = versionParts.join(".")
+        const modelType = capitalize(filtered[idx] ?? "")
+        return `Claude ${version} ${modelType}`.trim()
+      }
+
+      // New format: claude-haiku-4-5
+      const modelType = capitalize(filtered[1] ?? "")
+      const versionParts = filtered.slice(2).filter((p) => VERSION_PART.test(p))
+
+      return versionParts.length > 0 ? `Claude ${modelType} ${versionParts.join(".")}` : `Claude ${modelType}`
+    }
+
+    function humanizeGeneralModelName(parts: string[]): string {
+      // Handle generic model naming with special cases
+      const specialCases: Record<string, string> = {
+        gpt: "GPT",
+        o4: "o4",
+      }
+
+      return parts.map((p) => specialCases[p.toLowerCase()] ?? capitalize(p)).join(" ")
+    }
+
+    function humanizeModelName(modelName: string): string {
+      // Most models are seperated by hyphen or underscore
+      const parts = modelName.split(/[-_]+/)
+      if (parts.length === 0) return modelName
+
+      return parts[0].toLowerCase() === "claude" ? humanizeClaudeModelName(parts) : humanizeGeneralModelName(parts)
     }
 
     return data.data
@@ -544,9 +610,11 @@ export namespace Provider {
         if (info.supports_audio_input) inputModalities.push("audio")
         if (info.supports_audio_output) outputModalities.push("audio")
 
+        const humanReadableName = humanizeModelName(item.model_name || "")
+
         return {
           id: info.key || item.model_name,
-          name: item.model_name,
+          name: humanReadableName,
           family: info.litellm_provider,
           release_date: "",
           attachment: info.supports_vision || info.supports_pdf_input || false,
@@ -804,12 +872,10 @@ export namespace Provider {
 
     // Add Mammouth AI as built-in provider if not already in models.dev
     if (!database["mammouth-ai"]) {
-      console.log("Adding Mammouth AI provider to database")
       database["mammouth-ai"] = fromModelsDevProvider(MAMMOUTH_PROVIDER)
       const mammouthModels = await getMammouthModels()
       for (const model of mammouthModels) {
         database["mammouth-ai"].models[model.id] = fromModelsDevModel(MAMMOUTH_PROVIDER, model)
-        console.log(`- Added Mammouth model: ${model.id} (${model?.cost?.input}/${model?.cost?.output} per token)`)
       }
     }
 
