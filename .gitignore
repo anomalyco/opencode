@@ -26,3 +26,7 @@ target
 opencode-dev
 logs/
 *.bun-build
+.claude/settings.local.json
+
+#lockfiles
+*.lock
