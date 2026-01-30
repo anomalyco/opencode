@@ -87,8 +87,8 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
   // Handle public routes that don't require auth
   const path = c.req.path
 
-  // Health check endpoint is always public
-  if (path === "/global/health") {
+  // Health check endpoints are always public
+  if (path === "/global/health" || path === "/health") {
     return next()
   }
 
