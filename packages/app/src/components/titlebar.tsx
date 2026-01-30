@@ -132,12 +132,14 @@ export function Titlebar() {
   }
 
   return (
-    <header class="h-10 shrink-0 bg-background-base flex items-center relative" data-tauri-drag-region>
+    <header
+      class="h-10 shrink-0 bg-background-base relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-center"
+      data-tauri-drag-region
+    >
       <div
         classList={{
-          "flex items-center w-full min-w-0": true,
+          "flex items-center min-w-0": true,
           "pl-2": !mac(),
-          "pr-6": !windows(),
         }}
         onMouseDown={drag}
         data-tauri-drag-region
@@ -218,19 +220,28 @@ export function Titlebar() {
           </div>
         </div>
         <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" data-tauri-drag-region />
-        <div class="flex-1 h-full" data-tauri-drag-region />
-        <div
-          id="opencode-titlebar-right"
-          class="flex items-center gap-3 shrink-0 flex-1 justify-end"
-          data-tauri-drag-region
-        />
+      </div>
+
+      <div
+        class="min-w-0 flex items-center justify-center pointer-events-none lg:absolute lg:inset-0 lg:flex lg:items-center lg:justify-center"
+        data-tauri-drag-region
+      >
+        <div id="opencode-titlebar-center" class="pointer-events-auto w-full min-w-0 flex justify-center lg:w-fit" />
+      </div>
+
+      <div
+        classList={{
+          "flex items-center min-w-0 justify-end": true,
+          "pr-6": !windows(),
+        }}
+        onMouseDown={drag}
+        data-tauri-drag-region
+      >
+        <div id="opencode-titlebar-right" class="flex items-center gap-3 shrink-0 justify-end" data-tauri-drag-region />
         <Show when={windows()}>
           <div class="w-6 shrink-0" />
           <div data-tauri-decorum-tb class="flex flex-row" />
         </Show>
-      </div>
-      <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div id="opencode-titlebar-center" class="pointer-events-auto" />
       </div>
     </header>
   )
