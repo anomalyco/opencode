@@ -10,9 +10,6 @@ export const serverName = `${serverHost}:${serverPort}`
 export const modKey = process.platform === "darwin" ? "Meta" : "Control"
 export const terminalToggleKey = "Control+Backquote"
 
-export const promptSelector = '[data-component="prompt-input"]'
-export const terminalSelector = '[data-component="terminal"]'
-
 export function createSdk(directory?: string) {
   return createOpencodeClient({ baseUrl: serverUrl, directory, throwOnError: true })
 }

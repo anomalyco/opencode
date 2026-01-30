@@ -335,4 +335,29 @@ export namespace Billing {
       return subscription.id
     },
   )
+
+  export const unsubscribe = fn(
+    z.object({
+      subscriptionID: z.string(),
+    }),
+    async ({ subscriptionID }) => {
+      const workspaceID = await Database.use((tx) =>
+        tx
+          .select({ workspaceID: BillingTable.workspaceID })
+          .from(BillingTable)
+          .where(eq(BillingTable.subscriptionID, subscriptionID))
+          .then((rows) => rows[0]?.workspaceID),
+      )
+      if (!workspaceID) throw new Error("Workspace ID not found for subscription")
+
+      await Database.transaction(async (tx) => {
+        await tx
+          .update(BillingTable)
+          .set({ subscriptionID: null, subscription: null })
+          .where(eq(BillingTable.workspaceID, workspaceID))
+
+        await tx.delete(SubscriptionTable).where(eq(SubscriptionTable.workspaceID, workspaceID))
+      })
+    },
+  )
 }

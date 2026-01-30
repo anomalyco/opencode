@@ -36,7 +36,9 @@
         border-radius: var(--radius-md);
         overflow: clip;
         color: var(--text-strong);
-        transition: background-color 0.15s ease;
+        transition-property: background-color, border-color;
+        transition-duration: var(--transition-duration);
+        transition-timing-function: var(--transition-easing);
 
         /* text-12-regular */
         font-family: var(--font-family-sans);
@@ -58,41 +60,48 @@
       }
     }
 
-    &[data-expanded] {
-      [data-slot="accordion-trigger"] {
-        border-bottom-left-radius: 0;
-        border-bottom-right-radius: 0;
-      }
-
-      [data-slot="accordion-content"] {
-        border: 1px solid var(--border-weak-base);
-        border-top: none;
-        border-bottom-left-radius: var(--radius-md);
-        border-bottom-right-radius: var(--radius-md);
-      }
+    [data-slot="accordion-arrow"] {
+      flex-shrink: 0;
+      width: 16px;
+      height: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-weak);
     }
 
     [data-slot="accordion-content"] {
-      overflow: hidden;
+      display: grid;
+      grid-template-rows: 0fr;
+      transition-property: grid-template-rows, opacity;
+      transition-duration: var(--transition-duration);
+      transition-timing-function: var(--transition-easing);
       width: 100%;
+
+      > * {
+        overflow: hidden;
+      }
     }
-  }
-}
 
-@keyframes slideDown {
-  from {
-    height: 0;
-  }
-  to {
-    height: var(--kb-accordion-content-height);
-  }
-}
+    [data-slot="accordion-content"][data-expanded] {
+      grid-template-rows: 1fr;
+    }
 
-@keyframes slideUp {
-  from {
-    height: var(--kb-accordion-content-height);
-  }
-  to {
-    height: 0;
+    [data-slot="accordion-content"][data-closed] {
+      grid-template-rows: 0fr;
+    }
+
+    &[data-expanded] [data-slot="accordion-trigger"] {
+      border-bottom-left-radius: 0;
+      border-bottom-right-radius: 0;
+    }
+
+    &[data-expanded] [data-slot="accordion-content"] {
+      border: 1px solid var(--border-weak-base);
+      border-top: none;
+      border-bottom-left-radius: var(--radius-md);
+      border-bottom-right-radius: var(--radius-md);
+      height: auto;
+    }
   }
 }
