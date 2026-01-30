@@ -1,11 +1,14 @@
 import { Component, For, Match, Show, Switch } from "solid-js"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
+import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
+import type { IconName } from "@opencode-ai/ui/icons/provider"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 
 export type AtOption =
   | { type: "agent"; name: string; display: string }
   | { type: "file"; path: string; display: string; recent?: boolean }
+  | { type: "model"; providerID: string; modelID: string; modelName: string; providerName: string; display: string }
 
 export interface SlashCommand {
   id: string
@@ -18,7 +21,7 @@ export interface SlashCommand {
 }
 
 type PromptPopoverProps = {
-  popover: "at" | "slash" | null
+  popover: "at" | "slash" | "at:model" | null
   setSlashPopoverRef: (el: HTMLDivElement) => void
   atFlat: AtOption[]
   atActive?: string
@@ -31,6 +34,7 @@ type PromptPopoverProps = {
   onSlashSelect: (item: SlashCommand) => void
   commandKeybind: (id: string) => string | undefined
   t: (key: string) => string
+  agentForModel?: string
 }
 
 export const PromptPopover: Component<PromptPopoverProps> = (props) => {
@@ -87,6 +91,43 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
                           <span class="text-text-strong whitespace-nowrap">{filename}</span>
                         </Show>
                       </div>
+                    </button>
+                  )
+                }}
+              </For>
+            </Show>
+          </Match>
+          <Match when={props.popover === "at:model"}>
+            <Show
+              when={props.atFlat.length > 0}
+              fallback={<div class="text-text-weak px-2 py-1">{props.t("prompt.popover.emptyResults")}</div>}
+            >
+              <For each={props.atFlat.slice(0, 10)}>
+                {(item) => {
+                  const model = item as {
+                    type: "model"
+                    providerID: string
+                    modelID: string
+                    modelName: string
+                    providerName: string
+                    display: string
+                  }
+                  return (
+                    <button
+                      classList={{
+                        "w-full flex items-center gap-x-2 rounded-md px-2 py-0.5": true,
+                        "bg-surface-raised-base-hover": props.atActive === props.atKey(item),
+                      }}
+                      onClick={() => props.onAtSelect(item)}
+                      onMouseEnter={() => props.setAtActive(props.atKey(item))}
+                    >
+                      <ProviderIcon id={model.providerID as IconName} class="size-4 shrink-0" />
+                      <div class="flex items-center text-14-regular min-w-0">
+                        <span class="text-text-strong whitespace-nowrap truncate">
+                          @{props.agentForModel}:{model.display}
+                        </span>
+                      </div>
+                      <span class="text-text-weak text-12-regular whitespace-nowrap ml-auto">{model.providerName}</span>
                     </button>
                   )
                 }}

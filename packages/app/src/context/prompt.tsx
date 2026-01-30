@@ -25,8 +25,10 @@ export interface FileAttachmentPart extends PartBase {
 export interface AgentPart extends PartBase {
   type: "agent"
   name: string
-  // TODO: Add model override support for @agent:provider/model syntax
-  // Currently only supported in TUI. See packages/opencode/src/cli/cmd/tui/component/prompt/autocomplete.tsx
+  model?: {
+    providerID: string
+    modelID: string
+  }
 }
 
 export interface ImageAttachmentPart {
@@ -69,7 +71,12 @@ function isPartEqual(partA: ContentPart, partB: ContentPart) {
     case "file":
       return partB.type === "file" && partA.path === partB.path && isSelectionEqual(partA.selection, partB.selection)
     case "agent":
-      return partB.type === "agent" && partA.name === partB.name
+      return (
+        partB.type === "agent" &&
+        partA.name === partB.name &&
+        partA.model?.providerID === partB.model?.providerID &&
+        partA.model?.modelID === partB.model?.modelID
+      )
     case "image":
       return partB.type === "image" && partA.id === partB.id
   }
@@ -91,7 +98,7 @@ function cloneSelection(selection?: FileSelection) {
 function clonePart(part: ContentPart): ContentPart {
   if (part.type === "text") return { ...part }
   if (part.type === "image") return { ...part }
-  if (part.type === "agent") return { ...part }
+  if (part.type === "agent") return { ...part, model: part.model ? { ...part.model } : undefined }
   return {
     ...part,
     selection: cloneSelection(part.selection),

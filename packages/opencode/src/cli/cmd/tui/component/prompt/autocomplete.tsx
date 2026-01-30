@@ -403,11 +403,10 @@ export function Autocomplete(props: {
         .filter(([_, info]) => info.status !== "deprecated")
         .map(([modelId, info]): AutocompleteOption => {
           const modelRef = `${provider.id}/${modelId}`
-          const displayText = `@${agentName}:${provider.id}/${info.name ?? modelId}`
+          const displayText = `@${agentName}:${modelRef}`
           return {
             display: Locale.truncateMiddle(displayText, width),
             value: modelRef,
-            description: provider.name,
             onSelect: () => {
               insertPart(`${agentName}:${modelRef}`, {
                 type: "agent",

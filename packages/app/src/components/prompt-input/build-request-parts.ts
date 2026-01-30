@@ -112,6 +112,7 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
       id: Identifier.ascending("part"),
       type: "agent",
       name: attachment.name,
+      model: attachment.model,
       source: {
         value: attachment.content,
         start: attachment.start,

@@ -237,13 +237,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   )
 
   const [store, setStore] = createStore<{
-    popover: "at" | "slash" | null
+    popover: "at" | "slash" | "at:model" | null
     historyIndex: number
     savedPrompt: PromptHistoryEntry | null
     placeholder: number
     draggingType: "image" | "@mention" | null
     mode: "normal" | "shell"
     applyingHistory: boolean
+    agentForModel: string | undefined
   }>({
     popover: null,
     historyIndex: -1,
@@ -252,6 +253,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     draggingType: null,
     mode: "normal",
     applyingHistory: false,
+    agentForModel: undefined,
   })
 
   const buttonsSpring = useSpring(() => (store.mode === "normal" ? 1 : 0), { visualDuration: 0.2, bounce: 0 })
@@ -509,18 +511,50 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   )
   const agentNames = createMemo(() => local.agent.list().map((agent) => agent.name))
 
+  const modelList = createMemo(() => {
+    if (!store.agentForModel) return []
+    return providers.connected().flatMap((provider) =>
+      Object.entries(provider.models)
+        .filter(([_, info]) => info.status !== "deprecated")
+        .map(
+          ([modelId, info]): AtOption => ({
+            type: "model",
+            providerID: provider.id,
+            modelID: modelId,
+            modelName: info.name ?? modelId,
+            providerName: provider.name,
+            display: `${provider.id}/${info.name ?? modelId}`,
+          }),
+        ),
+    )
+  })
+
   const handleAtSelect = (option: AtOption | undefined) => {
     if (!option) return
     if (option.type === "agent") {
       addPart({ type: "agent", name: option.name, content: "@" + option.name, start: 0, end: 0 })
-    } else {
+    } else if (option.type === "model" && store.agentForModel) {
+      const agentName = store.agentForModel
+      const content = `@${agentName}:${option.providerID}/${option.modelID}`
+      addPart({
+        type: "agent",
+        name: agentName,
+        model: { providerID: option.providerID, modelID: option.modelID },
+        content,
+        start: 0,
+        end: 0,
+      })
+      setStore("agentForModel", undefined)
+    } else if (option.type === "file") {
       addPart({ type: "file", path: option.path, content: "@" + option.path, start: 0, end: 0 })
     }
   }
 
   const atKey = (x: AtOption | undefined) => {
     if (!x) return ""
-    return x.type === "agent" ? `agent:${x.name}` : `file:${x.path}`
+    if (x.type === "agent") return `agent:${x.name}`
+    if (x.type === "model") return `model:${x.providerID}/${x.modelID}`
+    return `file:${x.path}`
   }
 
   const {
@@ -531,6 +565,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onKeyDown: atOnKeyDown,
   } = useFilteredList<AtOption>({
     items: async (query) => {
+      // When in model selection mode, return models instead of agents/files
+      if (store.agentForModel) {
+        return modelList()
+      }
       const agents = agentList()
       const open = recent()
       const seen = new Set(open)
@@ -545,7 +583,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     filterKeys: ["display"],
     groupBy: (item) => {
       if (item.type === "agent") return "agent"
-      if (item.recent) return "recent"
+      if (item.type === "model") return "model"
+      if (item.type === "file" && item.recent) return "recent"
       return "file"
     },
     sortGroupsBy: (a, b) => {
@@ -618,7 +657,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     pill.textContent = part.content
     pill.setAttribute("data-type", part.type)
     if (part.type === "file") pill.setAttribute("data-path", part.path)
-    if (part.type === "agent") pill.setAttribute("data-name", part.name)
+    if (part.type === "agent") {
+      pill.setAttribute("data-name", part.name)
+      if (part.model) {
+        pill.setAttribute("data-model-provider", part.model.providerID)
+        pill.setAttribute("data-model-id", part.model.modelID)
+      }
+    }
     pill.setAttribute("contenteditable", "false")
     pill.style.userSelect = "text"
     pill.style.cursor = "default"
@@ -674,7 +719,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   const selectPopoverActive = () => {
-    if (store.popover === "at") {
+    if (store.popover === "at" || store.popover === "at:model") {
       const items = atFlat()
       if (items.length === 0) return
       const active = atActive()
@@ -746,9 +791,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     const pushAgent = (agent: HTMLElement) => {
       const content = agent.textContent ?? ""
+      const providerID = agent.dataset.modelProvider
+      const modelID = agent.dataset.modelId
+      const model = providerID && modelID ? { providerID, modelID } : undefined
       parts.push({
         type: "agent",
         name: agent.dataset.name!,
+        model,
         content,
         start: position,
         end: position + content.length,
@@ -828,16 +877,46 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const slashMatch = rawText.match(/^\/(\S*)$/)
 
       if (atMatch) {
-        atOnInput(atMatch[1])
-        setStore("popover", "at")
+        const afterAt = atMatch[1]
+        // Check if the user typed @agent: to enter model selection mode
+        // Match against known agent names followed by colon
+        const validAgent = sync.data.agent.find(
+          (a) => !a.hidden && a.mode !== "primary" && afterAt.toLowerCase().startsWith(a.name.toLowerCase() + ":"),
+        )
+        if (validAgent) {
+          // Extract the part after agent: for filtering models
+          const colonIndex =
+            afterAt.toLowerCase().indexOf(validAgent.name.toLowerCase() + ":") + validAgent.name.length + 1
+          const modelFilter = afterAt.slice(colonIndex)
+          setStore("agentForModel", validAgent.name)
+          setStore("popover", "at:model")
+          atOnInput(modelFilter)
+        } else if (store.agentForModel) {
+          // Check if user deleted the colon
+          if (!afterAt.includes(":")) {
+            setStore("agentForModel", undefined)
+            setStore("popover", "at")
+            atOnInput(afterAt)
+          } else {
+            // Still in model mode, extract model filter
+            const colonIdx = afterAt.indexOf(":")
+            const modelFilter = afterAt.slice(colonIdx + 1)
+            atOnInput(modelFilter)
+          }
+        } else {
+          setStore("popover", "at")
+          atOnInput(afterAt)
+        }
       } else if (slashMatch) {
         slashOnInput(slashMatch[1])
         setStore("popover", "slash")
       } else {
-        closePopover()
+        setStore("popover", null)
+        setStore("agentForModel", undefined)
       }
     } else {
-      closePopover()
+      setStore("popover", null)
+      setStore("agentForModel", undefined)
     }
 
     resetHistoryNavigation()
@@ -1091,7 +1170,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const nav = event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter"
       const ctrlNav = ctrl && (event.key === "n" || event.key === "p")
       if (nav || ctrlNav) {
-        if (store.popover === "at") {
+        if (store.popover === "at" || store.popover === "at:model") {
           atOnKeyDown(event)
           event.preventDefault()
           return
@@ -1106,7 +1185,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     if (ctrl && event.code === "KeyG") {
       if (store.popover) {
-        closePopover()
+        setStore("popover", null)
+        setStore("agentForModel", undefined)
         event.preventDefault()
         return
       }
@@ -1157,6 +1237,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         onSlashSelect={handleSlashSelect}
         commandKeybind={command.keybind}
         t={(key) => language.t(key as Parameters<typeof language.t>[0])}
+        agentForModel={store.agentForModel}
       />
       <DockShellForm
         onSubmit={handleSubmit}
