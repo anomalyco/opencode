@@ -67,6 +67,9 @@ jobs:
         with:
           fetch-tags: true
 
+      - name: Mark workspace as safe
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - uses: ./.github/actions/setup-bun
 
       - name: Build
@@ -106,6 +109,9 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-tags: true
+
+      - name: Mark workspace as safe
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - uses: apple-actions/import-codesign-certs@v2
         if: ${{ runner.os == 'macOS' }}
