@@ -5,13 +5,11 @@ import { useParams } from "@solidjs/router"
 import { useLayout } from "@/context/layout"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
-// import { useServer } from "@/context/server"
-// import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { usePlatform } from "@/context/platform"
 import { useSync } from "@/context/sync"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { getFilename } from "@opencode-ai/util/path"
-import { base64Decode } from "@opencode-ai/util/encode"
+import { decode64 } from "@/utils/base64"
 
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -31,7 +29,7 @@ export function SessionHeader() {
   const platform = usePlatform()
   const language = useLanguage()
 
-  const projectDirectory = createMemo(() => base64Decode(params.dir ?? ""))
+  const projectDirectory = createMemo(() => decode64(params.dir) ?? "")
   const project = createMemo(() => {
     const directory = projectDirectory()
     if (!directory) return
@@ -47,7 +45,6 @@ export function SessionHeader() {
   const currentSession = createMemo(() => sync.data.session.find((s) => s.id === params.id))
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
   const showShare = createMemo(() => shareEnabled() && !!currentSession())
-  const showReview = createMemo(() => !!currentSession())
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const view = createMemo(() => layout.view(sessionKey))
 
@@ -133,7 +130,7 @@ export function SessionHeader() {
           <Portal mount={mount()}>
             <button
               type="button"
-              class="hidden md:flex w-[320px] p-1 pl-1.5 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-raised-base transition-colors cursor-default hover:bg-surface-raised-base-hover focus:bg-surface-raised-base-hover active:bg-surface-raised-base-active"
+              class="hidden md:flex w-[320px] max-w-full min-w-0 p-1 pl-1.5 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-raised-base transition-colors cursor-default hover:bg-surface-raised-base-hover focus-visible:bg-surface-raised-base-hover active:bg-surface-raised-base-active"
               onClick={() => command.trigger("file.open")}
               aria-label={language.t("session.header.searchFiles")}
             >
@@ -256,7 +253,7 @@ export function SessionHeader() {
                 >
                   <Button
                     variant="ghost"
-                    class="group/terminal-toggle size-5 p-0"
+                    class="group/terminal-toggle size-6 p-0"
                     onClick={() => view().terminal.toggle()}
                     aria-label={language.t("command.terminal.toggle")}
                     aria-expanded={view().terminal.opened()}
@@ -286,28 +283,27 @@ export function SessionHeader() {
                 <TooltipKeybind title={language.t("command.review.toggle")} keybind={command.keybind("review.toggle")}>
                   <Button
                     variant="ghost"
-                    class="group/review-toggle size-5 p-0"
-                    onClick={() => view().reviewPanel.toggle()}
+                    class="group/file-tree-toggle size-6 p-0"
+                    onClick={() => layout.fileTree.toggle()}
                     aria-label={language.t("command.review.toggle")}
-                    aria-expanded={view().reviewPanel.opened()}
+                    aria-expanded={layout.fileTree.opened()}
                     aria-controls="review-panel"
-                    tabIndex={showReview() ? 0 : -1}
                   >
                     <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
                       <Icon
                         size="small"
-                        name={view().reviewPanel.opened() ? "layout-right-full" : "layout-right"}
-                        class="group-hover/review-toggle:hidden"
+                        name={layout.fileTree.opened() ? "layout-right-full" : "layout-right"}
+                        class="group-hover/file-tree-toggle:hidden"
                       />
                       <Icon
                         size="small"
                         name="layout-right-partial"
-                        class="hidden group-hover/review-toggle:inline-block"
+                        class="hidden group-hover/file-tree-toggle:inline-block"
                       />
                       <Icon
                         size="small"
-                        name={view().reviewPanel.opened() ? "layout-right" : "layout-right-full"}
-                        class="hidden group-active/review-toggle:inline-block"
+                        name={layout.fileTree.opened() ? "layout-right" : "layout-right-full"}
+                        class="hidden group-active/file-tree-toggle:inline-block"
                       />
                     </div>
                   </Button>

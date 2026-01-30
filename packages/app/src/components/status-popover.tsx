@@ -15,14 +15,16 @@ import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { DialogSelectServer } from "./dialog-select-server"
+import { showToast } from "@opencode-ai/ui/toast"
 
 type ServerStatus = { healthy: boolean; version?: string }
 
 async function checkHealth(url: string, platform: ReturnType<typeof usePlatform>): Promise<ServerStatus> {
+  const signal = (AbortSignal as unknown as { timeout?: (ms: number) => AbortSignal }).timeout?.(3000)
   const sdk = createOpencodeClient({
     baseUrl: url,
     fetch: platform.fetch,
-    signal: AbortSignal.timeout(3000),
+    signal,
   })
   return sdk.global
     .health()
@@ -39,9 +41,10 @@ export function StatusPopover() {
   const language = useLanguage()
   const navigate = useNavigate()
 
-  const [loading, setLoading] = createSignal<string | null>(null)
   const [store, setStore] = createStore({
     status: {} as Record<string, ServerStatus | undefined>,
+    loading: null as string | null,
+    defaultServerUrl: undefined as string | undefined,
   })
 
   const servers = createMemo(() => {
@@ -97,17 +100,23 @@ export function StatusPopover() {
   const mcpConnected = createMemo(() => mcpItems().filter((i) => i.status === "connected").length)
 
   const toggleMcp = async (name: string) => {
-    if (loading()) return
-    setLoading(name)
-    const status = sync.data.mcp[name]
-    if (status?.status === "connected") {
-      await sdk.client.mcp.disconnect({ name })
-    } else {
-      await sdk.client.mcp.connect({ name })
+    if (store.loading) return
+    setStore("loading", name)
+
+    try {
+      const status = sync.data.mcp[name]
+      await (status?.status === "connected" ? sdk.client.mcp.disconnect({ name }) : sdk.client.mcp.connect({ name }))
+      const result = await sdk.client.mcp.status()
+      if (result.data) sync.set("mcp", result.data)
+    } catch (err) {
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+        description: err instanceof Error ? err.message : String(err),
+      })
+    } finally {
+      setStore("loading", null)
     }
-    const result = await sdk.client.mcp.status()
-    if (result.data) sync.set("mcp", result.data)
-    setLoading(null)
   }
 
   const lspItems = createMemo(() => sync.data.lsp ?? [])
@@ -123,15 +132,21 @@ export function StatusPopover() {
 
   const serverCount = createMemo(() => sortedServers().length)
 
-  const [defaultServerUrl, setDefaultServerUrl] = createSignal<string | undefined>()
-
-  createEffect(() => {
+  const refreshDefaultServerUrl = () => {
     const result = platform.getDefaultServerUrl?.()
-    if (result instanceof Promise) {
-      result.then((url) => setDefaultServerUrl(url ? normalizeServerUrl(url) : undefined))
+    if (!result) {
+      setStore("defaultServerUrl", undefined)
       return
     }
-    if (result) setDefaultServerUrl(normalizeServerUrl(result))
+    if (result instanceof Promise) {
+      result.then((url) => setStore("defaultServerUrl", url ? normalizeServerUrl(url) : undefined))
+      return
+    }
+    setStore("defaultServerUrl", normalizeServerUrl(result))
+  }
+
+  createEffect(() => {
+    refreshDefaultServerUrl()
   })
 
   return (
@@ -153,7 +168,7 @@ export function StatusPopover() {
               "bg-border-weak-base": server.healthy() === undefined,
             }}
           />
-          <span class="text-12-regular text-text-strong">Status</span>
+          <span class="text-12-regular text-text-strong">{language.t("status.popover.trigger")}</span>
         </div>
       }
       class="[&_[data-slot=popover-body]]:p-0 w-[360px] max-w-[calc(100vw-40px)] bg-transparent border-0 shadow-none rounded-xl"
@@ -161,44 +176,31 @@ export function StatusPopover() {
       placement="bottom-end"
       shift={-136}
     >
-      <div
-        class="flex items-center gap-1 w-[360px] rounded-xl"
-        style={{ "box-shadow": "var(--shadow-lg-border-base)" }}
-      >
+      <div class="flex items-center gap-1 w-[360px] rounded-xl shadow-[var(--shadow-lg-border-base)]">
         <Tabs
-          aria-label="Server Configurations"
-          class="tabs"
+          aria-label={language.t("status.popover.ariaLabel")}
+          class="tabs bg-background-strong rounded-xl overflow-hidden"
           data-component="tabs"
           data-active="servers"
           defaultValue="servers"
           variant="alt"
-          style={{
-            "background-color": "var(--background-strong)",
-            "border-radius": "12px",
-            overflow: "hidden",
-          }}
         >
-          <Tabs.List
-            data-slot="tablist"
-            style={{
-              "background-color": "transparent",
-              "border-bottom": "none",
-              padding: "8px 16px 0",
-              gap: "16px",
-              height: "40px",
-            }}
-          >
+          <Tabs.List data-slot="tablist" class="bg-transparent border-b-0 px-4 pt-2 pb-0 gap-4 h-10">
             <Tabs.Trigger value="servers" data-slot="tab" class="text-12-regular">
-              {serverCount() > 0 ? `${serverCount()} ` : ""}Servers
+              {serverCount() > 0 ? `${serverCount()} ` : ""}
+              {language.t("status.popover.tab.servers")}
             </Tabs.Trigger>
             <Tabs.Trigger value="mcp" data-slot="tab" class="text-12-regular">
-              {mcpConnected() > 0 ? `${mcpConnected()} ` : ""}MCP
+              {mcpConnected() > 0 ? `${mcpConnected()} ` : ""}
+              {language.t("status.popover.tab.mcp")}
             </Tabs.Trigger>
             <Tabs.Trigger value="lsp" data-slot="tab" class="text-12-regular">
-              {lspCount() > 0 ? `${lspCount()} ` : ""}LSP
+              {lspCount() > 0 ? `${lspCount()} ` : ""}
+              {language.t("status.popover.tab.lsp")}
             </Tabs.Trigger>
             <Tabs.Trigger value="plugins" data-slot="tab" class="text-12-regular">
-              {pluginCount() > 0 ? `${pluginCount()} ` : ""}Plugins
+              {pluginCount() > 0 ? `${pluginCount()} ` : ""}
+              {language.t("status.popover.tab.plugins")}
             </Tabs.Trigger>
           </Tabs.List>
 
@@ -208,7 +210,7 @@ export function StatusPopover() {
                 <For each={sortedServers()}>
                   {(url) => {
                     const isActive = () => url === server.url
-                    const isDefault = () => url === defaultServerUrl()
+                    const isDefault = () => url === store.defaultServerUrl
                     const status = () => store.status[url]
                     const isBlocked = () => status()?.healthy === false
                     const [truncated, setTruncated] = createSignal(false)
@@ -274,7 +276,7 @@ export function StatusPopover() {
                           </Show>
                           <Show when={isDefault()}>
                             <span class="text-11-regular text-text-base bg-surface-base px-1.5 py-0.5 rounded-md">
-                              Default
+                              {language.t("common.default")}
                             </span>
                           </Show>
                           <div class="flex-1" />
@@ -290,9 +292,9 @@ export function StatusPopover() {
                 <Button
                   variant="secondary"
                   class="mt-3 self-start h-8 px-3 py-1.5"
-                  onClick={() => dialog.show(() => <DialogSelectServer />)}
+                  onClick={() => dialog.show(() => <DialogSelectServer />, refreshDefaultServerUrl)}
                 >
-                  Manage servers
+                  {language.t("status.popover.action.manageServers")}
                 </Button>
               </div>
             </div>
@@ -304,7 +306,9 @@ export function StatusPopover() {
                 <Show
                   when={mcpItems().length > 0}
                   fallback={
-                    <div class="text-14-regular text-text-base text-center my-auto">No MCP servers configured</div>
+                    <div class="text-14-regular text-text-base text-center my-auto">
+                      {language.t("dialog.mcp.empty")}
+                    </div>
                   }
                 >
                   <For each={mcpItems()}>
@@ -315,7 +319,7 @@ export function StatusPopover() {
                           type="button"
                           class="flex items-center gap-2 w-full h-8 pl-3 pr-2 py-1 rounded-md hover:bg-surface-raised-base-hover transition-colors text-left"
                           onClick={() => toggleMcp(item.name)}
-                          disabled={loading() === item.name}
+                          disabled={store.loading === item.name}
                         >
                           <div
                             classList={{
@@ -331,7 +335,7 @@ export function StatusPopover() {
                           <div onClick={(event) => event.stopPropagation()}>
                             <Switch
                               checked={enabled()}
-                              disabled={loading() === item.name}
+                              disabled={store.loading === item.name}
                               onChange={() => toggleMcp(item.name)}
                             />
                           </div>
@@ -351,7 +355,7 @@ export function StatusPopover() {
                   when={lspItems().length > 0}
                   fallback={
                     <div class="text-14-regular text-text-base text-center my-auto">
-                      LSPs auto-detected from file types
+                      {language.t("dialog.lsp.empty")}
                     </div>
                   }
                 >
@@ -381,8 +385,19 @@ export function StatusPopover() {
                   when={plugins().length > 0}
                   fallback={
                     <div class="text-14-regular text-text-base text-center my-auto">
-                      Plugins configured in{" "}
-                      <code class="bg-surface-raised-base px-1.5 py-0.5 rounded-sm text-text-base">opencode.json</code>
+                      {(() => {
+                        const value = language.t("dialog.plugins.empty")
+                        const file = "opencode.json"
+                        const parts = value.split(file)
+                        if (parts.length === 1) return value
+                        return (
+                          <>
+                            {parts[0]}
+                            <code class="bg-surface-raised-base px-1.5 py-0.5 rounded-sm text-text-base">{file}</code>
+                            {parts.slice(1).join(file)}
+                          </>
+                        )
+                      })()}
                     </div>
                   }
                 >

@@ -12,6 +12,7 @@ export const terminalToggleKey = "Control+Backquote"
 
 export const promptSelector = '[data-component="prompt-input"]'
 export const terminalSelector = '[data-component="terminal"]'
+export const modelVariantCycleSelector = '[data-action="model-variant-cycle"]'
 
 export function createSdk(directory?: string) {
   return createOpencodeClient({ baseUrl: serverUrl, directory, throwOnError: true })
