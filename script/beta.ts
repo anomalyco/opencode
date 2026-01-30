@@ -66,7 +66,8 @@ async function main() {
     const compare = `${repo.nameWithOwner}/compare/dev...${head.headRepository.nameWithOwner}:${head.headRefName}`
     const diffResult = await $`gh api -H Accept:application/vnd.github.v3.diff repos/${compare}`.nothrow()
     if (diffResult.exitCode !== 0) {
-      console.log(`  Failed to get diff`)
+      console.log(`  Failed to get diff: ${diffResult.stderr}`)
+      console.log(`  Compare: ${compare}`)
       skipped.push({ number: pr.number, reason: `Failed to get diff: ${diffResult.stderr}` })
       continue
     }
