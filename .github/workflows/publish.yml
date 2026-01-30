@@ -38,12 +38,6 @@ jobs:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/setup-bun
 
-      - name: Setup git committer
-        id: committer
-        uses: ./.github/actions/setup-git-committer
-        with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
       - id: version
         run: |
           ./script/version.ts
