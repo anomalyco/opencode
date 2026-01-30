@@ -1006,6 +1006,34 @@ export namespace ACP {
           description: "compact the session",
         })
 
+      // Session management commands
+      const sessionCommands = [
+        { name: "listSessions", description: "List all available sessions" },
+        { name: "switchSession", description: "Switch to a different session" },
+        { name: "createSession", description: "Create a new session" },
+        { name: "forkSession", description: "Fork the current session" },
+        { name: "renameSession", description: "Rename a session" },
+        { name: "deleteSession", description: "Delete a session" },
+        { name: "getSessionInfo", description: "Get information about a session" },
+        { name: "undoMessage", description: "Undo the last message" },
+        { name: "redoMessage", description: "Redo the last message" },
+        { name: "compactSession", description: "Compact the session" },
+        { name: "exportSession", description: "Export a session" },
+        { name: "jumpToMessage", description: "Jump to a specific message" },
+        { name: "duplicateSession", description: "Duplicate a session" },
+      ]
+
+      for (const cmd of sessionCommands) {
+        availableCommands.push({
+          name: cmd.name,
+          description: cmd.description,
+        })
+      }
+
+      // Add missing commands directly
+      availableCommands.push({ name: "listSessions", description: "List all available sessions" })
+      availableCommands.push({ name: "getSessionInfo", description: "Get information about a session" })
+
       const availableModes = agents
         .filter((agent) => agent.mode !== "subagent" && !agent.hidden)
         .map((agent) => ({
@@ -1216,19 +1244,106 @@ export namespace ACP {
         _meta: {},
       }
 
-      if (!cmd) {
-        await this.sdk.session.prompt({
-          sessionID,
-          model: {
-            providerID: model.providerID,
-            modelID: model.modelID,
-          },
-          parts,
-          agent,
-          directory,
-        })
-        return done
+      if (!cmd) return done
+      switch (cmd.name) {
+        case "compact":
+          await this.config.sdk.session.summarize(
+            {
+              sessionID,
+              directory,
+              providerID: model.providerID,
+              modelID: model.modelID,
+            },
+            { throwOnError: true },
+          )
+          break
+
+        case "listSessions": {
+          // Parse --limit from cmd.args string if present
+          const limitMatch = cmd.args?.match(/--limit\s+(\d+)/)
+          const limit = limitMatch ? parseInt(limitMatch[1]) : undefined
+          const result = await listSessions({ limit, projectPath: directory })
+          return { content: JSON.stringify(result), type: "text" }
+        }
+        case "switchSession": {
+          const sessionIdMatch = cmd.args?.match(/--session-id\s+(\S+)/)
+          const sessionId = sessionIdMatch?.[1]
+          if (!sessionId) return { content: JSON.stringify({ error: "Missing --session-id" }), type: "text" }
+          const result = await switchSession({ sessionId })
+          return { content: JSON.stringify(result), type: "text" }
+        }
+        case "createSession": {
+          const titleMatch = cmd.args?.match(/--title\s+"([^"]+)"/) || cmd.args?.match(/--title\s+(\S+)/)
+          const title = titleMatch?.[1]
+          const result = await createSession({ title, projectPath: directory })
+          return { content: JSON.stringify(result), type: "text" }
+        }
+        case "forkSession": {
+          const sessionIdMatch = cmd.args?.match(/--session-id\s+(\S+)/)
+          const messageIdMatch = cmd.args?.match(/--message-id\s+(\S+)/)
+          const titleMatch = cmd.args?.match(/--title\s+"([^"]+)"/) || cmd.args?.match(/--title\s+(\S+)/)
+          if (!sessionIdMatch) return { content: JSON.stringify({ error: "Missing --session-id" }), type: "text" }
+          const result = await forkSession({ sessionId: sessionIdMatch[1], messageId: messageIdMatch?.[1], title: titleMatch?.[1] })
+          return { content: JSON.stringify(result), type: "text" }
+        }
+        case "renameSession": {
+          const sessionIdMatch = cmd.args?.match(/--session-id\s+(\S+)/)
+          const titleMatch = cmd.args?.match(/--title\s+"([^"]+)"/) || cmd.args?.match(/--title\s+(\S+)/)
+          if (!sessionIdMatch || !titleMatch) return { content: JSON.stringify({ error: "Missing --session-id or --title" }), type: "text" }
+          const result = await renameSession({ sessionId: sessionIdMatch[1], title: titleMatch[1] })
+          return { content: JSON.stringify(result), type: "text" }
+        }
+        case "deleteSession": {
+          const sessionIdMatch = cmd.args?.match(/--session-id\s+(\S+)/)
+          if (!sessionIdMatch) return { content: JSON.stringify({ error: "Missing --session-id" }), type: "text" }
+          const result = await deleteSession({ sessionId: sessionIdMatch[1] })
+          return { content: JSON.stringify(result), type: "text" }
+        }
+        case "getSessionInfo": {
+          const sessionIdMatch = cmd.args?.match(/--session-id\s+(\S+)/)
+          if (!sessionIdMatch) return { content: JSON.stringify({ error: "Missing --session-id" }), type: "text" }
+          const result = await getSessionInfo({ sessionId: sessionIdMatch[1] })
+          return { content: JSON.stringify(result), type: "text" }
+        }
+        case "undoMessage": {
+          const sessionIdMatch = cmd.args?.match(/--session-id\s+(\S+)/)
+          const result = await undoMessage({ sessionId: sessionIdMatch?.[1] })
+          return { content: JSON.stringify(result), type: "text" }
+        }
+        case "redoMessage": {
+          const sessionIdMatch = cmd.args?.match(/--session-id\s+(\S+)/)
+          const result = await redoMessage({ sessionId: sessionIdMatch?.[1] })
+          return { content: JSON.stringify(result), type: "text" }
+        }
+        case "compactSession": {
+          const sessionIdMatch = cmd.args?.match(/--session-id\s+(\S+)/)
+          const result = await compactSession({ sessionId: sessionIdMatch?.[1] })
+          return { content: JSON.stringify(result), type: "text" }
+        }
+        case "exportSession": {
+          const sessionIdMatch = cmd.args?.match(/--session-id\s+(\S+)/)
+          const formatMatch = cmd.args?.match(/--format\s+(\w+)/)
+          if (!sessionIdMatch) return { content: JSON.stringify({ error: "Missing --session-id" }), type: "text" }
+          const result = await exportSession({ sessionId: sessionIdMatch[1], format: formatMatch?.[1] as "text" | "json" | "markdown" })
+          return { content: JSON.stringify(result), type: "text" }
+        }
+        case "jumpToMessage": {
+          const sessionIdMatch = cmd.args?.match(/--session-id\s+(\S+)/)
+          const messageIdMatch = cmd.args?.match(/--message-id\s+(\S+)/)
+          if (!sessionIdMatch || !messageIdMatch) return { content: JSON.stringify({ error: "Missing --session-id or --message-id" }), type: "text" }
+          const result = await jumpToMessage({ sessionId: sessionIdMatch[1], messageId: messageIdMatch[1] })
+          return { content: JSON.stringify(result), type: "text" }
+        }
+        case "duplicateSession": {
+          const sessionIdMatch = cmd.args?.match(/--session-id\s+(\S+)/)
+          const titleMatch = cmd.args?.match(/--title\s+"([^"]+)"/) || cmd.args?.match(/--title\s+(\S+)/)
+          if (!sessionIdMatch) return { content: JSON.stringify({ error: "Missing --session-id" }), type: "text" }
+          const result = await duplicateSession({ sessionId: sessionIdMatch[1], title: titleMatch?.[1] })
+          return { content: JSON.stringify(result), type: "text" }
+        }
       }
+
+      return done
 
       const command = await this.config.sdk.command
         .list({ directory }, { throwOnError: true })
@@ -1243,20 +1358,6 @@ export namespace ACP {
           directory,
         })
         return done
-      }
-
-      switch (cmd.name) {
-        case "compact":
-          await this.config.sdk.session.summarize(
-            {
-              sessionID,
-              directory,
-              providerID: model.providerID,
-              modelID: model.modelID,
-            },
-            { throwOnError: true },
-          )
-          break
       }
 
       return done
@@ -1435,3 +1536,25 @@ export namespace ACP {
     return result
   }
 }
+
+// ============ Session Management ACP Commands ============
+
+import {
+	listSessions,
+	switchSession,
+	createSession,
+	forkSession,
+	renameSession,
+	deleteSession,
+	getSessionInfo,
+	undoMessage,
+	redoMessage,
+	compactSession,
+	exportSession,
+	jumpToMessage,
+	duplicateSession,
+} from "./session-handlers.js"
+
+// Add session management commands to the prompt handler
+// These will be available as /command_name in prompts
+
