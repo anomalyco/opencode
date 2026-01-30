@@ -20,6 +20,10 @@ export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
   const log = Log.create({ service: "session.processor" })
 
+  // Throttle interval for streaming updates to reduce file I/O overhead.
+  // Content is accumulated in memory and flushed to storage periodically.
+  const STREAMING_UPDATE_THROTTLE_MS = 50
+
   export type Info = Awaited<ReturnType<typeof create>>
   export type Result = Awaited<ReturnType<Info["process"]>>
 
@@ -52,6 +56,10 @@ export namespace SessionProcessor {
             let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
             const stream = await LLM.stream(streamInput)
 
+            // Throttle state for delta updates to reduce file I/O overhead
+            let lastUpdateTime = 0
+            let pendingReasoningUpdates = new Set<string>()
+
             for await (const value of stream.fullStream) {
               input.abort.throwIfAborted()
               switch (value.type) {
@@ -81,7 +89,14 @@ export namespace SessionProcessor {
                     const part = reasoningMap[value.id]
                     part.text += value.text
                     if (value.providerMetadata) part.metadata = value.providerMetadata
-                    if (part.text) await Session.updatePart({ part, delta: value.text })
+                    // Throttle: accumulate in memory, only write to storage periodically
+                    pendingReasoningUpdates.add(value.id)
+                    const now = Date.now()
+                    if (now - lastUpdateTime >= STREAMING_UPDATE_THROTTLE_MS) {
+                      lastUpdateTime = now
+                      if (part.text) await Session.updatePart({ part, delta: value.text })
+                      pendingReasoningUpdates.delete(value.id)
+                    }
                   }
                   break
 
@@ -96,6 +111,7 @@ export namespace SessionProcessor {
                     }
                     if (value.providerMetadata) part.metadata = value.providerMetadata
                     await Session.updatePart(part)
+                    pendingReasoningUpdates.delete(value.id)
                     delete reasoningMap[value.id]
                   }
                   break
