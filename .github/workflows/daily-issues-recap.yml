@@ -1,4 +1,4 @@
-name: Daily Issues Recap
+name: daily-issues-recap
 
 on:
   schedule:

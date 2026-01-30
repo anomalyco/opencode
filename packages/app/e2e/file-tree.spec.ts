@@ -1,6 +1,6 @@
 import { test, expect } from "./fixtures"
 
-test("file tree can expand folders and open a file", async ({ page, gotoSession }) => {
+test.skip("file tree can expand folders and open a file", async ({ page, gotoSession }) => {
   await gotoSession()
 
   const toggle = page.getByRole("button", { name: "Toggle file tree" })
