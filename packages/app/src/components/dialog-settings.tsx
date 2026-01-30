@@ -14,7 +14,7 @@ export const DialogSettings: Component = () => {
   const platform = usePlatform()
 
   return (
-    <Dialog size="x-large">
+    <Dialog size="x-large" transition>
       <Tabs orientation="vertical" variant="settings" defaultValue="general" class="h-full settings-dialog">
         <Tabs.List>
           <div class="flex flex-col justify-between h-full w-full">
@@ -38,11 +38,11 @@ export const DialogSettings: Component = () => {
                   <Tabs.SectionTitle>{language.t("settings.section.server")}</Tabs.SectionTitle>
                   <div class="flex flex-col gap-1.5 w-full">
                     <Tabs.Trigger value="providers">
-                      <Icon name="server" />
+                      <Icon name="providers" />
                       {language.t("settings.providers.title")}
                     </Tabs.Trigger>
                     <Tabs.Trigger value="models">
-                      <Icon name="server" />
+                      <Icon name="models" />
                       {language.t("settings.models.title")}
                     </Tabs.Trigger>
                   </div>
@@ -50,7 +50,7 @@ export const DialogSettings: Component = () => {
               </div>
             </div>
             <div class="flex flex-col gap-1 pl-1 py-1 text-12-medium text-text-weak">
-              <span>OpenCode Desktop</span>
+              <span>{language.t("app.name.desktop")}</span>
               <span class="text-11-regular">v{platform.version}</span>
             </div>
           </div>
