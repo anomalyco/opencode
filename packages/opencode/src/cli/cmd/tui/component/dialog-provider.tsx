@@ -15,8 +15,8 @@ import { Clipboard } from "@tui/util/clipboard"
 import { useToast } from "../ui/toast"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
-  opencode: 0,
-  mammouth: 1,
+  "mammouth-ai": 0,
+  opencode: 1,
   anthropic: 2,
   "github-copilot": 3,
   openai: 4,
@@ -43,7 +43,7 @@ export function createDialogProviderOptions() {
             "mammouth-ai": "(Mammouth API key)",
             openai: "(ChatGPT Plus/Pro or API key)",
           }[provider.id],
-          category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
+          category: provider.id == "mammouth-ai" ? "Mammouth AI" : provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
           footer: isConnected ? "Connected" : undefined,
           async onSelect() {
             const methods = sync.data.provider_auth[provider.id] ?? [
