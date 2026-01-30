@@ -49,9 +49,9 @@ async function main() {
       continue
     }
 
-    // Get diff from PR base to PR head and apply it
+    // Get diff from dev to PR head (PR's changes)
     console.log(`  Getting diff for PR #${pr.number}...`)
-    const diff = await $`git diff HEAD...pr-${pr.number}`.nothrow()
+    const diff = await $`git diff dev..pr-${pr.number}`.nothrow()
     if (diff.exitCode !== 0) {
       console.log(`  Failed to get diff for PR #${pr.number}`)
       console.log(`  Error: ${diff.stderr}`)
