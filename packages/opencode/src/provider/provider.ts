@@ -1201,6 +1201,17 @@ export namespace Provider {
     }
   }
 
+  export function resolveAlias(model: string, aliases: Record<string, string> | undefined): string {
+    if (!aliases) return model
+    return aliases[model] ?? model
+  }
+
+  export async function resolveModel(model: string) {
+    const cfg = await Config.get()
+    const resolved = resolveAlias(model, cfg.model_aliases)
+    return parseModel(resolved)
+  }
+
   export const ModelNotFoundError = NamedError.create(
     "ProviderModelNotFoundError",
     z.object({

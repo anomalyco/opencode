@@ -213,7 +213,7 @@ export namespace Agent {
           options: {},
           native: false,
         }
-      if (value.model) item.model = Provider.parseModel(value.model)
+      if (value.model) item.model = Provider.parseModel(Provider.resolveAlias(value.model, cfg.model_aliases))
       item.prompt = value.prompt ?? item.prompt
       item.description = value.description ?? item.description
       item.temperature = value.temperature ?? item.temperature

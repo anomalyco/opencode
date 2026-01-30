@@ -2148,3 +2148,146 @@ test("custom model with variants enabled and disabled", async () => {
     },
   })
 })
+
+// Global model alias tests
+
+test("resolveAlias returns original when no aliases provided", () => {
+  const result = Provider.resolveAlias("anthropic/claude-sonnet-4", undefined)
+  expect(result).toBe("anthropic/claude-sonnet-4")
+})
+
+test("resolveAlias returns original when aliases is empty", () => {
+  const result = Provider.resolveAlias("anthropic/claude-sonnet-4", {})
+  expect(result).toBe("anthropic/claude-sonnet-4")
+})
+
+test("resolveAlias returns original when no match found", () => {
+  const aliases = { cheap: "anthropic/claude-3-haiku" }
+  const result = Provider.resolveAlias("anthropic/claude-sonnet-4", aliases)
+  expect(result).toBe("anthropic/claude-sonnet-4")
+})
+
+test("resolveAlias resolves simple alias", () => {
+  const aliases = { cheap: "anthropic/claude-3-haiku" }
+  const result = Provider.resolveAlias("cheap", aliases)
+  expect(result).toBe("anthropic/claude-3-haiku")
+})
+
+test("resolveAlias resolves namespaced alias", () => {
+  const aliases = { "acme/fast": "openai/gpt-4o-mini" }
+  const result = Provider.resolveAlias("acme/fast", aliases)
+  expect(result).toBe("openai/gpt-4o-mini")
+})
+
+test("resolveAlias resolves complex namespaced alias", () => {
+  const aliases = { "team/reasoning/advanced": "anthropic/claude-opus-4" }
+  const result = Provider.resolveAlias("team/reasoning/advanced", aliases)
+  expect(result).toBe("anthropic/claude-opus-4")
+})
+
+test("resolveAlias does not chain aliases", () => {
+  const aliases = { cheap: "fast", fast: "openai/gpt-4" }
+  const result = Provider.resolveAlias("cheap", aliases)
+  expect(result).toBe("fast") // Only resolves one level
+})
+
+test("resolveAlias handles alias that looks like provider/model but matches exactly", () => {
+  const aliases = { "custom/model": "anthropic/claude-sonnet-4" }
+  const result = Provider.resolveAlias("custom/model", aliases)
+  expect(result).toBe("anthropic/claude-sonnet-4")
+})
+
+test("resolveModel resolves alias and parses model", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          model_aliases: {
+            cheap: "anthropic/claude-3-haiku",
+            fast: "openai/gpt-4o-mini",
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const result = await Provider.resolveModel("cheap")
+      expect(result.providerID).toBe("anthropic")
+      expect(result.modelID).toBe("claude-3-haiku")
+    },
+  })
+})
+
+test("resolveModel passes through non-aliased model", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          model_aliases: {
+            cheap: "anthropic/claude-3-haiku",
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const result = await Provider.resolveModel("openai/gpt-4-turbo")
+      expect(result.providerID).toBe("openai")
+      expect(result.modelID).toBe("gpt-4-turbo")
+    },
+  })
+})
+
+test("resolveModel works when no aliases configured", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const result = await Provider.resolveModel("anthropic/claude-sonnet-4")
+      expect(result.providerID).toBe("anthropic")
+      expect(result.modelID).toBe("claude-sonnet-4")
+    },
+  })
+})
+
+test("resolveModel handles namespaced aliases", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          model_aliases: {
+            "acme/reasoning": "anthropic/claude-opus-4",
+            "acme/fast": "openai/gpt-4o-mini",
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const result = await Provider.resolveModel("acme/reasoning")
+      expect(result.providerID).toBe("anthropic")
+      expect(result.modelID).toBe("claude-opus-4")
+    },
+  })
+})

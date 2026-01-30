@@ -239,6 +239,21 @@ You can configure the providers and models you want to use in your OpenCode conf
 
 The `small_model` option configures a separate model for lightweight tasks like title generation. By default, OpenCode tries to use a cheaper model if one is available from your provider, otherwise it falls back to your main model.
 
+You can also define model aliases to create short names for models:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model_aliases": {
+    "cheap": "anthropic/claude-3-haiku",
+    "fast": "openai/gpt-4o-mini"
+  },
+  "model": "cheap"
+}
+```
+
+[Learn more about model aliases](/docs/models#model-aliases).
+
 Provider options can include `timeout` and `setCacheKey`:
 
 ```json title="opencode.json"

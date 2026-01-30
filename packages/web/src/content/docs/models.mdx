@@ -64,6 +64,90 @@ If you've configured a [custom provider](/docs/providers#custom), the `provider_
 
 ---
 
+## Model aliases
+
+Model aliases let you define short names that map to full `provider/model` strings. This is useful for:
+
+- Creating memorable shortcuts like `cheap` or `fast`
+- Letting team members use different providers with shared agent configs
+- Abstracting away provider details from your workflow
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model_aliases": {
+    "cheap": "anthropic/claude-3-haiku-20240307",
+    "fast": "openai/gpt-4o-mini",
+    "reasoning": "anthropic/claude-opus-4"
+  }
+}
+```
+
+Once defined, use aliases anywhere you'd use a model ID.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model_aliases": {
+    "cheap": "anthropic/claude-3-haiku-20240307"
+  },
+  "model": "cheap",
+  "small_model": "cheap"
+}
+```
+
+Or in agent configurations:
+
+```markdown title=".opencode/agents/reviewer.md"
+---
+description: Code review agent
+model: cheap
+---
+
+Review the code for issues.
+```
+
+---
+
+### Team workflows
+
+Aliases are powerful for teams where members have different LLM subscriptions. Define alias names in your shared repo config, and let each developer resolve them in their personal global config.
+
+**Shared agent** in `.opencode/agents/dev.md`:
+
+```markdown
+---
+description: Development agent
+model: acme/reasoning
+---
+
+You are a development assistant.
+```
+
+**Developer A's global config** in `~/.config/opencode/opencode.json`:
+
+```json
+{
+  "model_aliases": {
+    "acme/reasoning": "anthropic/claude-opus-4"
+  }
+}
+```
+
+**Developer B's global config** in `~/.config/opencode/opencode.json`:
+
+```json
+{
+  "model_aliases": {
+    "acme/reasoning": "openai/gpt-5"
+  }
+}
+```
+
+Each developer uses their preferred provider while the team shares the same agent definitions.
+
+---
+
 ## Configure models
 
 You can globally configure a model's options through the config.

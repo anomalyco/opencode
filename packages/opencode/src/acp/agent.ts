@@ -1113,7 +1113,9 @@ export namespace ACP {
         .providers({ directory: session.cwd }, { throwOnError: true })
         .then((x) => x.data!.providers)
 
-      const selection = parseModelSelection(params.modelId, providers)
+      const resolved = await Provider.resolveModel(params.modelId)
+      const resolvedModelId = `${resolved.providerID}/${resolved.modelID}`
+      const selection = parseModelSelection(resolvedModelId, providers)
       this.sessionManager.setModel(session.id, selection.model)
       this.sessionManager.setVariant(session.id, selection.variant)
 
@@ -1359,10 +1361,10 @@ export namespace ACP {
 
     const specified = await sdk.config
       .get({ directory }, { throwOnError: true })
-      .then((resp) => {
+      .then(async (resp) => {
         const cfg = resp.data
         if (!cfg || !cfg.model) return undefined
-        const parsed = Provider.parseModel(cfg.model)
+        const parsed = await Provider.resolveModel(cfg.model)
         return {
           providerID: parsed.providerID,
           modelID: parsed.modelID,

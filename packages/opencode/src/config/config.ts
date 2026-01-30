@@ -997,6 +997,12 @@ export namespace Config {
         .record(z.string(), Provider)
         .optional()
         .describe("Custom provider configurations and model overrides"),
+      model_aliases: z
+        .record(z.string(), z.string())
+        .optional()
+        .describe(
+          "Model aliases mapping short names to provider/model strings (e.g., 'cheap': 'anthropic/claude-3-haiku')",
+        ),
       mcp: z
         .record(
           z.string(),
