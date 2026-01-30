@@ -1,0 +1,34 @@
+name: beta
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    types: [opened, synchronize, labeled, unlabeled]
+
+jobs:
+  sync:
+    if: |
+      github.event_name == 'push' || 
+      (github.event_name == 'pull_request' && 
+       contains(github.event.pull_request.labels.*.name, 'contributor'))
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync beta branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bun script/beta.ts
