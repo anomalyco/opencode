@@ -617,10 +617,12 @@ export namespace Config {
         .describe("Hide this subagent from the @ autocomplete menu (default: false, only applies to mode: subagent)"),
       options: z.record(z.string(), z.any()).optional(),
       color: z
-        .string()
-        .regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color format")
+        .union([
+          z.string().regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color format"),
+          z.enum(["primary", "secondary", "accent", "success", "warning", "error"]),
+        ])
         .optional()
-        .describe("Hex color code for the agent (e.g., #FF5733)"),
+        .describe("Hex color code (e.g., #FF5733) or theme color (e.g., primary)"),
       steps: z
         .number()
         .int()
