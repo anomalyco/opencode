@@ -1754,9 +1754,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         }}
       >
         <Show when={store.dragging}>
-          <div class="absolute inset-0 z-10 flex items-center justify-center bg-surface-raised-stronger-non-alpha/90 pointer-events-none">
+          <div class="absolute inset-0 z-10 flex items-center justify-center bg-surface-raised-stronger-non-alpha/90 mr-1 pointer-events-none">
             <div class="flex flex-col items-center gap-2 text-text-weak">
-              <Icon name="photo" class="size-8" />
+              <Icon name="photo" size={18} class="text-icon-base stroke-1.5" />
               <span class="text-14-regular">{language.t("prompt.dropzone.label")}</span>
             </div>
           </div>
