@@ -153,9 +153,15 @@ export namespace Config {
         }
       }
 
-      const exists = existsSync(path.join(dir, "node_modules"))
-      const installing = installDependencies(dir)
-      if (!exists) await installing
+      // Only install dependencies for directories within the project worktree
+      // This prevents creating unwanted .opencode/node_modules in arbitrary directories
+      const isWithinWorktree =
+        Instance.worktree === "/" || Filesystem.contains(Instance.worktree, dir)
+      if (isWithinWorktree) {
+        const exists = existsSync(path.join(dir, "node_modules"))
+        const installing = installDependencies(dir)
+        if (!exists) await installing
+      }
 
       result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
       result.agent = mergeDeep(result.agent, await loadAgent(dir))
