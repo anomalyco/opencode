@@ -1,0 +1,105 @@
+import { dict as en } from "./en"
+type Keys = keyof typeof en
+
+export const dict: Record<Keys, string> = {
+  "ui.sessionReview.title": "Sesjonsendringer",
+  "ui.sessionReview.diffStyle.unified": "Samlet",
+  "ui.sessionReview.diffStyle.split": "Delt",
+  "ui.sessionReview.expandAll": "Utvid alle",
+  "ui.sessionReview.collapseAll": "Fold sammen alle",
+
+  "ui.sessionReview.change.added": "Lagt til",
+  "ui.sessionReview.change.removed": "Fjernet",
+  "ui.lineComment.label.prefix": "Kommenter på ",
+  "ui.lineComment.label.suffix": "",
+  "ui.lineComment.editorLabel.prefix": "Kommenterer på ",
+  "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.placeholder": "Legg til kommentar",
+  "ui.lineComment.submit": "Kommenter",
+  "ui.sessionTurn.steps.show": "Vis trinn",
+  "ui.sessionTurn.steps.hide": "Skjul trinn",
+  "ui.sessionTurn.summary.response": "Svar",
+  "ui.sessionTurn.diff.showMore": "Vis flere endringer ({{count}})",
+
+  "ui.sessionTurn.retry.retrying": "Prøver igjen",
+  "ui.sessionTurn.retry.inSeconds": "om {{seconds}}s",
+
+  "ui.sessionTurn.status.delegating": "Delegerer arbeid",
+  "ui.sessionTurn.status.planning": "Planlegger neste trinn",
+  "ui.sessionTurn.status.gatheringContext": "Samler inn kontekst",
+  "ui.sessionTurn.status.searchingCodebase": "Søker i kodebasen",
+  "ui.sessionTurn.status.searchingWeb": "Søker på nettet",
+  "ui.sessionTurn.status.makingEdits": "Gjør endringer",
+  "ui.sessionTurn.status.runningCommands": "Kjører kommandoer",
+  "ui.sessionTurn.status.thinking": "Tenker",
+  "ui.sessionTurn.status.thinkingWithTopic": "Tenker - {{topic}}",
+  "ui.sessionTurn.status.gatheringThoughts": "Samler tanker",
+  "ui.sessionTurn.status.consideringNextSteps": "Vurderer neste trinn",
+
+  "ui.messagePart.diagnostic.error": "Feil",
+  "ui.messagePart.title.edit": "Rediger",
+  "ui.messagePart.title.write": "Skriv",
+  "ui.messagePart.option.typeOwnAnswer": "Skriv ditt eget svar",
+  "ui.messagePart.review.title": "Gjennomgå svarene dine",
+
+  "ui.list.loading": "Laster",
+  "ui.list.empty": "Ingen resultater",
+  "ui.list.clearFilter": "Tøm filter",
+  "ui.list.emptyWithFilter.prefix": "Ingen resultater for",
+  "ui.list.emptyWithFilter.suffix": "",
+
+  "ui.messageNav.newMessage": "Ny melding",
+
+  "ui.textField.copyToClipboard": "Kopier til utklippstavlen",
+  "ui.textField.copyLink": "Kopier lenke",
+  "ui.textField.copied": "Kopiert",
+
+  "ui.imagePreview.alt": "Bildeforhåndsvisning",
+
+  "ui.tool.read": "Les",
+  "ui.tool.loaded": "Lastet",
+  "ui.tool.list": "Liste",
+  "ui.tool.glob": "Glob",
+  "ui.tool.grep": "Grep",
+  "ui.tool.webfetch": "Webhenting",
+  "ui.tool.shell": "Shell",
+  "ui.tool.patch": "Patch",
+  "ui.tool.todos": "Gjøremål",
+  "ui.tool.todos.read": "Les gjøremål",
+  "ui.tool.questions": "Spørsmål",
+  "ui.tool.agent": "{{type}}-agent",
+
+  "ui.common.file.one": "fil",
+  "ui.common.file.other": "filer",
+  "ui.common.question.one": "spørsmål",
+  "ui.common.question.other": "spørsmål",
+
+  "ui.common.add": "Legg til",
+  "ui.common.cancel": "Avbryt",
+  "ui.common.confirm": "Bekreft",
+  "ui.common.dismiss": "Avvis",
+  "ui.common.close": "Lukk",
+  "ui.common.next": "Neste",
+  "ui.common.submit": "Send inn",
+
+  "ui.permission.deny": "Avslå",
+  "ui.permission.allowAlways": "Tillat alltid",
+  "ui.permission.allowOnce": "Tillat én gang",
+
+  "ui.message.expand": "Utvid melding",
+  "ui.message.collapse": "Skjul melding",
+  "ui.message.copy": "Kopier",
+  "ui.message.copied": "Kopiert!",
+  "ui.message.attachment.alt": "vedlegg",
+
+  "ui.patch.action.deleted": "Slettet",
+  "ui.patch.action.created": "Opprettet",
+  "ui.patch.action.moved": "Flyttet",
+  "ui.patch.action.patched": "Oppdatert",
+
+  "ui.question.subtitle.answered": "{{count}} besvart",
+  "ui.question.answer.none": "(ingen svar)",
+  "ui.question.review.notAnswered": "(ikke besvart)",
+  "ui.question.multiHint": "(velg alle som gjelder)",
+  "ui.question.custom.placeholder": "Skriv svaret ditt...",
+}

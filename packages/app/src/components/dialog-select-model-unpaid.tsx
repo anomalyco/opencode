@@ -35,9 +35,10 @@ export const DialogSelectModelUnpaid: Component = () => {
 
   return (
     <Dialog title={language.t("dialog.model.select.title")}>
-      <div class="flex flex-col gap-3 px-2.5">
+      <div class="flex flex-col gap-3 px-2.5 flex-1 min-h-0 overflow-hidden">
         <div class="text-14-medium text-text-base px-2.5">{language.t("dialog.model.unpaid.freeModels.title")}</div>
         <List
+          class="flex-1 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0"
           ref={(ref) => (listRef = ref)}
           items={local.model.list}
           current={local.model.current()}
@@ -75,10 +76,8 @@ export const DialogSelectModelUnpaid: Component = () => {
             </div>
           )}
         </List>
-        <div />
-        <div />
       </div>
-      <div class="px-1.5 pb-1.5">
+      <div class="shrink-0 px-1.5 pb-1.5">
         <div class="w-full rounded-sm border border-border-weak-base bg-surface-raised-base">
           <div class="w-full flex flex-col items-start gap-4 px-1.5 pt-4 pb-4">
             <div class="px-2 text-14-medium text-text-base">{language.t("dialog.model.unpaid.addMore.title")}</div>
