@@ -18,13 +18,29 @@ export const team = [
   "R44VC0RP",
 ]
 
-export async function getLatestRelease() {
-  return fetch("https://api.github.com/repos/anomalyco/opencode/releases/latest")
-    .then((res) => {
-      if (!res.ok) throw new Error(res.statusText)
-      return res.json()
-    })
-    .then((data: any) => data.tag_name.replace(/^v/, ""))
+type Release = {
+  tag_name: string
+  draft: boolean
+  prerelease: boolean
+}
+
+export async function getLatestRelease(skip?: string) {
+  const data = await fetch("https://api.github.com/repos/anomalyco/opencode/releases?per_page=100").then((res) => {
+    if (!res.ok) throw new Error(res.statusText)
+    return res.json()
+  })
+
+  const releases = data as Release[]
+  const target = skip?.replace(/^v/, "")
+
+  for (const release of releases) {
+    if (release.draft) continue
+    const tag = release.tag_name.replace(/^v/, "")
+    if (target && tag === target) continue
+    return tag
+  }
+
+  throw new Error("No releases found")
 }
 
 type Commit = {
