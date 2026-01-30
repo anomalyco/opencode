@@ -216,14 +216,14 @@ function App() {
     if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
 
     if (route.data.type === "home") {
-      renderer.setTerminalTitle("OpenCode")
+      renderer.setTerminalTitle("Mammouth CLI")
       return
     }
 
     if (route.data.type === "session") {
       const session = sync.session.get(route.data.sessionID)
       if (!session || SessionApi.isDefaultTitle(session.title)) {
-        renderer.setTerminalTitle("OpenCode")
+        renderer.setTerminalTitle("Mammouth CLI")
         return
       }
 
@@ -483,7 +483,7 @@ function App() {
       title: "Open docs",
       value: "docs.open",
       onSelect: () => {
-        open("https://opencode.ai/docs").catch(() => {})
+        open("https://api.mammouth.ai/").catch(() => {})
         dialog.clear()
       },
       category: "System",
@@ -652,7 +652,7 @@ function App() {
     toast.show({
       variant: "info",
       title: "Update Available",
-      message: `OpenCode v${evt.properties.version} is available. Run 'opencode upgrade' to update manually.`,
+      message: `Mammouth CLI v${evt.properties.version} is available. Run 'mammouth-cli upgrade' to update manually.`,
       duration: 10000,
     })
   })
@@ -742,7 +742,7 @@ function ErrorComponent(props: {
 
   return (
     <box flexDirection="column" gap={1} backgroundColor={colors.bg}>
-      <box flexDirection="row" gap={1} alignItems="center">
+      {/* <box flexDirection="row" gap={1} alignItems="center">
         <text attributes={TextAttributes.BOLD} fg={colors.text}>
           Please report an issue.
         </text>
@@ -752,7 +752,7 @@ function ErrorComponent(props: {
           </text>
         </box>
         {copied() && <text fg={colors.muted}>Successfully copied</text>}
-      </box>
+      </box> */}
       <box flexDirection="row" gap={2} alignItems="center">
         <text fg={colors.text}>A fatal error occurred!</text>
         <box onMouseUp={props.reset} backgroundColor={colors.primary} padding={1}>

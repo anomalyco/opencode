@@ -13,6 +13,7 @@ import { DialogModel } from "./dialog-model"
 import { useKeyboard } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { useToast } from "../ui/toast"
+import { sleep } from "bun"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   "mammouth-ai": 0,
@@ -111,6 +112,17 @@ export function createDialogProviderOptions() {
 
 export function DialogProvider() {
   const options = createDialogProviderOptions()
+
+  onMount(() => {
+    const opts = options()
+    if (opts.length === 1) {
+      // sleep to avoid race condition with dialog opening
+      sleep(5).then(() => {
+        opts[0].onSelect?.()
+      })
+    }
+  })
+
   return <DialogSelect title="Connect a provider" options={options()} />
 }
 
@@ -224,22 +236,38 @@ function ApiMethod(props: ApiMethodProps) {
   const sync = useSync()
   const { theme } = useTheme()
 
+  const description = () => {
+    if (props.providerID === "opencode") {
+      return (
+        <box gap={1}>
+          <text fg={theme.textMuted}>
+            OpenCode Zen gives you access to all the best coding models at the cheapest prices with a single API key.
+          </text>
+          <text fg={theme.text}>
+            Go to <span style={{ fg: theme.primary }}>https://opencode.ai/zen</span> to get a key
+          </text>
+        </box>
+      )
+    } else if (props.providerID === "mammouth-ai") {
+      return (
+        <box gap={1}>
+          <text fg={theme.textMuted}>
+            Mammouth AI provides a curated selection of great models from various providers with a single API key.
+          </text>
+          <text fg={theme.text}>
+            Go to <span style={{ fg: theme.primary }}>https://mammouth.ai/app/account/settings/api</span> to get your key
+          </text>
+        </box>
+      )
+    }
+    return undefined
+  }
+
   return (
     <DialogPrompt
       title={props.title}
       placeholder="API key"
-      description={
-        props.providerID === "opencode" ? (
-          <box gap={1}>
-            <text fg={theme.textMuted}>
-              OpenCode Zen gives you access to all the best coding models at the cheapest prices with a single API key.
-            </text>
-            <text fg={theme.text}>
-              Go to <span style={{ fg: theme.primary }}>https://opencode.ai/zen</span> to get a key
-            </text>
-          </box>
-        ) : undefined
-      }
+      description={description()}
       onConfirm={async (value) => {
         if (!value) return
         await sdk.client.auth.set({
