@@ -1320,14 +1320,11 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
         customBorderChars={SplitBorder.customBorderChars}
         borderColor={theme.backgroundElement}
       >
-        <code
-          filetype="markdown"
-          drawUnstyledText={false}
-          streaming={true}
+        <markdown
           syntaxStyle={subtleSyntax()}
+          streaming={true}
           content={"_Thinking:_ " + content()}
           conceal={ctx.conceal()}
-          fg={theme.textMuted}
         />
       </box>
     </Show>
@@ -1342,14 +1339,6 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
       <box id={"text-" + props.part.id} paddingLeft={3} marginTop={1} flexShrink={0}>
         <Switch>
           <Match when={Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
-            <markdown
-              syntaxStyle={syntax()}
-              streaming={true}
-              content={props.part.text.trim()}
-              conceal={ctx.conceal()}
-            />
-          </Match>
-          <Match when={!Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
             <code
               filetype="markdown"
               drawUnstyledText={false}
@@ -1358,6 +1347,14 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
               content={props.part.text.trim()}
               conceal={ctx.conceal()}
               fg={theme.text}
+            />
+          </Match>
+          <Match when={!Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
+            <markdown
+              syntaxStyle={syntax()}
+              streaming={true}
+              content={props.part.text.trim()}
+              conceal={ctx.conceal()}
             />
           </Match>
         </Switch>
