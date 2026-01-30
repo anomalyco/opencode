@@ -238,6 +238,45 @@ export const SettingsGeneral: Component = () => {
                 )}
               </Select>
             </SettingsRow>
+
+            <SettingsRow
+              title="Message Font Size"
+              description="Adjust the font size for user and assistant messages"
+            >
+              <div class="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => {
+                    const current = settings.appearance.fontSize()
+                    if (current > 10) {
+                      settings.appearance.setFontSize(current - 1)
+                    }
+                  }}
+                  disabled={settings.appearance.fontSize() <= 10}
+                  aria-label="Decrease font size"
+                >
+                  −
+                </Button>
+                <span class="text-14-regular text-text-strong min-w-[48px] text-center">
+                  {settings.appearance.fontSize()}px
+                </span>
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => {
+                    const current = settings.appearance.fontSize()
+                    if (current < 24) {
+                      settings.appearance.setFontSize(current + 1)
+                    }
+                  }}
+                  disabled={settings.appearance.fontSize() >= 24}
+                  aria-label="Increase font size"
+                >
+                  +
+                </Button>
+              </div>
+            </SettingsRow>
           </div>
         </div>
 

@@ -26,6 +26,7 @@ export interface Settings {
   appearance: {
     fontSize: number
     font: string
+    zoomLevel: number
   }
   keybinds: Record<string, string>
   permissions: {
@@ -46,6 +47,7 @@ const defaultSettings: Settings = {
   appearance: {
     fontSize: 14,
     font: "ibm-plex-mono",
+    zoomLevel: 1,
   },
   keybinds: {},
   permissions: {
@@ -95,6 +97,12 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       document.documentElement.style.setProperty("--font-family-mono", monoFontFamily(store.appearance?.font))
     })
 
+    createEffect(() => {
+      if (typeof document === "undefined") return
+      const fontSize = store.appearance?.fontSize ?? defaultSettings.appearance.fontSize
+      document.documentElement.style.setProperty("--font-size-base", `${fontSize}px`)
+    })
+
     return {
       ready,
       get current() {
@@ -124,6 +132,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         font: createMemo(() => store.appearance?.font ?? defaultSettings.appearance.font),
         setFont(value: string) {
           setStore("appearance", "font", value)
+        },
+        zoomLevel: createMemo(() => store.appearance?.zoomLevel ?? defaultSettings.appearance.zoomLevel),
+        setZoomLevel(value: number) {
+          setStore("appearance", "zoomLevel", value)
         },
       },
       keybinds: {
