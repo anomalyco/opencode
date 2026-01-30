@@ -259,4 +259,53 @@ describe.concurrent("core.share", () => {
 
     await Share.remove({ id: share.id, secret: share.secret })
   })
+
+  test("should allow resharing after unsharing with fresh data", async () => {
+    const sessionID = "test_" + Identifier.descending()
+    const share1 = await Share.create({ sessionID })
+
+    const data1: Share.Data[] = [
+      { type: "session", data: { id: sessionID, title: "Original" } as any },
+      {
+        type: "part",
+        data: { id: "part1", sessionID, messageID: "msg1", type: "text", text: "Original content" },
+      },
+    ]
+
+    await Share.sync({
+      share: { id: share1.id, secret: share1.secret },
+      data: data1,
+    })
+
+    const result1 = await Share.data(share1.id)
+    expect(result1.length).toBe(2)
+
+    await Share.remove({ id: share1.id, secret: share1.secret })
+
+    const share2 = await Share.create({ sessionID })
+    expect(share2.id).toBe(share1.id)
+
+    const data2: Share.Data[] = [
+      { type: "session", data: { id: sessionID, title: "Reshared" } as any },
+      {
+        type: "part",
+        data: { id: "part2", sessionID, messageID: "msg2", type: "text", text: "New content" },
+      },
+    ]
+
+    await Share.sync({
+      share: { id: share2.id, secret: share2.secret },
+      data: data2,
+    })
+
+    const result2 = await Share.data(share2.id)
+
+    expect(result2.length).toBe(2)
+    const session = result2.find((d) => d.type === "session")
+    expect(session?.type === "session" && (session.data as any).title).toBe("Reshared")
+    const part = result2.find((d) => d.type === "part")
+    expect(part?.type === "part" && part.data.type === "text" && part.data.text).toBe("New content")
+
+    await Share.remove({ id: share2.id, secret: share2.secret })
+  })
 })

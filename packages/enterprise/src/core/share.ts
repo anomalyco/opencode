@@ -60,8 +60,13 @@ export namespace Share {
     if (!share) throw new Errors.NotFound(body.id)
     if (share.secret !== body.secret) throw new Errors.InvalidSecret(body.id)
     await Storage.remove(["share", body.id])
+    await Storage.remove(["share_compaction", body.id])
     const list = await Storage.list({ prefix: ["share_data", body.id] })
     for (const item of list) {
+      await Storage.remove(item)
+    }
+    const events = await Storage.list({ prefix: ["share_event", body.id] })
+    for (const item of events) {
       await Storage.remove(item)
     }
   })
