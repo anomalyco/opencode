@@ -925,7 +925,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       .abort({
         sessionID,
       })
-      .catch(() => { })
+      .catch(() => {})
   }
 
   const addToHistory = (prompt: Prompt, mode: "normal" | "shell") => {
@@ -1351,18 +1351,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     const contextParts: Array<
       | {
-        id: string
-        type: "text"
-        text: string
-        synthetic?: boolean
-      }
+          id: string
+          type: "text"
+          text: string
+          synthetic?: boolean
+        }
       | {
-        id: string
-        type: "file"
-        mime: string
-        url: string
-        filename?: string
-      }
+          id: string
+          type: "file"
+          mime: string
+          url: string
+          filename?: string
+        }
     > = []
 
     const commentNote = (path: string, selection: FileSelection | undefined, comment: string) => {

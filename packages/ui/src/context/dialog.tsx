@@ -121,12 +121,16 @@ function init() {
 
   const render = (element: JSX.Element, id: string, owner: Owner) => {
     setRenders((renders) => ({ ...renders, [id]: element }))
-    show(() => element, owner, () => {
-      setRenders((renders) => {
-        const { [id]: _, ...rest } = renders
-        return rest
-      })
-    })
+    show(
+      () => element,
+      owner,
+      () => {
+        setRenders((renders) => {
+          const { [id]: _, ...rest } = renders
+          return rest
+        })
+      },
+    )
   }
 
   const isActive = (id: string) => {

@@ -1,169 +1,156 @@
 [data-component="radio-group"] {
-	display: flex;
-	flex-direction: column;
-	gap: calc(var(--spacing) * 2);
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--spacing) * 2);
 
-	[data-slot="radio-group-wrapper"] {
-		all: unset;
-		background-color: var(--surface-base);
-		border-radius: var(--radius-md);
-		box-shadow: var(--shadow-xs-border);
-		margin: 0;
-		padding: 0;
-		position: relative;
-		width: fit-content;
-	}
+  [data-slot="radio-group-wrapper"] {
+    all: unset;
+    background-color: var(--surface-base);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-xs-border);
+    margin: 0;
+    padding: 0;
+    position: relative;
+    width: fit-content;
+  }
 
-	[data-slot="radio-group-items"] {
-		display: inline-flex;
-		list-style: none;
-		flex-direction: row;
-	}
+  [data-slot="radio-group-items"] {
+    display: inline-flex;
+    list-style: none;
+    flex-direction: row;
+  }
 
-	[data-slot="radio-group-indicator"] {
-		background: var(--button-secondary-base);
-		border-radius: var(--radius-md);
-		box-shadow: var(--shadow-xs-border);
-		content: "";
-		opacity: var(--indicator-opacity, 1);
-		position: absolute;
-		transition-property: opacity, box-shadow, width, height, transform;
-		transition-duration: var(--transition-duration);
-		transition-timing-function: var(--transition-easing);
-	}
+  [data-slot="radio-group-indicator"] {
+    background: var(--button-secondary-base);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-xs-border);
+    content: "";
+    opacity: var(--indicator-opacity, 1);
+    position: absolute;
+    transition-property: opacity, box-shadow, width, height, transform;
+    transition-duration: var(--transition-duration);
+    transition-timing-function: var(--transition-easing);
+  }
 
-	[data-slot="radio-group-item"] {
-		position: relative;
-	}
+  [data-slot="radio-group-item"] {
+    position: relative;
+  }
 
-	/* Separator between items */
-	[data-slot="radio-group-item"]:not(:first-of-type)::before {
-		background: var(--border-weak-base);
-		border-radius: var(--radius-xs);
-		content: "";
-		inset: 6px 0;
-		position: absolute;
-		transition-property: opacity;
-		transition-duration: var(--transition-duration);
-		transition-timing-function: var(--transition-easing);
-		width: 1px;
-		transform: translateX(-0.5px);
-	}
+  /* Separator between items */
+  [data-slot="radio-group-item"]:not(:first-of-type)::before {
+    background: var(--border-weak-base);
+    border-radius: var(--radius-xs);
+    content: "";
+    inset: 6px 0;
+    position: absolute;
+    transition-property: opacity;
+    transition-duration: var(--transition-duration);
+    transition-timing-function: var(--transition-easing);
+    width: 1px;
+    transform: translateX(-0.5px);
+  }
 
-	/* Hide separator when item or previous item is checked */
-	[data-slot="radio-group-item"]:has(
-			[data-slot="radio-group-item-input"][data-checked]
-		)::before,
-	[data-slot="radio-group-item"]:has(
-			[data-slot="radio-group-item-input"][data-checked]
-		)
-		+ [data-slot="radio-group-item"]::before {
-		opacity: 0;
-	}
+  /* Hide separator when item or previous item is checked */
+  [data-slot="radio-group-item"]:has([data-slot="radio-group-item-input"][data-checked])::before,
+  [data-slot="radio-group-item"]:has([data-slot="radio-group-item-input"][data-checked])
+    + [data-slot="radio-group-item"]::before {
+    opacity: 0;
+  }
 
-	[data-slot="radio-group-item-label"] {
-		color: var(--text-weak);
-		font-family: var(--font-family-sans);
-		font-size: var(--font-size-small);
-		font-weight: var(--font-weight-medium);
-		border-radius: var(--radius-md);
-		cursor: pointer;
-		display: flex;
-		flex-wrap: nowrap;
-		gap: calc(var(--spacing) * 1);
-		line-height: 1;
-		padding: 6px 12px;
-		place-content: center;
-		position: relative;
-		transition-property: color, opacity;
-		transition-duration: var(--transition-duration);
-		transition-timing-function: var(--transition-easing);
-		user-select: none;
-	}
+  [data-slot="radio-group-item-label"] {
+    color: var(--text-weak);
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-medium);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: calc(var(--spacing) * 1);
+    line-height: 1;
+    padding: 6px 12px;
+    place-content: center;
+    position: relative;
+    transition-property: color, opacity;
+    transition-duration: var(--transition-duration);
+    transition-timing-function: var(--transition-easing);
+    user-select: none;
+  }
 
-	[data-slot="radio-group-item-input"] {
-		all: unset;
-	}
+  [data-slot="radio-group-item-input"] {
+    all: unset;
+  }
 
-	/* Checked state */
-	[data-slot="radio-group-item-input"][data-checked]
-		+ [data-slot="radio-group-item-label"] {
-		color: var(--text-strong);
-	}
+  /* Checked state */
+  [data-slot="radio-group-item-input"][data-checked] + [data-slot="radio-group-item-label"] {
+    color: var(--text-strong);
+  }
 
-	/* Disabled state */
-	[data-slot="radio-group-item-input"][data-disabled]
-		+ [data-slot="radio-group-item-label"] {
-		cursor: not-allowed;
-		opacity: 0.5;
-	}
+  /* Disabled state */
+  [data-slot="radio-group-item-input"][data-disabled] + [data-slot="radio-group-item-label"] {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
 
-	/* Hover state for unchecked, enabled items */
-	[data-slot="radio-group-item-input"]:not([data-checked], [data-disabled])
-		+ [data-slot="radio-group-item-label"] {
-		cursor: pointer;
-		user-select: none;
-	}
+  /* Hover state for unchecked, enabled items */
+  [data-slot="radio-group-item-input"]:not([data-checked], [data-disabled]) + [data-slot="radio-group-item-label"] {
+    cursor: pointer;
+    user-select: none;
+  }
 
-	[data-slot="radio-group-item-input"]:not([data-checked], [data-disabled])
-		+ [data-slot="radio-group-item-label"]:hover {
-		color: var(--text-base);
-	}
+  [data-slot="radio-group-item-input"]:not([data-checked], [data-disabled])
+    + [data-slot="radio-group-item-label"]:hover {
+    color: var(--text-base);
+  }
 
-	[data-slot="radio-group-item-input"]:not([data-checked], [data-disabled])
-		+ [data-slot="radio-group-item-label"]:active {
-		opacity: 0.7;
-	}
+  [data-slot="radio-group-item-input"]:not([data-checked], [data-disabled])
+    + [data-slot="radio-group-item-label"]:active {
+    opacity: 0.7;
+  }
 
-	/* Focus state */
-	[data-slot="radio-group-wrapper"]:has(
-			[data-slot="radio-group-item-input"]:focus-visible
-		)
-		[data-slot="radio-group-indicator"] {
-		box-shadow: var(--shadow-xs-border-focus);
-	}
+  /* Focus state */
+  [data-slot="radio-group-wrapper"]:has([data-slot="radio-group-item-input"]:focus-visible)
+    [data-slot="radio-group-indicator"] {
+    box-shadow: var(--shadow-xs-border-focus);
+  }
 
-	/* Hide indicator when nothing is checked */
-	[data-slot="radio-group-wrapper"]:not(
-			:has([data-slot="radio-group-item-input"][data-checked])
-		)
-		[data-slot="radio-group-indicator"] {
-		--indicator-opacity: 0;
-	}
+  /* Hide indicator when nothing is checked */
+  [data-slot="radio-group-wrapper"]:not(:has([data-slot="radio-group-item-input"][data-checked]))
+    [data-slot="radio-group-indicator"] {
+    --indicator-opacity: 0;
+  }
 
-	/* Vertical orientation */
-	&[aria-orientation="vertical"] [data-slot="radio-group-items"] {
-		flex-direction: column;
-	}
+  /* Vertical orientation */
+  &[aria-orientation="vertical"] [data-slot="radio-group-items"] {
+    flex-direction: column;
+  }
 
-	&[aria-orientation="vertical"]
-		[data-slot="radio-group-item"]:not(:first-of-type)::before {
-		height: 1px;
-		width: auto;
-		inset: 0 6px;
-		transform: translateY(-0.5px);
-	}
+  &[aria-orientation="vertical"] [data-slot="radio-group-item"]:not(:first-of-type)::before {
+    height: 1px;
+    width: auto;
+    inset: 0 6px;
+    transform: translateY(-0.5px);
+  }
 
-	/* Small size variant */
-	&[data-size="small"] {
-		[data-slot="radio-group-item-label"] {
-			font-size: 12px;
-			padding: 4px 8px;
-		}
+  /* Small size variant */
+  &[data-size="small"] {
+    [data-slot="radio-group-item-label"] {
+      font-size: 12px;
+      padding: 4px 8px;
+    }
 
-		[data-slot="radio-group-item"]:not(:first-of-type)::before {
-			inset: 4px 0;
-		}
+    [data-slot="radio-group-item"]:not(:first-of-type)::before {
+      inset: 4px 0;
+    }
 
-		&[aria-orientation="vertical"]
-			[data-slot="radio-group-item"]:not(:first-of-type)::before {
-			inset: 0 4px;
-		}
-	}
+    &[aria-orientation="vertical"] [data-slot="radio-group-item"]:not(:first-of-type)::before {
+      inset: 0 4px;
+    }
+  }
 
-	/* Disabled root state */
-	&[data-disabled] {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
+  /* Disabled root state */
+  &[data-disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 }

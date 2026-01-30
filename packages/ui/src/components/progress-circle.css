@@ -1,10 +1,10 @@
 [data-component="progress-circle"] {
-	color: inherit;
+  color: inherit;
 
-	[data-slot="progress-circle-background"] {
-		transform-origin: 50% 50%;
-		transform: rotate(270deg);
-		stroke-opacity: 0.5;
-		transition: stroke-dashoffset 0.35s cubic-bezier(0.65, 0, 0.35, 1);
-	}
+  [data-slot="progress-circle-background"] {
+    transform-origin: 50% 50%;
+    transform: rotate(270deg);
+    stroke-opacity: 0.5;
+    transition: stroke-dashoffset 0.35s cubic-bezier(0.65, 0, 0.35, 1);
+  }
 }

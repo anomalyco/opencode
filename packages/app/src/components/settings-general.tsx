@@ -61,24 +61,24 @@ export const SettingsGeneral: Component = () => {
         const actions =
           platform.update && platform.restart
             ? [
-              {
-                label: language.t("toast.update.action.installRestart"),
-                onClick: async () => {
-                  await platform.update!()
-                  await platform.restart!()
+                {
+                  label: language.t("toast.update.action.installRestart"),
+                  onClick: async () => {
+                    await platform.update!()
+                    await platform.restart!()
+                  },
                 },
-              },
-              {
-                label: language.t("toast.update.action.notYet"),
-                onClick: "dismiss" as const,
-              },
-            ]
+                {
+                  label: language.t("toast.update.action.notYet"),
+                  onClick: "dismiss" as const,
+                },
+              ]
             : [
-              {
-                label: language.t("toast.update.action.notYet"),
-                onClick: "dismiss" as const,
-              },
-            ]
+                {
+                  label: language.t("toast.update.action.notYet"),
+                  onClick: "dismiss" as const,
+                },
+              ]
 
         showToast({
           persistent: true,
