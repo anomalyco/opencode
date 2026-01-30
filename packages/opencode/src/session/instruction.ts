@@ -41,6 +41,32 @@ async function resolveRelative(instruction: string): Promise<string[]> {
 }
 
 export namespace InstructionPrompt {
+  const state = Instance.state(() => {
+    return {
+      claims: new Map<string, Set<string>>(),
+    }
+  })
+
+  function isClaimed(messageID: string, filepath: string) {
+    const claimed = state().claims.get(messageID)
+    if (!claimed) return false
+    return claimed.has(filepath)
+  }
+
+  function claim(messageID: string, filepath: string) {
+    const current = state()
+    let claimed = current.claims.get(messageID)
+    if (!claimed) {
+      claimed = new Set()
+      current.claims.set(messageID, claimed)
+    }
+    claimed.add(filepath)
+  }
+
+  export function clear(messageID: string) {
+    state().claims.delete(messageID)
+  }
+
   export async function systemPaths() {
     const config = await Config.get()
     const paths = new Set<string>()
@@ -137,7 +163,7 @@ export namespace InstructionPrompt {
     }
   }
 
-  export async function resolve(messages: MessageV2.WithParts[], filepath: string) {
+  export async function resolve(messages: MessageV2.WithParts[], filepath: string, messageID: string) {
     const system = await systemPaths()
     const already = loaded(messages)
     const results: { filepath: string; content: string }[] = []
@@ -147,7 +173,8 @@ export namespace InstructionPrompt {
 
     while (current.startsWith(root)) {
       const found = await find(current)
-      if (found && !system.has(found) && !already.has(found)) {
+      if (found && !system.has(found) && !already.has(found) && !isClaimed(messageID, found)) {
+        claim(messageID, found)
         const content = await Bun.file(found)
           .text()
           .catch(() => undefined)
