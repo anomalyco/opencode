@@ -1,10 +1,6 @@
 import { test, expect } from "../fixtures"
-import { promptSelector } from "../utils"
-
-function sessionIDFromUrl(url: string) {
-  const match = /\/session\/([^/?#]+)/.exec(url)
-  return match?.[1]
-}
+import { promptSelector } from "../selectors"
+import { sessionIDFromUrl } from "../actions"
 
 test("can send a prompt and receive a reply", async ({ page, sdk, gotoSession }) => {
   test.setTimeout(120_000)

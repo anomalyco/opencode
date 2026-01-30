@@ -1,5 +1,6 @@
 import { test, expect } from "../fixtures"
-import { promptSelector, terminalSelector, terminalToggleKey } from "../utils"
+import { promptSelector, terminalSelector } from "../selectors"
+import { terminalToggleKey } from "../utils"
 
 test("smoke terminal mounts and can create a second tab", async ({ page, gotoSession }) => {
   await gotoSession()

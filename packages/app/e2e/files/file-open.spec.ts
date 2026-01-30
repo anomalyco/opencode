@@ -1,13 +1,10 @@
 import { test, expect } from "../fixtures"
-import { modKey } from "../utils"
+import { openPalette } from "../actions"
 
 test("can open a file tab from the search palette", async ({ page, gotoSession }) => {
   await gotoSession()
 
-  await page.keyboard.press(`${modKey}+P`)
-
-  const dialog = page.getByRole("dialog")
-  await expect(dialog).toBeVisible()
+  const dialog = await openPalette(page)
 
   const input = dialog.getByRole("textbox").first()
   await input.fill("package.json")
