@@ -59,6 +59,23 @@ const listenForDeepLinks = async () => {
   await onOpenUrl((urls) => emitDeepLinks(urls)).catch(() => undefined)
 }
 
+// Deep link handling for opencode:// URLs
+const deepLinkEvent = "opencode:deep-link"
+
+const emitDeepLinks = (urls: string[]) => {
+  if (urls.length === 0) return
+  window.__OPENCODE__ ??= {}
+  const pending = (window.__OPENCODE__ as { deepLinks?: string[] }).deepLinks ?? []
+  ;(window.__OPENCODE__ as { deepLinks?: string[] }).deepLinks = [...pending, ...urls]
+  window.dispatchEvent(new CustomEvent(deepLinkEvent, { detail: { urls } }))
+}
+
+const listenForDeepLinks = async () => {
+  const startUrls = await getCurrent().catch(() => null)
+  if (startUrls?.length) emitDeepLinks(startUrls)
+  await onOpenUrl((urls) => emitDeepLinks(urls)).catch(() => undefined)
+}
+
 const createPlatform = (password: Accessor<string | null>): Platform => ({
   platform: "desktop",
   os: (() => {
