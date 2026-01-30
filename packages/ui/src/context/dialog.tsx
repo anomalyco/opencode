@@ -28,6 +28,7 @@ const Context = createContext<ReturnType<typeof init>>()
 
 function init() {
   const [active, setActive] = createSignal<Active | undefined>()
+  const [renders, setRenders] = createSignal<Record<string, JSX.Element>>({})
   const timer = { current: undefined as ReturnType<typeof setTimeout> | undefined }
   const lock = { value: false }
 
@@ -118,12 +119,28 @@ function init() {
     setActive({ id, node, dispose, owner, onClose, setClosing })
   }
 
+  const render = (element: JSX.Element, id: string, owner: Owner) => {
+    setRenders((renders) => ({ ...renders, [id]: element }))
+    show(() => element, owner, () => {
+      setRenders((renders) => {
+        const { [id]: _, ...rest } = renders
+        return rest
+      })
+    })
+  }
+
+  const isActive = (id: string) => {
+    return renders()[id] !== undefined
+  }
+
   return {
     get active() {
       return active()
     },
+    isActive,
     close,
     show,
+    render,
   }
 }
 
@@ -152,9 +169,16 @@ export function useDialog() {
     get active() {
       return ctx.active
     },
+    isActive(id: string) {
+      return ctx.isActive(id)
+    },
     show(element: DialogElement, onClose?: () => void) {
       const base = ctx.active?.owner ?? owner
       ctx.show(element, base, onClose)
+    },
+    render(element: JSX.Element, id: string) {
+      const base = ctx.active?.owner ?? owner
+      ctx.render(element, id, base)
     },
     close() {
       ctx.close()

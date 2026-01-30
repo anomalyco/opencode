@@ -5,6 +5,7 @@ import { useI18n } from "../context/i18n"
 import { Icon, type IconProps } from "./icon"
 import { IconButton } from "./icon-button"
 import { TextField } from "./text-field"
+import { ScrollFade } from "./scroll-fade"
 
 function findByKey(container: HTMLElement, key: string) {
   const nodes = container.querySelectorAll<HTMLElement>('[data-slot="list-item"][data-key]')
@@ -267,7 +268,13 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
           {searchAction()}
         </div>
       </Show>
-      <div ref={setScrollRef} data-slot="list-scroll">
+      <ScrollFade
+        ref={setScrollRef}
+        direction="vertical"
+        fadeStartSize={0}
+        fadeEndSize={20}
+        data-slot="list-scroll"
+      >
         <Show
           when={flat().length > 0 || showAdd()}
           fallback={
@@ -339,7 +346,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
             </div>
           </Show>
         </Show>
-      </div>
+      </ScrollFade>
     </div>
   )
 }
