@@ -91,6 +91,8 @@
     "@standard-schema/spec": "1.0.0",
     "@xenova/transformers": "2.17.2",
     "@zip.js/zip.js": "2.7.62",
+    "sharp": "0.34.5",
+    "wavefile": "11.0.0",
     "ai": "catalog:",
     "bonjour-service": "1.3.0",
     "bun-pty": "0.4.4",

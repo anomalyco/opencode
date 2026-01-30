@@ -76,9 +76,7 @@
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
-    "sharp": "0.34.5",
-    "typescript": "catalog:",
-    "wavefile": "11.0.0"
+    "typescript": "catalog:"
   },
   "repository": {
     "type": "git",
