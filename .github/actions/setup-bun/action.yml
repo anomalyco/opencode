@@ -14,6 +14,12 @@ runs:
       with:
         bun-version-file: package.json
 
+    - name: Mount Bun Cache
+      uses: useblacksmith/stickydisk@v1
+      with:
+        key: ${{ github.repository }}-bun-cache
+        path: ~/.bun
+
     - name: Install dependencies
       run: bun install
       shell: bash
