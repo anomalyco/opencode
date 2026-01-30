@@ -127,7 +127,6 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
                           @{props.agentForModel}:{model.display}
                         </span>
                       </div>
-                      <span class="text-text-weak text-12-regular whitespace-nowrap ml-auto">{model.providerName}</span>
                     </button>
                   )
                 }}

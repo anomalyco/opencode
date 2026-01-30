@@ -523,7 +523,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             modelID: modelId,
             modelName: info.name ?? modelId,
             providerName: provider.name,
-            display: `${provider.id}/${info.name ?? modelId}`,
+            display: `${provider.id}/${modelId}`,
           }),
         ),
     )
@@ -873,6 +873,45 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const shellMode = store.mode === "shell"
 
     if (!shellMode) {
+      // Check for @agentname : pattern (space before colon) and collapse it
+      const spaceColonMatch = rawText.substring(0, cursorPosition).match(/@(\S+) :$/)
+      if (spaceColonMatch) {
+        const agentName = spaceColonMatch[1]
+        const validAgent = sync.data.agent.find(
+          (a) => !a.hidden && a.mode !== "primary" && a.name.toLowerCase() === agentName.toLowerCase(),
+        )
+        if (validAgent) {
+          // Remove the space before the colon by manipulating the DOM
+          const selection = window.getSelection()
+          if (selection && selection.rangeCount > 0) {
+            const range = selection.getRangeAt(0)
+            // Move back 2 positions (past the colon and space), then delete the space
+            const spacePos = cursorPosition - 2
+            setRangeEdge(editorRef, range, "start", spacePos)
+            setRangeEdge(editorRef, range, "end", spacePos + 1)
+            range.deleteContents()
+            // Position cursor after the colon (which is now at spacePos)
+            const newCursorPos = spacePos + 1
+            setRangeEdge(editorRef, range, "start", newCursorPos)
+            setRangeEdge(editorRef, range, "end", newCursorPos)
+            range.collapse(true)
+            selection.removeAllRanges()
+            selection.addRange(range)
+            // Re-parse to get updated parts
+            const updatedParts = parseFromDOM()
+            // Trigger model selection mode
+            setStore("agentForModel", validAgent.name)
+            setStore("popover", "at:model")
+            atOnInput("")
+            // Update prompt with new cursor position
+            mirror.input = true
+            prompt.set([...updatedParts, ...images], newCursorPos)
+            queueScroll()
+            return
+          }
+        }
+      }
+
       const atMatch = rawText.substring(0, cursorPosition).match(/@(\S*)$/)
       const slashMatch = rawText.match(/^\/(\S*)$/)
 

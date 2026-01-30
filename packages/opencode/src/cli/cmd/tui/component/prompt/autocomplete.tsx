@@ -632,6 +632,41 @@ export function Autocomplete(props: {
         const offset = props.input().cursorOffset
         if (offset === 0) return
 
+        // Collapse space before colon when typing `:` after `@agentname `
+        // This allows ergonomic model override: select agent (adds space), then type `:` to override model
+        const charBeforeCursor = offset > 0 ? value[offset - 1] : undefined
+        if (charBeforeCursor === ":" && offset >= 3) {
+          const charBeforeColon = value[offset - 2]
+          if (charBeforeColon === " ") {
+            const textBeforeSpace = value.slice(0, offset - 2)
+            const atIdx = textBeforeSpace.lastIndexOf("@")
+            if (atIdx !== -1) {
+              const agentName = textBeforeSpace.slice(atIdx + 1)
+              const validAgent = sync.data.agent.find(
+                (a) => !a.hidden && a.mode !== "primary" && a.name.toLowerCase() === agentName.toLowerCase(),
+              )
+              if (validAgent) {
+                // Delete the space before the colon
+                const input = props.input()
+                const spacePos = offset - 2
+                input.cursorOffset = spacePos
+                const startCursor = input.logicalCursor
+                input.cursorOffset = spacePos + 1
+                const endCursor = input.logicalCursor
+                input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
+                // After deletion, colon is now at spacePos, so position cursor after it
+                input.cursorOffset = spacePos + 1
+                // Trigger model autocomplete
+                show("@")
+                setStore("index", atIdx)
+                setStore("agentForModel", validAgent.name)
+                setStore("visible", "@:model")
+                return
+              }
+            }
+          }
+        }
+
         if (value.startsWith("/") && !value.slice(0, offset).match(/\s/)) {
           show("/")
           setStore("index", 0)
