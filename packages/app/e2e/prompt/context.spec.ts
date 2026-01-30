@@ -1,5 +1,5 @@
-import { test, expect } from "./fixtures"
-import { promptSelector } from "./utils"
+import { test, expect } from "../fixtures"
+import { promptSelector } from "../utils"
 
 test("context panel can be opened from the prompt", async ({ page, sdk, gotoSession }) => {
   const title = `e2e smoke context ${Date.now()}`

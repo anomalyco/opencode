@@ -1,5 +1,5 @@
-import { test, expect } from "./fixtures"
-import { modKey } from "./utils"
+import { test, expect } from "../fixtures"
+import { modKey } from "../utils"
 
 test("sidebar can be collapsed and expanded", async ({ page, gotoSession }) => {
   await gotoSession()

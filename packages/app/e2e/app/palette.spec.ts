@@ -1,5 +1,5 @@
-import { test, expect } from "./fixtures"
-import { modKey } from "./utils"
+import { test, expect } from "../fixtures"
+import { modKey } from "../utils"
 
 test("search palette opens and closes", async ({ page, gotoSession }) => {
   await gotoSession()

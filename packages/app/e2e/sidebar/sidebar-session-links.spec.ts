@@ -1,33 +1,7 @@
-import { test, expect } from "./fixtures"
-import { modKey, promptSelector } from "./utils"
+import { test, expect } from "../fixtures"
+import { modKey, promptSelector } from "../utils"
 
-type Locator = {
-  first: () => Locator
-  getAttribute: (name: string) => Promise<string | null>
-  scrollIntoViewIfNeeded: () => Promise<void>
-  click: () => Promise<void>
-}
-
-type Page = {
-  locator: (selector: string) => Locator
-  keyboard: {
-    press: (key: string) => Promise<void>
-  }
-}
-
-type Fixtures = {
-  page: Page
-  slug: string
-  sdk: {
-    session: {
-      create: (input: { title: string }) => Promise<{ data?: { id?: string } }>
-      delete: (input: { sessionID: string }) => Promise<unknown>
-    }
-  }
-  gotoSession: (sessionID?: string) => Promise<void>
-}
-
-test("sidebar session links navigate to the selected session", async ({ page, slug, sdk, gotoSession }: Fixtures) => {
+test("sidebar session links navigate to the selected session", async ({ page, slug, sdk, gotoSession }) => {
   const stamp = Date.now()
 
   const one = await sdk.session.create({ title: `e2e sidebar nav 1 ${stamp}` }).then((r) => r.data)
