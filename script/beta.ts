@@ -5,6 +5,12 @@ interface PR {
   title: string
 }
 
+interface RunResult {
+  exitCode: number
+  stdout: string
+  stderr: string
+}
+
 async function main() {
   console.log("Fetching open contributor PRs...")
 
@@ -34,43 +40,35 @@ async function main() {
   for (const pr of prs) {
     console.log(`\nProcessing PR #${pr.number}: ${pr.title}`)
 
-    // Get the diff from GitHub
-    console.log(`  Getting diff...`)
-    const diffResult = await $`gh pr diff ${pr.number}`.nothrow()
-    if (diffResult.exitCode !== 0) {
-      console.log(`  Failed to get diff`)
-      skipped.push({ number: pr.number, reason: `Failed to get diff: ${diffResult.stderr}` })
+    console.log("  Fetching PR head...")
+    const fetch = await run(["git", "fetch", "origin", `pull/${pr.number}/head:pr/${pr.number}`])
+    if (fetch.exitCode !== 0) {
+      console.log(`  Failed to fetch PR head: ${fetch.stderr}`)
+      skipped.push({ number: pr.number, reason: `Fetch failed: ${fetch.stderr}` })
       continue
     }
 
-    if (!diffResult.stdout.trim()) {
-      console.log(`  No changes, skipping`)
-      skipped.push({ number: pr.number, reason: "No changes" })
-      continue
-    }
-
-    // Try to apply the diff
-    console.log(`  Applying...`)
-    const apply = await Bun.spawn(["git", "apply", "--3way"], {
-      stdin: new TextEncoder().encode(diffResult.stdout),
-      stdout: "pipe",
-      stderr: "pipe",
-    })
-    const applyExit = await apply.exited
-    const applyStderr = await Bun.readableStreamToText(apply.stderr)
-
-    if (applyExit !== 0) {
-      console.log(`  Failed to apply (conflicts)`)
+    console.log("  Merging...")
+    const merge = await run(["git", "merge", "--no-commit", "--no-ff", `pr/${pr.number}`])
+    if (merge.exitCode !== 0) {
+      console.log("  Failed to merge (conflicts)")
+      await $`git merge --abort`.nothrow()
       await $`git checkout -- .`.nothrow()
       await $`git clean -fd`.nothrow()
       skipped.push({ number: pr.number, reason: "Has conflicts" })
       continue
     }
 
-    // Stage and commit
+    const mergeHead = await $`git rev-parse -q --verify MERGE_HEAD`.nothrow()
+    if (mergeHead.exitCode !== 0) {
+      console.log("  No changes, skipping")
+      skipped.push({ number: pr.number, reason: "No changes" })
+      continue
+    }
+
     const add = await $`git add -A`.nothrow()
     if (add.exitCode !== 0) {
-      console.log(`  Failed to stage`)
+      console.log("  Failed to stage")
       await $`git checkout -- .`.nothrow()
       await $`git clean -fd`.nothrow()
       skipped.push({ number: pr.number, reason: "Failed to stage" })
@@ -78,16 +76,16 @@ async function main() {
     }
 
     const commitMsg = `Apply PR #${pr.number}: ${pr.title}`
-    const commit = await $`git commit -m ${commitMsg}`.nothrow()
+    const commit = await run(["git", "commit", "-m", commitMsg])
     if (commit.exitCode !== 0) {
-      console.log(`  Failed to commit`)
+      console.log(`  Failed to commit: ${commit.stderr}`)
       await $`git checkout -- .`.nothrow()
       await $`git clean -fd`.nothrow()
       skipped.push({ number: pr.number, reason: `Commit failed: ${commit.stderr}` })
       continue
     }
 
-    console.log(`  Applied successfully`)
+    console.log("  Applied successfully")
     applied.push(pr.number)
   }
 
@@ -110,6 +108,18 @@ main().catch((err) => {
   console.error("Error:", err)
   process.exit(1)
 })
+
+async function run(args: string[], stdin?: Uint8Array): Promise<RunResult> {
+  const proc = Bun.spawn(args, {
+    stdin: stdin ?? "inherit",
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  const exitCode = await proc.exited
+  const stdout = await new Response(proc.stdout).text()
+  const stderr = await new Response(proc.stderr).text()
+  return { exitCode, stdout, stderr }
+}
 
 function $(strings: TemplateStringsArray, ...values: unknown[]) {
   const cmd = strings.reduce((acc, str, i) => acc + str + (values[i] ?? ""), "")
