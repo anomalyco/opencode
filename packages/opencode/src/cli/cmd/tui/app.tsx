@@ -36,6 +36,7 @@ import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
+import { sleep } from "bun"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -275,7 +276,11 @@ function App() {
       (isEmpty, wasEmpty) => {
         // only trigger when we transition into an empty-provider state
         if (!isEmpty || wasEmpty) return
-        dialog.replace(() => <DialogProviderList />)
+        // TODO: not using sleep would be better
+        // using sleep so that focus goes to the prompt input first, then dialog opens
+        sleep(5).then(() => {
+          dialog.replace(() => <DialogProviderList />)
+        })
       },
     ),
   )
