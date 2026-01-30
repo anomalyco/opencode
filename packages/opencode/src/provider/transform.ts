@@ -725,49 +725,58 @@ export namespace ProviderTransform {
     }
     */
 
-    // Convert integer enums to string enums for Google/Gemini
-    if (model.providerID === "google" || model.api.id.includes("gemini")) {
-      const sanitizeGemini = (obj: any): any => {
-        if (obj === null || typeof obj !== "object") {
-          return obj
-        }
-
-        if (Array.isArray(obj)) {
-          return obj.map(sanitizeGemini)
-        }
-
-        const result: any = {}
-        for (const [key, value] of Object.entries(obj)) {
-          if (key === "enum" && Array.isArray(value)) {
-            // Convert all enum values to strings
-            result[key] = value.map((v) => String(v))
-            // If we have integer type with enum, change type to string
-            if (result.type === "integer" || result.type === "number") {
-              result.type = "string"
-            }
-          } else if (typeof value === "object" && value !== null) {
-            result[key] = sanitizeGemini(value)
-          } else {
-            result[key] = value
-          }
-        }
-
-        // Filter required array to only include fields that exist in properties
-        if (result.type === "object" && result.properties && Array.isArray(result.required)) {
-          result.required = result.required.filter((field: any) => field in result.properties)
-        }
-
-        if (result.type === "array" && result.items == null) {
-          result.items = {}
-        }
-
-        return result
-      }
-
-      schema = sanitizeGemini(schema)
+    const isGemini = model.providerID === "google" || model.id.toLowerCase().includes("gemini")
+    if (isGemini) {
+      schema = sanitizeGeminiSchema(schema)
     }
 
     return schema
+  }
+
+  export function sanitizeGeminiSchema(obj: any): any {
+    if (obj === null || typeof obj !== "object") return obj
+    if (Array.isArray(obj)) return obj.map(sanitizeGeminiSchema)
+
+    const result: any = {}
+    for (const [key, value] of Object.entries(obj)) {
+      if (key === "type" && Array.isArray(value)) {
+        // gemini will 400 on union types with null
+        const types = value as string[]
+        const hasNull = types.includes("null")
+        const nonNullTypes = types.filter((t) => t !== "null")
+
+        if (hasNull && nonNullTypes.length === 1) {
+          result.type = nonNullTypes[0]
+          result.nullable = true
+        } else if (nonNullTypes.length === 1) {
+          result.type = nonNullTypes[0]
+        } else {
+          result.type = value
+        }
+      } else if (key === "enum" && Array.isArray(value)) {
+        // Convert all enum values to strings
+        result[key] = value.map((v) => String(v))
+        // If we have integer type with enum, change type to string
+        if (result.type === "integer" || result.type === "number") {
+          result.type = "string"
+        }
+      } else if (typeof value === "object" && value !== null) {
+        result[key] = sanitizeGeminiSchema(value)
+      } else {
+        result[key] = value
+      }
+    }
+
+    // Filter required array to only include fields that exist in properties
+    if (result.type === "object" && result.properties && Array.isArray(result.required)) {
+      result.required = result.required.filter((field: any) => field in result.properties)
+    }
+
+    if (result.type === "array" && result.items == null) {
+      result.items = {}
+    }
+
+    return result
   }
 
   export function error(providerID: string, error: APICallError) {

@@ -2,6 +2,7 @@ import { OpenAICompatibleChatLanguageModel } from "@ai-sdk/openai-compatible"
 import type { LanguageModelV2, LanguageModelV2StreamPart, SharedV2ProviderMetadata } from "@ai-sdk/provider"
 import { type FetchFunction, withoutTrailingSlash, withUserAgentSuffix } from "@ai-sdk/provider-utils"
 import { OpenAIResponsesLanguageModel } from "../openai-compatible/src/responses/openai-responses-language-model"
+import { ProviderTransform } from "../../transform"
 
 type RawChunk = {
   choices?: Array<{
@@ -42,9 +43,23 @@ function wrapStream(stream: ReadableStream<LanguageModelV2StreamPart>) {
   )
 }
 
-function createFetchAdapter(base?: FetchFunction): FetchFunction {
+function createFetchAdapter(base?: FetchFunction, modelId?: string): FetchFunction {
   const fetcher = base ?? globalThis.fetch
+  const isGemini = modelId?.toLowerCase().includes("gemini")
+
   return (async (url, init) => {
+    // catch MCP tools not sanitized in transform.ts
+    if (isGemini && init?.body && url.toString().includes("/chat/completions")) {
+      const body = JSON.parse(init.body as string)
+      if (body.tools) {
+        body.tools = body.tools.map((t: any) => ({
+          ...t,
+          function: { ...t.function, parameters: ProviderTransform.sanitizeGeminiSchema(t.function.parameters) },
+        }))
+        init = { ...init, body: JSON.stringify(body) }
+      }
+    }
+
     const response = await fetcher(url, init)
     if (!url.toString().includes("/chat/completions")) return response
 
@@ -87,9 +102,9 @@ export function createCopilot(
     ...options.headers,
   }
   const getHeaders = () => withUserAgentSuffix(headers, "opencode/copilot")
-  const copilotFetch = createFetchAdapter(options.fetch)
 
   const createChatModel = (id: string): LanguageModelV2 => {
+    const copilotFetch = createFetchAdapter(options.fetch, id)
     const model = new OpenAICompatibleChatLanguageModel(id, {
       provider: "openai.chat",
       headers: getHeaders,
