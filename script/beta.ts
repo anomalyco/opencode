@@ -100,7 +100,7 @@ async function main() {
   skipped.forEach((x) => console.log(`  - PR #${x.number}: ${x.reason}`))
 
   console.log("\nForce pushing beta branch...")
-  const push = await $`git push origin beta --force`.nothrow()
+  const push = await $`git push origin beta --force --no-verify`.nothrow()
   if (push.exitCode !== 0) {
     throw new Error(`Failed to push beta branch: ${push.stderr}`)
   }
