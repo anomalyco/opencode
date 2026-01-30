@@ -3,6 +3,7 @@ import { EOL } from "os"
 import { NamedError } from "@opencode-ai/util/error"
 
 export namespace UI {
+  // First character is braille blank (U+2800) to prevent yargs from trimming leading spaces
   const LOGO = [
     `⠀                                ▄     `,
     `█▀▀█ █▀▀█ █▀▀█ █▀▀▄ █▀▀▀ █▀▀█ █▀▀█ █▀▀█`,
