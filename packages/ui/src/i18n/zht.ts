@@ -9,6 +9,14 @@ export const dict = {
   "ui.sessionReview.expandAll": "全部展開",
   "ui.sessionReview.collapseAll": "全部收合",
 
+  "ui.sessionReview.change.added": "已新增",
+  "ui.sessionReview.change.removed": "已移除",
+  "ui.lineComment.label.prefix": "評論 ",
+  "ui.lineComment.label.suffix": "",
+  "ui.lineComment.editorLabel.prefix": "正在評論 ",
+  "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.placeholder": "新增評論",
+  "ui.lineComment.submit": "評論",
   "ui.sessionTurn.steps.show": "顯示步驟",
   "ui.sessionTurn.steps.hide": "隱藏步驟",
   "ui.sessionTurn.summary.response": "回覆",
@@ -50,6 +58,7 @@ export const dict = {
   "ui.imagePreview.alt": "圖片預覽",
 
   "ui.tool.read": "讀取",
+  "ui.tool.loaded": "已載入",
   "ui.tool.list": "清單",
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",

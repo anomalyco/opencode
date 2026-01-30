@@ -1,4 +1,4 @@
-name: Duplicate PR Check
+name: pr-management
 
 on:
   pull_request_target:
@@ -63,3 +63,26 @@ jobs:
           gh pr comment "$PR_NUMBER" --body "_The following comment was made by an LLM, it may be inaccurate:_
 
           $COMMENT"
+
+  add-contributor-label:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Add Contributor Label
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const isPR = !!context.payload.pull_request;
+            const issueNumber = isPR ? context.payload.pull_request.number : context.payload.issue.number;
+            const authorAssociation = isPR ? context.payload.pull_request.author_association : context.payload.issue.author_association;
+
+            if (authorAssociation === 'CONTRIBUTOR') {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                labels: ['contributor']
+              });
+            }
