@@ -2148,3 +2148,299 @@ test("custom model with variants enabled and disabled", async () => {
     },
   })
 })
+
+// Model-level options tests
+
+test("model-level baseURL overrides provider-level baseURL", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "multi-endpoint": {
+              name: "Multi Endpoint Provider",
+              npm: "@ai-sdk/openai-compatible",
+              env: [],
+              models: {
+                "default-model": {
+                  name: "Default Model",
+                  tool_call: true,
+                  limit: { context: 8000, output: 2000 },
+                },
+                "custom-endpoint-model": {
+                  name: "Custom Endpoint Model",
+                  tool_call: true,
+                  limit: { context: 8000, output: 2000 },
+                  options: {
+                    baseURL: "https://custom.endpoint.com/v1",
+                  },
+                },
+              },
+              options: {
+                apiKey: "test-key",
+                baseURL: "https://default.endpoint.com/v1",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await Provider.list()
+      // Provider-level baseURL
+      expect(providers["multi-endpoint"].options.baseURL).toBe("https://default.endpoint.com/v1")
+      // Model without custom baseURL should inherit provider baseURL
+      expect(providers["multi-endpoint"].models["default-model"].options).toEqual({})
+      // Model with custom baseURL
+      expect(providers["multi-endpoint"].models["custom-endpoint-model"].options.baseURL).toBe(
+        "https://custom.endpoint.com/v1",
+      )
+    },
+  })
+})
+
+test("model-level apiKey overrides provider-level apiKey", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "multi-key": {
+              name: "Multi Key Provider",
+              npm: "@ai-sdk/openai-compatible",
+              env: [],
+              models: {
+                "default-key-model": {
+                  name: "Default Key Model",
+                  tool_call: true,
+                  limit: { context: 8000, output: 2000 },
+                },
+                "custom-key-model": {
+                  name: "Custom Key Model",
+                  tool_call: true,
+                  limit: { context: 8000, output: 2000 },
+                  options: {
+                    apiKey: "model-specific-key",
+                  },
+                },
+              },
+              options: {
+                apiKey: "provider-default-key",
+                baseURL: "https://api.example.com/v1",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await Provider.list()
+      // Provider-level apiKey
+      expect(providers["multi-key"].options.apiKey).toBe("provider-default-key")
+      // Model without custom apiKey should have empty options
+      expect(providers["multi-key"].models["default-key-model"].options).toEqual({})
+      // Model with custom apiKey
+      expect(providers["multi-key"].models["custom-key-model"].options.apiKey).toBe("model-specific-key")
+    },
+  })
+})
+
+test("model-level options fallback to provider options when not specified", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "fallback-test": {
+              name: "Fallback Test Provider",
+              npm: "@ai-sdk/openai-compatible",
+              env: [],
+              models: {
+                "no-options-model": {
+                  name: "No Options Model",
+                  tool_call: true,
+                  limit: { context: 8000, output: 2000 },
+                  // No options specified
+                },
+                "empty-options-model": {
+                  name: "Empty Options Model",
+                  tool_call: true,
+                  limit: { context: 8000, output: 2000 },
+                  options: {},
+                },
+              },
+              options: {
+                apiKey: "provider-key",
+                baseURL: "https://provider.api.com/v1",
+                timeout: 30000,
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await Provider.list()
+      const provider = providers["fallback-test"]
+      // Both models should have empty/undefined options, they inherit from provider at SDK creation time
+      expect(provider.models["no-options-model"].options).toEqual({})
+      expect(provider.models["empty-options-model"].options).toEqual({})
+      // Provider options should remain intact
+      expect(provider.options.baseURL).toBe("https://provider.api.com/v1")
+      expect(provider.options.apiKey).toBe("provider-key")
+      expect(provider.options.timeout).toBe(30000)
+    },
+  })
+})
+
+test("model-level options with mixed baseURL and apiKey overrides", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "modelhub-gpt": {
+              name: "ModelHub GPT",
+              npm: "@ai-sdk/openai-compatible",
+              env: [],
+              models: {
+                "gpt-4o": {
+                  name: "GPT-4o (Default Endpoint)",
+                  tool_call: true,
+                  limit: { context: 128000, output: 4096 },
+                },
+                "gpt-4o-alternate": {
+                  name: "GPT-4o (Alternate Endpoint)",
+                  tool_call: true,
+                  limit: { context: 128000, output: 4096 },
+                  options: {
+                    baseURL: "https://alternate.endpoint.com/v1",
+                    apiKey: "alternate-key",
+                  },
+                },
+                "gemini-2.0-flash": {
+                  name: "Gemini 2.0 Flash",
+                  tool_call: true,
+                  limit: { context: 1000000, output: 8192 },
+                  options: {
+                    baseURL: "https://gemini.api.com/v1",
+                    apiKey: "gemini-specific-key",
+                  },
+                },
+                "codex-mini": {
+                  name: "Codex Mini",
+                  tool_call: true,
+                  limit: { context: 200000, output: 16384 },
+                  options: {
+                    baseURL: "https://responses.api.com/v1",
+                  },
+                },
+              },
+              options: {
+                baseURL: "https://default.api.com/v1",
+                apiKey: "default-key",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await Provider.list()
+      const provider = providers["modelhub-gpt"]
+
+      // Default model - no options override
+      expect(provider.models["gpt-4o"].options).toEqual({})
+
+      // Alternate endpoint with both baseURL and apiKey
+      expect(provider.models["gpt-4o-alternate"].options.baseURL).toBe("https://alternate.endpoint.com/v1")
+      expect(provider.models["gpt-4o-alternate"].options.apiKey).toBe("alternate-key")
+
+      // Gemini with different endpoint and key
+      expect(provider.models["gemini-2.0-flash"].options.baseURL).toBe("https://gemini.api.com/v1")
+      expect(provider.models["gemini-2.0-flash"].options.apiKey).toBe("gemini-specific-key")
+
+      // Codex with only baseURL override (should use provider apiKey)
+      expect(provider.models["codex-mini"].options.baseURL).toBe("https://responses.api.com/v1")
+      expect(provider.models["codex-mini"].options.apiKey).toBeUndefined()
+
+      // Provider defaults remain unchanged
+      expect(provider.options.baseURL).toBe("https://default.api.com/v1")
+      expect(provider.options.apiKey).toBe("default-key")
+    },
+  })
+})
+
+test("model-level options can add new keys not present in provider options", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "new-keys-test": {
+              name: "New Keys Test Provider",
+              npm: "@ai-sdk/openai-compatible",
+              env: [],
+              models: {
+                "model-with-new-keys": {
+                  name: "Model With New Keys",
+                  tool_call: true,
+                  limit: { context: 8000, output: 2000 },
+                  options: {
+                    baseURL: "https://model.api.com/v1",
+                    customModelOption: "model-custom-value",
+                    anotherNewKey: 12345,
+                    nestedOption: { foo: "bar" },
+                  },
+                },
+              },
+              options: {
+                apiKey: "provider-key",
+                baseURL: "https://provider.api.com/v1",
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const providers = await Provider.list()
+      const model = providers["new-keys-test"].models["model-with-new-keys"]
+
+      // Model options should contain the new keys
+      expect(model.options.baseURL).toBe("https://model.api.com/v1")
+      expect(model.options.customModelOption).toBe("model-custom-value")
+      expect(model.options.anotherNewKey).toBe(12345)
+      expect(model.options.nestedOption).toEqual({ foo: "bar" })
+
+      // Provider options should not be affected
+      expect(providers["new-keys-test"].options.customModelOption).toBeUndefined()
+      expect(providers["new-keys-test"].options.anotherNewKey).toBeUndefined()
+    },
+  })
+})

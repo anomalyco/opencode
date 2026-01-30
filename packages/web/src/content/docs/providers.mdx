@@ -48,6 +48,50 @@ You can customize the base URL for any provider by setting the `baseURL` option.
 
 ---
 
+#### Model-Level Options
+
+You can override provider-level options (`baseURL`, `apiKey`, etc.) at the model level. This is useful when different models need to route to different endpoints or use different API keys.
+
+```json title="opencode.json" {8-11,16-18}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "my-provider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "https://default.api.com/v1",
+        "apiKey": "default-key"
+      },
+      "models": {
+        "model-a": {
+          "name": "Model A (Default Endpoint)"
+        },
+        "model-b": {
+          "name": "Model B (Custom Endpoint)",
+          "options": {
+            "baseURL": "https://custom.api.com/v1",
+            "apiKey": "custom-key"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+**How it works:**
+- If `model.options.baseURL` is set, it overrides `provider.options.baseURL`
+- If `model.options.apiKey` is set, it overrides `provider.options.apiKey`
+- Any new keys in `model.options` that don't exist in `provider.options` will be added
+- Models without custom options will use the provider's defaults
+
+This is particularly useful for:
+- **Multi-region deployments**: Route different models to different regional endpoints
+- **Quota management**: Use different API keys with separate rate limits
+- **API versioning**: Point specific models to different API versions
+
+---
+
 ## OpenCode Zen
 
 OpenCode Zen is a list of models provided by the OpenCode team that have been

@@ -969,6 +969,15 @@ export namespace Provider {
       const provider = s.providers[model.providerID]
       const options = { ...provider.options }
 
+      // Merge model-level options (model options take precedence over provider options)
+      if (model.options) {
+        for (const [key, value] of Object.entries(model.options)) {
+          if (value !== undefined) {
+            options[key] = value
+          }
+        }
+      }
+
       if (model.api.npm.includes("@ai-sdk/openai-compatible") && options["includeUsage"] !== false) {
         options["includeUsage"] = true
       }
