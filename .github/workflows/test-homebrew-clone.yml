@@ -1,6 +1,9 @@
 name: test-homebrew-clone
 
 on:
+  push:
+    branches:
+      - dev
   workflow_dispatch: {}
 
 permissions:
