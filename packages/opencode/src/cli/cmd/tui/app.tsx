@@ -395,7 +395,7 @@ function App() {
       },
     },
     {
-      title: "Voice Settings",
+      title: "Voice settings",
       value: "voice.settings",
       category: "Agent",
       slash: {

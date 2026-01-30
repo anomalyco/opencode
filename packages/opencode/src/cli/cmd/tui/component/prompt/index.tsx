@@ -805,9 +805,9 @@ export function Prompt(props: PromptProps) {
                   return
                 }
 
-                // Handle voice input - toggle recording on backslash
-                if (e.name === "\\") {
-                  // Prevent default to avoid inserting backslash character
+                // Handle voice input - toggle recording
+                if (keybind.match("voice_input", e)) {
+                  // Prevent default to avoid inserting the keybind character
                   e.preventDefault()
 
                   // Only allow voice input if service is available
@@ -1157,7 +1157,9 @@ export function Prompt(props: PromptProps) {
                 <Match when={store.mode === "normal"}>
                   <Show when={sync.data.voice?.status === "ready" && voiceStatus() === "recording"}>
                     <text fg={theme.primary}>
-                      <span style={{ fg: theme.primary, bold: true }}>Recording... (\ to stop)</span>
+                      <span style={{ fg: theme.primary, bold: true }}>
+                        Recording... ({keybind.print("voice_input")} to stop)
+                      </span>
                     </text>
                   </Show>
                   <Show when={sync.data.voice?.status === "ready" && voiceStatus() === "transcribing"}>
@@ -1167,7 +1169,7 @@ export function Prompt(props: PromptProps) {
                   </Show>
                   <Show when={sync.data.voice?.status === "ready" && voiceStatus() === "idle"}>
                     <text fg={theme.text}>
-                      \ <span style={{ fg: theme.textMuted }}>voice</span>
+                      {keybind.print("voice_input")} <span style={{ fg: theme.textMuted }}>voice</span>
                     </text>
                   </Show>
                   <Show when={local.model.variant.list().length > 0}>
