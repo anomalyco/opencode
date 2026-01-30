@@ -160,18 +160,21 @@ export namespace LLM {
 
     const tools = await resolveTools(input)
 
-    // LiteLLM and some Anthropic proxies require the tools parameter to be present
-    // when message history contains tool calls, even if no tools are being used.
+    // LiteLLM, some Anthropic proxies, and Github Copilot Enterprise require the tools
+    // parameter to be present when message history contains tool calls, even if no tools
+    // are being used.
     // Add a dummy tool that is never called to satisfy this validation.
     // This is enabled for:
     // 1. Providers with "litellm" in their ID or API ID (auto-detected)
     // 2. Providers with explicit "litellmProxy: true" option (opt-in for custom gateways)
-    const isLiteLLMProxy =
+    // 3. Github Copilot Enterprise (auto-detected)
+    const needsDummyTools =
       provider.options?.["litellmProxy"] === true ||
       input.model.providerID.toLowerCase().includes("litellm") ||
-      input.model.api.id.toLowerCase().includes("litellm")
+      input.model.api.id.toLowerCase().includes("litellm") ||
+      input.model.providerID.toLowerCase().includes("github-copilot-enterprise")
 
-    if (isLiteLLMProxy && Object.keys(tools).length === 0 && hasToolCalls(input.messages)) {
+    if (needsDummyTools && Object.keys(tools).length === 0 && hasToolCalls(input.messages)) {
       tools["_noop"] = tool({
         description:
           "Placeholder for LiteLLM/Anthropic proxy compatibility - required when message history contains tool calls but no active tools are needed",
