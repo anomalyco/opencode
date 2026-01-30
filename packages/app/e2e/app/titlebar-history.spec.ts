@@ -1,5 +1,5 @@
-import { test, expect } from "./fixtures"
-import { modKey, promptSelector } from "./utils"
+import { test, expect } from "../fixtures"
+import { modKey, promptSelector } from "../utils"
 
 test("titlebar back/forward navigates between sessions", async ({ page, slug, sdk, gotoSession }) => {
   await page.setViewportSize({ width: 1400, height: 800 })

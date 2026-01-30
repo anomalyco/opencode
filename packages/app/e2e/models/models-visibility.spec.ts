@@ -1,5 +1,5 @@
-import { test, expect } from "./fixtures"
-import { modKey, promptSelector } from "./utils"
+import { test, expect } from "../fixtures"
+import { modKey, promptSelector } from "../utils"
 
 test("hiding a model removes it from the model picker", async ({ page, gotoSession }) => {
   await gotoSession()
