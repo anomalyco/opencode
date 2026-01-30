@@ -1316,6 +1316,11 @@ export type KeybindsConfig = {
 export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR"
 
 /**
+ * Cursor shape in text inputs: 'block', 'line', or 'underline'
+ */
+export type CursorStyleConfig = "block" | "line" | "underline"
+
+/**
  * Server configuration for opencode serve and web commands
  */
 export type ServerConfig = {
@@ -1620,6 +1625,11 @@ export type Config = {
      * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
      */
     diff_style?: "auto" | "stacked"
+    cursor_style?: CursorStyleConfig
+    /**
+     * Enable cursor blinking in text inputs
+     */
+    cursor_blink?: boolean
   }
   server?: ServerConfig
   /**

@@ -4,6 +4,7 @@ import { useKeyboard } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useKeybind } from "../../context/keybind"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
+import { useSync } from "../../context/sync"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../component/border"
@@ -15,6 +16,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
   const { theme } = useTheme()
   const keybind = useKeybind()
   const bindings = useTextareaKeybindings()
+  const sync = useSync()
 
   const questions = createMemo(() => props.request.questions)
   const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)
@@ -40,6 +42,13 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     const value = input()
     if (!value) return false
     return store.answers[store.tab]?.includes(value) ?? false
+  })
+  const cursorStyle = createMemo(() => {
+    const tui = sync.data.config.tui
+    return {
+      style: (tui?.cursor_style ?? "block") as "block" | "line" | "underline",
+      blinking: tui?.cursor_blink ?? true,
+    }
   })
 
   function submit() {
@@ -379,6 +388,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                         textColor={theme.text}
                         focusedTextColor={theme.text}
                         cursorColor={theme.primary}
+                        cursorStyle={cursorStyle()}
                         keyBindings={bindings()}
                       />
                     </box>

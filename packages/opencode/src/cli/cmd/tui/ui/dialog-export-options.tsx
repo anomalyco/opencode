@@ -2,8 +2,9 @@ import { TextareaRenderable, TextAttributes } from "@opentui/core"
 import { useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "./dialog"
 import { createStore } from "solid-js/store"
-import { onMount, Show, type JSX } from "solid-js"
+import { createMemo, onMount, Show, type JSX } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
+import { useSync } from "../context/sync"
 
 export type DialogExportOptionsProps = {
   defaultFilename: string
@@ -24,7 +25,17 @@ export type DialogExportOptionsProps = {
 export function DialogExportOptions(props: DialogExportOptionsProps) {
   const dialog = useDialog()
   const { theme } = useTheme()
+  const sync = useSync()
   let textarea: TextareaRenderable
+
+  const cursorStyle = createMemo(() => {
+    const tui = sync.data.config.tui
+    return {
+      style: (tui?.cursor_style ?? "block") as "block" | "line" | "underline",
+      blinking: tui?.cursor_blink ?? true,
+    }
+  })
+
   const [store, setStore] = createStore({
     thinking: props.defaultThinking,
     toolDetails: props.defaultToolDetails,
@@ -104,6 +115,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
           textColor={theme.text}
           focusedTextColor={theme.text}
           cursorColor={theme.text}
+          cursorStyle={cursorStyle()}
         />
       </box>
       <box flexDirection="column">

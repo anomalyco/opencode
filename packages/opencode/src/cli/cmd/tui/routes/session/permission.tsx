@@ -306,6 +306,15 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
   const dimensions = useTerminalDimensions()
   const narrow = createMemo(() => dimensions().width < 80)
   const dialog = useDialog()
+  const sync = useSync()
+
+  const cursorStyle = createMemo(() => {
+    const tui = sync.data.config.tui
+    return {
+      style: (tui?.cursor_style ?? "block") as "block" | "line" | "underline",
+      blinking: tui?.cursor_blink ?? true,
+    }
+  })
 
   useKeyboard((evt) => {
     if (dialog.stack.length > 0) return
@@ -355,6 +364,7 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
           textColor={theme.text}
           focusedTextColor={theme.text}
           cursorColor={theme.primary}
+          cursorStyle={cursorStyle()}
           keyBindings={textareaKeybindings()}
         />
         <box flexDirection="row" gap={2} flexShrink={0}>

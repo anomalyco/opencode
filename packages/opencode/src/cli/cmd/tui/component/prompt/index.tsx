@@ -713,6 +713,14 @@ export function Prompt(props: PromptProps) {
     return !!current
   })
 
+  const cursorStyle = createMemo(() => {
+    const tui = sync.data.config.tui
+    return {
+      style: (tui?.cursor_style ?? "block") as "block" | "line" | "underline",
+      blinking: tui?.cursor_blink ?? true,
+    }
+  })
+
   const spinnerDef = createMemo(() => {
     const color = local.agent.color(local.agent.current().name)
     return {
@@ -948,6 +956,7 @@ export function Prompt(props: PromptProps) {
               onMouseDown={(r: MouseEvent) => r.target?.focus()}
               focusedBackgroundColor={theme.backgroundElement}
               cursorColor={theme.text}
+              cursorStyle={cursorStyle()}
               syntaxStyle={syntax()}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>

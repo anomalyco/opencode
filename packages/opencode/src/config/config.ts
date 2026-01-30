@@ -829,6 +829,11 @@ export namespace Config {
       ref: "KeybindsConfig",
     })
 
+  export const CursorStyle = z.enum(["block", "line", "underline"]).meta({
+    ref: "CursorStyleConfig",
+  })
+  export type CursorStyle = z.infer<typeof CursorStyle>
+
   export const TUI = z.object({
     scroll_speed: z.number().min(0.001).optional().describe("TUI scroll speed"),
     scroll_acceleration: z
@@ -841,6 +846,8 @@ export namespace Config {
       .enum(["auto", "stacked"])
       .optional()
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+    cursor_style: CursorStyle.optional().describe("Cursor shape in text inputs: 'block', 'line', or 'underline'"),
+    cursor_blink: z.boolean().optional().describe("Enable cursor blinking in text inputs"),
   })
 
   export const Server = z
