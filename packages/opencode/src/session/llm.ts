@@ -70,10 +70,11 @@ export namespace LLM {
     system.push(
       [
         // use agent prompt otherwise provider prompt
-        // For Codex sessions, skip SystemPrompt.provider() since it's sent via options.instructions
-        ...(input.agent.prompt ? [input.agent.prompt] : isCodex ? [] : SystemPrompt.provider(input.model)),
+        // For Codex sessions, skip SystemPrompt.provider() and agent.prompt since they're sent via options.instructions
+        ...(!isCodex && input.agent.prompt ? [input.agent.prompt] : isCodex ? [] : SystemPrompt.provider(input.model)),
         // any custom prompt passed into this call
-        ...input.system,
+        // For Codex sessions, skip input.system since it's sent via options.instructions
+        ...(!isCodex ? input.system : []),
         // any custom prompt from last user message
         ...(input.user.system ? [input.user.system] : []),
       ]
@@ -114,7 +115,9 @@ export namespace LLM {
       mergeDeep(variant),
     )
     if (isCodex) {
-      options.instructions = SystemPrompt.instructions()
+      const base = input.agent.prompt ? input.agent.prompt : SystemPrompt.instructions()
+      const env = input.system.join("\n\n")
+      options.instructions = [base, env].filter(Boolean).join("\n\n")
     }
 
     const params = await Plugin.trigger(
