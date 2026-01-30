@@ -4,7 +4,7 @@
   // "enterprise": {
   //   "url": "https://enterprise.dev.opencode.ai",
   // },
-  "theme": "system",
+  "theme": "mammouth",
   "mcp": {
     "context7": {
       "type": "remote",
