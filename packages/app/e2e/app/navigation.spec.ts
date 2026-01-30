@@ -1,5 +1,6 @@
-import { test, expect } from "./fixtures"
-import { dirPath, promptSelector } from "./utils"
+import { test, expect } from "../fixtures"
+import { promptSelector } from "../selectors"
+import { dirPath } from "../utils"
 
 test("project route redirects to /session", async ({ page, directory, slug }) => {
   await page.goto(dirPath(directory))

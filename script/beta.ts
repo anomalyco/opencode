@@ -2,26 +2,25 @@
 
 interface PR {
   number: number
-  headRefName: string
-  headRefOid: string
-  createdAt: string
-  isDraft: boolean
   title: string
+}
+
+interface RunResult {
+  exitCode: number
+  stdout: string
+  stderr: string
 }
 
 async function main() {
   console.log("Fetching open contributor PRs...")
 
-  const prsResult =
-    await $`gh pr list --label contributor --state open --json number,headRefName,headRefOid,createdAt,isDraft,title --limit 100`.nothrow()
+  const prsResult = await $`gh pr list --label contributor --state open --json number,title --limit 100`.nothrow()
   if (prsResult.exitCode !== 0) {
     throw new Error(`Failed to fetch PRs: ${prsResult.stderr}`)
   }
 
-  const allPRs: PR[] = JSON.parse(prsResult.stdout)
-  const prs = allPRs.filter((pr) => !pr.isDraft)
-
-  console.log(`Found ${prs.length} open non-draft contributor PRs`)
+  const prs: PR[] = JSON.parse(prsResult.stdout)
+  console.log(`Found ${prs.length} open contributor PRs`)
 
   console.log("Fetching latest dev branch...")
   const fetchDev = await $`git fetch origin dev`.nothrow()
@@ -41,71 +40,52 @@ async function main() {
   for (const pr of prs) {
     console.log(`\nProcessing PR #${pr.number}: ${pr.title}`)
 
-    // Fetch the PR
-    const fetchPR = await $`git fetch origin pull/${pr.number}/head:pr-${pr.number}`.nothrow()
-    if (fetchPR.exitCode !== 0) {
-      console.log(`  Failed to fetch PR #${pr.number}, skipping`)
-      skipped.push({ number: pr.number, reason: "Failed to fetch" })
+    console.log("  Fetching PR head...")
+    const fetch = await run(["git", "fetch", "origin", `pull/${pr.number}/head:pr/${pr.number}`])
+    if (fetch.exitCode !== 0) {
+      console.log(`  Failed to fetch PR head: ${fetch.stderr}`)
+      skipped.push({ number: pr.number, reason: `Fetch failed: ${fetch.stderr}` })
       continue
     }
 
-    // Try to rebase onto current beta branch
-    console.log(`  Attempting to rebase PR #${pr.number}...`)
-    const rebase = await $`git rebase beta pr-${pr.number}`.nothrow()
-    if (rebase.exitCode !== 0) {
-      console.log(`  Rebase failed for PR #${pr.number} (has conflicts)`)
-      await $`git rebase --abort`.nothrow()
-      await $`git checkout beta`.nothrow()
-      skipped.push({ number: pr.number, reason: "Rebase failed (conflicts)" })
-      continue
-    }
-
-    // Move rebased commits to pr-${pr.number} branch and checkout back to beta
-    await $`git checkout -B pr-${pr.number}`.nothrow()
-    await $`git checkout beta`.nothrow()
-
-    console.log(`  Successfully rebased PR #${pr.number}`)
-
-    // Now squash merge the rebased PR
-    const merge = await $`git merge --squash pr-${pr.number}`.nothrow()
+    console.log("  Merging...")
+    const merge = await run(["git", "merge", "--no-commit", "--no-ff", `pr/${pr.number}`])
     if (merge.exitCode !== 0) {
-      console.log(`  Squash merge failed for PR #${pr.number}`)
-      console.log(`  Error: ${merge.stderr}`)
-      await $`git reset --hard HEAD`.nothrow()
-      skipped.push({ number: pr.number, reason: `Squash merge failed: ${merge.stderr}` })
+      console.log("  Failed to merge (conflicts)")
+      await $`git merge --abort`.nothrow()
+      await $`git checkout -- .`.nothrow()
+      await $`git clean -fd`.nothrow()
+      skipped.push({ number: pr.number, reason: "Has conflicts" })
+      continue
+    }
+
+    const mergeHead = await $`git rev-parse -q --verify MERGE_HEAD`.nothrow()
+    if (mergeHead.exitCode !== 0) {
+      console.log("  No changes, skipping")
+      skipped.push({ number: pr.number, reason: "No changes" })
       continue
     }
 
     const add = await $`git add -A`.nothrow()
     if (add.exitCode !== 0) {
-      console.log(`  Failed to stage changes for PR #${pr.number}`)
-      await $`git reset --hard HEAD`.nothrow()
+      console.log("  Failed to stage")
+      await $`git checkout -- .`.nothrow()
+      await $`git clean -fd`.nothrow()
       skipped.push({ number: pr.number, reason: "Failed to stage" })
       continue
     }
 
-    const status = await $`git status --porcelain`.nothrow()
-    if (status.exitCode !== 0 || !status.stdout.trim()) {
-      console.log(`  No changes to commit for PR #${pr.number}, skipping`)
-      await $`git reset --hard HEAD`.nothrow()
-      skipped.push({ number: pr.number, reason: "No changes to commit" })
-      continue
-    }
-
     const commitMsg = `Apply PR #${pr.number}: ${pr.title}`
-    const commit = await Bun.spawn(["git", "commit", "-m", commitMsg], { stdout: "pipe", stderr: "pipe" })
-    const commitExit = await commit.exited
-    const commitStderr = await Bun.readableStreamToText(commit.stderr)
-
-    if (commitExit !== 0) {
-      console.log(`  Failed to commit PR #${pr.number}`)
-      console.log(`  Error: ${commitStderr}`)
-      await $`git reset --hard HEAD`.nothrow()
-      skipped.push({ number: pr.number, reason: `Commit failed: ${commitStderr}` })
+    const commit = await run(["git", "commit", "-m", commitMsg])
+    if (commit.exitCode !== 0) {
+      console.log(`  Failed to commit: ${commit.stderr}`)
+      await $`git checkout -- .`.nothrow()
+      await $`git clean -fd`.nothrow()
+      skipped.push({ number: pr.number, reason: `Commit failed: ${commit.stderr}` })
       continue
     }
 
-    console.log(`  Successfully applied PR #${pr.number}`)
+    console.log("  Applied successfully")
     applied.push(pr.number)
   }
 
@@ -116,7 +96,7 @@ async function main() {
   skipped.forEach((x) => console.log(`  - PR #${x.number}: ${x.reason}`))
 
   console.log("\nForce pushing beta branch...")
-  const push = await $`git push origin beta --force`.nothrow()
+  const push = await $`git push origin beta --force --no-verify`.nothrow()
   if (push.exitCode !== 0) {
     throw new Error(`Failed to push beta branch: ${push.stderr}`)
   }
@@ -128,6 +108,18 @@ main().catch((err) => {
   console.error("Error:", err)
   process.exit(1)
 })
+
+async function run(args: string[], stdin?: Uint8Array): Promise<RunResult> {
+  const proc = Bun.spawn(args, {
+    stdin: stdin ?? "inherit",
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  const exitCode = await proc.exited
+  const stdout = await new Response(proc.stdout).text()
+  const stderr = await new Response(proc.stderr).text()
+  return { exitCode, stdout, stderr }
+}
 
 function $(strings: TemplateStringsArray, ...values: unknown[]) {
   const cmd = strings.reduce((acc, str, i) => acc + str + (values[i] ?? ""), "")

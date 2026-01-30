@@ -230,8 +230,14 @@ if (!Script.preview) {
     "",
   ].join("\n")
 
+  const token = process.env.GITHUB_TOKEN
+  if (!token) {
+    console.error("GITHUB_TOKEN is required to update homebrew tap")
+    process.exit(1)
+  }
+  const tap = `https://x-access-token:${token}@github.com/anomalyco/homebrew-tap.git`
   await $`rm -rf ./dist/homebrew-tap`
-  await $`git clone https://${process.env["GITHUB_TOKEN"]}@github.com/sst/homebrew-tap.git ./dist/homebrew-tap`
+  await $`git clone ${tap} ./dist/homebrew-tap`
   await Bun.file("./dist/homebrew-tap/opencode.rb").write(homebrewFormula)
   await $`cd ./dist/homebrew-tap && git add opencode.rb`
   await $`cd ./dist/homebrew-tap && git commit -m "Update to v${Script.version}"`

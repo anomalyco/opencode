@@ -290,8 +290,8 @@ export const SessionReview = (props: SessionReviewProps) => {
         <div data-slot="session-review-title">{i18n.t("ui.sessionReview.title")}</div>
         <div data-slot="session-review-actions">
           <Show when={props.onDiffStyleChange}>
-            <RadioGroup
-              options={["unified", "split"] as const}
+            <RadioGroup<SessionReviewDiffStyle>
+              options={["unified", "split"]}
               current={diffStyle()}
               value={(style) => style}
               label={(style) =>
@@ -501,6 +501,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                   value={diff.file}
                   id={diffId(diff.file)}
                   data-file={diff.file}
+                  expanded={open().includes(diff.file)}
                   data-slot="session-review-accordion-item"
                   data-selected={props.focusedFile === diff.file ? "" : undefined}
                 >
