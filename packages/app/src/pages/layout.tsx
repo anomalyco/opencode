@@ -2694,7 +2694,7 @@ export default function Layout(props: ParentProps) {
         <Show when={providers.all().length > 0 && providers.paid().length === 0}>
           <div
             classList={{
-              "shrink-0 px-2 py-3": true,
+              "shrink-0 p-2": true,
               "border-t border-border-weak-base": !!panelProps.project,
             }}
           >
