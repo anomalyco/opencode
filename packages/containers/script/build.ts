@@ -15,9 +15,12 @@ for (const name of images) {
   const image = `${reg}/build/${name}:${tag}`
   const file = `packages/containers/${name}/Dockerfile`
   const arg = name === "base" ? "" : `--build-arg REGISTRY=${reg}`
-  const cmd = `docker build -f ${file} -t ${image} ${arg} .`
-  console.log(cmd)
-  await $`${cmd}`
+  console.log(`docker build -f ${file} -t ${image} ${arg} .`)
+  if (arg) {
+    await $`docker build -f ${file} -t ${image} --build-arg REGISTRY=${reg} .`
+  } else {
+    await $`docker build -f ${file} -t ${image} .`
+  }
 
   if (push) {
     await $`docker push ${image}`
