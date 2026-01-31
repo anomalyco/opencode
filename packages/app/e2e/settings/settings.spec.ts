@@ -1,6 +1,17 @@
 import { test, expect, settingsKey } from "../fixtures"
 import { closeDialog, openSettings } from "../actions"
-import { settingsColorSchemeSelector, settingsFontSelector, settingsLanguageSelectSelector, settingsNotificationsAgentSelector, settingsNotificationsErrorsSelector, settingsNotificationsPermissionsSelector, settingsReleaseNotesSelector, settingsSoundsAgentSelector, settingsThemeSelector, settingsUpdatesStartupSelector } from "../selectors"
+import {
+  settingsColorSchemeSelector,
+  settingsFontSelector,
+  settingsLanguageSelectSelector,
+  settingsNotificationsAgentSelector,
+  settingsNotificationsErrorsSelector,
+  settingsNotificationsPermissionsSelector,
+  settingsReleaseNotesSelector,
+  settingsSoundsAgentSelector,
+  settingsThemeSelector,
+  settingsUpdatesStartupSelector,
+} from "../selectors"
 
 test("smoke settings dialog opens, switches tabs, closes", async ({ page, gotoSession }) => {
   await gotoSession()
@@ -13,7 +24,6 @@ test("smoke settings dialog opens, switches tabs, closes", async ({ page, gotoSe
 
   await closeDialog(page, dialog)
 })
-
 
 test("changing language updates settings labels", async ({ page, gotoSession }) => {
   await page.addInitScript(() => {
@@ -98,7 +108,6 @@ test("changing theme persists in localStorage", async ({ page, gotoSession }) =>
 })
 
 test("changing font persists in localStorage and updates CSS variable", async ({ page, gotoSession }) => {
-
   await gotoSession()
 
   const dialog = await openSettings(page)
@@ -156,7 +165,6 @@ test("toggling notification agent switch updates localStorage", async ({ page, g
 })
 
 test("toggling notification permissions switch updates localStorage", async ({ page, gotoSession }) => {
-
   await gotoSession()
 
   const dialog = await openSettings(page)
@@ -207,7 +215,6 @@ test("toggling notification errors switch updates localStorage", async ({ page, 
 })
 
 test("changing sound agent selection persists in localStorage", async ({ page, gotoSession }) => {
-
   await gotoSession()
 
   const dialog = await openSettings(page)
@@ -228,7 +235,6 @@ test("changing sound agent selection persists in localStorage", async ({ page, g
 })
 
 test("toggling updates startup switch updates localStorage", async ({ page, gotoSession }) => {
-
   await gotoSession()
 
   const dialog = await openSettings(page)
@@ -261,7 +267,6 @@ test("toggling updates startup switch updates localStorage", async ({ page, goto
 })
 
 test("toggling release notes switch updates localStorage", async ({ page, gotoSession }) => {
-
   await gotoSession()
 
   const dialog = await openSettings(page)

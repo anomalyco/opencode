@@ -3,7 +3,6 @@ import { seedProjects } from "./actions"
 import { promptSelector } from "./selectors"
 import { createSdk, dirSlug, getWorktree, sessionPath } from "./utils"
 
-
 export const settingsKey = "settings.v3"
 
 type TestFixtures = {
