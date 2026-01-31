@@ -103,6 +103,78 @@ describe("ProviderTransform.options - setCacheKey", () => {
   })
 })
 
+describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
+  const sessionID = "test-session-123"
+
+  const createGpt5Model = (apiId: string) =>
+    ({
+      id: `openai/${apiId}`,
+      providerID: "openai",
+      api: {
+        id: apiId,
+        url: "https://api.openai.com",
+        npm: "@ai-sdk/openai",
+      },
+      name: apiId,
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0.03, output: 0.06, cache: { read: 0.001, write: 0.002 } },
+      limit: { context: 128000, output: 4096 },
+      status: "active",
+      options: {},
+      headers: {},
+    }) as any
+
+  test("gpt-5.2 should have textVerbosity set to low", () => {
+    const model = createGpt5Model("gpt-5.2")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.textVerbosity).toBe("low")
+  })
+
+  test("gpt-5.1 should have textVerbosity set to low", () => {
+    const model = createGpt5Model("gpt-5.1")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.textVerbosity).toBe("low")
+  })
+
+  test("gpt-5.2-chat-latest should NOT have textVerbosity set (only supports medium)", () => {
+    const model = createGpt5Model("gpt-5.2-chat-latest")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.textVerbosity).toBeUndefined()
+  })
+
+  test("gpt-5.1-chat-latest should NOT have textVerbosity set (only supports medium)", () => {
+    const model = createGpt5Model("gpt-5.1-chat-latest")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.textVerbosity).toBeUndefined()
+  })
+
+  test("gpt-5.2-chat should NOT have textVerbosity set", () => {
+    const model = createGpt5Model("gpt-5.2-chat")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.textVerbosity).toBeUndefined()
+  })
+
+  test("gpt-5-chat should NOT have textVerbosity set", () => {
+    const model = createGpt5Model("gpt-5-chat")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.textVerbosity).toBeUndefined()
+  })
+
+  test("gpt-5.2-codex should NOT have textVerbosity set (codex models excluded)", () => {
+    const model = createGpt5Model("gpt-5.2-codex")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.textVerbosity).toBeUndefined()
+  })
+})
+
 describe("ProviderTransform.maxOutputTokens", () => {
   test("returns 32k when modelLimit > 32k", () => {
     const modelLimit = 100000
@@ -192,6 +264,76 @@ describe("ProviderTransform.maxOutputTokens", () => {
         },
       }
       const result = ProviderTransform.maxOutputTokens("@ai-sdk/anthropic", options, modelLimit, OUTPUT_TOKEN_MAX)
+      expect(result).toBe(OUTPUT_TOKEN_MAX)
+    })
+  })
+
+  describe("openai-compatible with thinking options (snake_case)", () => {
+    test("returns 32k when budget_tokens + 32k <= modelLimit", () => {
+      const modelLimit = 100000
+      const options = {
+        thinking: {
+          type: "enabled",
+          budget_tokens: 10000,
+        },
+      }
+      const result = ProviderTransform.maxOutputTokens(
+        "@ai-sdk/openai-compatible",
+        options,
+        modelLimit,
+        OUTPUT_TOKEN_MAX,
+      )
+      expect(result).toBe(OUTPUT_TOKEN_MAX)
+    })
+
+    test("returns modelLimit - budget_tokens when budget_tokens + 32k > modelLimit", () => {
+      const modelLimit = 50000
+      const options = {
+        thinking: {
+          type: "enabled",
+          budget_tokens: 30000,
+        },
+      }
+      const result = ProviderTransform.maxOutputTokens(
+        "@ai-sdk/openai-compatible",
+        options,
+        modelLimit,
+        OUTPUT_TOKEN_MAX,
+      )
+      expect(result).toBe(20000)
+    })
+
+    test("returns 32k when thinking type is not enabled", () => {
+      const modelLimit = 100000
+      const options = {
+        thinking: {
+          type: "disabled",
+          budget_tokens: 10000,
+        },
+      }
+      const result = ProviderTransform.maxOutputTokens(
+        "@ai-sdk/openai-compatible",
+        options,
+        modelLimit,
+        OUTPUT_TOKEN_MAX,
+      )
+      expect(result).toBe(OUTPUT_TOKEN_MAX)
+    })
+
+    test("returns 32k when budget_tokens is 0", () => {
+      const modelLimit = 100000
+      const options = {
+        thinking: {
+          type: "enabled",
+          budget_tokens: 0,
+        },
+      }
+      const result = ProviderTransform.maxOutputTokens(
+        "@ai-sdk/openai-compatible",
+        options,
+        modelLimit,
+        OUTPUT_TOKEN_MAX,
+      )
       expect(result).toBe(OUTPUT_TOKEN_MAX)
     })
   })
@@ -959,21 +1101,21 @@ describe("ProviderTransform.message - providerOptions key remapping", () => {
     expect(result[0].providerOptions?.openai).toBeUndefined()
   })
 
-  test("openai with github-copilot npm remaps providerID to 'openai'", () => {
+  test("copilot remaps providerID to 'copilot' key", () => {
     const model = createModel("github-copilot", "@ai-sdk/github-copilot")
     const msgs = [
       {
         role: "user",
         content: "Hello",
         providerOptions: {
-          "github-copilot": { someOption: "value" },
+          copilot: { someOption: "value" },
         },
       },
     ] as any[]
 
     const result = ProviderTransform.message(msgs, model, {})
 
-    expect(result[0].providerOptions?.openai).toEqual({ someOption: "value" })
+    expect(result[0].providerOptions?.copilot).toEqual({ someOption: "value" })
     expect(result[0].providerOptions?.["github-copilot"]).toBeUndefined()
   })
 
@@ -1421,6 +1563,67 @@ describe("ProviderTransform.variants", () => {
       expect(Object.keys(result)).toEqual(["low", "medium", "high"])
       expect(result.low).toEqual({ reasoningEffort: "low" })
       expect(result.high).toEqual({ reasoningEffort: "high" })
+    })
+
+    test("Claude via LiteLLM returns thinking with snake_case budget_tokens", () => {
+      const model = createMockModel({
+        id: "anthropic/claude-sonnet-4-5",
+        providerID: "anthropic",
+        api: {
+          id: "claude-sonnet-4-5-20250929",
+          url: "http://localhost:4000",
+          npm: "@ai-sdk/openai-compatible",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["high", "max"])
+      expect(result.high).toEqual({
+        thinking: {
+          type: "enabled",
+          budget_tokens: 16000,
+        },
+      })
+      expect(result.max).toEqual({
+        thinking: {
+          type: "enabled",
+          budget_tokens: 31999,
+        },
+      })
+    })
+
+    test("Claude model (by model.id) via openai-compatible uses snake_case", () => {
+      const model = createMockModel({
+        id: "litellm/claude-3-opus",
+        providerID: "litellm",
+        api: {
+          id: "claude-3-opus-20240229",
+          url: "http://localhost:4000",
+          npm: "@ai-sdk/openai-compatible",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["high", "max"])
+      expect(result.high).toEqual({
+        thinking: {
+          type: "enabled",
+          budget_tokens: 16000,
+        },
+      })
+    })
+
+    test("Anthropic model (by model.api.id) via openai-compatible uses snake_case", () => {
+      const model = createMockModel({
+        id: "custom/my-model",
+        providerID: "custom",
+        api: {
+          id: "anthropic.claude-sonnet",
+          url: "http://localhost:4000",
+          npm: "@ai-sdk/openai-compatible",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["high", "max"])
+      expect(result.high.thinking.budget_tokens).toBe(16000)
     })
   })
 
