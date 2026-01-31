@@ -36,7 +36,7 @@ export const DialogSettings: Component = () => {
 
                 <div class="flex flex-col gap-1.5">
                   <Tabs.SectionTitle>{language.t("settings.section.server")}</Tabs.SectionTitle>
-                  <div class="flex flex-col gap-1.5 w-full">
+                <div class="flex flex-col gap-1.5 w-full">
                     <Tabs.Trigger value="providers">
                       <Icon name="providers" />
                       {language.t("settings.providers.title")}
@@ -44,6 +44,10 @@ export const DialogSettings: Component = () => {
                     <Tabs.Trigger value="models">
                       <Icon name="models" />
                       {language.t("settings.models.title")}
+                    </Tabs.Trigger>
+                    <Tabs.Trigger value="plugins">
+                      <Icon name="settings" />
+                      {language.t("settings.plugins.title")}
                     </Tabs.Trigger>
                   </div>
                 </div>
@@ -66,6 +70,9 @@ export const DialogSettings: Component = () => {
         </Tabs.Content>
         <Tabs.Content value="models" class="no-scrollbar">
           <SettingsModels />
+        </Tabs.Content>
+        <Tabs.Content value="plugins" class="no-scrollbar">
+          <SettingsPlugins />
         </Tabs.Content>
         {/* <Tabs.Content value="agents" class="no-scrollbar"> */}
         {/*   <SettingsAgents /> */}
