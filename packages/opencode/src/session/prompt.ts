@@ -293,11 +293,25 @@ export namespace SessionPrompt {
       }
 
       if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
-      if (
-        lastAssistant?.finish &&
-        !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
-        lastUser.id < lastAssistant.id
-      ) {
+      const complete = iife(() => {
+        if (!lastAssistant?.finish) return false
+        if (lastUser.id >= lastAssistant.id) return false
+        if (lastAssistant.finish === "tool-calls") return false
+        const msg = msgs.findLast((m) => m.info.role === "assistant")
+        const hasText = msg?.parts.some((p) => p.type === "text") ?? false
+        const hasTool = msg?.parts.some((p) => p.type === "tool") ?? false
+
+        // Some providers may return `stop` (or other finish reasons) while still emitting tool calls.
+        // If the last assistant message contains any tool parts, keep looping so the model can consume
+        // tool results and produce a final response.
+        if (hasTool) return false
+
+        if (lastAssistant.finish !== "unknown") return true
+        if (!msg) return true
+        return hasText || !hasTool
+      })
+
+      if (complete) {
         log.info("exiting loop", { sessionID })
         break
       }
