@@ -102,6 +102,12 @@ describe("session.retry.retryable", () => {
     expect(SessionRetry.retryable(error)).toBe("Provider Server Error")
   })
 
+  test("does not throw on numeric error codes", () => {
+    const error = wrap(JSON.stringify({ type: "error", error: { code: 123 } }))
+    const result = SessionRetry.retryable(error)
+    expect(result).toBeUndefined()
+  })
+
   test("returns undefined for non-json message", () => {
     const error = wrap("not-json")
     expect(SessionRetry.retryable(error)).toBeUndefined()

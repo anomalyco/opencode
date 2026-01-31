@@ -5,9 +5,12 @@ import { relaunch } from "@tauri-apps/plugin-process"
 
 import { runUpdater, UPDATER_ENABLED } from "./updater"
 import { installCli } from "./cli"
+import { initI18n, t } from "./i18n"
 
 export async function createMenu() {
   if (ostype() !== "macos") return
+
+  await initI18n()
 
   const menu = await Menu.new({
     items: [
@@ -20,22 +23,22 @@ export async function createMenu() {
           await MenuItem.new({
             enabled: UPDATER_ENABLED,
             action: () => runUpdater({ alertOnFail: true }),
-            text: "Check For Updates...",
+            text: t("desktop.menu.checkForUpdates"),
           }),
           await MenuItem.new({
             action: () => installCli(),
-            text: "Install CLI...",
+            text: t("desktop.menu.installCli"),
           }),
           await MenuItem.new({
             action: async () => window.location.reload(),
-            text: "Reload Webview",
+            text: t("desktop.menu.reloadWebview"),
           }),
           await MenuItem.new({
             action: async () => {
               await invoke("kill_sidecar").catch(() => undefined)
               await relaunch().catch(() => undefined)
             },
-            text: "Restart",
+            text: t("desktop.menu.restart"),
           }),
           await PredefinedMenuItem.new({
             item: "Separator",

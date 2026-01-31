@@ -345,11 +345,26 @@ export function Autocomplete(props: {
     const results: AutocompleteOption[] = [...command.slashes()]
 
     for (const serverCommand of sync.data.command) {
+      const label = serverCommand.source === "mcp" ? ":mcp" : serverCommand.source === "skill" ? ":skill" : ""
       results.push({
-        display: "/" + serverCommand.name + (serverCommand.mcp ? " (MCP)" : ""),
+        display: "/" + serverCommand.name + label,
         description: serverCommand.description,
         onSelect: () => {
           const newText = "/" + serverCommand.name + " "
+          const cursor = props.input().logicalCursor
+          props.input().deleteRange(0, 0, cursor.row, cursor.col)
+          props.input().insertText(newText)
+          props.input().cursorOffset = Bun.stringWidth(newText)
+        },
+      })
+    }
+
+    for (const skill of sync.data.skill) {
+      results.push({
+        display: "/skill:" + skill.name,
+        description: skill.description,
+        onSelect: () => {
+          const newText = `Load the "${skill.name}" skill and follow its instructions.`
           const cursor = props.input().logicalCursor
           props.input().deleteRange(0, 0, cursor.row, cursor.col)
           props.input().insertText(newText)
