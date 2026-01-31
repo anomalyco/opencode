@@ -8,10 +8,10 @@ import { BlackData } from "../src/black"
 const root = path.resolve(process.cwd(), "..", "..", "..")
 const secrets = await $`bun sst secret list`.cwd(root).text()
 
-// read the line starting with "ZEN_BLACK"
+// read value
 const lines = secrets.split("\n")
-const oldValue = lines.find((line) => line.startsWith("ZEN_BLACK"))?.split("=")[1]
-if (!oldValue) throw new Error("ZEN_BLACK not found")
+const oldValue = lines.find((line) => line.startsWith("ZEN_BLACK_LIMITS"))?.split("=")[1] ?? "{}"
+if (!oldValue) throw new Error("ZEN_BLACK_LIMITS not found")
 
 // store the prettified json to a temp file
 const filename = `black-${Date.now()}.json`
@@ -25,4 +25,4 @@ const newValue = JSON.stringify(JSON.parse(await tempFile.text()))
 BlackData.validate(JSON.parse(newValue))
 
 // update the secret
-await $`bun sst secret set ZEN_BLACK ${newValue}`
+await $`bun sst secret set ZEN_BLACK_LIMITS ${newValue}`

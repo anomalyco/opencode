@@ -3,7 +3,7 @@ import { createMemo, For, Show } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useKeybind } from "../../context/keybind"
-import { useTheme } from "../../context/theme"
+import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../component/border"
@@ -125,11 +125,21 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     // Skip processing if a dialog (e.g., command palette) is open
     if (dialog.stack.length > 0) return
 
-    // When editing "Other" textarea
+    // When editing custom answer textarea
     if (store.editing && !confirm()) {
       if (evt.name === "escape") {
         evt.preventDefault()
         setStore("editing", false)
+        return
+      }
+      if (keybind.match("input_clear", evt)) {
+        evt.preventDefault()
+        const text = textarea?.plainText ?? ""
+        if (!text) {
+          setStore("editing", false)
+          return
+        }
+        textarea?.setText("")
         return
       }
       if (evt.name === "return") {
@@ -142,16 +152,11 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
             const inputs = [...store.custom]
             inputs[store.tab] = ""
             setStore("custom", inputs)
-          }
 
-          const answers = [...store.answers]
-          if (prev) {
+            const answers = [...store.answers]
             answers[store.tab] = (answers[store.tab] ?? []).filter((x) => x !== prev)
+            setStore("answers", answers)
           }
-          if (!prev) {
-            answers[store.tab] = []
-          }
-          setStore("answers", answers)
           setStore("editing", false)
           return
         }
@@ -193,6 +198,12 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
       selectTab((store.tab + 1) % tabs())
     }
 
+    if (evt.name === "tab") {
+      evt.preventDefault()
+      const direction = evt.shift ? -1 : 1
+      selectTab((store.tab + direction + tabs()) % tabs())
+    }
+
     if (confirm()) {
       if (evt.name === "return") {
         evt.preventDefault()
@@ -205,6 +216,16 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
     } else {
       const opts = options()
       const total = opts.length + (custom() ? 1 : 0)
+      const max = Math.min(total, 9)
+      const digit = Number(evt.name)
+
+      if (!Number.isNaN(digit) && digit >= 1 && digit <= max) {
+        evt.preventDefault()
+        const index = digit - 1
+        moveTo(index)
+        selectOption()
+        return
+      }
 
       if (evt.name === "up" || evt.name === "k") {
         evt.preventDefault()
@@ -251,7 +272,15 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                     backgroundColor={isActive() ? theme.accent : theme.backgroundElement}
                     onMouseUp={() => selectTab(index())}
                   >
-                    <text fg={isActive() ? theme.selectedListItemText : isAnswered() ? theme.text : theme.textMuted}>
+                    <text
+                      fg={
+                        isActive()
+                          ? selectedForeground(theme, theme.accent)
+                          : isAnswered()
+                            ? theme.text
+                            : theme.textMuted
+                      }
+                    >
                       {q.header}
                     </text>
                   </box>
@@ -264,7 +293,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
               backgroundColor={confirm() ? theme.accent : theme.backgroundElement}
               onMouseUp={() => selectTab(questions().length)}
             >
-              <text fg={confirm() ? theme.selectedListItemText : theme.textMuted}>Confirm</text>
+              <text fg={confirm() ? selectedForeground(theme, theme.accent) : theme.textMuted}>Confirm</text>
             </box>
           </box>
         </Show>
@@ -283,15 +312,27 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                   const active = () => i() === store.selected
                   const picked = () => store.answers[store.tab]?.includes(opt.label) ?? false
                   return (
-                    <box onMouseOver={() => moveTo(i())} onMouseUp={() => selectOption()}>
-                      <box flexDirection="row" gap={1}>
-                        <box backgroundColor={active() ? theme.backgroundElement : undefined}>
-                          <text fg={active() ? theme.secondary : picked() ? theme.success : theme.text}>
-                            {i() + 1}. {opt.label}
+                    <box
+                      onMouseOver={() => moveTo(i())}
+                      onMouseDown={() => moveTo(i())}
+                      onMouseUp={() => selectOption()}
+                    >
+                      <box flexDirection="row">
+                        <box backgroundColor={active() ? theme.backgroundElement : undefined} paddingRight={1}>
+                          <text fg={active() ? tint(theme.textMuted, theme.secondary, 0.6) : theme.textMuted}>
+                            {`${i() + 1}.`}
                           </text>
                         </box>
-                        <text fg={theme.success}>{picked() ? "✓" : ""}</text>
+                        <box backgroundColor={active() ? theme.backgroundElement : undefined}>
+                          <text fg={active() ? theme.secondary : picked() ? theme.success : theme.text}>
+                            {multi() ? `[${picked() ? "✓" : " "}] ${opt.label}` : opt.label}
+                          </text>
+                        </box>
+                        <Show when={!multi()}>
+                          <text fg={theme.success}>{picked() ? "✓" : ""}</text>
+                        </Show>
                       </box>
+
                       <box paddingLeft={3}>
                         <text fg={theme.textMuted}>{opt.description}</text>
                       </box>
@@ -300,22 +341,41 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                 }}
               </For>
               <Show when={custom()}>
-                <box onMouseOver={() => moveTo(options().length)} onMouseUp={() => selectOption()}>
-                  <box flexDirection="row" gap={1}>
-                    <box backgroundColor={other() ? theme.backgroundElement : undefined}>
-                      <text fg={other() ? theme.secondary : customPicked() ? theme.success : theme.text}>
-                        {options().length + 1}. Type your own answer
+                <box
+                  onMouseOver={() => moveTo(options().length)}
+                  onMouseDown={() => moveTo(options().length)}
+                  onMouseUp={() => selectOption()}
+                >
+                  <box flexDirection="row">
+                    <box backgroundColor={other() ? theme.backgroundElement : undefined} paddingRight={1}>
+                      <text fg={other() ? tint(theme.textMuted, theme.secondary, 0.6) : theme.textMuted}>
+                        {`${options().length + 1}.`}
                       </text>
                     </box>
-                    <text fg={theme.success}>{customPicked() ? "✓" : ""}</text>
+                    <box backgroundColor={other() ? theme.backgroundElement : undefined}>
+                      <text fg={other() ? theme.secondary : customPicked() ? theme.success : theme.text}>
+                        {multi() ? `[${customPicked() ? "✓" : " "}] Type your own answer` : "Type your own answer"}
+                      </text>
+                    </box>
+
+                    <Show when={!multi()}>
+                      <text fg={theme.success}>{customPicked() ? "✓" : ""}</text>
+                    </Show>
                   </box>
                   <Show when={store.editing}>
                     <box paddingLeft={3}>
                       <textarea
-                        ref={(val: TextareaRenderable) => (textarea = val)}
-                        focused
+                        ref={(val: TextareaRenderable) => {
+                          textarea = val
+                          queueMicrotask(() => {
+                            val.focus()
+                            val.gotoLineEnd()
+                          })
+                        }}
                         initialValue={input()}
                         placeholder="Type your own answer"
+                        minHeight={1}
+                        maxHeight={6}
                         textColor={theme.text}
                         focusedTextColor={theme.text}
                         cursorColor={theme.primary}
@@ -343,9 +403,13 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
               const value = () => store.answers[index()]?.join(", ") ?? ""
               const answered = () => Boolean(value())
               return (
-                <box flexDirection="row" gap={1} paddingLeft={1}>
-                  <text fg={theme.textMuted}>{q.header}:</text>
-                  <text fg={answered() ? theme.text : theme.error}>{answered() ? value() : "(not answered)"}</text>
+                <box paddingLeft={1}>
+                  <text>
+                    <span style={{ fg: theme.textMuted }}>{q.header}:</span>{" "}
+                    <span style={{ fg: answered() ? theme.text : theme.error }}>
+                      {answered() ? value() : "(not answered)"}
+                    </span>
+                  </text>
                 </box>
               )
             }}

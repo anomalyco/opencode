@@ -3,7 +3,6 @@ import { Actor } from "@opencode-ai/console-core/actor.js"
 import { action, json, query } from "@solidjs/router"
 import { withActor } from "~/context/auth.withActor"
 import { Billing } from "@opencode-ai/console-core/billing.js"
-import { User } from "@opencode-ai/console-core/user.js"
 import { and, Database, desc, eq, isNull } from "@opencode-ai/console-core/drizzle/index.js"
 import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.js"
 import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
@@ -96,11 +95,26 @@ export const queryBillingInfo = query(async (workspaceID: string) => {
   return withActor(async () => {
     const billing = await Billing.get()
     return {
-      ...billing,
+      customerID: billing.customerID,
+      paymentMethodID: billing.paymentMethodID,
+      paymentMethodType: billing.paymentMethodType,
+      paymentMethodLast4: billing.paymentMethodLast4,
+      balance: billing.balance,
+      reload: billing.reload,
       reloadAmount: billing.reloadAmount ?? Billing.RELOAD_AMOUNT,
       reloadAmountMin: Billing.RELOAD_AMOUNT_MIN,
       reloadTrigger: billing.reloadTrigger ?? Billing.RELOAD_TRIGGER,
       reloadTriggerMin: Billing.RELOAD_TRIGGER_MIN,
+      monthlyLimit: billing.monthlyLimit,
+      monthlyUsage: billing.monthlyUsage,
+      timeMonthlyUsageUpdated: billing.timeMonthlyUsageUpdated,
+      reloadError: billing.reloadError,
+      timeReloadError: billing.timeReloadError,
+      subscription: billing.subscription,
+      subscriptionID: billing.subscriptionID,
+      subscriptionPlan: billing.subscriptionPlan,
+      timeSubscriptionBooked: billing.timeSubscriptionBooked,
+      timeSubscriptionSelected: billing.timeSubscriptionSelected,
     }
   }, workspaceID)
 }, "billing.get")

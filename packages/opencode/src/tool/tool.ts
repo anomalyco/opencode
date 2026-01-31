@@ -20,6 +20,7 @@ export namespace Tool {
     abort: AbortSignal
     callID?: string
     extra?: { [key: string]: any }
+    messages: MessageV2.WithParts[]
     metadata(input: { title?: string; metadata?: M }): void
     ask(input: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">): Promise<void>
   }

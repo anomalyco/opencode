@@ -16,7 +16,7 @@ export default function () {
     <div data-page="workspace-[id]">
       <div data-slot="sections">
         <Show when={sessionInfo()?.isAdmin}>
-          <Show when={billingInfo()?.subscriptionID}>
+          <Show when={billingInfo()?.subscriptionID || billingInfo()?.timeSubscriptionBooked}>
             <BlackSection />
           </Show>
           <BillingSection />

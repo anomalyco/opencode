@@ -242,6 +242,20 @@ List available themes.
 
 ---
 
+### thinking
+
+Toggle the visibility of thinking/reasoning blocks in the conversation. When enabled, you can see the model's reasoning process for models that support extended thinking.
+
+:::note
+This command only controls whether thinking blocks are **displayed** - it does not enable or disable the model's reasoning capabilities. To toggle actual reasoning capabilities, use `ctrl+t` to cycle through model variants.
+:::
+
+```bash frame="none"
+/thinking
+```
+
+---
+
 ### undo
 
 Undo last message in the conversation. Removes the most recent user message, all subsequent responses, and any file changes.

@@ -21,7 +21,7 @@ type Usage = {
   }
 }
 
-export const oaCompatHelper = {
+export const oaCompatHelper: ProviderHelper = () => ({
   format: "oa-compat",
   modifyUrl: (providerApi: string) => providerApi + "/chat/completions",
   modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => {
@@ -33,6 +33,7 @@ export const oaCompatHelper = {
       ...(body.stream ? { stream_options: { include_usage: true } } : {}),
     }
   },
+  createBinaryStreamDecoder: () => undefined,
   streamSeparator: "\n\n",
   createUsageParser: () => {
     let usage: Usage
@@ -68,7 +69,7 @@ export const oaCompatHelper = {
       cacheWrite1hTokens: undefined,
     }
   },
-} satisfies ProviderHelper
+})
 
 export function fromOaCompatibleRequest(body: any): CommonRequest {
   if (!body || typeof body !== "object") return body

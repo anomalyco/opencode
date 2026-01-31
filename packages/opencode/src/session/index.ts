@@ -1,5 +1,5 @@
 import { Slug } from "@opencode-ai/util/slug"
-import pat from "path"
+import path from "path"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
@@ -21,7 +21,7 @@ import { Snapshot } from "@/snapshot"
 
 import type { Provider } from "@/provider/provider"
 import { PermissionNext } from "@/permission/next"
-import path from "path"
+import { Global } from "@/global"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -37,6 +37,16 @@ export namespace Session {
     return new RegExp(
       `^(${parentTitlePrefix}|${childTitlePrefix})\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$`,
     ).test(title)
+  }
+
+  function getForkedTitle(title: string): string {
+    const match = title.match(/^(.+) \(fork #(\d+)\)$/)
+    if (match) {
+      const base = match[1]
+      const num = parseInt(match[2], 10)
+      return `${base} (fork #${num + 1})`
+    }
+    return `${title} (fork #1)`
   }
 
   export const Info = z
@@ -151,8 +161,12 @@ export namespace Session {
       messageID: Identifier.schema("message").optional(),
     }),
     async (input) => {
+      const original = await get(input.sessionID)
+      if (!original) throw new Error("session not found")
+      const title = getForkedTitle(original.title)
       const session = await createNext({
         directory: Instance.directory,
+        title,
       })
       const msgs = await messages({ sessionID: input.sessionID })
       const idMap = new Map<string, string>()
@@ -233,7 +247,10 @@ export namespace Session {
   }
 
   export function plan(input: { slug: string; time: { created: number } }) {
-    return path.join(Instance.worktree, ".opencode", "plans", [input.time.created, input.slug].join("-") + ".md")
+    const base = Instance.project.vcs
+      ? path.join(Instance.worktree, ".opencode", "plans")
+      : path.join(Global.Path.data, "plans")
+    return path.join(base, [input.time.created, input.slug].join("-") + ".md")
   }
 
   export const get = fn(Identifier.schema("session"), async (id) => {
@@ -252,11 +269,15 @@ export namespace Session {
     }
     const { ShareNext } = await import("@/share/share-next")
     const share = await ShareNext.create(id)
-    await update(id, (draft) => {
-      draft.share = {
-        url: share.url,
-      }
-    })
+    await update(
+      id,
+      (draft) => {
+        draft.share = {
+          url: share.url,
+        }
+      },
+      { touch: false },
+    )
     return share
   })
 
@@ -264,16 +285,22 @@ export namespace Session {
     // Use ShareNext to remove the share (same as share function uses ShareNext to create)
     const { ShareNext } = await import("@/share/share-next")
     await ShareNext.remove(id)
-    await update(id, (draft) => {
-      draft.share = undefined
-    })
+    await update(
+      id,
+      (draft) => {
+        draft.share = undefined
+      },
+      { touch: false },
+    )
   })
 
-  export async function update(id: string, editor: (session: Info) => void) {
+  export async function update(id: string, editor: (session: Info) => void, options?: { touch?: boolean }) {
     const project = Instance.project
     const result = await Storage.update<Info>(["session", project.id, id], (draft) => {
       editor(draft)
-      draft.time.updated = Date.now()
+      if (options?.touch !== false) {
+        draft.time.updated = Date.now()
+      }
     })
     Bus.publish(Event.Updated, {
       info: result,
@@ -413,11 +440,18 @@ export namespace Session {
       metadata: z.custom<ProviderMetadata>().optional(),
     }),
     (input) => {
-      const cachedInputTokens = input.usage.cachedInputTokens ?? 0
+      const cacheReadInputTokens = input.usage.cachedInputTokens ?? 0
+      const cacheWriteInputTokens = (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
+        // @ts-expect-error
+        input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
+        // @ts-expect-error
+        input.metadata?.["venice"]?.["usage"]?.["cacheCreationInputTokens"] ??
+        0) as number
+
       const excludesCachedTokens = !!(input.metadata?.["anthropic"] || input.metadata?.["bedrock"])
       const adjustedInputTokens = excludesCachedTokens
         ? (input.usage.inputTokens ?? 0)
-        : (input.usage.inputTokens ?? 0) - cachedInputTokens
+        : (input.usage.inputTokens ?? 0) - cacheReadInputTokens - cacheWriteInputTokens
       const safe = (value: number) => {
         if (!Number.isFinite(value)) return 0
         return value
@@ -428,13 +462,8 @@ export namespace Session {
         output: safe(input.usage.outputTokens ?? 0),
         reasoning: safe(input.usage?.reasoningTokens ?? 0),
         cache: {
-          write: safe(
-            (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
-              // @ts-expect-error
-              input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
-              0) as number,
-          ),
-          read: safe(cachedInputTokens),
+          write: safe(cacheWriteInputTokens),
+          read: safe(cacheReadInputTokens),
         },
       }
 

@@ -184,7 +184,7 @@ export function ReloadSection() {
           </div>
         </form>
       </Show>
-      <Show when={billingInfo()?.reload && billingInfo()?.reloadError}>
+      <Show when={billingInfo()?.reloadError}>
         <div data-slot="section-content">
           <div data-slot="reload-error">
             <p>
