@@ -1136,6 +1136,46 @@ export default function Layout(props: ParentProps) {
     if (navigate) navigateToProject(directory)
   }
 
+  const deepLinkEvent = "opencode:deep-link"
+
+  const parseDeepLink = (input: string) => {
+    if (!input.startsWith("opencode://")) return
+    const url = new URL(input)
+    if (url.hostname !== "open-project") return
+    const directory = url.searchParams.get("directory")
+    if (!directory) return
+    return directory
+  }
+
+  const handleDeepLinks = (urls: string[]) => {
+    if (!server.isLocal()) return
+    for (const input of urls) {
+      const directory = parseDeepLink(input)
+      if (!directory) continue
+      openProject(directory)
+    }
+  }
+
+  const drainDeepLinks = () => {
+    const pending = window.__OPENCODE__?.deepLinks ?? []
+    if (pending.length === 0) return
+    if (window.__OPENCODE__) window.__OPENCODE__.deepLinks = []
+    handleDeepLinks(pending)
+  }
+
+  onMount(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ urls: string[] }>).detail
+      const urls = detail?.urls ?? []
+      if (urls.length === 0) return
+      handleDeepLinks(urls)
+    }
+
+    drainDeepLinks()
+    window.addEventListener(deepLinkEvent, handler as EventListener)
+    onCleanup(() => window.removeEventListener(deepLinkEvent, handler as EventListener))
+  })
+
   const displayName = (project: LocalProject) => project.name || getFilename(project.worktree)
 
   async function renameProject(project: LocalProject, next: string) {
@@ -2245,6 +2285,8 @@ export default function Layout(props: ParentProps) {
       <button
         type="button"
         aria-label={projectName()}
+        data-action="project-switch"
+        data-project={base64Encode(props.project.worktree)}
         classList={{
           "flex items-center justify-center size-10 p-1 rounded-lg overflow-hidden transition-colors cursor-default": true,
           "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover": selected(),
@@ -2295,6 +2337,8 @@ export default function Layout(props: ParentProps) {
                     icon="circle-x"
                     variant="ghost"
                     class="shrink-0"
+                    data-action="project-close-hover"
+                    data-project={base64Encode(props.project.worktree)}
                     aria-label={language.t("common.close")}
                     onClick={(event) => {
                       event.stopPropagation()
@@ -2537,6 +2581,8 @@ export default function Layout(props: ParentProps) {
                       as={IconButton}
                       icon="dot-grid"
                       variant="ghost"
+                      data-action="project-menu"
+                      data-project={base64Encode(p.worktree)}
                       class="shrink-0 size-6 rounded-md opacity-0 group-hover/project:opacity-100 data-[expanded]:opacity-100 data-[expanded]:bg-surface-base-active"
                       aria-label={language.t("common.moreOptions")}
                     />
@@ -2564,7 +2610,11 @@ export default function Layout(props: ParentProps) {
                           </DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                         <DropdownMenu.Separator />
-                        <DropdownMenu.Item onSelect={() => closeProject(p.worktree)}>
+                        <DropdownMenu.Item
+                          data-action="project-close-menu"
+                          data-project={base64Encode(p.worktree)}
+                          onSelect={() => closeProject(p.worktree)}
+                        >
                           <DropdownMenu.ItemLabel>{language.t("common.close")}</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                       </DropdownMenu.Content>
@@ -2774,6 +2824,7 @@ export default function Layout(props: ParentProps) {
       <div class="flex-1 min-h-0 flex">
         <nav
           aria-label={language.t("sidebar.nav.projectsAndSessions")}
+          data-component="sidebar-nav-desktop"
           classList={{
             "hidden xl:block": true,
             "relative shrink-0": true,
@@ -2833,6 +2884,7 @@ export default function Layout(props: ParentProps) {
           />
           <nav
             aria-label={language.t("sidebar.nav.projectsAndSessions")}
+            data-component="sidebar-nav-mobile"
             classList={{
               "@container fixed top-10 bottom-0 left-0 z-50 w-72 bg-background-base transition-transform duration-200 ease-out": true,
               "translate-x-0": layout.mobileSidebar.opened(),

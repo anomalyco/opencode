@@ -390,12 +390,14 @@ export function SessionTurn(
     const interval = Interval.fromDateTimes(from, to)
     const unit: DurationUnit[] = interval.length("seconds") > 60 ? ["minutes", "seconds"] : ["seconds"]
 
-    return interval.toDuration(unit).normalize().reconfigure({ locale: i18n.locale() }).toHuman({
+    const locale = i18n.locale()
+    const human = interval.toDuration(unit).normalize().reconfigure({ locale }).toHuman({
       notation: "compact",
       unitDisplay: "narrow",
       compactDisplay: "short",
       showZeros: false,
     })
+    return locale.startsWith("zh") ? human.replaceAll("、", "") : human
   }
 
   const autoScroll = createAutoScroll({
