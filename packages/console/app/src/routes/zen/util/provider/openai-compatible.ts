@@ -188,17 +188,19 @@ export function toOaCompatibleRequest(body: CommonRequest) {
 
   const tools = Array.isArray(body.tools)
     ? body.tools.map((tool: any) => {
-        const t = tool.function ? tool.function : tool
-        return {
-          type: "function",
-          function: {
-            name: t.name,
-            description: t.description,
-            parameters: t.parameters,
-            strict: t.strict,
-          },
-        }
-      })
+      const t = tool.function ?? tool
+      const strict = tool.strict ?? t.strict
+
+      return {
+        type: "function",
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters,
+          strict,
+        },
+      }
+    })
     : undefined
 
   return {
