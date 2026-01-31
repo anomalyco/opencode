@@ -1,5 +1,6 @@
 import { test, expect } from "../fixtures"
-import { modKey, promptSelector } from "../utils"
+import { openSidebar } from "../actions"
+import { promptSelector } from "../selectors"
 
 test("sidebar session links navigate to the selected session", async ({ page, slug, sdk, gotoSession }) => {
   const stamp = Date.now()
@@ -13,12 +14,7 @@ test("sidebar session links navigate to the selected session", async ({ page, sl
   try {
     await gotoSession(one.id)
 
-    const main = page.locator("main")
-    const collapsed = ((await main.getAttribute("class")) ?? "").includes("xl:border-l")
-    if (collapsed) {
-      await page.keyboard.press(`${modKey}+B`)
-      await expect(main).not.toHaveClass(/xl:border-l/)
-    }
+    await openSidebar(page)
 
     const target = page.locator(`[data-session-id="${two.id}"] a`).first()
     await expect(target).toBeVisible()

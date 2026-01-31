@@ -183,7 +183,7 @@ export async function convertToOpenAIResponsesInput({
 
             case "reasoning": {
               const providerOptions = await parseProviderOptions({
-                provider: "openai",
+                provider: "copilot",
                 providerOptions: part.providerOptions,
                 schema: openaiResponsesReasoningProviderOptionsSchema,
               })
