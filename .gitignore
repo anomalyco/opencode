@@ -21,6 +21,7 @@ a.out
 target
 .scripts
 .direnv/
+.playwright-mcp/
 
 # Local dev files
 opencode-dev
