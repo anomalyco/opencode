@@ -393,14 +393,14 @@ function Prompt<const T extends Record<string, string>>(props: {
   useKeyboard((evt) => {
     if (dialog.stack.length > 0) return
 
-    if (evt.name === "left" || evt.name == "h") {
+    if (evt.name === "left" || evt.name == "h" || (evt.name === "tab" && evt.shift)) {
       evt.preventDefault()
       const idx = keys.indexOf(store.selected)
       const next = keys[(idx - 1 + keys.length) % keys.length]
       setStore("selected", next)
     }
 
-    if (evt.name === "right" || evt.name == "l") {
+    if (evt.name === "right" || evt.name == "l" || (evt.name === "tab" && !evt.shift)) {
       evt.preventDefault()
       const idx = keys.indexOf(store.selected)
       const next = keys[(idx + 1) % keys.length]
