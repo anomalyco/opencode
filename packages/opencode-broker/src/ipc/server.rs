@@ -117,7 +117,9 @@ impl Server {
         let listener = match UnixListener::bind(&self.socket_path) {
             Ok(listener) => listener,
             Err(err) => {
-                self.log_bind_error_details(&err).await;
+                if self.handle_bind_error(&err).await {
+                    return Ok(());
+                }
                 return Err(ServerError::BindError(err));
             }
         };
@@ -182,9 +184,9 @@ impl Server {
         Ok(())
     }
 
-    async fn log_bind_error_details(&self, err: &io::Error) {
+    async fn handle_bind_error(&self, err: &io::Error) -> bool {
         if err.kind() != io::ErrorKind::AddrInUse {
-            return;
+            return false;
         }
 
         let socket_path = self.socket_path.display().to_string();
@@ -192,18 +194,18 @@ impl Server {
 
         if !self.socket_path.exists() {
             self.log_missing_socket_path();
-            return;
+            return false;
         }
 
         let file_type = match fs::metadata(&self.socket_path).map(|metadata| metadata.file_type()) {
             Ok(file_type) => file_type,
             Err(error) => {
                 warn!(error = %error, path = %socket_path, "failed to read socket metadata");
-                return;
+                return false;
             }
         };
 
-        self.log_socket_file_type(&file_type).await;
+        self.handle_socket_file_type(&file_type).await
     }
 
     fn log_addr_in_use_intro(&self, socket_path: &str) {
@@ -216,21 +218,26 @@ impl Server {
         warn!("another process may be bound to this path");
     }
 
-    async fn log_socket_file_type(&self, file_type: &fs::FileType) {
+    async fn handle_socket_file_type(&self, file_type: &fs::FileType) -> bool {
         #[cfg(unix)]
         {
             use std::os::unix::fs::FileTypeExt;
             if !file_type.is_socket() {
                 warn!("path exists but is not a socket file");
                 warn!("remove or change the configured socket path");
-                return;
+                return false;
             }
 
-            self.log_socket_listener_status().await;
+            return self.handle_socket_listener_status().await;
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = file_type;
+            false
         }
     }
 
-    async fn log_socket_listener_status(&self) {
+    async fn handle_socket_listener_status(&self) -> bool {
         match tokio::time::timeout(
             Duration::from_millis(250),
             UnixStream::connect(&self.socket_path),
@@ -239,7 +246,8 @@ impl Server {
         {
             Ok(Ok(_stream)) => {
                 warn!("a broker appears to be running and listening on this socket");
-                warn!("stop the running broker or change the socket path");
+                warn!("exiting: existing broker is healthy");
+                return true;
             }
             Ok(Err(connect_error)) => {
                 warn!(
@@ -253,6 +261,7 @@ impl Server {
                 warn!("another broker may be running or the socket is stuck");
             }
         }
+        false
     }
 }
 
