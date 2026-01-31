@@ -189,10 +189,10 @@ export async function openSessionMoreMenu(page: Page, sessionID: string) {
   return menu
 }
 
-export async function clickMenuItem(menu: Locator, itemName: string | RegExp) {
+export async function clickMenuItem(menu: Locator, itemName: string | RegExp, options?: { force?: boolean }) {
   const item = menu.getByRole("menuitem").filter({ hasText: itemName }).first()
   await expect(item).toBeVisible()
-  await item.click()
+  await item.click({ force: options?.force })
 }
 
 export async function confirmDialog(page: Page, buttonName: string | RegExp) {
@@ -208,10 +208,21 @@ export async function openSharePopover(page: Page) {
   const rightSection = page.locator(titlebarRightSelector)
   const shareButton = rightSection.getByRole("button", { name: "Share" }).first()
   await expect(shareButton).toBeVisible()
-  await shareButton.click()
 
-  const popoverBody = page.locator(popoverBodySelector).first()
-  await expect(popoverBody).toBeVisible()
+  const popoverBody = page
+    .locator(popoverBodySelector)
+    .filter({ has: page.getByRole("button", { name: /^(Publish|Unpublish)$/ }) })
+    .first()
+
+  const opened = await popoverBody
+    .isVisible()
+    .then((x) => x)
+    .catch(() => false)
+
+  if (!opened) {
+    await shareButton.click()
+    await expect(popoverBody).toBeVisible()
+  }
   return { rightSection, popoverBody }
 }
 
