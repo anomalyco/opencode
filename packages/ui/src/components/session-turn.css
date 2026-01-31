@@ -105,10 +105,6 @@
     transition: max-height 200ms cubic-bezier(0.25, 0, 0.5, 1);
   }
 
-  [data-component="user-message"][data-expanded="true"] [data-slot="user-message-text"] {
-    max-height: 2000px;
-  }
-
   [data-component="user-message"][data-can-expand="true"] [data-slot="user-message-text"] {
     padding-right: 36px;
     padding-bottom: 28px;

@@ -335,6 +335,16 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
     updateCanExpand()
   })
 
+  createEffect(() => {
+    const el = textRef
+    if (!el) return
+    if (expanded()) {
+      el.style.maxHeight = el.scrollHeight + "px"
+    } else {
+      el.style.maxHeight = ""
+    }
+  })
+
   const files = createMemo(() => (props.parts?.filter((p) => p.type === "file") as FilePart[]) ?? [])
 
   const attachments = createMemo(() =>
