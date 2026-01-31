@@ -111,7 +111,7 @@ interface SlashCommand {
   title: string
   description?: string
   keybind?: string
-  type: "builtin" | "custom"
+  type: "builtin" | "custom" | "skill"
 }
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
@@ -519,7 +519,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       type: "custom" as const,
     }))
 
-    return [...custom, ...builtin]
+    const skills = sync.data.skill.map((skill) => ({
+      id: `skill.${skill.name}`,
+      trigger: `skill:${skill.name}`,
+      title: skill.name,
+      description: skill.description,
+      type: "skill" as const,
+    }))
+
+    return [...skills, ...custom, ...builtin]
   })
 
   const handleSlashSelect = (cmd: SlashCommand | undefined) => {
@@ -528,6 +536,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     if (cmd.type === "custom") {
       const text = `/${cmd.trigger} `
+      editorRef.innerHTML = ""
+      editorRef.textContent = text
+      prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
+      requestAnimationFrame(() => {
+        editorRef.focus()
+        const range = document.createRange()
+        const sel = window.getSelection()
+        range.selectNodeContents(editorRef)
+        range.collapse(false)
+        sel?.removeAllRanges()
+        sel?.addRange(range)
+      })
+      return
+    }
+
+    if (cmd.type === "skill") {
+      // Extract skill name from the id (skill.{name})
+      const skillName = cmd.id.replace("skill.", "")
+      const text = `Load the "${skillName}" skill and follow its instructions.`
       editorRef.innerHTML = ""
       editorRef.textContent = text
       prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
@@ -1704,6 +1731,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         <Show when={cmd.type === "custom"}>
                           <span class="text-11-regular text-text-subtle px-1.5 py-0.5 bg-surface-base rounded">
                             {language.t("prompt.slash.badge.custom")}
+                          </span>
+                        </Show>
+                        <Show when={cmd.type === "skill"}>
+                          <span class="text-11-regular text-text-subtle px-1.5 py-0.5 bg-surface-base rounded">
+                            {language.t("prompt.slash.badge.skill")}
                           </span>
                         </Show>
                         <Show when={command.keybind(cmd.id)}>

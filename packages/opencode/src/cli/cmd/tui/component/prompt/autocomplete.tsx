@@ -359,6 +359,20 @@ export function Autocomplete(props: {
       })
     }
 
+    for (const skill of sync.data.skill) {
+      results.push({
+        display: "/skill:" + skill.name,
+        description: skill.description,
+        onSelect: () => {
+          const newText = `Load the "${skill.name}" skill and follow its instructions.`
+          const cursor = props.input().logicalCursor
+          props.input().deleteRange(0, 0, cursor.row, cursor.col)
+          props.input().insertText(newText)
+          props.input().cursorOffset = Bun.stringWidth(newText)
+        },
+      })
+    }
+
     results.sort((a, b) => a.display.localeCompare(b.display))
 
     const max = firstBy(results, [(x) => x.display.length, "desc"])?.display.length
