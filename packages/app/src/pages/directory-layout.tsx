@@ -1,22 +1,36 @@
-import { createMemo, Show, type ParentProps } from "solid-js"
+import { createEffect, createMemo, Show, type ParentProps } from "solid-js"
 import { useNavigate, useParams } from "@solidjs/router"
 import { SDKProvider, useSDK } from "@/context/sdk"
 import { SyncProvider, useSync } from "@/context/sync"
 import { LocalProvider } from "@/context/local"
 
-import { base64Decode } from "@opencode-ai/util/encode"
 import { DataProvider } from "@opencode-ai/ui/context"
 import { iife } from "@opencode-ai/util/iife"
 import type { QuestionAnswer } from "@opencode-ai/sdk/v2"
+import { decode64 } from "@/utils/base64"
+import { showToast } from "@opencode-ai/ui/toast"
+import { useLanguage } from "@/context/language"
 
 export default function Layout(props: ParentProps) {
   const params = useParams()
   const navigate = useNavigate()
+  const language = useLanguage()
   const directory = createMemo(() => {
-    return base64Decode(params.dir!)
+    return decode64(params.dir) ?? ""
+  })
+
+  createEffect(() => {
+    if (!params.dir) return
+    if (directory()) return
+    showToast({
+      variant: "error",
+      title: language.t("common.requestFailed"),
+      description: "Invalid directory in URL.",
+    })
+    navigate("/")
   })
   return (
-    <Show when={params.dir}>
+    <Show when={directory()}>
       <SDKProvider directory={directory()}>
         <SyncProvider>
           {iife(() => {

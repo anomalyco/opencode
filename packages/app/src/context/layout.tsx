@@ -51,16 +51,37 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     const migrate = (value: unknown) => {
       if (!isRecord(value)) return value
+
       const sidebar = value.sidebar
-      if (!isRecord(sidebar)) return value
-      if (typeof sidebar.workspaces !== "boolean") return value
-      return {
-        ...value,
-        sidebar: {
+      const migratedSidebar = (() => {
+        if (!isRecord(sidebar)) return sidebar
+        if (typeof sidebar.workspaces !== "boolean") return sidebar
+        return {
           ...sidebar,
           workspaces: {},
           workspacesDefault: sidebar.workspaces,
-        },
+        }
+      })()
+
+      const fileTree = value.fileTree
+      const migratedFileTree = (() => {
+        if (!isRecord(fileTree)) return fileTree
+        if (fileTree.tab === "changes" || fileTree.tab === "all") return fileTree
+
+        const width = typeof fileTree.width === "number" ? fileTree.width : 344
+        return {
+          ...fileTree,
+          opened: true,
+          width: width === 260 ? 344 : width,
+          tab: "changes",
+        }
+      })()
+
+      if (migratedSidebar === sidebar && migratedFileTree === fileTree) return value
+      return {
+        ...value,
+        sidebar: migratedSidebar,
+        fileTree: migratedFileTree,
       }
     }
 
@@ -80,7 +101,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         review: {
           diffStyle: "split" as ReviewDiffStyle,
-          panelOpened: true,
+        },
+        fileTree: {
+          opened: true,
+          width: 344,
+          tab: "changes" as "changes" | "all",
         },
         session: {
           width: 600,
@@ -218,7 +243,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
 
     function enrich(project: { worktree: string; expanded: boolean }) {
-      const [childStore] = globalSync.child(project.worktree)
+      const [childStore] = globalSync.child(project.worktree, { bootstrap: false })
       const projectID = childStore.project
       const metadata = projectID
         ? globalSync.data.project.find((x) => x.id === projectID)
@@ -449,6 +474,46 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("review", "diffStyle", diffStyle)
         },
       },
+      fileTree: {
+        opened: createMemo(() => store.fileTree?.opened ?? true),
+        width: createMemo(() => store.fileTree?.width ?? 344),
+        tab: createMemo(() => store.fileTree?.tab ?? "changes"),
+        setTab(tab: "changes" | "all") {
+          if (!store.fileTree) {
+            setStore("fileTree", { opened: true, width: 344, tab })
+            return
+          }
+          setStore("fileTree", "tab", tab)
+        },
+        open() {
+          if (!store.fileTree) {
+            setStore("fileTree", { opened: true, width: 344, tab: "changes" })
+            return
+          }
+          setStore("fileTree", "opened", true)
+        },
+        close() {
+          if (!store.fileTree) {
+            setStore("fileTree", { opened: false, width: 344, tab: "changes" })
+            return
+          }
+          setStore("fileTree", "opened", false)
+        },
+        toggle() {
+          if (!store.fileTree) {
+            setStore("fileTree", { opened: true, width: 344, tab: "changes" })
+            return
+          }
+          setStore("fileTree", "opened", (x) => !x)
+        },
+        resize(width: number) {
+          if (!store.fileTree) {
+            setStore("fileTree", { opened: true, width, tab: "changes" })
+            return
+          }
+          setStore("fileTree", "width", width)
+        },
+      },
       session: {
         width: createMemo(() => store.session?.width ?? 600),
         resize(width: number) {
@@ -490,7 +555,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
         const s = createMemo(() => store.sessionView[key()] ?? { scroll: {} })
         const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
-        const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? true)
 
         function setTerminalOpened(next: boolean) {
           const current = store.terminal
@@ -502,18 +566,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           const value = current.opened ?? false
           if (value === next) return
           setStore("terminal", "opened", next)
-        }
-
-        function setReviewPanelOpened(next: boolean) {
-          const current = store.review
-          if (!current) {
-            setStore("review", { diffStyle: "split" as ReviewDiffStyle, panelOpened: next })
-            return
-          }
-
-          const value = current.panelOpened ?? true
-          if (value === next) return
-          setStore("review", "panelOpened", next)
         }
 
         return {
@@ -533,18 +585,6 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             },
             toggle() {
               setTerminalOpened(!terminalOpened())
-            },
-          },
-          reviewPanel: {
-            opened: reviewPanelOpened,
-            open() {
-              setReviewPanelOpened(true)
-            },
-            close() {
-              setReviewPanelOpened(false)
-            },
-            toggle() {
-              setReviewPanelOpened(!reviewPanelOpened())
             },
           },
           review: {
@@ -584,10 +624,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const tabs = createMemo(() => store.sessionTabs[key()] ?? { all: [] })
         return {
           tabs,
-          active: createMemo(() => tabs().active),
-          all: createMemo(() => tabs().all),
+          active: createMemo(() => (tabs().active === "review" ? undefined : tabs().active)),
+          all: createMemo(() => tabs().all.filter((tab) => tab !== "review")),
           setActive(tab: string | undefined) {
             const session = key()
+            if (tab === "review") return
             if (!store.sessionTabs[session]) {
               setStore("sessionTabs", session, { all: [], active: tab })
             } else {
@@ -596,24 +637,17 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           },
           setAll(all: string[]) {
             const session = key()
+            const next = all.filter((tab) => tab !== "review")
             if (!store.sessionTabs[session]) {
-              setStore("sessionTabs", session, { all, active: undefined })
+              setStore("sessionTabs", session, { all: next, active: undefined })
             } else {
-              setStore("sessionTabs", session, "all", all)
+              setStore("sessionTabs", session, "all", next)
             }
           },
           async open(tab: string) {
+            if (tab === "review") return
             const session = key()
             const current = store.sessionTabs[session] ?? { all: [] }
-
-            if (tab === "review") {
-              if (!store.sessionTabs[session]) {
-                setStore("sessionTabs", session, { all: [], active: tab })
-                return
-              }
-              setStore("sessionTabs", session, "active", tab)
-              return
-            }
 
             if (tab === "context") {
               const all = [tab, ...current.all.filter((x) => x !== tab)]

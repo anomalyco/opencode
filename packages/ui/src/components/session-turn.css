@@ -88,10 +88,6 @@
     }
   }
 
-  [data-slot="session-turn-response-trigger"] {
-    width: fit-content;
-  }
-
   [data-slot="session-turn-message-header"] {
     display: flex;
     align-items: center;
@@ -106,15 +102,30 @@
 
   [data-component="user-message"] [data-slot="user-message-text"] {
     max-height: var(--user-message-collapsed-height, 64px);
+    transition: max-height 200ms cubic-bezier(0.25, 0, 0.5, 1);
   }
 
   [data-component="user-message"][data-expanded="true"] [data-slot="user-message-text"] {
-    max-height: none;
+    max-height: 2000px;
   }
 
   [data-component="user-message"][data-can-expand="true"] [data-slot="user-message-text"] {
     padding-right: 36px;
     padding-bottom: 28px;
+  }
+
+  [data-component="user-message"][data-can-expand="true"]:not([data-expanded="true"])
+    [data-slot="user-message-text"]::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 8px;
+    bottom: 0px;
+    background:
+      linear-gradient(to bottom, transparent, var(--surface-weak)),
+      linear-gradient(to bottom, transparent, var(--surface-weak));
+    pointer-events: none;
   }
 
   [data-component="user-message"] [data-slot="user-message-text"] [data-slot="user-message-expand"] {
@@ -141,17 +152,6 @@
     background: transparent;
     cursor: pointer;
     color: var(--text-weak);
-
-    [data-slot="icon-svg"] {
-      transition: transform 0.15s ease;
-    }
-  }
-
-  [data-component="user-message"][data-expanded="true"]
-    [data-slot="user-message-text"]
-    [data-slot="user-message-expand"]
-    [data-slot="icon-svg"] {
-    transform: rotate(180deg);
   }
 
   [data-component="user-message"] [data-slot="user-message-text"] [data-slot="user-message-expand"]:hover {
@@ -457,6 +457,7 @@
     gap: 16px;
     align-items: center;
     justify-content: flex-end;
+    color: var(--icon-base);
   }
 
   [data-slot="session-turn-accordion-content"] {
@@ -483,11 +484,15 @@
   }
 
   [data-slot="session-turn-collapsible-trigger-content"] {
-    width: fit-content;
+    max-width: 100%;
     display: flex;
     align-items: center;
     gap: 8px;
     color: var(--text-weak);
+
+    [data-slot="session-turn-trigger-icon"] {
+      color: var(--icon-base);
+    }
 
     [data-component="spinner"] {
       width: 12px;
@@ -512,6 +517,11 @@
 
   [data-slot="session-turn-retry-attempt"] {
     color: var(--text-weak);
+  }
+
+  [data-slot="session-turn-status-text"] {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   [data-slot="session-turn-details-text"] {

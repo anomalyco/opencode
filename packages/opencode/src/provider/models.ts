@@ -105,9 +105,6 @@ export namespace ModelsDev {
 
   export async function refresh() {
     const file = Bun.file(filepath)
-    log.info("refreshing", {
-      file,
-    })
     const result = await fetch(`${url()}/api.json`, {
       headers: {
         "User-Agent": Installation.USER_AGENT,

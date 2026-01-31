@@ -170,8 +170,8 @@ Plugins can subscribe to events as seen below in the Examples section. Here is a
 
 #### Permission Events
 
+- `permission.asked`
 - `permission.replied`
-- `permission.updated`
 
 #### Server Events
 
@@ -269,8 +269,9 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
         args: {
           foo: tool.schema.string(),
         },
-        async execute(args, ctx) {
-          return `Hello ${args.foo}!`
+        async execute(args, context) {
+          const { directory, worktree } = context
+          return `Hello ${args.foo} from ${directory} (worktree: ${worktree})`
         },
       }),
     },

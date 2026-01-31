@@ -23,16 +23,19 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
   const variant = createMemo(() => props.variant ?? "button")
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey))
-  const view = createMemo(() => layout.view(sessionKey))
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
 
+  const usd = createMemo(
+    () =>
+      new Intl.NumberFormat(language.locale(), {
+        style: "currency",
+        currency: "USD",
+      }),
+  )
+
   const cost = createMemo(() => {
-    const locale = language.locale()
     const total = messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
-    return new Intl.NumberFormat(locale, {
-      style: "currency",
-      currency: "USD",
-    }).format(total)
+    return usd().format(total)
   })
 
   const context = createMemo(() => {
@@ -54,14 +57,15 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
 
   const openContext = () => {
     if (!params.id) return
-    view().reviewPanel.open()
+    layout.fileTree.open()
+    layout.fileTree.setTab("all")
     tabs().open("context")
     tabs().setActive("context")
   }
 
   const circle = () => (
-    <div class="p-1">
-      <ProgressCircle size={16} strokeWidth={2} percentage={context()?.percentage ?? 0} />
+    <div class="text-icon-base">
+      <ProgressCircle size={18} percentage={context()?.percentage ?? 0} />
     </div>
   )
 
@@ -97,7 +101,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
             <Button
               type="button"
               variant="ghost"
-              class="size-6"
+              class="size-7 text-icon-base"
               onClick={openContext}
               aria-label={language.t("context.usage.view")}
             >

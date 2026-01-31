@@ -209,7 +209,10 @@ export namespace Ripgrep {
     hidden?: boolean
     follow?: boolean
     maxDepth?: number
+    signal?: AbortSignal
   }) {
+    input.signal?.throwIfAborted()
+
     const args = [await filepath(), "--files", "--glob=!.git/*"]
     if (input.follow !== false) args.push("--follow")
     if (input.hidden !== false) args.push("--hidden")
@@ -235,6 +238,7 @@ export namespace Ripgrep {
       stdout: "pipe",
       stderr: "ignore",
       maxBuffer: 1024 * 1024 * 20,
+      signal: input.signal,
     })
 
     const reader = proc.stdout.getReader()
@@ -243,6 +247,8 @@ export namespace Ripgrep {
 
     try {
       while (true) {
+        input.signal?.throwIfAborted()
+
         const { done, value } = await reader.read()
         if (done) break
 
@@ -261,11 +267,13 @@ export namespace Ripgrep {
       reader.releaseLock()
       await proc.exited
     }
+
+    input.signal?.throwIfAborted()
   }
 
-  export async function tree(input: { cwd: string; limit?: number }) {
+  export async function tree(input: { cwd: string; limit?: number; signal?: AbortSignal }) {
     log.info("tree", input)
-    const files = await Array.fromAsync(Ripgrep.files({ cwd: input.cwd }))
+    const files = await Array.fromAsync(Ripgrep.files({ cwd: input.cwd, signal: input.signal }))
     interface Node {
       path: string[]
       children: Node[]

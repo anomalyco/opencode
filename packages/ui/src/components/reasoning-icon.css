@@ -1,0 +1,8 @@
+[data-component="reasoning-icon"] {
+  color: var(--icon-strong-base);
+
+  [data-slot="reasoning-icon-percentage"] {
+    transition: clip-path 200ms cubic-bezier(0.25, 0, 0.5, 1);
+    clip-path: inset(calc(100% - var(--reasoning-icon-percentage) * 100%) 0 0 0);
+  }
+}
