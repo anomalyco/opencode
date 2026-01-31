@@ -1,5 +1,6 @@
 import { test, expect } from "../fixtures"
-import { modKey, promptSelector } from "../utils"
+import { promptSelector } from "../selectors"
+import { closeDialog, openSettings } from "../actions"
 
 test("hiding a model removes it from the model picker", async ({ page, gotoSession }) => {
   await gotoSession()
@@ -27,18 +28,7 @@ test("hiding a model removes it from the model picker", async ({ page, gotoSessi
   await page.keyboard.press("Escape")
   await expect(picker).toHaveCount(0)
 
-  const settings = page.getByRole("dialog")
-
-  await page.keyboard.press(`${modKey}+Comma`).catch(() => undefined)
-  const opened = await settings
-    .waitFor({ state: "visible", timeout: 3000 })
-    .then(() => true)
-    .catch(() => false)
-
-  if (!opened) {
-    await page.getByRole("button", { name: "Settings" }).first().click()
-    await expect(settings).toBeVisible()
-  }
+  const settings = await openSettings(page)
 
   await settings.getByRole("tab", { name: "Models" }).click()
   const search = settings.getByPlaceholder("Search models")
@@ -52,22 +42,7 @@ test("hiding a model removes it from the model picker", async ({ page, gotoSessi
   await toggle.locator('[data-slot="switch-control"]').click()
   await expect(input).toHaveAttribute("aria-checked", "false")
 
-  await page.keyboard.press("Escape")
-  const closed = await settings
-    .waitFor({ state: "detached", timeout: 1500 })
-    .then(() => true)
-    .catch(() => false)
-  if (!closed) {
-    await page.keyboard.press("Escape")
-    const closedSecond = await settings
-      .waitFor({ state: "detached", timeout: 1500 })
-      .then(() => true)
-      .catch(() => false)
-    if (!closedSecond) {
-      await page.locator('[data-component="dialog-overlay"]').click({ position: { x: 5, y: 5 } })
-      await expect(settings).toHaveCount(0)
-    }
-  }
+  await closeDialog(page, settings)
 
   await page.locator(promptSelector).click()
   await page.keyboard.type("/model")

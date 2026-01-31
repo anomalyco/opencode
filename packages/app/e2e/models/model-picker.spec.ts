@@ -1,5 +1,5 @@
 import { test, expect } from "../fixtures"
-import { promptSelector } from "../utils"
+import { promptSelector } from "../selectors"
 
 test("smoke model selection updates prompt footer", async ({ page, gotoSession }) => {
   await gotoSession()

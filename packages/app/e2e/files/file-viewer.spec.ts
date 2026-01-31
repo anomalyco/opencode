@@ -1,5 +1,5 @@
 import { test, expect } from "../fixtures"
-import { modKey } from "../utils"
+import { openPalette } from "../actions"
 
 test("smoke file viewer renders real file content", async ({ page, gotoSession }) => {
   await gotoSession()
@@ -7,10 +7,7 @@ test("smoke file viewer renders real file content", async ({ page, gotoSession }
   const sep = process.platform === "win32" ? "\\" : "/"
   const file = ["packages", "app", "package.json"].join(sep)
 
-  await page.keyboard.press(`${modKey}+P`)
-
-  const dialog = page.getByRole("dialog")
-  await expect(dialog).toBeVisible()
+  const dialog = await openPalette(page)
 
   const input = dialog.getByRole("textbox").first()
   await input.fill(file)

@@ -33,7 +33,7 @@ export namespace Flag {
     OPENCODE_DISABLE_CLAUDE_CODE || truthy("OPENCODE_DISABLE_CLAUDE_CODE_SKILLS")
   export declare const OPENCODE_DISABLE_PROJECT_CONFIG: boolean
   export const OPENCODE_FAKE_VCS = process.env["OPENCODE_FAKE_VCS"]
-  export const OPENCODE_CLIENT = process.env["OPENCODE_CLIENT"] ?? "cli"
+  export declare const OPENCODE_CLIENT: string
   export const OPENCODE_SERVER_PASSWORD = process.env["OPENCODE_SERVER_PASSWORD"]
   export const OPENCODE_SERVER_USERNAME = process.env["OPENCODE_SERVER_USERNAME"]
 
@@ -61,6 +61,7 @@ export namespace Flag {
   export const OPENCODE_EXPERIMENTAL_CONTINUE_LOOP_ON_DENY =
     OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_CONTINUE_LOOP_ON_DENY")
   export const OPENCODE_EXPERIMENTAL_MCP_TIMEOUT_MS = number("OPENCODE_EXPERIMENTAL_MCP_TIMEOUT_MS")
+  export const OPENCODE_MODELS_PATH = process.env["OPENCODE_MODELS_PATH"]
 }
 
 // Dynamic getter for OPENCODE_DISABLE_PROJECT_CONFIG
@@ -80,6 +81,17 @@ Object.defineProperty(Flag, "OPENCODE_DISABLE_PROJECT_CONFIG", {
 Object.defineProperty(Flag, "OPENCODE_CONFIG_DIR", {
   get() {
     return process.env["OPENCODE_CONFIG_DIR"]
+  },
+  enumerable: true,
+  configurable: false,
+})
+
+// Dynamic getter for OPENCODE_CLIENT
+// This must be evaluated at access time, not module load time,
+// because some commands override the client at runtime
+Object.defineProperty(Flag, "OPENCODE_CLIENT", {
+  get() {
+    return process.env["OPENCODE_CLIENT"] ?? "cli"
   },
   enumerable: true,
   configurable: false,
