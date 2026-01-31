@@ -210,6 +210,8 @@ export const dict = {
   "prompt.popover.emptyCommands": "لا توجد أوامر مطابقة",
   "prompt.dropzone.label": "أفلت الصور أو ملفات PDF هنا",
   "prompt.slash.badge.custom": "مخصص",
+  "prompt.slash.badge.skill": "مهارة",
+  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "نشط",
   "prompt.context.includeActiveFile": "تضمين الملف النشط",
   "prompt.context.removeActiveFile": "إزالة الملف النشط من السياق",

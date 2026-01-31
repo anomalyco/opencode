@@ -112,6 +112,7 @@ interface SlashCommand {
   description?: string
   keybind?: string
   type: "builtin" | "custom"
+  source?: "command" | "mcp" | "skill"
 }
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
@@ -517,6 +518,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       title: cmd.name,
       description: cmd.description,
       type: "custom" as const,
+      source: cmd.source,
     }))
 
     return [...custom, ...builtin]
@@ -1703,7 +1705,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       <div class="flex items-center gap-2 shrink-0">
                         <Show when={cmd.type === "custom"}>
                           <span class="text-11-regular text-text-subtle px-1.5 py-0.5 bg-surface-base rounded">
-                            {language.t("prompt.slash.badge.custom")}
+                            {cmd.source === "skill"
+                              ? language.t("prompt.slash.badge.skill")
+                              : cmd.source === "mcp"
+                                ? language.t("prompt.slash.badge.mcp")
+                                : language.t("prompt.slash.badge.custom")}
                           </span>
                         </Show>
                         <Show when={command.keybind(cmd.id)}>
