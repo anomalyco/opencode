@@ -20,6 +20,7 @@ export namespace ProviderTransform {
   function sdkKey(npm: string): string | undefined {
     switch (npm) {
       case "@ai-sdk/github-copilot":
+        return "copilot"
       case "@ai-sdk/openai":
       case "@ai-sdk/azure":
         return "openai"
@@ -178,6 +179,9 @@ export namespace ProviderTransform {
       },
       openaiCompatible: {
         cache_control: { type: "ephemeral" },
+      },
+      copilot: {
+        copilot_cache_control: { type: "ephemeral" },
       },
     }
 
@@ -353,6 +357,15 @@ export namespace ProviderTransform {
         return Object.fromEntries(OPENAI_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
 
       case "@ai-sdk/github-copilot":
+        if (model.id.includes("gemini")) {
+          // currently github copilot only returns thinking
+          return {}
+        }
+        if (model.id.includes("claude")) {
+          return {
+            thinking: { thinking_budget: 4000 },
+          }
+        }
         const copilotEfforts = iife(() => {
           if (id.includes("5.1-codex-max") || id.includes("5.2")) return [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
           return WIDELY_SUPPORTED_EFFORTS
