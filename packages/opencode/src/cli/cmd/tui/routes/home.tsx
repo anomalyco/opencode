@@ -11,7 +11,7 @@ import { useArgs } from "../context/args"
 import { useDirectory } from "../context/directory"
 import { useRouteData } from "@tui/context/route"
 import { usePromptRef } from "../context/prompt"
-import { Installation } from "@/installation"
+import { VersionTag } from "@tui/component/version-tag"
 import { useKV } from "../context/kv"
 import { useCommandDialog } from "../component/dialog-command"
 
@@ -132,7 +132,7 @@ export function Home() {
         </box>
         <box flexGrow={1} />
         <box flexShrink={0}>
-          <text fg={theme.textMuted}>{Installation.VERSION}</text>
+          <VersionTag />
         </box>
       </box>
     </>

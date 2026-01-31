@@ -6,7 +6,7 @@ import { Locale } from "@/util/locale"
 import path from "path"
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import { Global } from "@/global"
-import { Installation } from "@/installation"
+import { VersionTag } from "@tui/component/version-tag"
 import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
@@ -304,8 +304,8 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
             <span style={{ fg: theme.text }}>
               <b>Code</b>
             </span>{" "}
-            <span>{Installation.VERSION}</span>
           </text>
+          <VersionTag />
         </box>
       </box>
     </Show>
