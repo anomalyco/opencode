@@ -121,6 +121,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
   const sync = useSync()
   const [store, setStore] = createStore({
     stage: "permission" as PermissionStage,
+    selectedOption: null as string | null,
   })
 
   const session = createMemo(() => sync.data.session.find((s) => s.id === props.request.sessionID))
@@ -171,10 +172,10 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
           onSelect={(option) => {
             setStore("stage", "permission")
             if (option === "cancel") return
-            // We need to determine what type of "always" this was
-            // For now, default to project_recursive for backward compatibility
+            // Use the selected option from the initial choice
+            const reply = store.selectedOption || "project_recursive"
             sdk.client.permission.reply({
-              reply: "project_recursive",
+              reply: reply as any,
               requestID: props.request.id,
             })
           }}
@@ -301,6 +302,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                   ["file_always", "folder_always", "folder_recursive", "project_recursive"].includes(option as string)
                 ) {
                   setStore("stage", "always")
+                  setStore("selectedOption", option as string)
                   return
                 }
                 if (option === "reject") {
