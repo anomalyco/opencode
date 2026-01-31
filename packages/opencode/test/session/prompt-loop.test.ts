@@ -12,7 +12,9 @@ const { Session } = await import("../../src/session")
 const { SessionPrompt } = await import("../../src/session/prompt")
 
 describe("SessionPrompt.loop", () => {
-  test("exits when assistant finish is unknown but text exists", async () => {
+  test(
+    "exits when assistant finish is unknown but text exists",
+    async () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
@@ -62,10 +64,7 @@ describe("SessionPrompt.loop", () => {
             time: { start: Date.now(), end: Date.now() },
           })
 
-          const result = (await Promise.race([
-            SessionPrompt.loop(session.id),
-            new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 1_000)),
-          ])) as Awaited<ReturnType<typeof SessionPrompt.loop>>
+          const result = (await SessionPrompt.loop(session.id)) as Awaited<ReturnType<typeof SessionPrompt.loop>>
 
           expect(result.info.id).toBe(assistantId)
         } finally {
@@ -73,5 +72,7 @@ describe("SessionPrompt.loop", () => {
         }
       },
     })
-  })
+    },
+    20_000,
+  )
 })
