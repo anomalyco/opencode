@@ -13,6 +13,7 @@ use futures::{SinkExt, StreamExt};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::{fs, io};
+use std::time::Duration;
 use thiserror::Error;
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::watch;
@@ -113,7 +114,13 @@ impl Server {
         }
 
         // Bind the Unix socket
-        let listener = UnixListener::bind(&self.socket_path).map_err(ServerError::BindError)?;
+        let listener = match UnixListener::bind(&self.socket_path) {
+            Ok(listener) => listener,
+            Err(err) => {
+                self.log_bind_error_details(&err).await;
+                return Err(ServerError::BindError(err));
+            }
+        };
 
         // Set socket permissions to 0o666 (any local user can connect)
         // Authentication is handled by PAM, not socket permissions
@@ -173,6 +180,79 @@ impl Server {
         let _ = fs::remove_file(&self.socket_path);
 
         Ok(())
+    }
+
+    async fn log_bind_error_details(&self, err: &io::Error) {
+        if err.kind() != io::ErrorKind::AddrInUse {
+            return;
+        }
+
+        let socket_path = self.socket_path.display().to_string();
+        self.log_addr_in_use_intro(&socket_path);
+
+        if !self.socket_path.exists() {
+            self.log_missing_socket_path();
+            return;
+        }
+
+        let file_type = match fs::metadata(&self.socket_path).map(|metadata| metadata.file_type()) {
+            Ok(file_type) => file_type,
+            Err(error) => {
+                warn!(error = %error, path = %socket_path, "failed to read socket metadata");
+                return;
+            }
+        };
+
+        self.log_socket_file_type(&file_type).await;
+    }
+
+    fn log_addr_in_use_intro(&self, socket_path: &str) {
+        warn!(path = %socket_path, "socket address/path ({socket_path}) already in use");
+        warn!("run to find the owning pid: sudo lsof -a -n -U -- {socket_path}", socket_path = socket_path);
+    }
+
+    fn log_missing_socket_path(&self) {
+        warn!("socket path does not exist but address is still in use");
+        warn!("another process may be bound to this path");
+    }
+
+    async fn log_socket_file_type(&self, file_type: &fs::FileType) {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::FileTypeExt;
+            if !file_type.is_socket() {
+                warn!("path exists but is not a socket file");
+                warn!("remove or change the configured socket path");
+                return;
+            }
+
+            self.log_socket_listener_status().await;
+        }
+    }
+
+    async fn log_socket_listener_status(&self) {
+        match tokio::time::timeout(
+            Duration::from_millis(250),
+            UnixStream::connect(&self.socket_path),
+        )
+        .await
+        {
+            Ok(Ok(_stream)) => {
+                warn!("a broker appears to be running and listening on this socket");
+                warn!("stop the running broker or change the socket path");
+            }
+            Ok(Err(connect_error)) => {
+                warn!(
+                    error = %connect_error,
+                    "socket file exists but no listener responded"
+                );
+                warn!("try removing the stale socket file");
+            }
+            Err(_) => {
+                warn!("timed out trying to connect to existing socket");
+                warn!("another broker may be running or the socket is stuck");
+            }
+        }
     }
 }
 

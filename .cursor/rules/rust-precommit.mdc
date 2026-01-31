@@ -1,0 +1,17 @@
+---
+description: Rust pre-commit checks (fmt, clippy, build, test)
+alwaysApply: true
+---
+
+# Rust Pre-Commit Checks
+
+When making Rust changes, run these before committing:
+
+```bash
+cargo fmt
+cargo clippy --all-targets --all-features -- -D warnings
+cargo build
+cargo test
+```
+
+If any step fails, fix issues before committing.
