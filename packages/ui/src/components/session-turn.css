@@ -102,11 +102,10 @@
 
   [data-component="user-message"] [data-slot="user-message-text"] {
     max-height: var(--user-message-collapsed-height, 64px);
-    transition: max-height 200ms cubic-bezier(0.25, 0, 0.5, 1);
   }
 
   [data-component="user-message"][data-expanded="true"] [data-slot="user-message-text"] {
-    max-height: 2000px;
+    max-height: none;
   }
 
   [data-component="user-message"][data-can-expand="true"] [data-slot="user-message-text"] {
@@ -152,6 +151,17 @@
     background: transparent;
     cursor: pointer;
     color: var(--text-weak);
+
+    [data-slot="icon-svg"] {
+      transition: transform 0.15s ease;
+    }
+  }
+
+  [data-component="user-message"][data-expanded="true"]
+    [data-slot="user-message-text"]
+    [data-slot="user-message-expand"]
+    [data-slot="icon-svg"] {
+    transform: rotate(180deg);
   }
 
   [data-component="user-message"] [data-slot="user-message-text"] [data-slot="user-message-expand"]:hover {
@@ -457,7 +467,6 @@
     gap: 16px;
     align-items: center;
     justify-content: flex-end;
-    color: var(--icon-base);
   }
 
   [data-slot="session-turn-accordion-content"] {
