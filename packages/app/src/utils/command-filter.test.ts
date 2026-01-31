@@ -1,3 +1,4 @@
+import { describe, expect, test } from "bun:test"
 import { compileCommandFilter, isCommandHidden } from "./command-filter"
 
 describe("command filter", () => {
