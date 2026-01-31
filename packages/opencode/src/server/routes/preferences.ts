@@ -1,58 +1,46 @@
+import { lazy } from "../../util/lazy"
+import { Hono } from "hono"
+import { describeRoute, validator, resolver } from "hono-openapi"
+import z from "zod"
 import { adapter } from "../../preferences/adapter"
-import type { ServerRequest, ServerResponse } from "../types"
+import { errors } from "../error"
 
-/**
- * Lightweight HTTP handlers for plugin preferences. The server may import and
- * wire these handlers into its route table. We keep this module minimal so it
- * can be integrated into existing server route registration logic.
- */
-
-export async function listTabs(_req: ServerRequest, res: ServerResponse) {
-  try {
-    const tabs = await adapter.listPreferenceTabs()
-    return res.json({ ok: true, tabs })
-  } catch (err) {
-    return res.json({ ok: false, error: String(err) }, 500)
-  }
-}
-
-export async function getValues(req: ServerRequest, res: ServerResponse) {
-  try {
-    const { pluginId } = req.params
-    const values = await adapter.getPreferenceValues(pluginId)
-    return res.json({ ok: true, values })
-  } catch (err) {
-    return res.json({ ok: false, error: String(err) }, 500)
-  }
-}
-
-export async function validate(req: ServerRequest, res: ServerResponse) {
-  try {
-    const { pluginId } = req.params
-    const { key, value } = await req.json()
-    const result = await adapter.validatePreferenceValue(pluginId, key, value)
-    return res.json({ ok: true, result })
-  } catch (err) {
-    return res.json({ ok: false, error: String(err) }, 500)
-  }
-}
-
-export async function applyChange(req: ServerRequest, res: ServerResponse) {
-  try {
-    const { pluginId } = req.params
-    const { key, value } = await req.json()
-    await adapter.applyPreferenceChange(pluginId, key, value)
-    return res.json({ ok: true })
-  } catch (err) {
-    return res.json({ ok: false, error: String(err) }, 500)
-  }
-}
-
-export const PreferenceRoutes = {
-  listTabs,
-  getValues,
-  validate,
-  applyChange,
-}
+export const PreferenceRoutes = lazy(() =>
+  new Hono()
+    .get(
+      "/",
+      describeRoute({
+        summary: "List plugin preference tabs",
+        operationId: "preferences.list",
+        responses: {
+          200: {
+            description: "List of preference tabs",
+            content: { "application/json": { schema: resolver(z.any()) } },
+          },
+        },
+      }),
+      async (c) => {
+        const tabs = await adapter.listPreferenceTabs()
+        return c.json(tabs)
+      },
+    )
+    .get("/:pluginId/values", async (c) => {
+      const pluginId = c.req.param("pluginId")
+      const values = await adapter.getPreferenceValues(pluginId)
+      return c.json(values)
+    })
+    .post("/:pluginId/validate", async (c) => {
+      const pluginId = c.req.param("pluginId")
+      const body = await c.req.json()
+      const result = await adapter.validatePreferenceValue(pluginId, body.key, body.value)
+      return c.json(result)
+    })
+    .post("/:pluginId/apply", async (c) => {
+      const pluginId = c.req.param("pluginId")
+      const body = await c.req.json()
+      await adapter.applyPreferenceChange(pluginId, body.key, body.value)
+      return c.json({ ok: true })
+    }),
+)
 
 export default PreferenceRoutes
