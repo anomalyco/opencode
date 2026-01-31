@@ -12,12 +12,12 @@ import { getUserConfig } from "../../config/index.js"
 import { getEnv } from "../../env/index.js"
 import os from "../../os/index.js"
 import { getFlags } from "../../flag/index.js"
-import { McpServer, createServer } from "@modelcontextprotocol/sdk/server/mcp.js"
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
 import { IncomingMessage, ServerResponse } from "http"
 import { Readable } from "stream"
-import {
+import type {
 	CallToolResult,
 	ListToolsResult,
 } from "@modelcontextprotocol/sdk/types.js"
@@ -113,7 +113,7 @@ async function getAgentTools(agent: Agent): Promise<AcpTool[]> {
 }
 
 export async function createAgentServer(agent: Agent): Promise<McpServer> {
-	const server = createServer("opencode-agent", "1.0.0")
+	const server = new McpServer({ name: "opencode-agent", version: "1.0.0" })
 
 	server.listTools = async (): Promise<ListToolsResult> => {
 		const tools = await getAgentTools(agent)
