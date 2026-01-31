@@ -71,15 +71,50 @@ Replace `<platform>` with your platform (e.g., `darwin-arm64`, `linux-x64`).
   - `packages/desktop`: The native desktop app, built with Tauri (wraps `packages/app`)
   - `packages/plugin`: Source for `@opencode-ai/plugin`
 
+### Understanding bun dev vs opencode
+
+During development, `bun dev` is the local equivalent of the built `opencode` command. Both run the same CLI interface:
+
+```bash
+# Development (from project root)
+bun dev --help           # Show all available commands
+bun dev serve            # Start headless API server
+bun dev web              # Start server + open web interface
+bun dev <directory>      # Start TUI in specific directory
+
+# Production
+opencode --help          # Show all available commands
+opencode serve           # Start headless API server
+opencode web             # Start server + open web interface
+opencode <directory>     # Start TUI in specific directory
+```
+
+### Running the API Server
+
+To start the OpenCode headless API server:
+
+```bash
+bun dev serve
+```
+
+This starts the headless server on port 4096 by default. You can specify a different port:
+
+```bash
+bun dev serve --port 8080
+```
+
 ### Running the Web App
 
-To test UI changes during development, run the web app:
+To test UI changes during development:
+
+1. **First, start the OpenCode server** (see [Running the API Server](#running-the-api-server) section above)
+2. **Then run the web app:**
 
 ```bash
 bun run --cwd packages/app dev
 ```
 
-This starts a local dev server at http://localhost:5173 (or similar port shown in output). Most UI changes can be tested here.
+This starts a local dev server at http://localhost:5173 (or similar port shown in output). Most UI changes can be tested here, but the server must be running for full functionality.
 
 ### Running the Desktop App
 
@@ -113,7 +148,7 @@ This runs `bun run --cwd packages/desktop build` automatically via Tauri’s `be
 > [!NOTE]
 > If you make changes to the API or SDK (e.g. `packages/opencode/src/server/server.ts`), run `./script/generate.ts` to regenerate the SDK and related files.
 
-Please try to follow the [style guide](./STYLE_GUIDE.md)
+Please try to follow the [style guide](./AGENTS.md)
 
 ### Setting up a Debugger
 
@@ -127,9 +162,9 @@ Caveats:
 - If you want to run the OpenCode TUI and have breakpoints triggered in the server code, you might need to run `bun dev spawn` instead of
   the usual `bun dev`. This is because `bun dev` runs the server in a worker thread and breakpoints might not work there.
 - If `spawn` does not work for you, you can debug the server separately:
-  - Debug server: `bun run --inspect=ws://localhost:6499/ ./src/index.ts serve --port 4096`,
+  - Debug server: `bun run --inspect=ws://localhost:6499/ --cwd packages/opencode ./src/index.ts serve --port 4096`,
     then attach TUI with `opencode attach http://localhost:4096`
-  - Debug TUI: `bun run --inspect=ws://localhost:6499/ --conditions=browser ./src/index.ts`
+  - Debug TUI: `bun run --inspect=ws://localhost:6499/ --cwd packages/opencode --conditions=browser ./src/index.ts`
 
 Other tips and tricks:
 

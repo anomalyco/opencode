@@ -4,7 +4,7 @@
   justify-content: center;
   flex-shrink: 0;
   /* resize: both; */
-  aspect-ratio: 1/1;
+  aspect-ratio: 1 / 1;
   color: var(--icon-base);
 
   &[data-size="small"] {
@@ -15,6 +15,11 @@
   &[data-size="normal"] {
     width: 20px;
     height: 20px;
+  }
+
+  &[data-size="medium"] {
+    width: 24px;
+    height: 24px;
   }
 
   &[data-size="large"] {

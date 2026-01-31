@@ -1,10 +1,12 @@
 import { Config } from "../config/config"
 import z from "zod"
 import { Provider } from "../provider/provider"
-import { generateObject, type ModelMessage } from "ai"
+import { generateObject, streamObject, type ModelMessage } from "ai"
 import { SystemPrompt } from "../session/system"
 import { Instance } from "../project/instance"
 import { Truncate } from "../tool/truncation"
+import { Auth } from "../auth"
+import { ProviderTransform } from "../provider/transform"
 
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
@@ -15,6 +17,7 @@ import { PermissionNext } from "@/permission/next"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
 import path from "path"
+import { Plugin } from "@/plugin"
 
 export namespace Agent {
   export const Info = z
@@ -70,6 +73,7 @@ export namespace Agent {
     const result: Record<string, Info> = {
       build: {
         name: "build",
+        description: "The default agent. Executes tools based on configured permissions.",
         options: {},
         permission: PermissionNext.merge(
           defaults,
@@ -84,6 +88,7 @@ export namespace Agent {
       },
       plan: {
         name: "plan",
+        description: "Plan mode. Disallows all edit tools.",
         options: {},
         permission: PermissionNext.merge(
           defaults,
@@ -276,10 +281,12 @@ export namespace Agent {
     const defaultModel = input.model ?? (await Provider.defaultModel())
     const model = await Provider.getModel(defaultModel.providerID, defaultModel.modelID)
     const language = await Provider.getLanguage(model)
-    const system = SystemPrompt.header(defaultModel.providerID)
-    system.push(PROMPT_GENERATE)
+
+    const system = [PROMPT_GENERATE]
+    await Plugin.trigger("experimental.chat.system.transform", { model }, { system })
     const existing = await list()
-    const result = await generateObject({
+
+    const params = {
       experimental_telemetry: {
         isEnabled: cfg.experimental?.openTelemetry,
         metadata: {
@@ -305,7 +312,24 @@ export namespace Agent {
         whenToUse: z.string(),
         systemPrompt: z.string(),
       }),
-    })
+    } satisfies Parameters<typeof generateObject>[0]
+
+    if (defaultModel.providerID === "openai" && (await Auth.get(defaultModel.providerID))?.type === "oauth") {
+      const result = streamObject({
+        ...params,
+        providerOptions: ProviderTransform.providerOptions(model, {
+          instructions: SystemPrompt.instructions(),
+          store: false,
+        }),
+        onError: () => {},
+      })
+      for await (const part of result.fullStream) {
+        if (part.type === "error") throw part.error
+      }
+      return result.object
+    }
+
+    const result = await generateObject(params)
     return result.object
   }
 }
