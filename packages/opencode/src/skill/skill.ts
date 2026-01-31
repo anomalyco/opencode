@@ -153,11 +153,4 @@ export namespace Skill {
   export async function all() {
     return state().then((x) => Object.values(x))
   }
-
-  export async function content(name: string) {
-    const info = await get(name)
-    if (!info) return undefined
-    const md = await ConfigMarkdown.parse(info.location)
-    return md.content
-  }
 }
