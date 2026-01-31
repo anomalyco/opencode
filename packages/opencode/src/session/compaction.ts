@@ -43,6 +43,74 @@ export namespace SessionCompaction {
 
   const PRUNE_PROTECTED_TOOLS = ["skill"]
 
+  // Reserve tokens for compaction prompt
+  const COMPACTION_PROMPT_RESERVE = 2000
+
+  function estimateMessageTokens(msg: MessageV2.WithParts): number {
+    let chars = 0
+    for (const part of msg.parts) {
+      if (part.type === "text") chars += part.text.length
+      if (part.type === "reasoning") chars += part.text.length
+      if (part.type === "tool" && part.state.status === "completed") {
+        if (!part.state.time.compacted) chars += part.state.output.length
+        chars += JSON.stringify(part.state.input).length
+      }
+      if (part.type === "tool" && part.state.status === "error") {
+        chars += part.state.error.length
+      }
+    }
+    return Token.estimate(String.fromCharCode(0).repeat(chars))
+  }
+
+  // truncates messages to fit within context window for compaction.
+  // prioritizes recent messages while preserving summary messages.
+  export function truncateForCompaction(
+    messages: MessageV2.WithParts[],
+    model: Provider.Model
+  ): MessageV2.WithParts[] {
+    const outputReserve = Math.min(model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) || SessionPrompt.OUTPUT_TOKEN_MAX
+    const inputLimit = model.limit.input || model.limit.context - outputReserve
+    const targetLimit = inputLimit - COMPACTION_PROMPT_RESERVE
+
+    if (targetLimit <= 0) return messages
+
+    // collect summary messages first
+    const summaryMessages: MessageV2.WithParts[] = []
+    let summaryTokens = 0
+    for (const msg of messages) {
+      if (msg.info.role === "assistant" && (msg.info as MessageV2.Assistant).summary) {
+        summaryMessages.push(msg)
+        summaryTokens += estimateMessageTokens(msg)
+      }
+    }
+
+    if (summaryTokens >= targetLimit) return summaryMessages
+
+    // add messages from end until limit reached
+    const result: MessageV2.WithParts[] = []
+    let estimatedTokens = summaryTokens
+    const summaryIds = new Set(summaryMessages.map((m) => m.info.id))
+
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i]
+      if (summaryIds.has(msg.info.id)) continue
+
+      const msgTokens = estimateMessageTokens(msg)
+      if (estimatedTokens + msgTokens > targetLimit) {
+        log.info("truncateForCompaction", { included: result.length, skipped: i + 1 })
+        break
+      }
+
+      result.unshift(msg)
+      estimatedTokens += msgTokens
+    }
+
+    const finalResult = [...summaryMessages, ...result]
+    finalResult.sort((a, b) => (a.info.id > b.info.id ? 1 : -1))
+
+    return finalResult
+  }
+
   // goes backwards through parts until there are 40_000 tokens worth of tool
   // calls. then erases output of previous tool calls. idea is to throw away old
   // tool calls that are no longer relevant.
@@ -149,7 +217,7 @@ export namespace SessionCompaction {
       tools: {},
       system: [],
       messages: [
-        ...MessageV2.toModelMessages(input.messages, model),
+        ...MessageV2.toModelMessages(truncateForCompaction(input.messages, model), model),
         {
           role: "user",
           content: [

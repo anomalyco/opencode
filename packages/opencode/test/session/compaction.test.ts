@@ -146,6 +146,161 @@ describe("session.compaction.isOverflow", () => {
   })
 })
 
+describe("session.compaction.truncateForCompaction", () => {
+  function createMessage(opts: {
+    id: string
+    role: "user" | "assistant"
+    textLength: number
+    isSummary?: boolean
+  }): import("../../src/session/message-v2").MessageV2.WithParts {
+    const baseInfo = {
+      id: opts.id,
+      sessionID: "test-session",
+    }
+
+    const parts: import("../../src/session/message-v2").MessageV2.Part[] = [
+      {
+        id: `part-${opts.id}`,
+        sessionID: "test-session",
+        messageID: opts.id,
+        type: "text" as const,
+        text: "x".repeat(opts.textLength),
+      },
+    ]
+
+    if (opts.role === "user") {
+      return {
+        info: {
+          ...baseInfo,
+          role: "user" as const,
+          time: { created: Date.now() },
+          agent: "test-agent",
+          model: { providerID: "test", modelID: "test-model" },
+        },
+        parts,
+      }
+    }
+
+    return {
+      info: {
+        ...baseInfo,
+        role: "assistant" as const,
+        time: { created: Date.now() },
+        parentID: "parent",
+        modelID: "test-model",
+        providerID: "test",
+        mode: "test",
+        agent: "test-agent",
+        path: { cwd: "/", root: "/" },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        summary: opts.isSummary ?? false,
+      },
+      parts,
+    }
+  }
+
+  test("returns all messages when within limit", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = createModel({ context: 100_000, output: 8_000 })
+        const messages = [
+          createMessage({ id: "1", role: "user", textLength: 1000 }),
+          createMessage({ id: "2", role: "assistant", textLength: 1000 }),
+        ]
+
+        const result = SessionCompaction.truncateForCompaction(messages, model)
+        expect(result.length).toBe(2)
+      },
+    })
+  })
+
+  test("truncates messages when exceeding limit", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        // Model with 10k context, 2k output = 8k input, minus 2k reserve = 6k usable
+        // Each message with 8000 chars = ~2000 tokens
+        const model = createModel({ context: 10_000, output: 2_000 })
+        const messages = [
+          createMessage({ id: "1", role: "user", textLength: 8000 }),
+          createMessage({ id: "2", role: "assistant", textLength: 8000 }),
+          createMessage({ id: "3", role: "user", textLength: 8000 }),
+          createMessage({ id: "4", role: "assistant", textLength: 8000 }),
+        ]
+
+        const result = SessionCompaction.truncateForCompaction(messages, model)
+        expect(result.length).toBeLessThan(messages.length)
+      },
+    })
+  })
+
+  test("preserves summary messages even when truncating", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = createModel({ context: 10_000, output: 2_000 })
+        const messages = [
+          createMessage({ id: "1", role: "assistant", textLength: 1000, isSummary: true }),
+          createMessage({ id: "2", role: "user", textLength: 8000 }),
+          createMessage({ id: "3", role: "assistant", textLength: 8000 }),
+          createMessage({ id: "4", role: "user", textLength: 8000 }),
+        ]
+
+        const result = SessionCompaction.truncateForCompaction(messages, model)
+        const hasSummary = result.some(
+          (m) => m.info.role === "assistant" && (m.info as any).summary === true
+        )
+        expect(hasSummary).toBe(true)
+      },
+    })
+  })
+
+  test("prioritizes recent messages over older ones", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = createModel({ context: 10_000, output: 2_000 })
+        const messages = [
+          createMessage({ id: "1", role: "user", textLength: 8000 }),
+          createMessage({ id: "2", role: "assistant", textLength: 8000 }),
+          createMessage({ id: "3", role: "user", textLength: 4000 }),
+          createMessage({ id: "4", role: "assistant", textLength: 4000 }),
+        ]
+
+        const result = SessionCompaction.truncateForCompaction(messages, model)
+        const hasMessage4 = result.some((m) => m.info.id === "4")
+        expect(hasMessage4).toBe(true)
+      },
+    })
+  })
+
+  test("maintains chronological order after truncation", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = createModel({ context: 10_000, output: 2_000 })
+        const messages = [
+          createMessage({ id: "1", role: "user", textLength: 4000 }),
+          createMessage({ id: "2", role: "assistant", textLength: 4000 }),
+          createMessage({ id: "3", role: "user", textLength: 4000 }),
+        ]
+
+        const result = SessionCompaction.truncateForCompaction(messages, model)
+        for (let i = 1; i < result.length; i++) {
+          expect(result[i].info.id > result[i - 1].info.id).toBe(true)
+        }
+      },
+    })
+  })
+})
+
 describe("util.token.estimate", () => {
   test("estimates tokens from text (4 chars per token)", () => {
     const text = "x".repeat(4000)
