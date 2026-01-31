@@ -8614,6 +8614,11 @@
             "default": "<leader>m",
             "type": "string"
           },
+          "model_list_recent_toggle": {
+            "description": "Toggle recent models section visibility",
+            "default": "ctrl+h",
+            "type": "string"
+          },
           "model_cycle_recent": {
             "description": "Next recently used model",
             "default": "f2",

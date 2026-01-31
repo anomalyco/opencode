@@ -1094,6 +1094,10 @@ export type KeybindsConfig = {
    */
   model_list?: string
   /**
+   * Toggle recent models section visibility
+   */
+  model_list_recent_toggle?: string
+  /**
    * Next recently used model
    */
   model_cycle_recent?: string
