@@ -35,6 +35,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const agent = iife(() => {
       const agents = createMemo(() => sync.data.agent.filter((x) => x.mode !== "subagent" && !x.hidden))
+      const visibleAgents = createMemo(() => sync.data.agent.filter((x) => !x.hidden))
       const [agentStore, setAgentStore] = createStore<{
         current: string
       }>({
@@ -76,9 +77,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           })
         },
         color(name: string) {
-          const index = agents().findIndex((x) => x.name === name)
+          const index = visibleAgents().findIndex((x) => x.name === name)
           if (index === -1) return colors()[0]
-          const agent = agents()[index]
+          const agent = visibleAgents()[index]
 
           if (agent?.color) {
             const color = agent.color
