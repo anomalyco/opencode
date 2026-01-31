@@ -4,6 +4,9 @@ import type { Context } from "hono"
 import { UserSession } from "../../session/user-session"
 import { ServerAuth } from "../../config/server-auth"
 import { parseDuration } from "../../util/duration"
+import { getUiDir } from "../ui-dir"
+import { Filesystem } from "../../util/filesystem"
+import nodePath from "node:path"
 
 /**
  * Auth context with essential session information.
@@ -89,6 +92,28 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
 
   // Health check endpoints are always public
   if (path === "/global/health" || path === "/health") {
+    return next()
+  }
+
+  const isUiStaticRequest = async () => {
+    const method = c.req.method.toUpperCase()
+    if (method !== "GET" && method !== "HEAD") return false
+
+    const uiDir = getUiDir()
+    if (!uiDir) return false
+
+    const relativePath = path.replace(/^\/+/, "")
+    if (!relativePath) return false
+
+    const resolvedPath = nodePath.resolve(uiDir, relativePath)
+    if (!Filesystem.contains(uiDir, resolvedPath)) return false
+    if (await Filesystem.isDir(resolvedPath)) return false
+    if (!(await Filesystem.exists(resolvedPath))) return false
+
+    return true
+  }
+
+  if (await isUiStaticRequest()) {
     return next()
   }
 
