@@ -294,6 +294,14 @@ export const dict = {
   "context.systemPrompt.title": "システムプロンプト",
   "context.rawMessages.title": "生のメッセージ",
 
+  "context.tab.context": "コンテキスト",
+  "context.tab.tools": "ツール",
+
+  "context.tools.title": "ツール使用量",
+  "context.tools.details": "ツール内訳",
+  "context.tools.history": "呼び出し履歴",
+  "context.tools.empty": "このセッションではツールは使用されていません",
+
   "context.stats.session": "セッション",
   "context.stats.messages": "メッセージ",
   "context.stats.provider": "プロバイダー",

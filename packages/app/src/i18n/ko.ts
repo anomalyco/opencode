@@ -1,7 +1,3 @@
-import { dict as en } from "./en"
-
-type Keys = keyof typeof en
-
 export const dict = {
   "command.category.suggested": "추천",
   "command.category.view": "보기",
@@ -296,6 +292,14 @@ export const dict = {
 
   "context.systemPrompt.title": "시스템 프롬프트",
   "context.rawMessages.title": "원시 메시지",
+
+  "context.tab.context": "컨텍스트",
+  "context.tab.tools": "도구",
+
+  "context.tools.title": "도구 사용량",
+  "context.tools.details": "도구 분석",
+  "context.tools.history": "호출 기록",
+  "context.tools.empty": "이 세션에서 사용된 도구가 없습니다",
 
   "context.stats.session": "세션",
   "context.stats.messages": "메시지",

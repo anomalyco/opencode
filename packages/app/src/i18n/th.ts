@@ -299,6 +299,14 @@ export const dict = {
   "context.systemPrompt.title": "พร้อมท์ระบบ",
   "context.rawMessages.title": "ข้อความดิบ",
 
+  "context.tab.context": "บริบท",
+  "context.tab.tools": "เครื่องมือ",
+
+  "context.tools.title": "การใช้เครื่องมือ",
+  "context.tools.details": "รายละเอียดเครื่องมือ",
+  "context.tools.history": "ประวัติการเรียก",
+  "context.tools.empty": "ไม่มีการใช้เครื่องมือในเซสชันนี้",
+
   "context.stats.session": "เซสชัน",
   "context.stats.messages": "ข้อความ",
   "context.stats.provider": "ผู้ให้บริการ",

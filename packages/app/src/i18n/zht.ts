@@ -294,6 +294,14 @@ export const dict = {
   "context.systemPrompt.title": "系統提示詞",
   "context.rawMessages.title": "原始訊息",
 
+  "context.tab.context": "上下文",
+  "context.tab.tools": "工具",
+
+  "context.tools.title": "工具使用情況",
+  "context.tools.details": "工具細分",
+  "context.tools.history": "呼叫歷史",
+  "context.tools.empty": "此工作階段中未使用工具",
+
   "context.stats.session": "工作階段",
   "context.stats.messages": "訊息數",
   "context.stats.provider": "提供者",

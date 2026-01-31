@@ -313,6 +313,14 @@ export const dict = {
   "context.stats.sessionCreated": "Сессия создана",
   "context.stats.lastActivity": "Последняя активность",
 
+  "context.tab.context": "Контекст",
+  "context.tab.tools": "Инструменты",
+
+  "context.tools.title": "Использование инструментов",
+  "context.tools.details": "Детализация по инструментам",
+  "context.tools.history": "История вызовов",
+  "context.tools.empty": "В этой сессии инструменты не использовались",
+
   "context.usage.tokens": "Токены",
   "context.usage.usage": "Использование",
   "context.usage.cost": "Стоимость",

@@ -317,6 +317,14 @@ export const dict = {
   "context.stats.sessionCreated": "Session Created",
   "context.stats.lastActivity": "Last Activity",
 
+  "context.tab.context": "Context",
+  "context.tab.tools": "Tools",
+
+  "context.tools.title": "Tools Usage",
+  "context.tools.details": "Tools Breakdown",
+  "context.tools.history": "Call History",
+  "context.tools.empty": "No tools used in this session",
+
   "context.usage.tokens": "Tokens",
   "context.usage.usage": "Usage",
   "context.usage.cost": "Cost",

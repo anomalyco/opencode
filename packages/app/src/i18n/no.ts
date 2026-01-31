@@ -297,6 +297,14 @@ export const dict = {
   "context.systemPrompt.title": "Systemprompt",
   "context.rawMessages.title": "Rå meldinger",
 
+  "context.tab.context": "Kontekst",
+  "context.tab.tools": "Verktøy",
+
+  "context.tools.title": "Verktøybruk",
+  "context.tools.details": "Verktøyanalyse",
+  "context.tools.history": "Kallhistorikk",
+  "context.tools.empty": "Ingen verktøy brukt i denne sesjonen",
+
   "context.stats.session": "Sesjon",
   "context.stats.messages": "Meldinger",
   "context.stats.provider": "Leverandør",

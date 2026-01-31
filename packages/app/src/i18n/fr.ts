@@ -296,6 +296,14 @@ export const dict = {
   "context.systemPrompt.title": "Prompt système",
   "context.rawMessages.title": "Messages bruts",
 
+  "context.tab.context": "Contexte",
+  "context.tab.tools": "Outils",
+
+  "context.tools.title": "Utilisation des outils",
+  "context.tools.details": "Répartition des outils",
+  "context.tools.history": "Historique des appels",
+  "context.tools.empty": "Aucun outil utilisé dans cette session",
+
   "context.stats.session": "Session",
   "context.stats.messages": "Messages",
   "context.stats.provider": "Fournisseur",

@@ -301,6 +301,14 @@ export const dict = {
   "context.systemPrompt.title": "System-Prompt",
   "context.rawMessages.title": "Rohdaten der Nachrichten",
 
+  "context.tab.context": "Kontext",
+  "context.tab.tools": "Werkzeuge",
+
+  "context.tools.title": "Werkzeugnutzung",
+  "context.tools.details": "Werkzeug-Aufschlüsselung",
+  "context.tools.history": "Aufrufhistorie",
+  "context.tools.empty": "In dieser Sitzung wurden keine Werkzeuge verwendet",
+
   "context.stats.session": "Sitzung",
   "context.stats.messages": "Nachrichten",
   "context.stats.provider": "Anbieter",

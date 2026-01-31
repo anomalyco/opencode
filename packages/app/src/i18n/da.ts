@@ -295,6 +295,14 @@ export const dict = {
   "context.systemPrompt.title": "Systemprompt",
   "context.rawMessages.title": "Rå beskeder",
 
+  "context.tab.context": "Kontekst",
+  "context.tab.tools": "Værktøjer",
+
+  "context.tools.title": "Værktøjsforbrug",
+  "context.tools.details": "Værktøjsopdeling",
+  "context.tools.history": "Kaldhistorik",
+  "context.tools.empty": "Ingen værktøjer brugt i denne session",
+
   "context.stats.session": "Session",
   "context.stats.messages": "Beskeder",
   "context.stats.provider": "Udbyder",

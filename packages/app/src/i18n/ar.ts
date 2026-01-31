@@ -294,6 +294,14 @@ export const dict = {
   "context.systemPrompt.title": "موجه النظام",
   "context.rawMessages.title": "الرسائل الخام",
 
+  "context.tab.context": "السياق",
+  "context.tab.tools": "الأدوات",
+
+  "context.tools.title": "استخدام الأدوات",
+  "context.tools.details": "تفاصيل الأدوات",
+  "context.tools.history": "سجل الاستدعاءات",
+  "context.tools.empty": "لم يتم استخدام أي أدوات في هذه الجلسة",
+
   "context.stats.session": "جلسة",
   "context.stats.messages": "رسائل",
   "context.stats.provider": "موفر",
