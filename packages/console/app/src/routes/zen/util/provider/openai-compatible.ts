@@ -187,14 +187,18 @@ export function toOaCompatibleRequest(body: CommonRequest) {
   }
 
   const tools = Array.isArray(body.tools)
-    ? body.tools.map((tool: any) => ({
-        type: "function",
-        function: {
-          name: tool.name,
-          description: tool.description,
-          parameters: tool.parameters,
-        },
-      }))
+    ? body.tools.map((tool: any) => {
+        const t = tool.function ? tool.function : tool
+        return {
+          type: "function",
+          function: {
+            name: t.name,
+            description: t.description,
+            parameters: t.parameters,
+            strict: t.strict,
+          },
+        }
+      })
     : undefined
 
   return {
@@ -281,25 +285,25 @@ export function fromOaCompatibleResponse(resp: any): CommonResponse {
           role: "assistant" as const,
           ...(content.length > 0 && content.some((c) => c.type === "text")
             ? {
-                content: content
-                  .filter((c) => c.type === "text")
-                  .map((c: any) => c.text)
-                  .join(""),
-              }
+              content: content
+                .filter((c) => c.type === "text")
+                .map((c: any) => c.text)
+                .join(""),
+            }
             : {}),
           ...(content.length > 0 && content.some((c) => c.type === "tool_use")
             ? {
-                tool_calls: content
-                  .filter((c) => c.type === "tool_use")
-                  .map((c: any) => ({
-                    id: c.id,
-                    type: "function" as const,
-                    function: {
-                      name: c.name,
-                      arguments: typeof c.input === "string" ? c.input : JSON.stringify(c.input),
-                    },
-                  })),
-              }
+              tool_calls: content
+                .filter((c) => c.type === "tool_use")
+                .map((c: any) => ({
+                  id: c.id,
+                  type: "function" as const,
+                  function: {
+                    name: c.name,
+                    arguments: typeof c.input === "string" ? c.input : JSON.stringify(c.input),
+                  },
+                })),
+            }
             : {}),
         },
         finish_reason: stopReason,
@@ -534,10 +538,10 @@ export function toOaCompatibleChunk(chunk: CommonChunk): string {
       total_tokens: chunk.usage.total_tokens,
       ...(chunk.usage.prompt_tokens_details?.cached_tokens
         ? {
-            prompt_tokens_details: {
-              cached_tokens: chunk.usage.prompt_tokens_details.cached_tokens,
-            },
-          }
+          prompt_tokens_details: {
+            cached_tokens: chunk.usage.prompt_tokens_details.cached_tokens,
+          },
+        }
         : {}),
     }
   }
