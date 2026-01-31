@@ -128,4 +128,4 @@ export const ListNotebookCellsTool = Tool.define("list_notebook_cells", {
       output
     }
   }
-})<arg_value>
+}<arg_value>
