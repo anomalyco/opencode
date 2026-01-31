@@ -506,6 +506,14 @@ export namespace Provider {
         },
       }
     },
+    dify: async () => {
+      return {
+        autoload: false,
+        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
+          return (sdk as any)(modelID, options)
+        },
+      }
+    },
   }
 
   export const Model = z
