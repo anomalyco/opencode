@@ -28,7 +28,7 @@ tauri-plugin-process = "2"
 tauri-plugin-store = "2"
 tauri-plugin-window-state = "2"
 tauri-plugin-clipboard-manager = "2"
-tauri-plugin-http = "2"
+tauri-plugin-http = "2.5.6"
 tauri-plugin-notification = "2"
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 

@@ -269,13 +269,17 @@ If this is not set, the agent will continue to iterate until the model chooses t
     "quick-thinker": {
       "description": "Fast reasoning with limited iterations",
       "prompt": "You are a quick thinker. Solve problems with minimal steps.",
-      "maxSteps": 5
+      "steps": 5
     }
   }
 }
 ```
 
 When the limit is reached, the agent receives a special system prompt instructing it to respond with a summarization of its work and recommended remaining tasks.
+
+:::caution
+The legacy `maxSteps` field is deprecated. Use `steps` instead.
+:::
 
 ---
 
@@ -565,6 +569,42 @@ Rules are evaluated in order, and the **last matching rule wins**. In the exampl
 :::tip
 Users can always invoke any subagent directly via the `@` autocomplete menu, even if the agent's task permissions would deny it.
 :::
+
+---
+
+### Color
+
+Customize the agent's visual appearance in the UI with the `color` option. This affects how the agent appears in the interface.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "creative": {
+      "color": "#ff6b6b"
+    }
+  }
+}
+```
+
+Must be a valid hex color code like `#FF5733`.
+
+---
+
+### Top P
+
+Control response diversity with the `top_p` option. Alternative to temperature for controlling randomness.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "brainstorm": {
+      "top_p": 0.9
+    }
+  }
+}
+```
+
+Values range from 0.0 to 1.0. Lower values are more focused, higher values more diverse.
 
 ---
 
