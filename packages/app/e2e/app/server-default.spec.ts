@@ -1,5 +1,5 @@
-import { test, expect } from "./fixtures"
-import { serverName, serverUrl } from "./utils"
+import { test, expect } from "../fixtures"
+import { serverName, serverUrl } from "../utils"
 
 const DEFAULT_SERVER_URL_KEY = "opencode.settings.dat:defaultServerUrl"
 
