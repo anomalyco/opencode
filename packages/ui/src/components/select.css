@@ -31,7 +31,7 @@
       }
     }
 
-    &:not([data-expanded]):focus {
+    &:not([data-expanded]):focus-visible {
       &[data-variant="secondary"] {
         background-color: var(--button-secondary-base);
       }

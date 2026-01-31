@@ -551,6 +551,7 @@ export namespace SessionPrompt {
         model,
         abort,
       })
+      using _ = defer(() => InstructionPrompt.clear(processor.message.id))
 
       // Check if user explicitly invoked an agent via @ in this turn
       const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
@@ -839,6 +840,7 @@ export namespace SessionPrompt {
       system: input.system,
       variant: input.variant,
     }
+    using _ = defer(() => InstructionPrompt.clear(info.id))
 
     const parts = await Promise.all(
       input.parts.map(async (part): Promise<MessageV2.Part[]> => {

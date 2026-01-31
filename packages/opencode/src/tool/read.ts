@@ -24,7 +24,7 @@ export const ReadTool = Tool.define("read", {
   async execute(params, ctx) {
     let filepath = params.filePath
     if (!path.isAbsolute(filepath)) {
-      filepath = path.join(process.cwd(), filepath)
+      filepath = path.resolve(Instance.directory, filepath)
     }
     const title = path.relative(Instance.worktree, filepath)
 
@@ -60,7 +60,7 @@ export const ReadTool = Tool.define("read", {
       throw new Error(`File not found: ${filepath}`)
     }
 
-    const instructions = await InstructionPrompt.resolve(ctx.messages, filepath)
+    const instructions = await InstructionPrompt.resolve(ctx.messages, filepath, ctx.messageID)
 
     // Exclude SVG (XML-based) and vnd.fastbidsheet (.fbs extension, commonly FlatBuffers schema files)
     const isImage =
