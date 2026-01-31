@@ -758,6 +758,10 @@ export namespace ProviderTransform {
 
         const result: any = {}
         for (const [key, value] of Object.entries(obj)) {
+          // Skip non-standard JSON Schema fields that Gemini doesn't support
+          if (key === "ref" || key === "$schema") {
+            continue
+          }
           if (key === "enum" && Array.isArray(value)) {
             // Convert all enum values to strings
             result[key] = value.map((v) => String(v))

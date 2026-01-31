@@ -18,6 +18,7 @@ import {
   modify,
   parse as parseJsonc,
   printParseErrorCode,
+  visit as visitJsonc,
 } from "jsonc-parser"
 import { Instance } from "../project/instance"
 import { LSPServer } from "../lsp/server"
@@ -1190,8 +1191,27 @@ export namespace Config {
     }
 
     const errors: JsoncParseError[] = []
+    const duplicateKeys: { key: string; offset: number }[] = []
+    const keyStack: string[][] = [[]]
+    visitJsonc(text, {
+      onObjectBegin() {
+        keyStack.push([])
+      },
+      onObjectEnd() {
+        keyStack.pop()
+      },
+      onObjectProperty(property, offset) {
+        const currentLevel = keyStack[keyStack.length - 1]
+        if (currentLevel.includes(property)) {
+          duplicateKeys.push({ key: property, offset })
+        } else {
+          currentLevel.push(property)
+        }
+      },
+    })
+
     const data = parseJsonc(text, errors, { allowTrailingComma: true })
-    if (errors.length) {
+    if (errors.length || duplicateKeys.length) {
       const lines = text.split("\n")
       const errorDetails = errors
         .map((e) => {
@@ -1207,9 +1227,25 @@ export namespace Config {
         })
         .join("\n")
 
+      const duplicateDetails = duplicateKeys
+        .map((d) => {
+          const beforeOffset = text.substring(0, d.offset).split("\n")
+          const line = beforeOffset.length
+          const column = beforeOffset[beforeOffset.length - 1].length + 1
+          const problemLine = lines[line - 1]
+
+          const error = `Duplicate key "${d.key}" at line ${line}, column ${column}. Use an array for multiple values, e.g. "plugin": ["value1", "value2"]`
+          if (!problemLine) return error
+
+          return `${error}\n   Line ${line}: ${problemLine}\n${"".padStart(column + 9)}^`
+        })
+        .join("\n")
+
+      const allErrors = [errorDetails, duplicateDetails].filter(Boolean).join("\n")
+
       throw new JsonError({
         path: configFilepath,
-        message: `\n--- JSONC Input ---\n${text}\n--- Errors ---\n${errorDetails}\n--- End ---`,
+        message: `\n--- JSONC Input ---\n${text}\n--- Errors ---\n${allErrors}\n--- End ---`,
       })
     }
 

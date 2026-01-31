@@ -60,7 +60,11 @@ export namespace FileTime {
     const time = get(sessionID, filepath)
     if (!time) throw new Error(`You must read file ${filepath} before overwriting it. Use the Read tool first`)
     const stats = await Bun.file(filepath).stat()
-    if (stats.mtime.getTime() > time.getTime()) {
+    const mtime = stats.mtime.getTime()
+    const readTime = time.getTime()
+    // Allow 100ms tolerance to account for filesystem timestamp precision differences
+    // Some filesystems may update mtime slightly after the read operation completes
+    if (mtime > readTime + 100) {
       throw new Error(
         `File ${filepath} has been modified since it was last read.\nLast modification: ${stats.mtime.toISOString()}\nLast read: ${time.toISOString()}\n\nPlease read the file again before modifying it.`,
       )
