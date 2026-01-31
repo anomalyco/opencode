@@ -153,9 +153,7 @@ export namespace Config {
         }
       }
 
-      const exists = existsSync(path.join(dir, "node_modules"))
-      const installing = installDependencies(dir)
-      if (!exists) await installing
+      await installDependencies(dir).catch(() => {})
 
       result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
       result.agent = mergeDeep(result.agent, await loadAgent(dir))
@@ -228,25 +226,31 @@ export namespace Config {
 
   export async function installDependencies(dir: string) {
     const pkg = path.join(dir, "package.json")
+    const pkgjson = Bun.file(pkg)
 
-    if (!(await Bun.file(pkg).exists())) {
-      await Bun.write(pkg, "{}")
+    if (!(await pkgjson.exists())) {
+      return
     }
 
-    const gitignore = path.join(dir, ".gitignore")
-    const hasGitIgnore = await Bun.file(gitignore).exists()
-    if (!hasGitIgnore) await Bun.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
-
-    await BunProc.run(
-      ["add", "@opencode-ai/plugin@" + (Installation.isLocal() ? "latest" : Installation.VERSION), "--exact"],
-      {
-        cwd: dir,
-      },
-    ).catch(() => {})
+    const pkgContent = await pkgjson.json().catch(() => ({}))
+    const deps = pkgContent.dependencies ?? {}
+    const devDeps = pkgContent.devDependencies ?? {}
+    const allDeps = { ...deps, ...devDeps }
 
     // Install any additional dependencies defined in the package.json
     // This allows local plugins and custom tools to use external packages
-    await BunProc.run(["install"], { cwd: dir }).catch(() => {})
+    if (Object.keys(allDeps).length > 0) {
+      await BunProc.run(["install"], { cwd: dir }).catch(() => {})
+    }
+
+    await BunProc.install("@opencode-ai/plugin", "latest").catch(() => {})
+
+    const gitignore = path.join(dir, ".gitignore")
+    const gitignoreFile = Bun.file(gitignore)
+    const hasGitIgnore = await gitignoreFile.exists()
+    if (!hasGitIgnore) {
+      await Bun.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
+    }
   }
 
   function rel(item: string, patterns: string[]) {
