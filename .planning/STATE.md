@@ -179,6 +179,7 @@ Recent decisions affecting current work:
 ### Pending Todos
 
 - Fix site manifest 401
+- Fix web terminal 500
 
 ### Blockers/Concerns
 
