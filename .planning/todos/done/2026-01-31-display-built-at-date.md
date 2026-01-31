@@ -12,4 +12,4 @@ or surfaced in settings for troubleshooting and verification.
 
 ## Solution
 
-TBD
+Implemented build-time stamp injection and a subtle UI footer display.

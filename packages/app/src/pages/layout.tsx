@@ -83,6 +83,13 @@ export default function Layout(props: ParentProps) {
   )
 
   const pageReady = createMemo(() => ready())
+  const builtAt = import.meta.env.VITE_BUILD_DATE as string | undefined
+  const builtAtLabel = createMemo(() => {
+    if (!builtAt) return undefined
+    const parsed = new Date(builtAt)
+    if (Number.isNaN(parsed.getTime())) return builtAt
+    return parsed.toLocaleString()
+  })
 
   let scrollContainerRef: HTMLDivElement | undefined
   const xlQuery = window.matchMedia("(min-width: 1280px)")
@@ -1842,6 +1849,11 @@ export default function Layout(props: ParentProps) {
           {props.children}
         </main>
       </div>
+      <Show when={builtAtLabel()}>
+        <div class="fixed bottom-2 right-2 text-12-regular text-text-weak opacity-70 pointer-events-none">
+          Built at {builtAtLabel()}
+        </div>
+      </Show>
       <Toast.Region />
     </div>
   )

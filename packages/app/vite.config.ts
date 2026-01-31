@@ -3,6 +3,9 @@ import desktopPlugin from "./vite"
 
 export default defineConfig({
   plugins: [desktopPlugin] as any,
+  define: {
+    "import.meta.env.VITE_BUILD_DATE": JSON.stringify(new Date().toISOString()),
+  },
   server: {
     host: "0.0.0.0",
     allowedHosts: true,
