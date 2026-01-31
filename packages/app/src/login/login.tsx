@@ -143,7 +143,8 @@ export function LoginApp() {
         .logo {
           width: 80px;
           height: 100px;
-          margin-bottom: 2rem;
+          margin: 0 auto 2rem;
+          display: block;
         }
         .card {
           width: 100%;

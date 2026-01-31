@@ -2,7 +2,7 @@
 status: resolved
 trigger: "Investigate blank /auth/login with 401 errors when running bun run dev:web. Find auth middleware/basic auth/csrf for static assets. Determine why login.html/js/css from uiDir returns 401. Identify fix. Report paths and changes needed. Search server routes and middleware ordering. Check basic auth in server.ts, static serving. Return recommendation."
 created: 2026-01-31T22:21:43Z
-updated: 2026-01-31T22:36:00Z
+updated: 2026-01-31T22:32:00Z
 ---
 
 ## Current Focus
@@ -46,6 +46,6 @@ started: unknown
 
 root_cause: authMiddleware runs before uiDir static serving and only allowlists /auth/*; unauthenticated asset requests (e.g., /assets/*, /oc-theme-preload.js, /src/login/index.tsx) are treated as API calls and return 401, so /auth/login renders a blank page.
 fix: allow unauthenticated access to uiDir static assets by detecting file requests under uiDir in auth middleware.
-verification: pending (requires server restart and /auth/login load)
+verification: confirmed `/auth/login` loads without 401s after restart (bun run dev:web)
 files_changed:
   - packages/opencode/src/server/middleware/auth.ts
