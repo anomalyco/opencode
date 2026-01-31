@@ -464,7 +464,7 @@ describe("full conversation", () => {
 
     expect(result).toHaveLength(4)
 
-    const systemMsg = result[0];
+    const systemMsg = result[0]
     expect(systemMsg.role).toBe("system")
 
     // Assistant message should have reasoning fields

@@ -355,7 +355,9 @@ describe("doStream", () => {
     // Check text content
     const textDeltas = parts.filter((p) => p.type === "text-delta")
     expect(textDeltas).toHaveLength(1)
-    expect((textDeltas[0] as { delta: string }).delta).toContain("Okay, I need to check out the project's file structure.")
+    expect((textDeltas[0] as { delta: string }).delta).toContain(
+      "Okay, I need to check out the project's file structure.",
+    )
 
     // Check tool call
     const toolParts = parts.filter(
