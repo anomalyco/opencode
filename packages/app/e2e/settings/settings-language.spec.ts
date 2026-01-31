@@ -1,5 +1,6 @@
 import { test, expect } from "../fixtures"
-import { modKey, settingsLanguageSelectSelector } from "../utils"
+import { settingsLanguageSelectSelector } from "../selectors"
+import { openSettings } from "../actions"
 
 test("smoke changing language updates settings labels", async ({ page, gotoSession }) => {
   await page.addInitScript(() => {
@@ -8,19 +9,7 @@ test("smoke changing language updates settings labels", async ({ page, gotoSessi
 
   await gotoSession()
 
-  const dialog = page.getByRole("dialog")
-
-  await page.keyboard.press(`${modKey}+Comma`).catch(() => undefined)
-
-  const opened = await dialog
-    .waitFor({ state: "visible", timeout: 3000 })
-    .then(() => true)
-    .catch(() => false)
-
-  if (!opened) {
-    await page.getByRole("button", { name: "Settings" }).first().click()
-    await expect(dialog).toBeVisible()
-  }
+  const dialog = await openSettings(page)
 
   const heading = dialog.getByRole("heading", { level: 2 })
   await expect(heading).toHaveText("General")
