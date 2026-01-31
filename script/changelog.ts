@@ -74,7 +74,11 @@ export async function getCommits(from: string, to: string): Promise<Commit[]> {
     const data = commitData.get(hash)
     if (!data) continue
 
-    const message = data.message
+    const message = data.message?.trim() ?? ""
+    if (!message) {
+      console.log(`Skipping commit ${hash.slice(0, 7)} - empty message`)
+      continue
+    }
     if (message.match(/^(ignore:|test:|chore:|ci:|release:)/i)) continue
 
     const files = await $`git diff-tree --no-commit-id --name-only -r ${hash}`.text()
@@ -150,8 +154,13 @@ function getSection(areas: Set<string>): string {
 }
 
 async function summarizeCommit(opencode: Awaited<ReturnType<typeof createOpencode>>, message: string): Promise<string> {
+  if (!message || message.trim().length === 0) {
+    throw new Error("Cannot summarize empty commit message")
+  }
+
   console.log("summarizing commit:", message)
   const session = await opencode.client.session.create()
+
   const result = await opencode.client.session
     .prompt(
       {
@@ -173,8 +182,14 @@ Commit: ${message}`,
         signal: AbortSignal.timeout(120_000),
       },
     )
-    .then((x) => x.data?.parts?.find((y) => y.type === "text")?.text ?? message)
-  return result.trim()
+    .then((x) => x.data?.parts?.find((y) => y.type === "text")?.text)
+
+  const summary = result?.trim()
+  if (!summary) {
+    throw new Error(`AI returned empty summary for commit: ${message}`)
+  }
+
+  return summary
 }
 
 export async function generateChangelog(commits: Commit[], opencode: Awaited<ReturnType<typeof createOpencode>>) {
