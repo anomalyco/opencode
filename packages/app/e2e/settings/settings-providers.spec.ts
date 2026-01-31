@@ -1,6 +1,6 @@
 import { test, expect } from "../fixtures"
 import { promptSelector } from "../selectors"
-import { closeDialog, openSettings } from "../actions"
+import { closeDialog, openSettings, clickListItem } from "../actions"
 
 test("smoke providers settings opens provider selector", async ({ page, gotoSession }) => {
   await gotoSession()

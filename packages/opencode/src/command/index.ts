@@ -6,7 +6,9 @@ import { Identifier } from "../id/id"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
 import { MCP } from "../mcp"
+import { Skill } from "../skill"
 import { compileCommandFilter, isCommandHidden } from "../util/command-filter"
+
 
 export namespace Command {
   export const Event = {
@@ -27,7 +29,7 @@ export namespace Command {
       description: z.string().optional(),
       agent: z.string().optional(),
       model: z.string().optional(),
-      mcp: z.boolean().optional(),
+      source: z.enum(["command", "mcp", "skill"]).optional(),
       // workaround for zod not supporting async functions natively so we use getters
       // https://zod.dev/v4/changelog?id=zfunction
       template: z.promise(z.string()).or(z.string()),
@@ -95,7 +97,7 @@ export namespace Command {
     for (const [name, prompt] of Object.entries(await MCP.prompts())) {
       result[name] = {
         name,
-        mcp: true,
+        source: "mcp",
         description: prompt.description,
         get template() {
           // since a getter can't be async we need to manually return a promise here
@@ -116,6 +118,21 @@ export namespace Command {
           })
         },
         hints: prompt.arguments?.map((_, i) => `$${i + 1}`) ?? [],
+      }
+    }
+
+    // Add skills as invokable commands
+    for (const skill of await Skill.all()) {
+      // Skip if a command with this name already exists
+      if (result[skill.name]) continue
+      result[skill.name] = {
+        name: skill.name,
+        description: skill.description,
+        source: "skill",
+        get template() {
+          return skill.content
+        },
+        hints: [],
       }
     }
 

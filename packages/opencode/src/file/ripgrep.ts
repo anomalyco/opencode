@@ -214,8 +214,8 @@ export namespace Ripgrep {
     input.signal?.throwIfAborted()
 
     const args = [await filepath(), "--files", "--glob=!.git/*"]
-    if (input.follow !== false) args.push("--follow")
-    if (input.hidden !== false) args.push("--hidden")
+    if (input.follow) args.push("--follow")
+    if (input.hidden) args.push("--hidden")
     if (input.maxDepth !== undefined) args.push(`--max-depth=${input.maxDepth}`)
     if (input.glob) {
       for (const g of input.glob) {
@@ -381,7 +381,7 @@ export namespace Ripgrep {
     follow?: boolean
   }) {
     const args = [`${await filepath()}`, "--json", "--hidden", "--glob='!.git/*'"]
-    if (input.follow !== false) args.push("--follow")
+    if (input.follow) args.push("--follow")
 
     if (input.glob) {
       for (const g of input.glob) {
