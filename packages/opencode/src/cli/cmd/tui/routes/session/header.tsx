@@ -67,6 +67,16 @@ export function Header() {
   const dimensions = useTerminalDimensions()
   const narrow = createMemo(() => dimensions().width < 80)
 
+  const getSubagentPosition = createMemo(() => {
+    const current = session()
+    if (!current.parentID) return null
+    const siblings = sync.data.session.filter((session) => session.parentID === current.parentID)
+    const index = siblings.findIndex((sibling) => sibling.id === current.id)
+    return { current: index + 1, total: siblings.length }
+  })
+
+  const subagentPosition = getSubagentPosition()
+
   return (
     <box flexShrink={0}>
       <box
@@ -84,9 +94,16 @@ export function Header() {
           <Match when={session()?.parentID}>
             <box flexDirection="column" gap={1}>
               <box flexDirection={narrow() ? "column" : "row"} justifyContent="space-between" gap={narrow() ? 1 : 0}>
-                <text fg={theme.text}>
-                  <b>Subagent session</b>
-                </text>
+                <box flexDirection="row" gap={1} alignItems="center">
+                  <text fg={theme.text}>
+                    <b>Subagent session</b>
+                  </text>
+                  <Show when={subagentPosition !== null}>
+                    <text fg={theme.textMuted}>
+                      {subagentPosition!.current} of {subagentPosition!.total}
+                    </text>
+                  </Show>
+                </box>
                 <box flexDirection="row" gap={1} flexShrink={0}>
                   <ContextInfo context={context} cost={cost} />
                   <text fg={theme.textMuted}>v{Installation.VERSION}</text>
