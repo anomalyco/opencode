@@ -161,6 +161,7 @@ export const TuiThreadCommand = cmd({
 
       const tuiPromise = tui({
         url,
+        directory: cwd,
         fetch: customFetch,
         events,
         args: {
