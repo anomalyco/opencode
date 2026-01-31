@@ -505,6 +505,30 @@ export namespace Config {
       ref: "McpRemoteConfig",
     })
 
+  export const Compaction = z
+    .object({
+      auto: z.boolean().optional().describe("Enable automatic compaction when context is full (default: true)"),
+      prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
+      threshold: z
+        .number()
+        .min(0)
+        .max(1)
+        .optional()
+        .describe("Percentage of context window at which to trigger compaction (default: 0.75)"),
+      strategy: z.enum(["summarize", "truncate", "archive"]).optional().describe("Compaction strategy"),
+      preserveRecentMessages: z
+        .number()
+        .int()
+        .nonnegative()
+        .optional()
+        .describe("Number of recent messages to always preserve"),
+      preserveSystemPrompt: z.boolean().optional().describe("Always preserve the system prompt"),
+    })
+    .meta({
+      ref: "CompactionConfig",
+    })
+  export type Compaction = z.infer<typeof Compaction>
+
   export const Mcp = z.discriminatedUnion("type", [McpLocal, McpRemote])
   export type Mcp = z.infer<typeof Mcp>
 
@@ -868,6 +892,7 @@ export namespace Config {
         .record(
           z.string(),
           ModelsDev.Model.partial().extend({
+            compaction: Compaction.optional(),
             variants: z
               .record(
                 z.string(),
@@ -1070,12 +1095,7 @@ export namespace Config {
           url: z.string().optional().describe("Enterprise URL"),
         })
         .optional(),
-      compaction: z
-        .object({
-          auto: z.boolean().optional().describe("Enable automatic compaction when context is full (default: true)"),
-          prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
-        })
-        .optional(),
+      compaction: Compaction.optional(),
       experimental: z
         .object({
           disable_paste_summary: z.boolean().optional(),

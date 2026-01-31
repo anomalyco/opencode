@@ -573,6 +573,7 @@ export namespace Provider {
       headers: z.record(z.string(), z.string()),
       release_date: z.string(),
       variants: z.record(z.string(), z.record(z.string(), z.any())).optional(),
+      compaction: Config.Compaction.optional(),
     })
     .meta({
       ref: "Model",
@@ -924,6 +925,12 @@ export namespace Provider {
           delete provider.models[modelID]
 
         model.variants = mapValues(ProviderTransform.variants(model), (v) => v)
+
+        const configCompaction = configProvider?.models?.[modelID]?.compaction
+        if (configCompaction) {
+          // @ts-expect-error
+          model.compaction = mergeDeep(model.compaction ?? {}, configCompaction)
+        }
 
         // Filter out disabled variants from config
         const configVariants = configProvider?.models?.[modelID]?.variants

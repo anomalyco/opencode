@@ -29,12 +29,25 @@ export namespace SessionCompaction {
 
   export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
     const config = await Config.get()
-    if (config.compaction?.auto === false) return false
+
+    // Check auto compaction setting - model override takes precedence
+    const auto = input.model.compaction?.auto ?? config.compaction?.auto
+    if (auto === false) return false
+
     const context = input.model.limit.context
     if (context === 0) return false
+
     const count = input.tokens.input + input.tokens.cache.read + input.tokens.output
     const output = Math.min(input.model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) || SessionPrompt.OUTPUT_TOKEN_MAX
-    const usable = input.model.limit.input || context - output
+
+    // Check threshold setting - model override takes precedence
+    const threshold = input.model.compaction?.threshold ?? config.compaction?.threshold
+
+    let usable = input.model.limit.input || context - output
+    if (threshold !== undefined) {
+      usable = context * threshold
+    }
+
     return count > usable
   }
 
