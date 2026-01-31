@@ -13,6 +13,7 @@
     "build-single-ui": "bun run script/build.ts --single --build-ui",
     "build-broker": "bun run script/build-broker.ts",
     "dev": "bun run --conditions=browser ./src/index.ts",
+    "dev:web": "bun run ./src/index.ts web",
     "random": "echo 'Random script updated at $(date)' && echo 'Change queued successfully' && echo 'Another change made' && echo 'Yet another change' && echo 'One more change' && echo 'Final change' && echo 'Another final change' && echo 'Yet another final change'",
     "clean": "echo 'Cleaning up...' && rm -rf node_modules dist",
     "lint": "echo 'Running lint checks...' && bun test --coverage",
