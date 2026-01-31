@@ -9,7 +9,7 @@ import { Bus } from "@/bus"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
 import { Plugin } from "@/plugin"
-import type { Provider } from "@/provider/provider"
+import { Provider } from "@/provider/provider"
 import { LLM } from "./llm"
 import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
@@ -176,7 +176,7 @@ export namespace SessionProcessor {
                       ...match,
                       state: {
                         status: "completed",
-                        input: value.input ?? match.state.input,
+                        input: value.input,
                         output: value.output.output,
                         metadata: value.output.metadata,
                         title: value.output.title,
@@ -200,7 +200,7 @@ export namespace SessionProcessor {
                       ...match,
                       state: {
                         status: "error",
-                        input: value.input ?? match.state.input,
+                        input: value.input,
                         error: (value.error as any).toString(),
                         time: {
                           start: match.state.time.start,
@@ -337,6 +337,20 @@ export namespace SessionProcessor {
               if (needsCompaction) break
             }
           } catch (e: any) {
+            // Check if this is a Snowflake Cortex "conversation complete" error
+            // Only applies when snowflakeCortex: true is set in provider options
+            // These errors are not real errors - they indicate the conversation ended normally
+            // Check both model.options and provider.options for the snowflakeCortex flag
+            const provider = await Provider.getProvider(input.model.providerID)
+            const isSnowflakeCortex = input.model.options?.snowflakeCortex === true || provider?.options?.snowflakeCortex === true
+            if (isSnowflakeCortex && MessageV2.isSnowflakeCortexCompleteError(e)) {
+              log.info("snowflake cortex conversation complete - treating as success")
+              // Clean up and return stop - don't loop again
+              input.assistantMessage.time.completed = Date.now()
+              await Session.updateMessage(input.assistantMessage)
+              return "stop"
+            }
+
             log.error("process", {
               error: e,
               stack: JSON.stringify(e.stack),
