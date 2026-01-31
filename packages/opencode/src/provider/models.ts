@@ -87,7 +87,7 @@ export namespace ModelsDev {
   export const Data = lazy(async () => {
     const file = Bun.file(filepath)
     const result = await file.json().catch(() => {})
-    if (result) return result
+    if (result && typeof result === "object" && Object.keys(result).length > 0) return result
     // @ts-ignore
     const snapshot = await import("./models-snapshot")
       .then((m) => m.snapshot as Record<string, unknown>)
