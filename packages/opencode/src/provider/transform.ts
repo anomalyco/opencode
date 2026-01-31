@@ -4,6 +4,7 @@ import type { JSONSchema } from "zod/v4/core"
 import type { Provider } from "./provider"
 import type { ModelsDev } from "./models"
 import { iife } from "@/util/iife"
+import { createHash } from "crypto"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -16,6 +17,8 @@ function mimeToModality(mime: string): Modality | undefined {
 }
 
 export namespace ProviderTransform {
+  const affinity = new Map<string, number>()
+
   // Maps npm package to the key the AI SDK expects for providerOptions
   function sdkKey(npm: string): string | undefined {
     switch (npm) {
@@ -38,6 +41,37 @@ export namespace ProviderTransform {
         return "openrouter"
     }
     return undefined
+  }
+
+  function affinityID(sessionID: string, count: number): string {
+    const seed = `${sessionID}:${count}`
+    const hash = createHash("sha256").update(seed).digest()
+    const bytes = Uint8Array.from(hash.subarray(0, 16))
+    bytes[6] = (bytes[6] & 0x0f) | 0x40
+    bytes[8] = (bytes[8] & 0x3f) | 0x80
+    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")
+    const parts = [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20, 32)]
+    return parts.join("-")
+  }
+
+  export function mistralAffinity(sessionID: string): string {
+    const count = affinity.get(sessionID) ?? 0
+    return affinityID(sessionID, count)
+  }
+
+  export function bumpMistralAffinity(sessionID: string) {
+    const count = affinity.get(sessionID) ?? 0
+    affinity.set(sessionID, count + 1)
+  }
+
+  export function isMistral(model: Provider.Model): boolean {
+    const id = model.api.id.toLowerCase()
+    return (
+      model.providerID === "mistral" ||
+      model.api.npm === "@ai-sdk/mistral" ||
+      id.includes("mistral") ||
+      id.includes("devstral")
+    )
   }
 
   function normalizeMessages(
@@ -83,11 +117,7 @@ export namespace ProviderTransform {
         return msg
       })
     }
-    if (
-      model.providerID === "mistral" ||
-      model.api.id.toLowerCase().includes("mistral") ||
-      model.api.id.toLocaleLowerCase().includes("devstral")
-    ) {
+    if (isMistral(model)) {
       const result: ModelMessage[] = []
       for (let i = 0; i < msgs.length; i++) {
         const msg = msgs[i]

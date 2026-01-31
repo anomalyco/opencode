@@ -103,6 +103,43 @@ describe("ProviderTransform.options - setCacheKey", () => {
   })
 })
 
+describe("ProviderTransform.mistralAffinity", () => {
+  test("returns deterministic uuid for same session", () => {
+    const sessionID = "ses_test_mistral_affinity"
+    const first = ProviderTransform.mistralAffinity(sessionID)
+    const second = ProviderTransform.mistralAffinity(sessionID)
+    expect(first).toBe(second)
+    expect(first).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+  })
+
+  test("changes after compaction bump", () => {
+    const sessionID = "ses_test_mistral_affinity_bump"
+    const before = ProviderTransform.mistralAffinity(sessionID)
+    ProviderTransform.bumpMistralAffinity(sessionID)
+    const after = ProviderTransform.mistralAffinity(sessionID)
+    expect(before).not.toBe(after)
+  })
+
+  test("detects mistral models", () => {
+    const model = {
+      providerID: "mistral",
+      api: {
+        id: "mistral-large-latest",
+        npm: "@ai-sdk/mistral",
+      },
+    } as any
+    const nonMistral = {
+      providerID: "openai",
+      api: {
+        id: "gpt-4",
+        npm: "@ai-sdk/openai",
+      },
+    } as any
+    expect(ProviderTransform.isMistral(model)).toBe(true)
+    expect(ProviderTransform.isMistral(nonMistral)).toBe(false)
+  })
+})
+
 describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
   const sessionID = "test-session-123"
 

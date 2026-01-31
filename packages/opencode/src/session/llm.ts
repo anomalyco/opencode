@@ -228,6 +228,11 @@ export namespace LLM {
                 "User-Agent": `opencode/${Installation.VERSION}`,
               }
             : undefined),
+        ...(ProviderTransform.isMistral(input.model)
+          ? {
+              "x-affinity": ProviderTransform.mistralAffinity(input.sessionID),
+            }
+          : undefined),
         ...input.model.headers,
         ...headers,
       },

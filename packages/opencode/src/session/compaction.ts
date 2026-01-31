@@ -14,6 +14,7 @@ import { fn } from "@/util/fn"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
+import { ProviderTransform } from "@/provider/transform"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -188,6 +189,7 @@ export namespace SessionCompaction {
       })
     }
     if (processor.message.error) return "stop"
+    ProviderTransform.bumpMistralAffinity(input.sessionID)
     Bus.publish(Event.Compacted, { sessionID: input.sessionID })
     return "continue"
   }
