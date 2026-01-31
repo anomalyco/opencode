@@ -61,6 +61,7 @@ import { createOpencodeClient, type Message, type Part } from "@opencode-ai/sdk/
 import { Binary } from "@opencode-ai/util/binary"
 import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode } from "@opencode-ai/util/encode"
+import { compileCommandFilter, isCommandHidden } from "@/utils/command-filter"
 
 const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
 const ACCEPTED_FILE_TYPES = [...ACCEPTED_IMAGE_TYPES, "application/pdf"]
@@ -502,9 +503,22 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onSelect: handleAtSelect,
   })
 
+  type Filter = { command_filter?: string[] }
+
+  const rules = createMemo(() => {
+    const config = sync.data.config as Filter
+    return compileCommandFilter(config.command_filter)
+  })
+
+  const allow = (name: string) => {
+    const list = rules()
+    if (list.length === 0) return true
+    return !isCommandHidden([name], list)
+  }
+
   const slashCommands = createMemo<SlashCommand[]>(() => {
     const builtin = command.options
-      .filter((opt) => !opt.disabled && !opt.id.startsWith("suggested.") && opt.slash)
+      .filter((opt) => !opt.disabled && !opt.id.startsWith("suggested.") && opt.slash && allow(opt.slash))
       .map((opt) => ({
         id: opt.id,
         trigger: opt.slash!,
@@ -514,13 +528,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         type: "builtin" as const,
       }))
 
-    const custom = sync.data.command.map((cmd) => ({
-      id: `custom.${cmd.name}`,
-      trigger: cmd.name,
-      title: cmd.name,
-      description: cmd.description,
-      type: "custom" as const,
-    }))
+    const custom = sync.data.command
+      .filter((cmd) => allow(cmd.name))
+      .map((cmd) => ({
+        id: `custom.${cmd.name}`,
+        trigger: cmd.name,
+        title: cmd.name,
+        description: cmd.description,
+        type: "custom" as const,
+      }))
 
     return [...custom, ...builtin]
   })

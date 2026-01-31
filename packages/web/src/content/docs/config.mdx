@@ -402,6 +402,21 @@ You can also define commands using markdown files in `~/.config/opencode/command
 
 ---
 
+### Command filter
+
+Hide commands from the slash command list using regex patterns via `command_filter`.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command_filter": ["^plugin\\.", "init$", "^open$"],
+}
+```
+
+Patterns match the command name without the leading `/`.
+
+---
+
 ### Keybinds
 
 You can customize your keybinds through the `keybinds` option.

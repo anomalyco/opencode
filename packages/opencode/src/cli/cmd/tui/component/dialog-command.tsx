@@ -11,6 +11,9 @@ import {
 } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
 import { useKeybind } from "@tui/context/keybind"
+import { useSync } from "@tui/context/sync"
+import { isCommandAllowed } from "@tui/util/command-filter"
+import { compileCommandFilter } from "@/util/command-filter"
 import type { KeybindsConfig } from "@opencode-ai/sdk/v2"
 
 type Context = ReturnType<typeof init>
@@ -34,6 +37,14 @@ function init() {
   const [suspendCount, setSuspendCount] = createSignal(0)
   const dialog = useDialog()
   const keybind = useKeybind()
+  const sync = useSync()
+
+  type Filter = { command_filter?: string[] }
+
+  const rules = createMemo(() => {
+    const config = sync.data.config as Filter
+    return compileCommandFilter(config.command_filter)
+  })
 
   const entries = createMemo(() => {
     const all = registrations().flatMap((x) => x())
@@ -44,7 +55,8 @@ function init() {
   })
 
   const isEnabled = (option: CommandOption) => option.enabled !== false
-  const isVisible = (option: CommandOption) => isEnabled(option) && !option.hidden
+  const isAllowed = (option: CommandOption) => isCommandAllowed(option, rules())
+  const isVisible = (option: CommandOption) => isEnabled(option) && !option.hidden && isAllowed(option)
 
   const visibleOptions = createMemo(() => entries().filter((option) => isVisible(option)))
   const suggestedOptions = createMemo(() =>

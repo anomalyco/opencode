@@ -6,6 +6,7 @@ import { Identifier } from "../id/id"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
 import { MCP } from "../mcp"
+import { compileCommandFilter, isCommandHidden } from "../util/command-filter"
 
 export namespace Command {
   export const Event = {
@@ -126,6 +127,10 @@ export namespace Command {
   }
 
   export async function list() {
-    return state().then((x) => Object.values(x))
+    const commands = await state().then((x) => Object.values(x))
+    const config = await Config.get()
+    const rules = compileCommandFilter(config.command_filter)
+    if (rules.length === 0) return commands
+    return commands.filter((command) => !isCommandHidden([command.name], rules))
   }
 }

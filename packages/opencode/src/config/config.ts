@@ -30,6 +30,17 @@ import { GlobalBus } from "@/bus/global"
 import { Event } from "../server/event"
 
 export namespace Config {
+  const Regex = z.string().refine(
+    (value) => {
+      try {
+        new RegExp(value)
+        return true
+      } catch {
+        return false
+      }
+    },
+    { error: "Invalid regex" },
+  )
   const log = Log.create({ service: "config" })
 
   // Managed settings directory for enterprise deployments (highest priority, admin-controlled)
@@ -925,6 +936,7 @@ export namespace Config {
         .record(z.string(), Command)
         .optional()
         .describe("Command configuration, see https://opencode.ai/docs/commands"),
+      command_filter: z.array(Regex).optional().describe("Hide commands matching these regexes"),
       skills: Skills.optional().describe("Additional skill folder paths"),
       watcher: z
         .object({
