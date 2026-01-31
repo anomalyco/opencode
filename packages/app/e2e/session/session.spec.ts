@@ -5,10 +5,11 @@ import {
   clickMenuItem,
   confirmDialog,
   openSharePopover,
-  clickPopoverButton,
   withSession,
 } from "../actions"
 import { sessionItemSelector, inlineInputSelector } from "../selectors"
+
+const shareDisabled = process.env.OPENCODE_DISABLE_SHARE === "true" || process.env.OPENCODE_DISABLE_SHARE === "1"
 
 test("sidebar session can be renamed", async ({ page, sdk, gotoSession }) => {
   const stamp = Date.now()
@@ -65,6 +66,8 @@ test("sidebar session can be deleted", async ({ page, sdk, gotoSession }) => {
 })
 
 test("session can be shared and unshared via header button", async ({ page, sdk, gotoSession }) => {
+  test.skip(shareDisabled, "Share is disabled in this environment (OPENCODE_DISABLE_SHARE).")
+
   const stamp = Date.now()
   const title = `e2e share test ${stamp}`
 
@@ -78,7 +81,7 @@ test("session can be shared and unshared via header button", async ({ page, sdk,
       .poll(
         async () => {
           const data = await sdk.session.get({ sessionID: session.id }).then((r) => r.data)
-          return data?.share?.url
+          return data?.share?.url || undefined
         },
         { timeout: 30_000 },
       )
@@ -96,7 +99,7 @@ test("session can be shared and unshared via header button", async ({ page, sdk,
       .poll(
         async () => {
           const data = await sdk.session.get({ sessionID: session.id }).then((r) => r.data)
-          return data?.share?.url
+          return data?.share?.url || undefined
         },
         { timeout: 30_000 },
       )
