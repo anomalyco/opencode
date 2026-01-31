@@ -7,10 +7,6 @@ on:
 
 jobs:
   sync:
-    if: |
-      github.event_name == 'push' || 
-      (github.event_name == 'pull_request' && 
-       contains(github.event.pull_request.labels.*.name, 'contributor'))
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: write
