@@ -93,8 +93,11 @@ export function Prompt(props: PromptProps) {
   let promptPartTypeId = 0
 
   sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
+    if (!input || input.isDestroyed) return
     input.insertText(evt.properties.text)
     setTimeout(() => {
+      // setTimeout is a workaround and needs to be addressed properly
+      if (!input || input.isDestroyed) return
       input.getLayoutNode().markDirty()
       input.gotoBufferEnd()
       renderer.requestRender()
@@ -924,6 +927,8 @@ export function Prompt(props: PromptProps) {
 
                 // Force layout update and render for the pasted content
                 setTimeout(() => {
+                  // setTimeout is a workaround and needs to be addressed properly
+                  if (!input || input.isDestroyed) return
                   input.getLayoutNode().markDirty()
                   renderer.requestRender()
                 }, 0)
@@ -935,6 +940,8 @@ export function Prompt(props: PromptProps) {
                 }
                 props.ref?.(ref)
                 setTimeout(() => {
+                  // setTimeout is a workaround and needs to be addressed properly
+                  if (!input || input.isDestroyed) return
                   input.cursorColor = theme.text
                 }, 0)
               }}
