@@ -61,6 +61,10 @@ jobs:
             printf '%s\n' "XDG_STATE_HOME=${{ runner.temp }}/opencode-e2e/state" >> "$GITHUB_ENV"
           fi
 
+      - name: Copy models fixture
+        run: |
+          cp "${{ github.workspace }}/packages/opencode/test/tool/fixtures/models-api.json" "${{ github.workspace }}/packages/opencode/src/provider/models-snapshot.ts"
+
       - name: Seed opencode data
         if: matrix.settings.name != 'windows'
         working-directory: packages/opencode
