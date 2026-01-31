@@ -1,3 +1,4 @@
+import { describe, expect, test } from "bun:test"
 import { compileCommandFilter } from "../../../src/util/command-filter"
 import { commandNames, isCommandAllowed } from "../../../src/cli/cmd/tui/util/command-filter"
 

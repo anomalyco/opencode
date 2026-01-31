@@ -1,3 +1,4 @@
+import { expect, test } from "bun:test"
 import { Command } from "../../src/command"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"

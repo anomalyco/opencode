@@ -1635,6 +1635,10 @@ export type Config = {
     }
   }
   /**
+   * Hide commands matching these regexes
+   */
+  command_filter?: Array<string>
+  /**
    * Additional skill folder paths
    */
   skills?: {
