@@ -11,7 +11,7 @@ See: .planning/PROJECT.md (updated 2026-01-19)
 
 **Milestone 1:** Complete (Phases 1-11)
 **Phase:** 16 of 17 (Repo downloads) - In progress
-**Next Phase:** 18 - Audit all server routes for if they need authentication checks
+**Next Phase:** 19 - Refactor auth login page
 **Plan:** 08 of 08 - Complete (gap closures; plans 02-03 pending)
 **Status:** Phase in progress
 **Last activity:** 2026-01-28 - Completed 16-08 plan
@@ -175,6 +175,7 @@ Recent decisions affecting current work:
 - Phase 16 added: Allow the user to download git repos so that they can work on them with their opencode sessions
 - Phase 17 added: Make the client boundary the only place where "unknown" exists, then validate and normalize into strict types so the rest of the UI can't represent invalid shapes. Concrete pattern: Typed API layer: Expose functions like findFiles(): Promise<string[]> (no { data }, no unknown), and only allow those in UI code. Don't export the raw SDK client outside this layer. Runtime validation: Parse server responses with a schema (zod, valibot, io-ts). If validation fails, throw or return a typed error. This makes "wrong shape" impossible to flow into components. Normalization at the boundary: If the SDK can return { data } or raw arrays, normalize there and return the canonical type. No any/unknown past boundary: The rest of the app should only see string[] or a typed error union. This fully applies "illegal states unrepresentable": UI code can't accidentally access .map on a non-array because it never sees non-array values.
 - Phase 18 added: Audit all server routes for if they need authentication checks
+- Phase 19 added: Refactor auth login page (replace string-based login HTML with a SolidJS-based page)
 
 ### Pending Todos
 

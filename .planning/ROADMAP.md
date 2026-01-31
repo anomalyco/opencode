@@ -31,6 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 16: Allow the user to download git repos so that they can work on them with their opencode sessions** - Allow the user to download git repos so that they can work on them with their opencode sessions
 - [ ] **Phase 17: Make the client boundary the only place where "unknown" exists, then validate and normalize into strict types so the rest of the UI can't represent invalid shapes. Concrete pattern: Typed API layer: Expose functions like findFiles(): Promise<string[]> (no { data }, no unknown), and only allow those in UI code. Don't export the raw SDK client outside this layer. Runtime validation: Parse server responses with a schema (zod, valibot, io-ts). If validation fails, throw or return a typed error. This makes "wrong shape" impossible to flow into components. Normalization at the boundary: If the SDK can return { data } or raw arrays, normalize there and return the canonical type. No any/unknown past boundary: The rest of the app should only see string[] or a typed error union. This fully applies "illegal states unrepresentable": UI code can't accidentally access .map on a non-array because it never sees non-array values.** - Client boundary validation and normalization to prevent type mismatches
 - [ ] **Phase 18: Audit all server routes for if they need authentication checks** - Audit all server routes for if they need authentication checks
+- [ ] **Phase 19: Refactor auth login page** - Replace string-based login HTML with a proper SolidJS-based login page in `packages/opencode/src/server/routes/auth.ts`
 
 ## Phase Details
 
@@ -362,6 +363,18 @@ Plans:
 
 Plans:
 - [ ] TBD (run /gsd:plan-phase 18 to break down)
+
+**Details:**
+[To be added during planning]
+
+### Phase 19: Refactor auth login page
+
+**Goal:** [To be planned]
+**Depends on:** Phase 18
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 19 to break down)
 
 **Details:**
 [To be added during planning]
