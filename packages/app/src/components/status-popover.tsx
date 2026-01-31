@@ -15,14 +15,16 @@ import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { DialogSelectServer } from "./dialog-select-server"
+import { showToast } from "@opencode-ai/ui/toast"
 
 type ServerStatus = { healthy: boolean; version?: string }
 
 async function checkHealth(url: string, platform: ReturnType<typeof usePlatform>): Promise<ServerStatus> {
+  const signal = (AbortSignal as unknown as { timeout?: (ms: number) => AbortSignal }).timeout?.(3000)
   const sdk = createOpencodeClient({
     baseUrl: url,
     fetch: platform.fetch,
-    signal: AbortSignal.timeout(3000),
+    signal,
   })
   return sdk.global
     .health()
@@ -100,15 +102,21 @@ export function StatusPopover() {
   const toggleMcp = async (name: string) => {
     if (store.loading) return
     setStore("loading", name)
-    const status = sync.data.mcp[name]
-    if (status?.status === "connected") {
-      await sdk.client.mcp.disconnect({ name })
-    } else {
-      await sdk.client.mcp.connect({ name })
+
+    try {
+      const status = sync.data.mcp[name]
+      await (status?.status === "connected" ? sdk.client.mcp.disconnect({ name }) : sdk.client.mcp.connect({ name }))
+      const result = await sdk.client.mcp.status()
+      if (result.data) sync.set("mcp", result.data)
+    } catch (err) {
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+        description: err instanceof Error ? err.message : String(err),
+      })
+    } finally {
+      setStore("loading", null)
     }
-    const result = await sdk.client.mcp.status()
-    if (result.data) sync.set("mcp", result.data)
-    setStore("loading", null)
   }
 
   const lspItems = createMemo(() => sync.data.lsp ?? [])
@@ -168,33 +176,16 @@ export function StatusPopover() {
       placement="bottom-end"
       shift={-136}
     >
-      <div
-        class="flex items-center gap-1 w-[360px] rounded-xl"
-        style={{ "box-shadow": "var(--shadow-lg-border-base)" }}
-      >
+      <div class="flex items-center gap-1 w-[360px] rounded-xl shadow-[var(--shadow-lg-border-base)]">
         <Tabs
           aria-label={language.t("status.popover.ariaLabel")}
-          class="tabs"
+          class="tabs bg-background-strong rounded-xl overflow-hidden"
           data-component="tabs"
           data-active="servers"
           defaultValue="servers"
           variant="alt"
-          style={{
-            "background-color": "var(--background-strong)",
-            "border-radius": "12px",
-            overflow: "hidden",
-          }}
         >
-          <Tabs.List
-            data-slot="tablist"
-            style={{
-              "background-color": "transparent",
-              "border-bottom": "none",
-              padding: "8px 16px 0",
-              gap: "16px",
-              height: "40px",
-            }}
-          >
+          <Tabs.List data-slot="tablist" class="bg-transparent border-b-0 px-4 pt-2 pb-0 gap-4 h-10">
             <Tabs.Trigger value="servers" data-slot="tab" class="text-12-regular">
               {serverCount() > 0 ? `${serverCount()} ` : ""}
               {language.t("status.popover.tab.servers")}

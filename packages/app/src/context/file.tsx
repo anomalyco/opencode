@@ -151,6 +151,28 @@ const WORKSPACE_KEY = "__workspace__"
 const MAX_FILE_VIEW_SESSIONS = 20
 const MAX_VIEW_FILES = 500
 
+const MAX_FILE_CONTENT_ENTRIES = 40
+const MAX_FILE_CONTENT_BYTES = 20 * 1024 * 1024
+
+const contentLru = new Map<string, number>()
+
+function approxBytes(content: FileContent) {
+  const patchBytes =
+    content.patch?.hunks.reduce((total, hunk) => {
+      return total + hunk.lines.reduce((sum, line) => sum + line.length, 0)
+    }, 0) ?? 0
+
+  return (content.content.length + (content.diff?.length ?? 0) + patchBytes) * 2
+}
+
+function touchContent(path: string, bytes?: number) {
+  const prev = contentLru.get(path)
+  if (prev === undefined && bytes === undefined) return
+  const value = bytes ?? prev ?? 0
+  contentLru.delete(path)
+  contentLru.set(path, value)
+}
+
 type ViewSession = ReturnType<typeof createViewSession>
 
 type ViewCacheEntry = {
@@ -295,6 +317,12 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const inflight = new Map<string, Promise<void>>()
     const treeInflight = new Map<string, Promise<void>>()
 
+    const search = (query: string, dirs: "true" | "false") =>
+      sdk.client.find.files({ query, dirs }).then(
+        (x) => (x.data ?? []).map(normalize),
+        () => [],
+      )
+
     const [store, setStore] = createStore<{
       file: Record<string, FileState>
     }>({
@@ -309,10 +337,40 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       dir: { "": { expanded: true } },
     })
 
+    const evictContent = (keep?: Set<string>) => {
+      const protectedSet = keep ?? new Set<string>()
+      const total = () => {
+        return Array.from(contentLru.values()).reduce((sum, bytes) => sum + bytes, 0)
+      }
+
+      while (contentLru.size > MAX_FILE_CONTENT_ENTRIES || total() > MAX_FILE_CONTENT_BYTES) {
+        const path = contentLru.keys().next().value
+        if (!path) return
+
+        if (protectedSet.has(path)) {
+          touchContent(path)
+          if (contentLru.size <= protectedSet.size) return
+          continue
+        }
+
+        contentLru.delete(path)
+        if (!store.file[path]) continue
+        setStore(
+          "file",
+          path,
+          produce((draft) => {
+            draft.content = undefined
+            draft.loaded = false
+          }),
+        )
+      }
+    }
+
     createEffect(() => {
       scope()
       inflight.clear()
       treeInflight.clear()
+      contentLru.clear()
       setStore("file", {})
       setTree("node", {})
       setTree("dir", { "": { expanded: true } })
@@ -393,15 +451,20 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         .read({ path })
         .then((x) => {
           if (scope() !== directory) return
+          const content = x.data
           setStore(
             "file",
             path,
             produce((draft) => {
               draft.loaded = true
               draft.loading = false
-              draft.content = x.data
+              draft.content = content
             }),
           )
+
+          if (!content) return
+          touchContent(path, approxBytes(content))
+          evictContent(new Set([path]))
         })
         .catch((e) => {
           if (scope() !== directory) return
@@ -591,7 +654,18 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       listDir(parent, { force: true })
     })
 
-    const get = (input: string) => store.file[normalize(input)]
+    const get = (input: string) => {
+      const path = normalize(input)
+      const file = store.file[path]
+      const content = file?.content
+      if (!content) return file
+      if (contentLru.has(path)) {
+        touchContent(path)
+        return file
+      }
+      touchContent(path, approxBytes(content))
+      return file
+    }
 
     const scrollTop = (input: string) => view().scrollTop(normalize(input))
     const scrollLeft = (input: string) => view().scrollLeft(normalize(input))
@@ -645,10 +719,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       setScrollLeft,
       selectedLines,
       setSelectedLines,
-      searchFiles: (query: string) =>
-        sdk.client.find.files({ query, dirs: "false" }).then((x) => (x.data ?? []).map(normalize)),
-      searchFilesAndDirectories: (query: string) =>
-        sdk.client.find.files({ query, dirs: "true" }).then((x) => (x.data ?? []).map(normalize)),
+      searchFiles: (query: string) => search(query, "false"),
+      searchFilesAndDirectories: (query: string) => search(query, "true"),
     }
   },
 })
