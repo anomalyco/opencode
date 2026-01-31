@@ -345,7 +345,6 @@ pub fn run() {
                 .decorations(false);
 
             let window = window_builder.build().expect("Failed to create window");
-            let _ = window.show();
 
             #[cfg(windows)]
             let _ = window.create_overlay_titlebar();
