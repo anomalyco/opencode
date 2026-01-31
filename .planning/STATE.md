@@ -180,6 +180,7 @@ Recent decisions affecting current work:
 
 - Fix site manifest 401
 - Fix web terminal 500
+- Support Cloudflare Quick Tunnel
 
 ### Blockers/Concerns
 
