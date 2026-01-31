@@ -76,15 +76,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           })
         },
         color(name: string) {
-          const agent = agents().find((x) => x.name === name)
+          const index = agents().findIndex((x) => x.name === name)
+          if (index === -1) return colors()[0]
+          const agent = agents()[index]
+
           if (agent?.color) {
             const color = agent.color
             if (color.startsWith("#")) return RGBA.fromHex(color)
             // already validated by config, just satisfying TS here
             return theme[color as keyof typeof theme] as RGBA
           }
-          const index = agents().findIndex((x) => x.name === name)
-          if (index === -1) return colors()[0]
           return colors()[index % colors().length]
         },
       }
