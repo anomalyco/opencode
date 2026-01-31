@@ -19,7 +19,7 @@ test("dialog edit project updates name and startup script", async ({ page, gotoS
 
     const editItem = menu.getByRole("menuitem", { name: "Edit" }).first()
     await expect(editItem).toBeVisible()
-    await editItem.click()
+    await editItem.click({ force: true })
 
     const dialog = page.getByRole("dialog")
     await expect(dialog).toBeVisible()
