@@ -74,24 +74,32 @@ test("session can be shared and unshared via header button", async ({ page, sdk,
     const { rightSection } = await openSharePopover(page)
     await clickPopoverButton(page, "Publish")
 
-    await page.waitForTimeout(500)
+    await expect
+      .poll(async () => {
+        const data = await sdk.session.get({ sessionID: session.id }).then((r) => r.data)
+        return data?.share?.url
+      })
+      .not.toBeUndefined()
+
+    await gotoSession(session.id)
 
     await openSharePopover(page)
-    await expect(page.locator("input[readonly]").first()).toBeVisible()
+    await expect(page.getByRole("button", { name: "Unpublish" }).first()).toBeVisible()
+    await expect(rightSection.locator('button[aria-label="Copy link"]').first()).toBeVisible()
 
-    const copyButton = rightSection.locator('button[aria-label="Copy link"]').first()
-    await expect(copyButton).toBeVisible()
-    await copyButton.click()
-    await page.waitForTimeout(100)
-
-    await openSharePopover(page)
     await clickPopoverButton(page, "Unpublish")
 
-    await page.waitForTimeout(500)
+    await expect
+      .poll(async () => {
+        const data = await sdk.session.get({ sessionID: session.id }).then((r) => r.data)
+        return data?.share?.url
+      })
+      .toBeUndefined()
+
+    await gotoSession(session.id)
 
     await openSharePopover(page)
     await expect(page.getByRole("button", { name: "Publish" }).first()).toBeVisible()
-
     await expect(rightSection.locator('button[aria-label="Copy link"]')).not.toBeVisible()
   })
 })
