@@ -148,6 +148,7 @@ export const SettingsGeneral: Component = () => {
               description={language.t("settings.general.row.language.description")}
             >
               <Select
+                data-action="settings-language"
                 options={languageOptions()}
                 current={languageOptions().find((o) => o.value === language.locale())}
                 value={(o) => o.value}
