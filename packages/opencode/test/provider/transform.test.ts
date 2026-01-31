@@ -277,7 +277,12 @@ describe("ProviderTransform.maxOutputTokens", () => {
           budget_tokens: 10000,
         },
       }
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/openai-compatible", options, modelLimit, OUTPUT_TOKEN_MAX)
+      const result = ProviderTransform.maxOutputTokens(
+        "@ai-sdk/openai-compatible",
+        options,
+        modelLimit,
+        OUTPUT_TOKEN_MAX,
+      )
       expect(result).toBe(OUTPUT_TOKEN_MAX)
     })
 
@@ -289,7 +294,12 @@ describe("ProviderTransform.maxOutputTokens", () => {
           budget_tokens: 30000,
         },
       }
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/openai-compatible", options, modelLimit, OUTPUT_TOKEN_MAX)
+      const result = ProviderTransform.maxOutputTokens(
+        "@ai-sdk/openai-compatible",
+        options,
+        modelLimit,
+        OUTPUT_TOKEN_MAX,
+      )
       expect(result).toBe(20000)
     })
 
@@ -301,7 +311,12 @@ describe("ProviderTransform.maxOutputTokens", () => {
           budget_tokens: 10000,
         },
       }
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/openai-compatible", options, modelLimit, OUTPUT_TOKEN_MAX)
+      const result = ProviderTransform.maxOutputTokens(
+        "@ai-sdk/openai-compatible",
+        options,
+        modelLimit,
+        OUTPUT_TOKEN_MAX,
+      )
       expect(result).toBe(OUTPUT_TOKEN_MAX)
     })
 
@@ -313,7 +328,12 @@ describe("ProviderTransform.maxOutputTokens", () => {
           budget_tokens: 0,
         },
       }
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/openai-compatible", options, modelLimit, OUTPUT_TOKEN_MAX)
+      const result = ProviderTransform.maxOutputTokens(
+        "@ai-sdk/openai-compatible",
+        options,
+        modelLimit,
+        OUTPUT_TOKEN_MAX,
+      )
       expect(result).toBe(OUTPUT_TOKEN_MAX)
     })
   })

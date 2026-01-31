@@ -683,13 +683,19 @@ export namespace ProviderTransform {
 
     // Handle thinking mode for @ai-sdk/anthropic, @ai-sdk/google-vertex/anthropic (budgetTokens)
     // and @ai-sdk/openai-compatible with Claude (budget_tokens)
-    if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic" || npm === "@ai-sdk/openai-compatible") {
+    if (
+      npm === "@ai-sdk/anthropic" ||
+      npm === "@ai-sdk/google-vertex/anthropic" ||
+      npm === "@ai-sdk/openai-compatible"
+    ) {
       const thinking = options?.["thinking"]
       // Support both camelCase (for @ai-sdk/anthropic) and snake_case (for openai-compatible)
       const budgetTokens =
-        typeof thinking?.["budgetTokens"] === "number" ? thinking["budgetTokens"] :
-        typeof thinking?.["budget_tokens"] === "number" ? thinking["budget_tokens"] :
-        0
+        typeof thinking?.["budgetTokens"] === "number"
+          ? thinking["budgetTokens"]
+          : typeof thinking?.["budget_tokens"] === "number"
+            ? thinking["budget_tokens"]
+            : 0
       const enabled = thinking?.["type"] === "enabled"
       if (enabled && budgetTokens > 0) {
         // Return text tokens so that text + thinking <= model cap, preferring 32k text when possible.
