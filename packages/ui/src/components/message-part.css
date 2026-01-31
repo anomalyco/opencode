@@ -80,6 +80,7 @@
     border: 1px solid var(--border-weak-base);
     padding: 8px 12px;
     border-radius: 4px;
+    color: #cdef62;
 
     [data-highlight="file"] {
       color: var(--syntax-property);
