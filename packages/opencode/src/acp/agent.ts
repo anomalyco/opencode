@@ -26,7 +26,6 @@ import {
   type ToolCallContent,
   type ToolKind,
 } from "@agentclientprotocol/sdk"
-
 import { Log } from "../util/log"
 import { ACPSessionManager } from "./session"
 import type { ACPConfig } from "./types"
@@ -40,11 +39,6 @@ import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
 import type { Event, OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
 import { applyPatch } from "diff"
-
-type ModeOption = { id: string; name: string; description?: string }
-type ModelOption = { modelId: string; name: string }
-
-const DEFAULT_VARIANT_VALUE = "default"
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
@@ -482,7 +476,7 @@ export namespace ACP {
           sessionId,
           models: load.models,
           modes: load.modes,
-          _meta: load._meta,
+          _meta: {},
         }
       } catch (e) {
         const error = MessageV2.fromError(e, {
@@ -535,7 +529,7 @@ export namespace ACP {
             providerID: lastUser.model.providerID,
             modelID: lastUser.model.modelID,
           })
-          if (result.modes?.availableModes.some((m) => m.id === lastUser.agent)) {
+          if (result.modes.availableModes.some((m) => m.id === lastUser.agent)) {
             result.modes.currentModeId = lastUser.agent
             this.sessionManager.setMode(sessionId, lastUser.agent)
           }
@@ -962,7 +956,27 @@ export namespace ACP {
       }
     }
 
-    private async loadAvailableModes(directory: string): Promise<ModeOption[]> {
+    private async loadSessionMode(params: LoadSessionRequest) {
+      const directory = params.cwd
+      const model = await defaultModel(this.config, directory)
+      const sessionId = params.sessionId
+
+      const providers = await this.sdk.config.providers({ directory }).then((x) => x.data!.providers)
+      const entries = providers.sort((a, b) => {
+        const nameA = a.name.toLowerCase()
+        const nameB = b.name.toLowerCase()
+        if (nameA < nameB) return -1
+        if (nameA > nameB) return 1
+        return 0
+      })
+      const availableModels = entries.flatMap((provider) => {
+        const models = Provider.sort(Object.values(provider.models))
+        return models.map((model) => ({
+          modelId: `${provider.id}/${model.id}`,
+          name: `${provider.name}/${model.name}`,
+        }))
+      })
+
       const agents = await this.config.sdk.app
         .agents(
           {
@@ -971,56 +985,6 @@ export namespace ACP {
           { throwOnError: true },
         )
         .then((resp) => resp.data!)
-
-      return agents
-        .filter((agent) => agent.mode !== "subagent" && !agent.hidden)
-        .map((agent) => ({
-          id: agent.name,
-          name: agent.name,
-          description: agent.description,
-        }))
-    }
-
-    private async resolveModeState(
-      directory: string,
-      sessionId: string,
-    ): Promise<{ availableModes: ModeOption[]; currentModeId?: string }> {
-      const availableModes = await this.loadAvailableModes(directory)
-      const currentModeId =
-        this.sessionManager.get(sessionId).modeId ||
-        (await (async () => {
-          if (!availableModes.length) return undefined
-          const defaultAgentName = await AgentModule.defaultAgent()
-          const resolvedModeId =
-            availableModes.find((mode) => mode.name === defaultAgentName)?.id ?? availableModes[0].id
-          this.sessionManager.setMode(sessionId, resolvedModeId)
-          return resolvedModeId
-        })())
-
-      return { availableModes, currentModeId }
-    }
-
-    private async loadSessionMode(params: LoadSessionRequest) {
-      const directory = params.cwd
-      const model = await defaultModel(this.config, directory)
-      const sessionId = params.sessionId
-
-      const providers = await this.sdk.config.providers({ directory }).then((x) => x.data!.providers)
-      const entries = sortProvidersByName(providers)
-      const availableVariants = modelVariantsFromProviders(entries, model)
-      const currentVariant = this.sessionManager.getVariant(sessionId)
-      if (currentVariant && !availableVariants.includes(currentVariant)) {
-        this.sessionManager.setVariant(sessionId, undefined)
-      }
-      const availableModels = buildAvailableModels(entries, { includeVariants: true })
-      const modeState = await this.resolveModeState(directory, sessionId)
-      const currentModeId = modeState.currentModeId
-      const modes = currentModeId
-        ? {
-            availableModes: modeState.availableModes,
-            currentModeId,
-          }
-        : undefined
 
       const commands = await this.config.sdk.command
         .list(
@@ -1041,34 +1005,6 @@ export namespace ACP {
           name: "compact",
           description: "compact the session",
         })
-
-      // Session management commands
-      const sessionCommands = [
-        { name: "listSessions", description: "List all available sessions" },
-        { name: "switchSession", description: "Switch to a different session" },
-        { name: "createSession", description: "Create a new session" },
-        { name: "forkSession", description: "Fork the current session" },
-        { name: "renameSession", description: "Rename a session" },
-        { name: "deleteSession", description: "Delete a session" },
-        { name: "getSessionInfo", description: "Get information about a session" },
-        { name: "undoMessage", description: "Undo the last message" },
-        { name: "redoMessage", description: "Redo the last message" },
-        { name: "compactSession", description: "Compact the session" },
-        { name: "exportSession", description: "Export a session" },
-        { name: "jumpToMessage", description: "Jump to a specific message" },
-        { name: "duplicateSession", description: "Duplicate a session" },
-      ]
-
-      for (const cmd of sessionCommands) {
-        availableCommands.push({
-          name: cmd.name,
-          description: cmd.description,
-        })
-      }
-
-      // Add missing commands directly
-      availableCommands.push({ name: "listSessions", description: "List all available sessions" })
-      availableCommands.push({ name: "getSessionInfo", description: "Get information about a session" })
 
       const availableModes = agents
         .filter((agent) => agent.mode !== "subagent" && !agent.hidden)
@@ -1137,46 +1073,40 @@ export namespace ACP {
       return {
         sessionId,
         models: {
-          currentModelId: formatModelIdWithVariant(model, currentVariant, availableVariants, true),
+          currentModelId: `${model.providerID}/${model.modelID}`,
           availableModels,
         },
-        modes,
-        _meta: buildVariantMeta({
-          model,
-          variant: this.sessionManager.getVariant(sessionId),
-          availableVariants,
-        }),
+        modes: {
+          availableModes,
+          currentModeId,
+        },
+        _meta: {},
       }
     }
 
     async unstable_setSessionModel(params: SetSessionModelRequest) {
       const session = this.sessionManager.get(params.sessionId)
-      const providers = await this.sdk.config
-        .providers({ directory: session.cwd }, { throwOnError: true })
-        .then((x) => x.data!.providers)
 
-      const selection = parseModelSelection(params.modelId, providers)
-      this.sessionManager.setModel(session.id, selection.model)
-      this.sessionManager.setVariant(session.id, selection.variant)
+      const model = Provider.parseModel(params.modelId)
 
-      const entries = sortProvidersByName(providers)
-      const availableVariants = modelVariantsFromProviders(entries, selection.model)
+      this.sessionManager.setModel(session.id, {
+        providerID: model.providerID,
+        modelID: model.modelID,
+      })
 
       return {
-        _meta: buildVariantMeta({
-          model: selection.model,
-          variant: selection.variant,
-          availableVariants,
-        }),
+        _meta: {},
       }
     }
 
     async setSessionMode(params: SetSessionModeRequest): Promise<SetSessionModeResponse | void> {
-      const session = this.sessionManager.get(params.sessionId)
-      const availableModes = await this.loadAvailableModes(session.cwd)
-      if (!availableModes.some((mode) => mode.id === params.modeId)) {
-        throw new Error(`Agent not found: ${params.modeId}`)
-      }
+      this.sessionManager.get(params.sessionId)
+      await this.config.sdk.app
+        .agents({}, { throwOnError: true })
+        .then((x) => x.data)
+        .then((agent) => {
+          if (!agent) throw new Error(`Agent not found: ${params.modeId}`)
+        })
       this.sessionManager.setMode(params.sessionId, params.modeId)
     }
 
@@ -1286,106 +1216,19 @@ export namespace ACP {
         _meta: {},
       }
 
-      if (!cmd) return done
-      switch (cmd.name) {
-        case "compact":
-          await this.config.sdk.session.summarize(
-            {
-              sessionID,
-              directory,
-              providerID: model.providerID,
-              modelID: model.modelID,
-            },
-            { throwOnError: true },
-          )
-          break
-
-        case "listSessions": {
-          // Parse --limit from cmd.args string if present
-          const limitMatch = cmd.args?.match(/--limit\s+(\d+)/)
-          const limit = limitMatch ? parseInt(limitMatch[1]) : undefined
-          const result = await listSessions({ limit, projectPath: directory })
-          return { content: JSON.stringify(result), type: "text" }
-        }
-        case "switchSession": {
-          const sessionIdMatch = cmd.args?.match(/--session-id\s+(\S+)/)
-          const sessionId = sessionIdMatch?.[1]
-          if (!sessionId) return { content: JSON.stringify({ error: "Missing --session-id" }), type: "text" }
-          const result = await switchSession({ sessionId })
-          return { content: JSON.stringify(result), type: "text" }
-        }
-        case "createSession": {
-          const titleMatch = cmd.args?.match(/--title\s+"([^"]+)"/) || cmd.args?.match(/--title\s+(\S+)/)
-          const title = titleMatch?.[1]
-          const result = await createSession({ title, projectPath: directory })
-          return { content: JSON.stringify(result), type: "text" }
-        }
-        case "forkSession": {
-          const sessionIdMatch = cmd.args?.match(/--session-id\s+(\S+)/)
-          const messageIdMatch = cmd.args?.match(/--message-id\s+(\S+)/)
-          const titleMatch = cmd.args?.match(/--title\s+"([^"]+)"/) || cmd.args?.match(/--title\s+(\S+)/)
-          if (!sessionIdMatch) return { content: JSON.stringify({ error: "Missing --session-id" }), type: "text" }
-          const result = await forkSession({ sessionId: sessionIdMatch[1], messageId: messageIdMatch?.[1], title: titleMatch?.[1] })
-          return { content: JSON.stringify(result), type: "text" }
-        }
-        case "renameSession": {
-          const sessionIdMatch = cmd.args?.match(/--session-id\s+(\S+)/)
-          const titleMatch = cmd.args?.match(/--title\s+"([^"]+)"/) || cmd.args?.match(/--title\s+(\S+)/)
-          if (!sessionIdMatch || !titleMatch) return { content: JSON.stringify({ error: "Missing --session-id or --title" }), type: "text" }
-          const result = await renameSession({ sessionId: sessionIdMatch[1], title: titleMatch[1] })
-          return { content: JSON.stringify(result), type: "text" }
-        }
-        case "deleteSession": {
-          const sessionIdMatch = cmd.args?.match(/--session-id\s+(\S+)/)
-          if (!sessionIdMatch) return { content: JSON.stringify({ error: "Missing --session-id" }), type: "text" }
-          const result = await deleteSession({ sessionId: sessionIdMatch[1] })
-          return { content: JSON.stringify(result), type: "text" }
-        }
-        case "getSessionInfo": {
-          const sessionIdMatch = cmd.args?.match(/--session-id\s+(\S+)/)
-          if (!sessionIdMatch) return { content: JSON.stringify({ error: "Missing --session-id" }), type: "text" }
-          const result = await getSessionInfo({ sessionId: sessionIdMatch[1] })
-          return { content: JSON.stringify(result), type: "text" }
-        }
-        case "undoMessage": {
-          const sessionIdMatch = cmd.args?.match(/--session-id\s+(\S+)/)
-          const result = await undoMessage({ sessionId: sessionIdMatch?.[1] })
-          return { content: JSON.stringify(result), type: "text" }
-        }
-        case "redoMessage": {
-          const sessionIdMatch = cmd.args?.match(/--session-id\s+(\S+)/)
-          const result = await redoMessage({ sessionId: sessionIdMatch?.[1] })
-          return { content: JSON.stringify(result), type: "text" }
-        }
-        case "compactSession": {
-          const sessionIdMatch = cmd.args?.match(/--session-id\s+(\S+)/)
-          const result = await compactSession({ sessionId: sessionIdMatch?.[1] })
-          return { content: JSON.stringify(result), type: "text" }
-        }
-        case "exportSession": {
-          const sessionIdMatch = cmd.args?.match(/--session-id\s+(\S+)/)
-          const formatMatch = cmd.args?.match(/--format\s+(\w+)/)
-          if (!sessionIdMatch) return { content: JSON.stringify({ error: "Missing --session-id" }), type: "text" }
-          const result = await exportSession({ sessionId: sessionIdMatch[1], format: formatMatch?.[1] as "text" | "json" | "markdown" })
-          return { content: JSON.stringify(result), type: "text" }
-        }
-        case "jumpToMessage": {
-          const sessionIdMatch = cmd.args?.match(/--session-id\s+(\S+)/)
-          const messageIdMatch = cmd.args?.match(/--message-id\s+(\S+)/)
-          if (!sessionIdMatch || !messageIdMatch) return { content: JSON.stringify({ error: "Missing --session-id or --message-id" }), type: "text" }
-          const result = await jumpToMessage({ sessionId: sessionIdMatch[1], messageId: messageIdMatch[1] })
-          return { content: JSON.stringify(result), type: "text" }
-        }
-        case "duplicateSession": {
-          const sessionIdMatch = cmd.args?.match(/--session-id\s+(\S+)/)
-          const titleMatch = cmd.args?.match(/--title\s+"([^"]+)"/) || cmd.args?.match(/--title\s+(\S+)/)
-          if (!sessionIdMatch) return { content: JSON.stringify({ error: "Missing --session-id" }), type: "text" }
-          const result = await duplicateSession({ sessionId: sessionIdMatch[1], title: titleMatch?.[1] })
-          return { content: JSON.stringify(result), type: "text" }
-        }
+      if (!cmd) {
+        await this.sdk.session.prompt({
+          sessionID,
+          model: {
+            providerID: model.providerID,
+            modelID: model.modelID,
+          },
+          parts,
+          agent,
+          directory,
+        })
+        return done
       }
-
-      return done
 
       const command = await this.config.sdk.command
         .list({ directory }, { throwOnError: true })
@@ -1400,6 +1243,20 @@ export namespace ACP {
           directory,
         })
         return done
+      }
+
+      switch (cmd.name) {
+        case "compact":
+          await this.config.sdk.session.summarize(
+            {
+              sessionID,
+              directory,
+              providerID: model.providerID,
+              modelID: model.modelID,
+            },
+            { throwOnError: true },
+          )
+          break
       }
 
       return done
@@ -1577,127 +1434,4 @@ export namespace ACP {
     }
     return result
   }
-
-  function sortProvidersByName<T extends { name: string }>(providers: T[]): T[] {
-    return [...providers].sort((a, b) => {
-      const nameA = a.name.toLowerCase()
-      const nameB = b.name.toLowerCase()
-      if (nameA < nameB) return -1
-      if (nameA > nameB) return 1
-      return 0
-    })
-  }
-
-  function modelVariantsFromProviders(
-    providers: Array<{ id: string; models: Record<string, { variants?: Record<string, any> }> }>,
-    model: { providerID: string; modelID: string },
-  ): string[] {
-    const provider = providers.find((entry) => entry.id === model.providerID)
-    if (!provider) return []
-    const modelInfo = provider.models[model.modelID]
-    if (!modelInfo?.variants) return []
-    return Object.keys(modelInfo.variants)
-  }
-
-  function buildAvailableModels(
-    providers: Array<{ id: string; name: string; models: Record<string, any> }>,
-    options: { includeVariants?: boolean } = {},
-  ): ModelOption[] {
-    const includeVariants = options.includeVariants ?? false
-    return providers.flatMap((provider) => {
-      const models = Provider.sort(Object.values(provider.models) as any)
-      return models.flatMap((model) => {
-        const base: ModelOption = {
-          modelId: `${provider.id}/${model.id}`,
-          name: `${provider.name}/${model.name}`,
-        }
-        if (!includeVariants || !model.variants) return [base]
-        const variants = Object.keys(model.variants).filter((variant) => variant !== DEFAULT_VARIANT_VALUE)
-        const variantOptions = variants.map((variant) => ({
-          modelId: `${provider.id}/${model.id}/${variant}`,
-          name: `${provider.name}/${model.name} (${variant})`,
-        }))
-        return [base, ...variantOptions]
-      })
-    })
-  }
-
-  function formatModelIdWithVariant(
-    model: { providerID: string; modelID: string },
-    variant: string | undefined,
-    availableVariants: string[],
-    includeVariant: boolean,
-  ) {
-    const base = `${model.providerID}/${model.modelID}`
-    if (!includeVariant || !variant || !availableVariants.includes(variant)) return base
-    return `${base}/${variant}`
-  }
-
-  function buildVariantMeta(input: {
-    model: { providerID: string; modelID: string }
-    variant?: string
-    availableVariants: string[]
-  }) {
-    return {
-      opencode: {
-        modelId: `${input.model.providerID}/${input.model.modelID}`,
-        variant: input.variant ?? null,
-        availableVariants: input.availableVariants,
-      },
-    }
-  }
-
-  function parseModelSelection(
-    modelId: string,
-    providers: Array<{ id: string; models: Record<string, { variants?: Record<string, any> }> }>,
-  ): { model: { providerID: string; modelID: string }; variant?: string } {
-    const parsed = Provider.parseModel(modelId)
-    const provider = providers.find((p) => p.id === parsed.providerID)
-    if (!provider) {
-      return { model: parsed, variant: undefined }
-    }
-
-    // Check if modelID exists directly
-    if (provider.models[parsed.modelID]) {
-      return { model: parsed, variant: undefined }
-    }
-
-    // Try to extract variant from end of modelID (e.g., "claude-sonnet-4/high" -> model: "claude-sonnet-4", variant: "high")
-    const segments = parsed.modelID.split("/")
-    if (segments.length > 1) {
-      const candidateVariant = segments[segments.length - 1]
-      const baseModelId = segments.slice(0, -1).join("/")
-      const baseModelInfo = provider.models[baseModelId]
-      if (baseModelInfo?.variants && candidateVariant in baseModelInfo.variants) {
-        return {
-          model: { providerID: parsed.providerID, modelID: baseModelId },
-          variant: candidateVariant,
-        }
-      }
-    }
-
-    return { model: parsed, variant: undefined }
-  }
 }
-
-// ============ Session Management ACP Commands ============
-
-import {
-	listSessions,
-	switchSession,
-	createSession,
-	forkSession,
-	renameSession,
-	deleteSession,
-	getSessionInfo,
-	undoMessage,
-	redoMessage,
-	compactSession,
-	exportSession,
-	jumpToMessage,
-	duplicateSession,
-} from "./session-handlers.js"
-
-// Add session management commands to the prompt handler
-// These will be available as /command_name in prompts
-
