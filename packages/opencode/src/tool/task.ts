@@ -2,7 +2,7 @@ import { Tool } from "./tool"
 import DESCRIPTION from "./task.txt"
 import z from "zod"
 import { Session } from "../session"
-import { Bus } from "../bus"
+import { Bus, HookEvent } from "../bus"
 import { MessageV2 } from "../session/message-v2"
 import { Identifier } from "../id/id"
 import { Agent } from "../agent/agent"
@@ -96,6 +96,14 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           ],
         })
       })
+      
+      // Emit SubagentStart hook
+      Bus.publish(HookEvent.SubagentStart, {
+        subagentID: session.id,
+        parentSessionID: ctx.sessionID,
+        agentType: params.subagent_type,
+      })
+      
       const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
 
@@ -161,6 +169,12 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         parts: promptParts,
       }).finally(() => {
         unsub()
+        // Emit SubagentStop hook
+        Bus.publish(HookEvent.SubagentStop, {
+          subagentID: session.id,
+          parentSessionID: ctx.sessionID,
+          agentType: params.subagent_type,
+        })
       })
 
       const messages = await Session.messages({ sessionID: session.id })

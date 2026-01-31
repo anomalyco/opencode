@@ -1,6 +1,6 @@
 import { Slug } from "@opencode-ai/util/slug"
 import path from "path"
-import { BusEvent } from "@/bus/bus-event"
+import { BusEvent, HookEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
 import z from "zod"
@@ -229,6 +229,10 @@ export namespace Session {
     Bus.publish(Event.Created, {
       info: result,
     })
+
+    // Emit SessionStart hook for native hook system
+    Bus.publish(HookEvent.SessionStart, { session: result })
+
     const cfg = await Config.get()
     if (!result.parentID && (Flag.OPENCODE_AUTO_SHARE || cfg.share === "auto"))
       share(result.id)

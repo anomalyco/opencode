@@ -1,4 +1,4 @@
-import { BusEvent } from "@/bus/bus-event"
+import { BusEvent, HookEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Session } from "."
 import { Identifier } from "../id/id"
@@ -96,6 +96,12 @@ export namespace SessionCompaction {
     abort: AbortSignal
     auto: boolean
   }) {
+    // Emit PreCompact hook before compaction begins
+    Bus.publish(HookEvent.PreCompact, { 
+      sessionID: input.sessionID,
+      contextSize: input.messages.length
+    })
+    
     const userMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
     const agent = await Agent.get("compaction")
     const model = agent.model

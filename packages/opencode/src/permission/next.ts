@@ -1,5 +1,5 @@
 import { Bus } from "@/bus"
-import { BusEvent } from "@/bus/bus-event"
+import { BusEvent, HookEvent } from "@/bus/bus-event"
 import { Config } from "@/config/config"
 import { Identifier } from "@/id/id"
 import { Instance } from "@/project/instance"
@@ -149,6 +149,12 @@ export namespace PermissionNext {
               reject,
             }
             Bus.publish(Event.Asked, info)
+            // Emit PermissionRequest hook for native hook system
+            Bus.publish(HookEvent.PermissionRequest, {
+              permission: request.permission,
+              sessionID: request.sessionID,
+              metadata: request.metadata,
+            })
           })
         }
         if (rule.action === "allow") continue

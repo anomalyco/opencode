@@ -913,6 +913,61 @@ export namespace Config {
     })
   export type Provider = z.infer<typeof Provider>
 
+  // =================================================================
+  //                      NATIVE HOOK CONFIGURATION
+  // =================================================================
+  /**
+   * Configuration for a single hook script.
+   * Compatible with Claude Code's hook system.
+   */
+  export const HookConfig = z
+    .object({
+      name: z.string().describe("Unique identifier for the hook"),
+      path: z.string().describe("Path to the hook script (relative or absolute, supports ~)"),
+      enabled: z.boolean().default(true).describe("Whether the hook is enabled"),
+      timeout: z.number().int().positive().optional().default(5000).describe("Hook execution timeout in ms"),
+      args: z.record(z.string(), z.any()).optional().describe("Custom arguments passed to the hook"),
+    })
+    .strict()
+    .meta({
+      ref: "HookConfig",
+    })
+  export type HookConfig = z.infer<typeof HookConfig>
+
+  /**
+   * Configuration for all hook types.
+   * Uses PascalCase naming for Claude Code compatibility.
+   * All 12 Claude Code hooks are supported.
+   */
+  export const Hooks = z
+    .object({
+      // Session lifecycle
+      SessionStart: z.array(HookConfig).optional().describe("Hooks fired when a session starts"),
+      SessionStop: z.array(HookConfig).optional().describe("Hooks fired when a session stops"),
+      // Tool execution
+      PreToolUse: z.array(HookConfig).optional().describe("Hooks fired before tool execution"),
+      PostToolUse: z.array(HookConfig).optional().describe("Hooks fired after successful tool execution"),
+      PostToolUseFailure: z.array(HookConfig).optional().describe("Hooks fired after tool execution fails"),
+      // User input
+      UserPromptSubmit: z.array(HookConfig).optional().describe("Hooks fired when user submits a prompt"),
+      // Automation loop
+      Stop: z.array(HookConfig).optional().describe("Hooks fired when the automation loop ends"),
+      // Permissions
+      PermissionRequest: z.array(HookConfig).optional().describe("Hooks fired before permission dialogs"),
+      // Subagent lifecycle
+      SubagentStart: z.array(HookConfig).optional().describe("Hooks fired when a subagent starts"),
+      SubagentStop: z.array(HookConfig).optional().describe("Hooks fired when a subagent stops"),
+      // Context management
+      PreCompact: z.array(HookConfig).optional().describe("Hooks fired before context compaction"),
+      // Notifications
+      Notification: z.array(HookConfig).optional().describe("Hooks fired for notifications"),
+    })
+    .strict()
+    .meta({
+      ref: "HooksConfig",
+    })
+  export type Hooks = z.infer<typeof Hooks>
+
   export const Info = z
     .object({
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
@@ -1064,6 +1119,7 @@ export namespace Config {
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
       permission: Permission.optional(),
+      hooks: Hooks.optional().describe("Native hooks for lifecycle events (Claude Code compatible)"),
       tools: z.record(z.string(), z.boolean()).optional(),
       enterprise: z
         .object({

@@ -5,7 +5,7 @@ import { Session } from "."
 import { Agent } from "@/agent/agent"
 import { Snapshot } from "@/snapshot"
 import { SessionSummary } from "./summary"
-import { Bus } from "@/bus"
+import { Bus, HookEvent } from "@/bus"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
 import { Plugin } from "@/plugin"
@@ -394,9 +394,20 @@ export namespace SessionProcessor {
           }
           input.assistantMessage.time.completed = Date.now()
           await Session.updateMessage(input.assistantMessage)
+
+          // Emit SessionStop hook for native hook system
+          const session = await Session.get(input.sessionID)
+          Bus.publish(HookEvent.SessionStop, { session })
+
           if (needsCompaction) return "compact"
-          if (blocked) return "stop"
-          if (input.assistantMessage.error) return "stop"
+          if (blocked) {
+            Bus.publish(HookEvent.Stop, { sessionID: input.sessionID, reason: "blocked" })
+            return "stop"
+          }
+          if (input.assistantMessage.error) {
+            Bus.publish(HookEvent.Stop, { sessionID: input.sessionID, reason: "error" })
+            return "stop"
+          }
           return "continue"
         }
       },
