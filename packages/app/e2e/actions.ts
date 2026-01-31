@@ -269,3 +269,25 @@ export async function withSession<T>(
     await sdk.session.delete({ sessionID: session.id }).catch(() => undefined)
   }
 }
+
+export async function openStatusPopover(page: Page) {
+  await defocus(page)
+
+  const rightSection = page.locator(titlebarRightSelector)
+  const trigger = rightSection.getByRole("button", { name: /status/i }).first()
+
+  const popoverBody = page.locator(popoverBodySelector).filter({ has: page.locator('[data-component="tabs"]') })
+
+  const opened = await popoverBody
+    .isVisible()
+    .then((x) => x)
+    .catch(() => false)
+
+  if (!opened) {
+    await expect(trigger).toBeVisible()
+    await trigger.click()
+    await expect(popoverBody).toBeVisible()
+  }
+
+  return { rightSection, popoverBody }
+}
