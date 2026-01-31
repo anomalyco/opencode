@@ -14,7 +14,12 @@ test("dialog edit project updates name and startup script", async ({ page, gotoS
     await expect(trigger).toBeVisible()
     await trigger.click({ force: true })
 
-    await page.getByRole("menuitem", { name: "Edit" }).click()
+    const menu = page.locator('[data-component="dropdown-menu-content"]').first()
+    await expect(menu).toBeVisible()
+
+    const editItem = menu.getByRole("menuitem", { name: "Edit" }).first()
+    await expect(editItem).toBeVisible()
+    await editItem.click({ force: true })
 
     const dialog = page.getByRole("dialog")
     await expect(dialog).toBeVisible()

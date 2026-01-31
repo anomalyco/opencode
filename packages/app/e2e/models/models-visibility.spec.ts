@@ -1,6 +1,6 @@
 import { test, expect } from "../fixtures"
 import { promptSelector } from "../selectors"
-import { closeDialog, openSettings } from "../actions"
+import { closeDialog, openSettings, clickListItem } from "../actions"
 
 test("hiding a model removes it from the model picker", async ({ page, gotoSession }) => {
   await gotoSession()

@@ -15,3 +15,21 @@ export const projectMenuTriggerSelector = (slug: string) =>
   `${sidebarNavSelector} [data-action="project-menu"][data-project="${slug}"]`
 
 export const projectCloseMenuSelector = (slug: string) => `[data-action="project-close-menu"][data-project="${slug}"]`
+
+export const titlebarRightSelector = "#opencode-titlebar-right"
+
+export const popoverBodySelector = '[data-slot="popover-body"]'
+
+export const dropdownMenuTriggerSelector = '[data-slot="dropdown-menu-trigger"]'
+
+export const dropdownMenuContentSelector = '[data-component="dropdown-menu-content"]'
+
+export const inlineInputSelector = '[data-component="inline-input"]'
+
+export const sessionItemSelector = (sessionID: string) => `${sidebarNavSelector} [data-session-id="${sessionID}"]`
+
+export const listItemSelector = '[data-slot="list-item"]'
+
+export const listItemKeyStartsWithSelector = (prefix: string) => `${listItemSelector}[data-key^="${prefix}"]`
+
+export const listItemKeySelector = (key: string) => `${listItemSelector}[data-key="${key}"]`
