@@ -269,8 +269,9 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
         args: {
           foo: tool.schema.string(),
         },
-        async execute(args, ctx) {
-          return `Hello ${args.foo}!`
+        async execute(args, context) {
+          const { directory, worktree } = context
+          return `Hello ${args.foo} from ${directory} (worktree: ${worktree})`
         },
       }),
     },

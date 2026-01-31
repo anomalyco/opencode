@@ -96,6 +96,18 @@ export class ACPSessionManager {
     return session
   }
 
+  getVariant(sessionId: string) {
+    const session = this.get(sessionId)
+    return session.variant
+  }
+
+  setVariant(sessionId: string, variant?: string) {
+    const session = this.get(sessionId)
+    session.variant = variant
+    this.sessions.set(sessionId, session)
+    return session
+  }
+
   setMode(sessionId: string, modeId: string) {
     const session = this.get(sessionId)
     session.modeId = modeId

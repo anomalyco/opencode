@@ -111,7 +111,7 @@ interface SlashCommand {
   title: string
   description?: string
   keybind?: string
-  type: "builtin" | "custom"
+  type: "builtin" | "custom" | "skill"
 }
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
@@ -171,7 +171,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey))
-  const view = createMemo(() => layout.view(sessionKey))
 
   const commentInReview = (path: string) => {
     const sessionID = params.id
@@ -187,20 +186,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     const focus = { file: item.path, id: item.commentID }
     comments.setActive(focus)
-    view().reviewPanel.open()
 
-    if (item.commentOrigin === "review") {
-      tabs().open("review")
+    const wantsReview = item.commentOrigin === "review" || (item.commentOrigin !== "file" && commentInReview(item.path))
+    if (wantsReview) {
+      layout.fileTree.open()
+      layout.fileTree.setTab("changes")
       requestAnimationFrame(() => comments.setFocus(focus))
       return
     }
 
-    if (item.commentOrigin !== "file" && commentInReview(item.path)) {
-      tabs().open("review")
-      requestAnimationFrame(() => comments.setFocus(focus))
-      return
-    }
-
+    layout.fileTree.open()
+    layout.fileTree.setTab("all")
     const tab = files.tab(item.path)
     tabs().open(tab)
     files.load(item.path)
@@ -523,7 +519,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       type: "custom" as const,
     }))
 
-    return [...custom, ...builtin]
+    const skills = sync.data.skill.map((skill) => ({
+      id: `skill.${skill.name}`,
+      trigger: `skill:${skill.name}`,
+      title: skill.name,
+      description: skill.description,
+      type: "skill" as const,
+    }))
+
+    return [...skills, ...custom, ...builtin]
   })
 
   const handleSlashSelect = (cmd: SlashCommand | undefined) => {
@@ -532,6 +536,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     if (cmd.type === "custom") {
       const text = `/${cmd.trigger} `
+      editorRef.innerHTML = ""
+      editorRef.textContent = text
+      prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
+      requestAnimationFrame(() => {
+        editorRef.focus()
+        const range = document.createRange()
+        const sel = window.getSelection()
+        range.selectNodeContents(editorRef)
+        range.collapse(false)
+        sel?.removeAllRanges()
+        sel?.addRange(range)
+      })
+      return
+    }
+
+    if (cmd.type === "skill") {
+      // Extract skill name from the id (skill.{name})
+      const skillName = cmd.id.replace("skill.", "")
+      const text = `Load the "${skillName}" skill and follow its instructions.`
       editorRef.innerHTML = ""
       editorRef.textContent = text
       prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
@@ -1042,13 +1065,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
+    const ctrl = event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
+
     if (store.popover) {
       if (event.key === "Tab") {
         selectPopoverActive()
         event.preventDefault()
         return
       }
-      if (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter") {
+      const nav = event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter"
+      const ctrlNav = ctrl && (event.key === "n" || event.key === "p")
+      if (nav || ctrlNav) {
         if (store.popover === "at") {
           atOnKeyDown(event)
           event.preventDefault()
@@ -1061,8 +1088,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         return
       }
     }
-
-    const ctrl = event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
 
     if (ctrl && event.code === "KeyG") {
       if (store.popover) {
@@ -1563,13 +1588,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       })
 
       const timeoutMs = 5 * 60 * 1000
+      const timer = { id: undefined as number | undefined }
       const timeout = new Promise<Awaited<ReturnType<typeof WorktreeState.wait>>>((resolve) => {
-        setTimeout(() => {
+        timer.id = window.setTimeout(() => {
           resolve({ status: "failed", message: language.t("workspace.error.stillPreparing") })
         }, timeoutMs)
       })
 
-      const result = await Promise.race([WorktreeState.wait(sessionDirectory), abort, timeout])
+      const result = await Promise.race([WorktreeState.wait(sessionDirectory), abort, timeout]).finally(() => {
+        if (timer.id === undefined) return
+        clearTimeout(timer.id)
+      })
       pending.delete(session.id)
       if (controller.signal.aborted) return false
       if (result.status === "failed") throw new Error(result.message)
@@ -1704,6 +1733,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                             {language.t("prompt.slash.badge.custom")}
                           </span>
                         </Show>
+                        <Show when={cmd.type === "skill"}>
+                          <span class="text-11-regular text-text-subtle px-1.5 py-0.5 bg-surface-base rounded">
+                            {language.t("prompt.slash.badge.skill")}
+                          </span>
+                        </Show>
                         <Show when={command.keybind(cmd.id)}>
                           <span class="text-12-regular text-text-subtle">{command.keybind(cmd.id)}</span>
                         </Show>
@@ -1746,10 +1780,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <Tooltip
                     value={
                       <span class="flex max-w-[300px]">
-                        <span
-                          class="text-text-invert-base truncate min-w-0"
-                          style={{ direction: "rtl", "text-align": "left", "unicode-bidi": "plaintext" }}
-                        >
+                        <span class="text-text-invert-base truncate-start [unicode-bidi:plaintext] min-w-0">
                           {getDirectory(item.path)}
                         </span>
                         <span class="shrink-0">{getFilename(item.path)}</span>
@@ -1772,10 +1803,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     >
                       <div class="flex items-center gap-1.5">
                         <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-3.5" />
-                        <div
-                          class="flex items-center text-11-regular min-w-0"
-                          style={{ "font-weight": "var(--font-weight-medium)" }}
-                        >
+                        <div class="flex items-center text-11-regular min-w-0 font-medium">
                           <span class="text-text-strong whitespace-nowrap">{getFilenameTruncated(item.path, 14)}</span>
                           <Show when={item.selection}>
                             {(sel) => (
@@ -1957,6 +1985,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     keybind={command.keybind("model.variant.cycle")}
                   >
                     <Button
+                      data-action="model-variant-cycle"
                       variant="ghost"
                       class="text-text-base _hidden group-hover/prompt-input:inline-block capitalize text-12-regular"
                       onClick={() => local.model.variant.cycle()}

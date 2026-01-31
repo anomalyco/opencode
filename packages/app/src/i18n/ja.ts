@@ -331,6 +331,7 @@ export const dict = {
   "language.ar": "العربية",
   "language.no": "Norsk",
   "language.br": "Português (Brasil)",
+  "language.th": "ไทย",
 
   "toast.language.title": "言語",
   "toast.language.description": "{{language}}に切り替えました",
@@ -516,6 +517,7 @@ export const dict = {
 
   "settings.general.section.appearance": "外観",
   "settings.general.section.notifications": "システム通知",
+  "settings.general.section.updates": "アップデート",
   "settings.general.section.sounds": "効果音",
 
   "settings.general.row.language.title": "言語",
@@ -526,6 +528,18 @@ export const dict = {
   "settings.general.row.theme.description": "OpenCodeのテーマをカスタマイズします。",
   "settings.general.row.font.title": "フォント",
   "settings.general.row.font.description": "コードブロックで使用する等幅フォントをカスタマイズします",
+
+  "settings.general.row.releaseNotes.title": "リリースノート",
+  "settings.general.row.releaseNotes.description": "アップデート後に「新機能」ポップアップを表示",
+
+  "settings.updates.row.startup.title": "起動時にアップデートを確認",
+  "settings.updates.row.startup.description": "OpenCode の起動時に自動でアップデートを確認します",
+  "settings.updates.row.check.title": "アップデートを確認",
+  "settings.updates.row.check.description": "手動でアップデートを確認し、利用可能ならインストールします",
+  "settings.updates.action.checkNow": "今すぐ確認",
+  "settings.updates.action.checking": "確認中...",
+  "settings.updates.toast.latest.title": "最新です",
+  "settings.updates.toast.latest.description": "OpenCode は最新バージョンです。",
 
   "font.option.ibmPlexMono": "IBM Plex Mono",
   "font.option.cascadiaCode": "Cascadia Code",

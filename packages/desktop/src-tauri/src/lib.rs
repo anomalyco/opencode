@@ -16,6 +16,8 @@ use std::{
     time::{Duration, Instant},
 };
 use tauri::{AppHandle, LogicalSize, Manager, RunEvent, State, WebviewWindowBuilder};
+#[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
+use tauri_plugin_deep_link::DeepLinkExt;
 #[cfg(windows)]
 use tauri_plugin_decorum::WebviewWindowExt;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
@@ -263,6 +265,7 @@ pub fn run() {
                 let _ = window.unminimize();
             }
         }))
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_os::init())
         .plugin(
             tauri_plugin_window_state::Builder::new()
@@ -291,6 +294,9 @@ pub fn run() {
             markdown::parse_markdown_command
         ])
         .setup(move |app| {
+            #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
+            app.deep_link().register_all().ok();
+
             let app = app.handle().clone();
 
             // Initialize log state
@@ -328,7 +334,15 @@ pub fn run() {
                 .hidden_title(true);
 
             #[cfg(windows)]
-            let window_builder = window_builder.decorations(false);
+            let window_builder = window_builder
+                // Some VPNs set a global/system proxy that WebView2 applies even for loopback
+                // connections, which breaks the app's localhost sidecar server.
+                // Note: when setting additional args, we must re-apply wry's default
+                // `--disable-features=...` flags.
+                .additional_browser_args(
+                    "--proxy-bypass-list=<-loopback> --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection",
+                )
+                .decorations(false);
 
             let window = window_builder.build().expect("Failed to create window");
 

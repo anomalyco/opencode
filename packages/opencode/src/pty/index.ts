@@ -108,6 +108,12 @@ export namespace Pty {
       TERM: "xterm-256color",
       OPENCODE_TERMINAL: "1",
     } as Record<string, string>
+
+    if (process.platform === "win32") {
+      env.LC_ALL = "C.UTF-8"
+      env.LC_CTYPE = "C.UTF-8"
+      env.LANG = "C.UTF-8"
+    }
     log.info("creating session", { id, cmd: command, args, cwd })
 
     const spawn = await pty()
