@@ -1,12 +1,38 @@
 import { A, useSearchParams } from "@solidjs/router"
 import { Title } from "@solidjs/meta"
-import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
+import { createMemo, createSignal, For, Match, onMount, Show, Switch } from "solid-js"
 import { PlanIcon, plans } from "./common"
 
 export default function Black() {
   const [params] = useSearchParams()
   const [selected, setSelected] = createSignal<string | null>((params.plan as string) || null)
+  const [mounted, setMounted] = createSignal(false)
   const selectedPlan = createMemo(() => plans.find((p) => p.id === selected()))
+
+  onMount(() => {
+    requestAnimationFrame(() => setMounted(true))
+  })
+
+  const transition = (action: () => void) => {
+    if (mounted() && "startViewTransition" in document) {
+      ;(document as any).startViewTransition(action)
+      return
+    }
+
+    action()
+  }
+
+  const select = (planId: string) => {
+    if (selected() === planId) {
+      return
+    }
+
+    transition(() => setSelected(planId))
+  }
+
+  const cancel = () => {
+    transition(() => setSelected(null))
+  }
 
   return (
     <>
@@ -17,7 +43,12 @@ export default function Black() {
             <div data-slot="pricing">
               <For each={plans}>
                 {(plan) => (
-                  <button type="button" onClick={() => setSelected(plan.id)} data-slot="pricing-card">
+                  <button
+                    type="button"
+                    onClick={() => select(plan.id)}
+                    data-slot="pricing-card"
+                    style={{ "view-transition-name": `card-${plan.id}` }}
+                  >
                     <div data-slot="icon">
                       <PlanIcon plan={plan.id} />
                     </div>
@@ -31,14 +62,11 @@ export default function Black() {
                 )}
               </For>
             </div>
-            <p data-slot="fine-print">
-              Prices shown don't include applicable tax · <A href="/legal/terms-of-service">Terms of Service</A>
-            </p>
           </Match>
           <Match when={selectedPlan()}>
             {(plan) => (
               <div data-slot="selected-plan">
-                <div data-slot="selected-card">
+                <div data-slot="selected-card" style={{ "view-transition-name": `card-${plan().id}` }}>
                   <div data-slot="icon">
                     <PlanIcon plan={plan().id} />
                   </div>
@@ -49,7 +77,7 @@ export default function Black() {
                       <span data-slot="multiplier">{plan().multiplier}</span>
                     </Show>
                   </p>
-                  <ul data-slot="terms">
+                  <ul data-slot="terms" style={{ "view-transition-name": `terms-${plan().id}` }}>
                     <li>Your subscription will not start immediately</li>
                     <li>You will be added to the waitlist and activated soon</li>
                     <li>Your card will be only charged when your subscription is activated</li>
@@ -58,8 +86,8 @@ export default function Black() {
                     <li>Limits may be adjusted and plans may be discontinued in the future</li>
                     <li>Cancel your subscription at anytime</li>
                   </ul>
-                  <div data-slot="actions">
-                    <button type="button" onClick={() => setSelected(null)} data-slot="cancel">
+                  <div data-slot="actions" style={{ "view-transition-name": `actions-${plan().id}` }}>
+                    <button type="button" onClick={() => cancel()} data-slot="cancel">
                       Cancel
                     </button>
                     <a href={`/black/subscribe/${plan().id}`} data-slot="continue">
@@ -67,13 +95,13 @@ export default function Black() {
                     </a>
                   </div>
                 </div>
-                <p data-slot="fine-print">
-                  Prices shown don't include applicable tax · <A href="/legal/terms-of-service">Terms of Service</A>
-                </p>
               </div>
             )}
           </Match>
         </Switch>
+        <p data-slot="fine-print" style={{ "view-transition-name": "fine-print" }}>
+          Prices shown don't include applicable tax · <A href="/legal/terms-of-service">Terms of Service</A>
+        </p>
       </section>
     </>
   )

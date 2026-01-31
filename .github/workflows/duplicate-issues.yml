@@ -1,4 +1,4 @@
-name: Duplicate Issue Detection
+name: duplicate-issues
 
 on:
   issues:

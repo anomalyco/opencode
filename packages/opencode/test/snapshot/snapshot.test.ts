@@ -266,23 +266,78 @@ test("unicode filenames", async () => {
       expect(before).toBeTruthy()
 
       const unicodeFiles = [
-        `${tmp.path}/文件.txt`,
-        `${tmp.path}/🚀rocket.txt`,
-        `${tmp.path}/café.txt`,
-        `${tmp.path}/файл.txt`,
+        { path: `${tmp.path}/文件.txt`, content: "chinese content" },
+        { path: `${tmp.path}/🚀rocket.txt`, content: "emoji content" },
+        { path: `${tmp.path}/café.txt`, content: "accented content" },
+        { path: `${tmp.path}/файл.txt`, content: "cyrillic content" },
       ]
 
       for (const file of unicodeFiles) {
-        await Bun.write(file, "unicode content")
+        await Bun.write(file.path, file.content)
       }
 
       const patch = await Snapshot.patch(before!)
-      // Note: git escapes unicode characters by default, so we just check that files are detected
-      // The actual filenames will be escaped like "caf\303\251.txt" but functionality works
       expect(patch.files.length).toBe(4)
 
-      // Skip revert test due to git filename escaping issues
-      // The functionality works but git uses escaped filenames internally
+      for (const file of unicodeFiles) {
+        expect(patch.files).toContain(file.path)
+      }
+
+      await Snapshot.revert([patch])
+
+      for (const file of unicodeFiles) {
+        expect(await Bun.file(file.path).exists()).toBe(false)
+      }
+    },
+  })
+})
+
+test("unicode filenames modification and restore", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const chineseFile = `${tmp.path}/文件.txt`
+      const cyrillicFile = `${tmp.path}/файл.txt`
+
+      await Bun.write(chineseFile, "original chinese")
+      await Bun.write(cyrillicFile, "original cyrillic")
+
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      await Bun.write(chineseFile, "modified chinese")
+      await Bun.write(cyrillicFile, "modified cyrillic")
+
+      const patch = await Snapshot.patch(before!)
+      expect(patch.files).toContain(chineseFile)
+      expect(patch.files).toContain(cyrillicFile)
+
+      await Snapshot.revert([patch])
+
+      expect(await Bun.file(chineseFile).text()).toBe("original chinese")
+      expect(await Bun.file(cyrillicFile).text()).toBe("original cyrillic")
+    },
+  })
+})
+
+test("unicode filenames in subdirectories", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      await $`mkdir -p "${tmp.path}/目录/подкаталог"`.quiet()
+      const deepFile = `${tmp.path}/目录/подкаталог/文件.txt`
+      await Bun.write(deepFile, "deep unicode content")
+
+      const patch = await Snapshot.patch(before!)
+      expect(patch.files).toContain(deepFile)
+
+      await Snapshot.revert([patch])
+      expect(await Bun.file(deepFile).exists()).toBe(false)
     },
   })
 })

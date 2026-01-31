@@ -19,11 +19,15 @@
 @import "../components/dropdown-menu.css" layer(components);
 @import "../components/dialog.css" layer(components);
 @import "../components/file-icon.css" layer(components);
+@import "../components/hover-card.css" layer(components);
 @import "../components/provider-icon.css" layer(components);
 @import "../components/icon.css" layer(components);
 @import "../components/icon-button.css" layer(components);
 @import "../components/image-preview.css" layer(components);
+@import "../components/keybind.css" layer(components);
+@import "../components/line-comment.css" layer(components);
 @import "../components/text-field.css" layer(components);
+@import "../components/inline-input.css" layer(components);
 @import "../components/list.css" layer(components);
 @import "../components/logo.css" layer(components);
 @import "../components/markdown.css" layer(components);

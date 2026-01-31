@@ -843,6 +843,14 @@ export type KeybindsConfig = {
    */
   messages_page_down?: string
   /**
+   * Scroll messages up by one line
+   */
+  messages_line_up?: string
+  /**
+   * Scroll messages down by one line
+   */
+  messages_line_down?: string
+  /**
    * Scroll messages up by half page
    */
   messages_half_page_up?: string
