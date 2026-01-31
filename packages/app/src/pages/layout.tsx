@@ -84,6 +84,7 @@ export default function Layout(props: ParentProps) {
 
   const pageReady = createMemo(() => ready())
   const builtAt = import.meta.env.VITE_BUILD_DATE as string | undefined
+  const buildSha = import.meta.env.VITE_BUILD_SHA as string | undefined
   const forkLabel = document.querySelector('meta[name="opencode-fork"]')?.getAttribute("content") ?? undefined
   const forkSource = document.querySelector('meta[name="opencode-source"]')?.getAttribute("content") ?? undefined
   const builtAtLabel = createMemo(() => {
@@ -91,6 +92,13 @@ export default function Layout(props: ParentProps) {
     const parsed = new Date(builtAt)
     if (Number.isNaN(parsed.getTime())) return builtAt
     return parsed.toLocaleString()
+  })
+  const builtAtLine = createMemo(() => {
+    const label = builtAtLabel()
+    if (label && buildSha) return `Built at ${label} · ${buildSha}`
+    if (label) return `Built at ${label}`
+    if (buildSha) return buildSha
+    return undefined
   })
 
   let scrollContainerRef: HTMLDivElement | undefined
@@ -1851,10 +1859,10 @@ export default function Layout(props: ParentProps) {
           {props.children}
         </main>
       </div>
-      <Show when={builtAtLabel() || forkLabel}>
+      <Show when={builtAtLine() || forkLabel}>
         <div class="fixed bottom-2 right-2 text-12-regular text-text-weak opacity-70 text-right pointer-events-auto">
-          <Show when={builtAtLabel()}>
-            <div>Built at {builtAtLabel()}</div>
+          <Show when={builtAtLine()}>
+            <div>{builtAtLine()}</div>
           </Show>
           <Show when={forkLabel}>
             <div>

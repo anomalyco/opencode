@@ -1,10 +1,20 @@
 import { defineConfig } from "vite"
+import { execSync } from "node:child_process"
 import desktopPlugin from "./vite"
+
+const gitSha = (() => {
+  try {
+    return execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim()
+  } catch {
+    return ""
+  }
+})()
 
 export default defineConfig({
   plugins: [desktopPlugin] as any,
   define: {
     "import.meta.env.VITE_BUILD_DATE": JSON.stringify(new Date().toISOString()),
+    "import.meta.env.VITE_BUILD_SHA": JSON.stringify(gitSha),
   },
   server: {
     host: "0.0.0.0",
