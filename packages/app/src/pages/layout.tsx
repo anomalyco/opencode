@@ -84,6 +84,8 @@ export default function Layout(props: ParentProps) {
 
   const pageReady = createMemo(() => ready())
   const builtAt = import.meta.env.VITE_BUILD_DATE as string | undefined
+  const forkLabel = document.querySelector('meta[name="opencode-fork"]')?.getAttribute("content") ?? undefined
+  const forkSource = document.querySelector('meta[name="opencode-source"]')?.getAttribute("content") ?? undefined
   const builtAtLabel = createMemo(() => {
     if (!builtAt) return undefined
     const parsed = new Date(builtAt)
@@ -1849,9 +1851,22 @@ export default function Layout(props: ParentProps) {
           {props.children}
         </main>
       </div>
-      <Show when={builtAtLabel()}>
-        <div class="fixed bottom-2 right-2 text-12-regular text-text-weak opacity-70 pointer-events-none">
-          Built at {builtAtLabel()}
+      <Show when={builtAtLabel() || forkLabel}>
+        <div class="fixed bottom-2 right-2 text-12-regular text-text-weak opacity-70 text-right pointer-events-auto">
+          <Show when={builtAtLabel()}>
+            <div>Built at {builtAtLabel()}</div>
+          </Show>
+          <Show when={forkLabel}>
+            <div>
+              {forkLabel}
+              <Show when={forkSource}>
+                {" "}
+                <a class="underline" href={forkSource} rel="noreferrer" target="_blank">
+                  {forkSource?.replace(/^https?:\/\//, "")}
+                </a>
+              </Show>
+            </div>
+          </Show>
         </div>
       </Show>
       <Toast.Region />
