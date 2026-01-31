@@ -64,25 +64,98 @@ jobs:
 
           $COMMENT"
 
-  add-contributor-label:
+  add-contributor-labels:
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
       issues: write
     steps:
-      - name: Add Contributor Label
+      - name: Add appropriate contributor labels
         uses: actions/github-script@v8
         with:
           script: |
-            const isPR = !!context.payload.pull_request;
-            const issueNumber = isPR ? context.payload.pull_request.number : context.payload.issue.number;
-            const authorAssociation = isPR ? context.payload.pull_request.author_association : context.payload.issue.author_association;
+            const prNumber = context.payload.pull_request.number;
+            const authorAssociation = context.payload.pull_request.author_association;
+            const prAuthor = context.payload.pull_request.user.login;
 
+            console.log(`Author: ${prAuthor}, Association: ${authorAssociation}`);
+
+            // Add opencode-contributor label if they have prior contributions
             if (authorAssociation === 'CONTRIBUTOR') {
               await github.rest.issues.addLabels({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number: issueNumber,
-                labels: ['contributor']
+                issue_number: prNumber,
+                labels: ['opencode-contributor']
               });
+              console.log('Added opencode-contributor label');
+            }
+            // Check for OSS contributions only if NOT a contributor/collaborator/owner
+            else if (authorAssociation !== 'COLLABORATOR' && authorAssociation !== 'OWNER') {
+              console.log(`Checking OSS contributions for: ${prAuthor}`);
+
+              // Query user's contributions via GraphQL
+              const result = await github.graphql(`
+                query($login: String!) {
+                  user(login: $login) {
+                    login
+                    contributionsCollection {
+                      pullRequestContributionsByRepository(maxRepositories: 20) {
+                        repository {
+                          owner { login }
+                          isPrivate
+                        }
+                        contributions(first: 1) {
+                          nodes {
+                            pullRequest { merged }
+                          }
+                        }
+                      }
+                      commitContributionsByRepository(maxRepositories: 20) {
+                        repository {
+                          owner { login }
+                          isPrivate
+                        }
+                        contributions {
+                          totalCount
+                        }
+                      }
+                    }
+                  }
+                }
+              `, {
+                login: prAuthor
+              });
+
+            // Check if user has any contributions to external public repos
+            const isExternalPublicRepo = repo =>
+              repo.repository.owner.login !== prAuthor && !repo.repository.isPrivate;
+
+            const { pullRequestContributionsByRepository, commitContributionsByRepository } =
+              result.user.contributionsCollection;
+
+            const hasOSSContributions =
+              pullRequestContributionsByRepository
+                .filter(isExternalPublicRepo)
+                .some(repo => repo.contributions.nodes.some(c => c.pullRequest.merged)) ||
+              commitContributionsByRepository
+                .filter(isExternalPublicRepo)
+                .some(repo => repo.contributions.totalCount > 0);
+
+            console.log(`Has OSS contributions: ${hasOSSContributions}`);
+
+            // Add label if user is an OSS contributor
+            if (hasOSSContributions) {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: prNumber,
+                  labels: ['oss-contributor']
+                });
+                console.log('Added oss-contributor label');
+              } else {
+                console.log('User has no OSS contributions to other repos');
+              }
+            } else {
+              console.log(`User is ${authorAssociation}, skipping OSS check`);
             }

@@ -14,7 +14,8 @@ interface RunResult {
 async function main() {
   console.log("Fetching open contributor PRs...")
 
-  const prsResult = await $`gh pr list --label contributor --state open --json number,title --limit 100`.nothrow()
+  const prsResult =
+    await $`gh pr list --label opencode-contributor --state open --json number,title --limit 100`.nothrow()
   if (prsResult.exitCode !== 0) {
     throw new Error(`Failed to fetch PRs: ${prsResult.stderr}`)
   }
