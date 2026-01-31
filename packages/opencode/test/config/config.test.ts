@@ -225,6 +225,61 @@ test("throws error for invalid JSON", async () => {
   })
 })
 
+test("throws error for duplicate keys in config (#11130)", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        `{
+  "plugin": "opencode-gemini-auth@latest",
+  "plugin": "@franlol/opencode-md-table-formatter@0.0.3"
+}`,
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      try {
+        await Config.get()
+        expect(true).toBe(false)
+      } catch (e: any) {
+        expect(e.data?.message || e.message).toMatch(/Duplicate key/)
+      }
+    },
+  })
+})
+
+test("throws error for nested duplicate keys (#11130)", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        `{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "test": {
+      "model": "model1",
+      "model": "model2"
+    }
+  }
+}`,
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      try {
+        await Config.get()
+        expect(true).toBe(false)
+      } catch (e: any) {
+        expect(e.data?.message || e.message).toMatch(/Duplicate key.*model/)
+      }
+    },
+  })
+})
+
 test("handles agent configuration", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

@@ -363,6 +363,85 @@ describe("ProviderTransform.schema - gemini array items", () => {
   })
 })
 
+describe("ProviderTransform.schema - gemini removes non-standard fields (#11413)", () => {
+  const geminiModel = {
+    providerID: "google",
+    api: { id: "gemini-3-pro" },
+  } as any
+
+  test("removes ref field from schema", () => {
+    const schema = {
+      ref: "QuestionInfo",
+      type: "object",
+      properties: {
+        question: { type: "string" },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.ref).toBeUndefined()
+    expect(result.type).toBe("object")
+    expect(result.properties.question.type).toBe("string")
+  })
+
+  test("removes $schema field from schema", () => {
+    const schema = {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: {
+        name: { type: "string" },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.$schema).toBeUndefined()
+    expect(result.type).toBe("object")
+  })
+
+  test("removes ref from nested objects", () => {
+    const schema = {
+      ref: "QuestionInfo",
+      type: "object",
+      properties: {
+        options: {
+          type: "array",
+          items: {
+            ref: "QuestionOption",
+            type: "object",
+            properties: {
+              label: { type: "string" },
+            },
+          },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.ref).toBeUndefined()
+    expect(result.properties.options.items.ref).toBeUndefined()
+    expect(result.properties.options.items.type).toBe("object")
+  })
+
+  test("does not remove ref for non-gemini providers", () => {
+    const openaiModel = {
+      providerID: "openai",
+      api: { id: "gpt-4" },
+    } as any
+
+    const schema = {
+      ref: "QuestionInfo",
+      type: "object",
+    } as any
+
+    const result = ProviderTransform.schema(openaiModel, schema) as any
+
+    expect(result.ref).toBe("QuestionInfo")
+  })
+})
+
 describe("ProviderTransform.message - DeepSeek reasoning content", () => {
   test("DeepSeek with tool calls includes reasoning_content in providerOptions", () => {
     const msgs = [
