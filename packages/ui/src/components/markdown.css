@@ -166,6 +166,7 @@
     font-feature-settings: var(--font-family-mono--font-feature-settings);
     color: var(--syntax-string);
     font-weight: var(--font-weight-medium);
+    cursor: pointer;
     /* font-size: 13px; */
 
     /* padding: 2px 2px; */
@@ -173,6 +174,11 @@
     /* border-radius: 2px; */
     /* background: var(--surface-base); */
     /* box-shadow: 0 0 0 0.5px var(--border-weak-base); */
+  }
+
+  :not(pre) > code:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
 
   /* Tables */

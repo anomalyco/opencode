@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "@solidjs/router"
 import { SDKProvider, useSDK } from "@/context/sdk"
 import { SyncProvider, useSync } from "@/context/sync"
 import { LocalProvider } from "@/context/local"
+import { useLayout } from "@/context/layout"
 
 import { DataProvider } from "@opencode-ai/ui/context"
 import { iife } from "@opencode-ai/util/iife"
@@ -14,6 +15,7 @@ import { useLanguage } from "@/context/language"
 export default function Layout(props: ParentProps) {
   const params = useParams()
   const navigate = useNavigate()
+  const layout = useLayout()
   const language = useLanguage()
   const directory = createMemo(() => {
     return decode64(params.dir) ?? ""
@@ -51,6 +53,34 @@ export default function Layout(props: ParentProps) {
               navigate(`/${params.dir}/session/${sessionID}`)
             }
 
+            const openFile = (path: string) => {
+              // Only works when we're in a session context
+              const sessionId = params.id
+              if (!sessionId) return
+
+              const sessionKey = `${params.dir}${sessionId ? "/" + sessionId : ""}`
+              const tabs = layout.tabs(sessionKey)
+
+              // Normalize path the same way file.tab() does
+              let normalized = path
+              if (normalized.startsWith("file://")) {
+                normalized = normalized.slice(7)
+              }
+              const root = directory()
+              if (root && normalized.startsWith(root)) {
+                normalized = normalized.slice(root.length)
+              }
+              if (normalized.startsWith("./")) {
+                normalized = normalized.slice(2)
+              }
+              if (normalized.startsWith("/")) {
+                normalized = normalized.slice(1)
+              }
+
+              const tabValue = `file://${normalized}`
+              tabs.open(tabValue)
+            }
+
             return (
               <DataProvider
                 data={sync.data}
@@ -59,6 +89,7 @@ export default function Layout(props: ParentProps) {
                 onQuestionReply={replyToQuestion}
                 onQuestionReject={rejectQuestion}
                 onNavigateToSession={navigateToSession}
+                onOpenFile={openFile}
               >
                 <LocalProvider>{props.children}</LocalProvider>
               </DataProvider>

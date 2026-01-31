@@ -1,10 +1,26 @@
 import { useMarked } from "../context/marked"
+import { useData } from "../context"
 import { useI18n } from "../context/i18n"
 import DOMPurify from "dompurify"
 import morphdom from "morphdom"
 import { checksum } from "@opencode-ai/util/encode"
 import { ComponentProps, createEffect, createResource, createSignal, onCleanup, splitProps } from "solid-js"
 import { isServer } from "solid-js/web"
+
+// Matches common file path patterns:
+// - ./path/file.ext, ../path/file.ext, /absolute/path.ext
+// - relative/path/file.ext, file.ext
+function isFilePath(text: string): boolean {
+  // Must have a file extension
+  if (!/\.\w+$/.test(text)) return false
+  // Match paths starting with ./, ../, or /
+  if (/^\.{1,2}\/[\w\-./]+$/.test(text)) return true
+  // Match absolute paths
+  if (/^\/[\w\-./]+$/.test(text)) return true
+  // Match relative paths (word/word.ext pattern, must have at least one slash or be a simple filename)
+  if (/^[\w\-]+(\/[\w\-./]+)?$/.test(text)) return true
+  return false
+}
 
 type Entry = {
   hash: string
@@ -169,8 +185,24 @@ export function Markdown(
 ) {
   const [local, others] = splitProps(props, ["text", "cacheKey", "class", "classList"])
   const marked = useMarked()
+  const data = useData()
   const i18n = useI18n()
   const [root, setRoot] = createSignal<HTMLDivElement>()
+
+  const handleClick = (e: MouseEvent) => {
+    if (!data?.openFile) return
+
+    const target = e.target as HTMLElement
+    // Check if clicked on inline code (not inside a code block)
+    if (target.tagName === "CODE" && target.parentElement?.tagName !== "PRE") {
+      const text = target.textContent?.trim()
+      if (text && isFilePath(text)) {
+        e.preventDefault()
+        data.openFile(text)
+      }
+    }
+  }
+
   const [html] = createResource(
     () => local.text,
     async (markdown) => {
@@ -258,6 +290,7 @@ export function Markdown(
         [local.class ?? ""]: !!local.class,
       }}
       ref={setRoot}
+      onClick={handleClick}
       {...others}
     />
   )
