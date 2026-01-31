@@ -169,6 +169,23 @@
         "cost": { "input": 0.6, "output": 3, "cache_read": 0.1 },
         "limit": { "context": 262144, "output": 262144 }
       },
+      "kimi-k2.5-thinking": {
+        "id": "kimi-k2.5-thinking",
+        "name": "Kimi K2.5 Thinking",
+        "family": "kimi-k2.5",
+        "attachment": true,
+        "reasoning": true,
+        "tool_call": true,
+        "interleaved": { "field": "reasoning_content" },
+        "temperature": true,
+        "knowledge": "2025-01",
+        "release_date": "2026-01-28",
+        "last_updated": "2026-01-28",
+        "modalities": { "input": ["text", "image"], "output": ["text"] },
+        "open_weights": true,
+        "cost": { "input": 0.6, "output": 2.5, "cache_read": 0.15 },
+        "limit": { "context": 262144, "output": 262144 }
+      },
       "kimi-k2-turbo-preview": {
         "id": "kimi-k2-turbo-preview",
         "name": "Kimi K2 Turbo",
@@ -708,6 +725,23 @@
         "modalities": { "input": ["text", "image", "video"], "output": ["text"] },
         "open_weights": true,
         "cost": { "input": 0.6, "output": 3, "cache_read": 0.1 },
+        "limit": { "context": 262144, "output": 262144 }
+      },
+      "kimi-k2.5-thinking": {
+        "id": "kimi-k2.5-thinking",
+        "name": "Kimi K2.5 Thinking",
+        "family": "kimi-k2.5",
+        "attachment": true,
+        "reasoning": true,
+        "tool_call": true,
+        "interleaved": { "field": "reasoning_content" },
+        "temperature": true,
+        "knowledge": "2025-01",
+        "release_date": "2026-01-28",
+        "last_updated": "2026-01-28",
+        "modalities": { "input": ["text", "image"], "output": ["text"] },
+        "open_weights": true,
+        "cost": { "input": 0.6, "output": 2.5, "cache_read": 0.15 },
         "limit": { "context": 262144, "output": 262144 }
       },
       "kimi-k2-0711-preview": {
