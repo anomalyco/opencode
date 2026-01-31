@@ -1922,12 +1922,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       title={language.t("command.model.choose")}
                       keybind={command.keybind("model.choose")}
                     >
-                      <Button as="div" variant="ghost" onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}>
+                      <Button
+                        as="div"
+                        variant="ghost"
+                        class="p-2 -m-2 sm:p-0 sm:m-0"
+                        onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}
+                      >
                         <Show when={local.model.current()?.provider?.id}>
                           <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
                         </Show>
-                        {local.model.current()?.name ?? language.t("dialog.model.select.title")}
-                        <Icon name="chevron-down" size="small" />
+                        <span class="hidden sm:inline">
+                          {local.model.current()?.name ?? language.t("dialog.model.select.title")}
+                        </span>
+                        <Icon name="chevron-down" size="small" class="hidden sm:block" />
                       </Button>
                     </TooltipKeybind>
                   }
@@ -1937,12 +1944,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     title={language.t("command.model.choose")}
                     keybind={command.keybind("model.choose")}
                   >
-                    <ModelSelectorPopover triggerAs={Button} triggerProps={{ variant: "ghost" }}>
+                    <ModelSelectorPopover
+                      triggerAs={Button}
+                      triggerProps={{ variant: "ghost", class: "p-2 -m-2 sm:p-0 sm:m-0" }}
+                    >
                       <Show when={local.model.current()?.provider?.id}>
                         <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
                       </Show>
-                      {local.model.current()?.name ?? language.t("dialog.model.select.title")}
-                      <Icon name="chevron-down" size="small" />
+                      <span class="hidden sm:inline">
+                        {local.model.current()?.name ?? language.t("dialog.model.select.title")}
+                      </span>
+                      <Icon name="chevron-down" size="small" class="hidden sm:block" />
                     </ModelSelectorPopover>
                   </TooltipKeybind>
                 </Show>
@@ -1955,10 +1967,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <Button
                       data-action="model-variant-cycle"
                       variant="ghost"
-                      class="text-text-base _hidden group-hover/prompt-input:inline-block capitalize text-12-regular"
+                      class="p-2 -m-2 sm:p-0 sm:m-0 text-text-base _hidden group-hover/prompt-input:inline-block capitalize text-12-regular"
                       onClick={() => local.model.variant.cycle()}
                     >
-                      {local.model.variant.current() ?? language.t("common.default")}
+                      <Icon name="brain" size="small" class="sm:hidden" />
+                      <span class="hidden sm:inline">
+                        {local.model.variant.current() ?? language.t("common.default")}
+                      </span>
                     </Button>
                   </TooltipKeybind>
                 </Show>
@@ -2013,7 +2028,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <Button
                     type="button"
                     variant="ghost"
-                    class="size-6"
+                    class="size-6 p-2 -m-2 sm:p-0 sm:m-0"
                     onClick={() => fileInputRef.click()}
                     aria-label={language.t("prompt.action.attachFile")}
                   >
@@ -2047,7 +2062,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 disabled={!prompt.dirty() && !working()}
                 icon={working() ? "stop" : "arrow-up"}
                 variant="primary"
-                class="h-6 w-4.5"
+                class="h-6 w-4.5 p-2 -m-2 sm:p-0 sm:m-0"
                 aria-label={working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
               />
             </Tooltip>
