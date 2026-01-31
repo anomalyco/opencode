@@ -278,19 +278,6 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                   return null
                 })()
 
-                console.log(
-                  "DEBUG: permission:",
-                  props.request.permission,
-                  "isFileTool:",
-                  isFileTool,
-                  "filePath:",
-                  filePath,
-                  "input_data:",
-                  input_data,
-                  "metadata:",
-                  props.request.metadata,
-                )
-
                 if (isFileTool && filePath) {
                   return {
                     once: "Allow once",
