@@ -1108,7 +1108,7 @@ describe("ProviderTransform.message - providerOptions key remapping", () => {
         role: "user",
         content: "Hello",
         providerOptions: {
-          "copilot": { someOption: "value" },
+          copilot: { someOption: "value" },
         },
       },
     ] as any[]
