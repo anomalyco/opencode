@@ -34,7 +34,8 @@ test("context panel can be opened from the prompt", async ({ page, sdk, gotoSess
     await contextButton.click()
 
     const tabs = page.locator('[data-component="tabs"][data-variant="normal"]')
-    const contextTab = tabs.locator('[data-slot="tabs-trigger-wrapper"]')
+    const contextTab = tabs
+      .locator('[data-slot="tabs-trigger-wrapper"]')
       .filter({ has: page.locator('[data-component="progress-circle"]') })
     await expect(contextTab).toBeVisible()
   })
