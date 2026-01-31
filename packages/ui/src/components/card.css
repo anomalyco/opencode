@@ -4,7 +4,9 @@
   flex-direction: column;
   background-color: var(--surface-inset-base);
   border: 1px solid var(--border-weaker-base);
-  transition: background-color 0.15s ease;
+  transition-property: background-color, border-color;
+  transition-duration: var(--transition-duration);
+  transition-timing-function: var(--transition-easing);
   border-radius: var(--radius-md);
   padding: 6px 12px;
   overflow: clip;
