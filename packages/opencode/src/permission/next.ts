@@ -8,6 +8,7 @@ import { fn } from "@/util/fn"
 import { Log } from "@/util/log"
 import { Wildcard } from "@/util/wildcard"
 import os from "os"
+import path from "path"
 import z from "zod"
 
 export namespace PermissionNext {
@@ -85,7 +86,14 @@ export namespace PermissionNext {
 
   export type Request = z.infer<typeof Request>
 
-  export const Reply = z.enum(["once", "always", "reject"])
+  export const Reply = z.enum([
+    "once",
+    "file_always",
+    "folder_always",
+    "folder_recursive",
+    "project_recursive",
+    "reject",
+  ])
   export type Reply = z.infer<typeof Reply>
 
   export const Approval = z.object({
@@ -193,8 +201,43 @@ export namespace PermissionNext {
         existing.resolve()
         return
       }
-      if (input.reply === "always") {
-        for (const pattern of existing.info.always) {
+
+      // Helper to extract file path from metadata
+      function getFilePath(request: Request): string | null {
+        const metadata = request.metadata
+        if (typeof metadata?.filepath === "string") return metadata.filepath
+        const input = metadata?.input as any
+        if (typeof input?.filePath === "string") return input.filePath
+        if (typeof input?.path === "string") return input.path
+        return null
+      }
+
+      function generatePatterns(reply: Reply, request: Request): string[] {
+        const filePath = getFilePath(request)
+        if (!filePath) return request.always // fallback to original patterns
+
+        const resolvedPath = path.resolve(filePath)
+        const dir = path.dirname(resolvedPath)
+        const basename = path.basename(resolvedPath)
+
+        switch (reply) {
+          case "file_always":
+            return [resolvedPath]
+          case "folder_always":
+            return [path.join(dir, "*")]
+          case "folder_recursive":
+            return [path.join(dir, "**")]
+          case "project_recursive":
+            return ["**"]
+          default:
+            return request.always
+        }
+      }
+
+      const patterns = generatePatterns(input.reply, existing.info)
+
+      if (["file_always", "folder_always", "folder_recursive", "project_recursive"].includes(input.reply)) {
+        for (const pattern of patterns) {
           s.approved.push({
             permission: existing.info.permission,
             pattern,
@@ -215,7 +258,7 @@ export namespace PermissionNext {
           Bus.publish(Event.Replied, {
             sessionID: pending.info.sessionID,
             requestID: pending.info.id,
-            reply: "always",
+            reply: input.reply,
           })
           pending.resolve()
         }

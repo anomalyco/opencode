@@ -688,3 +688,178 @@ test("ask - allows all patterns when all match allow rules", async () => {
     },
   })
 })
+
+// Tests for new permission types
+
+test("reply - file_always adds specific file to approved ruleset", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const askPromise = PermissionNext.ask({
+        id: "permission_file_always",
+        sessionID: "session_test",
+        permission: "edit",
+        patterns: ["src/components/Button.tsx"],
+        metadata: { filepath: "src/components/Button.tsx" },
+        always: [],
+        ruleset: [],
+      })
+
+      await PermissionNext.reply({
+        requestID: "permission_file_always",
+        reply: "file_always",
+      })
+
+      await expect(askPromise).resolves.toBeUndefined()
+
+      // Verify the specific file was added to approved ruleset
+      const state = await PermissionNext.state()
+      const approved = state.approved
+      const filePath = require("path").resolve("src/components/Button.tsx")
+      expect(approved).toContainEqual({
+        permission: "edit",
+        pattern: filePath,
+        action: "allow",
+      })
+    },
+  })
+})
+
+test("reply - folder_always adds folder pattern to approved ruleset", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const askPromise = PermissionNext.ask({
+        id: "permission_folder_always",
+        sessionID: "session_test",
+        permission: "read",
+        patterns: ["src/components/Button.tsx"],
+        metadata: { filepath: "src/components/Button.tsx" },
+        always: [],
+        ruleset: [],
+      })
+
+      await PermissionNext.reply({
+        requestID: "permission_folder_always",
+        reply: "folder_always",
+      })
+
+      await expect(askPromise).resolves.toBeUndefined()
+
+      // Verify the folder pattern was added to approved ruleset
+      const state = await PermissionNext.state()
+      const approved = state.approved
+      const dirPattern = require("path").join(require("path").resolve("src/components"), "*")
+      expect(approved).toContainEqual({
+        permission: "read",
+        pattern: dirPattern,
+        action: "allow",
+      })
+    },
+  })
+})
+
+test("reply - folder_recursive adds recursive folder pattern to approved ruleset", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const askPromise = PermissionNext.ask({
+        id: "permission_folder_recursive",
+        sessionID: "session_test",
+        permission: "edit",
+        patterns: ["src/components/Button.tsx"],
+        metadata: { filepath: "src/components/Button.tsx" },
+        always: [],
+        ruleset: [],
+      })
+
+      await PermissionNext.reply({
+        requestID: "permission_folder_recursive",
+        reply: "folder_recursive",
+      })
+
+      await expect(askPromise).resolves.toBeUndefined()
+
+      // Verify the recursive folder pattern was added to approved ruleset
+      const state = await PermissionNext.state()
+      const approved = state.approved
+      const dirPattern = require("path").join(require("path").resolve("src/components"), "**")
+      expect(approved).toContainEqual({
+        permission: "edit",
+        pattern: dirPattern,
+        action: "allow",
+      })
+    },
+  })
+})
+
+test("reply - project_recursive adds recursive project pattern to approved ruleset", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const askPromise = PermissionNext.ask({
+        id: "permission_project_recursive",
+        sessionID: "session_test",
+        permission: "read",
+        patterns: ["README.md"],
+        metadata: { filepath: "README.md" },
+        always: [],
+        ruleset: [],
+      })
+
+      await PermissionNext.reply({
+        requestID: "permission_project_recursive",
+        reply: "project_recursive",
+      })
+
+      await expect(askPromise).resolves.toBeUndefined()
+
+      // Verify the project recursive pattern was added to approved ruleset
+      const state = await PermissionNext.state()
+      const approved = state.approved
+      expect(approved).toContainEqual({
+        permission: "read",
+        pattern: "**",
+        action: "allow",
+      })
+    },
+  })
+})
+
+test("reply - non-file tool with project_recursive works without filepath", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const askPromise = PermissionNext.ask({
+        id: "permission_bash_project",
+        sessionID: "session_test",
+        permission: "bash",
+        patterns: ["npm test"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      })
+
+      await PermissionNext.reply({
+        requestID: "permission_bash_project",
+        reply: "project_recursive",
+      })
+
+      await expect(askPromise).resolves.toBeUndefined()
+
+      // Verify the project recursive pattern was added to approved ruleset
+      const state = await PermissionNext.state()
+      const approved = state.approved
+      expect(approved).toContainEqual({
+        permission: "bash",
+        pattern: "**",
+        action: "allow",
+      })
+    },
+  })
+})
