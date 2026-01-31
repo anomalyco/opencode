@@ -11,6 +11,11 @@ import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
+import { ReadNotebookTool } from "./read-notebook"
+import { EditNotebookCellTool } from "./edit-notebook-cell"
+import { AddNotebookCellTool } from "./add-notebook-cell"
+import { DeleteNotebookCellTool } from "./delete-notebook-cell"
+import { ListNotebookCellsTool } from "./list-notebook-cells"
 import type { Agent } from "../agent/agent"
 import { Tool } from "./tool"
 import { Instance } from "../project/instance"
@@ -115,6 +120,11 @@ export namespace ToolRegistry {
       CodeSearchTool,
       SkillTool,
       ApplyPatchTool,
+      ReadNotebookTool,
+      EditNotebookCellTool,
+      AddNotebookCellTool,
+      DeleteNotebookCellTool,
+      ListNotebookCellsTool,
       ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool, PlanEnterTool] : []),
