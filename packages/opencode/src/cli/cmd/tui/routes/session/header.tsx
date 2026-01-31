@@ -7,7 +7,7 @@ import { SplitBorder } from "@tui/component/border"
 import type { AssistantMessage, Session } from "@opencode-ai/sdk/v2"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { useKeybind } from "../../context/keybind"
-import { Installation } from "@/installation"
+import { VersionTag } from "@tui/component/version-tag"
 import { useTerminalDimensions } from "@opentui/solid"
 
 const Title = (props: { session: Accessor<Session> }) => {
@@ -89,7 +89,7 @@ export function Header() {
                 </text>
                 <box flexDirection="row" gap={1} flexShrink={0}>
                   <ContextInfo context={context} cost={cost} />
-                  <text fg={theme.textMuted}>v{Installation.VERSION}</text>
+                  <VersionTag />
                 </box>
               </box>
               <box flexDirection="row" gap={2}>
@@ -131,7 +131,7 @@ export function Header() {
               <Title session={session} />
               <box flexDirection="row" gap={1} flexShrink={0}>
                 <ContextInfo context={context} cost={cost} />
-                <text fg={theme.textMuted}>v{Installation.VERSION}</text>
+                <VersionTag />
               </box>
             </box>
           </Match>

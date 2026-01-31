@@ -26,6 +26,8 @@ import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
 import { DialogAlert } from "./ui/dialog-alert"
+import { DialogChangelog } from "@tui/component/dialog-changelog"
+import { getReleaseNotes } from "@tui/util/changelog"
 import { ToastProvider, useToast } from "./ui/toast"
 import { ExitProvider, useExit } from "./context/exit"
 import { Session as SessionApi } from "@/session"
@@ -281,6 +283,14 @@ function App() {
   )
 
   const connected = useConnected()
+
+  async function showChangelog() {
+    const notes = await getReleaseNotes()
+    if (notes && notes.trim().length > 0) {
+      dialog.replace(() => <DialogChangelog version={Installation.VERSION} notes={notes} />)
+    }
+  }
+
   command.register(() => [
     {
       title: "Switch session",
@@ -579,6 +589,15 @@ function App() {
         kv.set("diff_wrap_mode", current === "word" ? "none" : "word")
         dialog.clear()
       },
+    },
+    {
+      title: "View changelog",
+      value: "changelog.show",
+      slash: {
+        name: "changelog",
+      },
+      category: "System",
+      onSelect: () => showChangelog(),
     },
   ])
 
