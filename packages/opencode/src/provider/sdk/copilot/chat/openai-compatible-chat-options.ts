@@ -1,6 +1,6 @@
-import { z } from 'zod/v4';
+import { z } from "zod/v4"
 
-export type OpenAICompatibleChatModelId = string;
+export type OpenAICompatibleChatModelId = string
 
 export const openaiCompatibleProviderOptions = z.object({
   /**
@@ -23,8 +23,6 @@ export const openaiCompatibleProviderOptions = z.object({
    * Copilot thinking_budget used for Anthropic models.
    */
   thinking_budget: z.number().optional(),
-});
+})
 
-export type OpenAICompatibleProviderOptions = z.infer<
-  typeof openaiCompatibleProviderOptions
->;
+export type OpenAICompatibleProviderOptions = z.infer<typeof openaiCompatibleProviderOptions>

@@ -1,4 +1,4 @@
-import type { SharedV2ProviderMetadata } from '@ai-sdk/provider';
+import type { SharedV2ProviderMetadata } from "@ai-sdk/provider"
 
 /**
 Extracts provider-specific metadata from API responses.
@@ -14,11 +14,7 @@ export type MetadataExtractor = {
    * @returns Provider-specific metadata or undefined if no metadata is available.
    *          The metadata should be under a key indicating the provider id.
    */
-  extractMetadata: ({
-    parsedBody,
-  }: {
-    parsedBody: unknown;
-  }) => Promise<SharedV2ProviderMetadata | undefined>;
+  extractMetadata: ({ parsedBody }: { parsedBody: unknown }) => Promise<SharedV2ProviderMetadata | undefined>
 
   /**
    * Creates an extractor for handling streaming responses. The returned object provides
@@ -34,7 +30,7 @@ export type MetadataExtractor = {
      *
      * @param parsedChunk - The parsed JSON response chunk from the provider's API
      */
-    processChunk(parsedChunk: unknown): void;
+    processChunk(parsedChunk: unknown): void
 
     /**
      * Builds the metadata object after all chunks have been processed.
@@ -43,6 +39,6 @@ export type MetadataExtractor = {
      * @returns Provider-specific metadata or undefined if no metadata is available.
      *          The metadata should be under a key indicating the provider id.
      */
-    buildMetadata(): SharedV2ProviderMetadata | undefined;
-  };
-};
+    buildMetadata(): SharedV2ProviderMetadata | undefined
+  }
+}
