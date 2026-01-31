@@ -1,5 +1,6 @@
 import { defineConfig } from "vite"
 import { execSync } from "node:child_process"
+import { fileURLToPath } from "node:url"
 import desktopPlugin from "./vite"
 
 const gitSha = (() => {
@@ -95,6 +96,12 @@ export default defineConfig({
   },
   build: {
     target: "esnext",
+    rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL("./index.html", import.meta.url)),
+        login: fileURLToPath(new URL("./login.html", import.meta.url)),
+      },
+    },
     // sourcemap: true,
   },
 })

@@ -47,6 +47,7 @@ import { authMiddleware } from "./middleware/auth"
 import { csrfMiddleware } from "./middleware/csrf"
 import { MDNS } from "./mdns"
 import { ServerAuth } from "../config/server-auth"
+import { setUiDir } from "./ui-dir"
 import path from "path"
 import { Installation } from "@/installation"
 
@@ -623,6 +624,7 @@ export namespace Server {
 
     _corsWhitelist = opts.cors ?? []
     _uiDir = opts.uiDir ? path.resolve(opts.uiDir) : undefined
+    setUiDir(_uiDir)
 
     const args = {
       hostname: opts.hostname,

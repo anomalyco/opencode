@@ -18,6 +18,8 @@ import { create2FAToken, verify2FAToken, type TwoFactorUserInfo } from "../../au
 import { verifyDeviceTrustToken, createDeviceTrustToken, createDeviceFingerprint } from "../../auth/device-trust"
 import { getTokenSecret } from "../security/token-secret"
 import { generateTotpSetup, getGoogleAuthenticatorSetupCommand } from "../../auth/totp-setup"
+import { getUiDir } from "../ui-dir"
+import path from "node:path"
 
 const log = Log.create({ service: "auth-routes" })
 
@@ -131,378 +133,38 @@ function isValidReturnUrl(url: string): boolean {
 /**
  * Generate login page HTML with security context.
  */
-function generateLoginPageHtml(securityContext: {
-  shouldWarn: boolean
-  shouldBlock: boolean
-  isSecure: boolean
-}): string {
-  const { shouldWarn, shouldBlock } = securityContext
+let cachedLoginTemplate: string | undefined
+let cachedLoginTemplatePath: string | undefined
 
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Login - opencode</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #0a0a0a;
-      color: #e5e5e5;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 2rem;
-    }
-    .logo {
-      width: 80px;
-      height: 100px;
-      margin-bottom: 2rem;
-    }
-    .card {
-      width: 100%;
-      max-width: 360px;
-      padding: 2rem;
-      background: #141414;
-      border: 1px solid #262626;
-      border-radius: 12px;
-      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3), 0 2px 4px -2px rgba(0,0,0,0.3);
-    }
-    form { display: flex; flex-direction: column; gap: 1.25rem; }
-    .field { display: flex; flex-direction: column; gap: 0.5rem; }
-    label {
-      font-size: 0.75rem;
-      font-weight: 500;
-      color: #a3a3a3;
-      letter-spacing: 0.01em;
-    }
-    .input-wrapper {
-      position: relative;
-      display: flex;
-      align-items: center;
-    }
-    input[type="text"], input[type="password"] {
-      width: 100%;
-      height: 36px;
-      padding: 0 12px;
-      border: 1px solid #333;
-      border-radius: 8px;
-      background: #1a1a1a;
-      color: #e5e5e5;
-      font-size: 14px;
-      transition: border-color 0.15s, box-shadow 0.15s;
-    }
-    input:focus {
-      outline: none;
-      border-color: #525252;
-      box-shadow: 0 0 0 3px rgba(82,82,82,0.3), 0 0 0 1px #525252;
-    }
-    input.invalid {
-      background: rgba(239,68,68,0.1);
-      border-color: #dc2626;
-      box-shadow: 0 0 0 3px rgba(220,38,38,0.3), 0 0 0 1px #dc2626;
-    }
-    input.invalid:focus {
-      border-color: #dc2626;
-      box-shadow: 0 0 0 3px rgba(220,38,38,0.3), 0 0 0 1px #dc2626;
-    }
-    input::placeholder { color: #525252; }
-    input:disabled {
-      background: #0a0a0a;
-      color: #525252;
-      cursor: not-allowed;
-      opacity: 0.5;
-    }
-    .password-toggle {
-      position: absolute;
-      right: 4px;
-      top: 50%;
-      transform: translateY(-50%);
-      width: 28px;
-      height: 28px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: transparent;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      color: #737373;
-      transition: background-color 0.15s, color 0.15s;
-    }
-    .password-toggle:hover { background: #262626; }
-    .password-toggle.active { color: #0ea5e9; }
-    .password-toggle svg { width: 16px; height: 16px; }
-    .password-input { padding-right: 36px; }
-    .checkbox-wrapper {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      margin-top: -0.25rem;
-    }
-    input[type="checkbox"] {
-      width: 16px;
-      height: 16px;
-      accent-color: #0ea5e9;
-      cursor: pointer;
-    }
-    .checkbox-label {
-      font-size: 0.875rem;
-      color: #a3a3a3;
-      cursor: pointer;
-      user-select: none;
-    }
-    .error {
-      color: #fca5a5;
-      font-size: 0.75rem;
-      padding: 0.75rem;
-      background: rgba(239,68,68,0.15);
-      border: 1px solid rgba(239,68,68,0.3);
-      border-radius: 8px;
-      display: none;
-    }
-    .error.visible { display: block; }
-    button[type="submit"] {
-      height: 40px;
-      border: none;
-      border-radius: 8px;
-      background: #e5e5e5;
-      color: #0a0a0a;
-      font-size: 0.875rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background-color 0.15s;
-      margin-top: 0.5rem;
-    }
-    button[type="submit"]:hover { background: #d4d4d4; }
-    button[type="submit"]:disabled {
-      background: #404040;
-      color: #737373;
-      cursor: not-allowed;
-    }
-    .http-warning {
-      background: rgba(234, 179, 8, 0.15);
-      border: 1px solid rgba(234, 179, 8, 0.4);
-      border-radius: 8px;
-      padding: 0.75rem;
-      margin-bottom: 1.25rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-    }
-    .http-warning.hidden { display: none; }
-    .http-warning-text {
-      color: #fbbf24;
-      font-size: 0.75rem;
-      line-height: 1.4;
-    }
-    .http-warning-dismiss {
-      background: transparent;
-      border: 1px solid rgba(234, 179, 8, 0.4);
-      color: #fbbf24;
-      font-size: 0.75rem;
-      padding: 0.375rem 0.75rem;
-      border-radius: 6px;
-      cursor: pointer;
-      align-self: flex-start;
-    }
-    .http-warning-dismiss:hover {
-      background: rgba(234, 179, 8, 0.1);
-    }
-    .blocked-message {
-      color: #fca5a5;
-      font-size: 0.875rem;
-      padding: 1rem;
-      background: rgba(239,68,68,0.15);
-      border: 1px solid rgba(239,68,68,0.3);
-      border-radius: 8px;
-      margin-bottom: 1.25rem;
-      text-align: center;
-      line-height: 1.5;
-    }
-    @media (max-width: 480px) {
-      .card { padding: 1.5rem; border-radius: 8px; }
-      .logo { width: 60px; height: 75px; margin-bottom: 1.5rem; }
-    }
-  </style>
-</head>
-<body>
-  <svg class="logo" viewBox="0 0 80 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M60 80H20V40H60V80Z" fill="#525252"/>
-    <path d="M60 20H20V80H60V20ZM80 100H0V0H80V100Z" fill="#e5e5e5"/>
-  </svg>
+async function loadLoginTemplate(uiDir: string): Promise<string> {
+  const templatePath = path.join(uiDir, "login.html")
+  if (cachedLoginTemplate && cachedLoginTemplatePath === templatePath) {
+    return cachedLoginTemplate
+  }
 
-  <div class="card">
-    <form id="loginForm">
-      ${
-        shouldBlock
-          ? `<div class="blocked-message">
-        <strong>HTTPS is required to log in.</strong><br>
-        Please access this page over a secure connection.
-      </div>`
-          : ""
-      }
-      ${
-        shouldWarn
-          ? `<div id="httpWarning" class="http-warning">
-        <div class="http-warning-text">
-          ⚠️ You are connecting over HTTP. Your credentials may be visible to attackers on this network.
-        </div>
-        <button type="button" id="dismissWarning" class="http-warning-dismiss">
-          I understand the risks
-        </button>
-      </div>`
-          : ""
-      }
-      <div id="error" class="error"></div>
+  const file = Bun.file(templatePath)
+  const exists = await file.exists()
+  if (!exists) {
+    throw new Error(`Login HTML not found at ${templatePath}`)
+  }
 
-      <div class="field">
-        <label for="username">Username</label>
-        <div class="input-wrapper">
-          <input type="text" id="username" name="username" required autocomplete="username" autofocus ${shouldBlock ? "disabled" : ""}>
-        </div>
-      </div>
+  cachedLoginTemplate = await file.text()
+  cachedLoginTemplatePath = templatePath
+  return cachedLoginTemplate
+}
 
-      <div class="field">
-        <label for="password">Password</label>
-        <div class="input-wrapper">
-          <input type="password" id="password" name="password" required autocomplete="current-password" class="password-input" ${shouldBlock ? "disabled" : ""}>
-          <button type="button" class="password-toggle" id="passwordToggle" aria-label="Show password" aria-pressed="false" ${shouldBlock ? "disabled" : ""}>
-            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M10 4.58325C5.83333 4.58325 2.5 9.99992 2.5 9.99992C2.5 9.99992 5.83333 15.4166 10 15.4166C14.1667 15.4166 17.5 9.99992 17.5 9.99992C17.5 9.99992 14.1667 4.58325 10 4.58325Z"/>
-              <circle cx="10" cy="10" r="2.5"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      <div class="checkbox-wrapper">
-        <input type="checkbox" id="rememberMe" name="rememberMe" checked ${shouldBlock ? "disabled" : ""}>
-        <label for="rememberMe" class="checkbox-label">Remember me</label>
-      </div>
-
-      ${shouldBlock ? "" : '<button type="submit" id="submitBtn">Sign In</button>'}
-    </form>
-  </div>
-
-  <script>
-    const form = document.getElementById('loginForm');
-    const errorDiv = document.getElementById('error');
-    const usernameInput = document.getElementById('username');
-    const passwordInput = document.getElementById('password');
-    const passwordToggle = document.getElementById('passwordToggle');
-    const submitBtn = document.getElementById('submitBtn');
-
-    // HTTP warning dismissal
-    const httpWarning = document.getElementById('httpWarning');
-    const dismissWarning = document.getElementById('dismissWarning');
-
-    // Check if warning was previously dismissed this session
-    if (httpWarning && sessionStorage.getItem('http-warning-dismissed')) {
-      httpWarning.classList.add('hidden');
-    }
-
-    if (dismissWarning) {
-      dismissWarning.addEventListener('click', () => {
-        sessionStorage.setItem('http-warning-dismissed', 'true');
-        httpWarning.classList.add('hidden');
-      });
-    }
-
-    // Password visibility toggle
-    passwordToggle.addEventListener('click', () => {
-      const isPassword = passwordInput.type === 'password';
-      passwordInput.type = isPassword ? 'text' : 'password';
-      passwordToggle.classList.toggle('active', isPassword);
-      passwordToggle.setAttribute('aria-pressed', isPassword);
-      passwordToggle.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
-    });
-
-    // Form submission
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      errorDiv.classList.remove('visible');
-      errorDiv.textContent = '';
-
-      // Validate
-      let valid = true;
-      if (!usernameInput.value.trim()) {
-        usernameInput.classList.add('invalid');
-        valid = false;
-      } else {
-        usernameInput.classList.remove('invalid');
-      }
-      if (!passwordInput.value) {
-        passwordInput.classList.add('invalid');
-        valid = false;
-      } else {
-        passwordInput.classList.remove('invalid');
-      }
-      if (!valid) return;
-
-      // Submit
-      submitBtn.disabled = true;
-      submitBtn.textContent = 'Signing in...';
-
-      try {
-        const res = await fetch('/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-          body: JSON.stringify({
-            username: usernameInput.value,
-            password: passwordInput.value,
-            rememberMe: document.getElementById('rememberMe').checked,
-          }),
-        });
-        const data = await res.json();
-
-        // Check for 2FA required
-        if (data.error === '2fa_required') {
-          submitBtn.textContent = 'Redirecting...';
-          const params = new URLSearchParams({
-            token: data.twoFactorToken,
-            username: data.username,
-            timeout: String(data.timeoutSeconds),
-          });
-          window.location.href = '/auth/2fa?' + params.toString();
-          return;
-        }
-
-        // Check for 2FA setup required
-        if (data.error === '2fa_setup_required') {
-          submitBtn.textContent = 'Redirecting to 2FA setup...';
-          const setupUrl = data.canSkip ? '/auth/2fa/setup' : '/auth/2fa/setup?required=1';
-          window.location.href = setupUrl;
-          return;
-        }
-
-        if (res.ok && data.success) {
-          // Keep button disabled during redirect
-          submitBtn.textContent = 'Redirecting...';
-          window.location.href = '/';
-        } else {
-          errorDiv.textContent = data.message || 'Authentication failed';
-          errorDiv.classList.add('visible');
-          submitBtn.disabled = false;
-          submitBtn.textContent = 'Sign In';
-        }
-      } catch (err) {
-        errorDiv.textContent = 'Connection error';
-        errorDiv.classList.add('visible');
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Sign In';
-      }
-    });
-
-    // Clear invalid state on input
-    usernameInput.addEventListener('input', () => usernameInput.classList.remove('invalid'));
-    passwordInput.addEventListener('input', () => passwordInput.classList.remove('invalid'));
-  </script>
-</body>
-</html>`
+function injectLoginBootstrap(
+  template: string,
+  securityContext: { shouldWarn: boolean; shouldBlock: boolean; isSecure: boolean },
+): string {
+  const bootstrap = `<script>window.__OPENCODE_LOGIN__ = ${JSON.stringify(securityContext)};</script>`
+  if (template.includes("</head>")) {
+    return template.replace("</head>", `${bootstrap}\n</head>`)
+  }
+  if (template.includes("</body>")) {
+    return template.replace("</body>", `${bootstrap}\n</body>`)
+  }
+  return `${template}\n${bootstrap}`
 }
 
 /**
@@ -1442,7 +1104,7 @@ function generate2FASetupPageHtml(params: {
  */
 export const AuthRoutes = lazy(() =>
   new Hono<AuthEnv>()
-    .get("/login", (c) => {
+    .get("/login", async (c) => {
       // Get security context for connection
       const authConfig = ServerAuth.get()
       const securityContext = getConnectionSecurityInfo(c, {
@@ -1450,7 +1112,18 @@ export const AuthRoutes = lazy(() =>
         trustProxy: authConfig.trustProxy,
       })
 
-      return c.html(generateLoginPageHtml(securityContext))
+      const uiDir = getUiDir()
+      if (!uiDir) {
+        return c.text("Login UI is not configured. Build the app UI and set uiDir.", 500)
+      }
+
+      try {
+        const template = await loadLoginTemplate(uiDir)
+        return c.html(injectLoginBootstrap(template, securityContext))
+      } catch (error) {
+        log.error("Failed to load login HTML", { error })
+        return c.text("Login UI is missing. Run the app build to generate login.html.", 500)
+      }
     })
     .get("/2fa", (c) => {
       // Get token, username, timeout from query params

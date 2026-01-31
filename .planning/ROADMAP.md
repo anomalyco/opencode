@@ -369,12 +369,13 @@ Plans:
 
 ### Phase 19: Refactor auth login page
 
-**Goal:** [To be planned]
+**Goal:** The auth login page is delivered as a SolidJS entry with visual and behavioral parity to the current login UI.
 **Depends on:** Phase 18
-**Plans:** 0 plans
+**Plans:** 2 plans
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 19 to break down)
+- [x] 19-01-PLAN.md — SolidJS login entry and Vite multi-page build
+- [x] 19-02-PLAN.md — Auth route serves Solid login HTML with security context
 
 **Details:**
 [To be added during planning]
