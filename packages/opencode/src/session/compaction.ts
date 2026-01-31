@@ -189,7 +189,7 @@ export namespace SessionCompaction {
       })
     }
     if (processor.message.error) return "stop"
-    ProviderTransform.bumpMistralAffinity(input.sessionID)
+    if (ProviderTransform.isMistral(model)) ProviderTransform.bumpMistralAffinity(input.sessionID)
     Bus.publish(Event.Compacted, { sessionID: input.sessionID })
     return "continue"
   }
