@@ -122,10 +122,10 @@ export const ReadNotebookTool = Tool.define("read_notebook", {
       // Add outputs for code cells
       if (cell.cell_type === "code" && cell.outputs && cell.outputs.length > 0) {
         output += "Outputs:\n"
-        cell.outputs.forEach((output, i) => {
-          output += `  [${i}] ${output.output_type}\n`
-          if ("text" in output) {
-            output += `    ${String(output.text).slice(0, 100)}\n`
+        cell.outputs.forEach((cellOutput, i) => {
+          output += `  [${i}] ${cellOutput.output_type}\n`
+          if ("text" in cellOutput) {
+            output += `    ${String(cellOutput.text).slice(0, 100)}\n`
           }
         })
       }
