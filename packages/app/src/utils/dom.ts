@@ -49,3 +49,26 @@ export function getSelectionInContainer(
   const ech = getCharacterOffsetInLine(ele as Element, ec, r.endOffset)
   return { sl, sch, el, ech }
 }
+
+export function scrollTabIntoView(trigger: HTMLElement): void {
+  const wrapper = trigger.closest('[data-slot="tabs-trigger-wrapper"]') as HTMLElement | null
+  if (!wrapper) return
+
+  const list = wrapper.closest('[data-slot="tabs-list"]') as HTMLElement | null
+  if (!list) return
+
+  const stickyButton = list.querySelector('[data-slot="sticky-add-button"]') as HTMLElement | null
+  const stickyWidth = stickyButton?.offsetWidth ?? 0
+
+  const wrapperRect = wrapper.getBoundingClientRect()
+  const listRect = list.getBoundingClientRect()
+
+  // Scroll tab into view accounting for sticky button on the right
+  if (wrapperRect.right > listRect.right - stickyWidth) {
+    const overflow = wrapperRect.right - (listRect.right - stickyWidth)
+    list.scrollLeft += overflow
+  } else if (wrapperRect.left < listRect.left) {
+    const overflow = listRect.left - wrapperRect.left
+    list.scrollLeft -= overflow
+  }
+}
