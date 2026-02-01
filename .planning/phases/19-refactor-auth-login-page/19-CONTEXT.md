@@ -14,15 +14,18 @@ Replace the string-based login HTML with a proper SolidJS-based login page in `p
 ## Implementation Decisions
 
 ### Visual/layout direction
+
 - Match the current login page exactly; no visual redesign.
 - Use a minimal, standalone login layout (no app shell), matching the current login page chrome.
 - Ensure the page remains mobile responsive.
 - Branding and visuals must match the current login design.
 
 ### Technology alignment
+
 - Use the existing web stack from `packages/app` (SolidJS + Vite + Tailwind/@opencode-ai/ui patterns); avoid introducing new packages or dependencies.
 
 ### Claude's Discretion
+
 - Component structure and CSS organization needed to mirror the existing login page.
 
 </decisions>
@@ -43,5 +46,5 @@ None — discussion stayed within phase scope.
 
 ---
 
-*Phase: 19-refactor-auth-login-page*
-*Context gathered: 2026-01-31*
+_Phase: 19-refactor-auth-login-page_
+_Context gathered: 2026-01-31_

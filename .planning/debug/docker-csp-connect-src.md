@@ -6,14 +6,16 @@ updated: 2026-01-29T00:00:04Z
 ---
 
 ## Current Focus
+
 hypothesis: CSP connect-src is too restrictive for UI that targets localhost from a non-localhost origin
 test: verify CSP in Docker by reproducing login flow
 expecting: browser allows fetches to http://localhost:3000 and UI loads post-login
 next_action: ask user to retry Docker flow and report CSP console output
 
 ## Symptoms
+
 expected: App loads main UI/dashboard normally after login.
-actual: UI shows "something went wrong" and requests to http://localhost:3000/* are blocked by CSP; main page doesn't load.
+actual: UI shows "something went wrong" and requests to http://localhost:3000/\* are blocked by CSP; main page doesn't load.
 errors: Browser console logs show CSP violations: connect-src 'self' blocks fetch to http://localhost:3000/auth/session, /global/health, /global/event. site.webmanifest 401. No container logs checked yet.
 reproduction: Happens every login (first run).
 started: First time running in Docker.
@@ -21,6 +23,7 @@ started: First time running in Docker.
 ## Eliminated
 
 ## Evidence
+
 - timestamp: 2026-01-29T00:00:00Z
   checked: packages/opencode/src/server/server.ts
   found: contentSecurityPolicy is hardcoded with "connect-src 'self'" and applied to responses
@@ -43,9 +46,10 @@ started: First time running in Docker.
   implication: CSP change does not introduce lint errors
 
 ## Resolution
+
 root_cause:
-  CSP header sets connect-src to 'self' only, so when the UI targets http://localhost:3000 from a non-localhost origin (e.g. host IP), those API calls are blocked by CSP.
+CSP header sets connect-src to 'self' only, so when the UI targets http://localhost:3000 from a non-localhost origin (e.g. host IP), those API calls are blocked by CSP.
 fix:
-  Expanded CSP connect-src to allow localhost, 127.0.0.1, and host.docker.internal on any port.
+Expanded CSP connect-src to allow localhost, 127.0.0.1, and host.docker.internal on any port.
 verification:
 files_changed: ["packages/opencode/src/server/server.ts"]

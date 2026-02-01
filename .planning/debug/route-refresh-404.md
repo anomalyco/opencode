@@ -36,10 +36,12 @@ started: Started after static serving changes.
   checked: user verification after login
   found: refresh still returns 404/ERR_INVALID_RESPONSE at http://127.0.0.1:4096/
   implication: SPA fallback still bypassed or not matching; need stronger fallback
+
 ## Resolution
 
 root_cause: SPA fallback not guaranteed when routes miss; catch-all returned 404 for html navigations
 fix: serve index.html for text/html GET/HEAD in catch-all and via explicit helper
 verification:
 files_changed:
-  - packages/opencode/src/server/server.ts
+
+- packages/opencode/src/server/server.ts

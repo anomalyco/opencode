@@ -51,6 +51,7 @@ completed: 2026-01-31
 - **Files modified:** 3
 
 ## Accomplishments
+
 - Added a shared UI directory accessor to expose build output paths to routes.
 - Updated server startup to record the UI directory for route access.
 - Replaced the string-based login template with a login.html loader and bootstrap injector.
@@ -61,11 +62,13 @@ completed: 2026-01-31
 No task commits were created (commits were not requested).
 
 ## Files Created/Modified
+
 - `packages/opencode/src/server/ui-dir.ts` - Shared getter/setter for UI build directory.
 - `packages/opencode/src/server/server.ts` - Records UI directory for route access.
 - `packages/opencode/src/server/routes/auth.ts` - Loads login.html and injects security bootstrap data.
 
 ## Decisions Made
+
 None - followed plan as specified.
 
 ## Deviations from Plan
@@ -73,6 +76,7 @@ None - followed plan as specified.
 None - plan executed exactly as written.
 
 ## Issues Encountered
+
 - Live `/auth/login` serving verification was not run (would require starting the server locally).
 
 ## User Setup Required
@@ -80,8 +84,10 @@ None - plan executed exactly as written.
 None - no external service configuration required.
 
 ## Next Phase Readiness
+
 Ready for manual `/auth/login` verification in a local dev server session.
 
 ---
-*Phase: 19-refactor-auth-login-page*
-*Completed: 2026-01-31*
+
+_Phase: 19-refactor-auth-login-page_
+_Completed: 2026-01-31_

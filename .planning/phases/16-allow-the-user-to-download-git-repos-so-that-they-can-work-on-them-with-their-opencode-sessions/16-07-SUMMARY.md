@@ -50,6 +50,7 @@ completed: 2026-01-28
 - **Files modified:** 3
 
 ## Accomplishments
+
 - Classified malformed storage JSON as invalid repo data
 - Validated repo records on load with missing-path errors
 - Returned structured 4xx responses for invalid repo records in branches
@@ -64,26 +65,33 @@ Each task was committed atomically:
 **Plan metadata:** (docs commit for this summary)
 
 ## Files Created/Modified
+
 - `packages/opencode/src/repo/repo.ts` - Validates repo records and reports invalid records
 - `packages/opencode/src/storage/storage.ts` - Classifies malformed JSON storage data
 - `packages/opencode/src/server/routes/repo.ts` - Maps invalid repo records to 4xx responses
 
 ## Decisions Made
+
 None - followed plan as specified.
 
 ## Deviations from Plan
+
 None - plan executed exactly as written.
 
 ## Issues Encountered
+
 None.
 
 ## User Setup Required
+
 None - no external service configuration required.
 
 ## Next Phase Readiness
+
 - Repo validation gap closed; proceed with 16-08 UI gap updates
 - No blockers identified for remaining Phase 16 work
 
 ---
-*Phase: 16-allow-the-user-to-download-git-repos-so-that-they-can-work-on-them-with-their-opencode-sessions*
-*Completed: 2026-01-28*
+
+_Phase: 16-allow-the-user-to-download-git-repos-so-that-they-can-work-on-them-with-their-opencode-sessions_
+_Completed: 2026-01-28_

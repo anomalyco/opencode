@@ -54,6 +54,7 @@ completed: 2026-01-31
 - **Files modified:** 4
 
 ## Accomplishments
+
 - Implemented a Solid login entry and component mirroring the current login UI and behavior.
 - Added a dedicated `login.html` entry wired to the new Solid login entry script.
 - Configured Vite to emit a standalone `login.html` during build.
@@ -64,12 +65,14 @@ completed: 2026-01-31
 No task commits were created (commits were not requested).
 
 ## Files Created/Modified
+
 - `packages/app/src/login/login.tsx` - Solid login UI with parity behaviors and styling.
 - `packages/app/src/login/index.tsx` - Login entry renderer that mounts `LoginApp`.
 - `packages/app/login.html` - Standalone login HTML entry.
 - `packages/app/vite.config.ts` - Multi-page build input configuration.
 
 ## Decisions Made
+
 None - followed plan as specified.
 
 ## Deviations from Plan
@@ -77,6 +80,7 @@ None - followed plan as specified.
 None - plan executed exactly as written.
 
 ## Issues Encountered
+
 None.
 
 ## User Setup Required
@@ -84,8 +88,10 @@ None.
 None - no external service configuration required.
 
 ## Next Phase Readiness
+
 Solid login entry builds successfully; ready to wire `/auth/login` to the built `login.html`.
 
 ---
-*Phase: 19-refactor-auth-login-page*
-*Completed: 2026-01-31*
+
+_Phase: 19-refactor-auth-login-page_
+_Completed: 2026-01-31_

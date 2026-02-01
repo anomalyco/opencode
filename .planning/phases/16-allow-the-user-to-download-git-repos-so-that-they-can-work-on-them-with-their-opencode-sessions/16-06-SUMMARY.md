@@ -52,6 +52,7 @@ completed: 2026-01-28
 - **Files modified:** 4
 
 ## Accomplishments
+
 - Added dev proxy forwarding for `/agent` and `/command` list calls
 - Returned RepoErrorResponse 400s for invalid branch list paths
 - Surfaced branch load failures with retry UI in repo selectors
@@ -67,27 +68,34 @@ Each task was committed atomically:
 **Plan metadata:** (docs commit for this summary)
 
 ## Files Created/Modified
+
 - `packages/app/vite.config.ts` - Adds dev proxy entries for agent/command list calls
 - `packages/opencode/src/server/routes/repo.ts` - Returns RepoErrorResponse 400 on CloneError
 - `packages/app/src/components/repo/repo-selector.tsx` - Adds branch load error + retry state
 - `packages/app/src/components/repo/repo-settings-dialog.tsx` - Adds branch load error + retry state
 
 ## Decisions Made
+
 None - followed plan as specified.
 
 ## Deviations from Plan
+
 None - plan executed exactly as written.
 
 ## Issues Encountered
+
 None.
 
 ## User Setup Required
+
 None - no external service configuration required.
 
 ## Next Phase Readiness
+
 - Repo manager gaps closed; remaining Phase 16 work is 16-02/16-03 integration
 - No blockers identified for Phase 16 follow-up
 
 ---
-*Phase: 16-allow-the-user-to-download-git-repos-so-that-they-can-work-on-them-with-their-opencode-sessions*
-*Completed: 2026-01-28*
+
+_Phase: 16-allow-the-user-to-download-git-repos-so-that-they-can-work-on-them-with-their-opencode-sessions_
+_Completed: 2026-01-28_

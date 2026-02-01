@@ -49,6 +49,7 @@ completed: 2026-01-28
 - **Files modified:** 2
 
 ## Accomplishments
+
 - Added directory picker for local repositories with host-machine guidance
 - Surfaced actionable branch list errors in repo selector UI
 
@@ -62,25 +63,32 @@ Each task was committed atomically:
 **Plan metadata:** (docs commit for this summary)
 
 ## Files Created/Modified
+
 - `packages/app/src/components/repo/repository-manager-dialog.tsx` - Adds directory picker and host-path helper copy
 - `packages/app/src/components/repo/repo-selector.tsx` - Maps branch errors to actionable messaging
 
 ## Decisions Made
+
 None - followed plan as specified.
 
 ## Deviations from Plan
+
 None - plan executed exactly as written.
 
 ## Issues Encountered
+
 None.
 
 ## User Setup Required
+
 None - no external service configuration required.
 
 ## Next Phase Readiness
+
 - Repo manager UX gaps closed; remaining Phase 16 work is 16-02/16-03 integration
 - No blockers identified for Phase 16 follow-up
 
 ---
-*Phase: 16-allow-the-user-to-download-git-repos-so-that-they-can-work-on-them-with-their-opencode-sessions*
-*Completed: 2026-01-28*
+
+_Phase: 16-allow-the-user-to-download-git-repos-so-that-they-can-work-on-them-with-their-opencode-sessions_
+_Completed: 2026-01-28_

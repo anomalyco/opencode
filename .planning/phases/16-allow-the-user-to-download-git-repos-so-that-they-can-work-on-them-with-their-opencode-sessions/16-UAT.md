@@ -13,27 +13,33 @@ updated: 2026-01-28T21:02:00Z
 ## Tests
 
 ### 1. Repository manager dialog
+
 expected: Opening the repository manager shows a list of repositories with actions to open a repo or access settings.
 result: pass
 
 ### 2. Add local repository
+
 expected: Choosing "Add local" opens a directory picker and adds the selected repo, which appears in the repo list and can be selected.
 result: pass
 
 ### 3. Clone repository workflow
+
 expected: The clone dialog accepts a repo URL (and optional branch), shows progress while cloning, and adds the repo on success.
 result: pass
 
 ### 4. Credential retry for private clone
+
 expected: When cloning a private repo, a credential prompt appears and retrying with valid credentials completes the clone.
 result: skipped
 reason: "skip"
 
 ### 5. Branch switching with dirty warning
+
 expected: Switching branches shows a warning if the working tree is dirty, with an option to force switch.
 result: pass
 
 ### 6. New session repo selector
+
 expected: The new session view shows the repo selector, allows choosing a repo, and updates branches for the selected repo.
 result: pass
 
@@ -46,4 +52,5 @@ pending: 0
 skipped: 1
 
 ## Gaps
+
 [none]

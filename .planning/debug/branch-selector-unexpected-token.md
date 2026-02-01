@@ -1,6 +1,7 @@
 ## UAT gap: /repo/:id/branches 500
 
 ### Evidence
+
 - `Repo.listBranches` shells out via Bun `$` and passes `--format=%(refname:short)` unquoted.
 - The error reported in UAT ("Unexpected token: (") points to Bun's shell parser choking on `%(...)` before `git` runs.
 - The route handler only catches `InvalidRecordError` and `CloneError`, so any parse error from `$` bubbles as 500.
@@ -14,11 +15,13 @@
 ```
 
 ### Source of shell error
+
 - Bun's `$` tag parses arguments in a shell-like grammar.
 - The `%(refname:short)` token appears unquoted, so the shell parser treats `%(` as syntax instead of a literal string, resulting in "Unexpected token: (".
 - Because parsing fails, no process is spawned, and the error is not a `CloneError`, so the route returns 500.
 
 ### Fix direction
+
 - Quote or escape the `--format` arg so Bun treats it as a literal:
   - `--format="%(refname:short)"` (or single quotes) is simplest.
 - Alternatively, bypass the shell parser by switching to `Bun.spawn`/`Bun.spawnSync` with an args array for this command.

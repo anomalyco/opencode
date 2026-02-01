@@ -50,6 +50,7 @@ completed: 2026-01-28
 - **Files modified:** 3
 
 ## Accomplishments
+
 - Added dev proxy forwarding for `/repo` and `/find` to the backend
 - Surfaced repo list failures with inline retry UI
 - Replaced blank directory picker states with actionable error messaging
@@ -64,25 +65,32 @@ Each task was committed atomically:
 **Plan metadata:** `4771ef792` (docs)
 
 ## Files Created/Modified
+
 - `packages/app/vite.config.ts` - Added dev proxy routes for repo and find endpoints
 - `packages/app/src/components/repo/repo-selector.tsx` - Added repo list error state and retry UI
 - `packages/app/src/components/dialog-select-directory.tsx` - Added directory picker error state
 
 ## Decisions Made
+
 None - followed plan as specified.
 
 ## Deviations from Plan
+
 None - plan executed exactly as written.
 
 ## Issues Encountered
+
 None.
 
 ## User Setup Required
+
 None - no external service configuration required.
 
 ## Next Phase Readiness
+
 Ready to re-run UAT for repo add/clone flows with dev proxy fixes and visible errors.
 
 ---
-*Phase: 16-allow-the-user-to-download-git-repos-so-that-they-can-work-on-them-with-their-opencode-sessions*
-*Completed: 2026-01-28*
+
+_Phase: 16-allow-the-user-to-download-git-repos-so-that-they-can-work-on-them-with-their-opencode-sessions_
+_Completed: 2026-01-28_

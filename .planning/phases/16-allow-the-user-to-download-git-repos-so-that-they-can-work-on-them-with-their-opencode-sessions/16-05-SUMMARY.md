@@ -48,6 +48,7 @@ completed: 2026-01-28
 - **Files modified:** 1
 
 ## Accomplishments
+
 - Added a Manage repos action in the new session view that opens the repo manager dialog
 - Added an empty-state hint to help users discover repo management
 
@@ -61,23 +62,30 @@ Each task was committed atomically:
 **Plan metadata:** (docs commit)
 
 ## Files Created/Modified
+
 - `packages/app/src/components/session/session-new-view.tsx` - Added manage repos entry and empty-state hint
 
 ## Decisions Made
+
 None - followed plan as specified.
 
 ## Deviations from Plan
+
 None - plan executed exactly as written.
 
 ## Issues Encountered
+
 None.
 
 ## User Setup Required
+
 None - no external service configuration required.
 
 ## Next Phase Readiness
+
 Ready for UAT verification of repo manager entry points and new session flow.
 
 ---
-*Phase: 16-allow-the-user-to-download-git-repos-so-that-they-can-work-on-them-with-their-opencode-sessions*
-*Completed: 2026-01-28*
+
+_Phase: 16-allow-the-user-to-download-git-repos-so-that-they-can-work-on-them-with-their-opencode-sessions_
+_Completed: 2026-01-28_
