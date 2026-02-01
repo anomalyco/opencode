@@ -255,7 +255,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
           </List>
         }
       >
-        <div class="directory-picker flex flex-col gap-3 max-h-[70vh]">
+        <div class="directory-picker flex flex-col gap-3 flex-1 min-h-0">
           <div class="sticky top-0 z-20 bg-surface-base/95 backdrop-blur px-3 pt-3">
             <div class="flex items-center justify-between gap-3">
               <div class="text-12-regular text-text-weak pl-1">
@@ -309,7 +309,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
               )
             }}
           </List>
-          <div class="sticky bottom-0 z-20 bg-surface-base/95 backdrop-blur px-3 pb-3 pt-2 flex justify-end gap-3">
+          <div class="bg-surface-base backdrop-blur px-3 pb-3 pt-2 flex justify-end gap-3">
             <Button size="large" variant="ghost" onClick={() => dialog.close()}>
               Cancel
             </Button>
