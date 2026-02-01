@@ -5,9 +5,11 @@ type TwoFactorSetupBootstrap = {
   username: string
   secret: string
   qrCodeSvg: string
-  setupCommand: string
+  setupCommand?: string
   alreadyConfigured: boolean
   required?: boolean
+  setupStatus: "pending_verification" | "already_configured" | "manual_required"
+  setupMessage?: string
 }
 
 declare global {
@@ -33,8 +35,11 @@ export function TwoFactorSetupApp() {
   const secret = bootstrap?.secret ?? ""
   const qrCodeSvg = bootstrap?.qrCodeSvg ?? ""
   const setupCommand = bootstrap?.setupCommand ?? ""
-  const alreadyConfigured = Boolean(bootstrap?.alreadyConfigured)
+  const setupStatus = bootstrap?.setupStatus ?? "manual_required"
+  const setupMessage = bootstrap?.setupMessage
+  const alreadyConfigured = setupStatus === "already_configured" || Boolean(bootstrap?.alreadyConfigured)
   const required = Boolean(bootstrap?.required)
+  const manualRequired = setupStatus === "manual_required"
 
   const [state, setState] = createStore({
     code: "",
@@ -57,6 +62,7 @@ export function TwoFactorSetupApp() {
   })
 
   const handleCopy = async () => {
+    if (!setupCommand) return
     const markCopied = () => {
       setCopyLabel("Copied!")
       window.setTimeout(() => setCopyLabel("Copy"), 2000)
@@ -146,7 +152,11 @@ export function TwoFactorSetupApp() {
 
       const data = await res.json()
       setState({
-        error: data.message || "Invalid code - make sure you ran the setup command first",
+        error:
+          data.message ||
+          (manualRequired
+            ? "Invalid code - make sure you ran the setup command first"
+            : "Invalid code - make sure your authenticator is set up"),
         submitting: false,
         submitLabel: "Verify & Enable 2FA",
         code: "",
@@ -244,6 +254,28 @@ export function TwoFactorSetupApp() {
           color: #60a5fa;
           font-size: 0.875rem;
           text-align: center;
+        }
+        .status-banner {
+          border-radius: 8px;
+          padding: 0.75rem;
+          margin-bottom: 1.5rem;
+          font-size: 0.875rem;
+          text-align: center;
+        }
+        .status-banner.success {
+          background: rgba(34, 197, 94, 0.15);
+          border: 1px solid rgba(34, 197, 94, 0.4);
+          color: #4ade80;
+        }
+        .status-banner.warning {
+          background: rgba(234, 179, 8, 0.15);
+          border: 1px solid rgba(234, 179, 8, 0.4);
+          color: #fbbf24;
+        }
+        .status-banner.info {
+          background: rgba(59, 130, 246, 0.15);
+          border: 1px solid rgba(59, 130, 246, 0.4);
+          color: #93c5fd;
         }
         .skip-section {
           margin-top: 1.5rem;
@@ -499,9 +531,22 @@ export function TwoFactorSetupApp() {
           </div>
         </Show>
 
+        <Show when={setupStatus === "created"}>
+          <div class="status-banner success">{setupMessage ?? "2FA configuration created on the server."}</div>
+        </Show>
+        <Show when={setupStatus === "pending_verification"}>
+          <div class="status-banner info">
+            {setupMessage ?? "We'll create your 2FA configuration after you verify your code."}
+          </div>
+        </Show>
+        <Show when={setupStatus === "manual_required"}>
+          <div class="status-banner warning">
+            {setupMessage ?? "Automatic setup was unavailable. Use the manual command below."}
+          </div>
+        </Show>
         <Show when={alreadyConfigured}>
           <div class="warning">
-            You already have 2FA configured. Setting up again will replace your existing configuration.
+            {setupMessage ?? "We detected an existing 2FA configuration for this account."}
           </div>
         </Show>
 
@@ -583,53 +628,55 @@ export function TwoFactorSetupApp() {
           </details>
         </div>
 
-        <div class="step">
-          <div class="step-title">Step 3: Run Setup Command on the Server</div>
-          <p class="note">Run this command on the opencode server to create your 2FA configuration file:</p>
-          <div class="command-container">
-            <div class="command-display" id="setupCommand">
-              {setupCommand}
+        <Show when={manualRequired && setupCommand}>
+          <div class="step">
+            <div class="step-title">Step 3: Run Setup Command on the Server</div>
+            <p class="note">Run this command on the opencode server to create your 2FA configuration file:</p>
+            <div class="command-container">
+              <div class="command-display" id="setupCommand">
+                {setupCommand}
+              </div>
+              <button type="button" class="copy-btn" classList={{ copied: copyLabel() !== "Copy" }} onClick={handleCopy}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                <span>{copyLabel()}</span>
+              </button>
             </div>
-            <button type="button" class="copy-btn" classList={{ copied: copyLabel() !== "Copy" }} onClick={handleCopy}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-              </svg>
-              <span>{copyLabel()}</span>
-            </button>
+            <p class="note">This creates ~/.google_authenticator with the secret from Step 1.</p>
+            <details class="install-details">
+              <summary>Is this safe? Will it affect my system login?</summary>
+              <div class="safety-info">
+                <p>
+                  <strong>No, this will not affect your system login.</strong>
+                </p>
+                <p>
+                  The command creates a file at <code>~/.google_authenticator</code> containing your TOTP secret. This
+                  file is completely inert by itself.
+                </p>
+                <p>
+                  It only affects authentication when a PAM service explicitly loads it. Your system&apos;s login, sudo,
+                  and SSH use their own PAM configs which remain untouched. Opencode uses a separate PAM service file (
+                  <code>opencode-otp</code>) that only opencode reads.
+                </p>
+                <p>
+                  <strong>Multi-user:</strong> Each user has their own <code>~/.google_authenticator</code> in their home
+                  directory. Multiple users can independently configure 2FA.
+                </p>
+                <p>
+                  <strong>Existing file:</strong> The command will prompt before overwriting an existing configuration.
+                </p>
+                <p>
+                  <strong>Reversibility:</strong> Run <code>rm ~/.google_authenticator</code> to remove 2FA.
+                </p>
+              </div>
+            </details>
           </div>
-          <p class="note">This creates ~/.google_authenticator with the secret from Step 1.</p>
-          <details class="install-details">
-            <summary>Is this safe? Will it affect my system login?</summary>
-            <div class="safety-info">
-              <p>
-                <strong>No, this will not affect your system login.</strong>
-              </p>
-              <p>
-                The command creates a file at <code>~/.google_authenticator</code> containing your TOTP secret. This
-                file is completely inert by itself.
-              </p>
-              <p>
-                It only affects authentication when a PAM service explicitly loads it. Your system&apos;s login, sudo,
-                and SSH use their own PAM configs which remain untouched. Opencode uses a separate PAM service file (
-                <code>opencode-otp</code>) that only opencode reads.
-              </p>
-              <p>
-                <strong>Multi-user:</strong> Each user has their own <code>~/.google_authenticator</code> in their home
-                directory. Multiple users can independently configure 2FA.
-              </p>
-              <p>
-                <strong>Existing file:</strong> The command will prompt before overwriting an existing configuration.
-              </p>
-              <p>
-                <strong>Reversibility:</strong> Run <code>rm ~/.google_authenticator</code> to remove 2FA.
-              </p>
-            </div>
-          </details>
-        </div>
+        </Show>
 
         <div class="step">
-          <div class="step-title">Step 4: Verify Setup</div>
+          <div class="step-title">{manualRequired ? "Step 4: Verify Setup" : "Step 3: Verify Setup"}</div>
           <p class="note">Enter a code from your authenticator app to verify it&apos;s working:</p>
           <form class="verify-form" onSubmit={handleSubmit}>
             <div class="error" classList={{ visible: Boolean(state.error) }}>

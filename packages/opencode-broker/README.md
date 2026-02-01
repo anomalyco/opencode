@@ -140,6 +140,30 @@ If the socket exists but no process is listening, remove it:
 sudo rm /var/run/opencode/auth.sock
 ```
 
+## 2FA file debugging
+
+The broker manages each user's `~/.google_authenticator` file. When debugging
+2FA setup, it helps to verify whether the file exists and remove it between
+tests.
+
+Check if the file exists:
+
+```bash
+sudo test -f /Users/testuser/.google_authenticator && echo "exists" || echo "missing"
+```
+
+Inspect permissions/ownership:
+
+```bash
+sudo ls -l /Users/testuser/.google_authenticator
+```
+
+Remove the file (reset 2FA for that user):
+
+```bash
+sudo rm /Users/testuser/.google_authenticator
+```
+
 ## macOS test users (development)
 
 macOS user management is done via Directory Services. You will generally need

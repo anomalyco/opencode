@@ -17,8 +17,9 @@ import { getConnectionSecurityInfo, shouldBlockInsecureLogin } from "../security
 import { create2FAToken, verify2FAToken, type TwoFactorUserInfo } from "../../auth/two-factor-token"
 import { verifyDeviceTrustToken, createDeviceTrustToken, createDeviceFingerprint } from "../../auth/device-trust"
 import { getTokenSecret } from "../security/token-secret"
-import { generateTotpSetup, getGoogleAuthenticatorSetupCommand } from "../../auth/totp-setup"
+import { generateTotpSetup, getGoogleAuthenticatorSetupCommand, verifyTotpCode } from "../../auth/totp-setup"
 import { getUiDir } from "../ui-dir"
+import { Flag } from "../../flag/flag"
 import path from "node:path"
 
 const log = Log.create({ service: "auth-routes" })
@@ -231,9 +232,11 @@ function injectTwoFactorSetupBootstrap(
     username: string
     secret: string
     qrCodeSvg: string
-    setupCommand: string
+    setupCommand?: string
     alreadyConfigured: boolean
     required: boolean
+    setupStatus: "pending_verification" | "already_configured" | "manual_required"
+    setupMessage?: string
   },
 ): string {
   const script = `<script>window.__OPENCODE_2FA_SETUP__ = ${JSON.stringify(bootstrap)};</script>`
@@ -541,6 +544,18 @@ export const AuthRoutes = lazy(() =>
             tempSession.twoFactorPending = true
             setSessionCookie(c, tempSession.id, false)
             setCSRFCookie(c, tempSession.id)
+
+            const userInfoForBroker: UserInfo = {
+              username,
+              uid: userInfo.uid,
+              gid: userInfo.gid,
+              home: userInfo.home,
+              shell: userInfo.shell,
+            }
+            const brokerForRegistration = new BrokerClient()
+            brokerForRegistration.registerSession(tempSession.id, userInfoForBroker).catch((err) => {
+              log.warn("Failed to register setup session with broker", { error: err })
+            })
 
             return c.json(
               {
@@ -954,6 +969,25 @@ export const AuthRoutes = lazy(() =>
 
       // Generate setup data
       const setupData = await generateTotpSetup(session.username)
+      UserSession.setTwoFactorSetupSecret(sessionId, setupData.secret)
+
+      let setupStatus: "pending_verification" | "already_configured" | "manual_required" = "pending_verification"
+      let setupMessage: string | undefined =
+        "We'll create your 2FA configuration after you verify your code."
+      let setupCommand: string | undefined
+
+      if (has2fa) {
+        setupStatus = "already_configured"
+        setupMessage = "We detected an existing 2FA configuration for this account."
+      } else {
+        const brokerAvailable = await broker.ping()
+        if (!brokerAvailable) {
+          setupStatus = "manual_required"
+          setupMessage =
+            "We couldn't reach the authentication service. Run the command below on the server."
+          setupCommand = getGoogleAuthenticatorSetupCommand(setupData.secret)
+        }
+      }
 
       const uiDir = getUiDir()
       if (!uiDir) {
@@ -967,9 +1001,11 @@ export const AuthRoutes = lazy(() =>
             username: session.username,
             secret: setupData.secret,
             qrCodeSvg: setupData.qrCodeSvg,
-            setupCommand: getGoogleAuthenticatorSetupCommand(setupData.secret),
-            alreadyConfigured: has2fa,
+            setupCommand,
+            alreadyConfigured: setupStatus === "already_configured",
             required,
+            setupStatus,
+            setupMessage,
           }),
         )
       } catch (error) {
@@ -1056,22 +1092,43 @@ export const AuthRoutes = lazy(() =>
         log.info("PAM service file auto-created", { path: otpConfig.pamServicePath })
       }
 
-      // Validate OTP via broker
-      const result = await broker.authenticateOtp(session.username, code)
+      const setupSecret = session.twoFactorSetupSecret
+      if (!setupSecret) {
+        return c.json(
+          {
+            error: "setup_missing",
+            message: "2FA setup session expired. Please restart setup.",
+          },
+          400,
+        )
+      }
 
-      if (!result.success) {
+      if (!verifyTotpCode(setupSecret, code)) {
         return c.json(
           {
             error: "invalid_code",
             message:
-              "Invalid verification code. Make sure: 1) You ran the setup command on the server to create ~/.google_authenticator, 2) The code from your authenticator matches the QR code you scanned",
+              "Invalid verification code. Make sure your authenticator is set up and the code matches the QR code you scanned.",
           },
           401,
         )
       }
 
+      const setupResult = await broker.setupOtp(sessionId, setupSecret)
+      if (setupResult.errorCode && !setupResult.written && !setupResult.alreadyConfigured) {
+        return c.json(
+          {
+            error: "setup_failed",
+            message: "Unable to create your 2FA configuration. Please try again.",
+            details: setupResult,
+          },
+          500,
+        )
+      }
+
       // Clear twoFactorPending flag now that 2FA is configured
       UserSession.clearTwoFactorPending(sessionId)
+      UserSession.clearTwoFactorSetupSecret(sessionId)
 
       return c.json({ success: true })
     })
@@ -1101,10 +1158,45 @@ export const AuthRoutes = lazy(() =>
         )
       }
 
-      // Clear twoFactorPending flag so user can access the app
+      // Clear setup state so user can access the app
       UserSession.clearTwoFactorPending(sessionId)
+      UserSession.clearTwoFactorSetupSecret(sessionId)
 
       return c.json({ success: true })
+    })
+    .post("/2fa/reset", async (c) => {
+      if (!Flag.OPENCODE_ENABLE_2FA_RESET) {
+        return c.json({ error: "not_enabled" }, 403)
+      }
+
+      // Require authenticated session
+      const sessionId = getCookie(c, "opencode_session")
+      if (!sessionId) {
+        return c.json({ error: "not_authenticated" }, 401)
+      }
+      const session = UserSession.get(sessionId)
+      if (!session) {
+        return c.json({ error: "not_authenticated" }, 401)
+      }
+
+      // Check CSRF
+      const xrw = c.req.header("X-Requested-With")
+      if (!xrw) {
+        return c.json({ error: "csrf_missing", message: "CSRF token required" }, 400)
+      }
+
+      const broker = new BrokerClient()
+      const result = await broker.removeOtp(sessionId)
+
+      if (result.errorCode && !result.removed && !result.alreadyMissing) {
+        return c.json({ error: "reset_failed", message: "Failed to reset 2FA", details: result }, 500)
+      }
+
+      return c.json({
+        success: true as const,
+        removed: result.removed,
+        alreadyMissing: result.alreadyMissing,
+      })
     })
     .post(
       "/logout",

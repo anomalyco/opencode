@@ -28,6 +28,8 @@ impl fmt::Debug for Request {
         match &self.params {
             RequestParams::Authenticate(params) => s.field("params", params),
             RequestParams::AuthenticateOtp(params) => s.field("params", params),
+            RequestParams::SetupOtp(params) => s.field("params", params),
+            RequestParams::RemoveOtp(params) => s.field("params", params),
             RequestParams::Check2fa(params) => s.field("params", params),
             RequestParams::CheckOtpConfig(params) => s.field("params", params),
             RequestParams::Ping(params) => s.field("params", params),
@@ -51,6 +53,10 @@ pub enum Method {
     Authenticate,
     /// Validate OTP code for two-factor authentication.
     AuthenticateOtp,
+    /// Write ~/.google_authenticator for the session user.
+    SetupOtp,
+    /// Remove ~/.google_authenticator for the session user.
+    RemoveOtp,
     /// Check if user has 2FA configured.
     Check2fa,
     /// Check OTP/2FA server configuration (PAM module, service file).
@@ -79,6 +85,8 @@ pub enum Method {
 /// - Variants with MORE required fields come BEFORE variants with fewer
 /// - `RegisterSession` (6 required) before `SpawnPty` (1 required + defaults)
 /// - `UnregisterSession` (1 required + deny_unknown_fields) before `SpawnPty`
+/// - `SetupOtp` must come before `SpawnPty` because it uses session_id
+/// - `RemoveOtp` must come before `SpawnPty` because it uses session_id
 /// - `Check2fa` (2 required) before `Ping`
 /// - `CheckOtpConfig` uses deny_unknown_fields - must come before Ping
 /// - `Ping` must be LAST because `PingParams` is empty and matches any JSON
@@ -88,6 +96,10 @@ pub enum RequestParams {
     Authenticate(AuthenticateParams),
     /// AuthenticateOtp has 2 required fields - must come after Authenticate.
     AuthenticateOtp(AuthenticateOtpParams),
+    /// SetupOtp has 2 required fields - must come before SpawnPty.
+    SetupOtp(SetupOtpParams),
+    /// RemoveOtp has 2 required fields - must come before SpawnPty.
+    RemoveOtp(RemoveOtpParams),
     /// RegisterSession has 6 required fields - must come before SpawnPty.
     RegisterSession(RegisterSessionParams),
     /// UnregisterSession uses deny_unknown_fields - must come before SpawnPty.
@@ -160,6 +172,42 @@ impl fmt::Debug for AuthenticateOtpParams {
     }
 }
 
+/// Parameters for writing ~/.google_authenticator.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct SetupOtpParams {
+    /// Session ID of the authenticated user (for user lookup).
+    pub session_id: String,
+    /// Base32 secret to write.
+    pub secret: String,
+}
+
+impl fmt::Debug for SetupOtpParams {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SetupOtpParams")
+            .field("session_id", &self.session_id)
+            .field("secret", &"[REDACTED]")
+            .finish()
+    }
+}
+
+/// Parameters for removing ~/.google_authenticator.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct RemoveOtpParams {
+    /// Session ID of the authenticated user (for user lookup).
+    pub session_id: String,
+    /// Explicit confirmation to remove 2FA.
+    pub confirm: bool,
+}
+
+impl fmt::Debug for RemoveOtpParams {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RemoveOtpParams")
+            .field("session_id", &self.session_id)
+            .field("confirm", &self.confirm)
+            .finish()
+    }
+}
+
 /// Parameters for checking OTP/2FA server configuration.
 ///
 /// Uses `deny_unknown_fields` to prevent matching with untagged serde
@@ -187,6 +235,30 @@ pub struct OtpConfigResult {
     pub service_auto_created: bool,
     /// Specific error code if not configured.
     /// Possible values: "pam_module_not_installed", "pam_service_not_configured", null
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_code: Option<String>,
+}
+
+/// Result of writing ~/.google_authenticator.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetupOtpResult {
+    /// Whether the file was written successfully.
+    pub written: bool,
+    /// Whether the file already existed.
+    pub already_configured: bool,
+    /// Optional error code when writing failed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_code: Option<String>,
+}
+
+/// Result of removing ~/.google_authenticator.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoveOtpResult {
+    /// Whether the file was removed.
+    pub removed: bool,
+    /// Whether the file was already missing.
+    pub already_missing: bool,
+    /// Optional error code when removal failed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_code: Option<String>,
 }
@@ -570,6 +642,10 @@ mod tests {
             serde_json::to_string(&Method::ResizePty).expect("serialize"),
             "\"resizepty\""
         );
+        assert_eq!(
+            serde_json::to_string(&Method::RemoveOtp).expect("serialize"),
+            "\"removeotp\""
+        );
     }
 
     #[test]
@@ -583,6 +659,9 @@ mod tests {
 
         let resize: Method = serde_json::from_str("\"resizepty\"").expect("deserialize");
         assert_eq!(resize, Method::ResizePty);
+
+        let remove: Method = serde_json::from_str("\"removeotp\"").expect("deserialize");
+        assert_eq!(remove, Method::RemoveOtp);
     }
 
     #[test]
@@ -766,6 +845,14 @@ mod tests {
             serde_json::to_string(&Method::AuthenticateOtp).expect("serialize"),
             "\"authenticateotp\""
         );
+        assert_eq!(
+            serde_json::to_string(&Method::SetupOtp).expect("serialize"),
+            "\"setupotp\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Method::RemoveOtp).expect("serialize"),
+            "\"removeotp\""
+        );
     }
 
     #[test]
@@ -775,5 +862,11 @@ mod tests {
 
         let otp: Method = serde_json::from_str("\"authenticateotp\"").expect("deserialize");
         assert_eq!(otp, Method::AuthenticateOtp);
+
+        let setup: Method = serde_json::from_str("\"setupotp\"").expect("deserialize");
+        assert_eq!(setup, Method::SetupOtp);
+
+        let remove: Method = serde_json::from_str("\"removeotp\"").expect("deserialize");
+        assert_eq!(remove, Method::RemoveOtp);
     }
 }

@@ -22,6 +22,7 @@ export namespace UserSession {
       userAgent: z.string().optional(),
       rememberMe: z.boolean().optional(), // Extended session persistence
       twoFactorPending: z.boolean().optional(), // User needs to set up 2FA
+      twoFactorSetupSecret: z.string().optional(), // TOTP secret awaiting verification
     })
     .meta({ ref: "UserSessionInfo" })
 
@@ -99,6 +100,28 @@ export namespace UserSession {
     if (!session) return false
 
     session.twoFactorPending = false
+    return true
+  }
+
+  /**
+   * Store the pending 2FA setup secret for a session.
+   */
+  export function setTwoFactorSetupSecret(id: string, secret: string): boolean {
+    const session = sessions.get(id)
+    if (!session) return false
+
+    session.twoFactorSetupSecret = secret
+    return true
+  }
+
+  /**
+   * Clear the pending 2FA setup secret for a session.
+   */
+  export function clearTwoFactorSetupSecret(id: string): boolean {
+    const session = sessions.get(id)
+    if (!session) return false
+
+    session.twoFactorSetupSecret = undefined
     return true
   }
 

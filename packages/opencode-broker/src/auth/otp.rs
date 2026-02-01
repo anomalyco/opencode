@@ -8,6 +8,7 @@ use std::io::Write;
 use std::path::Path;
 use std::thread;
 use tokio::sync::oneshot;
+use std::os::unix::fs::PermissionsExt;
 
 use super::pam::AuthError;
 
@@ -193,6 +194,185 @@ pub fn has_2fa_configured(home: &str) -> bool {
     }
 }
 
+/// Result of writing the google_authenticator file.
+#[derive(Debug, Clone)]
+pub struct OtpSetupResult {
+    /// Whether the file was written.
+    pub written: bool,
+    /// Whether the file already existed.
+    pub already_configured: bool,
+}
+
+/// Result of removing the google_authenticator file.
+#[derive(Debug, Clone)]
+pub struct OtpRemoveResult {
+    /// Whether the file was removed.
+    pub removed: bool,
+    /// Whether the file was already missing.
+    pub already_missing: bool,
+}
+
+/// Errors that can occur while writing the google_authenticator file.
+#[derive(Debug)]
+pub enum OtpSetupError {
+    AlreadyConfigured,
+    InvalidHome,
+    PermissionDenied,
+    WriteFailed(String),
+}
+
+/// Errors that can occur while removing the google_authenticator file.
+#[derive(Debug)]
+pub enum OtpRemoveError {
+    AlreadyMissing,
+    InvalidHome,
+    PermissionDenied,
+    RemoveFailed(String),
+}
+
+impl OtpRemoveError {
+    pub fn error_code(&self) -> &'static str {
+        match self {
+            Self::AlreadyMissing => "already_missing",
+            Self::InvalidHome => "invalid_home",
+            Self::PermissionDenied => "permission_denied",
+            Self::RemoveFailed(_) => "remove_failed",
+        }
+    }
+}
+
+impl OtpSetupError {
+    pub fn error_code(&self) -> &'static str {
+        match self {
+            Self::AlreadyConfigured => "already_configured",
+            Self::InvalidHome => "invalid_home",
+            Self::PermissionDenied => "permission_denied",
+            Self::WriteFailed(_) => "write_failed",
+        }
+    }
+}
+
+fn google_authenticator_contents(secret: &str) -> String {
+    format!(
+        "{secret}\n\" TOTP_AUTH\n\" RATE_LIMIT 3 30\n\" WINDOW_SIZE 3\n\" DISALLOW_REUSE"
+    )
+}
+
+fn create_unique_temp_path(home: &Path) -> std::path::PathBuf {
+    let pid = std::process::id();
+    home.join(format!(".google_authenticator.tmp.{pid}"))
+}
+
+fn map_io_error(error: std::io::Error) -> OtpSetupError {
+    if error.kind() == std::io::ErrorKind::PermissionDenied {
+        return OtpSetupError::PermissionDenied;
+    }
+    OtpSetupError::WriteFailed(error.to_string())
+}
+
+fn map_remove_error(error: std::io::Error) -> OtpRemoveError {
+    if error.kind() == std::io::ErrorKind::PermissionDenied {
+        return OtpRemoveError::PermissionDenied;
+    }
+    OtpRemoveError::RemoveFailed(error.to_string())
+}
+
+/// Create ~/.google_authenticator for the target user.
+pub fn write_google_authenticator(
+    home: &str,
+    uid: u32,
+    gid: u32,
+    secret: &str,
+) -> Result<OtpSetupResult, OtpSetupError> {
+    let home_path = Path::new(home);
+    if !home_path.is_dir() {
+        return Err(OtpSetupError::InvalidHome);
+    }
+
+    let auth_path = home_path.join(".google_authenticator");
+    if auth_path.exists() {
+        return Err(OtpSetupError::AlreadyConfigured);
+    }
+
+    let temp_path = create_unique_temp_path(home_path);
+    let mut file = match fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp_path)
+    {
+        Ok(file) => file,
+        Err(error) => {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                return Err(OtpSetupError::AlreadyConfigured);
+            }
+            return Err(map_io_error(error));
+        }
+    };
+
+    let contents = google_authenticator_contents(secret);
+    if let Err(error) = file.write_all(contents.as_bytes()) {
+        let _ = fs::remove_file(&temp_path);
+        return Err(map_io_error(error));
+    }
+
+    if let Err(error) = file.sync_all() {
+        let _ = fs::remove_file(&temp_path);
+        return Err(map_io_error(error));
+    }
+
+    if let Err(error) = fs::set_permissions(&temp_path, fs::Permissions::from_mode(0o400)) {
+        let _ = fs::remove_file(&temp_path);
+        return Err(map_io_error(error));
+    }
+
+    if let Err(error) = nix::unistd::chown(
+        &temp_path,
+        Some(nix::unistd::Uid::from_raw(uid)),
+        Some(nix::unistd::Gid::from_raw(gid)),
+    ) {
+        let _ = fs::remove_file(&temp_path);
+        if error == nix::Error::EPERM {
+            return Err(OtpSetupError::PermissionDenied);
+        }
+        return Err(OtpSetupError::WriteFailed(error.to_string()));
+    }
+
+    if let Err(error) = fs::rename(&temp_path, &auth_path) {
+        let _ = fs::remove_file(&temp_path);
+        if auth_path.exists() {
+            return Err(OtpSetupError::AlreadyConfigured);
+        }
+        return Err(map_io_error(error));
+    }
+
+    Ok(OtpSetupResult {
+        written: true,
+        already_configured: false,
+    })
+}
+
+/// Remove ~/.google_authenticator for the target user.
+pub fn remove_google_authenticator(home: &str) -> Result<OtpRemoveResult, OtpRemoveError> {
+    let home_path = Path::new(home);
+    if !home_path.is_dir() {
+        return Err(OtpRemoveError::InvalidHome);
+    }
+
+    let auth_path = home_path.join(".google_authenticator");
+    if !auth_path.exists() {
+        return Err(OtpRemoveError::AlreadyMissing);
+    }
+
+    if let Err(error) = fs::remove_file(&auth_path) {
+        return Err(map_remove_error(error));
+    }
+
+    Ok(OtpRemoveResult {
+        removed: true,
+        already_missing: false,
+    })
+}
+
 /// Validate an OTP code via PAM.
 ///
 /// Uses a separate PAM service (`{service}-otp`) for OTP-only validation.
@@ -340,6 +520,82 @@ mod tests {
     #[test]
     fn test_has_2fa_configured_invalid_home() {
         assert!(!has_2fa_configured("/nonexistent/path"));
+    }
+
+    #[test]
+    fn test_write_google_authenticator_creates_file() {
+        let tmp = tempdir().unwrap();
+        let home = tmp.path().to_str().unwrap();
+        let uid = nix::unistd::getuid().as_raw();
+        let gid = nix::unistd::getgid().as_raw();
+
+        let result = write_google_authenticator(home, uid, gid, "SECRETKEY");
+        let result = match result {
+            Ok(result) => result,
+            Err(OtpSetupError::PermissionDenied) => {
+                eprintln!("Skipping test: permission denied while chowning");
+                return;
+            }
+            Err(err) => panic!("Unexpected error: {err:?}"),
+        };
+
+        assert!(result.written);
+        assert!(!result.already_configured);
+
+        let auth_path = tmp.path().join(".google_authenticator");
+        let contents = fs::read_to_string(&auth_path).unwrap();
+        assert!(contents.contains("SECRETKEY"));
+        assert!(contents.contains("\" TOTP_AUTH"));
+
+        let metadata = fs::metadata(&auth_path).unwrap();
+        let mode = metadata.permissions().mode() & 0o777;
+        assert_eq!(mode, 0o400);
+    }
+
+    #[test]
+    fn test_write_google_authenticator_already_configured() {
+        let tmp = tempdir().unwrap();
+        let home = tmp.path().to_str().unwrap();
+        let auth_path = tmp.path().join(".google_authenticator");
+        fs::write(&auth_path, "existing").unwrap();
+
+        let uid = nix::unistd::getuid().as_raw();
+        let gid = nix::unistd::getgid().as_raw();
+        let result = write_google_authenticator(home, uid, gid, "SECRETKEY");
+
+        assert!(matches!(result, Err(OtpSetupError::AlreadyConfigured)));
+    }
+
+    #[test]
+    fn test_write_google_authenticator_invalid_home() {
+        let result = write_google_authenticator("/nonexistent/path", 1000, 1000, "SECRETKEY");
+        assert!(matches!(result, Err(OtpSetupError::InvalidHome)));
+    }
+
+    #[test]
+    fn test_remove_google_authenticator_removes_file() {
+        let tmp = tempdir().unwrap();
+        let home = tmp.path().to_str().unwrap();
+        let auth_path = tmp.path().join(".google_authenticator");
+        fs::write(&auth_path, "secret").unwrap();
+
+        let result = remove_google_authenticator(home);
+        assert!(matches!(result, Ok(OtpRemoveResult { removed: true, .. })));
+        assert!(!auth_path.exists());
+    }
+
+    #[test]
+    fn test_remove_google_authenticator_already_missing() {
+        let tmp = tempdir().unwrap();
+        let home = tmp.path().to_str().unwrap();
+        let result = remove_google_authenticator(home);
+        assert!(matches!(result, Err(OtpRemoveError::AlreadyMissing)));
+    }
+
+    #[test]
+    fn test_remove_google_authenticator_invalid_home() {
+        let result = remove_google_authenticator("/nonexistent/path");
+        assert!(matches!(result, Err(OtpRemoveError::InvalidHome)));
     }
 
     #[tokio::test]

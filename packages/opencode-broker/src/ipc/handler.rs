@@ -11,11 +11,14 @@ use base64::Engine;
 
 use crate::auth::rate_limit::RateLimiter;
 use crate::auth::validation;
-use crate::auth::{check_otp_config, has_2fa_configured, pam, validate_otp};
+use crate::auth::{
+    check_otp_config, has_2fa_configured, pam, remove_google_authenticator, validate_otp,
+    write_google_authenticator, OtpRemoveError, OtpSetupError,
+};
 use crate::config::BrokerConfig;
 use crate::ipc::protocol::{
-    Method, OtpConfigResult, PROTOCOL_VERSION, PtyReadResult, Request, RequestParams, Response,
-    SpawnPtyResult,
+    Method, OtpConfigResult, PROTOCOL_VERSION, PtyReadResult, RemoveOtpResult, Request,
+    RequestParams, Response, SetupOtpResult, SpawnPtyResult,
 };
 use crate::process::environment::LoginEnvironment;
 use crate::process::spawn::{self, SpawnConfig};
@@ -75,6 +78,10 @@ pub async fn handle_request(
 
         Method::AuthenticateOtp => handle_authenticate_otp(request, config, rate_limiter).await,
 
+        Method::SetupOtp => handle_setup_otp(request, user_sessions).await,
+
+        Method::RemoveOtp => handle_remove_otp(request, user_sessions).await,
+
         Method::Check2fa => handle_check_2fa(request).await,
 
         Method::CheckOtpConfig => handle_check_otp_config(request, config).await,
@@ -93,6 +100,79 @@ pub async fn handle_request(
 
         Method::PtyRead => handle_pty_read(request, pty_sessions).await,
     }
+}
+
+/// Handle a remove OTP request.
+///
+/// Removes ~/.google_authenticator for the session user.
+async fn handle_remove_otp(request: Request, user_sessions: &UserSessionStore) -> Response {
+    let params = match &request.params {
+        RequestParams::RemoveOtp(params) => params,
+        _ => {
+            return Response::failure(&request.id, "invalid params for remove_otp");
+        }
+    };
+
+    if !params.confirm {
+        return Response::failure(&request.id, "confirmation_required");
+    }
+
+    let user = match user_sessions.get(&params.session_id) {
+        Some(user) => user,
+        None => {
+            warn!(
+                id = %request.id,
+                session_id = %params.session_id,
+                "remove_otp: session not found"
+            );
+            return Response::failure(&request.id, "session not found");
+        }
+    };
+
+    info!(
+        id = %request.id,
+        username = %user.username,
+        home = %user.home,
+        "removing google_authenticator file"
+    );
+
+    let result = match remove_google_authenticator(&user.home) {
+        Ok(_) => RemoveOtpResult {
+            removed: true,
+            already_missing: false,
+            error_code: None,
+        },
+        Err(OtpRemoveError::AlreadyMissing) => RemoveOtpResult {
+            removed: false,
+            already_missing: true,
+            error_code: None,
+        },
+        Err(error) => {
+            let error_code = error.error_code().to_string();
+            warn!(
+                id = %request.id,
+                username = %user.username,
+                error = ?error,
+                error_code = %error_code,
+                "failed to remove google_authenticator file"
+            );
+            let mut response = Response::failure(&request.id, "remove_otp_failed");
+            response.data = Some(
+                serde_json::to_value(RemoveOtpResult {
+                    removed: false,
+                    already_missing: false,
+                    error_code: Some(error_code),
+                })
+                .expect("RemoveOtpResult serialization cannot fail"),
+            );
+            return response;
+        }
+    };
+
+    Response::success_with_data(
+        &request.id,
+        serde_json::to_value(result).expect("RemoveOtpResult serialization cannot fail"),
+    )
 }
 
 /// Handle an authentication request.
@@ -270,6 +350,75 @@ async fn handle_check_2fa(request: Request) -> Response {
         // Use failure to indicate no 2FA - client checks success field
         Response::failure(&request.id, "2FA not configured")
     }
+}
+
+/// Handle a setup OTP request.
+///
+/// Writes ~/.google_authenticator for the session user.
+async fn handle_setup_otp(request: Request, user_sessions: &UserSessionStore) -> Response {
+    let params = match &request.params {
+        RequestParams::SetupOtp(params) => params,
+        _ => {
+            return Response::failure(&request.id, "invalid params for setup_otp");
+        }
+    };
+
+    let user = match user_sessions.get(&params.session_id) {
+        Some(user) => user,
+        None => {
+            warn!(
+                id = %request.id,
+                session_id = %params.session_id,
+                "setup_otp: session not found"
+            );
+            return Response::failure(&request.id, "session not found");
+        }
+    };
+
+    info!(
+        id = %request.id,
+        username = %user.username,
+        home = %user.home,
+        "writing google_authenticator file"
+    );
+
+    let result = match write_google_authenticator(&user.home, user.uid, user.gid, &params.secret) {
+        Ok(_) => SetupOtpResult {
+            written: true,
+            already_configured: false,
+            error_code: None,
+        },
+        Err(OtpSetupError::AlreadyConfigured) => SetupOtpResult {
+            written: false,
+            already_configured: true,
+            error_code: None,
+        },
+        Err(error) => {
+            let error_code = error.error_code().to_string();
+            warn!(
+                id = %request.id,
+                username = %user.username,
+                error = ?error,
+                error_code = %error_code,
+                "failed to write google_authenticator file"
+            );
+            let mut response = Response::failure(&request.id, "setup_otp_failed");
+            response.data = Some(
+                serde_json::to_value(SetupOtpResult {
+                    written: false,
+                    already_configured: false,
+                    error_code: Some(error_code),
+                })
+                .expect("SetupOtpResult serialization cannot fail"),
+            );
+            return response;
+        }
+    };
+
+    Response::success_with_data(
+        &request.id,
+        serde_json::to_value(result).expect("SetupOtpResult serialization cannot fail"),
+    )
 }
 
 /// Handle an OTP configuration check request.

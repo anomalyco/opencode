@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto"
 import QRCode from "qrcode"
 
 /**
@@ -16,6 +17,7 @@ export interface TotpSetupData {
  * Base32 alphabet for TOTP secrets.
  */
 const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+const BASE32_LOOKUP = new Map(BASE32_ALPHABET.split("").map((char, index) => [char, index]))
 
 /**
  * Encode bytes to base32.
@@ -40,6 +42,56 @@ function base32Encode(bytes: Uint8Array): string {
   }
 
   return result
+}
+
+/**
+ * Decode a base32 string to bytes.
+ */
+function base32Decode(value: string): Uint8Array | null {
+  const cleaned = value.toUpperCase().replace(/=+$/g, "").replace(/\s+/g, "")
+  if (!cleaned) return null
+
+  let bits = 0
+  let buffer = 0
+  const bytes: number[] = []
+
+  for (const char of cleaned) {
+    const maybeIndex = BASE32_LOOKUP.get(char)
+    if (maybeIndex === undefined) return null
+
+    buffer = (buffer << 5) | maybeIndex
+    bits += 5
+
+    if (bits >= 8) {
+      bytes.push((buffer >>> (bits - 8)) & 0xff)
+      bits -= 8
+    }
+  }
+
+  return new Uint8Array(bytes)
+}
+
+/**
+ * Generate a 6-digit TOTP code for a secret and counter.
+ */
+function generateTotpCode(secret: string, counter: number): string | null {
+  const key = base32Decode(secret)
+  if (!key) return null
+
+  const buffer = new ArrayBuffer(8)
+  const view = new DataView(buffer)
+  view.setUint32(0, Math.floor(counter / 0x1_0000_0000), false)
+  view.setUint32(4, counter >>> 0, false)
+
+  const hmac = createHmac("sha1", Buffer.from(key)).update(Buffer.from(buffer)).digest()
+  const offset = hmac[hmac.length - 1] & 0x0f
+  const code =
+    ((hmac[offset] & 0x7f) << 24) |
+    ((hmac[offset + 1] & 0xff) << 16) |
+    ((hmac[offset + 2] & 0xff) << 8) |
+    (hmac[offset + 3] & 0xff)
+
+  return String(code % 1_000_000).padStart(6, "0")
 }
 
 /**
@@ -76,6 +128,29 @@ export async function generateTotpSetup(username: string, issuer = "opencode"): 
     otpauthUrl: otpauthUrl.toString(),
     qrCodeSvg,
   }
+}
+
+/**
+ * Verify a TOTP code against a secret.
+ */
+export function verifyTotpCode(
+  secret: string,
+  code: string,
+  options: { stepSeconds?: number; window?: number } = {},
+): boolean {
+  const stepSeconds = options.stepSeconds ?? 30
+  const window = options.window ?? 3
+  if (!/^\d{6}$/.test(code)) return false
+
+  const nowSeconds = Math.floor(Date.now() / 1000)
+  const counter = Math.floor(nowSeconds / stepSeconds)
+
+  for (let offset = -window; offset <= window; offset += 1) {
+    const expected = generateTotpCode(secret, counter + offset)
+    if (expected && expected === code) return true
+  }
+
+  return false
 }
 
 /**

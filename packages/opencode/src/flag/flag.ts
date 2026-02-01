@@ -22,6 +22,7 @@ export namespace Flag {
   export const OPENCODE_CLIENT = process.env["OPENCODE_CLIENT"] ?? "cli"
   export const OPENCODE_SERVER_PASSWORD = process.env["OPENCODE_SERVER_PASSWORD"]
   export const OPENCODE_SERVER_USERNAME = process.env["OPENCODE_SERVER_USERNAME"]
+  export const OPENCODE_ENABLE_2FA_RESET = truthy("OPENCODE_ENABLE_2FA_RESET")
 
   // Experimental
   export const OPENCODE_EXPERIMENTAL = truthy("OPENCODE_EXPERIMENTAL")

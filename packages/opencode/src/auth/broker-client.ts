@@ -23,6 +23,8 @@ interface BrokerRequest {
     | "check2fa"
     | "authenticateotp"
     | "checkotpconfig"
+    | "setupotp"
+    | "removeotp"
   /** Username for authenticate method */
   username?: string
   /** Password for authenticate method */
@@ -53,6 +55,10 @@ interface BrokerRequest {
   max_bytes?: number
   /** OTP code for authenticateotp */
   code?: string
+  /** Base32 secret for setupotp */
+  secret?: string
+  /** Confirmation for removeotp */
+  confirm?: boolean
 }
 
 /**
@@ -81,6 +87,12 @@ interface BrokerResponse {
     pam_service_path?: string
     service_auto_created?: boolean
     error_code?: string
+    /** Setup OTP fields */
+    written?: boolean
+    already_configured?: boolean
+    /** Remove OTP fields */
+    removed?: boolean
+    already_missing?: boolean
   }
 }
 
@@ -173,6 +185,30 @@ export interface OtpConfigResult {
    * - "pam_module_not_installed": google-authenticator PAM module not found
    * - "pam_service_not_configured": /etc/pam.d/opencode-otp missing and couldn't be created
    */
+  errorCode?: string
+}
+
+/**
+ * Result of setup OTP file creation.
+ */
+export interface SetupOtpResult {
+  /** Whether the file was written */
+  written: boolean
+  /** Whether the file already existed */
+  alreadyConfigured: boolean
+  /** Error code when setup failed */
+  errorCode?: string
+}
+
+/**
+ * Result of removing OTP configuration.
+ */
+export interface RemoveOtpResult {
+  /** Whether the file was removed */
+  removed: boolean
+  /** Whether the file was already missing */
+  alreadyMissing: boolean
+  /** Error code when removal failed */
   errorCode?: string
 }
 
@@ -286,6 +322,85 @@ export class BrokerClient {
         success: false,
         error: "authentication service unavailable",
       }
+    }
+  }
+
+  /**
+   * Create ~/.google_authenticator for the session user.
+   *
+   * @param sessionId - Session ID from UserSession
+   * @param secret - Base32 secret to write
+   * @returns Setup result with status and optional error code
+   */
+  async setupOtp(sessionId: string, secret: string): Promise<SetupOtpResult> {
+    const id = crypto.randomUUID()
+    const unavailableResult: SetupOtpResult = {
+      written: false,
+      alreadyConfigured: false,
+      errorCode: "broker_unavailable",
+    }
+
+    const request: BrokerRequest = {
+      id,
+      version: 1,
+      method: "setupotp",
+      session_id: sessionId,
+      secret,
+    }
+
+    try {
+      const response = await this.sendRequest(request)
+      if (response.id !== id) {
+        return unavailableResult
+      }
+
+      const data = response.data
+      return {
+        written: data?.written ?? false,
+        alreadyConfigured: data?.already_configured ?? false,
+        errorCode: data?.error_code ?? (response.success ? undefined : response.error),
+      }
+    } catch {
+      return unavailableResult
+    }
+  }
+
+  /**
+   * Remove ~/.google_authenticator for the session user.
+   *
+   * @param sessionId - Session ID from UserSession
+   * @returns Remove result with status and optional error code
+   */
+  async removeOtp(sessionId: string): Promise<RemoveOtpResult> {
+    const id = crypto.randomUUID()
+    const unavailableResult: RemoveOtpResult = {
+      removed: false,
+      alreadyMissing: false,
+      errorCode: "broker_unavailable",
+    }
+
+    const request: BrokerRequest = {
+      id,
+      version: 1,
+      method: "removeotp",
+      session_id: sessionId,
+      confirm: true,
+    }
+
+    try {
+      const response = await this.sendRequest(request)
+      if (response.id !== id) {
+        return unavailableResult
+      }
+
+      const data = response.data
+      return {
+        removed: data?.removed ?? false,
+        alreadyMissing: data?.already_missing ?? false,
+        errorCode: data?.error_code ?? (response.success ? undefined : response.error),
+      }
+    } catch {
+      return unavailableResult
     }
   }
 

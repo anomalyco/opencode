@@ -1,5 +1,6 @@
 import { describe, test, expect, mock, beforeEach } from "bun:test"
 import { Hono } from "hono"
+import path from "path"
 import type { AuthResult } from "../../../src/auth/broker-client"
 import type { UnixUserInfo } from "../../../src/auth/user-info"
 import type { AuthConfig } from "../../../src/config/auth"
@@ -86,6 +87,9 @@ mock.module("../../../src/config/server-auth", () => ({
 
 // Import after mocking
 const { AuthRoutes } = await import("../../../src/server/routes/auth")
+const { setUiDir } = await import("../../../src/server/ui-dir")
+
+setUiDir(path.resolve(import.meta.dir, "../../../..", "app"))
 
 // Helper to set mock auth config
 function setMockAuthConfig(config: Partial<AuthConfig>) {
@@ -562,8 +566,9 @@ describe("HTTPS detection and enforcement", () => {
     })
     expect(res.status).toBe(200)
     const html = await res.text()
-    expect(html).toContain('id="httpWarning"')
-    expect(html).toContain("You are connecting over HTTP")
+    expect(html).toContain("window.__OPENCODE_LOGIN__")
+    expect(html).toContain('"shouldWarn":true')
+    expect(html).toContain('"shouldBlock":false')
   })
 
   test("GET /login returns blocked HTML when requireHttps is block and HTTP", async () => {
@@ -576,8 +581,8 @@ describe("HTTPS detection and enforcement", () => {
     })
     expect(res.status).toBe(200)
     const html = await res.text()
-    expect(html).toContain("HTTPS is required to log in")
-    expect(html).toContain("disabled")
+    expect(html).toContain("window.__OPENCODE_LOGIN__")
+    expect(html).toContain('"shouldBlock":true')
   })
 
   test("GET /login returns normal HTML for secure connection", async () => {
@@ -673,6 +678,7 @@ describe("HTTPS detection and enforcement", () => {
     })
     expect(res.status).toBe(200)
     const html = await res.text()
-    expect(html).toContain('id="httpWarning"') // Should warn because trustProxy is false
+    expect(html).toContain("window.__OPENCODE_LOGIN__")
+    expect(html).toContain('"shouldWarn":true') // Should warn because trustProxy is false
   })
 })
