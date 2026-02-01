@@ -145,8 +145,20 @@ export function getGoogleAuthenticatorSetupCommand(secret: string): string {
   // 1. Check if file exists and warn user (but allow override)
   // 2. Use heredoc to avoid secret appearing in shell history via echo
   // 3. Set restrictive permissions (400 = owner read-only)
-  return `[ -f ~/.google_authenticator ] && echo "Warning: ~/.google_authenticator exists and will be replaced" && read -p "Continue? [y/N] " confirm && [ "$confirm" != "y" ] && exit 1; cat > ~/.google_authenticator << 'EOF'
+  return `bash -lc 'set -euo pipefail
+target="$HOME/.google_authenticator"
+if [ -f "$target" ]; then
+  printf "Warning: %s exists and will be replaced.\\n" "$target"
+  printf "Continue? [y/N] "
+  read -r confirm </dev/tty || exit 1
+  if [ "$confirm" != "y" ]; then
+    exit 1
+  fi
+  rm -f "$target"
+fi
+cat > "$target" << "EOF"
 ${fileContent}
 EOF
-chmod 400 ~/.google_authenticator && echo "2FA configured successfully"`
+chmod 400 "$target"
+echo "2FA configured successfully"'`
 }
