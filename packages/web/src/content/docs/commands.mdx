@@ -195,43 +195,52 @@ Commands run in your project's root directory and their output becomes part of t
 
 ---
 
-### Generate a commit message
+### Commit (generate message + commit)
 
-You can create a command that turns your current git changes into a ready-to-paste commit message.
+You can create a command that generates a commit message from your current changes and (by default) runs `git commit`.
 
-Create `.opencode/commands/commitmsg.md`:
+Create `.opencode/commands/commit.md`:
 
-```md title=".opencode/commands/commitmsg.md"
+```md title=".opencode/commands/commit.md"
 ---
-description: Generate a git commit message
+description: Generate a commit message and commit
 ---
 
-You are generating a git commit message.
+You are helping me create a git commit.
 
-Here are the current changes:
+Input flags: $ARGUMENTS
 
-- Unstaged diff:
-!`git diff`
+First, inspect the current repo state:
 
 - Staged diff:
 !`git diff --cached`
 
+- Unstaged diff:
+!`git diff`
+
 - Status:
 !`git status --short`
 
-Write a concise commit message.
+Rules:
+- Prefer committing ONLY staged changes.
+- If there is no staged diff, stop and tell me to run `git add ...` first.
+- If `$ARGUMENTS` contains `--dry`, output ONLY the commit message text and stop.
+- If `$ARGUMENTS` contains `--ask`, output the proposed `git commit -m "<message>"` command and ask me to confirm before running it.
+- Otherwise, run `git commit -m "<message>"`.
+- Never run `git push`. Never use `--no-verify`. Do not amend unless explicitly requested.
 
-Constraints:
-- Use a single subject line (no more than ~72 chars)
-- Use present tense ("add", "fix", "refactor")
-- If there are multiple concerns, prefer the most important one
-- Output ONLY the commit message text (no code blocks, no extra commentary)
+Commit message constraints:
+- Single subject line (<= ~72 chars)
+- Present tense ("add", "fix", "refactor")
+- If there are multiple concerns, pick the most important one
 ```
 
 Run it in the TUI:
 
 ```bash frame="none"
-/commitmsg
+/commit
+/commit --dry
+/commit --ask
 ```
 
 ---
