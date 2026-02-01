@@ -38,6 +38,7 @@ import { InstanceBootstrap } from "../project/bootstrap"
 import { Storage } from "../storage/storage"
 import type { ContentfulStatusCode } from "hono/utils/http-status"
 import { serveStatic, websocket } from "hono/bun"
+import { fileURLToPath } from "node:url"
 import { HTTPException } from "hono/http-exception"
 import { errors } from "./error"
 import { QuestionRoutes } from "./routes/question"
@@ -60,6 +61,16 @@ export namespace Server {
   const defaultUiUrl = "https://app.opencode.ai"
   const contentSecurityPolicy =
     "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' data: http://localhost:* http://127.0.0.1:* http://host.docker.internal:*"
+  const fallbackUiAssetDir = fileURLToPath(new URL("../../../../ui/src/assets/favicon/", import.meta.url))
+  const fallbackUiAssets = new Set([
+    "site.webmanifest",
+    "favicon.svg",
+    "favicon.ico",
+    "favicon-96x96.png",
+    "apple-touch-icon.png",
+    "web-app-manifest-192x192.png",
+    "web-app-manifest-512x512.png",
+  ])
 
   let _url: URL | undefined
   let _corsWhitelist: string[] = []
@@ -176,6 +187,20 @@ export namespace Server {
         )
         .get("/health", (c) => {
           return c.json({ healthy: true, version: Installation.VERSION })
+        })
+        .use("/*", async (c, next) => {
+          if (c.req.method !== "GET" && c.req.method !== "HEAD") return next()
+          const relativePath = c.req.path.replace(/^\/+/, "")
+          if (!fallbackUiAssets.has(relativePath)) return next()
+          const filePath = path.join(fallbackUiAssetDir, relativePath)
+          const stat = await Bun.file(filePath)
+            .stat()
+            .catch(() => undefined)
+          if (!stat || stat.isDirectory()) return next()
+          return serveStatic({
+            root: fallbackUiAssetDir,
+            onFound: applyLocalUiCsp,
+          })(c, next)
         })
         .use(authMiddleware)
         .use(csrfMiddleware)
