@@ -279,11 +279,20 @@ export namespace Storage {
       try {
         await fh.writeFile(data)
         const syncFn = (fh as any).sync as (() => Promise<void>) | undefined
-        if (typeof syncFn === "function") await syncFn.call(fh)
-        else {
+        if (typeof syncFn === "function") {
+          await (syncFn.call(fh) as Promise<void>).catch((err: any) => {
+            if (!(process.platform === "win32" && (err as any)?.code === "EPERM")) throw err
+          })
+        } else {
           const fd = (fh as any).fd as number | undefined
           if (typeof fd === "number") {
-            await new Promise<void>((resolve, reject) => nodefs.fsync(fd, (err) => (err ? reject(err) : resolve())))
+            await new Promise<void>((resolve, reject) =>
+              nodefs.fsync(fd, (err: any) => {
+                if (err && process.platform === "win32" && (err as any)?.code === "EPERM") return resolve()
+                if (err) return reject(err)
+                resolve()
+              }),
+            )
           }
         }
       } finally {
@@ -291,18 +300,20 @@ export namespace Storage {
       }
       try {
         await fs.rename(tmp, target)
-        const dirFh = await fs.open(dir, "r").catch(() => null as any)
-        try {
-          const dirSync = (dirFh as any)?.sync as (() => Promise<void>) | undefined
-          if (typeof dirSync === "function") await dirSync.call(dirFh)
-          else {
-            const dfd = (dirFh as any)?.fd as number | undefined
-            if (typeof dfd === "number") {
-              await new Promise<void>((resolve, reject) => nodefs.fsync(dfd, (err) => (err ? reject(err) : resolve())))
+        if (process.platform !== "win32") {
+          const dirFh = await fs.open(dir, "r").catch(() => null as any)
+          try {
+            const dirSync = (dirFh as any)?.sync as (() => Promise<void>) | undefined
+            if (typeof dirSync === "function") await dirSync.call(dirFh)
+            else {
+              const dfd = (dirFh as any)?.fd as number | undefined
+              if (typeof dfd === "number") {
+                await new Promise<void>((resolve, reject) => nodefs.fsync(dfd, (err) => (err ? reject(err) : resolve())))
+              }
             }
+          } finally {
+            await dirFh?.close?.().catch?.(() => {})
           }
-        } finally {
-          await dirFh?.close?.().catch?.(() => {})
         }
         return
       } catch (e) {
