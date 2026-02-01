@@ -176,14 +176,10 @@ export namespace InstructionPrompt {
     let current = path.dirname(target)
     const root = path.resolve(Instance.directory)
 
-    while (current.startsWith(root)) {
+    while (current.startsWith(root) && current !== root) {
       const found = await find(current)
-      if (found === target) {
-        if (current === root) break
-        current = path.dirname(current)
-        continue
-      }
-      if (found && !system.has(found) && !already.has(found) && !isClaimed(messageID, found)) {
+
+      if (found && found !== target && !system.has(found) && !already.has(found) && !isClaimed(messageID, found)) {
         claim(messageID, found)
         const content = await Bun.file(found)
           .text()
@@ -192,7 +188,6 @@ export namespace InstructionPrompt {
           results.push({ filepath: found, content: "Instructions from: " + found + "\n" + content })
         }
       }
-      if (current === root) break
       current = path.dirname(current)
     }
 
