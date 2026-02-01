@@ -16,6 +16,7 @@ import { MessageV2 } from "./message-v2"
 import { Instance } from "../project/instance"
 import { SessionPrompt } from "./prompt"
 import { fn } from "@/util/fn"
+import { iife } from "@/util/iife"
 import { Command } from "../command"
 import { Snapshot } from "@/snapshot"
 
@@ -467,20 +468,26 @@ export namespace Session {
         },
       }
 
+      const tier = input.metadata?.openai?.serviceTier
+      const rate = iife(() => {
+        if (tier !== "default" && tier !== "flex" && tier !== "priority") return undefined
+        return input.model.cost?.serviceTier?.[tier]
+      })
       const costInfo =
         input.model.cost?.experimentalOver200K && tokens.input + tokens.cache.read > 200_000
           ? input.model.cost.experimentalOver200K
           : input.model.cost
+      const base = rate ?? costInfo
       return {
         cost: safe(
           new Decimal(0)
-            .add(new Decimal(tokens.input).mul(costInfo?.input ?? 0).div(1_000_000))
-            .add(new Decimal(tokens.output).mul(costInfo?.output ?? 0).div(1_000_000))
-            .add(new Decimal(tokens.cache.read).mul(costInfo?.cache?.read ?? 0).div(1_000_000))
-            .add(new Decimal(tokens.cache.write).mul(costInfo?.cache?.write ?? 0).div(1_000_000))
+            .add(new Decimal(tokens.input).mul(base?.input ?? 0).div(1_000_000))
+            .add(new Decimal(tokens.output).mul(base?.output ?? 0).div(1_000_000))
+            .add(new Decimal(tokens.cache.read).mul(base?.cache?.read ?? 0).div(1_000_000))
+            .add(new Decimal(tokens.cache.write).mul(base?.cache?.write ?? 0).div(1_000_000))
             // TODO: update models.dev to have better pricing model, for now:
             // charge reasoning tokens at the same rate as output tokens
-            .add(new Decimal(tokens.reasoning).mul(costInfo?.output ?? 0).div(1_000_000))
+            .add(new Decimal(tokens.reasoning).mul(base?.output ?? 0).div(1_000_000))
             .toNumber(),
         ),
         tokens,

@@ -290,4 +290,67 @@ describe("session.getUsage", () => {
 
     expect(result.cost).toBe(3 + 1.5)
   })
+
+  test("uses service tier pricing when provided", () => {
+    const model = createModel({
+      context: 100_000,
+      output: 32_000,
+      cost: {
+        input: 3,
+        output: 15,
+        cache: { read: 0.3, write: 0 },
+        serviceTier: {
+          flex: {
+            input: 0.875,
+            output: 7,
+            cache: { read: 0.0875, write: 0 },
+          },
+        },
+      },
+    })
+    const result = Session.getUsage({
+      model,
+      usage: {
+        inputTokens: 1_000_000,
+        outputTokens: 100_000,
+        totalTokens: 1_100_000,
+        cachedInputTokens: 100_000,
+      },
+      metadata: {
+        openai: {
+          serviceTier: "flex",
+        },
+      },
+    })
+
+    expect(result.cost).toBe(1.49625)
+  })
+
+  test("falls back to base pricing when service tier missing", () => {
+    const model = createModel({
+      context: 100_000,
+      output: 32_000,
+      cost: {
+        input: 3,
+        output: 15,
+        cache: { read: 0.3, write: 0 },
+      },
+    })
+    const result = Session.getUsage({
+      model,
+      usage: {
+        inputTokens: 1_000_000,
+        outputTokens: 100_000,
+        totalTokens: 1_100_000,
+        cachedInputTokens: 100_000,
+      },
+      metadata: {
+        openai: {
+          serviceTier: "priority",
+        },
+      },
+    })
+
+    expect(result.cost).toBe(4.23)
+  })
 })

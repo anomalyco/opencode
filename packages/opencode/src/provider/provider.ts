@@ -556,6 +556,40 @@ export namespace Provider {
           read: z.number(),
           write: z.number(),
         }),
+        serviceTier: z
+          .object({
+            default: z
+              .object({
+                input: z.number(),
+                output: z.number(),
+                cache: z.object({
+                  read: z.number(),
+                  write: z.number(),
+                }),
+              })
+              .optional(),
+            flex: z
+              .object({
+                input: z.number(),
+                output: z.number(),
+                cache: z.object({
+                  read: z.number(),
+                  write: z.number(),
+                }),
+              })
+              .optional(),
+            priority: z
+              .object({
+                input: z.number(),
+                output: z.number(),
+                cache: z.object({
+                  read: z.number(),
+                  write: z.number(),
+                }),
+              })
+              .optional(),
+          })
+          .optional(),
         experimentalOver200K: z
           .object({
             input: z.number(),
@@ -619,6 +653,40 @@ export namespace Provider {
           read: model.cost?.cache_read ?? 0,
           write: model.cost?.cache_write ?? 0,
         },
+        serviceTier: model.cost?.service_tier
+          ? {
+              default: model.cost.service_tier.default
+                ? {
+                    input: model.cost.service_tier.default.input,
+                    output: model.cost.service_tier.default.output,
+                    cache: {
+                      read: model.cost.service_tier.default.cache_read ?? 0,
+                      write: model.cost.service_tier.default.cache_write ?? 0,
+                    },
+                  }
+                : undefined,
+              flex: model.cost.service_tier.flex
+                ? {
+                    input: model.cost.service_tier.flex.input,
+                    output: model.cost.service_tier.flex.output,
+                    cache: {
+                      read: model.cost.service_tier.flex.cache_read ?? 0,
+                      write: model.cost.service_tier.flex.cache_write ?? 0,
+                    },
+                  }
+                : undefined,
+              priority: model.cost.service_tier.priority
+                ? {
+                    input: model.cost.service_tier.priority.input,
+                    output: model.cost.service_tier.priority.output,
+                    cache: {
+                      read: model.cost.service_tier.priority.cache_read ?? 0,
+                      write: model.cost.service_tier.priority.cache_write ?? 0,
+                    },
+                  }
+                : undefined,
+            }
+          : undefined,
         experimentalOver200K: model.cost?.context_over_200k
           ? {
               cache: {
@@ -791,6 +859,42 @@ export namespace Provider {
               read: model?.cost?.cache_read ?? existingModel?.cost?.cache.read ?? 0,
               write: model?.cost?.cache_write ?? existingModel?.cost?.cache.write ?? 0,
             },
+            serviceTier: iife(() => {
+              const current = existingModel?.cost?.serviceTier
+              if (!model?.cost?.service_tier) return current
+              return {
+                default: model.cost.service_tier.default
+                  ? {
+                      input: model.cost.service_tier.default.input,
+                      output: model.cost.service_tier.default.output,
+                      cache: {
+                        read: model.cost.service_tier.default.cache_read ?? 0,
+                        write: model.cost.service_tier.default.cache_write ?? 0,
+                      },
+                    }
+                  : current?.default,
+                flex: model.cost.service_tier.flex
+                  ? {
+                      input: model.cost.service_tier.flex.input,
+                      output: model.cost.service_tier.flex.output,
+                      cache: {
+                        read: model.cost.service_tier.flex.cache_read ?? 0,
+                        write: model.cost.service_tier.flex.cache_write ?? 0,
+                      },
+                    }
+                  : current?.flex,
+                priority: model.cost.service_tier.priority
+                  ? {
+                      input: model.cost.service_tier.priority.input,
+                      output: model.cost.service_tier.priority.output,
+                      cache: {
+                        read: model.cost.service_tier.priority.cache_read ?? 0,
+                        write: model.cost.service_tier.priority.cache_write ?? 0,
+                      },
+                    }
+                  : current?.priority,
+              }
+            }),
           },
           options: mergeDeep(existingModel?.options ?? {}, model.options ?? {}),
           limit: {
