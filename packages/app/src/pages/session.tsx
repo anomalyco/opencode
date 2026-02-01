@@ -128,6 +128,7 @@ function StickyAddButton(props: { children: JSX.Element }) {
   return (
     <div
       ref={button}
+      data-slot="sticky-add-button"
       class="bg-background-base h-full shrink-0 sticky right-0 z-10 flex items-center justify-center border-b border-border-weak-base px-3"
       classList={{ "border-l": stuck() }}
     >
@@ -2255,6 +2256,37 @@ export default function Page() {
                               }
                               hideCloseButton
                               onMiddleClick={() => tabs().close("context")}
+                              onClick={(e: MouseEvent) => {
+                                const trigger = e.currentTarget as HTMLElement
+                                const wrapper = trigger.closest(
+                                  '[data-slot="tabs-trigger-wrapper"]',
+                                ) as HTMLElement | null
+                                if (!wrapper) return
+
+                                const list = wrapper.closest('[data-slot="tabs-list"]') as HTMLElement | null
+                                if (!list) return
+
+                                const stickyButton = list.querySelector(
+                                  '[data-slot="sticky-add-button"]',
+                                ) as HTMLElement | null
+                                const stickyWidth = stickyButton?.offsetWidth ?? 0
+
+                                const wrapperRect = wrapper.getBoundingClientRect()
+                                const listRect = list.getBoundingClientRect()
+
+                                // Check if tab is partially or fully hidden on the right side (accounting for sticky button)
+                                if (wrapperRect.right > listRect.right - stickyWidth) {
+                                  // Scroll just enough to make the right edge visible (minus sticky button width)
+                                  const overflow = wrapperRect.right - (listRect.right - stickyWidth)
+                                  list.scrollLeft += overflow
+                                }
+                                // Check if tab is partially or fully hidden on the left side
+                                else if (wrapperRect.left < listRect.left) {
+                                  // Scroll just enough to make the left edge visible
+                                  const overflow = listRect.left - wrapperRect.left
+                                  list.scrollLeft -= overflow
+                                }
+                              }}
                             >
                               <div class="flex items-center gap-2">
                                 <SessionContextUsage variant="indicator" />

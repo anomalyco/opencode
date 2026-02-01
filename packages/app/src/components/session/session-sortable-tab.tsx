@@ -29,6 +29,35 @@ export function SortableTab(props: { tab: string; onTabClose: (tab: string) => v
   const language = useLanguage()
   const sortable = createSortable(props.tab)
   const path = createMemo(() => file.pathFromTab(props.tab))
+
+  const handleClick = (e: MouseEvent) => {
+    const trigger = e.currentTarget as HTMLElement
+    const wrapper = trigger.closest('[data-slot="tabs-trigger-wrapper"]') as HTMLElement | null
+    if (!wrapper) return
+
+    const list = wrapper.closest('[data-slot="tabs-list"]') as HTMLElement | null
+    if (!list) return
+
+    const stickyButton = list.querySelector('[data-slot="sticky-add-button"]') as HTMLElement | null
+    const stickyWidth = stickyButton?.offsetWidth ?? 0
+
+    const wrapperRect = wrapper.getBoundingClientRect()
+    const listRect = list.getBoundingClientRect()
+
+    // Check if tab is partially or fully hidden on the right side (accounting for sticky button)
+    if (wrapperRect.right > listRect.right - stickyWidth) {
+      // Scroll just enough to make the right edge visible (minus sticky button width)
+      const overflow = wrapperRect.right - (listRect.right - stickyWidth)
+      list.scrollLeft += overflow
+    }
+    // Check if tab is partially or fully hidden on the left side
+    else if (wrapperRect.left < listRect.left) {
+      // Scroll just enough to make the left edge visible
+      const overflow = listRect.left - wrapperRect.left
+      list.scrollLeft -= overflow
+    }
+  }
+
   return (
     // @ts-ignore
     <div use:sortable classList={{ "h-full": true, "opacity-0": sortable.isActiveDraggable }}>
@@ -48,6 +77,7 @@ export function SortableTab(props: { tab: string; onTabClose: (tab: string) => v
           }
           hideCloseButton
           onMiddleClick={() => props.onTabClose(props.tab)}
+          onClick={handleClick}
         >
           <Show when={path()}>{(p) => <FileVisual path={p()} />}</Show>
         </Tabs.Trigger>
