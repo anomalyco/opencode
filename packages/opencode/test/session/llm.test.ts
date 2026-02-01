@@ -688,4 +688,240 @@ describe("session.llm.stream", () => {
       },
     })
   })
+
+  test("sends opencode.json model options in HTTP request body for OpenAI responses API", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    const providerID = "openai"
+    const modelID = "gpt-5.2"
+    const fixture = await loadFixture(providerID, modelID)
+    const model = fixture.model
+
+    const responseChunks = [
+      {
+        type: "response.created",
+        response: {
+          id: "resp-config-test",
+          created_at: Math.floor(Date.now() / 1000),
+          model: model.id,
+          service_tier: null,
+        },
+      },
+      {
+        type: "response.output_text.delta",
+        item_id: "item-config",
+        delta: "Hello from config test",
+        logprobs: null,
+      },
+      {
+        type: "response.completed",
+        response: {
+          incomplete_details: null,
+          usage: {
+            input_tokens: 5,
+            input_tokens_details: null,
+            output_tokens: 4,
+            output_tokens_details: null,
+          },
+          service_tier: null,
+        },
+      },
+    ]
+    const request = waitRequest("/responses", createEventResponse(responseChunks, true))
+
+    // Configure model options in opencode.json for OpenAI responses API:
+    // - serviceTier: "flex" is a commonly used option for cost optimization
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: [providerID],
+            provider: {
+              [providerID]: {
+                name: "OpenAI",
+                env: ["OPENAI_API_KEY"],
+                npm: "@ai-sdk/openai",
+                api: "https://api.openai.com/v1",
+                models: {
+                  [modelID]: {
+                    ...model,
+                    options: {
+                      serviceTier: "flex",
+                    },
+                  },
+                },
+                options: {
+                  apiKey: "test-openai-config-key",
+                  baseURL: `${server.url.origin}/v1`,
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await Provider.getModel(providerID, modelID)
+        const sessionID = "session-openai-config-test"
+
+        // Agent WITHOUT temperature/topP - only selecting the provider
+        const agent = {
+          name: "openai-config-test-agent",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        const user = {
+          id: "user-openai-config-test",
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID, modelID: resolved.id },
+          variant: "high",
+        } satisfies MessageV2.User
+
+        const stream = await LLM.stream({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a test assistant."],
+          abort: new AbortController().signal,
+          messages: [{ role: "user", content: "Test message" }],
+          tools: {},
+        })
+
+        for await (const _ of stream.fullStream) {
+        }
+
+        const capture = await request
+        const body = capture.body
+
+        // Verify the serviceTier option appears in the HTTP request body for responses API
+        expect(capture.url.pathname.endsWith("/responses")).toBe(true)
+        expect(body.model).toBe(resolved.api.id)
+        expect(body.service_tier).toBe("flex")
+        expect((body.reasoning as { effort?: string } | undefined)?.effort).toBe("high")
+      },
+    })
+  })
+
+  test("sends opencode.json model options in HTTP request body for OpenAI-compatible provider", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    const providerID = "custom-llm"
+    const modelID = "custom-model"
+
+    const request = waitRequest(
+      "/chat/completions",
+      new Response(createChatStream("Hello from config test"), {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    )
+
+    // Configure model options in opencode.json:
+    // - top_p, top_k, min_p, frequency_penalty inside options
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: [providerID],
+            provider: {
+              [providerID]: {
+                name: "Custom LLM Provider",
+                npm: "@ai-sdk/openai-compatible",
+                api: `${server.url.origin}/v1`,
+                env: [],
+                models: {
+                  [modelID]: {
+                    name: "Custom Test Model",
+                    tool_call: true,
+                    limit: { context: 128000, output: 8192 },
+                    options: {
+                      temperature: 0.7,
+                      top_p: 0.85,
+                      top_k: 50,
+                      min_p: 0.1,
+                      frequency_penalty: 0.3,
+                      service_tier: "flex"
+                    },
+                  },
+                },
+                options: {
+                  apiKey: "test-config-key",
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await Provider.getModel(providerID, modelID)
+        const sessionID = "session-config-test"
+
+        // Agent WITHOUT temperature/topP - only selecting the provider
+        const agent = {
+          name: "config-test-agent",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        const user = {
+          id: "user-config-test",
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID, modelID: resolved.id },
+        } satisfies MessageV2.User
+
+        const stream = await LLM.stream({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a test assistant."],
+          abort: new AbortController().signal,
+          messages: [{ role: "user", content: "Test message" }],
+          tools: {},
+        })
+
+        for await (const _ of stream.fullStream) {
+        }
+
+        const capture = await request
+        const body = capture.body
+
+        // Verify all model options appear at top level of HTTP request body
+        expect(body.model).toBe(modelID)
+        expect(body.temperature).toBe(0.7)
+        expect(body.top_p).toBe(0.85)
+        expect(body.top_k).toBe(50)
+        expect(body.min_p).toBe(0.1)
+        expect(body.frequency_penalty).toBe(0.3)
+        expect(body.service_tier).toBe("flex")
+      },
+    })
+  })
 })

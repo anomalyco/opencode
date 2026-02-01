@@ -105,6 +105,86 @@ The built-in provider and model names can be found on [Models.dev](https://model
 
 You can also configure these options for any agents that you are using. The agent config overrides any global options here. [Learn more](/docs/agents/#additional).
 
+### Setting options from API documentation
+
+Many providers display their API reference with request body parameters or an example containing a curl request.
+
+For example, an API reference might show an example like this:
+
+```bash frame="none" {7-10}
+curl -X POST "https://api.provider.com/v1/chat/completions" \
+  -H "Authorization: Bearer ${API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "provider-model-id",
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "temperature": 0.7,
+    "top_p": 0.9,
+    "top_k": 40,
+    "max_tokens": 2048
+  }'
+```
+
+To set these options in OpenCode, add them to the `options` object:
+
+```jsonc title="opencode.jsonc" {8-11}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "custom-provider": {
+      "models": {
+        "provider-model-id": {
+          "options": {
+            "temperature": 0.7,
+            "top_p": 0.9,
+            "top_k": 40,
+            "max_tokens": 2048,
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+
+### OpenAI Flex Processing example
+
+[OpenAI Flex Processing](https://platform.openai.com/docs/guides/flex-processing?api-mode=chat&lang=curl) shows you can use the flex service tier with this curl request:
+
+```bash frame="none" {10}
+curl https://api.openai.com/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $OPENAI_API_KEY" \
+  -d '{
+    "model": "o3",
+    "messages": [
+      {"role": "developer", "content": "List and describe all the metaphors used in this book."},
+      {"role": "user", "content": "<very long text of book here>"}
+    ],
+    "service_tier": "flex"
+  }' --max-time 900
+```
+
+To set 'service_tier' to 'flex' for the `gpt-5` model in OpenCode, you would add it like this:
+
+```jsonc title="opencode.jsonc" {8}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openai": {
+      "models": {
+        "gpt-5": {
+          "options": {
+            "service_tier": "flex",
+          },
+        },
+      },
+    },
+  },
+}
+```
+
 You can also define custom variants that extend built-in ones. Variants let you configure different settings for the same model without creating duplicate entries:
 
 ```jsonc title="opencode.jsonc" {6-21}
