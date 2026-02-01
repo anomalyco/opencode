@@ -2183,7 +2183,62 @@ export default function Page() {
                     <ConstrainDragYAxis />
                     <Tabs value={activeTab()} onChange={openTab}>
                       <div class="sticky top-0 shrink-0 flex">
-                        <Tabs.List>
+                        <Tabs.List
+                          ref={(el: HTMLDivElement) => {
+                            let scrollTimeout: number | undefined
+                            let prevScrollWidth = el.scrollWidth
+                            let prevContextOpen = contextOpen()
+
+                            const handler = () => {
+                              if (scrollTimeout !== undefined) clearTimeout(scrollTimeout)
+                              scrollTimeout = window.setTimeout(() => {
+                                const scrollWidth = el.scrollWidth
+                                const clientWidth = el.clientWidth
+                                const currentContextOpen = contextOpen()
+
+                                // Only scroll when a tab is added (width increased), not on removal
+                                if (scrollWidth > prevScrollWidth) {
+                                  if (!prevContextOpen && currentContextOpen) {
+                                    // Context tab was opened, scroll to first
+                                    el.scrollTo({
+                                      left: 0,
+                                      behavior: "smooth",
+                                    })
+                                  } else if (scrollWidth > clientWidth) {
+                                    // File tab was added, scroll to rightmost
+                                    el.scrollTo({
+                                      left: scrollWidth - clientWidth,
+                                      behavior: "smooth",
+                                    })
+                                  }
+                                }
+                                // When width decreases (tab removed), don't scroll - let browser handle it naturally
+
+                                prevScrollWidth = scrollWidth
+                                prevContextOpen = currentContextOpen
+                              }, 0)
+                            }
+
+                            const wheelHandler = (e: WheelEvent) => {
+                              // Enable horizontal scrolling with mouse wheel
+                              if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+                                el.scrollLeft += e.deltaY > 0 ? 50 : -50
+                                e.preventDefault()
+                              }
+                            }
+
+                            el.addEventListener("wheel", wheelHandler, { passive: false })
+
+                            const observer = new MutationObserver(handler)
+                            observer.observe(el, { childList: true })
+
+                            onCleanup(() => {
+                              el.removeEventListener("wheel", wheelHandler)
+                              observer.disconnect()
+                              if (scrollTimeout !== undefined) clearTimeout(scrollTimeout)
+                            })
+                          }}
+                        >
                           <Show when={contextOpen()}>
                             <Tabs.Trigger
                               value="context"
@@ -2287,6 +2342,7 @@ export default function Page() {
                             const c = state()?.content
                             return c?.mimeType === "image/svg+xml"
                           })
+                          const isBinary = createMemo(() => state()?.content?.type === "binary")
                           const svgContent = createMemo(() => {
                             if (!isSvg()) return
                             const c = state()?.content
@@ -2737,6 +2793,19 @@ export default function Page() {
                                         <img src={svgPreviewUrl()} alt={path()} class="max-w-full max-h-96" />
                                       </div>
                                     </Show>
+                                  </div>
+                                </Match>
+                                <Match when={state()?.loaded && isBinary()}>
+                                  <div class="h-full px-6 pb-42 flex flex-col items-center justify-center text-center gap-6">
+                                    <Mark class="w-14 opacity-10" />
+                                    <div class="flex flex-col gap-2 max-w-md">
+                                      <div class="text-14-semibold text-text-strong truncate">
+                                        {path()?.split("/").pop()}
+                                      </div>
+                                      <div class="text-14-regular text-text-weak">
+                                        {language.t("session.files.binaryContent")}
+                                      </div>
+                                    </div>
                                   </div>
                                 </Match>
                                 <Match when={state()?.loaded}>{renderCode(contents(), "pb-40")}</Match>

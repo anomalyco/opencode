@@ -20,6 +20,7 @@ const env = {
   OPENCODE_CHANNEL: process.env["OPENCODE_CHANNEL"],
   OPENCODE_BUMP: process.env["OPENCODE_BUMP"],
   OPENCODE_VERSION: process.env["OPENCODE_VERSION"],
+  OPENCODE_RELEASE: process.env["OPENCODE_RELEASE"],
 }
 const CHANNEL = await (async () => {
   if (env.OPENCODE_CHANNEL) return env.OPENCODE_CHANNEL
@@ -54,6 +55,9 @@ export const Script = {
   },
   get preview() {
     return IS_PREVIEW
+  },
+  get release() {
+    return env.OPENCODE_RELEASE
   },
 }
 console.log(`opencode script`, JSON.stringify(Script, null, 2))
