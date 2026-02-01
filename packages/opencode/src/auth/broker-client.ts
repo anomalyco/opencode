@@ -1,4 +1,5 @@
 import { createConnection, type Socket } from "net"
+import { Log } from "@/util/log"
 
 /**
  * Request message sent to the auth broker.
@@ -228,6 +229,7 @@ export interface RemoveOtpResult {
  * ```
  */
 export class BrokerClient {
+  private log = Log.create({ service: "broker-client" })
   private socketPath: string
   private timeoutMs: number
 
@@ -636,8 +638,9 @@ export class BrokerClient {
    * }
    * ```
    */
-  async spawnPty(sessionId: string, options: SpawnPtyOptions = {}): Promise<SpawnPtyResult> {
+  async spawnPty(sessionId: string, options: SpawnPtyOptions = {}, requestId?: string): Promise<SpawnPtyResult> {
     const id = crypto.randomUUID()
+    this.log.info("broker request", { method: "spawnpty", sessionId, requestId })
 
     const request: BrokerRequest = {
       id,
@@ -654,10 +657,12 @@ export class BrokerClient {
       const response = await this.sendRequest(request)
 
       if (response.id !== id) {
+        this.log.warn("broker invalid response", { method: "spawnpty", sessionId, requestId })
         return { success: false, error: "invalid response" }
       }
 
       if (!response.success) {
+        this.log.warn("broker spawnpty failed", { method: "spawnpty", sessionId, requestId, error: response.error })
         return { success: false, error: response.error ?? "spawn failed" }
       }
 
@@ -667,6 +672,7 @@ export class BrokerClient {
         pid: response.data?.pid,
       }
     } catch {
+      this.log.warn("broker spawnpty unavailable", { method: "spawnpty", sessionId, requestId })
       return { success: false, error: "broker unavailable" }
     }
   }
@@ -685,8 +691,9 @@ export class BrokerClient {
    * await client.killPty(ptyId)
    * ```
    */
-  async killPty(ptyId: string): Promise<boolean> {
+  async killPty(ptyId: string, requestId?: string): Promise<boolean> {
     const id = crypto.randomUUID()
+    this.log.info("broker request", { method: "killpty", ptyId, requestId })
 
     const request: BrokerRequest = {
       id,
@@ -697,8 +704,12 @@ export class BrokerClient {
 
     try {
       const response = await this.sendRequest(request)
+      if (response.id !== id || !response.success) {
+        this.log.warn("broker killpty failed", { method: "killpty", ptyId, requestId, error: response.error })
+      }
       return response.id === id && response.success
     } catch {
+      this.log.warn("broker killpty unavailable", { method: "killpty", ptyId, requestId })
       return false
     }
   }
@@ -720,8 +731,9 @@ export class BrokerClient {
    * await client.resizePty(ptyId, 120, 40)
    * ```
    */
-  async resizePty(ptyId: string, cols: number, rows: number): Promise<boolean> {
+  async resizePty(ptyId: string, cols: number, rows: number, requestId?: string): Promise<boolean> {
     const id = crypto.randomUUID()
+    this.log.info("broker request", { method: "resizepty", ptyId, cols, rows, requestId })
 
     const request: BrokerRequest = {
       id,
@@ -734,8 +746,12 @@ export class BrokerClient {
 
     try {
       const response = await this.sendRequest(request)
+      if (response.id !== id || !response.success) {
+        this.log.warn("broker resizepty failed", { method: "resizepty", ptyId, cols, rows, requestId, error: response.error })
+      }
       return response.id === id && response.success
     } catch {
+      this.log.warn("broker resizepty unavailable", { method: "resizepty", ptyId, cols, rows, requestId })
       return false
     }
   }
@@ -756,7 +772,7 @@ export class BrokerClient {
    * await client.ptyWrite(ptyId, "ls -la\n")
    * ```
    */
-  async ptyWrite(ptyId: string, data: string | Uint8Array): Promise<boolean> {
+  async ptyWrite(ptyId: string, data: string | Uint8Array, requestId?: string): Promise<boolean> {
     const id = crypto.randomUUID()
 
     // Convert to base64
@@ -773,8 +789,12 @@ export class BrokerClient {
 
     try {
       const response = await this.sendRequest(request)
+      if (response.id !== id || !response.success) {
+        this.log.warn("broker ptywrite failed", { method: "ptywrite", ptyId, requestId, error: response.error })
+      }
       return response.id === id && response.success
     } catch {
+      this.log.warn("broker ptywrite unavailable", { method: "ptywrite", ptyId, requestId })
       return false
     }
   }
@@ -801,7 +821,7 @@ export class BrokerClient {
    * }
    * ```
    */
-  async ptyRead(ptyId: string, maxBytes = 4096): Promise<PtyReadResult | null> {
+  async ptyRead(ptyId: string, maxBytes = 4096, requestId?: string): Promise<PtyReadResult | null> {
     const id = crypto.randomUUID()
 
     const request: BrokerRequest = {
@@ -815,6 +835,7 @@ export class BrokerClient {
     try {
       const response = await this.sendRequest(request)
       if (response.id !== id || !response.success || !response.data) {
+        this.log.warn("broker ptyread failed", { method: "ptyread", ptyId, maxBytes, requestId, error: response.error })
         return null
       }
 
@@ -829,6 +850,7 @@ export class BrokerClient {
         more: response.data.more ?? false,
       }
     } catch {
+      this.log.warn("broker ptyread unavailable", { method: "ptyread", ptyId, maxBytes, requestId })
       return null
     }
   }

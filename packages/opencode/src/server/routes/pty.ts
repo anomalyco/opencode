@@ -8,6 +8,23 @@ import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { getAuthContext } from "../middleware/auth"
 import { ServerAuth } from "@/config/server-auth"
+import { Log } from "@/util/log"
+
+const log = Log.create({ service: "pty-routes" })
+
+const getErrorMessage = (error: unknown) => {
+  if (error instanceof Error) return error.message
+  if (typeof error === "string") return error
+  return "Unknown error"
+}
+
+const mapCreateError = (message: string) => {
+  const normalized = message.toLowerCase()
+  if (normalized.includes("session not found")) {
+    return { code: "broker_session_not_found", status: 404 }
+  }
+  return { code: "pty_create_failed", status: 500 }
+}
 
 export const PtyRoutes = lazy(() =>
   new Hono()
@@ -52,6 +69,7 @@ export const PtyRoutes = lazy(() =>
       }),
       validator("json", Pty.CreateInput),
       async (c) => {
+        const requestId = crypto.randomUUID()
         const authConfig = ServerAuth.get()
 
         // If auth enabled, require session and pass session ID
@@ -60,13 +78,34 @@ export const PtyRoutes = lazy(() =>
           if (!auth) {
             return c.json({ error: "Authentication required" }, 401)
           }
-          const info = await Pty.create(c.req.valid("json"), auth.sessionId)
-          return c.json(info)
+          try {
+            const info = await Pty.create(c.req.valid("json"), auth.sessionId, requestId)
+            log.info("pty created", { requestId, sessionId: auth.sessionId, ptyId: info.id })
+            return c.json(info)
+          } catch (error) {
+            const message = getErrorMessage(error)
+            const mapped = mapCreateError(message)
+            log.warn("pty create failed", {
+              requestId,
+              sessionId: auth.sessionId,
+              code: mapped.code,
+              error: message,
+            })
+            return c.json({ error: message, code: mapped.code, requestId }, mapped.status)
+          }
         }
 
         // Auth disabled - use existing behavior
-        const info = await Pty.create(c.req.valid("json"))
-        return c.json(info)
+        try {
+          const info = await Pty.create(c.req.valid("json"), undefined, requestId)
+          log.info("pty created", { requestId, ptyId: info.id })
+          return c.json(info)
+        } catch (error) {
+          const message = getErrorMessage(error)
+          const mapped = mapCreateError(message)
+          log.warn("pty create failed", { requestId, code: mapped.code, error: message })
+          return c.json({ error: message, code: mapped.code, requestId }, mapped.status)
+        }
       },
     )
     .get(
@@ -185,18 +224,30 @@ export const PtyRoutes = lazy(() =>
         },
       }),
       validator("param", z.object({ ptyID: z.string() })),
+      async (c, next) => {
+        const requestId = c.req.query("requestId") ?? crypto.randomUUID()
+        const ptyId = c.req.param("ptyID")
+        c.set("ptyRequestId", requestId)
+        if (!Pty.get(ptyId)) {
+          log.warn("pty connect session not found", { requestId, ptyId, code: "pty_session_not_found" })
+          return c.json({ error: "Session not found", code: "pty_session_not_found", requestId }, 404)
+        }
+        return next()
+      },
       upgradeWebSocket((c) => {
+        const requestId = c.get("ptyRequestId") as string | undefined
         const id = c.req.param("ptyID")
         let handler: ReturnType<typeof Pty.connect>
-        if (!Pty.get(id)) throw new Error("Session not found")
         return {
           onOpen(_event, ws) {
-            handler = Pty.connect(id, ws)
+            log.info("pty websocket opened", { requestId, ptyId: id })
+            handler = Pty.connect(id, ws, { requestId })
           },
           onMessage(event) {
             handler?.onMessage(String(event.data))
           },
           onClose() {
+            log.info("pty websocket closed", { requestId, ptyId: id })
             handler?.onClose()
           },
         }

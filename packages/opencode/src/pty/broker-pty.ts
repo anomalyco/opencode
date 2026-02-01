@@ -66,15 +66,20 @@ const sessions = new Map<string, BrokerPtySession>()
 export async function create(
   sessionId: string,
   options: { term?: string; cols?: number; rows?: number; env?: Record<string, string> } = {},
+  requestId?: string,
 ): Promise<BrokerPtyInfo> {
   const brokerClient = new BrokerClient()
 
-  const result = await brokerClient.spawnPty(sessionId, {
-    term: options.term ?? "xterm-256color",
-    cols: options.cols ?? 80,
-    rows: options.rows ?? 24,
-    env: options.env ?? {},
-  })
+  const result = await brokerClient.spawnPty(
+    sessionId,
+    {
+      term: options.term ?? "xterm-256color",
+      cols: options.cols ?? 80,
+      rows: options.rows ?? 24,
+      env: options.env ?? {},
+    },
+    requestId,
+  )
 
   if (!result.success || !result.ptyId || !result.pid) {
     throw new Error(result.error ?? "Failed to spawn PTY via broker")
@@ -96,7 +101,13 @@ export async function create(
 
   sessions.set(info.id, session)
 
-  log.info("Broker PTY created", { ptyId: info.ptyId, pid: info.pid })
+  log.info("Broker PTY created", {
+    ptyId: info.ptyId,
+    pid: info.pid,
+    sessionId,
+    requestId,
+    method: "spawnpty",
+  })
 
   return info
 }
@@ -128,12 +139,12 @@ export function list(): BrokerPtyInfo[] {
  *
  * @param id - PTY session ID to kill
  */
-export async function kill(id: string): Promise<void> {
+export async function kill(id: string, requestId?: string): Promise<void> {
   const session = sessions.get(id)
   if (!session) return
 
   const brokerClient = new BrokerClient()
-  await brokerClient.killPty(session.info.ptyId)
+  await brokerClient.killPty(session.info.ptyId, requestId)
 
   session.info.status = "exited"
   sessions.delete(id)
@@ -143,7 +154,12 @@ export async function kill(id: string): Promise<void> {
     ws.close()
   }
 
-  log.info("Broker PTY killed", { ptyId: id })
+  log.info("Broker PTY killed", {
+    ptyId: id,
+    sessionId: session.info.sessionId,
+    requestId,
+    method: "killpty",
+  })
 }
 
 /**
@@ -156,14 +172,21 @@ export async function kill(id: string): Promise<void> {
  * @param cols - New column count
  * @param rows - New row count
  */
-export async function resize(id: string, cols: number, rows: number): Promise<void> {
+export async function resize(id: string, cols: number, rows: number, requestId?: string): Promise<void> {
   const session = sessions.get(id)
   if (!session || session.info.status !== "running") return
 
   const brokerClient = new BrokerClient()
-  await brokerClient.resizePty(session.info.ptyId, cols, rows)
+  await brokerClient.resizePty(session.info.ptyId, cols, rows, requestId)
 
-  log.info("Broker PTY resized", { ptyId: id, cols, rows })
+  log.info("Broker PTY resized", {
+    ptyId: id,
+    cols,
+    rows,
+    sessionId: session.info.sessionId,
+    requestId,
+    method: "resizepty",
+  })
 }
 
 /**
@@ -197,6 +220,7 @@ export function connect(
   }
 
   session.subscribers.add(ws)
+  log.info("Broker PTY client connected", { ptyId: id, sessionId: session.info.sessionId })
 
   // Send buffered output
   if (session.buffer) {
@@ -210,11 +234,16 @@ export function connect(
       const data = typeof msg === "string" ? msg : new Uint8Array(msg as ArrayBuffer)
       const success = await brokerClient.ptyWrite(session.info.ptyId, data)
       if (!success) {
-        log.warn("Failed to write to broker PTY", { ptyId: id })
+        log.warn("Failed to write to broker PTY", {
+          ptyId: id,
+          sessionId: session.info.sessionId,
+          method: "ptywrite",
+        })
       }
     },
     onClose: () => {
       session.subscribers.delete(ws)
+      log.info("Broker PTY client disconnected", { ptyId: id, sessionId: session.info.sessionId })
     },
   }
 }

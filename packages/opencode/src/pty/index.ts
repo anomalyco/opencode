@@ -107,16 +107,16 @@ export namespace Pty {
    * @param input - PTY configuration options
    * @param maybeSessionId - Optional session ID for broker-based creation
    */
-  export async function create(input: CreateInput, maybeSessionId?: string): Promise<Info> {
+  export async function create(input: CreateInput, maybeSessionId?: string, requestId?: string): Promise<Info> {
     const authConfig = ServerAuth.get()
 
     // If auth is enabled and session ID provided, use broker
     if (authConfig.enabled && maybeSessionId) {
-      return createViaBroker(input, maybeSessionId)
+      return createViaBroker(input, maybeSessionId, requestId)
     }
 
     // Otherwise use existing bun-pty (runs as server user)
-    return createLocal(input)
+    return createLocal(input, requestId)
   }
 
   /**
@@ -128,19 +128,26 @@ export namespace Pty {
    * Note: Currently throws "not yet implemented" - PTY I/O streaming
    * will be implemented in Plan 05-08.
    */
-  async function createViaBroker(input: CreateInput, sessionId: string): Promise<Info> {
+  async function createViaBroker(input: CreateInput, sessionId: string, requestId?: string): Promise<Info> {
     const brokerClient = new BrokerClient()
+    log.info("creating broker PTY session", { sessionId, requestId, method: "spawnpty" })
 
-    const result = await brokerClient.spawnPty(sessionId, {
-      term: input.env?.TERM ?? "xterm-256color",
-      cols: 80, // Could get from input if added
-      rows: 24,
-      env: input.env,
-    })
+    const result = await brokerClient.spawnPty(
+      sessionId,
+      {
+        term: input.env?.TERM ?? "xterm-256color",
+        cols: 80, // Could get from input if added
+        rows: 24,
+        env: input.env,
+      },
+      requestId,
+    )
 
     if (!result.success) {
+      log.warn("broker PTY spawn failed", { sessionId, requestId, method: "spawnpty", error: result.error })
       throw new Error(result.error ?? "Failed to spawn PTY via broker")
     }
+    log.info("broker PTY spawned", { sessionId, requestId, method: "spawnpty", ptyId: result.ptyId, pid: result.pid })
 
     // For broker-spawned PTYs, we need a different approach
     // The broker holds the master_fd, we need to connect to it for I/O
@@ -165,7 +172,7 @@ export namespace Pty {
    *
    * Runs as the server user (no user impersonation).
    */
-  async function createLocal(input: CreateInput): Promise<Info> {
+  async function createLocal(input: CreateInput, requestId?: string): Promise<Info> {
     const id = Identifier.create("pty", false)
     const command = input.command || Shell.preferred()
     const args = input.args || []
@@ -175,7 +182,7 @@ export namespace Pty {
 
     const cwd = input.cwd || Instance.directory
     const env = { ...process.env, ...input.env, TERM: "xterm-256color" } as Record<string, string>
-    log.info("creating session", { id, cmd: command, args, cwd })
+    log.info("creating session", { id, cmd: command, args, cwd, requestId })
 
     const spawn = await pty()
     const ptyProcess = spawn(command, args, {
@@ -266,13 +273,13 @@ export namespace Pty {
     }
   }
 
-  export function connect(id: string, ws: WSContext) {
+  export function connect(id: string, ws: WSContext, options: { requestId?: string } = {}) {
     const session = state().get(id)
     if (!session) {
       ws.close()
       return
     }
-    log.info("client connected to session", { id })
+    log.info("client connected to session", { id, requestId: options.requestId })
     session.subscribers.add(ws)
     if (session.buffer) {
       const buffer = session.buffer.length <= BUFFER_LIMIT ? session.buffer : session.buffer.slice(-BUFFER_LIMIT)
@@ -293,7 +300,7 @@ export namespace Pty {
         session.process.write(String(message))
       },
       onClose: () => {
-        log.info("client disconnected from session", { id })
+        log.info("client disconnected from session", { id, requestId: options.requestId })
         session.subscribers.delete(ws)
       },
     }
