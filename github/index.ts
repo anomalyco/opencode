@@ -322,6 +322,10 @@ function useEnvAgent() {
   return process.env["AGENT"] || undefined
 }
 
+function useEnvPrompt() {
+  return process.env["PROMPT"] || undefined
+}
+
 function useEnvShare() {
   const value = process.env["SHARE"]
   if (!value) return undefined
@@ -414,14 +418,16 @@ async function getUserPrompt() {
   const context = useContext()
   const payload = context.payload as IssueCommentEvent | PullRequestReviewCommentEvent
   const reviewContext = getReviewCommentContext()
+  const envPrompt = useEnvPrompt()
 
   let prompt = (() => {
     const body = payload.comment.body.trim()
     if (body === "/opencode" || body === "/oc") {
       if (reviewContext) {
-        return `Review this code change and suggest improvements for the commented lines:\n\nFile: ${reviewContext.file}\nLines: ${reviewContext.line}\n\n${reviewContext.diffHunk}`
+        const defaultPrompt = envPrompt || "Review this code change and suggest improvements for the commented lines:"
+        return `${defaultPrompt}\n\nFile: ${reviewContext.file}\nLines: ${reviewContext.line}\n\n${reviewContext.diffHunk}`
       }
-      return "Summarize this thread"
+      return envPrompt || "Summarize this thread"
     }
     if (body.includes("/opencode") || body.includes("/oc")) {
       if (reviewContext) {
