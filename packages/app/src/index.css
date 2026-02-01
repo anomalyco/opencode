@@ -9,3 +9,7 @@
 *[data-tauri-drag-region] {
   app-region: drag;
 }
+
+.security-badge-icon [data-slot="icon-svg"] {
+  color: currentColor;
+}
