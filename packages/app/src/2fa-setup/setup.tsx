@@ -252,8 +252,9 @@ export function TwoFactorSetupApp() {
           display: flex;
           flex-direction: column;
           align-items: center;
-          justify-content: center;
+          justify-content: flex-start;
           padding: 2rem;
+          overflow-y: auto;
         }
         .card {
           width: 100%;
@@ -262,6 +263,7 @@ export function TwoFactorSetupApp() {
           background: #141414;
           border: 1px solid #262626;
           border-radius: 12px;
+          margin-bottom: 2rem;
         }
         h1 {
           font-size: 1.25rem;
