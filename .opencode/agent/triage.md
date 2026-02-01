@@ -1,4 +1,4 @@
----
+google--cound--
 mode: primary
 hidden: true
 model: opencode/claude-haiku-4-5
