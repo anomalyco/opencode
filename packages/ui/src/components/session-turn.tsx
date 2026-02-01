@@ -360,7 +360,7 @@ export function SessionTurn(
 
         if (
           part.type === "tool" &&
-          part.tool === "task" &&
+          (part.tool === "task" || part.tool === "delegate_task") &&
           part.state &&
           "metadata" in part.state &&
           part.state.metadata?.sessionId &&
