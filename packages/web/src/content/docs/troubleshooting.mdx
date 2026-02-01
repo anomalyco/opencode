@@ -30,10 +30,18 @@ opencode stores session data and other application data on disk at:
 This directory contains:
 
 - `auth.json` - Authentication data like API keys, OAuth tokens
+- `bin/` - Binary executables
 - `log/` - Application logs
-- `project/` - Project-specific data like session and message data
-  - If the project is within a Git repo, it is stored in `./<project-slug>/storage/`
-  - If it is not a Git repo, it is stored in `./global/storage/`
+- `snapshot/` - Project snapshots
+  - If the project is within a Git repo, it is stored in `./<git-commit-hash>/` (identified by git commit hash, not slug)
+  - If it is not a Git repo, it is stored in `./global/`
+- `storage/` - Session and message data
+  - `message/` - Message history
+  - `part/` - Part data
+  - `project/` - Project-specific data
+  - `session/` - Session data
+  - `session_diff/` - Session differences
+- `tool-output/` - Tool execution outputs
 
 ---
 
