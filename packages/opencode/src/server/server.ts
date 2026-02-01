@@ -60,14 +60,8 @@ export namespace Server {
       // TODO: Break server.ts into smaller route files to fix type inference
       app
         .onError((err, c) => {
-          const isError = err instanceof Error
-          const named = err instanceof NamedError
-
           log.error("failed", {
-            name: isError ? err.name : undefined,
-            message: isError ? err.message : undefined,
-            stack: isError ? err.stack : undefined,
-            data: named ? err.toObject() : undefined,
+            error: err,
           })
           if (err instanceof NamedError) {
             let status: ContentfulStatusCode

@@ -1,5 +1,4 @@
 import { base64Decode } from "@opencode-ai/util/encode"
-import { spawn } from "node:child_process"
 import fs from "node:fs/promises"
 import path from "node:path"
 import type { Page } from "@playwright/test"
@@ -192,30 +191,12 @@ test("can rename a workspace", async ({ page, directory, gotoSession }) => {
   }
 })
 
-test("can reset a workspace", async ({ page, directory, sdk, gotoSession }, testInfo) => {
+test("can reset a workspace", async ({ page, directory, sdk, gotoSession }) => {
   await page.setViewportSize({ width: 1400, height: 800 })
 
   const { project, slug, directory: createdDir } = await setupWorkspaceTest(page, directory, gotoSession)
 
   try {
-    const git = async (args: string[]) => {
-      return await new Promise<{ code: number | null; out: string }>((resolve) => {
-        const proc = spawn("git", args, { cwd: createdDir })
-        const chunks: Uint8Array[] = []
-        const errors: Uint8Array[] = []
-
-        proc.stdout.on("data", (c) => chunks.push(c))
-        proc.stderr.on("data", (c) => errors.push(c))
-
-        proc.on("close", (code) => {
-          const out = Buffer.concat([...chunks, ...errors]).toString("utf8")
-          resolve({ code, out })
-        })
-
-        proc.on("error", () => resolve({ code: 1, out: "failed to spawn git" }))
-      })
-    }
-
     const readme = path.join(createdDir, "README.md")
     const extra = path.join(createdDir, `e2e_reset_${Date.now()}.txt`)
     const original = await fs.readFile(readme, "utf8")
@@ -246,61 +227,18 @@ test("can reset a workspace", async ({ page, directory, sdk, gotoSession }, test
     await clickMenuItem(menu, /^Reset$/i, { force: true })
     await confirmDialog(page, /^Reset workspace$/i)
 
-    try {
-      await expect
-        .poll(
-          async () => {
-            const files = await sdk.file
-              .status({ directory: createdDir })
-              .then((r) => r.data ?? [])
-              .catch(() => [])
-            return files.length
-          },
-          { timeout: 60_000 },
-        )
-        .toBe(0)
-    } catch (error) {
-      const files = await sdk.file
-        .status({ directory: createdDir })
-        .then((r) => r.data ?? [])
-        .catch(() => [])
-
-      const status = await git(["status", "--porcelain=v1"])
-      const ls = await git(["ls-files", "--others", "--exclude-standard"])
-
-      console.error(
-        JSON.stringify(
-          {
-            test: "workspaces.reset",
-            directory: createdDir,
-            fileStatus: files,
-            git: {
-              status: { exit: status.code, output: status.out },
-              untracked: { exit: ls.code, output: ls.out },
-            },
-          },
-          null,
-          2,
-        ),
+    await expect
+      .poll(
+        async () => {
+          const files = await sdk.file
+            .status({ directory: createdDir })
+            .then((r) => r.data ?? [])
+            .catch(() => [])
+          return files.length
+        },
+        { timeout: 60_000 },
       )
-
-      await testInfo.attach("workspace-file-status.json", {
-        body: Buffer.from(JSON.stringify({ directory: createdDir, files }, null, 2)),
-        contentType: "application/json",
-      })
-
-      await testInfo.attach("workspace-git-status.txt", {
-        body: Buffer.from(`exit=${status.code}\n${status.out}`),
-        contentType: "text/plain",
-      })
-
-      await testInfo.attach("workspace-git-untracked.txt", {
-        body: Buffer.from(`exit=${ls.code}\n${ls.out}`),
-        contentType: "text/plain",
-      })
-
-      throw error
-    }
+      .toBe(0)
 
     await expect.poll(() => fs.readFile(readme, "utf8"), { timeout: 60_000 }).toBe(original)
 
