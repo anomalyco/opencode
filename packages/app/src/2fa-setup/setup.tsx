@@ -359,13 +359,14 @@ export function TwoFactorSetupApp() {
           display: flex;
           justify-content: center;
           padding: 1rem;
-          background: #fff;
+          background: #0a0a0a;
           border-radius: 8px;
           margin-bottom: 0.75rem;
         }
         .qr-container svg {
           width: 200px;
           height: 200px;
+          filter: invert(1) brightness(0.75) contrast(0.85);
         }
         .secret-display {
           font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
