@@ -1,0 +1,141 @@
+name: close-stale-prs
+
+on:
+  workflow_dispatch:
+    inputs:
+      dryRun:
+        description: "Log actions without closing PRs"
+        type: boolean
+        default: false
+  schedule:
+    - cron: "0 6 * * *"
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  close-stale-prs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close inactive PRs
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const DAYS_INACTIVE = 60
+            const cutoff = new Date(Date.now() - DAYS_INACTIVE * 24 * 60 * 60 * 1000)
+            const { owner, repo } = context.repo
+            const dryRun = context.payload.inputs?.dryRun === "true"
+
+            core.info(`Dry run mode: ${dryRun}`)
+            core.info(`Cutoff date: ${cutoff.toISOString()}`)
+
+            const query = `
+              query($owner: String!, $repo: String!, $cursor: String) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequests(first: 100, states: OPEN, after: $cursor) {
+                    pageInfo {
+                      hasNextPage
+                      endCursor
+                    }
+                    nodes {
+                      number
+                      title
+                      author {
+                        login
+                      }
+                      createdAt
+                      commits(last: 1) {
+                        nodes {
+                          commit {
+                            committedDate
+                          }
+                        }
+                      }
+                      comments(last: 1) {
+                        nodes {
+                          createdAt
+                        }
+                      }
+                      reviews(last: 1) {
+                        nodes {
+                          createdAt
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            `
+
+            const allPrs = []
+            let cursor = null
+            let hasNextPage = true
+
+            while (hasNextPage) {
+              const result = await github.graphql(query, {
+                owner,
+                repo,
+                cursor,
+              })
+
+              allPrs.push(...result.repository.pullRequests.nodes)
+              hasNextPage = result.repository.pullRequests.pageInfo.hasNextPage
+              cursor = result.repository.pullRequests.pageInfo.endCursor
+            }
+
+            core.info(`Found ${allPrs.length} open pull requests`)
+
+            const stalePrs = allPrs.filter((pr) => {
+              const dates = [
+                new Date(pr.createdAt),
+                pr.commits.nodes[0] ? new Date(pr.commits.nodes[0].commit.committedDate) : null,
+                pr.comments.nodes[0] ? new Date(pr.comments.nodes[0].createdAt) : null,
+                pr.reviews.nodes[0] ? new Date(pr.reviews.nodes[0].createdAt) : null,
+              ].filter((d) => d !== null)
+
+              const lastActivity = dates.sort((a, b) => b.getTime() - a.getTime())[0]
+
+              if (!lastActivity || lastActivity > cutoff) {
+                core.info(`PR #${pr.number} is fresh (last activity: ${lastActivity?.toISOString() || "unknown"})`)
+                return false
+              }
+
+              core.info(`PR #${pr.number} is STALE (last activity: ${lastActivity.toISOString()})`)
+              return true
+            })
+
+            if (!stalePrs.length) {
+              core.info("No stale pull requests found.")
+              return
+            }
+
+            core.info(`Found ${stalePrs.length} stale pull requests`)
+
+            for (const pr of stalePrs) {
+              const issue_number = pr.number
+              const closeComment = `Closing this pull request because it has had no updates for more than ${DAYS_INACTIVE} days. If you plan to continue working on it, feel free to reopen or open a new PR.`
+
+              if (dryRun) {
+                core.info(`[dry-run] Would close PR #${issue_number} from ${pr.author.login}: ${pr.title}`)
+                continue
+              }
+
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body: closeComment,
+              })
+
+              await github.rest.pulls.update({
+                owner,
+                repo,
+                pull_number: issue_number,
+                state: "closed",
+              })
+
+              core.info(`Closed PR #${issue_number} from ${pr.author.login}: ${pr.title}`)
+            }
