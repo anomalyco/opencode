@@ -222,7 +222,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   }
 
   return (
-    <Dialog title={props.title ?? "Open project"}>
+    <Dialog title={props.title ?? "Open project"} class="dialog-no-body-scroll">
       <Show
         when={isSingleSelect()}
         fallback={

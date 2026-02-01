@@ -114,6 +114,11 @@
           outline: none;
         }
       }
+      &.dialog-no-body-scroll {
+        [data-slot="dialog-body"] {
+          overflow: hidden;
+        }
+      }
       &:focus-visible {
         outline: none;
       }
