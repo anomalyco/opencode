@@ -709,14 +709,20 @@ function generate2FASetupPageHtml(params: {
 
         if (res.ok) {
           successDiv.classList.add('visible');
-          verifyBtn.textContent = 'Verified!';
+          verifyBtn.textContent = 'Verified';
           codeInput.disabled = true;
-          // Redirect to app if setup was required
-          const urlParams = new URLSearchParams(window.location.search);
-          if (urlParams.get('required') === '1') {
-            successDiv.textContent = '2FA enabled! Redirecting...';
-            setTimeout(() => { window.location.href = '/'; }, 1500);
-          }
+
+          let remaining = 3;
+          successDiv.textContent = 'Verified... redirecting in ' + remaining;
+          const redirectTimer = setInterval(() => {
+            remaining -= 1;
+            if (remaining <= 0) {
+              clearInterval(redirectTimer);
+              window.location.href = '/';
+              return;
+            }
+            successDiv.textContent = 'Verified... redirecting in ' + remaining;
+          }, 1000);
         } else {
           const data = await res.json();
           errorDiv.textContent = data.message || 'Invalid code - make sure you ran the setup command first';
