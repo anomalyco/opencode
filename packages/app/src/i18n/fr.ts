@@ -441,6 +441,7 @@ export const dict = {
   "session.review.noChanges": "Aucune modification",
   "session.files.selectToOpen": "Sélectionnez un fichier à ouvrir",
   "session.files.all": "Tous les fichiers",
+  "session.files.binaryContent": "Fichier binaire (le contenu ne peut pas être affiché)",
   "session.messages.renderEarlier": "Afficher les messages précédents",
   "session.messages.loadingEarlier": "Chargement des messages précédents...",
   "session.messages.loadEarlier": "Charger les messages précédents",
