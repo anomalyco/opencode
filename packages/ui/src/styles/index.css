@@ -48,6 +48,8 @@
 @import "../components/toast.css" layer(components);
 @import "../components/tooltip.css" layer(components);
 @import "../components/typewriter.css" layer(components);
+@import "../components/morph-chevron.css" layer(components);
+@import "../components/reasoning-icon.css" layer(components);
 
 @import "./utilities.css" layer(utilities);
 @import "./animations.css" layer(utilities);
