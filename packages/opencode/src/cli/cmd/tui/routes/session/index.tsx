@@ -1514,6 +1514,8 @@ function InlineTool(props: {
   const ctx = use()
   const sync = useSync()
 
+  const status = createMemo(() => props.part.state.status)
+
   const permission = createMemo(() => {
     const callID = sync.data.permission[ctx.sessionID]?.at(0)?.tool?.callID
     if (!callID) return false
@@ -1522,8 +1524,21 @@ function InlineTool(props: {
 
   const fg = createMemo(() => {
     if (permission()) return theme.warning
-    if (props.complete) return theme.textMuted
+    if (status() === "completed") return theme.textMuted
     return theme.text
+  })
+
+  const badge = createMemo(() => {
+    if (permission()) return { glyph: "!", color: theme.warning }
+
+    return (
+      {
+        pending: { glyph: "○", color: theme.textMuted },
+        running: { glyph: "●", color: theme.success },
+        completed: { glyph: "✓", color: theme.success },
+        error: { glyph: "✗", color: theme.error },
+      } satisfies Record<ToolPart["state"]["status"], { glyph: string; color: RGBA }>
+    )[status()]
   })
 
   const error = createMemo(() => (props.part.state.status === "error" ? props.part.state.error : undefined))
@@ -1563,6 +1578,7 @@ function InlineTool(props: {
       }}
     >
       <text paddingLeft={3} fg={fg()} attributes={denied() ? TextAttributes.STRIKETHROUGH : undefined}>
+        <span style={{ fg: badge().color }}>{badge().glyph}</span>{" "}
         <Show fallback={<>~ {props.pending}</>} when={props.complete}>
           <span style={{ fg: props.iconColor }}>{props.icon}</span> {props.children}
         </Show>
@@ -1585,6 +1601,20 @@ function BlockTool(props: {
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
   const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error : undefined))
+
+  const badge = createMemo(() => {
+    const status = props.part?.state.status
+    if (!status) return
+
+    return (
+      {
+        pending: { glyph: "○", color: theme.textMuted },
+        running: { glyph: "●", color: theme.success },
+        completed: { glyph: "✓", color: theme.success },
+        error: { glyph: "✗", color: theme.error },
+      } satisfies Record<ToolPart["state"]["status"], { glyph: string; color: RGBA }>
+    )[status]
+  })
   return (
     <box
       border={["left"]}
@@ -1607,6 +1637,13 @@ function BlockTool(props: {
         when={props.spinner}
         fallback={
           <text paddingLeft={3} fg={theme.textMuted}>
+            <Show when={badge()}>
+              {(b) => (
+                <>
+                  <span style={{ fg: b().color }}>{b().glyph}</span>{" "}
+                </>
+              )}
+            </Show>
             {props.title}
           </text>
         }
