@@ -11,7 +11,7 @@ See: .planning/PROJECT.md (updated 2026-01-19)
 
 **Milestone 1:** Complete (Phases 1-11)
 **Phase:** 21 of 21 (SSH key management) - Complete
-**Next Phase:** 20 - Refactor 2FA verification page
+**Next Phase:** 22 - Refactor the /auth/2fa/setup page from auth.ts into the SolidJS app at packages/app
 **Plan:** 02 of 02 - Complete
 **Status:** Phase complete
 **Last activity:** 2026-02-01 - Completed 21-02 plan
@@ -166,7 +166,7 @@ Recent decisions affecting current work:
 | 11-04 | Architecture diagram in index                                  | Visual overview helps users understand component relationships before diving in               |
 | 11-04 | Main README links to ./docs/                                   | GitHub landing page must lead to deployment docs without searching                            |
 | 21-01 | Managed SSH config block + ~/.ssh/opencode key directory       | Keeps OpenCode SSH keys isolated and permissions strict                                       |
-| 21-02 | Fetch SSH key inventory only for SSH clone URLs                | Avoids extra API calls for HTTPS clone flows                                                   |
+| 21-02 | Fetch SSH key inventory only for SSH clone URLs                | Avoids extra API calls for HTTPS clone flows                                                  |
 
 ### Roadmap Evolution
 
@@ -180,6 +180,7 @@ Recent decisions affecting current work:
 - Phase 19 added: Refactor auth login page (replace string-based login HTML with a SolidJS-based page)
 - Phase 20 added: Refactor 2FA verification page (move generate2FAPageHtml content into packages/app)
 - Phase 21 added: Allow the user to add and manage SSH keys in the opencode webapp; prompt for SSH key on clone; add settings CRUD; install keys in ~/.ssh; update ssh config; add server routes as needed
+- Phase 22 added: Refactor the /auth/2fa/setup page from auth.ts into the SolidJS app at packages/app
 
 ### Pending Todos
 

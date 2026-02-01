@@ -34,6 +34,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 19: Refactor auth login page** - Replace string-based login HTML with a proper SolidJS-based login page in `packages/opencode/src/server/routes/auth.ts`
 - [ ] **Phase 20: Refactor 2FA verification page** - Refactor generate2FAPageHtml so the content is moved and integrated with the project at `packages/app` instead of the large string in code
 - [ ] **Phase 21: Allow the user to add and manage SSH keys in the opencode webapp** - Allow the user to add and manage SSH keys in the opencode webapp; when attempting to clone via git SSH, prompt for a key if none are registered; add CRUD in settings; install keys in ~/.ssh; update ssh config; add server routes as needed
+- [ ] **Phase 22: Refactor the /auth/2fa/setup page from auth.ts into the SolidJS app at packages/app** - Refactor the /auth/2fa/setup page from auth.ts into the SolidJS app at packages/app
 
 ## Phase Details
 
@@ -411,6 +412,19 @@ Plans:
 
 **Details:**
 Allow the user to add and manage SSH keys in the opencode webapp; when attempting to clone via git SSH, prompt for a key if none are registered; add CRUD in settings; install keys in ~/.ssh; update ssh config; add server routes as needed.
+
+### Phase 22: Refactor the /auth/2fa/setup page from auth.ts into the SolidJS app at packages/app
+
+**Goal:** [To be planned]
+**Depends on:** Phase 21
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd:plan-phase 22 to break down)
+
+**Details:**
+[To be added during planning]
 
 ## Progress
 
