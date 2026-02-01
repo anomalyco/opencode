@@ -433,6 +433,7 @@ export const dict = {
   "session.review.noChanges": "変更なし",
   "session.files.selectToOpen": "開くファイルを選択",
   "session.files.all": "すべてのファイル",
+  "session.files.binaryContent": "バイナリファイル（内容を表示できません）",
   "session.messages.renderEarlier": "以前のメッセージを表示",
   "session.messages.loadingEarlier": "以前のメッセージを読み込み中...",
   "session.messages.loadEarlier": "以前のメッセージを読み込む",

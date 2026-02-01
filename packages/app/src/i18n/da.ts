@@ -434,6 +434,7 @@ export const dict = {
   "session.review.noChanges": "Ingen ændringer",
   "session.files.selectToOpen": "Vælg en fil at åbne",
   "session.files.all": "Alle filer",
+  "session.files.binaryContent": "Binær fil (indhold kan ikke vises)",
   "session.messages.renderEarlier": "Vis tidligere beskeder",
   "session.messages.loadingEarlier": "Indlæser tidligere beskeder...",
   "session.messages.loadEarlier": "Indlæs tidligere beskeder",
