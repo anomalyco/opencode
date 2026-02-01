@@ -4399,6 +4399,16 @@
               }
             }
           },
+          "400": {
+            "description": "Invalid repository path",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RepoErrorResponse"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Not found",
             "content": {
@@ -4504,6 +4514,186 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.repo.checkout({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/ssh-keys": {
+      "get": {
+        "operationId": "sshKeys.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List SSH keys",
+        "description": "List SSH keys for the authenticated user.",
+        "responses": {
+          "200": {
+            "description": "List of SSH keys",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SshKey"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SshKeyErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.sshKeys.list({\n  ...\n})"
+          }
+        ]
+      },
+      "post": {
+        "operationId": "sshKeys.create",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Create SSH key",
+        "description": "Add and install an SSH key for the authenticated user.",
+        "responses": {
+          "200": {
+            "description": "SSH key created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SshKey"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Failed to create SSH key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SshKeyErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SshKeyErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SshKeyInput"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.sshKeys.create({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/ssh-keys/{keyID}": {
+      "delete": {
+        "operationId": "sshKeys.delete",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "keyID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Delete SSH key",
+        "description": "Remove an SSH key and uninstall it from disk.",
+        "responses": {
+          "200": {
+            "description": "SSH key deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Failed to delete SSH key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SshKeyErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SshKeyErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SSH key not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SshKeyErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.sshKeys.delete({\n  ...\n})"
           }
         ]
       }
@@ -11315,6 +11505,114 @@
           }
         },
         "required": ["dirty"]
+      },
+      "SshKeyInstallInfo": {
+        "type": "object",
+        "properties": {
+          "privateKeyPath": {
+            "type": "string"
+          },
+          "publicKeyPath": {
+            "type": "string"
+          },
+          "configPath": {
+            "type": "string"
+          }
+        },
+        "required": ["privateKeyPath", "publicKeyPath", "configPath"]
+      },
+      "SshKey": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "publicKey": {
+            "type": "string",
+            "minLength": 1
+          },
+          "hosts": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "fingerprint": {
+            "type": "string"
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              },
+              "updated": {
+                "type": "number"
+              }
+            },
+            "required": ["created", "updated"]
+          },
+          "installed": {
+            "$ref": "#/components/schemas/SshKeyInstallInfo"
+          }
+        },
+        "required": ["name", "publicKey", "hosts", "id", "fingerprint", "time"]
+      },
+      "SshKeyError": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "help_steps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["message"]
+      },
+      "SshKeyErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/SshKeyError"
+          }
+        },
+        "required": ["error"]
+      },
+      "SshKeyInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "publicKey": {
+            "type": "string",
+            "minLength": 1
+          },
+          "privateKey": {
+            "type": "string",
+            "minLength": 1
+          },
+          "hosts": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "required": ["name", "publicKey", "privateKey", "hosts"]
       },
       "Symbol": {
         "type": "object",

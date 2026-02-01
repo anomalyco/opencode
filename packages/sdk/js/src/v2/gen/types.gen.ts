@@ -2148,6 +2148,41 @@ export type RepoCheckoutResult = {
   dirty: false
 }
 
+export type SshKeyInstallInfo = {
+  privateKeyPath: string
+  publicKeyPath: string
+  configPath: string
+}
+
+export type SshKey = {
+  name: string
+  publicKey: string
+  hosts: Array<string>
+  id: string
+  fingerprint: string
+  time: {
+    created: number
+    updated: number
+  }
+  installed?: SshKeyInstallInfo
+}
+
+export type SshKeyError = {
+  message: string
+  help_steps?: Array<string>
+}
+
+export type SshKeyErrorResponse = {
+  error: SshKeyError
+}
+
+export type SshKeyInput = {
+  name: string
+  publicKey: string
+  privateKey: string
+  hosts: Array<string>
+}
+
 export type Symbol = {
   name: string
   kind: number
@@ -4423,6 +4458,10 @@ export type RepoBranchesData = {
 
 export type RepoBranchesErrors = {
   /**
+   * Invalid repository path
+   */
+  400: RepoErrorResponse
+  /**
    * Not found
    */
   404: NotFoundError
@@ -4478,6 +4517,101 @@ export type RepoCheckoutResponses = {
 }
 
 export type RepoCheckoutResponse = RepoCheckoutResponses[keyof RepoCheckoutResponses]
+
+export type SshKeysListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/ssh-keys"
+}
+
+export type SshKeysListErrors = {
+  /**
+   * Authentication required
+   */
+  401: SshKeyErrorResponse
+}
+
+export type SshKeysListError = SshKeysListErrors[keyof SshKeysListErrors]
+
+export type SshKeysListResponses = {
+  /**
+   * List of SSH keys
+   */
+  200: Array<SshKey>
+}
+
+export type SshKeysListResponse = SshKeysListResponses[keyof SshKeysListResponses]
+
+export type SshKeysCreateData = {
+  body?: SshKeyInput
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/ssh-keys"
+}
+
+export type SshKeysCreateErrors = {
+  /**
+   * Failed to create SSH key
+   */
+  400: SshKeyErrorResponse
+  /**
+   * Authentication required
+   */
+  401: SshKeyErrorResponse
+}
+
+export type SshKeysCreateError = SshKeysCreateErrors[keyof SshKeysCreateErrors]
+
+export type SshKeysCreateResponses = {
+  /**
+   * SSH key created
+   */
+  200: SshKey
+}
+
+export type SshKeysCreateResponse = SshKeysCreateResponses[keyof SshKeysCreateResponses]
+
+export type SshKeysDeleteData = {
+  body?: never
+  path: {
+    keyID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/ssh-keys/{keyID}"
+}
+
+export type SshKeysDeleteErrors = {
+  /**
+   * Failed to delete SSH key
+   */
+  400: SshKeyErrorResponse
+  /**
+   * Authentication required
+   */
+  401: SshKeyErrorResponse
+  /**
+   * SSH key not found
+   */
+  404: SshKeyErrorResponse
+}
+
+export type SshKeysDeleteError = SshKeysDeleteErrors[keyof SshKeysDeleteErrors]
+
+export type SshKeysDeleteResponses = {
+  /**
+   * SSH key deleted
+   */
+  200: boolean
+}
+
+export type SshKeysDeleteResponse = SshKeysDeleteResponses[keyof SshKeysDeleteResponses]
 
 export type FindTextData = {
   body?: never

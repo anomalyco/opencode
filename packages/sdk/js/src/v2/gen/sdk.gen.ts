@@ -155,6 +155,13 @@ import type {
   SessionUnshareResponses,
   SessionUpdateErrors,
   SessionUpdateResponses,
+  SshKeyInput,
+  SshKeysCreateErrors,
+  SshKeysCreateResponses,
+  SshKeysDeleteErrors,
+  SshKeysDeleteResponses,
+  SshKeysListErrors,
+  SshKeysListResponses,
   SubtaskPartInput,
   TextPartInput,
   ToolIdsErrors,
@@ -2367,6 +2374,92 @@ export class Repo extends HeyApiClient {
   }
 }
 
+export class SshKeys extends HeyApiClient {
+  /**
+   * List SSH keys
+   *
+   * List SSH keys for the authenticated user.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<SshKeysListResponses, SshKeysListErrors, ThrowOnError>({
+      url: "/ssh-keys",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Create SSH key
+   *
+   * Add and install an SSH key for the authenticated user.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sshKeyInput?: SshKeyInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { key: "sshKeyInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SshKeysCreateResponses, SshKeysCreateErrors, ThrowOnError>({
+      url: "/ssh-keys",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Delete SSH key
+   *
+   * Remove an SSH key and uninstall it from disk.
+   */
+  public delete<ThrowOnError extends boolean = false>(
+    parameters: {
+      keyID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "keyID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<SshKeysDeleteResponses, SshKeysDeleteErrors, ThrowOnError>({
+      url: "/ssh-keys/{keyID}",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Find extends HeyApiClient {
   /**
    * Find text
@@ -3440,6 +3533,11 @@ export class OpencodeClient extends HeyApiClient {
   private _repo?: Repo
   get repo(): Repo {
     return (this._repo ??= new Repo({ client: this.client }))
+  }
+
+  private _sshKeys?: SshKeys
+  get sshKeys(): SshKeys {
+    return (this._sshKeys ??= new SshKeys({ client: this.client }))
   }
 
   private _find?: Find
