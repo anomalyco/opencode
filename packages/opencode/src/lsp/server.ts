@@ -899,9 +899,10 @@ export namespace LSPServer {
     async spawn(root) {
       const args = ["--background-index", "--clang-tidy"]
 
-      // Search for compile_commands.json in Instance.directory first
+      // Prefer compile_commands.json in the current working directory (Instance.directory).
+      // In monorepos, Instance.directory may be a subdirectory of the git worktree root (Instance.worktree),
+      // so if nothing is found there, fall back to searching the worktree root.
       let compileCommandsDir = await findCompileCommandsDir(Instance.directory)
-      // If not found and worktree is different, search in worktree
       if (!compileCommandsDir && Instance.worktree !== "/" && Instance.worktree !== Instance.directory) {
         compileCommandsDir = await findCompileCommandsDir(Instance.worktree)
       }
