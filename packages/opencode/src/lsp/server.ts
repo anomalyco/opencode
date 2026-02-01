@@ -10,6 +10,7 @@ import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
 import { Archive } from "../util/archive"
+import { findCompileCommandsDir } from "./clangd"
 
 export namespace LSPServer {
   const log = Log.create({ service: "lsp.server" })
@@ -892,10 +893,18 @@ export namespace LSPServer {
 
   export const Clangd: Info = {
     id: "clangd",
-    root: NearestRoot(["compile_commands.json", "compile_flags.txt", ".clangd", "CMakeLists.txt", "Makefile"]),
+    // clangd automatically searches for .clangd, compile_flags.txt in all parent directories
+    root: async (_file) => Instance.directory,
     extensions: [".c", ".cpp", ".cc", ".cxx", ".c++", ".h", ".hpp", ".hh", ".hxx", ".h++"],
     async spawn(root) {
       const args = ["--background-index", "--clang-tidy"]
+
+      // Search for compile_commands.json at project root, build subdirectories, or parent directories
+      const compileCommandsDir = await findCompileCommandsDir(Instance.directory)
+      if (compileCommandsDir) {
+        args.push(`--compile-commands-dir=${compileCommandsDir}`)
+      }
+
       const fromPath = Bun.which("clangd")
       if (fromPath) {
         return {
