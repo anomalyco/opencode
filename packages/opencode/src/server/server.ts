@@ -32,6 +32,7 @@ import { ConfigRoutes } from "./routes/config"
 import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
 import { RepoRoutes } from "./routes/repo"
+import { SshKeyRoutes } from "./routes/ssh-keys"
 import { lazy } from "../util/lazy"
 import { InstanceBootstrap } from "../project/bootstrap"
 import { Storage } from "../storage/storage"
@@ -216,6 +217,7 @@ export namespace Server {
         .route("/question", QuestionRoutes())
         .route("/provider", ProviderRoutes())
         .route("/repo", RepoRoutes())
+        .route("/ssh-keys", SshKeyRoutes())
         .use("/*", async (c, next) => {
           if (!_uiDir) return next()
           if (isDocumentRequest(c.req.raw.headers, c.req.path, c.req.method)) {
