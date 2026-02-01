@@ -21,8 +21,14 @@ export namespace Plugin {
   const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, CopilotAuthPlugin]
 
   const state = Instance.state(async () => {
+    const password = process.env.OPENCODE_SERVER_PASSWORD
     const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
+      headers: password
+        ? {
+            Authorization: `Basic ${btoa(`opencode:${password}`)}`,
+          }
+        : {},
       // @ts-ignore - fetch type incompatibility
       fetch: async (...args) => Server.App().fetch(...args),
     })
