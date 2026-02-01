@@ -219,6 +219,13 @@ export namespace Worktree {
     return [outputText(result.stderr), outputText(result.stdout)].filter(Boolean).join("\n")
   }
 
+  const NOISE_FILES = new Set([".DS_Store", "Thumbs.db", "desktop.ini"])
+
+  function noisePath(input: string) {
+    const name = input.split(/[\\/]/).pop() ?? ""
+    return NOISE_FILES.has(name)
+  }
+
   async function candidate(root: string, base?: string) {
     for (const attempt of Array.from({ length: 26 }, (_, i) => i)) {
       const name = base ? (attempt === 0 ? base : `${base}-${randomName()}`) : randomName()
@@ -537,8 +544,18 @@ export namespace Worktree {
     }
 
     const dirty = outputText(status.stdout)
-    if (dirty) {
-      throw new ResetFailedError({ message: `Worktree reset left local changes:\n${dirty}` })
+    const remaining = dirty
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .filter((line) => {
+        if (!line.startsWith("?? ")) return true
+        const filepath = line.slice(3).trim()
+        return !noisePath(filepath)
+      })
+
+    if (remaining.length > 0) {
+      throw new ResetFailedError({ message: `Worktree reset left local changes:\n${remaining.join("\n")}` })
     }
 
     const projectID = Instance.project.id

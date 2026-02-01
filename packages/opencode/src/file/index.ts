@@ -354,6 +354,9 @@ export namespace File {
     const project = Instance.project
     if (project.vcs !== "git") return []
 
+    const noise = new Set([".DS_Store", "Thumbs.db", "desktop.ini"])
+    const base = (input: string) => input.split(/[\\/]/).pop() ?? ""
+
     const diffOutput = await $`git -c core.quotepath=false diff --numstat HEAD`
       .cwd(Instance.directory)
       .quiet()
@@ -382,7 +385,10 @@ export namespace File {
       .text()
 
     if (untrackedOutput.trim()) {
-      const untrackedFiles = untrackedOutput.trim().split("\n")
+      const untrackedFiles = untrackedOutput
+        .trim()
+        .split("\n")
+        .filter((filepath) => !noise.has(base(filepath)))
       for (const filepath of untrackedFiles) {
         try {
           const content = await Bun.file(path.join(Instance.directory, filepath)).text()
