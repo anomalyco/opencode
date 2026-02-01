@@ -103,7 +103,7 @@ jobs:
             target: x86_64-pc-windows-msvc
           - host: blacksmith-4vcpu-ubuntu-2404
             target: x86_64-unknown-linux-gnu
-          - host: blacksmith-4vcpu-ubuntu-2404-arm
+          - host: blacksmith-8vcpu-ubuntu-2404-arm
             target: aarch64-unknown-linux-gnu
     runs-on: ${{ matrix.settings.host }}
     steps:
