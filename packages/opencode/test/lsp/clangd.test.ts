@@ -1,7 +1,9 @@
 import { describe, expect, test, beforeEach, afterEach } from "bun:test"
 import os from "node:os"
 import path from "node:path"
+import fs from "node:fs/promises"
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises"
+import { $ } from "bun"
 import { LSPServer } from "../../src/lsp/server"
 import { findCompileCommandsDir } from "../../src/lsp/clangd"
 import { Instance } from "../../src/project/instance"
@@ -20,14 +22,8 @@ describe("LSPServer.Clangd", () => {
   })
 
   describe("root detection", () => {
-    test("always returns Instance.directory (clangd finds .clangd automatically)", async () => {
-      // Create project structure:
-      // tmpDir/
-      //   .clangd
-      //   src/
-      //     main.cpp
-      // Note: clangd automatically searches for .clangd, compile_flags.txt
-      // in all parent directories of the active file
+    test("returns Instance.directory for non-git projects (worktree === /)", async () => {
+      // Non-git projects have worktree === "/", so root falls back to Instance.directory
       await writeFile(path.join(tmpDir, ".clangd"), "")
       await mkdir(path.join(tmpDir, "src"))
       const cppFile = path.join(tmpDir, "src", "main.cpp")
@@ -39,6 +35,83 @@ describe("LSPServer.Clangd", () => {
       })
 
       expect(root).toBe(tmpDir)
+    })
+
+    test("returns Instance.worktree for git projects (running from repo root)", async () => {
+      // Git repository with a commit, running from root
+      const git = Bun.which("git")
+      if (!git) return
+
+      await $`${git} init`.cwd(tmpDir).quiet()
+      await $`${git} commit --allow-empty -m "initial"`.cwd(tmpDir).quiet()
+
+      await writeFile(path.join(tmpDir, ".clangd"), "")
+      await mkdir(path.join(tmpDir, "src"))
+      const cppFile = path.join(tmpDir, "src", "main.cpp")
+      await writeFile(cppFile, "#include <iostream>")
+
+      const realpath = await fs.realpath(tmpDir)
+      const root = await Instance.provide({
+        directory: realpath,
+        fn: () => LSPServer.Clangd.root(cppFile),
+      })
+
+      expect(root).toBe(realpath)
+    })
+
+    test("returns Instance.worktree for monorepo (running from subdirectory)", async () => {
+      // Git repository with .clangd at root, but running from a subdirectory
+      const git = Bun.which("git")
+      if (!git) return
+
+      await $`${git} init`.cwd(tmpDir).quiet()
+      await $`${git} commit --allow-empty -m "initial"`.cwd(tmpDir).quiet()
+
+      await writeFile(path.join(tmpDir, ".clangd"), "")
+
+      const srcDir = path.join(tmpDir, "src")
+      await mkdir(srcDir)
+      const cppFile = path.join(srcDir, "main.cpp")
+      await writeFile(cppFile, "#include <iostream>")
+
+      const realpath = await fs.realpath(tmpDir)
+      const root = await Instance.provide({
+        directory: path.join(realpath, "src"),
+        fn: () => LSPServer.Clangd.root(cppFile),
+      })
+
+      expect(root).toBe(realpath)
+    })
+
+    test("finds compile_commands.json in worktree when running from subdirectory", async () => {
+      // Git repository with compile_commands.json at root, but running from a subdirectory
+      const git = Bun.which("git")
+      if (!git) return
+
+      await $`${git} init`.cwd(tmpDir).quiet()
+      await $`${git} commit --allow-empty -m "initial"`.cwd(tmpDir).quiet()
+
+      await writeFile(path.join(tmpDir, "compile_commands.json"), "[]")
+
+      const srcDir = path.join(tmpDir, "src")
+      await mkdir(srcDir)
+      const cppFile = path.join(srcDir, "main.cpp")
+      await writeFile(cppFile, "#include <iostream>")
+
+      const realpath = await fs.realpath(tmpDir)
+
+      let compileCommandsDir: string | undefined
+      await Instance.provide({
+        directory: path.join(realpath, "src"),
+        fn: async () => {
+          compileCommandsDir = await findCompileCommandsDir(Instance.directory)
+          if (!compileCommandsDir && Instance.worktree !== "/" && Instance.worktree !== Instance.directory) {
+            compileCommandsDir = await findCompileCommandsDir(Instance.worktree)
+          }
+        },
+      })
+
+      expect(compileCommandsDir).toBe(realpath)
     })
   })
 
