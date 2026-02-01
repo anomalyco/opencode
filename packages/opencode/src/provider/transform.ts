@@ -129,40 +129,39 @@ export namespace ProviderTransform {
       return result
     }
 
-    if (typeof model.capabilities.interleaved === "object" && model.capabilities.interleaved.field) {
-      const field = model.capabilities.interleaved.field
-      return msgs.map((msg) => {
-        if (msg.role === "assistant" && Array.isArray(msg.content)) {
-          const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
-          const reasoningText = reasoningParts.map((part: any) => part.text).join("")
+    const supportsInterleaved = typeof model.capabilities.interleaved === "object" && model.capabilities.interleaved.field
+    const field = supportsInterleaved ? model.capabilities.interleaved.field : undefined
 
-          // Filter out reasoning parts from content
-          const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
+    return msgs.map((msg) => {
+      if (msg.role === "assistant" && Array.isArray(msg.content)) {
+        const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
+        const reasoningText = reasoningParts.map((part: any) => part.text).join("")
+        // Filter out reasoning parts from content
+        const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
 
-          // Include reasoning_content | reasoning_details directly on the message for all assistant messages
-          if (reasoningText) {
-            return {
-              ...msg,
-              content: filteredContent,
-              providerOptions: {
-                ...msg.providerOptions,
-                openaiCompatible: {
-                  ...(msg.providerOptions as any)?.openaiCompatible,
-                  [field]: reasoningText,
-                },
-              },
-            }
-          }
-
+        // Include reasoning_content | reasoning_details directly on message for models that support interleaved reasoning
+        if (reasoningText && supportsInterleaved && field) {
           return {
             ...msg,
             content: filteredContent,
+            providerOptions: {
+              ...msg.providerOptions,
+              openaiCompatible: {
+                ...(msg.providerOptions as any)?.openaiCompatible,
+                [field]: reasoningText,
+              },
+            },
           }
         }
 
-        return msg
-      })
-    }
+        return {
+          ...msg,
+          content: filteredContent,
+        }
+      }
+
+      return msg
+    })
 
     return msgs
   }
