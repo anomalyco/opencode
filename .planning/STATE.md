@@ -10,13 +10,13 @@ See: .planning/PROJECT.md (updated 2026-01-19)
 ## Current Position
 
 **Milestone 1:** Complete (Phases 1-11)
-**Phase:** 16 of 17 (Repo downloads) - In progress
-**Next Phase:** 20 - Refactor 2FA verification page
-**Plan:** 08 of 08 - Complete (gap closures; plans 02-03 pending)
+**Phase:** 21 of 21 (SSH key management) - In progress
+**Next Phase:** 21 - Allow the user to add and manage SSH keys in the opencode webapp
+**Plan:** 01 of 02 - Complete
 **Status:** Phase in progress
-**Last activity:** 2026-01-31 - Completed 19-02 plan
+**Last activity:** 2026-02-01 - Completed 21-01 plan
 
-Progress: [█████████░] 96% (51/53 plans complete)
+Progress: [█████████░] 91% (54/59 plans complete)
 
 ## Performance Metrics
 
@@ -165,6 +165,7 @@ Recent decisions affecting current work:
 | 11-04 | Quick start in 5 steps                                         | New users need fastest path to working auth, reduces time-to-first-success                    |
 | 11-04 | Architecture diagram in index                                  | Visual overview helps users understand component relationships before diving in               |
 | 11-04 | Main README links to ./docs/                                   | GitHub landing page must lead to deployment docs without searching                            |
+| 21-01 | Managed SSH config block + ~/.ssh/opencode key directory       | Keeps OpenCode SSH keys isolated and permissions strict                                       |
 
 ### Roadmap Evolution
 
@@ -177,6 +178,7 @@ Recent decisions affecting current work:
 - Phase 18 added: Audit all server routes for if they need authentication checks
 - Phase 19 added: Refactor auth login page (replace string-based login HTML with a SolidJS-based page)
 - Phase 20 added: Refactor 2FA verification page (move generate2FAPageHtml content into packages/app)
+- Phase 21 added: Allow the user to add and manage SSH keys in the opencode webapp; prompt for SSH key on clone; add settings CRUD; install keys in ~/.ssh; update ssh config; add server routes as needed
 
 ### Pending Todos
 
@@ -199,10 +201,10 @@ From research summary (Phase 2, 3 flags):
 
 ## Session Continuity
 
-Last session: 2026-01-31 21:25:02Z
-Stopped at: Completed 19-02-PLAN.md
+Last session: 2026-02-01 01:07:10Z
+Stopped at: Completed 21-01-PLAN.md
 Resume file: None
-Next: Finish Phase 16 plans 02-03, then proceed to Phase 17
+Next: Complete 21-02-PLAN.md
 
 ## Phase 6 Progress
 
