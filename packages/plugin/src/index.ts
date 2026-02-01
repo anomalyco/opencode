@@ -1,4 +1,4 @@
-import type { createOpencodeClient as createOpencodeClientV1 } from "@opencode-ai/sdk"
+import type { createOpencodeClient as createOpencodeClientV2 } from "@opencode-ai/sdk/v2"
 import type {
   Event,
   createOpencodeClient,
@@ -11,7 +11,7 @@ import type {
   Part,
   Auth,
   Config,
-} from "@opencode-ai/sdk/v2"
+} from "@opencode-ai/sdk"
 
 import type { BunShell } from "./shell"
 import { type ToolDefinition } from "./tool"
@@ -25,8 +25,8 @@ export type ProviderContext = {
 }
 
 export type PluginInput = {
-  client: ReturnType<typeof createOpencodeClientV1>
-  clientNext: ReturnType<typeof createOpencodeClient>
+  client: ReturnType<typeof createOpencodeClient>
+  clientNext: ReturnType<typeof createOpencodeClientV2>
   project: Project
   directory: string
   worktree: string
