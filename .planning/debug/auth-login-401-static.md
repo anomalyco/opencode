@@ -49,7 +49,7 @@ started: unknown
 
 <!-- OVERWRITE as understanding evolves -->
 
-root_cause: authMiddleware runs before uiDir static serving and only allowlists /auth/_; unauthenticated asset requests (e.g., /assets/_, /oc-theme-preload.js, /src/login/index.tsx) are treated as API calls and return 401, so /auth/login renders a blank page.
+root*cause: authMiddleware runs before uiDir static serving and only allowlists /auth/*; unauthenticated asset requests (e.g., /assets/\_, /oc-theme-preload.js, /src/login/index.tsx) are treated as API calls and return 401, so /auth/login renders a blank page.
 fix: allow unauthenticated access to uiDir static assets by detecting file requests under uiDir in auth middleware.
 verification: confirmed `/auth/login` loads without 401s after restart (bun run dev:web)
 files_changed:

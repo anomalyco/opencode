@@ -55,6 +55,7 @@ completed: 2026-02-01
 - **Files modified:** 7
 
 ## Accomplishments
+
 - Regenerated OpenAPI + JS SDK with SSH key endpoints
 - Added settings dialog and SSH key CRUD UI
 - Added SSH clone prompt when no keys are registered
@@ -70,6 +71,7 @@ Each task was committed atomically:
 **Plan metadata:** (docs commit follows after summary + STATE updates)
 
 ## Files Created/Modified
+
 - `packages/sdk/openapi.json` - Added `/ssh-keys` OpenAPI definitions
 - `packages/sdk/js/src/v2/gen/sdk.gen.ts` - Generated SSH key client methods
 - `packages/sdk/js/src/v2/gen/types.gen.ts` - Generated SSH key types
@@ -79,6 +81,7 @@ Each task was committed atomically:
 - `packages/app/src/components/repo/clone-dialog.tsx` - Missing SSH key prompt
 
 ## Decisions Made
+
 - Only query SSH key inventory when the clone URL is SSH-based.
 
 ## Deviations from Plan
@@ -99,5 +102,6 @@ None - no external service configuration required.
 - No blockers identified.
 
 ---
-*Phase: 21-ssh-key-management*
-*Completed: 2026-02-01*
+
+_Phase: 21-ssh-key-management_
+_Completed: 2026-02-01_

@@ -12,8 +12,8 @@ use crate::session::user::UserSessionStore;
 use futures::{SinkExt, StreamExt};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::{fs, io};
 use std::time::Duration;
+use std::{fs, io};
 use thiserror::Error;
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::watch;
@@ -210,7 +210,10 @@ impl Server {
 
     fn log_addr_in_use_intro(&self, socket_path: &str) {
         warn!(path = %socket_path, "socket address/path ({socket_path}) already in use");
-        warn!("run to find the owning pid: sudo lsof -a -n -U -- {socket_path}", socket_path = socket_path);
+        warn!(
+            "run to find the owning pid: sudo lsof -a -n -U -- {socket_path}",
+            socket_path = socket_path
+        );
     }
 
     fn log_missing_socket_path(&self) {

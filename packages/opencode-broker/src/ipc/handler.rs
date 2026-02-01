@@ -331,11 +331,12 @@ async fn handle_check_otp_config(request: Request, config: &BrokerConfig) -> Res
         // Return failure with the detailed result in data
         let mut response = Response::failure(
             &request.id,
-            status.error_code.unwrap_or_else(|| "configuration_error".to_string()),
+            status
+                .error_code
+                .unwrap_or_else(|| "configuration_error".to_string()),
         );
-        response.data = Some(
-            serde_json::to_value(result).expect("OtpConfigResult serialization cannot fail"),
-        );
+        response.data =
+            Some(serde_json::to_value(result).expect("OtpConfigResult serialization cannot fail"));
         response
     }
 }

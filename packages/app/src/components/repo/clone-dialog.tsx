@@ -239,9 +239,7 @@ export function CloneDialog(props: CloneDialogProps) {
         <Show when={missingSshKeys()}>
           <div class="rounded-md border border-border-weak-base bg-surface-warning-base/30 p-3">
             <div class="text-12-medium text-text-strong">SSH key required</div>
-            <div class="mt-1 text-12-regular text-text-weak">
-              Add an SSH key to clone repositories over SSH.
-            </div>
+            <div class="mt-1 text-12-regular text-text-weak">Add an SSH key to clone repositories over SSH.</div>
             <div class="mt-3 flex justify-end">
               <Button size="normal" onClick={() => dialog.show(() => <SettingsDialog />)} disabled={isCloning()}>
                 Add SSH key
