@@ -49,6 +49,7 @@ export const Terminal = (props: TerminalProps) => {
   let handleTextareaBlur: () => void
   let reconnect: number | undefined
   let disposed = false
+  let currentPtyId = local.pty.id
 
   const getTerminalColors = (): TerminalColors => {
     const mode = theme.mode()
@@ -96,12 +97,14 @@ export const Terminal = (props: TerminalProps) => {
     focusTerminal()
   }
 
-  onMount(async () => {
-    const mod = await import("ghostty-web")
-    ghostty = await mod.Ghostty.load()
-
+  const connectSocket = (ptyId: string) => {
+    const t = term
+    if (!t) return
+    if (ws && ws.readyState !== WebSocket.CLOSED) {
+      ws.close()
+    }
     const connectRequestId = crypto.randomUUID()
-    const url = new URL(sdk.url + `/pty/${local.pty.id}/connect`)
+    const url = new URL(sdk.url + `/pty/${ptyId}/connect`)
     url.searchParams.set("directory", sdk.directory)
     url.searchParams.set("requestId", connectRequestId)
     if (window.__OPENCODE__?.serverPassword) {
@@ -110,6 +113,38 @@ export const Terminal = (props: TerminalProps) => {
     }
     const socket = new WebSocket(url)
     ws = socket
+
+    socket.addEventListener("open", () => {
+      console.log("WebSocket connected")
+      sdk.client.pty
+        .update({
+          ptyID: ptyId,
+          size: {
+            cols: t.cols,
+            rows: t.rows,
+          },
+        })
+        .catch(() => {})
+    })
+    socket.addEventListener("message", (event) => {
+      t.write(event.data)
+    })
+    socket.addEventListener("error", (error) => {
+      console.error("WebSocket error:", {
+        error,
+        code: "pty_connect_failed",
+        requestId: connectRequestId,
+      })
+      props.onConnectError?.({ error, code: "pty_connect_failed", requestId: connectRequestId })
+    })
+    socket.addEventListener("close", () => {
+      console.log("WebSocket disconnected", { requestId: connectRequestId })
+    })
+  }
+
+  onMount(async () => {
+    const mod = await import("ghostty-web")
+    ghostty = await mod.Ghostty.load()
 
     const t = new mod.Terminal({
       cursorBlink: true,
@@ -208,10 +243,10 @@ export const Terminal = (props: TerminalProps) => {
     handleResize = () => fitAddon.fit()
     window.addEventListener("resize", handleResize)
     t.onResize(async (size) => {
-      if (socket.readyState === WebSocket.OPEN) {
+      if (ws?.readyState === WebSocket.OPEN) {
         await sdk.client.pty
           .update({
-            ptyID: local.pty.id,
+            ptyID: currentPtyId,
             size: {
               cols: size.cols,
               rows: size.rows,
@@ -221,8 +256,8 @@ export const Terminal = (props: TerminalProps) => {
       }
     })
     t.onData((data) => {
-      if (socket.readyState === WebSocket.OPEN) {
-        socket.send(data)
+      if (ws?.readyState === WebSocket.OPEN) {
+        ws.send(data)
       }
     })
     t.onKey((key) => {
@@ -233,32 +268,14 @@ export const Terminal = (props: TerminalProps) => {
     // t.onScroll((ydisp) => {
     // console.log("Scroll position:", ydisp)
     // })
-    socket.addEventListener("open", () => {
-      console.log("WebSocket connected")
-      sdk.client.pty
-        .update({
-          ptyID: local.pty.id,
-          size: {
-            cols: t.cols,
-            rows: t.rows,
-          },
-        })
-        .catch(() => {})
-    })
-    socket.addEventListener("message", (event) => {
-      t.write(event.data)
-    })
-    socket.addEventListener("error", (error) => {
-      console.error("WebSocket error:", {
-        error,
-        code: "pty_connect_failed",
-        requestId: connectRequestId,
-      })
-      props.onConnectError?.({ error, code: "pty_connect_failed", requestId: connectRequestId })
-    })
-    socket.addEventListener("close", () => {
-      console.log("WebSocket disconnected", { requestId: connectRequestId })
-    })
+    connectSocket(local.pty.id)
+  })
+
+  createEffect(() => {
+    const nextId = local.pty.id
+    if (!term || nextId === currentPtyId) return
+    currentPtyId = nextId
+    connectSocket(nextId)
   })
 
   onCleanup(() => {

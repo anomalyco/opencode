@@ -14,6 +14,7 @@ export type LocalPTY = {
   buffer?: string
   scrollY?: number
   status?: "running" | "error"
+  retryCount?: number
   lastError?: {
     code?: string
     requestId?: string
@@ -101,6 +102,7 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
               title: pty.data?.title ?? "Terminal",
               titleNumber: nextNumber,
               status: "running",
+              retryCount: 0,
             },
           ])
           setStore("active", id)
@@ -149,9 +151,65 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
         ...clone.data,
         status: "running",
         lastError: undefined,
+        retryCount: 0,
       })
       if (store.active === pty.id) {
         setStore("active", clone.data.id)
+      }
+    },
+    async reconnect(id: string, details?: PtyErrorDetails) {
+      const index = store.all.findIndex((x) => x.id === id)
+      const pty = store.all[index]
+      if (!pty) return
+
+      const retryCount = pty.retryCount ?? 0
+      if (retryCount >= 1) {
+        setStore("all", index, {
+          ...pty,
+          status: "error",
+          lastError: details,
+          retryCount,
+        })
+        return
+      }
+
+      setStore("all", index, {
+        ...pty,
+        status: "error",
+        lastError: details,
+        retryCount: retryCount + 1,
+      })
+
+      const created = await sdk.client.pty
+        .create({
+          title: pty.title,
+        })
+        .catch((e) => {
+          const errorDetails = getPtyErrorDetails(e)
+          console.error("Failed to recover terminal", {
+            error: errorDetails.message ?? e,
+            code: errorDetails.code,
+            requestId: errorDetails.requestId,
+          })
+          setStore("all", index, {
+            ...pty,
+            status: "error",
+            lastError: errorDetails,
+            retryCount: retryCount + 1,
+          })
+          return undefined
+        })
+      if (!created?.data) return
+
+      setStore("all", index, {
+        ...pty,
+        ...created.data,
+        status: "running",
+        lastError: undefined,
+        retryCount: 0,
+      })
+      if (store.active === pty.id) {
+        setStore("active", created.data.id)
       }
     },
     open(id: string) {
@@ -241,6 +299,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       new: () => session().new(),
       update: (pty: Partial<LocalPTY> & { id: string }) => session().update(pty),
       clone: (id: string) => session().clone(id),
+      reconnect: (id: string, details?: PtyErrorDetails) => session().reconnect(id, details),
       open: (id: string) => session().open(id),
       close: (id: string) => session().close(id),
       move: (id: string, to: number) => session().move(id, to),

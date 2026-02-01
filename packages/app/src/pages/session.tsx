@@ -1773,15 +1773,7 @@ export default function Page() {
                             code: details.code ?? "pty_connect_failed",
                             requestId: details.requestId,
                           })
-                          terminal.update({
-                            id: pty.id,
-                            status: "error",
-                            lastError: {
-                              code: details.code ?? "pty_connect_failed",
-                              requestId: details.requestId,
-                              message: details.message,
-                            },
-                          })
+                          terminal.reconnect(pty.id, details)
                         }}
                       />
                     </Tabs.Content>

@@ -9,6 +9,7 @@ import { lazy } from "../../util/lazy"
 import { getAuthContext } from "../middleware/auth"
 import { ServerAuth } from "@/config/server-auth"
 import { Log } from "@/util/log"
+import { BrokerClient } from "@/auth/broker-client"
 
 const log = Log.create({ service: "pty-routes" })
 
@@ -89,6 +90,31 @@ export const PtyRoutes = lazy(() =>
           const auth = getAuthContext(c)
           if (!auth) {
             return c.json({ error: "Authentication required" }, 401)
+          }
+          const session = c.get("session")
+          if (!session) {
+            return c.json({ error: "Session not found", code: "session_missing" }, 401)
+          }
+          if (!session.uid || !session.gid || !session.home || !session.shell) {
+            return c.json({ error: "Session missing user info", code: "session_missing_user_info" }, 500)
+          }
+          const brokerClient = new BrokerClient()
+          const registered = await brokerClient.registerSession(session.id, {
+            username: session.username,
+            uid: session.uid,
+            gid: session.gid,
+            home: session.home,
+            shell: session.shell,
+          })
+          if (!registered) {
+            return c.json(
+              {
+                error: "Broker unavailable",
+                code: "broker_unavailable",
+                requestId,
+              },
+              503,
+            )
           }
           try {
             const info = await Pty.create(c.req.valid("json"), auth.sessionId, requestId)
