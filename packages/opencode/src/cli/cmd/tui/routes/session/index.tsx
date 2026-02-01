@@ -1829,8 +1829,8 @@ function Task(props: ToolProps<typeof TaskTool>) {
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool icon="#" pending="Working..." complete={props.input.description} part={props.part}>
-          {props.input.description}
+        <InlineTool icon="#" pending="Delegating..." complete={props.input.description} part={props.part}>
+          [{props.input.description}]
         </InlineTool>
       </Match>
     </Switch>
