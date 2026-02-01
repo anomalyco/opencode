@@ -92,10 +92,12 @@ export function SshKeysDialog() {
     setState("isSaving", true)
     try {
       await globalSDK.client.sshKeys.create({
-        name: form.name.trim(),
-        hosts,
-        publicKey: form.publicKey.trim(),
-        privateKey: form.privateKey.trim(),
+        sshKeyInput: {
+          name: form.name.trim(),
+          hosts,
+          publicKey: form.publicKey.trim(),
+          privateKey: form.privateKey.trim(),
+        },
       })
       resetForm()
       await refetch()
