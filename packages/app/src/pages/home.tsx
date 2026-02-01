@@ -10,7 +10,7 @@ import { DateTime } from "luxon"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogSelectServer } from "@/components/dialog-select-server"
-import { useServer } from "@/context/server"
+import { useServer, normalizePath } from "@/context/server"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 
@@ -23,6 +23,16 @@ export default function Home() {
   const server = useServer()
   const language = useLanguage()
   const homedir = createMemo(() => sync.data.path.home)
+  const displayPath = (path: string) => {
+    const home = homedir()
+    if (!home) return path
+    const normalizedPath = normalizePath(path)
+    const normalizedHome = normalizePath(home)
+    if (normalizedPath.startsWith(normalizedHome)) {
+      return "~" + normalizedPath.slice(normalizedHome.length)
+    }
+    return path
+  }
   const recent = createMemo(() => {
     return sync.data.project
       .toSorted((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
@@ -97,7 +107,7 @@ export default function Home() {
                     class="text-14-mono text-left justify-between px-3"
                     onClick={() => openProject(project.worktree)}
                   >
-                    {project.worktree.replace(homedir(), "~")}
+                    {displayPath(project.worktree)}
                     <div class="text-14-regular text-text-weak">
                       {DateTime.fromMillis(project.time.updated ?? project.time.created).toRelative()}
                     </div>

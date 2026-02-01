@@ -3,7 +3,7 @@ import { batch, createEffect, createMemo, on, onCleanup, onMount, type Accessor 
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSync } from "./global-sync"
 import { useGlobalSDK } from "./global-sdk"
-import { useServer } from "./server"
+import { useServer, normalizePath } from "./server"
 import { Project } from "@opencode-ai/sdk/v2"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
 import { same } from "@/utils/same"
@@ -415,7 +415,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         list,
         open(directory: string) {
           const root = rootFor(directory)
-          if (server.projects.list().find((x) => x.worktree === root)) return
+          const normalized = normalizePath(root)
+          if (server.projects.list().find((x) => normalizePath(x.worktree) === normalized)) return
           globalSync.project.loadSessions(root)
           server.projects.open(root)
         },

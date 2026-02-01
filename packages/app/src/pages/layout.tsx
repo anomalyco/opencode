@@ -71,7 +71,7 @@ import { navStart } from "@/utils/perf"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogEditProject } from "@/components/dialog-edit-project"
 import { Titlebar } from "@/components/titlebar"
-import { useServer } from "@/context/server"
+import { useServer, normalizePath } from "@/context/server"
 import { useLanguage, type Locale } from "@/context/language"
 
 export default function Layout(props: ParentProps) {
@@ -1111,13 +1111,14 @@ export default function Layout(props: ParentProps) {
 
   function navigateToProject(directory: string | undefined) {
     if (!directory) return
+    const normalized = normalizePath(directory)
     if (!layout.sidebar.opened()) {
       setState("hoverSession", undefined)
       setState("hoverProject", undefined)
     }
-    server.projects.touch(directory)
-    const lastSession = store.lastSession[directory]
-    navigate(`/${base64Encode(directory)}${lastSession ? `/session/${lastSession}` : ""}`)
+    server.projects.touch(normalized)
+    const lastSession = store.lastSession[normalized]
+    navigate(`/${base64Encode(normalized)}${lastSession ? `/session/${lastSession}` : ""}`)
     layout.mobileSidebar.hide()
   }
 
@@ -1132,8 +1133,9 @@ export default function Layout(props: ParentProps) {
   }
 
   function openProject(directory: string, navigate = true) {
-    layout.projects.open(directory)
-    if (navigate) navigateToProject(directory)
+    const normalized = normalizePath(directory)
+    layout.projects.open(normalized)
+    if (navigate) navigateToProject(normalized)
   }
 
   const deepLinkEvent = "opencode:deep-link"
@@ -2536,6 +2538,16 @@ export default function Layout(props: ParentProps) {
       return layout.sidebar.workspaces(project.worktree)()
     })
     const homedir = createMemo(() => globalSync.data.path.home)
+    const displayPath = (path: string) => {
+      const home = homedir()
+      if (!home) return path
+      const normalizedPath = normalizePath(path)
+      const normalizedHome = normalizePath(home)
+      if (normalizedPath.startsWith(normalizedHome)) {
+        return "~" + normalizedPath.slice(normalizedHome.length)
+      }
+      return path
+    }
 
     return (
       <div
@@ -2570,9 +2582,7 @@ export default function Layout(props: ParentProps) {
                         transform: "translate3d(52px, 0, 0)",
                       }}
                     >
-                      <span class="text-12-regular text-text-base truncate select-text">
-                        {p.worktree.replace(homedir(), "~")}
-                      </span>
+                      <span class="text-12-regular text-text-base truncate select-text">{displayPath(p.worktree)}</span>
                     </Tooltip>
                   </div>
 
