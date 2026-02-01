@@ -63,7 +63,11 @@
       "markdown-list-enumeration": "#427b58",
       "markdown-image": "#076678",
       "markdown-image-text": "#427b58",
-      "markdown-code-block": "#3c3836"
+      "markdown-code-block": "#3c3836",
+      "text-diff-delete-base": "#fe8019",
+      "text-diff-add-base": "#79740e",
+      "icon-diff-modified-base": "#fe8019",
+      "icon-warning-base": "#fe8019"
     }
   },
   "dark": {
@@ -127,7 +131,11 @@
       "markdown-list-enumeration": "#8ec07c",
       "markdown-image": "#83a598",
       "markdown-image-text": "#8ec07c",
-      "markdown-code-block": "#ebdbb2"
+      "markdown-code-block": "#ebdbb2",
+      "text-diff-delete-base": "#fabd2f",
+      "text-diff-add-base": "#b8bb26",
+      "icon-diff-modified-base": "#fabd2f",
+      "icon-warning-base": "#fabd2f"
     }
   }
 }
