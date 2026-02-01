@@ -1707,7 +1707,9 @@ function Glob(props: ToolProps<typeof GlobTool>) {
   return (
     <InlineTool icon="✱" pending="Finding files..." complete={props.input.pattern} part={props.part}>
       Glob "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
-      <Show when={props.metadata.count}>({props.metadata.count} matches)</Show>
+      <Show when={props.metadata.count}>
+        ({props.metadata.count} {props.metadata.count === 1 ? "match" : "matches"})
+      </Show>
     </InlineTool>
   )
 }
@@ -1743,7 +1745,9 @@ function Grep(props: ToolProps<typeof GrepTool>) {
   return (
     <InlineTool icon="✱" pending="Searching content..." complete={props.input.pattern} part={props.part}>
       Grep "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
-      <Show when={props.metadata.matches}>({props.metadata.matches} matches)</Show>
+      <Show when={props.metadata.matches}>
+        ({props.metadata.matches} {props.metadata.matches === 1 ? "match" : "matches"})
+      </Show>
     </InlineTool>
   )
 }
