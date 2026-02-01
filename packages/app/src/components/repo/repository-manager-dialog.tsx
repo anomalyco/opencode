@@ -116,9 +116,7 @@ export function RepositoryManagerDialog(props: RepositoryManagerDialogProps) {
             value={localPath()}
             onChange={setLocalPath}
           />
-          <div class="text-12-regular text-text-weak">
-            Path must exist on the host machine running opencode.
-          </div>
+          <div class="text-12-regular text-text-weak">Path must exist on the host machine running opencode.</div>
           <div class="flex justify-end">
             <Button size="normal" variant="ghost" onClick={handleSelectDirectory}>
               <Icon name="folder" size="small" />

@@ -90,9 +90,7 @@ export function NewSessionView(props: NewSessionViewProps) {
         </Button>
       </div>
       <Show when={showManageHint()}>
-        <div class="text-12-regular text-text-weak">
-          No repositories yet. Manage repos to add or clone one.
-        </div>
+        <div class="text-12-regular text-text-weak">No repositories yet. Manage repos to add or clone one.</div>
       </Show>
       <div class="flex justify-center items-center gap-1">
         <Icon name="branch" size="small" />

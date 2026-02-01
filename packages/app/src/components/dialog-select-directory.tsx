@@ -85,7 +85,8 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
 
   function normalizeFindFilesResponse(input: unknown): { results: string[]; error: string } {
     if (Array.isArray(input)) return { results: input, error: "" }
-    if (!input || typeof input !== "object") return { results: [], error: "Unable to load folders. Check the server connection." }
+    if (!input || typeof input !== "object")
+      return { results: [], error: "Unable to load folders. Check the server connection." }
 
     const maybeData = (input as { data?: unknown }).data
     if (Array.isArray(maybeData)) return { results: maybeData, error: "" }
@@ -97,9 +98,10 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     return { results: [], error: "Unable to load folders. Check the dev proxy configuration." }
   }
 
-  function normalizeFileListResponse(
-    input: unknown,
-  ): { results: { name: string; path: string; absolute: string; ignored: boolean; type: string }[]; error: string } {
+  function normalizeFileListResponse(input: unknown): {
+    results: { name: string; path: string; absolute: string; ignored: boolean; type: string }[]
+    error: string
+  } {
     if (Array.isArray(input)) return { results: input, error: "" }
     if (!input || typeof input !== "object") {
       return { results: [], error: "Unable to load folders. Check the server connection." }
@@ -273,12 +275,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
               </Button>
             </div>
             <div class="pt-2 pb-2">
-              <TextField
-                value={filter()}
-                onChange={setFilter}
-                placeholder="Filter folders"
-                variant="ghost"
-              />
+              <TextField value={filter()} onChange={setFilter} placeholder="Filter folders" variant="ghost" />
             </div>
           </div>
           <List

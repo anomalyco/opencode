@@ -335,11 +335,7 @@ export namespace File {
       }
       ignored = ig.ignores.bind(ig)
     }
-    const resolved = dir
-      ? path.isAbsolute(dir)
-        ? dir
-        : path.join(Instance.directory, dir)
-      : Instance.directory
+    const resolved = dir ? (path.isAbsolute(dir) ? dir : path.join(Instance.directory, dir)) : Instance.directory
 
     // TODO: Filesystem.contains is lexical only - symlinks inside the project can escape.
     // TODO: On Windows, cross-drive paths bypass this check. Consider realpath canonicalization.

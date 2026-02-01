@@ -88,7 +88,9 @@ export namespace Server {
   async function localIndexResponse() {
     if (!_uiDir) return
     const indexPath = path.join(_uiDir, "index.html")
-    const stat = await Bun.file(indexPath).stat().catch(() => undefined)
+    const stat = await Bun.file(indexPath)
+      .stat()
+      .catch(() => undefined)
     if (!stat || stat.isDirectory()) return
     const response = new Response(Bun.file(indexPath))
     response.headers.set("Content-Type", "text/html")
@@ -232,7 +234,9 @@ export namespace Server {
           const relativePath = requestPath.replace(/^\/+/, "")
           const filePath = path.join(_uiDir, relativePath)
           if (!Filesystem.contains(_uiDir, filePath)) return next()
-          const stat = await Bun.file(filePath).stat().catch(() => undefined)
+          const stat = await Bun.file(filePath)
+            .stat()
+            .catch(() => undefined)
           if (!stat || stat.isDirectory()) return next()
           return serveStatic({
             root: _uiDir,

@@ -543,7 +543,11 @@ export namespace Repo {
   export async function listBranches(repo: Info) {
     await ensureGitRepo(repo.path)
     const current = await $`git rev-parse --abbrev-ref HEAD`.quiet().nothrow().cwd(repo.path).text()
-    const output = await $`git ${["branch", "--all", "--format=%(refname:short)"]}`.quiet().nothrow().cwd(repo.path).text()
+    const output = await $`git ${["branch", "--all", "--format=%(refname:short)"]}`
+      .quiet()
+      .nothrow()
+      .cwd(repo.path)
+      .text()
     const names = output
       .split("\n")
       .map((line) => line.trim())
