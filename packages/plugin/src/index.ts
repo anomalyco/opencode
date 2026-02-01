@@ -5,6 +5,7 @@ import type {
   Project,
   Model,
   Provider,
+  Permission,
   UserMessage,
   Message,
   Part,
@@ -177,21 +178,7 @@ export interface Hooks {
     input: { sessionID: string; agent: string; model: Model; provider: ProviderContext; message: UserMessage },
     output: { headers: Record<string, string> },
   ) => Promise<void>
-  "permission.ask"?: (
-    // based on Permission.Info from Core
-    input: {
-      id: string
-      type: string
-      pattern?: string | Array<string>
-      sessionID: string
-      messageID: string
-      callID?: string
-      title: string
-      metadata: { [key: string]: unknown }
-      time: { created: number }
-    },
-    output: { status: "ask" | "deny" | "allow" },
-  ) => Promise<void>
+  "permission.ask"?: (input: Permission, output: { status: "ask" | "deny" | "allow" }) => Promise<void>
   "command.execute.before"?: (
     input: { command: string; sessionID: string; arguments: string },
     output: { parts: Part[] },
