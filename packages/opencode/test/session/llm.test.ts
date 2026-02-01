@@ -688,4 +688,113 @@ describe("session.llm.stream", () => {
       },
     })
   })
+
+  test("sends stable mistral affinity header", async () => {
+    const server = state.server
+    if (!server) {
+      throw new Error("Server not initialized")
+    }
+
+    const providerID = "mistral"
+    const modelID = "mistral-large-2512"
+    const fixture = await loadFixture(providerID, modelID)
+    const model = fixture.model
+
+    const requestOne = waitRequest(
+      "/chat/completions",
+      new Response(createChatStream("Hello"), {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    )
+
+    const requestTwo = waitRequest(
+      "/chat/completions",
+      new Response(createChatStream("Hi"), {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+    )
+
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: [providerID],
+            provider: {
+              [providerID]: {
+                options: {
+                  apiKey: "test-mistral-key",
+                  baseURL: `${server.url.origin}/v1`,
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const resolved = await Provider.getModel(providerID, model.id)
+        const sessionID = "session-test-mistral"
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          temperature: 0.4,
+        } satisfies Agent.Info
+
+        const user = {
+          id: "user-mistral",
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID, modelID: resolved.id },
+        } satisfies MessageV2.User
+
+        const streamOne = await LLM.stream({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          abort: new AbortController().signal,
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        })
+
+        for await (const _ of streamOne.fullStream) {
+        }
+
+        const streamTwo = await LLM.stream({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          abort: new AbortController().signal,
+          messages: [{ role: "user", content: "Hello again" }],
+          tools: {},
+        })
+
+        for await (const _ of streamTwo.fullStream) {
+        }
+
+        const captureOne = await requestOne
+        const captureTwo = await requestTwo
+
+        const affinityOne = captureOne.headers.get("x-affinity")
+        const affinityTwo = captureTwo.headers.get("x-affinity")
+
+        expect(affinityOne).toBeTruthy()
+        expect(affinityOne).toBe(affinityTwo)
+      },
+    })
+  })
 })
