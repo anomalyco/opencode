@@ -972,8 +972,7 @@ export const AuthRoutes = lazy(() =>
       UserSession.setTwoFactorSetupSecret(sessionId, setupData.secret)
 
       let setupStatus: "pending_verification" | "already_configured" | "manual_required" = "pending_verification"
-      let setupMessage: string | undefined =
-        "We'll create your 2FA configuration after you verify your code."
+      let setupMessage: string | undefined = "We'll create your 2FA configuration after you verify your code."
       let setupCommand: string | undefined
 
       if (has2fa) {
@@ -983,8 +982,7 @@ export const AuthRoutes = lazy(() =>
         const brokerAvailable = await broker.ping()
         if (!brokerAvailable) {
           setupStatus = "manual_required"
-          setupMessage =
-            "We couldn't reach the authentication service. Run the command below on the server."
+          setupMessage = "We couldn't reach the authentication service. Run the command below on the server."
           setupCommand = getGoogleAuthenticatorSetupCommand(setupData.secret)
         }
       }

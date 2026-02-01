@@ -526,14 +526,9 @@ export function TwoFactorSetupApp() {
         <p class="subtitle">for {username}</p>
 
         <Show when={required}>
-          <div class="required-banner">
-            Two-factor authentication is required. Please complete setup to continue.
-          </div>
+          <div class="required-banner">Two-factor authentication is required. Please complete setup to continue.</div>
         </Show>
 
-        <Show when={setupStatus === "created"}>
-          <div class="status-banner success">{setupMessage ?? "2FA configuration created on the server."}</div>
-        </Show>
         <Show when={setupStatus === "pending_verification"}>
           <div class="status-banner info">
             {setupMessage ?? "We'll create your 2FA configuration after you verify your code."}
@@ -545,16 +540,13 @@ export function TwoFactorSetupApp() {
           </div>
         </Show>
         <Show when={alreadyConfigured}>
-          <div class="warning">
-            {setupMessage ?? "We detected an existing 2FA configuration for this account."}
-          </div>
+          <div class="warning">{setupMessage ?? "We detected an existing 2FA configuration for this account."}</div>
         </Show>
 
         <div class="step">
           <div class="step-title">Step 1: Scan QR Code</div>
           <p class="note">
-            Scan this code with your authenticator app (Apple Passwords, Google Authenticator, Authy, 1Password,
-            etc.)
+            Scan this code with your authenticator app (Apple Passwords, Google Authenticator, Authy, 1Password, etc.)
           </p>
           <div class="qr-container" innerHTML={qrCodeSvg} />
           <p class="note">Or enter this secret manually:</p>
@@ -564,8 +556,8 @@ export function TwoFactorSetupApp() {
         <div class="step">
           <div class="step-title">Step 2: Install and configure PAM module on the server (if needed)</div>
           <p class="note">
-            Install <strong>libpam-google-authenticator</strong> on the same machine where opencode is running. This
-            PAM module validates TOTP codes.
+            Install <strong>libpam-google-authenticator</strong> on the same machine where opencode is running. This PAM
+            module validates TOTP codes.
           </p>
           <details class="install-details">
             <summary>Installation instructions</summary>
@@ -604,15 +596,17 @@ export function TwoFactorSetupApp() {
                 <strong>Linux:</strong>
               </p>
               <p>
-                <code>echo &quot;auth required pam_google_authenticator.so nullok&quot; | sudo tee /etc/pam.d/opencode-otp</code>
+                <code>
+                  echo &quot;auth required pam_google_authenticator.so nullok&quot; | sudo tee /etc/pam.d/opencode-otp
+                </code>
               </p>
               <p>
                 <strong>macOS (Apple Silicon):</strong>
               </p>
               <p>
                 <code>
-                  echo &quot;auth required /opt/homebrew/lib/security/pam_google_authenticator.so nullok&quot; | sudo tee
-                  /etc/pam.d/opencode-otp
+                  echo &quot;auth required /opt/homebrew/lib/security/pam_google_authenticator.so nullok&quot; | sudo
+                  tee /etc/pam.d/opencode-otp
                 </code>
               </p>
               <p>
@@ -636,8 +630,20 @@ export function TwoFactorSetupApp() {
               <div class="command-display" id="setupCommand">
                 {setupCommand}
               </div>
-              <button type="button" class="copy-btn" classList={{ copied: copyLabel() !== "Copy" }} onClick={handleCopy}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <button
+                type="button"
+                class="copy-btn"
+                classList={{ copied: copyLabel() !== "Copy" }}
+                onClick={handleCopy}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                   <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                 </svg>
@@ -661,8 +667,8 @@ export function TwoFactorSetupApp() {
                   <code>opencode-otp</code>) that only opencode reads.
                 </p>
                 <p>
-                  <strong>Multi-user:</strong> Each user has their own <code>~/.google_authenticator</code> in their home
-                  directory. Multiple users can independently configure 2FA.
+                  <strong>Multi-user:</strong> Each user has their own <code>~/.google_authenticator</code> in their
+                  home directory. Multiple users can independently configure 2FA.
                 </p>
                 <p>
                   <strong>Existing file:</strong> The command will prompt before overwriting an existing configuration.
