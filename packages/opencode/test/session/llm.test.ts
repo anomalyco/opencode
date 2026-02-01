@@ -197,12 +197,6 @@ async function loadFixture(providerID: string, modelID: string) {
   return { provider, model }
 }
 
-async function writeModels(models: Record<string, ModelsDev.Provider>) {
-  const modelsPath = path.join(Global.Path.cache, "models.json")
-  await Bun.write(modelsPath, JSON.stringify(models))
-  ModelsDev.Data.reset()
-}
-
 function createEventStream(chunks: unknown[], includeDone = false) {
   const lines = chunks.map((chunk) => `data: ${typeof chunk === "string" ? chunk : JSON.stringify(chunk)}`)
   if (includeDone) {
@@ -245,8 +239,6 @@ describe("session.llm.stream", () => {
         headers: { "Content-Type": "text/event-stream" },
       }),
     )
-
-    await writeModels({ [providerID]: provider })
 
     await using tmp = await tmpdir({
       init: async (dir) => {
@@ -342,7 +334,7 @@ describe("session.llm.stream", () => {
       throw new Error("Server not initialized")
     }
 
-    const source = await loadFixture("github-copilot", "gpt-5.1")
+    const source = await loadFixture("openai", "gpt-5.2")
     const model = source.model
 
     const responseChunks = [
@@ -376,8 +368,6 @@ describe("session.llm.stream", () => {
       },
     ]
     const request = waitRequest("/responses", createEventResponse(responseChunks, true))
-
-    await writeModels({})
 
     await using tmp = await tmpdir({
       init: async (dir) => {
@@ -513,8 +503,6 @@ describe("session.llm.stream", () => {
     ]
     const request = waitRequest("/messages", createEventResponse(chunks))
 
-    await writeModels({ [providerID]: provider })
-
     await using tmp = await tmpdir({
       init: async (dir) => {
         await Bun.write(
@@ -622,8 +610,6 @@ describe("session.llm.stream", () => {
       },
     ]
     const request = waitRequest(pathSuffix, createEventResponse(chunks))
-
-    await writeModels({ [providerID]: provider })
 
     await using tmp = await tmpdir({
       init: async (dir) => {
