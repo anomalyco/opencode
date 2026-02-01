@@ -101,6 +101,7 @@ export default defineConfig({
         main: fileURLToPath(new URL("./index.html", import.meta.url)),
         login: fileURLToPath(new URL("./login.html", import.meta.url)),
         twoFactor: fileURLToPath(new URL("./2fa.html", import.meta.url)),
+        twoFactorSetup: fileURLToPath(new URL("./2fa-setup.html", import.meta.url)),
       },
     },
     // sourcemap: true,

@@ -137,6 +137,8 @@ let cachedLoginTemplate: string | undefined
 let cachedLoginTemplatePath: string | undefined
 let cachedTwoFactorTemplate: string | undefined
 let cachedTwoFactorTemplatePath: string | undefined
+let cachedTwoFactorSetupTemplate: string | undefined
+let cachedTwoFactorSetupTemplatePath: string | undefined
 
 async function loadLoginTemplate(uiDir: string): Promise<string> {
   const templatePath = path.join(uiDir, "login.html")
@@ -204,611 +206,44 @@ function injectTwoFactorBootstrap(
 }
 
 /**
- * Escape HTML special characters to prevent XSS.
+ * Load 2FA setup page HTML.
  */
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#x27;")
+async function loadTwoFactorSetupTemplate(uiDir: string): Promise<string> {
+  const templatePath = path.join(uiDir, "2fa-setup.html")
+  if (cachedTwoFactorSetupTemplate && cachedTwoFactorSetupTemplatePath === templatePath) {
+    return cachedTwoFactorSetupTemplate
+  }
+
+  const file = Bun.file(templatePath)
+  const exists = await file.exists()
+  if (!exists) {
+    throw new Error(`2FA setup HTML not found at ${templatePath}`)
+  }
+
+  cachedTwoFactorSetupTemplate = await file.text()
+  cachedTwoFactorSetupTemplatePath = templatePath
+  return cachedTwoFactorSetupTemplate
 }
 
-/**
- * Generate 2FA setup wizard page HTML.
- */
-function generate2FASetupPageHtml(params: {
-  username: string
-  secret: string
-  qrCodeSvg: string
-  setupCommand: string
-  alreadyConfigured: boolean
-  required?: boolean
-}): string {
-  const { username, secret, qrCodeSvg, setupCommand, alreadyConfigured, required } = params
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Set Up Two-Factor Authentication - opencode</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #0a0a0a;
-      color: #e5e5e5;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 2rem;
-    }
-    .card {
-      width: 100%;
-      max-width: 480px;
-      padding: 2rem;
-      background: #141414;
-      border: 1px solid #262626;
-      border-radius: 12px;
-    }
-    h1 {
-      font-size: 1.25rem;
-      margin-bottom: 0.5rem;
-    }
-    .subtitle {
-      color: #737373;
-      font-size: 0.875rem;
-      margin-bottom: 1.5rem;
-    }
-    .warning {
-      background: rgba(234, 179, 8, 0.15);
-      border: 1px solid rgba(234, 179, 8, 0.4);
-      border-radius: 8px;
-      padding: 0.75rem;
-      margin-bottom: 1.5rem;
-      color: #fbbf24;
-      font-size: 0.875rem;
-    }
-    .required-banner {
-      background: rgba(59, 130, 246, 0.15);
-      border: 1px solid rgba(59, 130, 246, 0.4);
-      border-radius: 8px;
-      padding: 0.75rem;
-      margin-bottom: 1.5rem;
-      color: #60a5fa;
-      font-size: 0.875rem;
-      text-align: center;
-    }
-    .skip-section {
-      margin-top: 1.5rem;
-      padding-top: 1.5rem;
-      border-top: 1px solid #333;
-      text-align: center;
-    }
-    .skip-note {
-      font-size: 0.75rem;
-      color: #737373;
-      margin-bottom: 0.75rem;
-    }
-    .skip-btn {
-      background: transparent;
-      border: 1px solid #525252;
-      color: #a3a3a3;
-      padding: 0.5rem 1rem;
-      border-radius: 6px;
-      font-size: 0.875rem;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-    .skip-btn:hover {
-      border-color: #737373;
-      color: #e5e5e5;
-    }
-    .step {
-      margin-bottom: 1.5rem;
-    }
-    .step-title {
-      font-size: 0.875rem;
-      font-weight: 600;
-      margin-bottom: 0.5rem;
-      color: #a3a3a3;
-    }
-    .qr-container {
-      display: flex;
-      justify-content: center;
-      padding: 1rem;
-      background: #fff;
-      border-radius: 8px;
-      margin-bottom: 0.75rem;
-    }
-    .qr-container svg {
-      width: 200px;
-      height: 200px;
-    }
-    .secret-display {
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 0.875rem;
-      background: #1a1a1a;
-      padding: 0.75rem;
-      border-radius: 6px;
-      word-break: break-all;
-      text-align: center;
-      color: #0ea5e9;
-    }
-    .command-container {
-      position: relative;
-      margin-top: 0.5rem;
-    }
-    .command-display {
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 0.7rem;
-      background: #1a1a1a;
-      padding: 0.75rem;
-      padding-right: 3rem;
-      border-radius: 6px;
-      white-space: pre-wrap;
-      word-break: break-all;
-      color: #a3a3a3;
-      max-height: 150px;
-      overflow-y: auto;
-    }
-    .copy-btn {
-      position: absolute;
-      top: 0.5rem;
-      right: 0.5rem;
-      background: #333;
-      border: none;
-      border-radius: 4px;
-      padding: 0.35rem 0.5rem;
-      cursor: pointer;
-      color: #a3a3a3;
-      font-size: 0.7rem;
-      display: flex;
-      align-items: center;
-      gap: 0.25rem;
-      transition: all 0.15s;
-    }
-    .copy-btn:hover {
-      background: #444;
-      color: #e5e5e5;
-    }
-    .copy-btn.copied {
-      background: #166534;
-      color: #4ade80;
-    }
-    .copy-btn svg {
-      width: 14px;
-      height: 14px;
-    }
-    .install-details {
-      margin-top: 0.75rem;
-      border: 1px solid #333;
-      border-radius: 6px;
-      background: #1a1a1a;
-    }
-    .install-details summary {
-      padding: 0.75rem;
-      cursor: pointer;
-      font-size: 0.75rem;
-      color: #0ea5e9;
-    }
-    .install-details summary:hover {
-      color: #38bdf8;
-    }
-    .install-details[open] summary {
-      border-bottom: 1px solid #333;
-    }
-    .install-commands {
-      padding: 0.75rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-    }
-    .install-row {
-      display: flex;
-      gap: 0.75rem;
-      align-items: center;
-      font-size: 0.75rem;
-    }
-    .install-row .os {
-      color: #737373;
-      min-width: 100px;
-      flex-shrink: 0;
-    }
-    .install-row code {
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      color: #a3a3a3;
-      background: #0a0a0a;
-      padding: 0.25rem 0.5rem;
-      border-radius: 4px;
-    }
-    .safety-info {
-      padding: 0.75rem;
-      font-size: 0.75rem;
-      line-height: 1.5;
-      color: #a3a3a3;
-    }
-    .safety-info p {
-      margin: 0 0 0.5rem 0;
-    }
-    .safety-info p:last-child {
-      margin-bottom: 0;
-    }
-    .safety-info strong {
-      color: #e5e5e5;
-    }
-    .safety-info code {
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      background: #0a0a0a;
-      padding: 0.125rem 0.375rem;
-      border-radius: 3px;
-      font-size: 0.7rem;
-    }
-    .verify-form {
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-    }
-    .field {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-    }
-    label {
-      font-size: 0.75rem;
-      font-weight: 500;
-      color: #a3a3a3;
-    }
-    input[type="text"] {
-      width: 100%;
-      height: 40px;
-      padding: 0 12px;
-      border: 1px solid #333;
-      border-radius: 8px;
-      background: #1a1a1a;
-      color: #e5e5e5;
-      font-size: 16px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      letter-spacing: 0.2em;
-      text-align: center;
-    }
-    input:focus {
-      outline: none;
-      border-color: #525252;
-    }
-    .error {
-      color: #fca5a5;
-      font-size: 0.75rem;
-      padding: 0.5rem;
-      background: rgba(239,68,68,0.15);
-      border-radius: 6px;
-      display: none;
-    }
-    .error.visible { display: block; }
-    .success {
-      color: #4ade80;
-      font-size: 0.875rem;
-      padding: 0.75rem;
-      background: rgba(74, 222, 128, 0.15);
-      border-radius: 8px;
-      text-align: center;
-      display: none;
-    }
-    .success.visible { display: block; }
-    button {
-      height: 40px;
-      border: none;
-      border-radius: 8px;
-      background: #e5e5e5;
-      color: #0a0a0a;
-      font-size: 0.875rem;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    button:hover { background: #d4d4d4; }
-    button:disabled { background: #404040; color: #737373; cursor: not-allowed; }
-    .back-link {
-      display: block;
-      text-align: center;
-      margin-top: 1rem;
-      color: #737373;
-      font-size: 0.75rem;
-      text-decoration: none;
-    }
-    .back-link:hover { color: #a3a3a3; text-decoration: underline; }
-    .note {
-      font-size: 0.75rem;
-      color: #737373;
-      margin-top: 0.5rem;
-    }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h1>Set Up Two-Factor Authentication</h1>
-    <p class="subtitle">for ${escapeHtml(username)}</p>
-
-    ${
-      required
-        ? `
-    <div class="required-banner">
-      Two-factor authentication is required. Please complete setup to continue.
-    </div>
-    `
-        : ""
-    }
-
-    ${
-      alreadyConfigured
-        ? `
-    <div class="warning">
-      You already have 2FA configured. Setting up again will replace your existing configuration.
-    </div>
-    `
-        : ""
-    }
-
-    <div class="step">
-      <div class="step-title">Step 1: Scan QR Code</div>
-      <p class="note">Scan this code with your authenticator app (Apple Passwords, Google Authenticator, Authy, 1Password, etc.)</p>
-      <div class="qr-container">
-        ${qrCodeSvg}
-      </div>
-      <p class="note">Or enter this secret manually:</p>
-      <div class="secret-display">${secret}</div>
-    </div>
-
-    <div class="step">
-      <div class="step-title">Step 2: Install and configure PAM module on the server (if needed)</div>
-      <p class="note">Install <strong>libpam-google-authenticator</strong> on the same machine where opencode is running. This PAM module validates TOTP codes.</p>
-      <details class="install-details">
-        <summary>Installation instructions</summary>
-        <div class="install-commands">
-          <div class="install-row"><span class="os">Ubuntu/Debian:</span><code>sudo apt install libpam-google-authenticator</code></div>
-          <div class="install-row"><span class="os">Fedora/RHEL:</span><code>sudo dnf install google-authenticator</code></div>
-          <div class="install-row"><span class="os">Arch Linux:</span><code>sudo pacman -S libpam-google-authenticator</code></div>
-          <div class="install-row"><span class="os">macOS:</span><code>brew install google-authenticator-libpam</code></div>
-        </div>
-        <p class="note" style="margin-top: 0.75rem;">This is free, open source software: <a href="https://github.com/google/google-authenticator-libpam" target="_blank" rel="noopener">github.com/google/google-authenticator-libpam</a></p>
-      </details>
-      <details class="install-details">
-        <summary>PAM service file setup (required)</summary>
-        <div class="safety-info">
-          <p>Create the PAM service file at <code>/etc/pam.d/opencode-otp</code>:</p>
-          <p><strong>Linux:</strong></p>
-          <p><code>echo "auth required pam_google_authenticator.so nullok" | sudo tee /etc/pam.d/opencode-otp</code></p>
-          <p><strong>macOS (Apple Silicon):</strong></p>
-          <p><code>echo "auth required /opt/homebrew/lib/security/pam_google_authenticator.so nullok" | sudo tee /etc/pam.d/opencode-otp</code></p>
-          <p><strong>macOS (Intel):</strong></p>
-          <p><code>echo "auth required /usr/local/lib/security/pam_google_authenticator.so nullok" | sudo tee /etc/pam.d/opencode-otp</code></p>
-        </div>
-      </details>
-    </div>
-
-    <div class="step">
-      <div class="step-title">Step 3: Run Setup Command on the Server</div>
-      <p class="note">Run this command on the opencode server to create your 2FA configuration file:</p>
-      <div class="command-container">
-        <div class="command-display" id="setupCommand">${escapeHtml(setupCommand)}</div>
-        <button type="button" class="copy-btn" id="copyBtn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-          </svg>
-          <span>Copy</span>
-        </button>
-      </div>
-      <p class="note">This creates ~/.google_authenticator with the secret from Step 1.</p>
-      <details class="install-details">
-        <summary>Is this safe? Will it affect my system login?</summary>
-        <div class="safety-info">
-          <p><strong>No, this will not affect your system login.</strong></p>
-          <p>The command creates a file at <code>~/.google_authenticator</code> containing your TOTP secret. This file is completely inert by itself.</p>
-          <p>It only affects authentication when a PAM service explicitly loads it. Your system's login, sudo, and SSH use their own PAM configs which remain untouched. Opencode uses a separate PAM service file (<code>opencode-otp</code>) that only opencode reads.</p>
-          <p><strong>Multi-user:</strong> Each user has their own <code>~/.google_authenticator</code> in their home directory. Multiple users can independently configure 2FA.</p>
-          <p><strong>Existing file:</strong> The command will prompt before overwriting an existing configuration.</p>
-          <p><strong>Reversibility:</strong> Run <code>rm ~/.google_authenticator</code> to remove 2FA.</p>
-        </div>
-      </details>
-    </div>
-
-    <div class="step">
-      <div class="step-title">Step 4: Verify Setup</div>
-      <p class="note">Enter a code from your authenticator app to verify it's working:</p>
-      <form id="verifyForm" class="verify-form">
-        <div id="error" class="error"></div>
-        <div id="success" class="success">2FA is now enabled! You'll be prompted for a code on future logins.</div>
-        <div class="field">
-          <input type="text" id="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="000000">
-        </div>
-        <button type="submit" id="verifyBtn">Verify & Enable 2FA</button>
-      </form>
-    </div>
-
-    ${
-      required
-        ? ""
-        : `
-    <div class="skip-section">
-      <p class="skip-note">You can set up 2FA later from your session menu.</p>
-      <button type="button" id="skipBtn" class="skip-btn">Skip for now</button>
-    </div>
-    `
-    }
-
-    <a href="/" class="back-link">${required ? "Back to login" : "Back to opencode"}</a>
-  </div>
-
-  <script>
-    const form = document.getElementById('verifyForm');
-    const codeInput = document.getElementById('code');
-    const errorDiv = document.getElementById('error');
-    const successDiv = document.getElementById('success');
-    const verifyBtn = document.getElementById('verifyBtn');
-
-    // Helper to read CSRF token from cookie
-    function getCSRFToken() {
-      const cookies = document.cookie.split('; ');
-      for (const cookie of cookies) {
-        const [name, ...valueParts] = cookie.split('=');
-        if (name.trim() === 'opencode_csrf') {
-          // Rejoin in case value contains '=' and decode
-          return decodeURIComponent(valueParts.join('='));
-        }
-      }
-      return '';
-    }
-
-    // Auto-submit when 6 digits entered or pasted
-    codeInput.addEventListener('input', () => {
-      // Strip non-digits and trim
-      const cleaned = codeInput.value.replace(/\\D/g, '').trim();
-      if (cleaned !== codeInput.value) {
-        codeInput.value = cleaned;
-      }
-
-      // Auto-submit when exactly 6 digits
-      if (cleaned.length === 6) {
-        verifyBtn.disabled = true;
-        verifyBtn.textContent = 'Verifying...';
-        form.requestSubmit();
-      }
-    });
-
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      errorDiv.classList.remove('visible');
-
-      const code = codeInput.value.trim();
-      if (!code || code.length !== 6) {
-        errorDiv.textContent = 'Please enter a 6-digit code';
-        errorDiv.classList.add('visible');
-        verifyBtn.disabled = false;
-        verifyBtn.textContent = 'Verify & Enable 2FA';
-        return;
-      }
-
-      // Disable button (may already be disabled from auto-submit)
-      verifyBtn.disabled = true;
-      verifyBtn.textContent = 'Verifying...';
-
-      try {
-        const res = await fetch('/auth/2fa/verify', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-            'X-CSRF-Token': getCSRFToken(),
-          },
-          body: JSON.stringify({ code }),
-        });
-
-        if (res.ok) {
-          successDiv.classList.add('visible');
-          verifyBtn.textContent = 'Verified';
-          codeInput.disabled = true;
-
-          let remaining = 3;
-          successDiv.textContent = 'Verified... redirecting in ' + remaining;
-          const redirectTimer = setInterval(() => {
-            remaining -= 1;
-            if (remaining <= 0) {
-              clearInterval(redirectTimer);
-              window.location.href = '/';
-              return;
-            }
-            successDiv.textContent = 'Verified... redirecting in ' + remaining;
-          }, 1000);
-        } else {
-          const data = await res.json();
-          errorDiv.textContent = data.message || 'Invalid code - make sure you ran the setup command first';
-          errorDiv.classList.add('visible');
-          verifyBtn.disabled = false;
-          verifyBtn.textContent = 'Verify & Enable 2FA';
-          codeInput.value = '';
-          codeInput.focus();
-        }
-      } catch (err) {
-        errorDiv.textContent = 'Connection error';
-        errorDiv.classList.add('visible');
-        verifyBtn.disabled = false;
-        verifyBtn.textContent = 'Verify & Enable 2FA';
-      }
-    });
-
-    // Copy button handler
-    const copyBtn = document.getElementById('copyBtn');
-    const setupCommandEl = document.getElementById('setupCommand');
-    if (copyBtn && setupCommandEl) {
-      copyBtn.addEventListener('click', async () => {
-        try {
-          await navigator.clipboard.writeText(setupCommandEl.textContent || '');
-          copyBtn.classList.add('copied');
-          copyBtn.querySelector('span').textContent = 'Copied!';
-          setTimeout(() => {
-            copyBtn.classList.remove('copied');
-            copyBtn.querySelector('span').textContent = 'Copy';
-          }, 2000);
-        } catch (err) {
-          // Fallback for older browsers
-          const range = document.createRange();
-          range.selectNodeContents(setupCommandEl);
-          const selection = window.getSelection();
-          selection.removeAllRanges();
-          selection.addRange(range);
-          document.execCommand('copy');
-          selection.removeAllRanges();
-          copyBtn.classList.add('copied');
-          copyBtn.querySelector('span').textContent = 'Copied!';
-          setTimeout(() => {
-            copyBtn.classList.remove('copied');
-            copyBtn.querySelector('span').textContent = 'Copy';
-          }, 2000);
-        }
-      });
-    }
-
-    // Skip button handler
-    const skipBtn = document.getElementById('skipBtn');
-    if (skipBtn) {
-      skipBtn.addEventListener('click', async () => {
-        skipBtn.disabled = true;
-        skipBtn.textContent = 'Skipping...';
-
-        try {
-          const res = await fetch('/auth/2fa/skip', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Requested-With': 'XMLHttpRequest',
-              'X-CSRF-Token': getCSRFToken(),
-            },
-          });
-
-          if (res.ok) {
-            window.location.href = '/';
-          } else {
-            const data = await res.json();
-            errorDiv.textContent = data.message || 'Failed to skip setup';
-            errorDiv.classList.add('visible');
-            skipBtn.disabled = false;
-            skipBtn.textContent = 'Skip for now';
-          }
-        } catch (err) {
-          errorDiv.textContent = 'Connection error';
-          errorDiv.classList.add('visible');
-          skipBtn.disabled = false;
-          skipBtn.textContent = 'Skip for now';
-        }
-      });
-    }
-  </script>
-</body>
-</html>`
+function injectTwoFactorSetupBootstrap(
+  template: string,
+  bootstrap: {
+    username: string
+    secret: string
+    qrCodeSvg: string
+    setupCommand: string
+    alreadyConfigured: boolean
+    required: boolean
+  },
+): string {
+  const script = `<script>window.__OPENCODE_2FA_SETUP__ = ${JSON.stringify(bootstrap)};</script>`
+  if (template.includes("</head>")) {
+    return template.replace("</head>", `${script}\n</head>`)
+  }
+  if (template.includes("</body>")) {
+    return template.replace("</body>", `${script}\n</body>`)
+  }
+  return `${template}\n${script}`
 }
 
 /**
@@ -1520,16 +955,27 @@ export const AuthRoutes = lazy(() =>
       // Generate setup data
       const setupData = await generateTotpSetup(session.username)
 
-      return c.html(
-        generate2FASetupPageHtml({
-          username: session.username,
-          secret: setupData.secret,
-          qrCodeSvg: setupData.qrCodeSvg,
-          setupCommand: getGoogleAuthenticatorSetupCommand(setupData.secret),
-          alreadyConfigured: has2fa,
-          required,
-        }),
-      )
+      const uiDir = getUiDir()
+      if (!uiDir) {
+        return c.text("2FA setup UI is not configured. Build the app UI and set uiDir.", 500)
+      }
+
+      try {
+        const template = await loadTwoFactorSetupTemplate(uiDir)
+        return c.html(
+          injectTwoFactorSetupBootstrap(template, {
+            username: session.username,
+            secret: setupData.secret,
+            qrCodeSvg: setupData.qrCodeSvg,
+            setupCommand: getGoogleAuthenticatorSetupCommand(setupData.secret),
+            alreadyConfigured: has2fa,
+            required,
+          }),
+        )
+      } catch (error) {
+        log.error("Failed to load 2FA setup HTML", { error })
+        return c.text("2FA setup UI is missing. Run the app build to generate 2fa-setup.html.", 500)
+      }
     })
     .post("/2fa/verify", async (c) => {
       // Require authenticated session
