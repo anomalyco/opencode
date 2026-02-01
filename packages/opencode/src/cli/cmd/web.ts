@@ -44,14 +44,14 @@ export const WebCommand = cmd({
 
     if (opts.hostname === "0.0.0.0") {
       // Show localhost for local access
-      const baseUrl = opts.rootPath ? `http://localhost:${server.port}${opts.rootPath}` : `http://localhost:${server.port}`
+      const baseUrl = opts.rootPath ? new URL(opts.rootPath, `http://localhost:${server.port}`).toString() : `http://localhost:${server.port}`
       UI.println(UI.Style.TEXT_INFO_BOLD + "  Local access:      ", UI.Style.TEXT_NORMAL, baseUrl)
 
       // Show network IPs for remote access
       const networkIPs = getNetworkIPs()
       if (networkIPs.length > 0) {
         for (const ip of networkIPs) {
-          const networkUrl = opts.rootPath ? `http://${ip}:${server.port}${opts.rootPath}` : `http://${ip}:${server.port}`
+          const networkUrl = opts.rootPath ? new URL(opts.rootPath, `http://${ip}:${server.port}`).toString() : `http://${ip}:${server.port}`
           UI.println(
             UI.Style.TEXT_INFO_BOLD + "  Network access:    ",
             UI.Style.TEXT_NORMAL,
