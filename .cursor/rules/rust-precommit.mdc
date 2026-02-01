@@ -9,6 +9,7 @@ When making Rust changes, run these before committing:
 
 ```bash
 ./script/generate.ts
+bun turbo typecheck
 cargo fmt
 cargo clippy --all-targets --all-features -- -D warnings
 cargo build
