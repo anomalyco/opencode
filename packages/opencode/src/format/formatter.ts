@@ -364,3 +364,14 @@ export const ormolu: Info = {
     return Bun.which("ormolu") !== null
   },
 }
+
+export const scalafmt: Info = {
+  name: "scalafmt",
+  command: ["scalafmt", "$FILE"],
+  extensions: [".scala", ".sbt", ".sc"],
+  async enabled() {
+    if (!Bun.which("scalafmt")) return false
+    const items = await Filesystem.findUp(".scalafmt.conf", Instance.directory, Instance.worktree)
+    return items.length > 0
+  },
+}
