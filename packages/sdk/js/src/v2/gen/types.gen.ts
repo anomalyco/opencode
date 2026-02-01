@@ -138,6 +138,10 @@ export type UserMessage = {
     [key: string]: boolean
   }
   variant?: string
+  /**
+   * Render this user message with assistant styling in the UI
+   */
+  renderAsAssistant?: boolean
 }
 
 export type ProviderAuthError = {
@@ -3435,6 +3439,10 @@ export type SessionPromptData = {
     system?: string
     variant?: string
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
+    /**
+     * Render this user message with assistant styling in the UI
+     */
+    renderAsAssistant?: boolean
   }
   path: {
     /**
@@ -3623,6 +3631,10 @@ export type SessionPromptAsyncData = {
     system?: string
     variant?: string
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
+    /**
+     * Render this user message with assistant styling in the UI
+     */
+    renderAsAssistant?: boolean
   }
   path: {
     /**

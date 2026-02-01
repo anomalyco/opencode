@@ -359,6 +359,7 @@ export namespace MessageV2 {
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
     variant: z.string().optional(),
+    renderAsAssistant: z.boolean().optional().describe("Render this user message with assistant styling in the UI"),
   }).meta({
     ref: "UserMessage",
   })
