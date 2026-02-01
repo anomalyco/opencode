@@ -741,6 +741,64 @@ export function Session() {
       },
     },
     {
+      title: "Open last assistant message in editor",
+      value: "messages.open_in_editor",
+      category: "Session",
+      enabled: !!(process.env["VISUAL"] || process.env["EDITOR"]),
+      slash: {
+        name: "edit-last",
+      },
+      onSelect: async (dialog) => {
+        const revertID = session()?.revert?.messageID
+        const lastAssistantMessage = messages().findLast(
+          (msg) => msg.role === "assistant" && (!revertID || msg.id < revertID),
+        )
+        if (!lastAssistantMessage) {
+          toast.show({ message: "No assistant messages found", variant: "error" })
+          dialog.clear()
+          return
+        }
+        const parts = sync.data.part[lastAssistantMessage.id] ?? []
+        const textParts = parts.filter((part) => part.type === "text")
+        if (textParts.length === 0) {
+          toast.show({ message: "No text parts found in last assistant message", variant: "error" })
+          dialog.clear()
+          return
+        }
+        const text = textParts
+          .map((part) => part.text)
+          .join("\n")
+          .trim()
+        if (!text) {
+          toast.show({
+            message: "No text content found in last assistant message",
+            variant: "error",
+          })
+          dialog.clear()
+          return
+        }
+        dialog.clear()
+        const editedContent = await Editor.open({ value: text, renderer })
+
+        if (editedContent === undefined) {
+          return
+        }
+
+        if (editedContent.trim() === text.trim()) {
+          toast.show({ message: "No changes made", variant: "info" })
+          return
+        }
+
+        if (editedContent.trim() === "") {
+          toast.show({ message: "Empty message", variant: "warning" })
+          return
+        }
+
+        prompt.set({ input: editedContent, parts: [] })
+        toast.show({ message: "Edited message loaded. Press Enter to send.", variant: "success" })
+      },
+    },
+    {
       title: "Copy session transcript",
       value: "session.copy",
       category: "Session",
