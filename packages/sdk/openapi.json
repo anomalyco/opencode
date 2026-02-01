@@ -5723,9 +5723,12 @@
                       },
                       "location": {
                         "type": "string"
+                      },
+                      "content": {
+                        "type": "string"
                       }
                     },
-                    "required": ["name", "description", "location"]
+                    "required": ["name", "description", "location", "content"]
                   }
                 }
               }
@@ -10770,8 +10773,9 @@
           "model": {
             "type": "string"
           },
-          "mcp": {
-            "type": "boolean"
+          "source": {
+            "type": "string",
+            "enum": ["command", "mcp", "skill"]
           },
           "template": {
             "anyOf": [
