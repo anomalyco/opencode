@@ -10,13 +10,13 @@ See: .planning/PROJECT.md (updated 2026-01-19)
 ## Current Position
 
 **Milestone 1:** Complete (Phases 1-11)
-**Phase:** 21 of 21 (SSH key management) - Complete
+**Phase:** 24 of 24 (Remote Terminal Reliability) - In progress
 **Next Phase:** 24 - Remote Terminal Reliability
-**Plan:** 02 of 02 - Complete
-**Status:** Phase complete
-**Last activity:** 2026-02-01 - Completed 21-02 plan
+**Plan:** 01 of 02 - Complete
+**Status:** In progress
+**Last activity:** 2026-02-01 - Completed 24-01 plan
 
-Progress: [█████████░] 93% (55/59 plans complete)
+Progress: [█████████░] 95% (56/59 plans complete)
 
 ## Performance Metrics
 
@@ -167,6 +167,8 @@ Recent decisions affecting current work:
 | 11-04 | Main README links to ./docs/                                   | GitHub landing page must lead to deployment docs without searching                            |
 | 21-01 | Managed SSH config block + ~/.ssh/opencode key directory       | Keeps OpenCode SSH keys isolated and permissions strict                                       |
 | 21-02 | Fetch SSH key inventory only for SSH clone URLs                | Avoids extra API calls for HTTPS clone flows                                                  |
+| 24-01 | Include requestId in PTY errors without changing success body  | Preserves API compatibility while enabling log correlation                                    |
+| 24-01 | Mark failed terminals for retry visibility                     | Keeps failure context visible instead of silent retries                                       |
 
 ### Roadmap Evolution
 
@@ -204,10 +206,10 @@ From research summary (Phase 2, 3 flags):
 
 ## Session Continuity
 
-Last session: 2026-02-01 01:12:37Z
-Stopped at: Completed 21-02-PLAN.md
+Last session: 2026-02-01 21:28:10Z
+Stopped at: Completed 24-01-PLAN.md
 Resume file: None
-Next: Complete Phase 20 plans (2FA refactor)
+Next: Complete 24-02 plan (broker PTY lifecycle fixes)
 
 ## Phase 6 Progress
 
