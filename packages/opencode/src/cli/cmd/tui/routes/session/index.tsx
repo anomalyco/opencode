@@ -62,6 +62,7 @@ import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import parsers from "../../../../../../parsers-config.ts"
 import { Clipboard } from "../../util/clipboard"
 import { Toast, useToast } from "../../ui/toast"
+import { markdownToHtml } from "../../util/markdown-html"
 import { useKV } from "../../context/kv.tsx"
 import { Editor } from "../../util/editor"
 import stripAnsi from "strip-ansi"
@@ -580,6 +581,19 @@ export function Session() {
       },
     },
     {
+      title: local.copyAsRichText() ? "Disable copy as rich text" : "Enable copy as rich text",
+      value: "settings.copy_rich_text_toggle",
+      category: "Settings",
+      onSelect: (dialog) => {
+        local.toggleCopyAsRichText()
+        toast.show({
+          message: `Copy as rich text: ${local.copyAsRichText() ? "ON" : "OFF"}`,
+          variant: "info",
+        })
+        dialog.clear()
+      },
+    },
+    {
       title: "Page up",
       value: "session.page.up",
       keybind: "messages_page_up",
@@ -720,7 +734,7 @@ export function Session() {
       value: "messages.copy",
       keybind: "messages_copy",
       category: "Session",
-      onSelect: (dialog) => {
+      onSelect: async (dialog) => {
         const revertID = session()?.revert?.messageID
         const lastAssistantMessage = messages().findLast(
           (msg) => msg.role === "assistant" && (!revertID || msg.id < revertID),
@@ -752,9 +766,20 @@ export function Session() {
           return
         }
 
-        Clipboard.copy(text)
-          .then(() => toast.show({ message: "Message copied to clipboard!", variant: "success" }))
-          .catch(() => toast.show({ message: "Failed to copy to clipboard", variant: "error" }))
+        if (local.copyAsRichText()) {
+          const html = markdownToHtml(text)
+          const result = await Clipboard.copyRich(text, html)
+          if (!result.ok) {
+            toast.show({ message: "Failed to copy to clipboard", variant: "error" })
+          } else if (result.rich) {
+            toast.show({ message: "Copied as rich text!", variant: "success" })
+          } else {
+            toast.show({ message: `Copied as plain text. ${result.reason}`, variant: "warning" })
+          }
+        } else {
+          await Clipboard.copy(text)
+          toast.show({ message: "Message copied to clipboard!", variant: "success" })
+        }
         dialog.clear()
       },
     },
@@ -779,8 +804,20 @@ export function Session() {
               assistantMetadata: showAssistantMetadata(),
             },
           )
-          await Clipboard.copy(transcript)
-          toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
+          if (local.copyAsRichText()) {
+            const html = markdownToHtml(transcript)
+            const result = await Clipboard.copyRich(transcript, html)
+            if (!result.ok) {
+              toast.show({ message: "Failed to copy session transcript", variant: "error" })
+            } else if (result.rich) {
+              toast.show({ message: "Session transcript copied as rich text!", variant: "success" })
+            } else {
+              toast.show({ message: `Copied as plain text. ${result.reason}`, variant: "warning" })
+            }
+          } else {
+            await Clipboard.copy(transcript)
+            toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
+          }
         } catch (error) {
           toast.show({ message: "Failed to copy session transcript", variant: "error" })
         }

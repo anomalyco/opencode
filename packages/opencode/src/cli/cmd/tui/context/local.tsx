@@ -1,5 +1,5 @@
 import { createStore } from "solid-js/store"
-import { batch, createEffect, createMemo } from "solid-js"
+import { batch, createEffect, createMemo, createSignal } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
 import { uniqueBy } from "remeda"
@@ -392,10 +392,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     })
 
+    const [copyAsRichText, setCopyAsRichText] = createSignal(sync.data.config.tui?.copy_as_rich_text ?? false)
+
     const result = {
       model,
       agent,
       mcp,
+      copyAsRichText,
+      toggleCopyAsRichText: () => setCopyAsRichText((prev: boolean) => !prev),
     }
     return result
   },

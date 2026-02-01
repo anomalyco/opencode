@@ -5,6 +5,10 @@ import { Renderable, RGBA } from "@opentui/core"
 import { createStore } from "solid-js/store"
 import { Clipboard } from "@tui/util/clipboard"
 import { useToast } from "./toast"
+import { useLocal } from "@tui/context/local"
+import { useSync } from "@tui/context/sync"
+import { findMarkdownForSelection } from "@tui/util/selection-to-markdown"
+import { markdownToHtml } from "@tui/util/markdown-html"
 
 export function Dialog(
   props: ParentProps<{
@@ -133,6 +137,9 @@ export function DialogProvider(props: ParentProps) {
   const value = init()
   const renderer = useRenderer()
   const toast = useToast()
+  const local = useLocal()
+  const sync = useSync()
+
   return (
     <ctx.Provider value={value}>
       {props.children}
@@ -141,6 +148,25 @@ export function DialogProvider(props: ParentProps) {
         onMouseUp={async () => {
           const text = renderer.getSelection()?.getSelectedText()
           if (text && text.length > 0) {
+            // Try to find markdown source if rich text mode is enabled
+            if (local.copyAsRichText()) {
+              const markdown = findMarkdownForSelection(text, sync.data.part)
+              if (markdown) {
+                const html = markdownToHtml(markdown)
+                const result = await Clipboard.copyRich(text, html)
+                if (!result.ok) {
+                  toast.show({ message: "Failed to copy to clipboard", variant: "error" })
+                } else if (result.rich) {
+                  toast.show({ message: "Copied as rich text!", variant: "success" })
+                } else {
+                  toast.show({ message: `Copied as plain text. ${result.reason}`, variant: "warning" })
+                }
+                renderer.clearSelection()
+                return
+              }
+              // If no markdown match found, fall through to plain text copy
+            }
+
             await Clipboard.copy(text)
               .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
               .catch(toast.error)

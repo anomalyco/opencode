@@ -1615,6 +1615,10 @@ export type Config = {
      * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
      */
     diff_style?: "auto" | "stacked"
+    /**
+     * Copy markdown responses as rich text (HTML) instead of plain text
+     */
+    copy_as_rich_text?: boolean
   }
   server?: ServerConfig
   /**

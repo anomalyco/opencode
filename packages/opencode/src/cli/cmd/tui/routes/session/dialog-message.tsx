@@ -5,6 +5,9 @@ import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
 import { Clipboard } from "@tui/util/clipboard"
 import type { PromptInfo } from "@tui/component/prompt/history"
+import { useLocal } from "@tui/context/local"
+import { useToast } from "@tui/ui/toast"
+import { markdownToHtml } from "@tui/util/markdown-html"
 
 export function DialogMessage(props: {
   messageID: string
@@ -15,6 +18,8 @@ export function DialogMessage(props: {
   const sdk = useSDK()
   const message = createMemo(() => sync.data.message[props.sessionID]?.find((x) => x.id === props.messageID))
   const route = useRoute()
+  const local = useLocal()
+  const toast = useToast()
 
   return (
     <DialogSelect
@@ -67,7 +72,20 @@ export function DialogMessage(props: {
               return agg
             }, "")
 
-            await Clipboard.copy(text)
+            if (local.copyAsRichText()) {
+              const html = markdownToHtml(text)
+              const result = await Clipboard.copyRich(text, html)
+              if (!result.ok) {
+                toast.show({ message: "Failed to copy to clipboard", variant: "error" })
+              } else if (result.rich) {
+                toast.show({ message: "Copied as rich text!", variant: "success" })
+              } else {
+                toast.show({ message: `Copied as plain text. ${result.reason}`, variant: "warning" })
+              }
+            } else {
+              await Clipboard.copy(text)
+              toast.show({ message: "Message copied to clipboard!", variant: "success" })
+            }
             dialog.clear()
           },
         },

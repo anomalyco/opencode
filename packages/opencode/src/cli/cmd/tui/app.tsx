@@ -28,6 +28,8 @@ import { PromptStashProvider } from "./component/prompt/stash"
 import { DialogAlert } from "./ui/dialog-alert"
 import { ToastProvider, useToast } from "./ui/toast"
 import { ExitProvider, useExit } from "./context/exit"
+import { findMarkdownForSelection } from "@tui/util/selection-to-markdown"
+import { markdownToHtml } from "@tui/util/markdown-html"
 import { Session as SessionApi } from "@/session"
 import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
@@ -199,6 +201,25 @@ function App() {
   // Wire up console copy-to-clipboard via opentui's onCopySelection callback
   renderer.console.onCopySelection = async (text: string) => {
     if (!text || text.length === 0) return
+
+    // Try to find markdown source if rich text mode is enabled
+    if (local.copyAsRichText()) {
+      const markdown = findMarkdownForSelection(text, sync.data.part)
+      if (markdown) {
+        const html = markdownToHtml(markdown)
+        const result = await Clipboard.copyRich(text, html)
+        if (!result.ok) {
+          toast.show({ message: "Failed to copy to clipboard", variant: "error" })
+        } else if (result.rich) {
+          toast.show({ message: "Copied as rich text!", variant: "success" })
+        } else {
+          toast.show({ message: `Copied as plain text. ${result.reason}`, variant: "warning" })
+        }
+        renderer.clearSelection()
+        return
+      }
+      // If no markdown match found, fall through to plain text copy
+    }
 
     await Clipboard.copy(text)
       .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
@@ -659,6 +680,25 @@ function App() {
         }
         const text = renderer.getSelection()?.getSelectedText()
         if (text && text.length > 0) {
+          // Try to find markdown source if rich text mode is enabled
+          if (local.copyAsRichText()) {
+            const markdown = findMarkdownForSelection(text, sync.data.part)
+            if (markdown) {
+              const html = markdownToHtml(markdown)
+              const result = await Clipboard.copyRich(text, html)
+              if (!result.ok) {
+                toast.show({ message: "Failed to copy to clipboard", variant: "error" })
+              } else if (result.rich) {
+                toast.show({ message: "Copied as rich text!", variant: "success" })
+              } else {
+                toast.show({ message: `Copied as plain text. ${result.reason}`, variant: "warning" })
+              }
+              renderer.clearSelection()
+              return
+            }
+            // If no markdown match found, fall through to plain text copy
+          }
+
           await Clipboard.copy(text)
             .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
             .catch(toast.error)
