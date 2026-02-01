@@ -437,6 +437,7 @@ export const dict = {
   "session.review.noChanges": "Нет изменений",
   "session.files.selectToOpen": "Выберите файл, чтобы открыть",
   "session.files.all": "Все файлы",
+  "session.files.binaryContent": "Двоичный файл (содержимое не может быть отображено)",
   "session.messages.renderEarlier": "Показать предыдущие сообщения",
   "session.messages.loadingEarlier": "Загрузка предыдущих сообщений...",
   "session.messages.loadEarlier": "Загрузить предыдущие сообщения",
