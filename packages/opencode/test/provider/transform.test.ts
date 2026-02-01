@@ -1166,7 +1166,7 @@ describe("ProviderTransform.message - claude w/bedrock custom inference profile"
     expect(result[0].providerOptions?.bedrock).toEqual(
       expect.objectContaining({
         cachePoint: {
-          type: "ephemeral",
+          type: "default",
         },
       }),
     )
