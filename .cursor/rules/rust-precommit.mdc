@@ -8,6 +8,7 @@ alwaysApply: true
 When making Rust changes, run these before committing:
 
 ```bash
+./script/generate.ts
 cargo fmt
 cargo clippy --all-targets --all-features -- -D warnings
 cargo build
