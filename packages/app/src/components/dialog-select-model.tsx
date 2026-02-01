@@ -118,6 +118,17 @@ export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
   }
   const language = useLanguage()
 
+  // Set data-active on trigger when popover is open
+  createEffect(() => {
+    const trigger = store.trigger
+    if (!trigger) return
+    if (store.open) {
+      trigger.setAttribute("data-active", "true")
+    } else {
+      trigger.removeAttribute("data-active")
+    }
+  })
+
   createEffect(() => {
     if (!store.open) return
 
@@ -174,7 +185,8 @@ export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
         setStore("open", next)
       }}
       modal={false}
-      placement="top-start"
+      placement="top"
+      flip
       gutter={8}
     >
       <Kobalte.Trigger

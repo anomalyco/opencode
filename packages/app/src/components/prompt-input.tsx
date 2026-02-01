@@ -42,6 +42,7 @@ import { Select } from "@opencode-ai/ui/select"
 import { getDirectory, getFilename, getFilenameTruncated } from "@opencode-ai/util/path"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
+
 import { ModelSelectorPopover } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
 import { useProviders } from "@/hooks/use-providers"
@@ -1616,6 +1617,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     })
   }
 
+  const currentModelVariant = createMemo(() => {
+    const modelVariant = local.model.variant.current() ?? ""
+    return modelVariant === "xhigh"
+      ? "xHigh"
+      : modelVariant.length > 0
+        ? modelVariant[0].toUpperCase() + modelVariant.slice(1)
+        : "Default"
+  })
+
   return (
     <div class="relative size-full _max-h-[320px] flex flex-col gap-3">
       <Show when={store.popover}>
@@ -1890,8 +1900,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </div>
           </Show>
         </div>
-        <div class="relative p-3 flex items-center justify-between">
-          <div class="flex items-center justify-start gap-0.5">
+        <div class="relative p-3 flex items-center gap-2 sm:gap-0 sm:justify-between">
+          <div class="contents sm:flex sm:items-center sm:justify-start sm:gap-0.5 sm:min-w-0">
             <Switch>
               <Match when={store.mode === "shell"}>
                 <div class="flex items-center gap-2 px-2 h-6">
@@ -1910,7 +1920,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     options={local.agent.list().map((agent) => agent.name)}
                     current={local.agent.current()?.name ?? ""}
                     onSelect={local.agent.set}
-                    class="capitalize"
+                    class="capitalize shrink-0"
                     variant="ghost"
                   />
                 </TooltipKeybind>
@@ -1925,7 +1935,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       <Button
                         as="div"
                         variant="ghost"
-                        class="p-2 -m-2 sm:p-0 sm:m-0"
+                        class="shrink-0"
                         onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}
                       >
                         <Show when={local.model.current()?.provider?.id}>
@@ -1934,7 +1944,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         <span class="hidden sm:inline">
                           {local.model.current()?.name ?? language.t("dialog.model.select.title")}
                         </span>
-                        <Icon name="chevron-down" size="small" class="hidden sm:block" />
+                        <Icon name="chevron-down" class="size-3.5" />
                       </Button>
                     </TooltipKeybind>
                   }
@@ -1946,7 +1956,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   >
                     <ModelSelectorPopover
                       triggerAs={Button}
-                      triggerProps={{ variant: "ghost", class: "p-2 -m-2 sm:p-0 sm:m-0" }}
+                      triggerProps={{
+                        variant: "ghost",
+                        class: "shrink-0",
+                      }}
                     >
                       <Show when={local.model.current()?.provider?.id}>
                         <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
@@ -1954,7 +1967,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       <span class="hidden sm:inline">
                         {local.model.current()?.name ?? language.t("dialog.model.select.title")}
                       </span>
-                      <Icon name="chevron-down" size="small" class="hidden sm:block" />
+                      <Icon name="chevron-down" class="size-3.5" />
                     </ModelSelectorPopover>
                   </TooltipKeybind>
                 </Show>
@@ -1964,17 +1977,22 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     title={language.t("command.model.variant.cycle")}
                     keybind={command.keybind("model.variant.cycle")}
                   >
-                    <Button
-                      data-action="model-variant-cycle"
+                    <Select
+                      options={local.model.variant
+                        .list()
+                        .map((v) => (v === "" ? "Default" : v === "xhigh" ? "xHigh" : v[0].toUpperCase() + v.slice(1)))}
+                      current={currentModelVariant()}
+                      onSelect={(display) => {
+                        if (!display) return
+                        const variant =
+                          display === "Default" ? "" : display === "xHigh" ? "xhigh" : display.toLowerCase()
+                        local.model.variant.set(variant)
+                      }}
+                      class="shrink-0"
                       variant="ghost"
-                      class="p-2 -m-2 sm:p-0 sm:m-0 text-text-base _hidden group-hover/prompt-input:inline-block capitalize text-12-regular"
-                      onClick={() => local.model.variant.cycle()}
-                    >
-                      <Icon name="brain" size="small" class="sm:hidden" />
-                      <span class="hidden sm:inline">
-                        {local.model.variant.current() ?? language.t("common.default")}
-                      </span>
-                    </Button>
+                      icon={<Icon name="bulb" class="size-4 shrink-0" />}
+                      valueClass="hidden sm:inline"
+                    />
                   </TooltipKeybind>
                 </Show>
                 <Show when={permission.permissionsEnabled() && params.id}>
@@ -2009,7 +2027,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               </Match>
             </Switch>
           </div>
-          <div class="flex items-center gap-3 absolute right-3 bottom-3">
+          <div class="contents sm:flex sm:items-center sm:gap-3 sm:shrink-0">
             <input
               ref={fileInputRef}
               type="file"
@@ -2021,18 +2039,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 e.currentTarget.value = ""
               }}
             />
-            <div class="flex items-center gap-2">
+            <div class="contents sm:flex sm:items-center sm:gap-2">
               <SessionContextUsage />
               <Show when={store.mode === "normal"}>
                 <Tooltip placement="top" value={language.t("prompt.action.attachFile")}>
                   <Button
                     type="button"
                     variant="ghost"
-                    class="size-6 p-2 -m-2 sm:p-0 sm:m-0"
                     onClick={() => fileInputRef.click()}
                     aria-label={language.t("prompt.action.attachFile")}
                   >
-                    <Icon name="photo" class="size-4.5" />
+                    <Icon name="photo" />
                   </Button>
                 </Tooltip>
               </Show>
@@ -2062,7 +2079,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 disabled={!prompt.dirty() && !working()}
                 icon={working() ? "stop" : "arrow-up"}
                 variant="primary"
-                class="h-6 w-4.5 p-2 -m-2 sm:p-0 sm:m-0"
                 aria-label={working() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
               />
             </Tooltip>

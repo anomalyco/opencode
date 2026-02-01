@@ -18,6 +18,8 @@ export type SelectProps<T> = Omit<ComponentProps<typeof Kobalte<T>>, "value" | "
   children?: (item: T | undefined) => JSX.Element
   triggerStyle?: JSX.CSSProperties
   triggerVariant?: "settings"
+  icon?: JSX.Element
+  valueClass?: string
 }
 
 export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">) {
@@ -36,6 +38,8 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
     "children",
     "triggerStyle",
     "triggerVariant",
+    "icon",
+    "valueClass",
   ])
 
   const state = {
@@ -84,7 +88,8 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
       {...others}
       data-component="select"
       data-trigger-style={local.triggerVariant}
-      placement={local.triggerVariant === "settings" ? "bottom-end" : "bottom-start"}
+      placement={local.triggerVariant === "settings" ? "bottom-end" : "top-start"}
+      flip
       gutter={4}
       value={local.current}
       options={grouped()}
@@ -140,7 +145,8 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
           [local.class ?? ""]: !!local.class,
         }}
       >
-        <Kobalte.Value<T> data-slot="select-select-trigger-value">
+        {local.icon}
+        <Kobalte.Value<T> data-slot="select-select-trigger-value" class={local.valueClass}>
           {(state) => {
             const selected = state.selectedOption() ?? local.current
             if (!selected) return local.placeholder || ""
@@ -153,14 +159,7 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
         </Kobalte.Icon>
       </Kobalte.Trigger>
       <Kobalte.Portal>
-        <Kobalte.Content
-          classList={{
-            ...(local.classList ?? {}),
-            [local.class ?? ""]: !!local.class,
-          }}
-          data-component="select-content"
-          data-trigger-style={local.triggerVariant}
-        >
+        <Kobalte.Content data-component="select-content" data-trigger-style={local.triggerVariant}>
           <Kobalte.Listbox data-slot="select-select-content-list" />
         </Kobalte.Content>
       </Kobalte.Portal>
