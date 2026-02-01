@@ -35,6 +35,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 20: Refactor 2FA verification page** - Refactor generate2FAPageHtml so the content is moved and integrated with the project at `packages/app` instead of the large string in code
 - [ ] **Phase 21: Allow the user to add and manage SSH keys in the opencode webapp** - Allow the user to add and manage SSH keys in the opencode webapp; when attempting to clone via git SSH, prompt for a key if none are registered; add CRUD in settings; install keys in ~/.ssh; update ssh config; add server routes as needed
 - [ ] **Phase 22: Refactor the /auth/2fa/setup page from auth.ts into the SolidJS app at packages/app** - Refactor the /auth/2fa/setup page from auth.ts into the SolidJS app at packages/app
+- [ ] **Phase 23: During 2FA setup, make the server automatically set the .google_authenticator file in the appropriate user's home folder, instead of asking the user to run the command on their machine** - During 2FA setup, make the server automatically set the .google_authenticator file in the appropriate user's home folder, instead of asking the user to run the command on their machine
 
 ## Phase Details
 
@@ -425,6 +426,20 @@ Plans:
 
 **Details:**
 [To be added during planning]
+
+### Phase 23: During 2FA setup, make the server automatically set the .google_authenticator file in the appropriate user's home folder, instead of asking the user to run the command on their machine
+
+**Goal:** 2FA setup auto-provisions `~/.google_authenticator` via the broker with a manual fallback when the broker is unavailable
+**Depends on:** Phase 22
+**Plans:** 2 plans
+
+Plans:
+
+- [ ] 23-01-PLAN.md — Broker + server auto-provisioning with manual fallback
+- [ ] 23-02-PLAN.md — Setup UI status messaging and fallback rendering
+
+**Details:**
+The 2FA setup flow should have the broker write the `.google_authenticator` file for the authenticated user with correct ownership and permissions. The setup page should show status (created / already configured / manual required) and only display the manual command when the broker cannot complete the write.
 
 ## Progress
 

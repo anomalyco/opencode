@@ -11,7 +11,7 @@ See: .planning/PROJECT.md (updated 2026-01-19)
 
 **Milestone 1:** Complete (Phases 1-11)
 **Phase:** 21 of 21 (SSH key management) - Complete
-**Next Phase:** 22 - Refactor the /auth/2fa/setup page from auth.ts into the SolidJS app at packages/app
+**Next Phase:** 23 - During 2FA setup, make the server automatically set the .google_authenticator file in the appropriate user's home folder, instead of asking the user to run the command on their machine
 **Plan:** 02 of 02 - Complete
 **Status:** Phase complete
 **Last activity:** 2026-02-01 - Completed 21-02 plan
@@ -181,6 +181,7 @@ Recent decisions affecting current work:
 - Phase 20 added: Refactor 2FA verification page (move generate2FAPageHtml content into packages/app)
 - Phase 21 added: Allow the user to add and manage SSH keys in the opencode webapp; prompt for SSH key on clone; add settings CRUD; install keys in ~/.ssh; update ssh config; add server routes as needed
 - Phase 22 added: Refactor the /auth/2fa/setup page from auth.ts into the SolidJS app at packages/app
+- Phase 23 added: During 2FA setup, make the server automatically set the .google_authenticator file in the appropriate user's home folder, instead of asking the user to run the command on their machine
 
 ### Pending Todos
 
