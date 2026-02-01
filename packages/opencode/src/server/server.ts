@@ -563,13 +563,17 @@ export namespace Server {
     return result
   }
 
-  export function listen(opts: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
+  export function listen(opts: { port: number; hostname: string; mdns?: boolean; cors?: string[]; rootPath?: string }) {
     _corsWhitelist = opts.cors ?? []
+
+    const baseApp = opts.rootPath 
+      ? new Hono().basePath(opts.rootPath).route("/", App())
+      : App()
 
     const args = {
       hostname: opts.hostname,
       idleTimeout: 0,
-      fetch: App().fetch,
+      fetch: baseApp.fetch,
       websocket: websocket,
     } as const
     const tryServe = (port: number) => {
@@ -582,7 +586,9 @@ export namespace Server {
     const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
     if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
 
-    _url = server.url
+    _url = opts.rootPath 
+      ? new URL(`${server.url.origin}${opts.rootPath}`)
+      : server.url
 
     const shouldPublishMDNS =
       opts.mdns &&
