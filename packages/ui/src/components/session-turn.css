@@ -569,4 +569,20 @@
     flex-direction: column;
     gap: 12px;
   }
+
+  [data-slot="session-turn-question-parts"] {
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  [data-slot="session-turn-answered-question-parts"] {
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
 }

@@ -1,21 +1,15 @@
 name: beta
 
 on:
-  push:
-    branches: [dev]
-  pull_request:
-    types: [opened, synchronize, labeled, unlabeled]
+  workflow_dispatch:
+  schedule:
+    - cron: "0 * * * *"
 
 jobs:
   sync:
-    if: |
-      github.event_name == 'push' || 
-      (github.event_name == 'pull_request' && 
-       contains(github.event.pull_request.labels.*.name, 'contributor'))
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: write
-      pull-requests: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

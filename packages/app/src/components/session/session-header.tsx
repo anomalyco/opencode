@@ -167,7 +167,7 @@ export function SessionHeader() {
                     triggerAs={Button}
                     triggerProps={{
                       variant: "secondary",
-                      class: "rounded-sm w-[60px] h-[24px]",
+                      class: "rounded-sm h-[24px] px-3",
                       classList: { "rounded-r-none": shareUrl() !== undefined },
                       style: { scale: 1 },
                     }}
