@@ -10,7 +10,7 @@ async function pathExists(p: string): Promise<boolean> {
   }
 }
 
-export async function findCMakeBuildDirs(root: string): Promise<string[]> {
+async function findCMakeBuildDirs(root: string): Promise<string[]> {
   const dirs: string[] = []
   const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => [])
   for (const entry of entries) {
