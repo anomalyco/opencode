@@ -17,10 +17,13 @@ export function DialogAlert(props: DialogAlertProps) {
 
   useKeyboard((evt) => {
     if (evt.name === "return") {
+      evt.preventDefault()
+      evt.stopPropagation()
       props.onConfirm?.()
       dialog.clear()
     }
   })
+
   return (
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">

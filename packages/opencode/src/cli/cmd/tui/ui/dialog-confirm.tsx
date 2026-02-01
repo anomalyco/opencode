@@ -23,6 +23,8 @@ export function DialogConfirm(props: DialogConfirmProps) {
 
   useKeyboard((evt) => {
     if (evt.name === "return") {
+      evt.preventDefault()
+      evt.stopPropagation()
       if (store.active === "confirm") props.onConfirm?.()
       if (store.active === "cancel") props.onCancel?.()
       dialog.clear()
@@ -32,6 +34,7 @@ export function DialogConfirm(props: DialogConfirmProps) {
       setStore("active", store.active === "confirm" ? "cancel" : "confirm")
     }
   })
+
   return (
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
