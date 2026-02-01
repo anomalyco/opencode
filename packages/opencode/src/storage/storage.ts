@@ -233,7 +233,10 @@ export namespace Storage {
       if (!(e instanceof Error)) throw e
       const errnoException = e as NodeJS.ErrnoException
       if (errnoException.code === "ENOENT") {
-        throw new NotFoundError({ message: `Resource not found: ${errnoException.path}` })
+        const p = (errnoException as any).path as string | undefined
+        if (!p || (!p.includes(".oc-") && !p.endsWith(".tmp"))) {
+          throw new NotFoundError({ message: `Resource not found: ${errnoException.path}` })
+        }
       }
       throw e
     })
@@ -258,26 +261,34 @@ export namespace Storage {
 
   async function atomicWrite(target: string, data: string) {
     const dir = path.dirname(target)
-    await fs.mkdir(dir, { recursive: true })
-    const tmp = path.join(dir, `.oc-${path.basename(target)}.${process.pid}.${Date.now()}.tmp`)
-    const fh = await fs.open(tmp, "w")
-    try {
-      await fh.writeFile(data)
-      const syncFn = (fh as any).sync as (() => Promise<void>) | undefined
-      if (typeof syncFn === "function") {
-        await syncFn.call(fh)
-      } else {
-        const fd = (fh as any).fd as number | undefined
-        if (typeof fd === "number") {
-          await new Promise<void>((resolve, reject) => nodefs.fsync(fd, (err) => (err ? reject(err) : resolve())))
-        }
-      }
-    } finally {
-      await fh.close().catch(() => {})
-    }
-    let renamed = false
     let lastErr: any
     for (let i = 0; i < 6; i++) {
+      await fs.mkdir(dir, { recursive: true }).catch(() => {})
+      const tmp = path.join(dir, `.oc-${path.basename(target)}.${process.pid}.${Date.now()}.${i}.tmp`)
+      const fh = await fs.open(tmp, "w").catch((e) => {
+        lastErr = e
+        return null as any
+      })
+      if (!fh) {
+        const code = (lastErr as any)?.code as string | undefined
+        const transient = isTransientFsError(lastErr) || code === "ENOENT"
+        if (!transient) break
+        await delay(Math.min(1600, 50 * 2 ** i))
+        continue
+      }
+      try {
+        await fh.writeFile(data)
+        const syncFn = (fh as any).sync as (() => Promise<void>) | undefined
+        if (typeof syncFn === "function") await syncFn.call(fh)
+        else {
+          const fd = (fh as any).fd as number | undefined
+          if (typeof fd === "number") {
+            await new Promise<void>((resolve, reject) => nodefs.fsync(fd, (err) => (err ? reject(err) : resolve())))
+          }
+        }
+      } finally {
+        await fh.close().catch(() => {})
+      }
       try {
         await fs.rename(tmp, target)
         const dirFh = await fs.open(dir, "r").catch(() => null as any)
@@ -293,29 +304,23 @@ export namespace Storage {
         } finally {
           await dirFh?.close?.().catch?.(() => {})
         }
-        renamed = true
-        break
+        return
       } catch (e) {
         lastErr = e
-        if (!isTransientFsError(e)) break
+        await fs.rm(tmp, { force: true }).catch(() => {})
+        const code = (e as any)?.code as string | undefined
+        const transient = isTransientFsError(e) || code === "ENOENT"
+        if (!transient) break
         await delay(Math.min(1600, 50 * 2 ** i))
       }
     }
-    if (!renamed) {
-      try {
-        const root = await state().then((x) => x.dir)
-        const rel = path.relative(root, target)
-        const dest = path.join(root, "quarantine", String(Date.now()), rel)
-        await fs.mkdir(path.dirname(dest), { recursive: true })
-        await fs.rename(tmp, dest).catch(async () => {
-          const content = await Bun.file(tmp).arrayBuffer().catch(() => new ArrayBuffer(0))
-          await Bun.write(dest, new Uint8Array(content))
-          await fs.rm(tmp, { force: true }).catch(() => {})
-        })
-      } catch {
-        await fs.rm(tmp, { force: true }).catch(() => {})
-      }
-      throw lastErr
-    }
+    try {
+      const root = await state().then((x) => x.dir)
+      const rel = path.relative(root, target)
+      const dest = path.join(root, "quarantine", String(Date.now()), rel)
+      await fs.mkdir(path.dirname(dest), { recursive: true })
+      await Bun.write(dest, data)
+    } catch {}
+    throw lastErr
   }
 }
