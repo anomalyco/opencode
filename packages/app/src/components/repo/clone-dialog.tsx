@@ -12,6 +12,7 @@ import type { Repo, RepoCloneCredentials, RepoCloneProgress } from "@opencode-ai
 import { useCloneProgress, type CloneAuthType } from "@/hooks/use-clone-progress"
 import { useGlobalSync } from "@/context/global-sync"
 import { useGlobalSDK } from "@/context/global-sdk"
+import { SettingsDialog } from "@/components/settings/settings-dialog"
 
 type CredentialMode = CloneAuthType | null
 
@@ -46,6 +47,25 @@ export function CloneDialog(props: CloneDialogProps) {
   const [sshPassphrase, setSshPassphrase] = createSignal("")
   const [httpUsername, setHttpUsername] = createSignal("")
   const [httpPassword, setHttpPassword] = createSignal("")
+
+  const trimmedUrl = createMemo(() => gitUrl().trim())
+  const isSshUrl = createMemo(() => trimmedUrl().startsWith("git@") || trimmedUrl().startsWith("ssh://"))
+  const [sshKeys, { refetch: refetchSshKeys }] = createResource(
+    () => (isSshUrl() ? "ssh" : null),
+    async () => {
+      try {
+        return (await globalSDK.client.sshKeys.list()).data ?? []
+      } catch {
+        return undefined
+      }
+    },
+  )
+  const missingSshKeys = createMemo(() => {
+    if (!isSshUrl()) return false
+    const keys = sshKeys()
+    if (!keys) return false
+    return keys.length === 0
+  })
 
   const [config] = createResource(async () => {
     try {
@@ -83,6 +103,9 @@ export function CloneDialog(props: CloneDialogProps) {
       setIsCloning(false)
       setCloneProgress(null)
       setMaybeErrorInfo({ message, helpSteps, authType, canRetry })
+      if (authType === "ssh") {
+        void refetchSshKeys()
+      }
       if (canRetry && authType) setCredentialMode(authType)
       showToast({ title: "Failed to clone repository", description: message })
     },
@@ -126,14 +149,13 @@ export function CloneDialog(props: CloneDialogProps) {
   }
 
   const handleClone = () => {
-    const trimmedUrl = gitUrl().trim()
-    if (!trimmedUrl) {
+    if (!trimmedUrl()) {
       showToast({ title: "URL required", description: "Enter a git URL to clone." })
       return
     }
     setMaybeErrorInfo(null)
     setIsCloning(true)
-    startClone(trimmedUrl, branch().trim() || undefined)
+    startClone(trimmedUrl(), branch().trim() || undefined)
   }
 
   const handleRetryWithCredentials = async () => {
@@ -151,7 +173,7 @@ export function CloneDialog(props: CloneDialogProps) {
 
     setMaybeErrorInfo(null)
     setIsCloning(true)
-    await startCloneWithCredentials(gitUrl().trim(), credentials, branch().trim() || undefined)
+    await startCloneWithCredentials(trimmedUrl(), credentials, branch().trim() || undefined)
   }
 
   const hasValidCredentials = createMemo(() => {
@@ -212,6 +234,20 @@ export function CloneDialog(props: CloneDialogProps) {
               </Show>
             </div>
           )}
+        </Show>
+
+        <Show when={missingSshKeys()}>
+          <div class="rounded-md border border-border-weak-base bg-surface-warning-base/30 p-3">
+            <div class="text-12-medium text-text-strong">SSH key required</div>
+            <div class="mt-1 text-12-regular text-text-weak">
+              Add an SSH key to clone repositories over SSH.
+            </div>
+            <div class="mt-3 flex justify-end">
+              <Button size="normal" onClick={() => dialog.show(() => <SettingsDialog />)} disabled={isCloning()}>
+                Add SSH key
+              </Button>
+            </div>
+          </div>
         </Show>
 
         <Show when={credentialMode()}>
