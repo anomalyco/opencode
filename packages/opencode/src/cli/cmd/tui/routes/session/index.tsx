@@ -80,13 +80,57 @@ import { formatTranscript } from "../../util/transcript"
 addDefaultParsers(parsers.parsers)
 
 class CustomSpeedScroll implements ScrollAcceleration {
+  private accumulated = 0
+  private consecutiveTicks = 0
+  private lastTickTime = 0
+  private readonly timeout = 150 // ms - reset consecutive counter if more than this time passes
+
   constructor(private speed: number) {}
 
-  tick(_now?: number): number {
-    return this.speed
+  tick(now?: number): number {
+    const currentTime = now ?? Date.now()
+
+    // If too much time passed since last tick, reset consecutive counter
+    // This prevents scroll events spaced far apart in time from being considered "consecutive"
+    if (currentTime - this.lastTickTime > this.timeout) {
+      this.consecutiveTicks = 0
+      // Preserve accumulated value only if significant (> 0.5), otherwise reset
+      if (this.accumulated < 0.5) {
+        this.accumulated = 0
+      }
+    }
+
+    this.lastTickTime = currentTime
+    this.accumulated += this.speed
+    this.consecutiveTicks++
+
+    // If accumulated 1 full line, move immediately
+    if (this.accumulated >= 1) {
+      const lines = Math.floor(this.accumulated)
+      this.accumulated -= lines
+      this.consecutiveTicks = 0
+      return lines
+    }
+
+    // If 3+ rapid events in sequence without completing 1 line, force movement
+    // This fixes slow scrolls with "notches" (mouse wheel with detents)
+    if (this.consecutiveTicks >= 3) {
+      // Preserve remaining fraction instead of discarding everything
+      const lines = Math.max(1, Math.floor(this.accumulated))
+      this.accumulated -= lines
+      this.consecutiveTicks = 0
+      return lines
+    }
+
+    // Not enough accumulated yet
+    return 0
   }
 
-  reset(): void {}
+  reset(): void {
+    this.accumulated = 0
+    this.consecutiveTicks = 0
+    this.lastTickTime = 0
+  }
 }
 
 const context = createContext<{
@@ -165,11 +209,10 @@ export function Session() {
     if (tui?.scroll_acceleration?.enabled) {
       return new MacOSScrollAccel()
     }
-    if (tui?.scroll_speed) {
-      return new CustomSpeedScroll(tui.scroll_speed)
-    }
 
-    return new CustomSpeedScroll(3)
+    // Default to 1 line per scroll for smooth, predictable behavior
+    // Exactly 1 line per scroll event - no fractional weirdness
+    return new CustomSpeedScroll(tui?.scroll_speed ?? 1)
   })
 
   createEffect(async () => {
