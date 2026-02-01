@@ -292,7 +292,7 @@ export function Message(props: MessageProps) {
   )
 }
 
-export function AssistantMessageDisplay(props: { message: AssistantMessage; parts: PartType[] }) {
+export function AssistantMessageDisplay(props: { message: MessageType; parts: PartType[] }) {
   const emptyParts: PartType[] = []
   const filteredParts = createMemo(
     () =>

@@ -1087,7 +1087,7 @@ export function Session() {
                     >
                       <AssistantMessage
                         last={lastAssistant()?.id === message.id}
-                        message={message as AssistantMessage}
+                        message={message}
                         parts={sync.data.part[message.id] ?? []}
                       />
                     </Match>
@@ -1254,22 +1254,29 @@ function UserMessage(props: {
   )
 }
 
-function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; last: boolean }) {
+function AssistantMessage(props: { message: AssistantMessage | UserMessage; parts: Part[]; last: boolean }) {
   const local = useLocal()
   const { theme } = useTheme()
   const sync = useSync()
   const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
 
+  // Check if this is an actual AssistantMessage (not UserMessage with renderAsAssistant)
+  const isActualAssistant = createMemo(() => props.message.role === "assistant")
+
   const final = createMemo(() => {
-    return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
+    if (!isActualAssistant()) return false
+    const msg = props.message as AssistantMessage
+    return msg.finish && !["tool-calls", "unknown"].includes(msg.finish)
   })
 
   const duration = createMemo(() => {
+    if (!isActualAssistant()) return 0
     if (!final()) return 0
-    if (!props.message.time.completed) return 0
-    const user = messages().find((x) => x.role === "user" && x.id === props.message.parentID)
+    const msg = props.message as AssistantMessage
+    if (!msg.time.completed) return 0
+    const user = messages().find((x) => x.role === "user" && x.id === msg.parentID)
     if (!user || !user.time) return 0
-    return props.message.time.completed - user.time.created
+    return msg.time.completed - user.time.created
   })
 
   return (
@@ -1289,46 +1296,55 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           )
         }}
       </For>
-      <Show when={props.message.error && props.message.error.name !== "MessageAbortedError"}>
-        <box
-          border={["left"]}
-          paddingTop={1}
-          paddingBottom={1}
-          paddingLeft={2}
-          marginTop={1}
-          backgroundColor={theme.backgroundPanel}
-          customBorderChars={SplitBorder.customBorderChars}
-          borderColor={theme.error}
+      <Show when={isActualAssistant()}>
+        <Show
+          when={
+            (props.message as AssistantMessage).error &&
+            (props.message as AssistantMessage).error?.name !== "MessageAbortedError"
+          }
         >
-          <text fg={theme.textMuted}>{props.message.error?.data.message}</text>
-        </box>
-      </Show>
-      <Switch>
-        <Match when={props.last || final() || props.message.error?.name === "MessageAbortedError"}>
-          <box paddingLeft={3}>
-            <text marginTop={1}>
-              <span
-                style={{
-                  fg:
-                    props.message.error?.name === "MessageAbortedError"
-                      ? theme.textMuted
-                      : local.agent.color(props.message.agent),
-                }}
-              >
-                ▣{" "}
-              </span>{" "}
-              <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
-              <span style={{ fg: theme.textMuted }}> · {props.message.modelID}</span>
-              <Show when={duration()}>
-                <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
-              </Show>
-              <Show when={props.message.error?.name === "MessageAbortedError"}>
-                <span style={{ fg: theme.textMuted }}> · interrupted</span>
-              </Show>
-            </text>
+          <box
+            border={["left"]}
+            paddingTop={1}
+            paddingBottom={1}
+            paddingLeft={2}
+            marginTop={1}
+            backgroundColor={theme.backgroundPanel}
+            customBorderChars={SplitBorder.customBorderChars}
+            borderColor={theme.error}
+          >
+            <text fg={theme.textMuted}>{(props.message as AssistantMessage).error?.data.message}</text>
           </box>
-        </Match>
-      </Switch>
+        </Show>
+        <Switch>
+          <Match
+            when={props.last || final() || (props.message as AssistantMessage).error?.name === "MessageAbortedError"}
+          >
+            <box paddingLeft={3}>
+              <text marginTop={1}>
+                <span
+                  style={{
+                    fg:
+                      (props.message as AssistantMessage).error?.name === "MessageAbortedError"
+                        ? theme.textMuted
+                        : local.agent.color(props.message.agent),
+                  }}
+                >
+                  ▣{" "}
+                </span>{" "}
+                <span style={{ fg: theme.text }}>{Locale.titlecase((props.message as AssistantMessage).mode)}</span>
+                <span style={{ fg: theme.textMuted }}>· {(props.message as AssistantMessage).modelID}</span>
+                <Show when={duration()}>
+                  <span style={{ fg: theme.textMuted }}>· {Locale.duration(duration())}</span>
+                </Show>
+                <Show when={(props.message as AssistantMessage).error?.name === "MessageAbortedError"}>
+                  <span style={{ fg: theme.textMuted }}>· interrupted</span>
+                </Show>
+              </text>
+            </box>
+          </Match>
+        </Switch>
+      </Show>
     </>
   )
 }
@@ -1339,7 +1355,7 @@ const PART_MAPPING = {
   reasoning: ReasoningPart,
 }
 
-function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage }) {
+function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: AssistantMessage | UserMessage }) {
   const { theme, subtleSyntax } = useTheme()
   const ctx = use()
   const content = createMemo(() => {
@@ -1372,7 +1388,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
   )
 }
 
-function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage }) {
+function TextPart(props: { last: boolean; part: TextPart; message: AssistantMessage | UserMessage }) {
   const ctx = use()
   const { theme, syntax } = useTheme()
   return (
@@ -1406,7 +1422,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
 
 // Pending messages moved to individual tool pending functions
 
-function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMessage }) {
+function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMessage | UserMessage }) {
   const ctx = use()
   const sync = useSync()
 
