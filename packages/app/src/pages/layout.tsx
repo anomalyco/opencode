@@ -67,6 +67,7 @@ import { Titlebar } from "@/components/titlebar"
 import { SessionIndicator } from "@/components/session-indicator"
 import { SecurityBadge } from "@/components/security-badge"
 import { HttpWarningBanner } from "@/components/http-warning-banner"
+import { SettingsDialog } from "@/components/settings/settings-dialog"
 import { useServer } from "@/context/server"
 
 export default function Layout(props: ParentProps) {
@@ -1613,7 +1614,12 @@ export default function Layout(props: ParentProps) {
           </div>
           <div class="shrink-0 w-full pt-3 pb-3 flex flex-col items-center gap-2">
             <Tooltip placement={sidebarProps.mobile ? "bottom" : "right"} value="Settings">
-              <IconButton disabled icon="settings-gear" variant="ghost" size="large" />
+              <IconButton
+                icon="settings-gear"
+                variant="ghost"
+                size="large"
+                onClick={() => dialog.show(() => <SettingsDialog />)}
+              />
             </Tooltip>
             <Tooltip placement={sidebarProps.mobile ? "bottom" : "right"} value="Help">
               <IconButton
