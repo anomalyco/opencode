@@ -120,6 +120,31 @@ sudo systemctl stop opencode-broker
 sudo systemctl disable opencode-broker
 ```
 
+## Viewing broker logs
+
+### macOS (launchd)
+
+If the LaunchDaemon uses file logging, check:
+
+```bash
+sudo tail -n 200 /var/log/opencode-broker.log
+sudo tail -f /var/log/opencode-broker.log
+```
+
+You can also query unified logs if they are enabled for the service:
+
+```bash
+sudo log show --last 1h --predicate 'process == "opencode-broker"'
+sudo log stream --predicate 'process == "opencode-broker"'
+```
+
+### Linux (systemd)
+
+```bash
+sudo journalctl -u opencode-broker --since "1 hour ago"
+sudo journalctl -u opencode-broker -f
+```
+
 ## Find the owning PID for the socket
 
 On macOS:
