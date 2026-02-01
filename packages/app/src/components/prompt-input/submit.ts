@@ -13,6 +13,7 @@ import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
 import { Identifier } from "@/utils/id"
 import { Worktree as WorktreeState } from "@/utils/worktree"
+import { wasRecentlyBackgrounded } from "@/utils/visibility"
 import type { FileSelection } from "@/context/file"
 import { setCursorPosition } from "./editor-dom"
 import { buildRequestParts } from "./build-request-parts"
@@ -240,10 +241,13 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           command: text,
         })
         .catch((err) => {
-          showToast({
-            title: language.t("prompt.toast.shellSendFailed.title"),
-            description: errorMessage(err),
-          })
+          // Suppress toast if failure likely due to iOS backgrounding
+          if (!wasRecentlyBackgrounded()) {
+            showToast({
+              title: language.t("prompt.toast.shellSendFailed.title"),
+              description: errorMessage(err),
+            })
+          }
           restoreInput()
         })
       return
@@ -272,10 +276,13 @@ export function createPromptSubmit(input: PromptSubmitInput) {
             })),
           })
           .catch((err) => {
-            showToast({
-              title: language.t("prompt.toast.commandSendFailed.title"),
-              description: errorMessage(err),
-            })
+            // Suppress toast if failure likely due to iOS backgrounding
+            if (!wasRecentlyBackgrounded()) {
+              showToast({
+                title: language.t("prompt.toast.commandSendFailed.title"),
+                description: errorMessage(err),
+              })
+            }
             restoreInput()
           })
         return
@@ -389,10 +396,18 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       })
     }
 
-    void send().catch((err) => {
+    void send().catch(async (err) => {
       pending.delete(session.id)
       if (sessionDirectory === projectDirectory) {
         sync.set("session_status", session.id, { type: "idle" })
+      }
+      // If we just resumed from background, the request may have actually succeeded
+      // Resync to check before showing error and removing optimistic message
+      if (wasRecentlyBackgrounded()) {
+        await sync.session.sync(session.id).catch(() => {})
+        const messages = sync.data.message[session.id] ?? []
+        const found = messages.find((m) => m.id === messageID)
+        if (found) return // Message was delivered, don't show error
       }
       showToast({
         title: language.t("prompt.toast.promptSendFailed.title"),

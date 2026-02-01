@@ -1,4 +1,4 @@
-import { For, onCleanup, Show, Match, Switch, createMemo, createEffect, on } from "solid-js"
+import { For, onCleanup, onMount, Show, Match, Switch, createMemo, createEffect, on } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Dynamic } from "solid-js/web"
@@ -58,6 +58,7 @@ import { SessionPromptDock } from "@/pages/session/session-prompt-dock"
 import { SessionMobileTabs } from "@/pages/session/session-mobile-tabs"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
+import { wasHiddenFor } from "@/utils/visibility"
 
 type HandoffSession = {
   prompt: string
@@ -668,6 +669,17 @@ export default function Page() {
     const id = params.id
     if (!id) return
     sync.session.sync(id)
+  })
+
+  // Resync session when tab becomes visible after being backgrounded (iOS fix)
+  onMount(() => {
+    const handler = () => {
+      if (document.visibilityState === "hidden") return
+      if (!wasHiddenFor(1000)) return
+      if (params.id) sync.session.sync(params.id)
+    }
+    document.addEventListener("visibilitychange", handler)
+    onCleanup(() => document.removeEventListener("visibilitychange", handler))
   })
 
   createEffect(() => {

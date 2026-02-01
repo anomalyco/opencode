@@ -67,28 +67,83 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       timer = setTimeout(flush, Math.max(0, 16 - elapsed))
     }
 
-    void (async () => {
-      const events = await eventSdk.global.event()
-      let yielded = Date.now()
-      for await (const event of events.stream) {
-        const directory = event.directory ?? "global"
-        const payload = event.payload
-        const k = key(directory, payload)
-        if (k) {
-          const i = coalesced.get(k)
-          if (i !== undefined) {
-            queue[i] = undefined
-          }
-          coalesced.set(k, queue.length)
-        }
-        queue.push({ directory, payload })
-        schedule()
+    // SSE reconnection with exponential backoff (fixes iOS backgrounding)
+    const connectSSE = async () => {
+      const BASE_DELAY = 1000
+      const MAX_DELAY = 30000
+      let attempt = 0
 
-        if (Date.now() - yielded < 8) continue
-        yielded = Date.now()
-        await new Promise<void>((resolve) => setTimeout(resolve, 0))
+      while (!abort.signal.aborted) {
+        try {
+          const events = await eventSdk.global.event()
+          attempt = 0 // Reset on successful connection
+
+          let yielded = Date.now()
+          for await (const event of events.stream) {
+            const directory = event.directory ?? "global"
+            const payload = event.payload
+            const k = key(directory, payload)
+            if (k) {
+              const i = coalesced.get(k)
+              if (i !== undefined) {
+                queue[i] = undefined
+              }
+              coalesced.set(k, queue.length)
+            }
+            queue.push({ directory, payload })
+            schedule()
+
+            if (Date.now() - yielded < 8) continue
+            yielded = Date.now()
+            await new Promise<void>((resolve) => setTimeout(resolve, 0))
+          }
+
+          // Stream ended cleanly (e.g., iOS backgrounding) - reconnect
+          if (abort.signal.aborted) break
+        } catch {
+          // Connection error - will retry with backoff
+          if (abort.signal.aborted) break
+        }
+
+        // Exponential backoff before reconnecting
+        attempt++
+        const delay = Math.min(BASE_DELAY * 2 ** (attempt - 1), MAX_DELAY)
+
+        // Wait for delay, but also listen for abort
+        await new Promise<void>((resolve) => {
+          const timeout = setTimeout(resolve, delay)
+          const cleanup = () => {
+            clearTimeout(timeout)
+            resolve()
+          }
+          abort.signal.addEventListener("abort", cleanup, { once: true })
+        })
+
+        // If hidden, wait until visible before reconnecting (saves resources)
+        if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+          await new Promise<void>((resolve) => {
+            const handler = () => {
+              if (document.visibilityState === "visible") {
+                document.removeEventListener("visibilitychange", handler)
+                resolve()
+              }
+            }
+            document.addEventListener("visibilitychange", handler)
+            // Also resolve if aborted
+            abort.signal.addEventListener(
+              "abort",
+              () => {
+                document.removeEventListener("visibilitychange", handler)
+                resolve()
+              },
+              { once: true },
+            )
+          })
+        }
       }
-    })()
+    }
+
+    void connectSSE()
       .finally(flush)
       .catch(() => undefined)
 
