@@ -100,18 +100,18 @@ describe("LSPServer.Clangd", () => {
 
       const realpath = await fs.realpath(tmpDir)
 
-      let compileCommandsDir: string | undefined
+      let dirFromDirectory: string | undefined
+      let dirFromWorktree: string | undefined
       await Instance.provide({
         directory: path.join(realpath, "src"),
         fn: async () => {
-          compileCommandsDir = await findCompileCommandsDir(Instance.directory)
-          if (!compileCommandsDir && Instance.worktree !== "/" && Instance.worktree !== Instance.directory) {
-            compileCommandsDir = await findCompileCommandsDir(Instance.worktree)
-          }
+          dirFromDirectory = await findCompileCommandsDir(Instance.directory)
+          dirFromWorktree = await findCompileCommandsDir(Instance.worktree)
         },
       })
 
-      expect(compileCommandsDir).toBe(realpath)
+      expect(dirFromDirectory).toBeUndefined()
+      expect(dirFromWorktree).toBe(realpath)
     })
   })
 
