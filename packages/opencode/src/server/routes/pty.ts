@@ -6,7 +6,7 @@ import { Pty } from "@/pty"
 import { Storage } from "../../storage/storage"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
-import { getAuthContext } from "../middleware/auth"
+import { getAuthContext, type AuthEnv } from "../middleware/auth"
 import { ServerAuth } from "@/config/server-auth"
 import { Log } from "@/util/log"
 import { BrokerClient } from "@/auth/broker-client"
@@ -19,7 +19,9 @@ const getErrorMessage = (error: unknown) => {
   return "Unknown error"
 }
 
-const mapCreateError = (error: unknown, message: string) => {
+type CreateErrorStatus = 404 | 500 | 503
+
+const mapCreateError = (error: unknown, message: string): { code: string; status: CreateErrorStatus } => {
   if (error && typeof error === "object") {
     const code = typeof (error as { code?: string }).code === "string" ? (error as { code: string }).code : undefined
     if (code === "broker_session_not_found") {
@@ -39,8 +41,14 @@ const mapCreateError = (error: unknown, message: string) => {
   return { code: "pty_create_failed", status: 500 }
 }
 
+type PtyEnv = AuthEnv & {
+  Variables: AuthEnv["Variables"] & {
+    ptyRequestId?: string
+  }
+}
+
 export const PtyRoutes = lazy(() =>
-  new Hono()
+  new Hono<PtyEnv>()
     .get(
       "/",
       describeRoute({
