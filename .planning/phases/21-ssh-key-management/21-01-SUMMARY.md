@@ -51,6 +51,7 @@ completed: 2026-02-01
 - **Files modified:** 3
 
 ## Accomplishments
+
 - Added SshKey storage module with install/uninstall flows and fingerprinting
 - Added authenticated SSH key CRUD routes with Zod validation
 - Registered SSH key routes in the server router
@@ -65,11 +66,13 @@ Each task was committed atomically:
 **Plan metadata:** (docs commit follows after summary + STATE updates)
 
 ## Files Created/Modified
+
 - `packages/opencode/src/ssh/keys.ts` - Storage + install helpers and managed config updates
 - `packages/opencode/src/server/routes/ssh-keys.ts` - Authenticated SSH key CRUD routes
 - `packages/opencode/src/server/server.ts` - SSH key route registration
 
 ## Decisions Made
+
 - Use a managed SSH config block to keep key entries scoped to OpenCode.
 - Store SSH keys under a dedicated `~/.ssh/opencode` directory with strict permissions.
 
@@ -91,5 +94,6 @@ None - no external service configuration required.
 - No blockers identified.
 
 ---
-*Phase: 21-ssh-key-management*
-*Completed: 2026-02-01*
+
+_Phase: 21-ssh-key-management_
+_Completed: 2026-02-01_

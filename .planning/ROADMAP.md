@@ -33,6 +33,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 18: Audit all server routes for if they need authentication checks** - Audit all server routes for if they need authentication checks
 - [ ] **Phase 19: Refactor auth login page** - Replace string-based login HTML with a proper SolidJS-based login page in `packages/opencode/src/server/routes/auth.ts`
 - [ ] **Phase 20: Refactor 2FA verification page** - Refactor generate2FAPageHtml so the content is moved and integrated with the project at `packages/app` instead of the large string in code
+- [ ] **Phase 21: Allow the user to add and manage SSH keys in the opencode webapp** - Allow the user to add and manage SSH keys in the opencode webapp; when attempting to clone via git SSH, prompt for a key if none are registered; add CRUD in settings; install keys in ~/.ssh; update ssh config; add server routes as needed
 
 ## Phase Details
 
@@ -363,6 +364,7 @@ Plans:
 **Plans:** 0 plans
 
 Plans:
+
 - [ ] TBD (run /gsd:plan-phase 18 to break down)
 
 **Details:**
@@ -375,6 +377,7 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
+
 - [x] 19-01-PLAN.md — SolidJS login entry and Vite multi-page build
 - [x] 19-02-PLAN.md — Auth route serves Solid login HTML with security context
 
@@ -388,11 +391,26 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
+
 - [ ] 20-01-PLAN.md — SolidJS 2FA entry and Vite multi-page build
 - [ ] 20-02-PLAN.md — Auth route serves Solid 2FA HTML with bootstrap data
 
 **Details:**
 Move `generate2FAPageHtml` into `packages/app` and serve `2fa.html` from the UI build, following the login page refactor pattern.
+
+### Phase 21: Allow the user to add and manage SSH keys in the opencode webapp
+
+**Goal:** Users can manage SSH keys in the webapp, install them into ~/.ssh with updated config entries, and are prompted to add a key when cloning via SSH without one.
+**Depends on:** Phase 20
+**Plans:** 2 plans
+
+Plans:
+
+- [ ] 21-01-PLAN.md — Server-side SSH key storage, install, and CRUD routes
+- [ ] 21-02-PLAN.md — SDK regeneration, settings UI, and clone prompt for missing keys
+
+**Details:**
+Allow the user to add and manage SSH keys in the opencode webapp; when attempting to clone via git SSH, prompt for a key if none are registered; add CRUD in settings; install keys in ~/.ssh; update ssh config; add server routes as needed.
 
 ## Progress
 
