@@ -10,9 +10,10 @@ import { lazy } from "@opencode-ai/util/lazy"
 import { Shell } from "@/shell/shell"
 import { BrokerClient } from "@/auth/broker-client"
 import { ServerAuth } from "@/config/server-auth"
+import * as BrokerPty from "./broker-pty"
 
 // Re-export broker PTY module for authenticated sessions
-export * as BrokerPty from "./broker-pty"
+export { BrokerPty }
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
@@ -90,12 +91,24 @@ export namespace Pty {
     },
   )
 
+  const brokerState = Instance.state(
+    () => new Map<string, Info>(),
+    async (sessions) => {
+      for (const id of sessions.keys()) {
+        try {
+          await BrokerPty.kill(id)
+        } catch {}
+      }
+      sessions.clear()
+    },
+  )
+
   export function list() {
-    return Array.from(state().values()).map((s) => s.info)
+    return [...Array.from(state().values()).map((s) => s.info), ...Array.from(brokerState().values())]
   }
 
   export function get(id: string) {
-    return state().get(id)?.info
+    return state().get(id)?.info ?? brokerState().get(id)
   }
 
   /**
@@ -129,10 +142,14 @@ export namespace Pty {
    * will be implemented in Plan 05-08.
    */
   async function createViaBroker(input: CreateInput, sessionId: string, requestId?: string): Promise<Info> {
-    const brokerClient = new BrokerClient()
-    log.info("creating broker PTY session", { sessionId, requestId, method: "spawnpty" })
+    const command = input.command || Shell.preferred()
+    const args = input.args ? [...input.args] : []
+    if (command.endsWith("sh")) {
+      args.push("-l")
+    }
+    const cwd = input.cwd || Instance.directory
 
-    const result = await brokerClient.spawnPty(
+    const brokerInfo = await BrokerPty.create(
       sessionId,
       {
         term: input.env?.TERM ?? "xterm-256color",
@@ -143,28 +160,20 @@ export namespace Pty {
       requestId,
     )
 
-    if (!result.success) {
-      log.warn("broker PTY spawn failed", { sessionId, requestId, method: "spawnpty", error: result.error })
-      throw new Error(result.error ?? "Failed to spawn PTY via broker")
+    const info: Info = {
+      id: brokerInfo.ptyId,
+      title: input.title || `Terminal ${brokerInfo.ptyId.slice(-4)}`,
+      command,
+      args,
+      cwd,
+      status: "running",
+      pid: brokerInfo.pid,
     }
-    log.info("broker PTY spawned", { sessionId, requestId, method: "spawnpty", ptyId: result.ptyId, pid: result.pid })
 
-    // For broker-spawned PTYs, we need a different approach
-    // The broker holds the master_fd, we need to connect to it for I/O
-    // This is a TODO - for now, throw indicating feature incomplete
-    throw new Error("Broker PTY I/O not yet implemented - see Plan 05-08")
-
-    // Future: return broker-backed PTY info
-    // const info: Info = {
-    //   id: result.ptyId!,
-    //   title: input.title || `Terminal ${result.ptyId!.slice(-4)}`,
-    //   command: "shell",
-    //   args: [],
-    //   cwd: input.cwd || "/",
-    //   status: "running",
-    //   pid: result.pid!,
-    // }
-    // return info
+    brokerState().set(info.id, info)
+    log.info("broker PTY spawned", { sessionId, requestId, method: "spawnpty", ptyId: brokerInfo.ptyId, pid: brokerInfo.pid })
+    Bus.publish(Event.Created, { info })
+    return info
   }
 
   /**
@@ -234,28 +243,48 @@ export namespace Pty {
 
   export async function update(id: string, input: UpdateInput) {
     const session = state().get(id)
-    if (!session) return
+    if (session) {
+      if (input.title) {
+        session.info.title = input.title
+      }
+      if (input.size) {
+        session.process.resize(input.size.cols, input.size.rows)
+      }
+      Bus.publish(Event.Updated, { info: session.info })
+      return session.info
+    }
+
+    const brokerInfo = brokerState().get(id)
+    if (!brokerInfo) return
     if (input.title) {
-      session.info.title = input.title
+      brokerInfo.title = input.title
     }
     if (input.size) {
-      session.process.resize(input.size.cols, input.size.rows)
+      await BrokerPty.resize(id, input.size.cols, input.size.rows)
     }
-    Bus.publish(Event.Updated, { info: session.info })
-    return session.info
+    Bus.publish(Event.Updated, { info: brokerInfo })
+    return brokerInfo
   }
 
   export async function remove(id: string) {
     const session = state().get(id)
-    if (!session) return
-    log.info("removing session", { id })
-    try {
-      session.process.kill()
-    } catch {}
-    for (const ws of session.subscribers) {
-      ws.close()
+    if (session) {
+      log.info("removing session", { id })
+      try {
+        session.process.kill()
+      } catch {}
+      for (const ws of session.subscribers) {
+        ws.close()
+      }
+      state().delete(id)
+      Bus.publish(Event.Deleted, { id })
+      return
     }
-    state().delete(id)
+
+    const brokerInfo = brokerState().get(id)
+    if (!brokerInfo) return
+    await BrokerPty.kill(id)
+    brokerState().delete(id)
     Bus.publish(Event.Deleted, { id })
   }
 
@@ -263,6 +292,11 @@ export namespace Pty {
     const session = state().get(id)
     if (session && session.info.status === "running") {
       session.process.resize(cols, rows)
+      return
+    }
+
+    if (brokerState().has(id)) {
+      void BrokerPty.resize(id, cols, rows)
     }
   }
 
@@ -270,12 +304,21 @@ export namespace Pty {
     const session = state().get(id)
     if (session && session.info.status === "running") {
       session.process.write(data)
+      return
+    }
+
+    if (brokerState().has(id)) {
+      const brokerClient = new BrokerClient()
+      void brokerClient.ptyWrite(id, data)
     }
   }
 
   export function connect(id: string, ws: WSContext, options: { requestId?: string } = {}) {
     const session = state().get(id)
     if (!session) {
+      if (brokerState().has(id)) {
+        return BrokerPty.connect(id, ws, options)
+      }
       ws.close()
       return
     }

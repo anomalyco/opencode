@@ -18,10 +18,22 @@ const getErrorMessage = (error: unknown) => {
   return "Unknown error"
 }
 
-const mapCreateError = (message: string) => {
+const mapCreateError = (error: unknown, message: string) => {
+  if (error && typeof error === "object") {
+    const code = typeof (error as { code?: string }).code === "string" ? (error as { code: string }).code : undefined
+    if (code === "broker_session_not_found") {
+      return { code, status: 404 }
+    }
+    if (code === "broker_unavailable") {
+      return { code, status: 503 }
+    }
+  }
   const normalized = message.toLowerCase()
   if (normalized.includes("session not found")) {
     return { code: "broker_session_not_found", status: 404 }
+  }
+  if (normalized.includes("broker unavailable")) {
+    return { code: "broker_unavailable", status: 503 }
   }
   return { code: "pty_create_failed", status: 500 }
 }
@@ -84,7 +96,7 @@ export const PtyRoutes = lazy(() =>
             return c.json(info)
           } catch (error) {
             const message = getErrorMessage(error)
-            const mapped = mapCreateError(message)
+            const mapped = mapCreateError(error, message)
             log.warn("pty create failed", {
               requestId,
               sessionId: auth.sessionId,
@@ -102,7 +114,7 @@ export const PtyRoutes = lazy(() =>
           return c.json(info)
         } catch (error) {
           const message = getErrorMessage(error)
-          const mapped = mapCreateError(message)
+          const mapped = mapCreateError(error, message)
           log.warn("pty create failed", { requestId, code: mapped.code, error: message })
           return c.json({ error: message, code: mapped.code, requestId }, mapped.status)
         }

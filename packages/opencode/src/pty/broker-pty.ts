@@ -13,6 +13,13 @@ import { Log } from "@/util/log"
 const log = Log.create({ service: "broker-pty" })
 
 const BUFFER_LIMIT = 1024 * 1024 * 2
+const BUFFER_CHUNK = 64 * 1024
+const POLL_INTERVAL_MS = 200
+const decoder = new TextDecoder()
+
+export class BrokerSessionNotFoundError extends Error {
+  code = "broker_session_not_found"
+}
 
 /**
  * Information about a broker-managed PTY session.
@@ -39,6 +46,10 @@ interface BrokerPtySession {
   subscribers: Set<WSContext>
   /** Buffered output when no subscribers connected */
   buffer: string
+  /** Polling timer for broker output */
+  poller?: ReturnType<typeof setInterval>
+  /** Avoid overlapping read loops */
+  reading?: boolean
 }
 
 /** Active broker PTY sessions by ID */
@@ -82,7 +93,11 @@ export async function create(
   )
 
   if (!result.success || !result.ptyId || !result.pid) {
-    throw new Error(result.error ?? "Failed to spawn PTY via broker")
+    const message = result.error ?? "Failed to spawn PTY via broker"
+    if (message.toLowerCase().includes("session not found")) {
+      throw new BrokerSessionNotFoundError(message)
+    }
+    throw new Error(message)
   }
 
   const info: BrokerPtyInfo = {
@@ -100,6 +115,7 @@ export async function create(
   }
 
   sessions.set(info.id, session)
+  startPolling(session)
 
   log.info("Broker PTY created", {
     ptyId: info.ptyId,
@@ -147,6 +163,7 @@ export async function kill(id: string, requestId?: string): Promise<void> {
   await brokerClient.killPty(session.info.ptyId, requestId)
 
   session.info.status = "exited"
+  stopPolling(session)
   sessions.delete(id)
 
   // Close any subscribers
@@ -212,6 +229,7 @@ export async function resize(id: string, cols: number, rows: number, requestId?:
 export function connect(
   id: string,
   ws: WSContext,
+  options: { requestId?: string } = {},
 ): { onMessage: (msg: string | ArrayBuffer) => void; onClose: () => void } | undefined {
   const session = sessions.get(id)
   if (!session) {
@@ -220,31 +238,93 @@ export function connect(
   }
 
   session.subscribers.add(ws)
-  log.info("Broker PTY client connected", { ptyId: id, sessionId: session.info.sessionId })
+  log.info("Broker PTY client connected", { ptyId: id, sessionId: session.info.sessionId, requestId: options.requestId })
+  startPolling(session)
 
   // Send buffered output
   if (session.buffer) {
-    ws.send(session.buffer)
-    session.buffer = ""
+    try {
+      for (let i = 0; i < session.buffer.length; i += BUFFER_CHUNK) {
+        ws.send(session.buffer.slice(i, i + BUFFER_CHUNK))
+      }
+      session.buffer = ""
+    } catch {
+      session.subscribers.delete(ws)
+    }
   }
 
   return {
     onMessage: async (msg: string | ArrayBuffer) => {
       const brokerClient = new BrokerClient()
       const data = typeof msg === "string" ? msg : new Uint8Array(msg as ArrayBuffer)
-      const success = await brokerClient.ptyWrite(session.info.ptyId, data)
+      const success = await brokerClient.ptyWrite(session.info.ptyId, data, options.requestId)
       if (!success) {
         log.warn("Failed to write to broker PTY", {
           ptyId: id,
           sessionId: session.info.sessionId,
+          requestId: options.requestId,
           method: "ptywrite",
         })
       }
     },
     onClose: () => {
       session.subscribers.delete(ws)
-      log.info("Broker PTY client disconnected", { ptyId: id, sessionId: session.info.sessionId })
+      log.info("Broker PTY client disconnected", { ptyId: id, sessionId: session.info.sessionId, requestId: options.requestId })
     },
+  }
+}
+
+function startPolling(session: BrokerPtySession): void {
+  if (session.poller) return
+  session.poller = setInterval(() => {
+    void pollOutput(session)
+  }, POLL_INTERVAL_MS)
+}
+
+function stopPolling(session: BrokerPtySession): void {
+  if (!session.poller) return
+  clearInterval(session.poller)
+  session.poller = undefined
+}
+
+async function pollOutput(session: BrokerPtySession): Promise<void> {
+  if (session.reading) return
+  session.reading = true
+  try {
+    const brokerClient = new BrokerClient()
+    let iterations = 0
+    let more = true
+    while (more && iterations < 4) {
+      const result = await brokerClient.ptyRead(session.info.ptyId, 4096)
+      if (!result || result.data.length === 0) {
+        break
+      }
+      const text = decoder.decode(result.data)
+      if (session.subscribers.size > 0) {
+        for (const ws of session.subscribers) {
+          if (ws.readyState !== 1) {
+            session.subscribers.delete(ws)
+            continue
+          }
+          try {
+            ws.send(text)
+          } catch {
+            session.subscribers.delete(ws)
+          }
+        }
+      } else {
+        session.buffer += text
+        if (session.buffer.length > BUFFER_LIMIT) {
+          session.buffer = session.buffer.slice(-BUFFER_LIMIT)
+        }
+      }
+      more = result.more
+      iterations += 1
+    }
+  } catch (error) {
+    log.warn("Broker PTY poll failed", { ptyId: session.info.ptyId, error })
+  } finally {
+    session.reading = false
   }
 }
 
