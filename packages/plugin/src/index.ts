@@ -219,6 +219,10 @@ export interface Hooks {
     input: { sessionID: string },
     output: { context: string[]; prompt?: string },
   ) => Promise<void>
+  /**
+   * Called before fetch for session sharing to allow custom auth headers
+   */
+  "experimental.share.fetch"?: (input: { url: string }, output: { headers: Record<string, string> }) => Promise<void>
   "experimental.text.complete"?: (
     input: { sessionID: string; messageID: string; partID: string },
     output: { text: string },

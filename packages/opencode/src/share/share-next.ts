@@ -7,6 +7,7 @@ import { MessageV2 } from "@/session/message-v2"
 import { Storage } from "@/storage/storage"
 import { Log } from "@/util/log"
 import type * as SDK from "@opencode-ai/sdk/v2"
+import { Plugin } from "@/plugin"
 
 export namespace ShareNext {
   const log = Log.create({ service: "share-next" })
@@ -68,7 +69,7 @@ export namespace ShareNext {
   export async function create(sessionID: string) {
     if (disabled) return { id: "", url: "", secret: "" }
     log.info("creating share", { sessionID })
-    const result = await fetch(`${await url()}/api/share`, {
+    const result = await pluginAwareFetch(`${await url()}/api/share`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -80,6 +81,17 @@ export namespace ShareNext {
     await Storage.write(["session_share", sessionID], result)
     fullSync(sessionID)
     return result
+  }
+
+  async function pluginAwareFetch(input: RequestInfo, init?: RequestInit) {
+    const output = { headers: init?.headers ? { ...init.headers } : {} }
+
+    await Plugin.trigger("experimental.share.fetch", { url: typeof input === "string" ? input : input.url }, output)
+    const mergedInit = {
+      ...init,
+      headers: output.headers,
+    }
+    return fetch(input, mergedInit)
   }
 
   function get(sessionID: string) {
@@ -135,7 +147,7 @@ export namespace ShareNext {
       const share = await get(sessionID).catch(() => undefined)
       if (!share) return
 
-      await fetch(`${await url()}/api/share/${share.id}/sync`, {
+      await pluginAwareFetch(`${await url()}/api/share/${share.id}/sync`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -154,7 +166,7 @@ export namespace ShareNext {
     log.info("removing share", { sessionID })
     const share = await get(sessionID)
     if (!share) return
-    await fetch(`${await url()}/api/share/${share.id}`, {
+    await pluginAwareFetch(`${await url()}/api/share/${share.id}`, {
       method: "DELETE",
       headers: {
         "Content-Type": "application/json",
