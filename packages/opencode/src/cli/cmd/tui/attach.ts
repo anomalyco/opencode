@@ -40,6 +40,12 @@ export const AttachCommand = cmd({
     const unguard = win32InstallCtrlCGuard()
     try {
       win32DisableProcessedInput()
+      const shutdown = () => {
+        process.exit(0)
+      }
+      process.on("SIGTERM", shutdown)
+      process.on("SIGINT", shutdown)
+      process.on("SIGHUP", shutdown)
 
       if (args.fork && !args.continue && !args.session) {
         UI.error("--fork requires --continue or --session")
@@ -73,6 +79,9 @@ export const AttachCommand = cmd({
         directory,
         headers,
       })
+      process.off("SIGTERM", shutdown)
+      process.off("SIGINT", shutdown)
+      process.off("SIGHUP", shutdown)
     } finally {
       unguard?.()
     }

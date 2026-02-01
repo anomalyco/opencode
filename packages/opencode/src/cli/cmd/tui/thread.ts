@@ -129,6 +129,13 @@ export const TuiThreadCommand = cmd({
       process.on("SIGUSR2", async () => {
         await client.call("reload", undefined)
       })
+      const shutdown = async () => {
+        await client.call("shutdown", undefined).catch(() => {})
+        process.exit(0)
+      }
+      process.on("SIGTERM", shutdown)
+      process.on("SIGINT", shutdown)
+      process.on("SIGHUP", shutdown)
 
       const prompt = await iife(async () => {
         const piped = !process.stdin.isTTY ? await Bun.stdin.text() : undefined
@@ -173,9 +180,7 @@ export const TuiThreadCommand = cmd({
           prompt,
           fork: args.fork,
         },
-        onExit: async () => {
-          await client.call("shutdown", undefined)
-        },
+        onExit: shutdown,
       })
 
       setTimeout(() => {
@@ -183,6 +188,9 @@ export const TuiThreadCommand = cmd({
       }, 1000)
 
       await tuiPromise
+      process.off("SIGTERM", shutdown)
+      process.off("SIGINT", shutdown)
+      process.off("SIGHUP", shutdown)
     } finally {
       unguard?.()
     }

@@ -32,6 +32,33 @@ process.on("uncaughtException", (e) => {
   })
 })
 
+// Terminate worker if parent process dies
+// Check periodically if parent is still alive
+const parentPid = process.ppid
+if (parentPid) {
+  const checkParent = setInterval(() => {
+    try {
+      // process.kill with signal 0 checks if process exists without killing it
+      process.kill(parentPid, 0)
+    } catch {
+      // Parent is dead, shutdown
+      Log.Default.info("parent process died, shutting down worker")
+      clearInterval(checkParent)
+      rpc.shutdown().finally(() => process.exit(0))
+    }
+  }, 1000)
+  checkParent.unref() // Don't prevent exit
+}
+
+// Handle termination signals in worker
+const workerShutdown = () => {
+  rpc.shutdown().catch(() => {}).finally(() => process.exit(0))
+}
+
+process.on("SIGTERM", workerShutdown)
+process.on("SIGINT", workerShutdown)
+process.on("SIGHUP", workerShutdown)
+
 // Subscribe to global events and forward them via RPC
 GlobalBus.on("event", (event) => {
   Rpc.emit("global.event", event)
