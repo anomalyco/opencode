@@ -176,4 +176,60 @@ describe("session.message-v2.fromError", () => {
     const result = MessageV2.fromError(error, { providerID: "openai" }) as MessageV2.APIError
     expect(result.data.isRetryable).toBe(true)
   })
+
+  test("marks reasoning field validation errors as non-retryable", () => {
+    const error = new APICallError({
+      message: "Bad Request",
+      url: "https://openrouter.ai/api/v1/chat/completions",
+      requestBodyValues: {},
+      statusCode: 400,
+      responseHeaders: { "content-type": "application/json" },
+      responseBody: '{"error":"Extra inputs are not permitted, field: \'reasoning_content\'"}',
+      isRetryable: true, // AI SDK marks 400 as retryable by default
+    })
+    const result = MessageV2.fromError(error, { providerID: "openrouter" }) as MessageV2.APIError
+    expect(result.data.isRetryable).toBe(false)
+  })
+
+  test("marks reasoning_details validation errors as non-retryable", () => {
+    const error = new APICallError({
+      message: "Bad Request",
+      url: "https://openrouter.ai/api/v1/chat/completions",
+      requestBodyValues: {},
+      statusCode: 400,
+      responseHeaders: { "content-type": "application/json" },
+      responseBody: '{"error":"unknown parameter: reasoning_details"}',
+      isRetryable: true,
+    })
+    const result = MessageV2.fromError(error, { providerID: "openrouter" }) as MessageV2.APIError
+    expect(result.data.isRetryable).toBe(false)
+  })
+
+  test("preserves retryability for non-reasoning validation errors", () => {
+    const error = new APICallError({
+      message: "Bad Request",
+      url: "https://openrouter.ai/api/v1/chat/completions",
+      requestBodyValues: {},
+      statusCode: 400,
+      responseHeaders: { "content-type": "application/json" },
+      responseBody: '{"error":"Extra inputs are not permitted, field: \'some_other_field\'"}',
+      isRetryable: true,
+    })
+    const result = MessageV2.fromError(error, { providerID: "openrouter" }) as MessageV2.APIError
+    expect(result.data.isRetryable).toBe(true)
+  })
+
+  test("preserves retryability for rate limit errors (429)", () => {
+    const error = new APICallError({
+      message: "Rate limit exceeded",
+      url: "https://openrouter.ai/api/v1/chat/completions",
+      requestBodyValues: {},
+      statusCode: 429,
+      responseHeaders: { "content-type": "application/json" },
+      responseBody: '{"error":"Rate limit exceeded"}',
+      isRetryable: true,
+    })
+    const result = MessageV2.fromError(error, { providerID: "openrouter" }) as MessageV2.APIError
+    expect(result.data.isRetryable).toBe(true)
+  })
 })

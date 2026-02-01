@@ -665,6 +665,29 @@ export namespace MessageV2 {
     return status === 404 || e.isRetryable
   }
 
+  /**
+   * Detects validation errors from providers that don't support certain fields.
+   * These errors should not be retried as they will always fail.
+   *
+   * For example, when using Kimi K2.5 through OpenRouter with Together/Fireworks
+   * as backend providers, the reasoning_content field causes 400 errors that
+   * would otherwise be retried indefinitely.
+   */
+  const isNonRetryableValidationError = (e: APICallError): boolean => {
+    if (e.statusCode !== 400) return false
+
+    const errorText = (e.responseBody || e.message || "").toLowerCase()
+
+    const nonRetryablePatterns = ["extra inputs are not permitted", "unknown parameter", "unexpected field"]
+
+    const reasoningFields = ["reasoning_content", "reasoning_details", "reasoning"]
+
+    const hasNonRetryablePattern = nonRetryablePatterns.some((p) => errorText.includes(p))
+    const involvesReasoningField = reasoningFields.some((f) => errorText.includes(f))
+
+    return hasNonRetryablePattern && involvesReasoningField
+  }
+
   export function fromError(e: unknown, ctx: { providerID: string }) {
     switch (true) {
       case e instanceof DOMException && e.name === "AbortError":
@@ -733,7 +756,11 @@ export namespace MessageV2 {
           {
             message,
             statusCode: e.statusCode,
-            isRetryable: ctx.providerID.startsWith("openai") ? isOpenAiErrorRetryable(e) : e.isRetryable,
+            isRetryable: isNonRetryableValidationError(e)
+              ? false
+              : ctx.providerID.startsWith("openai")
+                ? isOpenAiErrorRetryable(e)
+                : e.isRetryable,
             responseHeaders: e.responseHeaders,
             responseBody: e.responseBody,
             metadata,
