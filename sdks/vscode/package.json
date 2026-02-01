@@ -99,10 +99,15 @@
     "@types/node": "20.x",
     "@typescript-eslint/eslint-plugin": "^8.31.1",
     "@typescript-eslint/parser": "^8.31.1",
-    "eslint": "^9.25.1",
+    "eslint": "^9.39.2",
     "esbuild": "^0.25.3",
     "typescript": "^5.8.3",
-    "@vscode/test-cli": "^0.0.11",
+    "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2"
+  },
+  "overrides": {
+    "glob": "^10.5.0",
+    "diff": "^8.0.3",
+    "js-yaml": "^4.1.1"
   }
 }
