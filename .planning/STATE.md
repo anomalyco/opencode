@@ -5,13 +5,13 @@
 See: .planning/PROJECT.md (updated 2026-01-19)
 
 **Core value:** Secure remote access to your opencode instance from anywhere — authenticate once with your system credentials, work on your projects from any device.
-**Current focus:** Milestone 1 Complete - Ready for next milestone
+**Current focus:** Add Phase 24 for remote terminal reliability
 
 ## Current Position
 
 **Milestone 1:** Complete (Phases 1-11)
 **Phase:** 21 of 21 (SSH key management) - Complete
-**Next Phase:** 23 - During 2FA setup, make the server automatically set the .google_authenticator file in the appropriate user's home folder, instead of asking the user to run the command on their machine
+**Next Phase:** 24 - Remote Terminal Reliability
 **Plan:** 02 of 02 - Complete
 **Status:** Phase complete
 **Last activity:** 2026-02-01 - Completed 21-02 plan

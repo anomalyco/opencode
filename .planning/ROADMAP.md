@@ -36,6 +36,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 21: Allow the user to add and manage SSH keys in the opencode webapp** - Allow the user to add and manage SSH keys in the opencode webapp; when attempting to clone via git SSH, prompt for a key if none are registered; add CRUD in settings; install keys in ~/.ssh; update ssh config; add server routes as needed
 - [ ] **Phase 22: Refactor the /auth/2fa/setup page from auth.ts into the SolidJS app at packages/app** - Refactor the /auth/2fa/setup page from auth.ts into the SolidJS app at packages/app
 - [ ] **Phase 23: During 2FA setup, make the server automatically set the .google_authenticator file in the appropriate user's home folder, instead of asking the user to run the command on their machine** - During 2FA setup, make the server automatically set the .google_authenticator file in the appropriate user's home folder, instead of asking the user to run the command on their machine
+- [ ] **Phase 24: Remote Terminal Reliability** - Investigate and fix remote terminal failures in the web app (PTY session creation, broker/session lifecycle, and /pty 500s)
 
 ## Phase Details
 
@@ -440,6 +441,20 @@ Plans:
 
 **Details:**
 The 2FA setup flow should have the broker write the `.google_authenticator` file for the authenticated user with correct ownership and permissions. The setup page should show status (created / already configured / manual required) and only display the manual command when the broker cannot complete the write.
+
+### Phase 24: Remote Terminal Reliability
+
+**Goal:** Remote terminal sessions work reliably in the web app without "session not found" errors or `/pty` 500s
+**Depends on:** Phase 23
+**Plans:** 2 plans
+
+Plans:
+
+- [ ] 24-01-PLAN.md — Add diagnostics and error surfacing for PTY session creation failures
+- [ ] 24-02-PLAN.md — Fix broker PTY session lifecycle alignment and add verification/UAT
+
+**Details:**
+Investigate the PTY session creation flow in the web UI and server. Focus on broker session registration lifecycle, session lookup, and any mismatches between UI/session IDs and broker sessions that cause `session not found` or `/pty` 500 errors. Add diagnostics and fixes as needed.
 
 ## Progress
 
