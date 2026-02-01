@@ -59,7 +59,7 @@ export namespace Server {
   const log = Log.create({ service: "server" })
   const defaultUiUrl = "https://app.opencode.ai"
   const contentSecurityPolicy =
-    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' http://localhost:* http://127.0.0.1:* http://host.docker.internal:*"
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' data: http://localhost:* http://127.0.0.1:* http://host.docker.internal:*"
 
   let _url: URL | undefined
   let _corsWhitelist: string[] = []
