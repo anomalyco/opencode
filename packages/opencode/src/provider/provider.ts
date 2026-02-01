@@ -588,6 +588,15 @@ export namespace Provider {
         },
       }
     },
+    dify: async () => {
+      const difyLog = Log.create({ service: "dify" })
+      return {
+        autoload: false,
+        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
+          return (sdk as any)(modelID, { ...options, logger: difyLog })
+        },
+      }
+    },
   }
 
   export const Model = z
