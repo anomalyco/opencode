@@ -219,11 +219,11 @@ export namespace Worktree {
     return [outputText(result.stderr), outputText(result.stdout)].filter(Boolean).join("\n")
   }
 
-  const NOISE_FILES = new Set([".DS_Store", "Thumbs.db", "desktop.ini"])
-
-  function noisePath(input: string) {
-    const name = input.split(/[\\/]/).pop() ?? ""
-    return NOISE_FILES.has(name)
+  async function canonical(input: string) {
+    const abs = path.resolve(input)
+    const real = await fs.realpath(abs).catch(() => abs)
+    const normalized = path.normalize(real)
+    return process.platform === "win32" ? normalized.toLowerCase() : normalized
   }
 
   async function candidate(root: string, base?: string) {
@@ -381,7 +381,7 @@ export namespace Worktree {
       throw new NotGitError({ message: "Worktrees are only supported for git projects" })
     }
 
-    const directory = path.resolve(input.directory)
+    const directory = await canonical(input.directory)
     const list = await $`git worktree list --porcelain`.quiet().nothrow().cwd(Instance.worktree)
     if (list.exitCode !== 0) {
       throw new RemoveFailedError({ message: errorText(list) || "Failed to read git worktrees" })
@@ -404,7 +404,13 @@ export namespace Worktree {
       return acc
     }, [])
 
-    const entry = entries.find((item) => item.path && path.resolve(item.path) === directory)
+    const entry = await (async () => {
+      for (const item of entries) {
+        if (!item.path) continue
+        const key = await canonical(item.path)
+        if (key === directory) return item
+      }
+    })()
     if (!entry?.path) {
       throw new RemoveFailedError({ message: "Worktree not found" })
     }
@@ -430,8 +436,9 @@ export namespace Worktree {
       throw new NotGitError({ message: "Worktrees are only supported for git projects" })
     }
 
-    const directory = path.resolve(input.directory)
-    if (directory === path.resolve(Instance.worktree)) {
+    const directory = await canonical(input.directory)
+    const primary = await canonical(Instance.worktree)
+    if (directory === primary) {
       throw new ResetFailedError({ message: "Cannot reset the primary workspace" })
     }
 
@@ -457,7 +464,13 @@ export namespace Worktree {
       return acc
     }, [])
 
-    const entry = entries.find((item) => item.path && path.resolve(item.path) === directory)
+    const entry = await (async () => {
+      for (const item of entries) {
+        if (!item.path) continue
+        const key = await canonical(item.path)
+        if (key === directory) return item
+      }
+    })()
     if (!entry?.path) {
       throw new ResetFailedError({ message: "Worktree not found" })
     }
@@ -544,18 +557,8 @@ export namespace Worktree {
     }
 
     const dirty = outputText(status.stdout)
-    const remaining = dirty
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .filter((line) => {
-        if (!line.startsWith("?? ")) return true
-        const filepath = line.slice(3).trim()
-        return !noisePath(filepath)
-      })
-
-    if (remaining.length > 0) {
-      throw new ResetFailedError({ message: `Worktree reset left local changes:\n${remaining.join("\n")}` })
+    if (dirty) {
+      throw new ResetFailedError({ message: `Worktree reset left local changes:\n${dirty}` })
     }
 
     const projectID = Instance.project.id
