@@ -7,6 +7,7 @@ import { useTerminal, type LocalPTY } from "@/context/terminal"
 export function SortableTerminalTab(props: { terminal: LocalPTY }): JSX.Element {
   const terminal = useTerminal()
   const sortable = createSortable(props.terminal.id)
+  const label = () => (props.terminal.status === "error" ? `${props.terminal.title} (retry)` : props.terminal.title)
   return (
     // @ts-ignore
     <div use:sortable classList={{ "h-full": true, "opacity-0": sortable.isActiveDraggable }}>
@@ -19,7 +20,7 @@ export function SortableTerminalTab(props: { terminal: LocalPTY }): JSX.Element 
             )
           }
         >
-          {props.terminal.title}
+          {label()}
         </Tabs.Trigger>
       </div>
     </div>

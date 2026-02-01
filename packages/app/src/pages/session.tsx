@@ -62,6 +62,24 @@ const handoff = {
   files: {} as Record<string, SelectedLineRange | null>,
 }
 
+const getConnectErrorDetails = (error: unknown) => {
+  if (error && typeof error === "object") {
+    const payload = error as Record<string, unknown>
+    return {
+      code: typeof payload.code === "string" ? payload.code : undefined,
+      requestId: typeof payload.requestId === "string" ? payload.requestId : undefined,
+      message: typeof payload.error === "string" ? payload.error : undefined,
+    }
+  }
+  if (typeof error === "string") {
+    return { message: error }
+  }
+  if (error instanceof Error) {
+    return { message: error.message }
+  }
+  return {}
+}
+
 interface SessionReviewTabProps {
   diffs: () => FileDiff[]
   view: () => ReturnType<ReturnType<typeof useLayout>["view"]>
@@ -1745,7 +1763,27 @@ export default function Page() {
                 <For each={terminal.all()}>
                   {(pty) => (
                     <Tabs.Content value={pty.id}>
-                      <Terminal pty={pty} onCleanup={terminal.update} onConnectError={() => terminal.clone(pty.id)} />
+                      <Terminal
+                        pty={pty}
+                        onCleanup={terminal.update}
+                        onConnectError={(error) => {
+                          const details = getConnectErrorDetails(error)
+                          console.error("Failed to connect terminal", {
+                            error: details.message ?? error,
+                            code: details.code ?? "pty_connect_failed",
+                            requestId: details.requestId,
+                          })
+                          terminal.update({
+                            id: pty.id,
+                            status: "error",
+                            lastError: {
+                              code: details.code ?? "pty_connect_failed",
+                              requestId: details.requestId,
+                              message: details.message,
+                            },
+                          })
+                        }}
+                      />
                     </Tabs.Content>
                   )}
                 </For>

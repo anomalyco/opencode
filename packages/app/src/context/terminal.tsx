@@ -13,6 +13,12 @@ export type LocalPTY = {
   cols?: number
   buffer?: string
   scrollY?: number
+  status?: "running" | "error"
+  lastError?: {
+    code?: string
+    requestId?: string
+    message?: string
+  }
 }
 
 const WORKSPACE_KEY = "__workspace__"
@@ -23,6 +29,34 @@ type TerminalSession = ReturnType<typeof createTerminalSession>
 type TerminalCacheEntry = {
   value: TerminalSession
   dispose: VoidFunction
+}
+
+type PtyErrorDetails = {
+  code?: string
+  requestId?: string
+  message?: string
+}
+
+const getPtyErrorDetails = (error: unknown): PtyErrorDetails => {
+  if (error && typeof error === "object") {
+    const payload = error as Record<string, unknown>
+    const code = typeof payload.code === "string" ? payload.code : undefined
+    const requestId = typeof payload.requestId === "string" ? payload.requestId : undefined
+    const message =
+      typeof payload.error === "string"
+        ? payload.error
+        : typeof payload.message === "string"
+          ? payload.message
+          : undefined
+    return { code, requestId, message }
+  }
+  if (typeof error === "string") {
+    return { message: error }
+  }
+  if (error instanceof Error) {
+    return { message: error.message }
+  }
+  return {}
 }
 
 function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: string | undefined) {
@@ -66,12 +100,18 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
               id,
               title: pty.data?.title ?? "Terminal",
               titleNumber: nextNumber,
+              status: "running",
             },
           ])
           setStore("active", id)
         })
         .catch((e) => {
-          console.error("Failed to create terminal", e)
+          const details = getPtyErrorDetails(e)
+          console.error("Failed to create terminal", {
+            error: details.message ?? e,
+            code: details.code,
+            requestId: details.requestId,
+          })
         })
     },
     update(pty: Partial<LocalPTY> & { id: string }) {
@@ -95,13 +135,20 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
           title: pty.title,
         })
         .catch((e) => {
-          console.error("Failed to clone terminal", e)
+          const details = getPtyErrorDetails(e)
+          console.error("Failed to clone terminal", {
+            error: details.message ?? e,
+            code: details.code,
+            requestId: details.requestId,
+          })
           return undefined
         })
       if (!clone?.data) return
       setStore("all", index, {
         ...pty,
         ...clone.data,
+        status: "running",
+        lastError: undefined,
       })
       if (store.active === pty.id) {
         setStore("active", clone.data.id)

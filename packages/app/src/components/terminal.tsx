@@ -100,7 +100,10 @@ export const Terminal = (props: TerminalProps) => {
     const mod = await import("ghostty-web")
     ghostty = await mod.Ghostty.load()
 
-    const url = new URL(sdk.url + `/pty/${local.pty.id}/connect?directory=${encodeURIComponent(sdk.directory)}`)
+    const connectRequestId = crypto.randomUUID()
+    const url = new URL(sdk.url + `/pty/${local.pty.id}/connect`)
+    url.searchParams.set("directory", sdk.directory)
+    url.searchParams.set("requestId", connectRequestId)
     if (window.__OPENCODE__?.serverPassword) {
       url.username = "opencode"
       url.password = window.__OPENCODE__?.serverPassword
@@ -246,11 +249,15 @@ export const Terminal = (props: TerminalProps) => {
       t.write(event.data)
     })
     socket.addEventListener("error", (error) => {
-      console.error("WebSocket error:", error)
-      props.onConnectError?.(error)
+      console.error("WebSocket error:", {
+        error,
+        code: "pty_connect_failed",
+        requestId: connectRequestId,
+      })
+      props.onConnectError?.({ error, code: "pty_connect_failed", requestId: connectRequestId })
     })
     socket.addEventListener("close", () => {
-      console.log("WebSocket disconnected")
+      console.log("WebSocket disconnected", { requestId: connectRequestId })
     })
   })
 
