@@ -1,7 +1,7 @@
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { batch, createContext, Show, useContext, type JSX, type ParentProps } from "solid-js"
 import { useTheme } from "@tui/context/theme"
-import { Renderable, RGBA } from "@opentui/core"
+import { Renderable, RGBA, ScrollBoxRenderable } from "@opentui/core"
 import { createStore } from "solid-js/store"
 import { Clipboard } from "@tui/util/clipboard"
 import { useToast } from "./toast"
@@ -9,12 +9,51 @@ import { useToast } from "./toast"
 export function Dialog(
   props: ParentProps<{
     size?: "medium" | "large"
+    scrollable?: boolean
     onClose: () => void
   }>,
 ) {
   const dimensions = useTerminalDimensions()
   const { theme } = useTheme()
   const renderer = useRenderer()
+  const maxHeight = () => Math.floor(dimensions().height / 2) - 6
+
+  let scroll: ScrollBoxRenderable | undefined
+
+  useKeyboard((evt) => {
+    if (!props.scrollable) return
+    if (!scroll) return
+    if (evt.name === "up" || (evt.ctrl && evt.name === "p")) {
+      scroll.scrollBy(-1)
+      evt.preventDefault()
+      evt.stopPropagation()
+    }
+    if (evt.name === "down" || (evt.ctrl && evt.name === "n")) {
+      scroll.scrollBy(1)
+      evt.preventDefault()
+      evt.stopPropagation()
+    }
+    if (evt.name === "pageup") {
+      scroll.scrollBy(-Math.floor(scroll.height / 2))
+      evt.preventDefault()
+      evt.stopPropagation()
+    }
+    if (evt.name === "pagedown") {
+      scroll.scrollBy(Math.floor(scroll.height / 2))
+      evt.preventDefault()
+      evt.stopPropagation()
+    }
+    if (evt.name === "home") {
+      scroll.scrollTo(0)
+      evt.preventDefault()
+      evt.stopPropagation()
+    }
+    if (evt.name === "end") {
+      scroll.scrollTo(scroll.scrollHeight)
+      evt.preventDefault()
+      evt.stopPropagation()
+    }
+  })
 
   return (
     <box
@@ -42,7 +81,21 @@ export function Dialog(
         paddingTop={1}
         paddingBottom={1}
       >
-        {props.children}
+        <Show when={props.scrollable} fallback={props.children}>
+          <scrollbox
+            ref={(r) => (scroll = r)}
+            maxHeight={maxHeight()}
+            verticalScrollbarOptions={{
+              visible: true,
+              trackOptions: {
+                backgroundColor: theme.backgroundPanel,
+                foregroundColor: theme.border,
+              },
+            }}
+          >
+            {props.children}
+          </scrollbox>
+        </Show>
       </box>
     </box>
   )
@@ -55,6 +108,7 @@ function init() {
       onClose?: () => void
     }[],
     size: "medium" as "medium" | "large",
+    scrollable: false,
   })
 
   useKeyboard((evt) => {
@@ -94,6 +148,7 @@ function init() {
       }
       batch(() => {
         setStore("size", "medium")
+        setStore("scrollable", false)
         setStore("stack", [])
       })
       refocus()
@@ -106,13 +161,16 @@ function init() {
       for (const item of store.stack) {
         if (item.onClose) item.onClose()
       }
-      setStore("size", "medium")
-      setStore("stack", [
-        {
-          element: input,
-          onClose,
-        },
-      ])
+      batch(() => {
+        setStore("size", "medium")
+        setStore("scrollable", false)
+        setStore("stack", [
+          {
+            element: input,
+            onClose,
+          },
+        ])
+      })
     },
     get stack() {
       return store.stack
@@ -122,6 +180,12 @@ function init() {
     },
     setSize(size: "medium" | "large") {
       setStore("size", size)
+    },
+    get scrollable() {
+      return store.scrollable
+    },
+    setScrollable(scrollable: boolean) {
+      setStore("scrollable", scrollable)
     },
   }
 }
@@ -150,7 +214,7 @@ export function DialogProvider(props: ParentProps) {
         }}
       >
         <Show when={value.stack.length}>
-          <Dialog onClose={() => value.clear()} size={value.size}>
+          <Dialog onClose={() => value.clear()} size={value.size} scrollable={value.scrollable}>
             {value.stack.at(-1)!.element}
           </Dialog>
         </Show>
