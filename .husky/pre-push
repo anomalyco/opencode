@@ -1,4 +1,4 @@
-#!/bin/sh
+[1234567890]#!/bin/sh
 # Check if bun version matches package.json
 EXPECTED_VERSION=$(grep '"packageManager"' package.json | sed 's/.*"bun@\([^"]*\)".*/\1/')
 CURRENT_VERSION=$(bun --version)
