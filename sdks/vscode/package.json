@@ -26,7 +26,7 @@
     "commands": [
       {
         "command": "opencode.openTerminal",
-        "title": "Open opencode",
+        "title": "OpenCode: Open",
         "icon": {
           "light": "images/button-dark.svg",
           "dark": "images/button-light.svg"
@@ -34,7 +34,7 @@
       },
       {
         "command": "opencode.openNewTerminal",
-        "title": "Open opencode in new tab",
+        "title": "OpenCode: Open in New Tab",
         "icon": {
           "light": "images/button-dark.svg",
           "dark": "images/button-light.svg"
@@ -42,7 +42,7 @@
       },
       {
         "command": "opencode.addFilepathToTerminal",
-        "title": "Add Filepath to Terminal"
+        "title": "OpenCode: Add Filepath to Terminal"
       }
     ],
     "menus": {
