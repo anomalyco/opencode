@@ -586,7 +586,7 @@ export namespace Server {
     const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
     if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
 
-    _url = opts.rootPath ? new URL(opts.rootPath, server.url.origin) : server.url
+    _url = opts.rootPath ? new URL(opts.rootPath, server.url) : server.url
 
     const shouldPublishMDNS =
       opts.mdns &&
