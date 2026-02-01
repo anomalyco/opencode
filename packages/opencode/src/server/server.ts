@@ -530,35 +530,32 @@ export namespace Server {
         .all("/*", async (c) => {
           const path = c.req.path
 
-          const response = await proxy(`https://app.opencode.ai${path}`, {
-            ...c.req,
-            headers: {
-              ...c.req.raw.headers,
-              host: "app.opencode.ai",
-            },
-          })
-          response.headers.set(
-            "Content-Security-Policy",
-            "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:",
-          )
+          // Serve web GUI locally for localhost access (default behavior)
+          const isLocalhost = c.req.url.startsWith("http://localhost") || c.req.url.startsWith("http://127.0.0.1") 
+          
+          if (isLocalhost && (path === "/" || path.startsWith("/assets/"))) {
+            // Serve web GUI locally
+            try {
+              const { App } = await import("@opencode-ai/app")
+              const app = App()
+              return await app.fetch(c.req)
+            } catch (error) {
+              console.error("Failed to serve local web app:", error)
+              // Fall back to proxy if local app fails
+            }
+          } else {
+            // For non-localhost access, proxy to app.opencode.ai
+            const response = await proxy(`https://app.opencode.ai${path}`, {
+              ...c.req,
+              headers: {
+                ...c.req.raw.headers,
+                host: "app.opencode.ai",
+              },
+            })
+          }
+          
+          // Return response for both cases
           return response
-        }) as unknown as Hono,
-  )
-
-  export async function openapi() {
-    // Cast to break excessive type recursion from long route chains
-    const result = await generateSpecs(App() as Hono, {
-      documentation: {
-        info: {
-          title: "opencode",
-          version: "1.0.0",
-          description: "opencode api",
-        },
-        openapi: "3.1.1",
-      },
-    })
-    return result
-  }
 
   export function listen(opts: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
     _corsWhitelist = opts.cors ?? []
