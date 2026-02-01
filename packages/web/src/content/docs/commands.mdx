@@ -195,6 +195,47 @@ Commands run in your project's root directory and their output becomes part of t
 
 ---
 
+## Generate a commit message
+
+You can create a command that turns your current git changes into a ready-to-paste commit message.
+
+Create `.opencode/commands/commitmsg.md`:
+
+```md title=".opencode/commands/commitmsg.md"
+---
+description: Generate a git commit message
+---
+
+You are generating a git commit message.
+
+Here are the current changes:
+
+- Unstaged diff:
+!`git diff`
+
+- Staged diff:
+!`git diff --cached`
+
+- Status:
+!`git status --short`
+
+Write a concise commit message.
+
+Constraints:
+- Use a single subject line (no more than ~72 chars)
+- Use present tense ("add", "fix", "refactor")
+- If there are multiple concerns, prefer the most important one
+- Output ONLY the commit message text (no code blocks, no extra commentary)
+```
+
+Run it in the TUI:
+
+```bash frame="none"
+/commitmsg
+```
+
+---
+
 ### File references
 
 Include files in your command using `@` followed by the filename.
