@@ -11,7 +11,8 @@ When making TypeScript changes, run these before committing:
 ```bash
 ./script/generate.ts
 bun turbo typecheck
-bun test
+bun --cwd packages/opencode test
+bun --cwd packages/app test
 ```
 
 If any step fails, fix issues before committing.

@@ -4,6 +4,8 @@ import { Session } from "../../src/session"
 import { Log } from "../../src/util/log"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
+import { AuthConfig } from "../../src/config/auth"
+import { ServerAuth } from "../../src/config/server-auth"
 
 const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
@@ -13,23 +15,28 @@ describe("tui.selectSession endpoint", () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
-        // #given
-        const session = await Session.create({})
+        ServerAuth._setForTesting(AuthConfig.parse({ enabled: false }))
+        try {
+          // #given
+          const session = await Session.create({})
 
-        // #when
-        const app = Server.App()
-        const response = await app.request("/tui/select-session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionID: session.id }),
-        })
+          // #when
+          const app = Server.App()
+          const response = await app.request("/tui/select-session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionID: session.id }),
+          })
 
-        // #then
-        expect(response.status).toBe(200)
-        const body = await response.json()
-        expect(body).toBe(true)
+          // #then
+          expect(response.status).toBe(200)
+          const body = await response.json()
+          expect(body).toBe(true)
 
-        await Session.remove(session.id)
+          await Session.remove(session.id)
+        } finally {
+          ServerAuth._reset()
+        }
       },
     })
   })
@@ -38,19 +45,24 @@ describe("tui.selectSession endpoint", () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
-        // #given
-        const nonExistentSessionID = "ses_nonexistent123"
+        ServerAuth._setForTesting(AuthConfig.parse({ enabled: false }))
+        try {
+          // #given
+          const nonExistentSessionID = "ses_nonexistent123"
 
-        // #when
-        const app = Server.App()
-        const response = await app.request("/tui/select-session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionID: nonExistentSessionID }),
-        })
+          // #when
+          const app = Server.App()
+          const response = await app.request("/tui/select-session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionID: nonExistentSessionID }),
+          })
 
-        // #then
-        expect(response.status).toBe(404)
+          // #then
+          expect(response.status).toBe(404)
+        } finally {
+          ServerAuth._reset()
+        }
       },
     })
   })
@@ -59,19 +71,24 @@ describe("tui.selectSession endpoint", () => {
     await Instance.provide({
       directory: projectRoot,
       fn: async () => {
-        // #given
-        const invalidSessionID = "invalid_session_id"
+        ServerAuth._setForTesting(AuthConfig.parse({ enabled: false }))
+        try {
+          // #given
+          const invalidSessionID = "invalid_session_id"
 
-        // #when
-        const app = Server.App()
-        const response = await app.request("/tui/select-session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionID: invalidSessionID }),
-        })
+          // #when
+          const app = Server.App()
+          const response = await app.request("/tui/select-session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionID: invalidSessionID }),
+          })
 
-        // #then
-        expect(response.status).toBe(400)
+          // #then
+          expect(response.status).toBe(400)
+        } finally {
+          ServerAuth._reset()
+        }
       },
     })
   })

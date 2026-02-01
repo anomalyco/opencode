@@ -102,7 +102,7 @@ describe("rate-limit", () => {
       const app = new Hono()
       const limiter = createLoginRateLimiter({ windowMs: 1000, limit: 3 })
 
-      app.post("/login", limiter, (c) => c.json({ success: true }))
+      app.post("/login", limiter, (c) => c.json({ error: "invalid_credentials" }, 401))
 
       // Make 3 requests - all should succeed
       for (let i = 0; i < 3; i++) {
@@ -113,7 +113,7 @@ describe("rate-limit", () => {
           },
         })
         const res = await app.fetch(req)
-        expect(res.status).toBe(200)
+        expect(res.status).toBe(401)
       }
     })
 
@@ -121,7 +121,7 @@ describe("rate-limit", () => {
       const app = new Hono()
       const limiter = createLoginRateLimiter({ windowMs: 1000, limit: 2 })
 
-      app.post("/login", limiter, (c) => c.json({ success: true }))
+      app.post("/login", limiter, (c) => c.json({ error: "invalid_credentials" }, 401))
 
       const headers = { "X-Forwarded-For": "192.168.1.1" }
 
@@ -132,7 +132,7 @@ describe("rate-limit", () => {
           headers,
         })
         const res = await app.fetch(req)
-        expect(res.status).toBe(200)
+        expect(res.status).toBe(401)
       }
 
       // 3rd request should be rate limited
@@ -152,7 +152,7 @@ describe("rate-limit", () => {
       const app = new Hono()
       const limiter = createLoginRateLimiter({ windowMs: 1000, limit: 1 })
 
-      app.post("/login", limiter, (c) => c.json({ success: true }))
+      app.post("/login", limiter, (c) => c.json({ error: "invalid_credentials" }, 401))
 
       const headers = { "X-Forwarded-For": "192.168.1.1" }
 
@@ -172,12 +172,12 @@ describe("rate-limit", () => {
       const app = new Hono()
       const limiter = createLoginRateLimiter({ windowMs: 1000, limit: 1 })
 
-      app.post("/login", limiter, (c) => c.json({ success: true }))
+      app.post("/login", limiter, (c) => c.json({ error: "invalid_credentials" }, 401))
 
       // IP 1: First request succeeds, second is rate limited
       const ip1Headers = { "X-Forwarded-For": "192.168.1.1" }
       const res1a = await app.fetch(new Request("http://localhost/login", { method: "POST", headers: ip1Headers }))
-      expect(res1a.status).toBe(200)
+      expect(res1a.status).toBe(401)
 
       const res1b = await app.fetch(new Request("http://localhost/login", { method: "POST", headers: ip1Headers }))
       expect(res1b.status).toBe(429)
@@ -185,20 +185,20 @@ describe("rate-limit", () => {
       // IP 2: First request still succeeds (independent limit)
       const ip2Headers = { "X-Forwarded-For": "10.0.0.1" }
       const res2a = await app.fetch(new Request("http://localhost/login", { method: "POST", headers: ip2Headers }))
-      expect(res2a.status).toBe(200)
+      expect(res2a.status).toBe(401)
     })
 
     it("resets after window expires", async () => {
       const app = new Hono()
       const limiter = createLoginRateLimiter({ windowMs: 100, limit: 1 })
 
-      app.post("/login", limiter, (c) => c.json({ success: true }))
+      app.post("/login", limiter, (c) => c.json({ error: "invalid_credentials" }, 401))
 
       const headers = { "X-Forwarded-For": "192.168.1.1" }
 
       // First request succeeds
       const res1 = await app.fetch(new Request("http://localhost/login", { method: "POST", headers }))
-      expect(res1.status).toBe(200)
+      expect(res1.status).toBe(401)
 
       // Second request is rate limited
       const res2 = await app.fetch(new Request("http://localhost/login", { method: "POST", headers }))
@@ -209,7 +209,7 @@ describe("rate-limit", () => {
 
       // Third request succeeds (window reset)
       const res3 = await app.fetch(new Request("http://localhost/login", { method: "POST", headers }))
-      expect(res3.status).toBe(200)
+      expect(res3.status).toBe(401)
     })
 
     it("uses default config when not provided", () => {
@@ -223,14 +223,14 @@ describe("rate-limit", () => {
       const app = new Hono()
       const limiter = createLoginRateLimiter({ windowMs: 1000, limit: 10 })
 
-      app.post("/login", limiter, (c) => c.json({ success: true }))
+      app.post("/login", limiter, (c) => c.json({ error: "invalid_credentials" }, 401))
 
       const headers = { "X-Forwarded-For": "192.168.1.1" }
 
       // Should allow 10 requests
       for (let i = 0; i < 10; i++) {
         const res = await app.fetch(new Request("http://localhost/login", { method: "POST", headers }))
-        expect(res.status).toBe(200)
+        expect(res.status).toBe(401)
       }
 
       // 11th should be rate limited

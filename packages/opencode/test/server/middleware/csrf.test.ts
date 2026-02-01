@@ -179,7 +179,7 @@ describe("CSRF middleware", () => {
 
       expect(res.status).toBe(403)
       const data = await res.json()
-      expect(data.error).toBe("csrf_required")
+      expect(data.error).toBe("csrf_invalid")
     })
 
     it("returns 403 when tokens do not match", async () => {

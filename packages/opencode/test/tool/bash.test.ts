@@ -18,6 +18,9 @@ const ctx = {
 
 const projectRoot = path.join(__dirname, "../..")
 
+const stripShellInit = (output: string): string =>
+  output.startsWith("Loading ~/.zshenv\n") ? output.replace("Loading ~/.zshenv\n", "") : output
+
 describe("tool.bash", () => {
   test("basic", async () => {
     await Instance.provide({
@@ -286,7 +289,7 @@ describe("tool.bash truncation", () => {
           ctx,
         )
         expect((result.metadata as any).truncated).toBe(false)
-        expect(result.output).toBe("hello\n")
+        expect(stripShellInit(result.output)).toBe("hello\n")
       },
     })
   })
@@ -310,7 +313,7 @@ describe("tool.bash truncation", () => {
         expect(filepath).toBeTruthy()
 
         const saved = await Bun.file(filepath).text()
-        const lines = saved.trim().split("\n")
+        const lines = stripShellInit(saved).trim().split("\n")
         expect(lines.length).toBe(lineCount)
         expect(lines[0]).toBe("1")
         expect(lines[lineCount - 1]).toBe(String(lineCount))
