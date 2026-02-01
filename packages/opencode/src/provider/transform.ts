@@ -45,6 +45,29 @@ export namespace ProviderTransform {
     model: Provider.Model,
     options: Record<string, unknown>,
   ): ModelMessage[] {
+    // FIRST: Strip reasoning parts for models that don't support interleaved reasoning.
+    // This MUST happen before any model-specific early returns to prevent cross-model errors
+    // when switching from a model with thinking/reasoning (e.g., Claude Opus) to one without.
+    if (model.capabilities.interleaved === false) {
+      msgs = msgs.map((msg) => {
+        if (msg.role === "assistant" && Array.isArray(msg.content)) {
+          const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
+          // If all content was reasoning, add placeholder text to avoid empty messages
+          if (filteredContent.length === 0 && msg.content.length > 0) {
+            return {
+              ...msg,
+              content: [{ type: "text" as const, text: "[Reasoning content from previous model]" }],
+            }
+          }
+          return {
+            ...msg,
+            content: filteredContent,
+          }
+        }
+        return msg
+      })
+    }
+
     // Anthropic rejects messages with empty content - filter out empty string messages
     // and remove empty text/reasoning parts from array content
     if (model.api.npm === "@ai-sdk/anthropic") {

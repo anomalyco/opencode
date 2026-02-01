@@ -431,12 +431,12 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
     expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBe("Let me think about this...")
   })
 
-  test("Non-DeepSeek providers leave reasoning content unchanged", () => {
+  test("Non-interleaved providers strip reasoning content to prevent cross-model errors", () => {
     const msgs = [
       {
         role: "assistant",
         content: [
-          { type: "reasoning", text: "Should not be processed" },
+          { type: "reasoning", text: "Should be stripped" },
           { type: "text", text: "Answer" },
         ],
       },
@@ -479,11 +479,113 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
       {},
     )
 
+    // Reasoning parts should be stripped for models with interleaved: false
+    expect(result[0].content).toEqual([{ type: "text", text: "Answer" }])
+    expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBeUndefined()
+  })
+
+  test("Non-interleaved providers replace message with placeholder when only reasoning content exists", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [{ type: "reasoning", text: "Only reasoning, no text" }],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(
+      msgs,
+      {
+        id: "openai/gpt-4",
+        providerID: "openai",
+        api: {
+          id: "gpt-4",
+          url: "https://api.openai.com",
+          npm: "@ai-sdk/openai",
+        },
+        name: "GPT-4",
+        capabilities: {
+          temperature: true,
+          reasoning: false,
+          attachment: true,
+          toolcall: true,
+          input: { text: true, audio: false, image: true, video: false, pdf: false },
+          output: { text: true, audio: false, image: false, video: false, pdf: false },
+          interleaved: false,
+        },
+        cost: {
+          input: 0.03,
+          output: 0.06,
+          cache: { read: 0.001, write: 0.002 },
+        },
+        limit: {
+          context: 128000,
+          output: 4096,
+        },
+        status: "active",
+        options: {},
+        headers: {},
+        release_date: "2023-04-01",
+      },
+      {},
+    )
+
+    // When all content is reasoning, a placeholder text should be inserted
+    expect(result[0].content).toEqual([{ type: "text", text: "[Reasoning content from previous model]" }])
+  })
+
+  test("Interleaved: true providers keep reasoning content in messages", () => {
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Should be kept" },
+          { type: "text", text: "Answer" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(
+      msgs,
+      {
+        id: "anthropic/claude-opus-4",
+        providerID: "anthropic",
+        api: {
+          id: "claude-opus-4-20250514",
+          url: "https://api.anthropic.com",
+          npm: "@ai-sdk/anthropic",
+        },
+        name: "Claude Opus 4",
+        capabilities: {
+          temperature: true,
+          reasoning: true,
+          attachment: true,
+          toolcall: true,
+          input: { text: true, audio: false, image: true, video: false, pdf: true },
+          output: { text: true, audio: false, image: false, video: false, pdf: false },
+          interleaved: true,
+        },
+        cost: {
+          input: 0.015,
+          output: 0.075,
+          cache: { read: 0.0015, write: 0.01875 },
+        },
+        limit: {
+          context: 200000,
+          output: 32000,
+        },
+        status: "active",
+        options: {},
+        headers: {},
+        release_date: "2025-05-14",
+      },
+      {},
+    )
+
+    // Reasoning parts should be kept for models with interleaved: true
     expect(result[0].content).toEqual([
-      { type: "reasoning", text: "Should not be processed" },
+      { type: "reasoning", text: "Should be kept" },
       { type: "text", text: "Answer" },
     ])
-    expect(result[0].providerOptions?.openaiCompatible?.reasoning_content).toBeUndefined()
   })
 })
 
@@ -718,7 +820,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     })
   })
 
-  test("keeps messages with valid text alongside empty parts", () => {
+  test("keeps messages with valid text alongside empty parts (reasoning stripped for non-interleaved)", () => {
     const msgs = [
       {
         role: "assistant",
@@ -732,10 +834,11 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
 
     const result = ProviderTransform.message(msgs, anthropicModel, {})
 
+    // Reasoning is stripped because model has interleaved: false
+    // Empty text is filtered by Anthropic, only "Result" remains
     expect(result).toHaveLength(1)
-    expect(result[0].content).toHaveLength(2)
-    expect(result[0].content[0]).toEqual({ type: "reasoning", text: "Thinking..." })
-    expect(result[0].content[1]).toEqual({ type: "text", text: "Result" })
+    expect(result[0].content).toHaveLength(1)
+    expect(result[0].content[0]).toEqual({ type: "text", text: "Result" })
   })
 
   test("does not filter for non-anthropic providers", () => {
@@ -766,6 +869,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
 })
 
 describe("ProviderTransform.message - strip openai metadata when store=false", () => {
+  // Use interleaved: true so reasoning parts are preserved for metadata testing
   const openaiModel = {
     id: "openai/gpt-5",
     providerID: "openai",
@@ -782,7 +886,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
       toolcall: true,
       input: { text: true, audio: false, image: true, video: false, pdf: false },
       output: { text: true, audio: false, image: false, video: false, pdf: false },
-      interleaved: false,
+      interleaved: true,
     },
     cost: { input: 0.03, output: 0.06, cache: { read: 0.001, write: 0.002 } },
     limit: { context: 128000, output: 4096 },
