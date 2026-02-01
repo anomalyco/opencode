@@ -2255,6 +2255,9 @@ export default function Page() {
                               }
                               hideCloseButton
                               onMiddleClick={() => tabs().close("context")}
+                              onMouseDown={(e) => {
+                                if (e.button === 1) e.preventDefault()
+                              }}
                             >
                               <div class="flex items-center gap-2">
                                 <SessionContextUsage variant="indicator" />
