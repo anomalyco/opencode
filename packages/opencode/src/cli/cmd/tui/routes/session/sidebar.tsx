@@ -1,7 +1,8 @@
 import { useSync } from "@tui/context/sync"
-import { createMemo, For, Show, Switch, Match } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
+import { usePromptRef } from "../../context/prompt"
 import { Locale } from "@/util/locale"
 import path from "path"
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
@@ -11,14 +12,24 @@ import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
+import { useToast } from "../../ui/toast"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
   const { theme } = useTheme()
+  const promptRef = usePromptRef()
+  const toast = useToast()
   const session = createMemo(() => sync.session.get(props.sessionID)!)
   const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
+
+  const hasCommit = createMemo(() => sync.data.command.some((x) => x.name === "commit"))
+  const [hover, setHover] = createSignal<"commit" | null>(null)
+
+  createEffect(() => {
+    if (!hasCommit()) setHover(null)
+  })
 
   const [expanded, setExpanded] = createStore({
     mcp: true,
@@ -293,6 +304,32 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                   <text fg={theme.textMuted}>/connect</text>
                 </box>
               </box>
+            </box>
+          </Show>
+          <Show when={hasCommit()}>
+            <box
+              backgroundColor={hover() === "commit" ? theme.backgroundElement : theme.backgroundPanel}
+              paddingTop={1}
+              paddingBottom={1}
+              paddingLeft={2}
+              paddingRight={2}
+              flexDirection="row"
+              justifyContent="space-between"
+              onMouseOver={() => setHover("commit")}
+              onMouseOut={() => setHover(null)}
+              onMouseUp={() => {
+                const ref = promptRef.current
+                if (!ref)
+                  return toast.show({
+                    message: "Prompt is not ready yet",
+                    variant: "error",
+                  })
+                ref.set({ input: "/commit", parts: [] })
+                ref.focus()
+              }}
+            >
+              <text fg={theme.text}>Commit</text>
+              <text fg={theme.textMuted}>/commit</text>
             </box>
           </Show>
           <text>
