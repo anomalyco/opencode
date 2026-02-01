@@ -13,7 +13,7 @@ The `opencode serve` command runs a headless HTTP server that exposes an OpenAPI
 ### Usage
 
 ```bash
-opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
+opencode serve [--port <number>] [--hostname <string>] [--cors <origin>] [--root-path <path>]
 ```
 
 #### Options
@@ -24,11 +24,18 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--hostname` | Hostname to listen on               | `127.0.0.1` |
 | `--mdns`     | Enable mDNS discovery               | `false`     |
 | `--cors`     | Additional browser origins to allow | `[]`        |
+| `--root-path` | Base path for reverse proxy                    | (empty)     |
 
 `--cors` can be passed multiple times:
 
 ```bash
 opencode serve --cors http://localhost:5173 --cors https://app.example.com
+```
+
+Use `--root-path` when running behind a reverse proxy:
+
+```bash
+opencode serve --root-path /jupyter/proxy/opencode
 ```
 
 ---

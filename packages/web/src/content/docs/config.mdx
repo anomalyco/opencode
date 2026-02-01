@@ -190,7 +190,8 @@ You can configure server settings for the `opencode serve` and `opencode web` co
     "port": 4096,
     "hostname": "0.0.0.0",
     "mdns": true,
-    "cors": ["http://localhost:5173"]
+    "cors": ["http://localhost:5173"],
+    "rootPath": "/proxy"
   }
 }
 ```
@@ -201,6 +202,7 @@ Available options:
 - `hostname` - Hostname to listen on. When `mdns` is enabled and no hostname is set, defaults to `0.0.0.0`.
 - `mdns` - Enable mDNS service discovery. This allows other devices on the network to discover your OpenCode server.
 - `cors` - Additional origins to allow for CORS when using the HTTP server from a browser-based client. Values must be full origins (scheme + host + optional port), eg `https://app.example.com`.
+- `rootPath` - Base path for reverse proxy. All routes will be prefixed with this path.
 
 [Learn more about the server here](/docs/server).
 
