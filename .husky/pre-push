@@ -1,5 +1,6 @@
 #!/bin/sh
 set -e
+export PATH="$HOME/.bun/bin:$PATH"
 # Check if bun version matches package.json
 # keep in sync with packages/script/src/index.ts semver qualifier
 bun -e '
