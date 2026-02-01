@@ -1061,7 +1061,7 @@ export function Session() {
                     <Match when={revert()?.messageID && message.id >= revert()!.messageID}>
                       <></>
                     </Match>
-                    <Match when={message.role === "user"}>
+                    <Match when={message.role === "user" && !(message as UserMessage).renderAsAssistant}>
                       <UserMessage
                         index={index()}
                         onMouseUp={() => {
@@ -1079,7 +1079,12 @@ export function Session() {
                         pending={pending()}
                       />
                     </Match>
-                    <Match when={message.role === "assistant"}>
+                    <Match
+                      when={
+                        message.role === "assistant" ||
+                        (message.role === "user" && (message as UserMessage).renderAsAssistant)
+                      }
+                    >
                       <AssistantMessage
                         last={lastAssistant()?.id === message.id}
                         message={message as AssistantMessage}

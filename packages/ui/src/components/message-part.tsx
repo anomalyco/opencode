@@ -274,12 +274,16 @@ export function registerPartComponent(type: string, component: PartComponent) {
 }
 
 export function Message(props: MessageProps) {
+  const isUser = props.message.role === "user"
+  const isAssistant = props.message.role === "assistant"
+  const renderAsAssistant = isUser && (props.message as UserMessage).renderAsAssistant === true
+
   return (
     <Switch>
-      <Match when={props.message.role === "user" && props.message}>
+      <Match when={isUser && !renderAsAssistant && props.message}>
         {(userMessage) => <UserMessageDisplay message={userMessage() as UserMessage} parts={props.parts} />}
       </Match>
-      <Match when={props.message.role === "assistant" && props.message}>
+      <Match when={(isAssistant || renderAsAssistant) && props.message}>
         {(assistantMessage) => (
           <AssistantMessageDisplay message={assistantMessage() as AssistantMessage} parts={props.parts} />
         )}
