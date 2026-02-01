@@ -24,6 +24,35 @@ while still allowing opencode to act on behalf of authenticated system users.
 This package provides the `opencode-broker` service. It listens on a Unix socket
 and is typically managed by the OS service manager.
 
+## Development (local)
+
+For local development, you can run the broker directly instead of through
+launchd/systemd. This is useful for testing changes and seeing logs in the
+foreground.
+
+### Build and run (debug)
+
+```bash
+cd packages/opencode-broker
+cargo run --bin opencode-broker
+```
+
+### Run with sudo (required for privileged operations)
+
+Some broker features (PAM and user impersonation) require elevated privileges.
+Run with sudo when you need those code paths:
+
+```bash
+cd packages/opencode-broker
+sudo cargo run --bin opencode-broker
+```
+
+### Common troubleshooting
+
+- If you see `Address already in use`, stop the system service or remove any
+  stale socket (see socket section below).
+- Ensure the broker has permission to create `/var/run/opencode/auth.sock`.
+
 ## Socket Location
 
 By default the broker uses a Unix socket at:
