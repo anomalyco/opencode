@@ -179,7 +179,7 @@ export namespace ProviderTransform {
         cacheControl: { type: "ephemeral" },
       },
       bedrock: {
-        cachePoint: { type: "ephemeral" },
+        cachePoint: { type: "default" },
       },
       openaiCompatible: {
         cache_control: { type: "ephemeral" },
@@ -190,7 +190,8 @@ export namespace ProviderTransform {
     }
 
     for (const msg of unique([...system, ...final])) {
-      const shouldUseContentOptions = providerID !== "anthropic" && Array.isArray(msg.content) && msg.content.length > 0
+      const useMessageLevelOptions = providerID === "anthropic" || providerID.includes("bedrock")
+      const shouldUseContentOptions = !useMessageLevelOptions && Array.isArray(msg.content) && msg.content.length > 0
 
       if (shouldUseContentOptions) {
         const lastContent = msg.content[msg.content.length - 1]
