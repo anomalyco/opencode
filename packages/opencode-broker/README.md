@@ -57,6 +57,13 @@ sudo launchctl stop system/com.opencode.broker
 sudo launchctl bootout system /Library/LaunchDaemons/com.opencode.broker.plist
 ```
 
+### Re-enable (system domain)
+
+```bash
+sudo launchctl bootstrap system /Library/LaunchDaemons/com.opencode.broker.plist
+sudo launchctl start system/com.opencode.broker
+```
+
 ### User agent (less common)
 
 ```bash
