@@ -265,20 +265,71 @@ export default function Page() {
     ),
   )
 
-  const decide = (response: "once" | "always" | "reject") => {
+  const decide = (
+    response: "once" | "file_always" | "folder_always" | "folder_recursive" | "project_recursive" | "reject",
+  ) => {
     const perm = request()
     if (!perm) return
     if (ui.responding) return
 
     setUi("responding", true)
     sdk.client.permission
-      .respond({ sessionID: perm.sessionID, permissionID: perm.id, response })
+      .reply({ requestID: perm.id, reply: response })
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : String(err)
         showToast({ title: language.t("common.requestFailed"), description: message })
       })
       .finally(() => setUi("responding", false))
   }
+
+  const permissionOptions = createMemo(() => {
+    const perm = request()
+    if (!perm) return []
+
+    const isFileTool = ["edit", "read"].includes(perm.permission)
+
+    // Use the same logic as TUI - get tool input from sync data
+    const toolInput = (() => {
+      const tool = perm.tool
+      if (!tool) return {}
+      const parts = sync.data.part[tool.messageID] ?? []
+      for (const part of parts) {
+        if (part.type === "tool" && part.callID === tool.callID && part.state.status !== "pending") {
+          return part.state.input ?? {}
+        }
+      }
+      return {}
+    })()
+
+    const filePath = (() => {
+      if (typeof toolInput.filePath === "string") return toolInput.filePath
+      if (typeof toolInput.path === "string") return toolInput.path
+      const meta = perm.metadata
+      if (typeof meta?.filepath === "string") return meta.filepath
+      return null
+    })()
+
+    if (isFileTool && filePath) {
+      return [
+        { key: "reject", label: language.t("ui.permission.deny"), variant: "ghost" as const },
+        { key: "file_always", label: language.t("ui.permission.allowFile"), variant: "secondary" as const },
+        { key: "folder_always", label: language.t("ui.permission.allowFolder"), variant: "secondary" as const },
+        {
+          key: "folder_recursive",
+          label: language.t("ui.permission.allowFolderRecursive"),
+          variant: "secondary" as const,
+        },
+        { key: "project_recursive", label: language.t("ui.permission.allowProject"), variant: "secondary" as const },
+        { key: "once", label: language.t("ui.permission.allowOnce"), variant: "primary" as const },
+      ]
+    }
+
+    return [
+      { key: "reject", label: language.t("ui.permission.deny"), variant: "ghost" as const },
+      { key: "project_recursive", label: language.t("ui.permission.allowProject"), variant: "secondary" as const },
+      { key: "once", label: language.t("ui.permission.allowOnce"), variant: "primary" as const },
+    ]
+  })
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey))
   const view = createMemo(() => layout.view(sessionKey))
@@ -2110,21 +2161,19 @@ export default function Page() {
                       </Show>
                     </BasicTool>
                     <div data-component="permission-prompt">
-                      <div data-slot="permission-actions">
-                        <Button variant="ghost" size="small" onClick={() => decide("reject")} disabled={ui.responding}>
-                          {language.t("ui.permission.deny")}
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          size="small"
-                          onClick={() => decide("always")}
-                          disabled={ui.responding}
-                        >
-                          {language.t("ui.permission.allowAlways")}
-                        </Button>
-                        <Button variant="primary" size="small" onClick={() => decide("once")} disabled={ui.responding}>
-                          {language.t("ui.permission.allowOnce")}
-                        </Button>
+                      <div data-slot="permission-actions" class="flex flex-wrap gap-2">
+                        <For each={permissionOptions()}>
+                          {(option) => (
+                            <Button
+                              variant={option.variant}
+                              size="small"
+                              onClick={() => decide(option.key as any)}
+                              disabled={ui.responding}
+                            >
+                              {option.label}
+                            </Button>
+                          )}
+                        </For>
                       </div>
                     </div>
                   </div>

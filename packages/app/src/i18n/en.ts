@@ -731,4 +731,12 @@ export const dict = {
   "workspace.reset.archived.one": "1 session will be archived.",
   "workspace.reset.archived.many": "{{count}} sessions will be archived.",
   "workspace.reset.note": "This will reset the workspace to match the default branch.",
+
+  "ui.permission.deny": "Deny",
+  "ui.permission.allowOnce": "Allow once",
+  "ui.permission.allowAlways": "Always allow",
+  "ui.permission.allowFile": "Always allow this file",
+  "ui.permission.allowFolder": "Always allow this folder",
+  "ui.permission.allowFolderRecursive": "Always allow this folder (recursive)",
+  "ui.permission.allowProject": "Always allow entire project",
 }

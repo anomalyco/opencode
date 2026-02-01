@@ -40,7 +40,7 @@ export default function Layout(props: ParentProps) {
               sessionID: string
               permissionID: string
               response: "once" | "always" | "reject"
-            }) => sdk.client.permission.respond(input)
+            }) => sdk.client.permission.reply({ requestID: input.permissionID, reply: input.response })
 
             const replyToQuestion = (input: { requestID: string; answers: QuestionAnswer[] }) =>
               sdk.client.question.reply(input)

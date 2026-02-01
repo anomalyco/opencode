@@ -3281,9 +3281,8 @@
                 "properties": {
                   "response": {
                     "type": "string",
-                    "enum": ["once", "always", "reject"]
-                  }
-                },
+                    "enum": ["once", "file_always", "folder_always", "folder_recursive", "project_recursive", "reject"]
+                  },
                 "required": ["response"]
               }
             }
@@ -3359,7 +3358,7 @@
                 "properties": {
                   "reply": {
                     "type": "string",
-                    "enum": ["once", "always", "reject"]
+                    "enum": ["once", "file_always", "folder_always", "folder_recursive", "project_recursive", "reject"]
                   },
                   "message": {
                     "type": "string"
