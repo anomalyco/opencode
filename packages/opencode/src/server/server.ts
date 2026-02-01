@@ -566,9 +566,9 @@ export namespace Server {
   export function listen(opts: { port: number; hostname: string; mdns?: boolean; cors?: string[]; rootPath?: string }) {
     _corsWhitelist = opts.cors ?? []
 
-    const baseApp = opts.rootPath 
-      ? new Hono().basePath(opts.rootPath).route("/", App())
-      : App()
+    // When rootPath is provided (for reverse proxy support), wrap the main app with a base path prefix.
+    // Hono's basePath() automatically prefixes all routes, including WebSocket upgrades.
+    const baseApp = opts.rootPath ? new Hono().basePath(opts.rootPath).route("/", App()) : App()
 
     const args = {
       hostname: opts.hostname,
@@ -586,9 +586,7 @@ export namespace Server {
     const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
     if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
 
-    _url = opts.rootPath 
-      ? new URL(`${server.url.origin}${opts.rootPath}`)
-      : server.url
+    _url = opts.rootPath ? new URL(`${server.url.origin}${opts.rootPath}`) : server.url
 
     const shouldPublishMDNS =
       opts.mdns &&

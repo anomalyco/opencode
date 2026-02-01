@@ -54,9 +54,11 @@ export async function resolveNetworkOptions(args: NetworkOptions) {
   const configCors = config?.server?.cors ?? []
   const argsCors = Array.isArray(args.cors) ? args.cors : args.cors ? [args.cors] : []
   const cors = [...configCors, ...argsCors]
-  const rootPath = rootPathExplicitlySet 
-    ? args.rootPath 
-    : (config?.server?.rootPath ?? args.rootPath)
+  const rootPath = rootPathExplicitlySet ? args.rootPath : (config?.server?.rootPath ?? args.rootPath)
+
+  if (rootPath && !rootPath.startsWith("/")) {
+    throw new Error("rootPath must start with '/' if provided")
+  }
 
   return { hostname, port, mdns, cors, rootPath }
 }
