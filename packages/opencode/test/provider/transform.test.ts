@@ -138,6 +138,28 @@ describe("ProviderTransform.mistralAffinity", () => {
     expect(ProviderTransform.isMistral(model)).toBe(true)
     expect(ProviderTransform.isMistral(nonMistral)).toBe(false)
   })
+
+  test("clears affinity on session cleanup", () => {
+    const sessionID = "ses_test_mistral_cleanup"
+    ProviderTransform.bumpMistralAffinity(sessionID)
+    ProviderTransform.bumpMistralAffinity(sessionID)
+    const before = ProviderTransform.mistralAffinity(sessionID)
+    
+    ProviderTransform.clearMistralAffinity(sessionID)
+    
+    const after = ProviderTransform.mistralAffinity(sessionID)
+    expect(before).not.toBe(after)
+    expect(after).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+  })
+
+  test("clearMistralAffinity is safe for non-mistral sessions", () => {
+    const sessionID = "ses_test_non_mistral_cleanup"
+    
+    ProviderTransform.clearMistralAffinity(sessionID)
+    
+    const affinityID = ProviderTransform.mistralAffinity(sessionID)
+    expect(affinityID).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+  })
 })
 
 describe("ProviderTransform.options - gpt-5 textVerbosity", () => {

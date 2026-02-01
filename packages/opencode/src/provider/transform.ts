@@ -64,6 +64,13 @@ export namespace ProviderTransform {
     affinity.set(sessionID, count + 1)
   }
 
+  export function clearMistralAffinity(sessionID: string) {
+    // Only clean up if this session actually has mistral affinity tracking
+    if (affinity.has(sessionID)) {
+      affinity.delete(sessionID)
+    }
+  }
+
   export function isMistral(model: Provider.Model): boolean {
     const id = model.api.id.toLowerCase()
     return (

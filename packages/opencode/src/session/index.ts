@@ -20,6 +20,7 @@ import { Command } from "../command"
 import { Snapshot } from "@/snapshot"
 
 import type { Provider } from "@/provider/provider"
+import { ProviderTransform } from "@/provider/transform"
 import { PermissionNext } from "@/permission/next"
 import { Global } from "@/global"
 
@@ -365,6 +366,7 @@ export namespace Session {
       Bus.publish(Event.Deleted, {
         info: session,
       })
+      ProviderTransform.clearMistralAffinity(sessionID)
     } catch (e) {
       log.error(e)
     }
