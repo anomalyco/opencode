@@ -1,0 +1,3 @@
+#!/bin/sh
+
+echo "No init file configured, skipping..."
