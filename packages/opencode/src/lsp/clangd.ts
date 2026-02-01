@@ -2,10 +2,12 @@ import fs from "fs/promises"
 import path from "path"
 
 async function pathExists(p: string): Promise<boolean> {
-  return fs
-    .stat(p)
-    .then(() => true)
-    .catch(() => false)
+  try {
+    const stats = await fs.stat(p)
+    return stats.isFile()
+  } catch {
+    return false
+  }
 }
 
 export async function findCMakeBuildDirs(root: string): Promise<string[]> {
