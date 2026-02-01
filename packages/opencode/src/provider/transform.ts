@@ -65,6 +65,25 @@ export namespace ProviderTransform {
           return { ...msg, content: filtered }
         })
         .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
+        .map((msg) => {
+          // Anthropic requires reasoning blocks to precede tool_use blocks in assistant messages
+          if (msg.role === "assistant" && Array.isArray(msg.content)) {
+            const priority = (type: string) => {
+              switch (type) {
+                case "reasoning":
+                  return 0
+                case "text":
+                  return 1
+                case "tool-call":
+                  return 2
+                default:
+                  return 3
+              }
+            }
+            msg.content.sort((a, b) => priority(a.type) - priority(b.type))
+          }
+          return msg
+        })
     }
 
     if (model.api.id.includes("claude")) {
