@@ -91,6 +91,19 @@ export function Code<T>(props: CodeProps<T>) {
     return root
   }
 
+  const applyScheme = () => {
+    const host = container.querySelector("diffs-container")
+    if (!(host instanceof HTMLElement)) return
+
+    const scheme = document.documentElement.dataset.colorScheme
+    if (scheme === "dark" || scheme === "light") {
+      host.dataset.colorScheme = scheme
+      return
+    }
+
+    host.removeAttribute("data-color-scheme")
+  }
+
   const applyCommentedLines = (ranges: SelectedLineRange[]) => {
     const root = getRoot()
     if (!root) return
@@ -115,20 +128,56 @@ export function Code<T>(props: CodeProps<T>) {
     }
   }
 
-  const notifyRendered = () => {
-    if (!local.onRendered) return
+  const lineCount = () => {
+    const text = local.file.contents
+    const total = text.split("\n").length - (text.endsWith("\n") ? 1 : 0)
+    return Math.max(1, total)
+  }
 
+  const applySelection = (range: SelectedLineRange | null) => {
+    const root = getRoot()
+    if (!root) return false
+
+    const lines = lineCount()
+    if (root.querySelectorAll("[data-line]").length < lines) return false
+
+    if (!range) {
+      file().setSelectedLines(null)
+      return true
+    }
+
+    const start = Math.min(range.start, range.end)
+    const end = Math.max(range.start, range.end)
+
+    if (start < 1 || end > lines) {
+      file().setSelectedLines(null)
+      return true
+    }
+
+    if (!root.querySelector(`[data-line="${start}"]`) || !root.querySelector(`[data-line="${end}"]`)) {
+      file().setSelectedLines(null)
+      return true
+    }
+
+    const normalized = (() => {
+      if (range.endSide != null) return { start: range.start, end: range.end }
+      if (range.side !== "deletions") return range
+      if (root.querySelector("[data-deletions]") != null) return range
+      return { start: range.start, end: range.end }
+    })()
+
+    file().setSelectedLines(normalized)
+    return true
+  }
+
+  const notifyRendered = () => {
     observer?.disconnect()
     observer = undefined
     renderToken++
 
     const token = renderToken
 
-    const lines = (() => {
-      const text = local.file.contents
-      const total = text.split("\n").length - (text.endsWith("\n") ? 1 : 0)
-      return Math.max(1, total)
-    })()
+    const lines = lineCount()
 
     const isReady = (root: ShadowRoot) => root.querySelectorAll("[data-line]").length >= lines
 
@@ -139,6 +188,7 @@ export function Code<T>(props: CodeProps<T>) {
       observer = undefined
       requestAnimationFrame(() => {
         if (token !== renderToken) return
+        applySelection(lastSelection)
         local.onRendered?.()
       })
     }
@@ -228,7 +278,7 @@ export function Code<T>(props: CodeProps<T>) {
 
   const setSelectedLines = (range: SelectedLineRange | null) => {
     lastSelection = range
-    file().setSelectedLines(range)
+    applySelection(range)
   }
 
   const scheduleSelectionUpdate = () => {
@@ -369,8 +419,22 @@ export function Code<T>(props: CodeProps<T>) {
       containerWrapper: container,
     })
 
+    applyScheme()
+
     setRendered((value) => value + 1)
     notifyRendered()
+  })
+
+  createEffect(() => {
+    if (typeof document === "undefined") return
+    if (typeof MutationObserver === "undefined") return
+
+    const root = document.documentElement
+    const monitor = new MutationObserver(() => applyScheme())
+    monitor.observe(root, { attributes: true, attributeFilter: ["data-color-scheme"] })
+    applyScheme()
+
+    onCleanup(() => monitor.disconnect())
   })
 
   createEffect(() => {

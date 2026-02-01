@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, onCleanup, onMount, type Accessor } from "solid-js"
+import { createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -22,6 +22,15 @@ function normalizeKey(key: string) {
   if (key === "+") return "plus"
   if (key === " ") return "space"
   return key.toLowerCase()
+}
+
+function signature(key: string, ctrl: boolean, meta: boolean, shift: boolean, alt: boolean) {
+  const mask = (ctrl ? 1 : 0) | (meta ? 2 : 0) | (shift ? 4 : 0) | (alt ? 8 : 0)
+  return `${key}:${mask}`
+}
+
+function signatureFromEvent(event: KeyboardEvent) {
+  return signature(normalizeKey(event.key), event.ctrlKey, event.metaKey, event.shiftKey, event.altKey)
 }
 
 export type KeybindConfig = string
@@ -156,8 +165,10 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     const dialog = useDialog()
     const settings = useSettings()
     const language = useLanguage()
-    const [registrations, setRegistrations] = createSignal<Accessor<CommandOption[]>[]>([])
-    const [suspendCount, setSuspendCount] = createSignal(0)
+    const [store, setStore] = createStore({
+      registrations: [] as Accessor<CommandOption[]>[],
+      suspendCount: 0,
+    })
 
     const [catalog, setCatalog, _, catalogReady] = persisted(
       Persist.global("command.catalog.v1"),
@@ -175,7 +186,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       const seen = new Set<string>()
       const all: CommandOption[] = []
 
-      for (const reg of registrations()) {
+      for (const reg of store.registrations) {
         for (const opt of reg()) {
           if (seen.has(opt.id)) continue
           seen.add(opt.id)
@@ -221,7 +232,31 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       ]
     })
 
-    const suspended = () => suspendCount() > 0
+    const suspended = () => store.suspendCount > 0
+
+    const palette = createMemo(() => {
+      const config = settings.keybinds.get(PALETTE_ID) ?? DEFAULT_PALETTE_KEYBIND
+      const keybinds = parseKeybind(config)
+      return new Set(keybinds.map((kb) => signature(kb.key, kb.ctrl, kb.meta, kb.shift, kb.alt)))
+    })
+
+    const keymap = createMemo(() => {
+      const map = new Map<string, CommandOption>()
+      for (const option of options()) {
+        if (option.id.startsWith(SUGGESTED_PREFIX)) continue
+        if (option.disabled) continue
+        if (!option.keybind) continue
+
+        const keybinds = parseKeybind(option.keybind)
+        for (const kb of keybinds) {
+          if (!kb.key) continue
+          const sig = signature(kb.key, kb.ctrl, kb.meta, kb.shift, kb.alt)
+          if (map.has(sig)) continue
+          map.set(sig, option)
+        }
+      }
+      return map
+    })
 
     const run = (id: string, source?: "palette" | "keybind" | "slash") => {
       for (const option of options()) {
@@ -239,24 +274,18 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     const handleKeyDown = (event: KeyboardEvent) => {
       if (suspended() || dialog.active) return
 
-      const paletteKeybinds = parseKeybind(settings.keybinds.get(PALETTE_ID) ?? DEFAULT_PALETTE_KEYBIND)
-      if (matchKeybind(paletteKeybinds, event)) {
+      const sig = signatureFromEvent(event)
+
+      if (palette().has(sig)) {
         event.preventDefault()
         showPalette()
         return
       }
 
-      for (const option of options()) {
-        if (option.disabled) continue
-        if (!option.keybind) continue
-
-        const keybinds = parseKeybind(option.keybind)
-        if (matchKeybind(keybinds, event)) {
-          event.preventDefault()
-          option.onSelect?.("keybind")
-          return
-        }
-      }
+      const option = keymap().get(sig)
+      if (!option) return
+      event.preventDefault()
+      option.onSelect?.("keybind")
     }
 
     onMount(() => {
@@ -270,9 +299,9 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     return {
       register(cb: () => CommandOption[]) {
         const results = createMemo(cb)
-        setRegistrations((arr) => [results, ...arr])
+        setStore("registrations", (arr) => [results, ...arr])
         onCleanup(() => {
-          setRegistrations((arr) => arr.filter((x) => x !== results))
+          setStore("registrations", (arr) => arr.filter((x) => x !== results))
         })
       },
       trigger(id: string, source?: "palette" | "keybind" | "slash") {
@@ -294,7 +323,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       },
       show: showPalette,
       keybinds(enabled: boolean) {
-        setSuspendCount((count) => count + (enabled ? -1 : 1))
+        setStore("suspendCount", (count) => count + (enabled ? -1 : 1))
       },
       suspended,
       get catalog() {

@@ -85,7 +85,7 @@ export namespace ModelsDev {
   }
 
   export const Data = lazy(async () => {
-    const file = Bun.file(filepath)
+    const file = Bun.file(Flag.OPENCODE_MODELS_PATH ?? filepath)
     const result = await file.json().catch(() => {})
     if (result) return result
     // @ts-ignore
@@ -105,9 +105,6 @@ export namespace ModelsDev {
 
   export async function refresh() {
     const file = Bun.file(filepath)
-    log.info("refreshing", {
-      file,
-    })
     const result = await fetch(`${url()}/api.json`, {
       headers: {
         "User-Agent": Installation.USER_AGENT,

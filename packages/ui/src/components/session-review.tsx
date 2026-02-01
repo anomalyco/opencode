@@ -4,11 +4,12 @@ import { RadioGroup } from "./radio-group"
 import { DiffChanges } from "./diff-changes"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
-import { LineCommentAnchor } from "./line-comment"
+import { LineComment, LineCommentEditor } from "./line-comment"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { useDiffComponent } from "../context/diff"
 import { useI18n } from "../context/i18n"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
+import { checksum } from "@opencode-ai/util/encode"
 import { createEffect, createMemo, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { type FileContent, type FileDiff } from "@opencode-ai/sdk/v2"
@@ -43,6 +44,7 @@ export interface SessionReviewProps {
   comments?: SessionReviewComment[]
   focusedComment?: SessionReviewFocus | null
   onFocusedCommentChange?: (focus: SessionReviewFocus | null) => void
+  focusedFile?: string
   open?: string[]
   onOpenChange?: (open: string[]) => void
   scrollRef?: (el: HTMLDivElement) => void
@@ -118,16 +120,28 @@ function dataUrlFromValue(value: unknown): string | undefined {
   return `data:${mime};base64,${content}`
 }
 
+function diffId(file: string): string | undefined {
+  const sum = checksum(file)
+  if (!sum) return
+  return `session-review-diff-${sum}`
+}
+
 type SessionReviewSelection = {
   file: string
   range: SelectedLineRange
 }
 
-function findSide(element: HTMLElement): "additions" | "deletions" {
+function findSide(element: HTMLElement): "additions" | "deletions" | undefined {
+  const typed = element.closest("[data-line-type]")
+  if (typed instanceof HTMLElement) {
+    const type = typed.dataset.lineType
+    if (type === "change-deletion") return "deletions"
+    if (type === "change-addition" || type === "change-additions") return "additions"
+  }
+
   const code = element.closest("[data-code]")
-  if (!(code instanceof HTMLElement)) return "additions"
-  if (code.hasAttribute("data-deletions")) return "deletions"
-  return "additions"
+  if (!(code instanceof HTMLElement)) return
+  return code.hasAttribute("data-deletions") ? "deletions" : "additions"
 }
 
 function findMarker(root: ShadowRoot, range: SelectedLineRange) {
@@ -232,7 +246,7 @@ export const SessionReview = (props: SessionReviewProps) => {
 
       const target = ready ? anchor : anchors.get(focus.file)
       if (!target) {
-        if (attempt >= 24) return
+        if (attempt >= 120) return
         requestAnimationFrame(() => scrollTo(attempt + 1))
         return
       }
@@ -244,7 +258,7 @@ export const SessionReview = (props: SessionReviewProps) => {
       root.scrollTop = Math.max(0, next)
 
       if (ready) return
-      if (attempt >= 24) return
+      if (attempt >= 120) return
       requestAnimationFrame(() => scrollTo(attempt + 1))
     }
 
@@ -305,7 +319,6 @@ export const SessionReview = (props: SessionReviewProps) => {
           <For each={props.diffs}>
             {(diff) => {
               let wrapper: HTMLDivElement | undefined
-              let textarea: HTMLTextAreaElement | undefined
 
               const comments = createMemo(() => (props.comments ?? []).filter((c) => c.file === diff.file))
               const commentedLines = createMemo(() => comments().map((c) => c.selection))
@@ -396,7 +409,6 @@ export const SessionReview = (props: SessionReviewProps) => {
                 if (!range) return
                 setDraft("")
                 scheduleAnchors()
-                requestAnimationFrame(() => textarea?.focus())
               })
 
               createEffect(() => {
@@ -485,7 +497,13 @@ export const SessionReview = (props: SessionReviewProps) => {
               }
 
               return (
-                <Accordion.Item value={diff.file} data-slot="session-review-accordion-item">
+                <Accordion.Item
+                  value={diff.file}
+                  id={diffId(diff.file)}
+                  data-file={diff.file}
+                  data-slot="session-review-accordion-item"
+                  data-selected={props.focusedFile === diff.file ? "" : undefined}
+                >
                   <StickyAccordionHeader>
                     <Accordion.Trigger>
                       <div data-slot="session-review-trigger-content">
@@ -514,12 +532,12 @@ export const SessionReview = (props: SessionReviewProps) => {
                           <Switch>
                             <Match when={isAdded()}>
                               <span data-slot="session-review-change" data-type="added">
-                                Added
+                                {i18n.t("ui.sessionReview.change.added")}
                               </span>
                             </Match>
                             <Match when={isDeleted()}>
                               <span data-slot="session-review-change" data-type="removed">
-                                Removed
+                                {i18n.t("ui.sessionReview.change.removed")}
                               </span>
                             </Match>
                             <Match when={true}>
@@ -565,7 +583,7 @@ export const SessionReview = (props: SessionReviewProps) => {
 
                       <For each={comments()}>
                         {(comment) => (
-                          <LineCommentAnchor
+                          <LineComment
                             id={comment.id}
                             top={positions()[comment.id]}
                             onMouseEnter={() => setSelection({ file: comment.file, range: comment.selection })}
@@ -578,83 +596,31 @@ export const SessionReview = (props: SessionReviewProps) => {
                               openComment(comment)
                             }}
                             open={isCommentOpen(comment)}
-                          >
-                            <div data-slot="session-review-comment-content">
-                              <div data-slot="session-review-comment-text">{comment.comment}</div>
-                              <div data-slot="session-review-comment-label">
-                                Comment on {selectionLabel(comment.selection)}
-                              </div>
-                            </div>
-                          </LineCommentAnchor>
+                            comment={comment.comment}
+                            selection={selectionLabel(comment.selection)}
+                          />
                         )}
                       </For>
 
                       <Show when={draftRange()}>
                         {(range) => (
                           <Show when={draftTop() !== undefined}>
-                            <LineCommentAnchor
+                            <LineCommentEditor
                               top={draftTop()}
-                              onClick={() => textarea?.focus()}
-                              open={true}
-                              variant="editor"
-                            >
-                              <div data-slot="session-review-comment-draft">
-                                <textarea
-                                  ref={textarea}
-                                  data-slot="session-review-comment-textarea"
-                                  rows={3}
-                                  placeholder="Add comment"
-                                  value={draft()}
-                                  onInput={(e) => setDraft(e.currentTarget.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Escape") {
-                                      e.preventDefault()
-                                      e.stopPropagation()
-                                      setCommenting(null)
-                                      return
-                                    }
-                                    if (e.key !== "Enter") return
-                                    if (e.shiftKey) return
-                                    e.preventDefault()
-                                    const value = draft().trim()
-                                    if (!value) return
-                                    props.onLineComment?.({
-                                      file: diff.file,
-                                      selection: range(),
-                                      comment: value,
-                                      preview: selectionPreview(diff, range()),
-                                    })
-                                    setCommenting(null)
-                                  }}
-                                />
-                                <div data-slot="session-review-comment-actions">
-                                  <div data-slot="session-review-comment-draft-label">
-                                    Commenting on {selectionLabel(range())}
-                                  </div>
-                                  <Button size="small" variant="ghost" onClick={() => setCommenting(null)}>
-                                    Cancel
-                                  </Button>
-                                  <Button
-                                    size="small"
-                                    variant="primary"
-                                    disabled={draft().trim().length === 0}
-                                    onClick={() => {
-                                      const value = draft().trim()
-                                      if (!value) return
-                                      props.onLineComment?.({
-                                        file: diff.file,
-                                        selection: range(),
-                                        comment: value,
-                                        preview: selectionPreview(diff, range()),
-                                      })
-                                      setCommenting(null)
-                                    }}
-                                  >
-                                    Comment
-                                  </Button>
-                                </div>
-                              </div>
-                            </LineCommentAnchor>
+                              value={draft()}
+                              selection={selectionLabel(range())}
+                              onInput={setDraft}
+                              onCancel={() => setCommenting(null)}
+                              onSubmit={(comment) => {
+                                props.onLineComment?.({
+                                  file: diff.file,
+                                  selection: range(),
+                                  comment,
+                                  preview: selectionPreview(diff, range()),
+                                })
+                                setCommenting(null)
+                              }}
+                            />
                           </Show>
                         )}
                       </Show>

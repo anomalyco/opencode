@@ -1,4 +1,4 @@
-import { createMemo, For, Match, Show, Switch } from "solid-js"
+import { createMemo, For, Match, Switch } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
 import { Logo } from "@opencode-ai/ui/logo"
 import { useLayout } from "@/context/layout"
@@ -23,6 +23,11 @@ export default function Home() {
   const server = useServer()
   const language = useLanguage()
   const homedir = createMemo(() => sync.data.path.home)
+  const recent = createMemo(() => {
+    return sync.data.project
+      .toSorted((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
+      .slice(0, 5)
+  })
 
   function openProject(directory: string) {
     layout.projects.open(directory)
@@ -84,11 +89,7 @@ export default function Home() {
               </Button>
             </div>
             <ul class="flex flex-col gap-2">
-              <For
-                each={sync.data.project
-                  .toSorted((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
-                  .slice(0, 5)}
-              >
+              <For each={recent()}>
                 {(project) => (
                   <Button
                     size="large"

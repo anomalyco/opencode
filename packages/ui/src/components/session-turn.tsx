@@ -4,6 +4,7 @@ import {
   Message as MessageType,
   Part as PartType,
   type PermissionRequest,
+  type QuestionRequest,
   TextPart,
   ToolPart,
 } from "@opencode-ai/sdk/v2/client"
@@ -150,6 +151,8 @@ export function SessionTurn(
   const emptyAssistant: AssistantMessage[] = []
   const emptyPermissions: PermissionRequest[] = []
   const emptyPermissionParts: { part: ToolPart; message: AssistantMessage }[] = []
+  const emptyQuestions: QuestionRequest[] = []
+  const emptyQuestionParts: { part: ToolPart; message: AssistantMessage }[] = []
   const emptyDiffs: FileDiff[] = []
   const idle = { type: "idle" as const }
 
@@ -281,8 +284,54 @@ export function SessionTurn(
     return emptyPermissionParts
   })
 
+  const questions = createMemo(() => data.store.question?.[props.sessionID] ?? emptyQuestions)
+  const nextQuestion = createMemo(() => questions()[0])
+
+  const questionParts = createMemo(() => {
+    if (props.stepsExpanded) return emptyQuestionParts
+
+    const next = nextQuestion()
+    if (!next || !next.tool) return emptyQuestionParts
+
+    const message = findLast(assistantMessages(), (m) => m.id === next.tool!.messageID)
+    if (!message) return emptyQuestionParts
+
+    const parts = data.store.part[message.id] ?? emptyParts
+    for (const part of parts) {
+      if (part?.type !== "tool") continue
+      const tool = part as ToolPart
+      if (tool.callID === next.tool?.callID) return [{ part: tool, message }]
+    }
+
+    return emptyQuestionParts
+  })
+
+  const answeredQuestionParts = createMemo(() => {
+    if (props.stepsExpanded) return emptyQuestionParts
+    if (questions().length > 0) return emptyQuestionParts
+
+    const result: { part: ToolPart; message: AssistantMessage }[] = []
+
+    for (const msg of assistantMessages()) {
+      const parts = data.store.part[msg.id] ?? emptyParts
+      for (const part of parts) {
+        if (part?.type !== "tool") continue
+        const tool = part as ToolPart
+        if (tool.tool !== "question") continue
+        // @ts-expect-error metadata may not exist on all tool states
+        const answers = tool.state?.metadata?.answers
+        if (answers && answers.length > 0) {
+          result.push({ part: tool, message: msg })
+        }
+      }
+    }
+
+    return result
+  })
+
   const shellModePart = createMemo(() => {
     const p = parts()
+    if (p.length === 0) return
     if (!p.every((part) => part?.type === "text" && part?.synthetic)) return
 
     const msgs = assistantMessages()
@@ -389,12 +438,14 @@ export function SessionTurn(
     const interval = Interval.fromDateTimes(from, to)
     const unit: DurationUnit[] = interval.length("seconds") > 60 ? ["minutes", "seconds"] : ["seconds"]
 
-    return interval.toDuration(unit).normalize().reconfigure({ locale: i18n.locale() }).toHuman({
+    const locale = i18n.locale()
+    const human = interval.toDuration(unit).normalize().reconfigure({ locale }).toHuman({
       notation: "compact",
       unitDisplay: "narrow",
       compactDisplay: "short",
       showZeros: false,
     })
+    return locale.startsWith("zh") ? human.replaceAll("、", "") : human
   }
 
   const autoScroll = createAutoScroll({
@@ -564,7 +615,7 @@ export function SessionTurn(
                                   viewBox="0 0 10 10"
                                   fill="none"
                                   xmlns="http://www.w3.org/2000/svg"
-                                  class="text-icon-base"
+                                  data-slot="session-turn-trigger-icon"
                                 >
                                   <path
                                     d="M8.125 1.875H1.875L5 8.125L8.125 1.875Z"
@@ -593,10 +644,16 @@ export function SessionTurn(
                                 <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
                               </Match>
                               <Match when={working()}>
-                                {store.status ?? i18n.t("ui.sessionTurn.status.consideringNextSteps")}
+                                <span data-slot="session-turn-status-text">
+                                  {store.status ?? i18n.t("ui.sessionTurn.status.consideringNextSteps")}
+                                </span>
                               </Match>
-                              <Match when={props.stepsExpanded}>{i18n.t("ui.sessionTurn.steps.hide")}</Match>
-                              <Match when={!props.stepsExpanded}>{i18n.t("ui.sessionTurn.steps.show")}</Match>
+                              <Match when={props.stepsExpanded}>
+                                <span data-slot="session-turn-status-text">{i18n.t("ui.sessionTurn.steps.hide")}</span>
+                              </Match>
+                              <Match when={!props.stepsExpanded}>
+                                <span data-slot="session-turn-status-text">{i18n.t("ui.sessionTurn.steps.show")}</span>
+                              </Match>
                             </Switch>
                             <span aria-hidden="true">·</span>
                             <span aria-live="off">{store.duration}</span>
@@ -627,6 +684,20 @@ export function SessionTurn(
                     <Show when={!props.stepsExpanded && permissionParts().length > 0}>
                       <div data-slot="session-turn-permission-parts">
                         <For each={permissionParts()}>
+                          {({ part, message }) => <Part part={part} message={message} />}
+                        </For>
+                      </div>
+                    </Show>
+                    <Show when={!props.stepsExpanded && questionParts().length > 0}>
+                      <div data-slot="session-turn-question-parts">
+                        <For each={questionParts()}>
+                          {({ part, message }) => <Part part={part} message={message} />}
+                        </For>
+                      </div>
+                    </Show>
+                    <Show when={!props.stepsExpanded && answeredQuestionParts().length > 0}>
+                      <div data-slot="session-turn-answered-question-parts">
+                        <For each={answeredQuestionParts()}>
                           {({ part, message }) => <Part part={part} message={message} />}
                         </For>
                       </div>
