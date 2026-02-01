@@ -100,7 +100,7 @@ export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV2Pro
               break
             }
             case "reasoning": {
-              reasoningText = part.text
+              if (part.text) reasoningText = part.text
               break
             }
             case "tool-call": {
@@ -122,7 +122,7 @@ export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV2Pro
           role: "assistant",
           content: text || null,
           tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
-          reasoning_text: reasoningText,
+          reasoning_text: reasoningOpaque ? reasoningText : undefined,
           reasoning_opaque: reasoningOpaque,
           ...metadata,
         })
