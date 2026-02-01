@@ -215,7 +215,7 @@ export namespace Ripgrep {
 
     const args = [await filepath(), "--files", "--glob=!.git/*"]
     if (input.follow) args.push("--follow")
-    if (input.hidden) args.push("--hidden")
+    if (input.hidden !== false) args.push("--hidden")
     if (input.maxDepth !== undefined) args.push(`--max-depth=${input.maxDepth}`)
     if (input.glob) {
       for (const g of input.glob) {
