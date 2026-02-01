@@ -57,10 +57,10 @@ async function getLatestMtimeMs(startPath: string) {
 async function getPackagedUiDir() {
   const execName = path.basename(process.execPath).toLowerCase()
   const isExecutable = execName === "opencode" || execName === "opencode.exe"
-  if (!isExecutable) return undefined
+  if (!isExecutable) return { uiDir: undefined, isExecutable }
   const maybeUiDir = path.resolve(process.execPath, "..", "..", "ui")
   const hasUiDir = await Filesystem.isDir(maybeUiDir)
-  return hasUiDir ? maybeUiDir : undefined
+  return { uiDir: hasUiDir ? maybeUiDir : undefined, isExecutable }
 }
 
 async function shouldRebuildUi(appDir: string, distDir: string) {
@@ -69,16 +69,19 @@ async function shouldRebuildUi(appDir: string, distDir: string) {
 
   const srcDir = path.join(appDir, "src")
   const indexHtml = path.join(appDir, "index.html")
-  const sourceLatest = await Promise.all([getLatestMtimeMs(srcDir), getLatestMtimeMs(indexHtml)]).then((items) =>
-    Math.max(...items),
-  )
+  const viteConfig = path.join(appDir, "vite.config.ts")
+  const sourceLatest = await Promise.all([
+    getLatestMtimeMs(srcDir),
+    getLatestMtimeMs(indexHtml),
+    getLatestMtimeMs(viteConfig),
+  ]).then((items) => Math.max(...items))
   const distLatest = await getLatestMtimeMs(distDir)
   return sourceLatest > distLatest
 }
 
 async function resolveLocalWebUiDir() {
-  const packagedUiDir = await getPackagedUiDir()
-  if (packagedUiDir) return packagedUiDir
+  const packaged = await getPackagedUiDir()
+  if (packaged.uiDir) return packaged.uiDir
 
   const appDir = fileURLToPath(new URL("../../../../app", import.meta.url))
   const distDir = path.join(appDir, "dist")
@@ -90,7 +93,16 @@ async function resolveLocalWebUiDir() {
   const rebuild = await shouldRebuildUi(appDir, distDir)
   if (rebuild) {
     try {
-      await BunProc.run(["run", "build"], { cwd: appDir })
+      const isDevBuild = !packaged.isExecutable && process.env.NODE_ENV !== "production"
+      await BunProc.run(["run", "build"], {
+        cwd: appDir,
+        env: isDevBuild
+          ? {
+              VITE_SOURCEMAP: "true",
+              VITE_MINIFY: "false",
+            }
+          : undefined,
+      })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       throw new Error(`Failed to build local web UI: ${message}`)

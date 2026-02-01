@@ -2,8 +2,10 @@ import { createEffect, createSignal, Show } from "solid-js"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useSession } from "@/context/session"
 import { useServer } from "@/context/server"
+import { ManageTwoFactorDialog } from "@/components/2fa/manage-2fa-dialog"
 
 /**
  * Get CSRF token from cookie.
@@ -18,6 +20,8 @@ function getCsrfToken(): string | undefined {
  */
 interface DeviceTrustStatus {
   twoFactorEnabled: boolean
+  twoFactorConfigured: boolean
+  twoFactorOptedOut: boolean
   deviceTrusted: boolean
 }
 
@@ -30,26 +34,30 @@ interface DeviceTrustStatus {
 export function SessionIndicator() {
   const session = useSession()
   const server = useServer()
+  const dialog = useDialog()
   const [deviceTrustStatus, setDeviceTrustStatus] = createSignal<DeviceTrustStatus | null>(null)
 
   // Fetch device trust status on mount
-  createEffect(() => {
+  const fetchDeviceTrustStatus = async () => {
     if (!session.isAuthenticated()) return
 
     const url = server.url
     if (!url) return
 
-    fetch(`${url}/auth/device-trust/status`, {
-      credentials: "include",
-    })
-      .then((res) => res.json())
-      .then((data: DeviceTrustStatus) => {
-        setDeviceTrustStatus(data)
+    try {
+      const res = await fetch(`${url}/auth/device-trust/status`, {
+        credentials: "include",
       })
-      .catch(() => {
-        // Silently fail - device trust features will just not show
-        setDeviceTrustStatus(null)
-      })
+      const data = (await res.json()) as DeviceTrustStatus
+      setDeviceTrustStatus(data)
+    } catch {
+      // Silently fail - device trust features will just not show
+      setDeviceTrustStatus(null)
+    }
+  }
+
+  createEffect(() => {
+    void fetchDeviceTrustStatus()
   })
 
   /**
@@ -150,10 +158,17 @@ export function SessionIndicator() {
     window.open(`${url}/auth/2fa/setup`, "_blank")
   }
 
+  function handleManage2FA(): void {
+    dialog.show(() => <ManageTwoFactorDialog onUpdate={fetchDeviceTrustStatus} />)
+  }
+
   const showDeviceTrustOptions = () => {
     const status = deviceTrustStatus()
     return status && status.twoFactorEnabled
   }
+
+  const isTwoFactorConfigured = () => deviceTrustStatus()?.twoFactorConfigured ?? false
+  const isTwoFactorOptedOut = () => deviceTrustStatus()?.twoFactorOptedOut ?? false
 
   const isDeviceTrusted = () => {
     const status = deviceTrustStatus()
@@ -186,8 +201,10 @@ export function SessionIndicator() {
                   <DropdownMenu.ItemLabel>Forget this device (require 2FA)</DropdownMenu.ItemLabel>
                 </DropdownMenu.Item>
               </Show>
-              <DropdownMenu.Item onSelect={handleSetup2FA}>
-                <DropdownMenu.ItemLabel>Set up 2FA</DropdownMenu.ItemLabel>
+              <DropdownMenu.Item onSelect={isTwoFactorConfigured() ? handleManage2FA : handleSetup2FA}>
+                <DropdownMenu.ItemLabel>
+                  {isTwoFactorConfigured() ? "Manage 2FA" : isTwoFactorOptedOut() ? "Enable 2FA" : "Set up 2FA"}
+                </DropdownMenu.ItemLabel>
               </DropdownMenu.Item>
             </Show>
             <DropdownMenu.Separator />

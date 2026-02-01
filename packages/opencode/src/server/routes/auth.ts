@@ -18,11 +18,43 @@ import { create2FAToken, verify2FAToken, type TwoFactorUserInfo } from "../../au
 import { verifyDeviceTrustToken, createDeviceTrustToken, createDeviceFingerprint } from "../../auth/device-trust"
 import { getTokenSecret } from "../security/token-secret"
 import { generateTotpSetup, getGoogleAuthenticatorSetupCommand, verifyTotpCode } from "../../auth/totp-setup"
+import { getTwoFactorPreference, setTwoFactorPreference } from "../../auth/two-factor-preference"
 import { getUiDir } from "../ui-dir"
-import { Flag } from "../../flag/flag"
 import path from "node:path"
 
 const log = Log.create({ service: "auth-routes" })
+
+async function ensureBrokerSession(sessionId: string, session: UserSession.Info): Promise<boolean> {
+  let { uid, gid, home, shell } = session
+  if (uid === undefined || gid === undefined || !home || !shell) {
+    const userInfo = await getUserInfo(session.username)
+    if (!userInfo) return false
+    uid = userInfo.uid
+    gid = userInfo.gid
+    home = userInfo.home
+    shell = userInfo.shell
+    session.uid = userInfo.uid
+    session.gid = userInfo.gid
+    session.home = userInfo.home
+    session.shell = userInfo.shell
+  }
+
+  const userInfoForBroker: UserInfo = {
+    username: session.username,
+    uid,
+    gid,
+    home,
+    shell,
+  }
+
+  const broker = new BrokerClient()
+  try {
+    await broker.registerSession(sessionId, userInfoForBroker)
+    return true
+  } catch {
+    return false
+  }
+}
 
 /**
  * Security event types for logging.
@@ -480,6 +512,8 @@ export const AuthRoutes = lazy(() =>
         // 8a. Check if 2FA is required
         if (authConfig.twoFactorEnabled) {
           const has2fa = await broker.check2fa(username, userInfo.home)
+          const preference = await getTwoFactorPreference(username)
+          const skipSetup = preference.skipSetup && !authConfig.twoFactorRequired
 
           if (has2fa) {
             // Check device trust cookie first
@@ -526,7 +560,7 @@ export const AuthRoutes = lazy(() =>
                 200,
               ) // 200 because password was valid, just need 2FA
             }
-          } else {
+          } else if (!skipSetup) {
             // User doesn't have 2FA configured - redirect to setup
             // Create session with twoFactorPending flag
             const tempSession = UserSession.create(
@@ -885,6 +919,8 @@ export const AuthRoutes = lazy(() =>
                 schema: resolver(
                   z.object({
                     twoFactorEnabled: z.boolean(),
+                    twoFactorConfigured: z.boolean(),
+                    twoFactorOptedOut: z.boolean(),
                     deviceTrusted: z.boolean(),
                   }),
                 ),
@@ -896,6 +932,20 @@ export const AuthRoutes = lazy(() =>
       async (c) => {
         const authConfig = ServerAuth.get()
         const twoFactorEnabled = authConfig.enabled && authConfig.twoFactorEnabled === true
+
+        const sessionId = getCookie(c, "opencode_session")
+        const session = sessionId ? UserSession.get(sessionId) : undefined
+        let twoFactorConfigured = false
+        let twoFactorOptedOut = false
+
+        if (twoFactorEnabled && session?.username) {
+          const preference = await getTwoFactorPreference(session.username)
+          twoFactorOptedOut = preference.skipSetup ?? false
+          if (session.home) {
+            const broker = new BrokerClient()
+            twoFactorConfigured = await broker.check2fa(session.username, session.home)
+          }
+        }
 
         // Check for device trust cookie
         let deviceTrusted = false
@@ -912,6 +962,8 @@ export const AuthRoutes = lazy(() =>
 
         return c.json({
           twoFactorEnabled,
+          twoFactorConfigured,
+          twoFactorOptedOut,
           deviceTrusted,
         })
       },
@@ -1127,6 +1179,7 @@ export const AuthRoutes = lazy(() =>
       // Clear twoFactorPending flag now that 2FA is configured
       UserSession.clearTwoFactorPending(sessionId)
       UserSession.clearTwoFactorSetupSecret(sessionId)
+      await setTwoFactorPreference(session.username, { skipSetup: false })
 
       return c.json({ success: true })
     })
@@ -1163,10 +1216,6 @@ export const AuthRoutes = lazy(() =>
       return c.json({ success: true })
     })
     .post("/2fa/reset", async (c) => {
-      if (!Flag.OPENCODE_ENABLE_2FA_RESET) {
-        return c.json({ error: "not_enabled" }, 403)
-      }
-
       // Require authenticated session
       const sessionId = getCookie(c, "opencode_session")
       if (!sessionId) {
@@ -1182,13 +1231,77 @@ export const AuthRoutes = lazy(() =>
       if (!xrw) {
         return c.json({ error: "csrf_missing", message: "CSRF token required" }, 400)
       }
+      const csrfToken = c.req.header("X-CSRF-Token")
+      if (!csrfToken || !validateCSRFToken(csrfToken, sessionId, getCSRFSecret())) {
+        return c.json({ error: "csrf_invalid", message: "Invalid CSRF token" }, 403)
+      }
 
       const broker = new BrokerClient()
-      const result = await broker.removeOtp(sessionId)
+      let result = await broker.removeOtp(sessionId)
+      if (result.errorCode === "session not found") {
+        const registered = await ensureBrokerSession(sessionId, session)
+        if (registered) {
+          result = await broker.removeOtp(sessionId)
+        }
+      }
 
       if (result.errorCode && !result.removed && !result.alreadyMissing) {
         return c.json({ error: "reset_failed", message: "Failed to reset 2FA", details: result }, 500)
       }
+
+      await setTwoFactorPreference(session.username, { skipSetup: false })
+
+      return c.json({
+        success: true as const,
+        removed: result.removed,
+        alreadyMissing: result.alreadyMissing,
+      })
+    })
+    .post("/2fa/disable", async (c) => {
+      // Require authenticated session
+      const sessionId = getCookie(c, "opencode_session")
+      if (!sessionId) {
+        return c.json({ error: "not_authenticated" }, 401)
+      }
+      const session = UserSession.get(sessionId)
+      if (!session) {
+        return c.json({ error: "not_authenticated" }, 401)
+      }
+
+      // Check CSRF
+      const xrw = c.req.header("X-Requested-With")
+      if (!xrw) {
+        return c.json({ error: "csrf_missing", message: "CSRF token required" }, 400)
+      }
+      const csrfToken = c.req.header("X-CSRF-Token")
+      if (!csrfToken || !validateCSRFToken(csrfToken, sessionId, getCSRFSecret())) {
+        return c.json({ error: "csrf_invalid", message: "Invalid CSRF token" }, 403)
+      }
+
+      const authConfig = ServerAuth.get()
+      if (authConfig.twoFactorRequired) {
+        return c.json(
+          { error: "2fa_required", message: "Two-factor authentication is required and cannot be disabled" },
+          403,
+        )
+      }
+
+      const broker = new BrokerClient()
+      let result = await broker.removeOtp(sessionId)
+      if (result.errorCode === "session not found") {
+        const registered = await ensureBrokerSession(sessionId, session)
+        if (registered) {
+          result = await broker.removeOtp(sessionId)
+        }
+      }
+
+      if (result.errorCode && !result.removed && !result.alreadyMissing) {
+        return c.json({ error: "disable_failed", message: "Failed to disable 2FA", details: result }, 500)
+      }
+
+      UserSession.clearTwoFactorPending(sessionId)
+      UserSession.clearTwoFactorSetupSecret(sessionId)
+      await setTwoFactorPreference(session.username, { skipSetup: true })
 
       return c.json({
         success: true as const,

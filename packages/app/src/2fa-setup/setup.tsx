@@ -51,6 +51,8 @@ export function TwoFactorSetupApp() {
     codeDisabled: false,
     skipDisabled: false,
     skipLabel: "Skip for now",
+    disableDisabled: false,
+    disableLabel: "Never ask me",
   })
   const [copyLabel, setCopyLabel] = createSignal("Copy")
   let redirectTimer: number | undefined
@@ -204,6 +206,40 @@ export function TwoFactorSetupApp() {
     }
   }
 
+  const handleDisable = async () => {
+    if (state.disableDisabled) return
+    setState({ disableDisabled: true, disableLabel: "Disabling..." })
+
+    try {
+      const res = await fetch("/auth/2fa/disable", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Requested-With": "XMLHttpRequest",
+          "X-CSRF-Token": getCsrfToken(),
+        },
+      })
+
+      if (res.ok) {
+        window.location.href = "/"
+        return
+      }
+
+      const data = await res.json()
+      setState({
+        error: data.message || "Failed to disable 2FA",
+        disableDisabled: false,
+        disableLabel: "Never ask me",
+      })
+    } catch {
+      setState({
+        error: "Connection error",
+        disableDisabled: false,
+        disableLabel: "Never ask me",
+      })
+    }
+  }
+
   return (
     <>
       <style>{`
@@ -282,6 +318,12 @@ export function TwoFactorSetupApp() {
           padding-top: 1.5rem;
           border-top: 1px solid #333;
           text-align: center;
+        }
+        .skip-actions {
+          display: flex;
+          justify-content: center;
+          gap: 0.75rem;
+          flex-wrap: wrap;
         }
         .skip-note {
           font-size: 0.75rem;
@@ -712,9 +754,14 @@ export function TwoFactorSetupApp() {
         <Show when={!required}>
           <div class="skip-section">
             <p class="skip-note">You can set up 2FA later from your session menu.</p>
-            <button type="button" class="skip-btn" disabled={state.skipDisabled} onClick={handleSkip}>
-              {state.skipLabel}
-            </button>
+            <div class="skip-actions">
+              <button type="button" class="skip-btn" disabled={state.skipDisabled} onClick={handleSkip}>
+                {state.skipLabel}
+              </button>
+              <button type="button" class="skip-btn" disabled={state.disableDisabled} onClick={handleDisable}>
+                {state.disableLabel}
+              </button>
+            </div>
           </div>
         </Show>
 

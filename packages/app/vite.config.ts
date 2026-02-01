@@ -11,6 +11,9 @@ const gitSha = (() => {
   }
 })()
 
+const enableSourcemap = process.env.VITE_SOURCEMAP === "true"
+const disableMinify = process.env.VITE_MINIFY === "false"
+
 export default defineConfig({
   plugins: [desktopPlugin] as any,
   define: {
@@ -96,6 +99,8 @@ export default defineConfig({
   },
   build: {
     target: "esnext",
+    sourcemap: enableSourcemap,
+    minify: disableMinify ? false : "esbuild",
     rollupOptions: {
       input: {
         main: fileURLToPath(new URL("./index.html", import.meta.url)),
@@ -104,6 +109,5 @@ export default defineConfig({
         twoFactorSetup: fileURLToPath(new URL("./2fa-setup.html", import.meta.url)),
       },
     },
-    // sourcemap: true,
   },
 })
