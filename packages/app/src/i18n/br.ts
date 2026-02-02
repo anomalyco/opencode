@@ -28,6 +28,8 @@ export const dict = {
   "command.settings.open": "Abrir configurações",
   "command.session.previous": "Sessão anterior",
   "command.session.next": "Próxima sessão",
+  "command.session.previous.unseen": "Previous unread session",
+  "command.session.next.unseen": "Next unread session",
   "command.session.archive": "Arquivar sessão",
 
   "command.palette": "Paleta de comandos",
@@ -210,6 +212,8 @@ export const dict = {
   "prompt.popover.emptyCommands": "Nenhum comando correspondente",
   "prompt.dropzone.label": "Solte imagens ou PDFs aqui",
   "prompt.slash.badge.custom": "personalizado",
+  "prompt.slash.badge.skill": "skill",
+  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "ativo",
   "prompt.context.includeActiveFile": "Incluir arquivo ativo",
   "prompt.context.removeActiveFile": "Remover arquivo ativo do contexto",

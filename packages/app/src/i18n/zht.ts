@@ -32,6 +32,8 @@ export const dict = {
   "command.settings.open": "開啟設定",
   "command.session.previous": "上一個工作階段",
   "command.session.next": "下一個工作階段",
+  "command.session.previous.unseen": "Previous unread session",
+  "command.session.next.unseen": "Next unread session",
   "command.session.archive": "封存工作階段",
 
   "command.palette": "命令面板",
@@ -211,6 +213,8 @@ export const dict = {
   "prompt.popover.emptyCommands": "沒有符合的命令",
   "prompt.dropzone.label": "將圖片或 PDF 拖到這裡",
   "prompt.slash.badge.custom": "自訂",
+  "prompt.slash.badge.skill": "技能",
+  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "作用中",
   "prompt.context.includeActiveFile": "包含作用中檔案",
   "prompt.context.removeActiveFile": "從上下文移除目前檔案",

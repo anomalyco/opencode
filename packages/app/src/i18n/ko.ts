@@ -32,6 +32,8 @@ export const dict = {
   "command.settings.open": "설정 열기",
   "command.session.previous": "이전 세션",
   "command.session.next": "다음 세션",
+  "command.session.previous.unseen": "Previous unread session",
+  "command.session.next.unseen": "Next unread session",
   "command.session.archive": "세션 보관",
 
   "command.palette": "명령 팔레트",
@@ -213,6 +215,8 @@ export const dict = {
   "prompt.popover.emptyCommands": "일치하는 명령어 없음",
   "prompt.dropzone.label": "이미지나 PDF를 여기에 드롭하세요",
   "prompt.slash.badge.custom": "사용자 지정",
+  "prompt.slash.badge.skill": "스킬",
+  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "활성",
   "prompt.context.includeActiveFile": "활성 파일 포함",
   "prompt.context.removeActiveFile": "컨텍스트에서 활성 파일 제거",
