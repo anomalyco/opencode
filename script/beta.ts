@@ -1,17 +1,12 @@
 #!/usr/bin/env bun
 
+import { $ } from "bun"
 import { Script } from "@opencode-ai/script"
 
 interface PR {
   number: number
   title: string
   author: { login: string }
-}
-
-interface RunResult {
-  exitCode: number
-  stdout: string
-  stderr: string
 }
 
 interface FailedPR {
@@ -55,10 +50,13 @@ async function main() {
 
   const allPrs: PR[] = []
   for (const member of Script.team) {
-    const result = await $`gh pr list --state open --author ${member} --json number,title,author --limit 100`.nothrow()
-    if (result.exitCode !== 0) continue
-    const memberPrs: PR[] = JSON.parse(result.stdout)
-    allPrs.push(...memberPrs)
+    try {
+      const stdout = await $`gh pr list --state open --author ${member} --json number,title,author --limit 100`.text()
+      const memberPrs: PR[] = JSON.parse(stdout)
+      allPrs.push(...memberPrs)
+    } catch {
+      // Skip member on error
+    }
   }
 
   const seen = new Set<number>()
@@ -76,16 +74,10 @@ async function main() {
   }
 
   console.log("Fetching latest dev branch...")
-  const fetchDev = await $`git fetch origin dev`.nothrow()
-  if (fetchDev.exitCode !== 0) {
-    throw new Error(`Failed to fetch dev branch: ${fetchDev.stderr}`)
-  }
+  await $`git fetch origin dev`
 
   console.log("Checking out beta branch...")
-  const checkoutBeta = await $`git checkout -B beta origin/dev`.nothrow()
-  if (checkoutBeta.exitCode !== 0) {
-    throw new Error(`Failed to checkout beta branch: ${checkoutBeta.stderr}`)
-  }
+  await $`git checkout -B beta origin/dev`
 
   const applied: number[] = []
   const failed: FailedPR[] = []
@@ -94,41 +86,52 @@ async function main() {
     console.log(`\nProcessing PR #${pr.number}: ${pr.title}`)
 
     console.log("  Fetching PR head...")
-    const fetch = await run(["git", "fetch", "origin", `pull/${pr.number}/head:pr/${pr.number}`])
-    if (fetch.exitCode !== 0) {
-      console.log(`  Failed to fetch: ${fetch.stderr}`)
+    try {
+      await $`git fetch origin pull/${pr.number}/head:pr/${pr.number}`
+    } catch (err) {
+      console.log(`  Failed to fetch: ${err}`)
       failed.push({ number: pr.number, title: pr.title, reason: "Fetch failed" })
       continue
     }
 
     console.log("  Merging...")
-    const merge = await run(["git", "merge", "--no-commit", "--no-ff", `pr/${pr.number}`])
-    if (merge.exitCode !== 0) {
+    try {
+      await $`git merge --no-commit --no-ff pr/${pr.number}`
+    } catch {
       console.log("  Failed to merge (conflicts)")
-      await $`git merge --abort`.nothrow()
-      await $`git checkout -- .`.nothrow()
-      await $`git clean -fd`.nothrow()
+      try {
+        await $`git merge --abort`
+      } catch {}
+      try {
+        await $`git checkout -- .`
+      } catch {}
+      try {
+        await $`git clean -fd`
+      } catch {}
       failed.push({ number: pr.number, title: pr.title, reason: "Merge conflicts" })
       continue
     }
 
-    const mergeHead = await $`git rev-parse -q --verify MERGE_HEAD`.nothrow()
-    if (mergeHead.exitCode !== 0) {
+    try {
+      await $`git rev-parse -q --verify MERGE_HEAD`.text()
+    } catch {
       console.log("  No changes, skipping")
       continue
     }
 
-    const add = await $`git add -A`.nothrow()
-    if (add.exitCode !== 0) {
+    try {
+      await $`git add -A`
+    } catch {
       console.log("  Failed to stage changes")
       failed.push({ number: pr.number, title: pr.title, reason: "Staging failed" })
       continue
     }
 
     const commitMsg = `Apply PR #${pr.number}: ${pr.title}`
-    const commit = await run(["git", "commit", "-m", commitMsg])
-    if (commit.exitCode !== 0) {
-      console.log(`  Failed to commit: ${commit.stderr}`)
+    try {
+      await $`git commit -m ${commitMsg}`
+    } catch (err) {
+      console.log(`  Failed to commit: ${err}`)
       failed.push({ number: pr.number, title: pr.title, reason: "Commit failed" })
       continue
     }
@@ -151,10 +154,7 @@ async function main() {
   }
 
   console.log("\nForce pushing beta branch...")
-  const push = await $`git push origin beta --force --no-verify`.nothrow()
-  if (push.exitCode !== 0) {
-    throw new Error(`Failed to push beta branch: ${push.stderr}`)
-  }
+  await $`git push origin beta --force --no-verify`
 
   console.log("Successfully synced beta branch")
 }
@@ -163,31 +163,3 @@ main().catch((err) => {
   console.error("Error:", err)
   process.exit(1)
 })
-
-async function run(args: string[], stdin?: Uint8Array): Promise<RunResult> {
-  const proc = Bun.spawn(args, {
-    stdin: stdin ?? "inherit",
-    stdout: "pipe",
-    stderr: "pipe",
-  })
-  const exitCode = await proc.exited
-  const stdout = await new Response(proc.stdout).text()
-  const stderr = await new Response(proc.stderr).text()
-  return { exitCode, stdout, stderr }
-}
-
-function $(strings: TemplateStringsArray, ...values: unknown[]) {
-  const cmd = strings.reduce((acc, str, i) => acc + str + (values[i] ?? ""), "")
-  return {
-    async nothrow() {
-      const proc = Bun.spawn(cmd.split(" "), {
-        stdout: "pipe",
-        stderr: "pipe",
-      })
-      const exitCode = await proc.exited
-      const stdout = await new Response(proc.stdout).text()
-      const stderr = await new Response(proc.stderr).text()
-      return { exitCode, stdout, stderr }
-    },
-  }
-}
