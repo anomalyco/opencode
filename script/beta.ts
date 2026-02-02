@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
-import { Script } from "@opencode-ai/script"
 
 interface PR {
   number: number
@@ -32,28 +31,12 @@ Please resolve this issue to include this PR in the next beta release.`
 }
 
 async function main() {
-  console.log("Fetching open PRs with beta label from team members...")
+  console.log("Fetching open PRs with beta label...")
 
-  const allPrs: PR[] = []
-  for (const member of Script.team) {
-    try {
-      const stdout =
-        await $`gh pr list --state open --author ${member} --label beta --json number,title,author,labels --limit 100`.text()
-      const memberPrs: PR[] = JSON.parse(stdout)
-      allPrs.push(...memberPrs)
-    } catch {
-      // Skip member on error
-    }
-  }
+  const stdout = await $`gh pr list --state open --label beta --json number,title,author,labels --limit 100`.text()
+  const prs: PR[] = JSON.parse(stdout)
 
-  const seen = new Set<number>()
-  const prs = allPrs.filter((pr) => {
-    if (seen.has(pr.number)) return false
-    seen.add(pr.number)
-    return true
-  })
-
-  console.log(`Found ${prs.length} open PRs with beta label from team members`)
+  console.log(`Found ${prs.length} open PRs with beta label`)
 
   if (prs.length === 0) {
     console.log("No team PRs to merge")
@@ -141,7 +124,18 @@ async function main() {
     throw new Error(`${failed.length} PR(s) failed to merge`)
   }
 
-  console.log("\nForce pushing beta branch...")
+  console.log("\nChecking if beta branch has changes...")
+  await $`git fetch origin beta`
+
+  const localTree = await $`git rev-parse beta^{tree}`.text()
+  const remoteTree = await $`git rev-parse origin/beta^{tree}`.text()
+
+  if (localTree.trim() === remoteTree.trim()) {
+    console.log("Beta branch has identical contents, no push needed")
+    return
+  }
+
+  console.log("Force pushing beta branch...")
   await $`git push origin beta --force --no-verify`
 
   console.log("Successfully synced beta branch")
