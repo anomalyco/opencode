@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { Script } from "@opencode-ai/script"
+import { parseArgs } from "util"
 
 interface PR {
   number: number
@@ -20,10 +21,10 @@ interface FailedPR {
   reason: string
 }
 
-async function postToDiscord(failures: FailedPR[]) {
-  const webhookUrl = process.env.DISCORD_ISSUES_WEBHOOK_URL
-  if (!webhookUrl) {
-    console.log("Warning: DISCORD_ISSUES_WEBHOOK_URL not set, skipping Discord notification")
+async function postToDiscord(failures: FailedPR[], webhookUrl?: string) {
+  const url = webhookUrl || process.env.DISCORD_ISSUES_WEBHOOK_URL
+  if (!url) {
+    console.log("Warning: No Discord webhook URL provided, skipping notification")
     return
   }
 
@@ -37,7 +38,7 @@ Please resolve these conflicts manually.`
 
   const content = JSON.stringify({ content: message })
 
-  const response = await fetch(webhookUrl, {
+  const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: content,
@@ -51,6 +52,15 @@ Please resolve these conflicts manually.`
 }
 
 async function main() {
+  const { values } = parseArgs({
+    args: Bun.argv.slice(2),
+    options: {
+      "discord-webhook": { type: "string", short: "d" },
+    },
+  })
+
+  const discordWebhook = values["discord-webhook"] as string | undefined
+
   console.log("Fetching open PRs from team members...")
 
   const allPrs: PR[] = []
@@ -145,7 +155,7 @@ async function main() {
     console.log(`Failed: ${failed.length} PRs`)
     failed.forEach((f) => console.log(`  - PR #${f.number}: ${f.reason}`))
 
-    await postToDiscord(failed)
+    await postToDiscord(failed, discordWebhook)
 
     throw new Error(`${failed.length} PR(s) failed to merge. Check Discord for details.`)
   }
