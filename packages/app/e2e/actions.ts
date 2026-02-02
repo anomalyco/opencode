@@ -8,11 +8,15 @@ import {
   sessionItemSelector,
   dropdownMenuTriggerSelector,
   dropdownMenuContentSelector,
+  projectMenuTriggerSelector,
+  projectWorkspacesToggleSelector,
   titlebarRightSelector,
   popoverBodySelector,
   listItemSelector,
   listItemKeySelector,
   listItemKeyStartsWithSelector,
+  workspaceItemSelector,
+  workspaceMenuTriggerSelector,
 } from "./selectors"
 import type { createSdk } from "./utils"
 
@@ -290,4 +294,70 @@ export async function openStatusPopover(page: Page) {
   }
 
   return { rightSection, popoverBody }
+}
+
+export async function openProjectMenu(page: Page, projectSlug: string) {
+  const trigger = page.locator(projectMenuTriggerSelector(projectSlug)).first()
+  await expect(trigger).toHaveCount(1)
+
+  await trigger.focus()
+  await page.keyboard.press("Enter")
+
+  const menu = page.locator(dropdownMenuContentSelector).first()
+  const opened = await menu
+    .waitFor({ state: "visible", timeout: 1500 })
+    .then(() => true)
+    .catch(() => false)
+
+  if (opened) {
+    const viewport = page.viewportSize()
+    const x = viewport ? Math.max(viewport.width - 5, 0) : 1200
+    const y = viewport ? Math.max(viewport.height - 5, 0) : 800
+    await page.mouse.move(x, y)
+    return menu
+  }
+
+  await trigger.click({ force: true })
+
+  await expect(menu).toBeVisible()
+
+  const viewport = page.viewportSize()
+  const x = viewport ? Math.max(viewport.width - 5, 0) : 1200
+  const y = viewport ? Math.max(viewport.height - 5, 0) : 800
+  await page.mouse.move(x, y)
+  return menu
+}
+
+export async function setWorkspacesEnabled(page: Page, projectSlug: string, enabled: boolean) {
+  const current = await page
+    .getByRole("button", { name: "New workspace" })
+    .first()
+    .isVisible()
+    .then((x) => x)
+    .catch(() => false)
+
+  if (current === enabled) return
+
+  await openProjectMenu(page, projectSlug)
+
+  const toggle = page.locator(projectWorkspacesToggleSelector(projectSlug)).first()
+  await expect(toggle).toBeVisible()
+  await toggle.click({ force: true })
+
+  const expected = enabled ? "New workspace" : "New session"
+  await expect(page.getByRole("button", { name: expected }).first()).toBeVisible()
+}
+
+export async function openWorkspaceMenu(page: Page, workspaceSlug: string) {
+  const item = page.locator(workspaceItemSelector(workspaceSlug)).first()
+  await expect(item).toBeVisible()
+  await item.hover()
+
+  const trigger = page.locator(workspaceMenuTriggerSelector(workspaceSlug)).first()
+  await expect(trigger).toBeVisible()
+  await trigger.click({ force: true })
+
+  const menu = page.locator(dropdownMenuContentSelector).first()
+  await expect(menu).toBeVisible()
+  return menu
 }
