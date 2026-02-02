@@ -92,6 +92,15 @@ For more info on how to configure OpenCode [**head over to our docs**](https://o
 
 For deployment with authentication, see our [**deployment guides**](./docs/).
 
+### SSH Key Manager
+
+OpenCode includes an SSH key manager in Settings to help with git operations.
+
+- Keys are stored on the server and installed to the server user's `~/.ssh/opencode` directory.
+- The manager also updates the server user's `~/.ssh/config` with an OpenCode-managed block.
+- Git operations started by the server will use these keys.
+- If you run the server under a service account, make sure that account owns its home directory and can create `~/.ssh`.
+
 ### Contributing
 
 If you're interested in contributing to OpenCode, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.

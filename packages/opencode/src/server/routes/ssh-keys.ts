@@ -5,7 +5,6 @@ import { SshKey } from "../../ssh/keys"
 import { getAuthContext } from "../middleware/auth"
 import { Storage } from "../../storage/storage"
 import { lazy } from "../../util/lazy"
-import { UserSession } from "../../session/user-session"
 
 const SshKeyError = z
   .object({
@@ -107,11 +106,9 @@ export const SshKeyRoutes = lazy(() =>
           return c.json({ error: { message: "Authentication required" } }, 401)
         }
 
-        const session = UserSession.get(auth.sessionId)
         try {
           const created = await SshKey.create(c.req.valid("json"), {
             username: auth.username,
-            home: session?.home,
           })
           return c.json(created)
         } catch (error) {
@@ -171,11 +168,9 @@ export const SshKeyRoutes = lazy(() =>
         if (!auth) {
           return c.json({ error: { message: "Authentication required" } }, 401)
         }
-        const session = UserSession.get(auth.sessionId)
         try {
           await SshKey.remove(c.req.valid("param").keyID, {
             username: auth.username,
-            home: session?.home,
           })
           return c.json(true)
         } catch (error) {
