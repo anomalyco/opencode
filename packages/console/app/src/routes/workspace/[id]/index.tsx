@@ -1,4 +1,4 @@
-import { Show, createMemo } from "solid-js"
+import { Match, Show, Switch, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createAsync, useParams, useAction, useSubmission } from "@solidjs/router"
 import { NewUserSection } from "./new-user-section"
@@ -44,7 +44,7 @@ export default function () {
           <Show when={userInfo()?.isAdmin}>
             <span data-slot="billing-info">
               <Show
-                when={billingInfo()?.reload}
+                when={billingInfo()?.customerID}
                 fallback={
                   <button
                     data-color="primary"

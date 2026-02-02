@@ -19,11 +19,15 @@
 @import "../components/dropdown-menu.css" layer(components);
 @import "../components/dialog.css" layer(components);
 @import "../components/file-icon.css" layer(components);
+@import "../components/hover-card.css" layer(components);
 @import "../components/provider-icon.css" layer(components);
 @import "../components/icon.css" layer(components);
 @import "../components/icon-button.css" layer(components);
 @import "../components/image-preview.css" layer(components);
+@import "../components/keybind.css" layer(components);
+@import "../components/line-comment.css" layer(components);
 @import "../components/text-field.css" layer(components);
+@import "../components/inline-input.css" layer(components);
 @import "../components/list.css" layer(components);
 @import "../components/logo.css" layer(components);
 @import "../components/markdown.css" layer(components);
@@ -36,6 +40,7 @@
 @import "../components/select.css" layer(components);
 @import "../components/spinner.css" layer(components);
 @import "../components/switch.css" layer(components);
+@import "../components/scroll-fade.css" layer(components);
 @import "../components/session-review.css" layer(components);
 @import "../components/session-turn.css" layer(components);
 @import "../components/sticky-accordion-header.css" layer(components);
@@ -44,6 +49,8 @@
 @import "../components/toast.css" layer(components);
 @import "../components/tooltip.css" layer(components);
 @import "../components/typewriter.css" layer(components);
+@import "../components/morph-chevron.css" layer(components);
+@import "../components/reasoning-icon.css" layer(components);
 
 @import "./utilities.css" layer(utilities);
 @import "./animations.css" layer(utilities);

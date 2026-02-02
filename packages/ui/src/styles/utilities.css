@@ -1,6 +1,17 @@
 :root {
   interpolate-size: allow-keywords;
 
+  /* Transition tokens */
+  --transition-duration: 200ms;
+  --transition-easing: cubic-bezier(0.25, 0, 0.5, 1);
+  --transition-fast: 150ms;
+  --transition-slow: 300ms;
+
+  /* Allow height transitions from 0 to auto */
+  @supports (interpolate-size: allow-keywords) {
+    interpolate-size: allow-keywords;
+  }
+
   [data-popper-positioner] {
     pointer-events: none;
   }
@@ -128,4 +139,35 @@
   font-weight: var(--font-weight-medium);
   line-height: var(--line-height-x-large); /* 120% */
   letter-spacing: var(--letter-spacing-tightest);
+}
+
+/* Transition utility classes */
+.transition-colors {
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-duration: var(--transition-duration);
+  transition-timing-function: var(--transition-easing);
+}
+
+.transition-opacity {
+  transition-property: opacity;
+  transition-duration: var(--transition-duration);
+  transition-timing-function: var(--transition-easing);
+}
+
+.transition-transform {
+  transition-property: transform;
+  transition-duration: var(--transition-duration);
+  transition-timing-function: var(--transition-easing);
+}
+
+.transition-shadow {
+  transition-property: box-shadow;
+  transition-duration: var(--transition-duration);
+  transition-timing-function: var(--transition-easing);
+}
+
+.transition-interactive {
+  transition-property: background-color, border-color, color, box-shadow, opacity;
+  transition-duration: var(--transition-duration);
+  transition-timing-function: var(--transition-easing);
 }

@@ -91,6 +91,10 @@ export const BashTool = Tool.define("bash", async () => {
 
       for (const node of tree.rootNode.descendantsOfType("command")) {
         if (!node) continue
+
+        // Get full command text including redirects if present
+        let commandText = node.parent?.type === "redirected_statement" ? node.parent.text : node.text
+
         const command = []
         for (let i = 0; i < node.childCount; i++) {
           const child = node.child(i)
@@ -108,7 +112,7 @@ export const BashTool = Tool.define("bash", async () => {
         }
 
         // not an exhaustive list, but covers most common cases
-        if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown"].includes(command[0])) {
+        if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown", "cat"].includes(command[0])) {
           for (const arg of command.slice(1)) {
             if (arg.startsWith("-") || (command[0] === "chmod" && arg.startsWith("+"))) continue
             const resolved = await $`realpath ${arg}`
@@ -131,8 +135,8 @@ export const BashTool = Tool.define("bash", async () => {
 
         // cd covered by above check
         if (command.length && command[0] !== "cd") {
-          patterns.add(command.join(" "))
-          always.add(BashArity.prefix(command).join(" ") + "*")
+          patterns.add(commandText)
+          always.add(BashArity.prefix(command).join(" ") + " *")
         }
       }
 
