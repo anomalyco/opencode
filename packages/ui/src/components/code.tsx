@@ -109,9 +109,8 @@ function installFindShortcuts() {
         return
       }
 
-      if (isEditable(event.target)) return
-
-      const host = hostForNode(document.activeElement) ?? findTarget ?? Array.from(findHosts)[0]
+      const host =
+        hostForNode(document.activeElement) ?? hostForNode(event.target) ?? findTarget ?? Array.from(findHosts)[0]
       if (!host) return
 
       event.preventDefault()
@@ -126,9 +125,11 @@ export function Code<T>(props: CodeProps<T>) {
   let wrapper!: HTMLDivElement
   let container!: HTMLDivElement
   let findInput: HTMLInputElement | undefined
+  let findBar: HTMLDivElement | undefined
   let findOverlay!: HTMLDivElement
   let findOverlayFrame: number | undefined
   let findOverlayScroll: HTMLElement[] = []
+  let findPositionFrame: number | undefined
   let observer: MutationObserver | undefined
   let renderToken = 0
   let selectionFrame: number | undefined
@@ -288,6 +289,41 @@ export function Code<T>(props: CodeProps<T>) {
     findHits = []
     setFindCount(0)
     setFindIndex(0)
+  }
+
+  const getScrollParent = (el: HTMLElement): HTMLElement | null => {
+    let parent = el.parentElement
+    while (parent) {
+      const style = getComputedStyle(parent)
+      if (style.overflowY === "auto" || style.overflowY === "scroll") return parent
+      parent = parent.parentElement
+    }
+    return null
+  }
+
+  const positionFindBar = () => {
+    if (!findBar || !wrapper) return
+    const scrollParent = getScrollParent(wrapper)
+    if (!scrollParent) {
+      findBar.style.position = "absolute"
+      findBar.style.top = "8px"
+      findBar.style.right = "8px"
+      findBar.style.left = ""
+      return
+    }
+    const scrollTop = scrollParent.scrollTop
+    findBar.style.position = "absolute"
+    findBar.style.top = `${scrollTop + 8}px`
+    findBar.style.right = "8px"
+    findBar.style.left = ""
+  }
+
+  const scheduleFindPosition = () => {
+    if (findPositionFrame !== undefined) return
+    findPositionFrame = requestAnimationFrame(() => {
+      findPositionFrame = undefined
+      positionFindBar()
+    })
   }
 
   const scanFind = (root: ShadowRoot, query: string) => {
@@ -458,6 +494,7 @@ export function Code<T>(props: CodeProps<T>) {
 
       if (!findOpen()) setFindOpen(true)
       requestAnimationFrame(() => {
+        positionFindBar()
         findInput?.focus()
         findInput?.select()
       })
@@ -479,6 +516,25 @@ export function Code<T>(props: CodeProps<T>) {
         clearHighlightFind()
       }
       if (findTarget === host) findTarget = undefined
+    })
+  })
+
+  createEffect(() => {
+    if (!findOpen()) return
+    const scrollParent = getScrollParent(wrapper)
+    const target = scrollParent ?? window
+
+    const handler = () => scheduleFindPosition()
+    target.addEventListener("scroll", handler, { passive: true })
+    window.addEventListener("resize", handler, { passive: true })
+
+    onCleanup(() => {
+      target.removeEventListener("scroll", handler)
+      window.removeEventListener("resize", handler)
+      if (findPositionFrame !== undefined) {
+        cancelAnimationFrame(findPositionFrame)
+        findPositionFrame = undefined
+      }
     })
   })
 
@@ -862,6 +918,11 @@ export function Code<T>(props: CodeProps<T>) {
       dragFrame = undefined
     }
 
+    if (findPositionFrame !== undefined) {
+      cancelAnimationFrame(findPositionFrame)
+      findPositionFrame = undefined
+    }
+
     dragStart = undefined
     dragEnd = undefined
     dragMoved = false
@@ -888,19 +949,18 @@ export function Code<T>(props: CodeProps<T>) {
         findTarget = host
       }}
     >
-      <div ref={container} />
-      <div ref={findOverlay} class="pointer-events-none absolute inset-0 z-0" />
       <Show when={findOpen()}>
         <div
-          class="absolute top-2 right-2 z-10 flex items-center gap-1 rounded-md border border-border-weak-base bg-surface-raised-base px-2 py-1 shadow-xs-border"
+          ref={findBar}
+          class="z-50 flex h-8 items-center gap-2 rounded-md border border-border-base bg-background-base px-3 shadow-md"
           onPointerDown={(e) => e.stopPropagation()}
         >
-          <Icon name="magnifying-glass" size="small" class="text-text-weak" />
+          <Icon name="magnifying-glass" size="small" class="text-text-weak shrink-0" />
           <input
             ref={findInput}
             placeholder="Find"
             value={findQuery()}
-            class="w-48 bg-transparent outline-none text-12-regular text-text-strong placeholder:text-text-weak"
+            class="w-40 bg-transparent outline-none text-14-regular text-text-strong placeholder:text-text-weak"
             onInput={(e) => {
               setFindQuery(e.currentTarget.value)
               setFindIndex(0)
@@ -917,30 +977,32 @@ export function Code<T>(props: CodeProps<T>) {
               stepFind(e.shiftKey ? -1 : 1)
             }}
           />
-          <div class="px-1 text-12-regular text-text-weak tabular-nums">
+          <div class="shrink-0 text-12-regular text-text-weak tabular-nums">
             {findCount() ? `${findIndex() + 1}/${findCount()}` : "0/0"}
+          </div>
+          <div class="flex items-center">
+            <button
+              type="button"
+              class="size-6 grid place-items-center rounded text-text-weak hover:bg-surface-base-hover hover:text-text-strong disabled:opacity-40 disabled:pointer-events-none"
+              disabled={findCount() === 0}
+              aria-label="Previous match"
+              onClick={() => stepFind(-1)}
+            >
+              <Icon name="chevron-down" size="small" class="rotate-180" />
+            </button>
+            <button
+              type="button"
+              class="size-6 grid place-items-center rounded text-text-weak hover:bg-surface-base-hover hover:text-text-strong disabled:opacity-40 disabled:pointer-events-none"
+              disabled={findCount() === 0}
+              aria-label="Next match"
+              onClick={() => stepFind(1)}
+            >
+              <Icon name="chevron-down" size="small" />
+            </button>
           </div>
           <button
             type="button"
             class="size-6 grid place-items-center rounded text-text-weak hover:bg-surface-base-hover hover:text-text-strong"
-            disabled={findCount() === 0}
-            aria-label="Previous match"
-            onClick={() => stepFind(-1)}
-          >
-            <Icon name="chevron-down" size="small" class="rotate-180" />
-          </button>
-          <button
-            type="button"
-            class="size-6 grid place-items-center rounded text-text-weak hover:bg-surface-base-hover hover:text-text-strong"
-            disabled={findCount() === 0}
-            aria-label="Next match"
-            onClick={() => stepFind(1)}
-          >
-            <Icon name="chevron-down" size="small" />
-          </button>
-          <button
-            type="button"
-            class="ml-1 size-6 grid place-items-center rounded text-text-weak hover:bg-surface-base-hover hover:text-text-strong"
             aria-label="Close search"
             onClick={closeFind}
           >
@@ -948,6 +1010,8 @@ export function Code<T>(props: CodeProps<T>) {
           </button>
         </div>
       </Show>
+      <div ref={container} />
+      <div ref={findOverlay} class="pointer-events-none absolute inset-0 z-0" />
     </div>
   )
 }
