@@ -1809,7 +1809,8 @@ function WebSearch(props: ToolProps<any>) {
 }
 
 function Task(props: ToolProps<typeof TaskTool>) {
-  const { theme } = useTheme()
+  const ctx = use()
+  const { theme, syntax } = useTheme()
   const keybind = useKeybind()
   const { navigate } = useRoute()
   const local = useLocal()
@@ -1875,15 +1876,24 @@ function Task(props: ToolProps<typeof TaskTool>) {
                 const title = item().state.status === "completed" ? (item().state as any).title : ""
                 return (
                   <text style={{ fg: item().state.status === "error" ? theme.error : theme.textMuted }}>
-                    └ {Locale.titlecase(item().tool)} {title}
+                    └ {Locale.titlecase(item().tool)}
+                    {title ? ` ${title}` : ""}
                   </text>
                 )
               }}
             </Show>
           </box>
           <Show when={hasOutput()}>
-            <box gap={1} marginTop={1}>
-              <text fg={theme.text}>{limited()}</text>
+            <box gap={1} marginTop={1} flexDirection="column">
+              <code
+                filetype="markdown"
+                drawUnstyledText={false}
+                streaming={false}
+                syntaxStyle={syntax()}
+                content={limited()}
+                conceal={ctx.conceal()}
+                fg={theme.text}
+              />
               <Show when={overflow()}>
                 <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
               </Show>
