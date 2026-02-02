@@ -499,6 +499,10 @@
     gap: 8px;
     color: var(--text-weak);
 
+    [data-slot="session-turn-trigger-icon"] {
+      color: var(--icon-base);
+    }
+
     [data-component="spinner"] {
       width: 12px;
       height: 12px;
@@ -559,6 +563,22 @@
   }
 
   [data-slot="session-turn-permission-parts"] {
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  [data-slot="session-turn-question-parts"] {
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  [data-slot="session-turn-answered-question-parts"] {
     width: 100%;
     min-width: 0;
     display: flex;

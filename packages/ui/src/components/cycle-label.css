@@ -1,0 +1,49 @@
+.cycle-label {
+  --c-duration: 200ms;
+  --c-stagger: 30ms;
+  --c-opacity-start: 0;
+  --c-opacity-end: 1;
+  --c-blur-start: 0px;
+  --c-blur-end: 0px;
+  --c-skew: 10deg;
+
+  display: inline-flex;
+  position: relative;
+
+  transform-style: preserve-3d;
+  perspective: 500px;
+  transition: width var(--transition-duration) var(--transition-easing);
+  will-change: width;
+  overflow: hidden;
+
+  .cycle-char {
+    display: inline-block;
+    transform-style: preserve-3d;
+    min-width: 0.25em;
+    backface-visibility: hidden;
+
+    transition-property: transform, opacity, filter;
+    transition-duration: var(--transition-duration);
+    transition-timing-function: var(--transition-easing);
+    transition-delay: calc(var(--i, 0) * var(--c-stagger));
+
+    &.enter {
+      opacity: var(--c-opacity-end);
+      filter: blur(var(--c-blur-end));
+      transform: translateY(0) rotateX(0) skewX(0);
+    }
+
+    &.exit {
+      opacity: var(--c-opacity-start);
+      filter: blur(var(--c-blur-start));
+      transform: translateY(50%) rotateX(90deg) skewX(var(--c-skew));
+    }
+
+    &.pre {
+      opacity: var(--c-opacity-start);
+      filter: blur(var(--c-blur-start));
+      transition: none;
+      transform: translateY(-50%) rotateX(-90deg) skewX(calc(var(--c-skew) * -1));
+    }
+  }
+}

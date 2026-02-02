@@ -1,6 +1,7 @@
 import { onMount, Show, splitProps, type JSX } from "solid-js"
 import { Button } from "./button"
 import { Icon } from "./icon"
+import { useI18n } from "../context/i18n"
 
 export type LineCommentVariant = "default" | "editor"
 
@@ -60,13 +61,18 @@ export type LineCommentProps = Omit<LineCommentAnchorProps, "children" | "varian
 }
 
 export const LineComment = (props: LineCommentProps) => {
+  const i18n = useI18n()
   const [split, rest] = splitProps(props, ["comment", "selection"])
 
   return (
     <LineCommentAnchor {...rest} variant="default">
       <div data-slot="line-comment-content">
         <div data-slot="line-comment-text">{split.comment}</div>
-        <div data-slot="line-comment-label">Comment on {split.selection}</div>
+        <div data-slot="line-comment-label">
+          {i18n.t("ui.lineComment.label.prefix")}
+          {split.selection}
+          {i18n.t("ui.lineComment.label.suffix")}
+        </div>
       </div>
     </LineCommentAnchor>
   )
@@ -86,6 +92,7 @@ export type LineCommentEditorProps = Omit<LineCommentAnchorProps, "children" | "
 }
 
 export const LineCommentEditor = (props: LineCommentEditorProps) => {
+  const i18n = useI18n()
   const [split, rest] = splitProps(props, [
     "value",
     "selection",
@@ -125,7 +132,7 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
           }}
           data-slot="line-comment-textarea"
           rows={split.rows ?? 3}
-          placeholder={split.placeholder ?? "Add comment"}
+          placeholder={split.placeholder ?? i18n.t("ui.lineComment.placeholder")}
           value={split.value}
           onInput={(e) => split.onInput(e.currentTarget.value)}
           onKeyDown={(e) => {
@@ -143,12 +150,16 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
           }}
         />
         <div data-slot="line-comment-actions">
-          <div data-slot="line-comment-editor-label">Commenting on {split.selection}</div>
+          <div data-slot="line-comment-editor-label">
+            {i18n.t("ui.lineComment.editorLabel.prefix")}
+            {split.selection}
+            {i18n.t("ui.lineComment.editorLabel.suffix")}
+          </div>
           <Button size="small" variant="ghost" onClick={split.onCancel}>
-            {split.cancelLabel ?? "Cancel"}
+            {split.cancelLabel ?? i18n.t("ui.common.cancel")}
           </Button>
           <Button size="small" variant="primary" disabled={split.value.trim().length === 0} onClick={submit}>
-            {split.submitLabel ?? "Comment"}
+            {split.submitLabel ?? i18n.t("ui.lineComment.submit")}
           </Button>
         </div>
       </div>

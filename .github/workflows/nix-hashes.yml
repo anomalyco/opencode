@@ -1,0 +1,145 @@
+name: nix-hashes
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [dev]
+    paths:
+      - "bun.lock"
+      - "package.json"
+      - "packages/*/package.json"
+      - "flake.lock"
+      - ".github/workflows/nix-hashes.yml"
+
+jobs:
+  # Native runners required: bun install cross-compilation flags (--os/--cpu)
+  # do not produce byte-identical node_modules as native installs.
+  compute-hash:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: x86_64-linux
+            runner: blacksmith-4vcpu-ubuntu-2404
+          - system: aarch64-linux
+            runner: blacksmith-4vcpu-ubuntu-2404-arm
+          - system: x86_64-darwin
+            runner: macos-15-intel
+          - system: aarch64-darwin
+            runner: macos-latest
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Nix
+        uses: nixbuild/nix-quick-install-action@v34
+
+      - name: Compute node_modules hash
+        id: hash
+        env:
+          SYSTEM: ${{ matrix.system }}
+        run: |
+          set -euo pipefail
+
+          BUILD_LOG=$(mktemp)
+          trap 'rm -f "$BUILD_LOG"' EXIT
+
+          # Build with fakeHash to trigger hash mismatch and reveal correct hash
+          nix build ".#packages.${SYSTEM}.node_modules_updater" --no-link 2>&1 | tee "$BUILD_LOG" || true
+
+          # Extract hash from build log with portability
+          HASH="$(grep -oE 'sha256-[A-Za-z0-9+/=]+' "$BUILD_LOG" | tail -n1 || true)"
+
+          if [ -z "$HASH" ]; then
+            echo "::error::Failed to compute hash for ${SYSTEM}"
+            cat "$BUILD_LOG"
+            exit 1
+          fi
+
+          echo "$HASH" > hash.txt
+          echo "Computed hash for ${SYSTEM}: $HASH"
+
+      - name: Upload hash
+        uses: actions/upload-artifact@v4
+        with:
+          name: hash-${{ matrix.system }}
+          path: hash.txt
+          retention-days: 1
+
+  update-hashes:
+    needs: compute-hash
+    if: github.event_name != 'pull_request'
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
+
+      - name: Setup git committer
+        uses: ./.github/actions/setup-git-committer
+        with:
+          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+
+      - name: Pull latest changes
+        run: |
+          git pull --rebase --autostash origin "$GITHUB_REF_NAME"
+
+      - name: Download hash artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: hashes
+          pattern: hash-*
+
+      - name: Update hashes.json
+        run: |
+          set -euo pipefail
+
+          HASH_FILE="nix/hashes.json"
+
+          [ -f "$HASH_FILE" ] || echo '{"nodeModules":{}}' > "$HASH_FILE"
+
+          for SYSTEM in x86_64-linux aarch64-linux x86_64-darwin aarch64-darwin; do
+            FILE="hashes/hash-${SYSTEM}/hash.txt"
+            if [ -f "$FILE" ]; then
+              HASH="$(tr -d '[:space:]' < "$FILE")"
+              echo "${SYSTEM}: ${HASH}"
+              jq --arg sys "$SYSTEM" --arg h "$HASH" '.nodeModules[$sys] = $h' "$HASH_FILE" > tmp.json
+              mv tmp.json "$HASH_FILE"
+            else
+              echo "::warning::Missing hash for ${SYSTEM}"
+            fi
+          done
+
+          cat "$HASH_FILE"
+
+      - name: Commit changes
+        run: |
+          set -euo pipefail
+
+          HASH_FILE="nix/hashes.json"
+
+          if [ -z "$(git status --short -- "$HASH_FILE")" ]; then
+            echo "No changes to commit"
+            echo "### Nix hashes" >> "$GITHUB_STEP_SUMMARY"
+            echo "Status: no changes" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          git add "$HASH_FILE"
+          git commit -m "chore: update nix node_modules hashes"
+
+          git pull --rebase --autostash origin "$GITHUB_REF_NAME"
+          git push origin HEAD:"$GITHUB_REF_NAME"
+
+          echo "### Nix hashes" >> "$GITHUB_STEP_SUMMARY"
+          echo "Status: committed $(git rev-parse --short HEAD)" >> "$GITHUB_STEP_SUMMARY"

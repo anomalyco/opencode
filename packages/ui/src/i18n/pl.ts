@@ -5,6 +5,14 @@ export const dict = {
   "ui.sessionReview.expandAll": "Rozwiń wszystko",
   "ui.sessionReview.collapseAll": "Zwiń wszystko",
 
+  "ui.sessionReview.change.added": "Dodano",
+  "ui.sessionReview.change.removed": "Usunięto",
+  "ui.lineComment.label.prefix": "Komentarz do ",
+  "ui.lineComment.label.suffix": "",
+  "ui.lineComment.editorLabel.prefix": "Komentowanie: ",
+  "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.placeholder": "Dodaj komentarz",
+  "ui.lineComment.submit": "Skomentuj",
   "ui.sessionTurn.steps.show": "Pokaż kroki",
   "ui.sessionTurn.steps.hide": "Ukryj kroki",
   "ui.sessionTurn.summary.response": "Odpowiedź",
@@ -46,6 +54,7 @@ export const dict = {
   "ui.imagePreview.alt": "Podgląd obrazu",
 
   "ui.tool.read": "Odczyt",
+  "ui.tool.loaded": "Załadowano",
   "ui.tool.list": "Lista",
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
