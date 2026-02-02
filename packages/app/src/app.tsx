@@ -43,7 +43,7 @@ function UiI18nBridge(props: ParentProps) {
 
 declare global {
   interface Window {
-    __OPENCODE__?: { updaterEnabled?: boolean; serverPassword?: string; deepLinks?: string[] }
+    __OPENCODE__?: { updaterEnabled?: boolean; serverPassword?: string; deepLinks?: string[]; rootPath?: string }
   }
 }
 
@@ -102,7 +102,8 @@ export function AppInterface(props: { defaultUrl?: string }) {
     if (import.meta.env.DEV)
       return `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
 
-    return window.location.origin
+    const rootPath = document.getElementById("root")?.dataset.rootPath || window.__OPENCODE__?.rootPath || ""
+    return (window.location.origin + rootPath).replace(/\/+$/, "")
   }
 
   return (
@@ -111,6 +112,7 @@ export function AppInterface(props: { defaultUrl?: string }) {
         <GlobalSDKProvider>
           <GlobalSyncProvider>
             <Router
+              base={document.getElementById("root")?.dataset.rootPath || window.__OPENCODE__?.rootPath}
               root={(props) => (
                 <SettingsProvider>
                   <PermissionProvider>
