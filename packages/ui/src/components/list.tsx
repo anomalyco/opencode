@@ -90,17 +90,13 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
 
   const moved = (event: MouseEvent) => event.movementX !== 0 || event.movementY !== 0
 
-  const applyFilter = (value: string) => {
-    setInternalFilter(value)
-    onInput(value)
-    props.onFilter?.(value)
-  }
-
-  const applyFilterRef = (value: string) => {
+  const applyFilter = (value: string, options?: { ref?: boolean }) => {
     const prev = filter()
     setInternalFilter(value)
     onInput(value)
     props.onFilter?.(value)
+
+    if (!options?.ref) return
 
     // Force a refetch even if the value is unchanged.
     // This is important for programmatic changes like Tab completion.
@@ -189,7 +185,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   props.ref?.({
     onKeyDown: handleKey,
     setScrollRef,
-    setFilter: applyFilterRef,
+    setFilter: (value) => applyFilter(value, { ref: true }),
   })
 
   const renderAdd = () => {
@@ -263,7 +259,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
                 data-slot="list-search-input"
                 type="text"
                 value={internalFilter()}
-                onChange={applyFilter}
+                onChange={(value) => applyFilter(value)}
                 onKeyDown={handleKey}
                 placeholder={searchProps().placeholder}
                 spellcheck={false}

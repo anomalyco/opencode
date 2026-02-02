@@ -34,9 +34,8 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const missingBase = createMemo(() => !(sync.data.path.home || sync.data.path.directory))
 
   const [fallbackPath] = createResource(
-    missingBase,
-    async (missing) => {
-      if (!missing) return undefined
+    () => (missingBase() ? true : undefined),
+    async () => {
       return sdk.client.path
         .get()
         .then((x) => x.data)
@@ -119,15 +118,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     const full = trimTrailing(path)
     if (modeOf(input) === "absolute") return full
 
-    const h = home()
-    if (!h) return full
-
-    const hn = trimTrailing(h)
-    const lc = full.toLowerCase()
-    const hc = hn.toLowerCase()
-    if (lc === hc) return "~"
-    if (lc.startsWith(hc + "/")) return "~" + full.slice(hn.length)
-    return full
+    return tildeOf(full) || full
   }
 
   function tildeOf(absolute: string) {
@@ -146,7 +137,6 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   function row(absolute: string): Row {
     const full = trimTrailing(absolute)
     const tilde = tildeOf(full)
-    const alias = tilde === "~" ? "~/" : tilde ? tilde : ""
 
     const withSlash = (value: string) => {
       if (!value) return ""
@@ -154,9 +144,9 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
       return value + "/"
     }
 
-    const search = [full, withSlash(full), tilde, withSlash(tilde), alias, withSlash(alias), getFilename(full)]
-      .filter(Boolean)
-      .join("\n")
+    const search = Array.from(
+      new Set([full, withSlash(full), tilde, withSlash(tilde), getFilename(full)].filter(Boolean)),
+    ).join("\n")
     return { absolute: full, search }
   }
 
