@@ -4,6 +4,7 @@ import {
   Message as MessageType,
   Part as PartType,
   type PermissionRequest,
+  type QuestionRequest,
   TextPart,
   ToolPart,
 } from "@opencode-ai/sdk/v2/client"
@@ -11,6 +12,7 @@ import { type FileDiff } from "@opencode-ai/sdk/v2"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { type UiI18nKey, type UiI18nParams, useI18n } from "../context/i18n"
+import { findLast } from "@opencode-ai/util/array"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 
 import { Binary } from "@opencode-ai/util/binary"
@@ -149,18 +151,20 @@ export function SessionTurn(
   const emptyAssistant: AssistantMessage[] = []
   const emptyPermissions: PermissionRequest[] = []
   const emptyPermissionParts: { part: ToolPart; message: AssistantMessage }[] = []
+  const emptyQuestions: QuestionRequest[] = []
+  const emptyQuestionParts: { part: ToolPart; message: AssistantMessage }[] = []
   const emptyDiffs: FileDiff[] = []
   const idle = { type: "idle" as const }
 
   const allMessages = createMemo(() => data.store.message[props.sessionID] ?? emptyMessages)
 
   const messageIndex = createMemo(() => {
-    const messages = allMessages()
+    const messages = allMessages() ?? emptyMessages
     const result = Binary.search(messages, props.messageID, (m) => m.id)
     if (!result.found) return -1
 
     const msg = messages[result.index]
-    if (msg.role !== "user") return -1
+    if (!msg || msg.role !== "user") return -1
 
     return result.index
   })
@@ -169,7 +173,8 @@ export function SessionTurn(
     const index = messageIndex()
     if (index < 0) return undefined
 
-    const msg = allMessages()[index]
+    const messages = allMessages() ?? emptyMessages
+    const msg = messages[index]
     if (!msg || msg.role !== "user") return undefined
 
     return msg
@@ -178,7 +183,7 @@ export function SessionTurn(
   const lastUserMessageID = createMemo(() => {
     if (props.lastUserMessageID) return props.lastUserMessageID
 
-    const messages = allMessages()
+    const messages = allMessages() ?? emptyMessages
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i]
       if (msg?.role === "user") return msg.id
@@ -212,7 +217,7 @@ export function SessionTurn(
       const msg = message()
       if (!msg) return emptyAssistant
 
-      const messages = allMessages()
+      const messages = allMessages() ?? emptyMessages
       const index = messageIndex()
       if (index < 0) return emptyAssistant
 
@@ -266,7 +271,7 @@ export function SessionTurn(
     const next = nextPermission()
     if (!next || !next.tool) return emptyPermissionParts
 
-    const message = assistantMessages().findLast((m) => m.id === next.tool!.messageID)
+    const message = findLast(assistantMessages(), (m) => m.id === next.tool!.messageID)
     if (!message) return emptyPermissionParts
 
     const parts = data.store.part[message.id] ?? emptyParts
@@ -279,8 +284,54 @@ export function SessionTurn(
     return emptyPermissionParts
   })
 
+  const questions = createMemo(() => data.store.question?.[props.sessionID] ?? emptyQuestions)
+  const nextQuestion = createMemo(() => questions()[0])
+
+  const questionParts = createMemo(() => {
+    if (props.stepsExpanded) return emptyQuestionParts
+
+    const next = nextQuestion()
+    if (!next || !next.tool) return emptyQuestionParts
+
+    const message = findLast(assistantMessages(), (m) => m.id === next.tool!.messageID)
+    if (!message) return emptyQuestionParts
+
+    const parts = data.store.part[message.id] ?? emptyParts
+    for (const part of parts) {
+      if (part?.type !== "tool") continue
+      const tool = part as ToolPart
+      if (tool.callID === next.tool?.callID) return [{ part: tool, message }]
+    }
+
+    return emptyQuestionParts
+  })
+
+  const answeredQuestionParts = createMemo(() => {
+    if (props.stepsExpanded) return emptyQuestionParts
+    if (questions().length > 0) return emptyQuestionParts
+
+    const result: { part: ToolPart; message: AssistantMessage }[] = []
+
+    for (const msg of assistantMessages()) {
+      const parts = data.store.part[msg.id] ?? emptyParts
+      for (const part of parts) {
+        if (part?.type !== "tool") continue
+        const tool = part as ToolPart
+        if (tool.tool !== "question") continue
+        // @ts-expect-error metadata may not exist on all tool states
+        const answers = tool.state?.metadata?.answers
+        if (answers && answers.length > 0) {
+          result.push({ part: tool, message: msg })
+        }
+      }
+    }
+
+    return result
+  })
+
   const shellModePart = createMemo(() => {
     const p = parts()
+    if (p.length === 0) return
     if (!p.every((part) => part?.type === "text" && part?.synthetic)) return
 
     const msgs = assistantMessages()
@@ -347,6 +398,8 @@ export function SessionTurn(
   const status = createMemo(() => data.store.session_status[props.sessionID] ?? idle)
   const working = createMemo(() => status().type !== "idle" && isLastUserMessage())
   const retry = createMemo(() => {
+    // session_status is session-scoped; only show retry on the active (last) turn
+    if (!isLastUserMessage()) return
     const s = status()
     if (s.type !== "retry") return
     return s
@@ -387,12 +440,14 @@ export function SessionTurn(
     const interval = Interval.fromDateTimes(from, to)
     const unit: DurationUnit[] = interval.length("seconds") > 60 ? ["minutes", "seconds"] : ["seconds"]
 
-    return interval.toDuration(unit).normalize().reconfigure({ locale: i18n.locale() }).toHuman({
+    const locale = i18n.locale()
+    const human = interval.toDuration(unit).normalize().reconfigure({ locale }).toHuman({
       notation: "compact",
       unitDisplay: "narrow",
       compactDisplay: "short",
       showZeros: false,
     })
+    return locale.startsWith("zh") ? human.replaceAll("、", "") : human
   }
 
   const autoScroll = createAutoScroll({
@@ -457,9 +512,16 @@ export function SessionTurn(
   })
 
   createEffect(() => {
-    const timer = setInterval(() => {
+    const update = () => {
       setStore("duration", duration())
-    }, 1000)
+    }
+
+    update()
+
+    // Only keep ticking while the active (in-progress) turn is running.
+    if (!working()) return
+
+    const timer = setInterval(update, 1000)
     onCleanup(() => clearInterval(timer))
   })
 
@@ -493,6 +555,11 @@ export function SessionTurn(
         statusTimeout = undefined
       }, 2500 - timeSinceLastChange) as unknown as number
     }
+  })
+
+  onCleanup(() => {
+    if (!statusTimeout) return
+    clearTimeout(statusTimeout)
   })
 
   return (
@@ -539,9 +606,28 @@ export function SessionTurn(
                             onClick={props.onStepsExpandedToggle ?? (() => {})}
                             aria-expanded={props.stepsExpanded}
                           >
-                            <Show when={working()}>
-                              <Spinner />
-                            </Show>
+                            <Switch>
+                              <Match when={working()}>
+                                <Spinner />
+                              </Match>
+                              <Match when={true}>
+                                <svg
+                                  width="10"
+                                  height="10"
+                                  viewBox="0 0 10 10"
+                                  fill="none"
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  data-slot="session-turn-trigger-icon"
+                                >
+                                  <path
+                                    d="M8.125 1.875H1.875L5 8.125L8.125 1.875Z"
+                                    fill="currentColor"
+                                    stroke="currentColor"
+                                    stroke-linejoin="round"
+                                  />
+                                </svg>
+                              </Match>
+                            </Switch>
                             <Switch>
                               <Match when={retry()}>
                                 <span data-slot="session-turn-retry-message">
@@ -560,16 +646,19 @@ export function SessionTurn(
                                 <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
                               </Match>
                               <Match when={working()}>
-                                {store.status ?? i18n.t("ui.sessionTurn.status.consideringNextSteps")}
+                                <span data-slot="session-turn-status-text">
+                                  {store.status ?? i18n.t("ui.sessionTurn.status.consideringNextSteps")}
+                                </span>
                               </Match>
-                              <Match when={props.stepsExpanded}>{i18n.t("ui.sessionTurn.steps.hide")}</Match>
-                              <Match when={!props.stepsExpanded}>{i18n.t("ui.sessionTurn.steps.show")}</Match>
+                              <Match when={props.stepsExpanded}>
+                                <span data-slot="session-turn-status-text">{i18n.t("ui.sessionTurn.steps.hide")}</span>
+                              </Match>
+                              <Match when={!props.stepsExpanded}>
+                                <span data-slot="session-turn-status-text">{i18n.t("ui.sessionTurn.steps.show")}</span>
+                              </Match>
                             </Switch>
                             <span aria-hidden="true">·</span>
                             <span aria-live="off">{store.duration}</span>
-                            <Show when={assistantMessages().length > 0}>
-                              <Icon name="chevron-grabber-vertical" size="small" />
-                            </Show>
                           </Button>
                         </div>
                       </Show>
@@ -597,6 +686,20 @@ export function SessionTurn(
                     <Show when={!props.stepsExpanded && permissionParts().length > 0}>
                       <div data-slot="session-turn-permission-parts">
                         <For each={permissionParts()}>
+                          {({ part, message }) => <Part part={part} message={message} />}
+                        </For>
+                      </div>
+                    </Show>
+                    <Show when={!props.stepsExpanded && questionParts().length > 0}>
+                      <div data-slot="session-turn-question-parts">
+                        <For each={questionParts()}>
+                          {({ part, message }) => <Part part={part} message={message} />}
+                        </For>
+                      </div>
+                    </Show>
+                    <Show when={!props.stepsExpanded && answeredQuestionParts().length > 0}>
+                      <div data-slot="session-turn-answered-question-parts">
+                        <For each={answeredQuestionParts()}>
                           {({ part, message }) => <Part part={part} message={message} />}
                         </For>
                       </div>

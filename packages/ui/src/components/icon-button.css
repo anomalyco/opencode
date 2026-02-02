@@ -90,8 +90,8 @@
       /*   color: var(--icon-hover); */
       /* } */
     }
-    &:focus:not(:disabled) {
-      background-color: var(--surface-focus);
+    &:focus-visible:not(:disabled) {
+      background-color: var(--surface-raised-base-hover);
     }
     &:active:not(:disabled) {
       background-color: var(--surface-raised-base-active);
