@@ -40,6 +40,7 @@
 @import "../components/select.css" layer(components);
 @import "../components/spinner.css" layer(components);
 @import "../components/switch.css" layer(components);
+@import "../components/scroll-fade.css" layer(components);
 @import "../components/session-review.css" layer(components);
 @import "../components/session-turn.css" layer(components);
 @import "../components/sticky-accordion-header.css" layer(components);
