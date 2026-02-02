@@ -2,14 +2,16 @@ name: beta
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 * * * *"
+  pull_request:
+    types: [labeled]
 
 jobs:
   sync:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'beta'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -29,5 +31,4 @@ jobs:
       - name: Sync beta branch
         env:
           GH_TOKEN: ${{ steps.setup-git-committer.outputs.token }}
-          DISCORD_ISSUES_WEBHOOK_URL: ${{ secrets.DISCORD_ISSUES_WEBHOOK_URL }}
         run: bun script/beta.ts
