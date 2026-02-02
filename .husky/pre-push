@@ -1,5 +1,11 @@
 #!/bin/sh
 set -e
+# If `bun` is not available, skip this hook so pushes aren't blocked in environments without Bun.
+if ! command -v bun >/dev/null 2>&1; then
+  echo "husky: bun not found — skipping pre-push hook"
+  exit 0
+fi
+
 # Check if bun version matches package.json
 # keep in sync with packages/script/src/index.ts semver qualifier
 bun -e '
