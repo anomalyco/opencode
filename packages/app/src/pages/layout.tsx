@@ -31,6 +31,7 @@ import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { HoverCard } from "@opencode-ai/ui/hover-card"
 import { MessageNav } from "@opencode-ai/ui/message-nav"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
+import { ContextMenu } from "@opencode-ai/ui/context-menu"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Spinner } from "@opencode-ai/ui/spinner"
@@ -2310,10 +2311,13 @@ export default function Layout(props: ParentProps) {
       () => props.project.vcs === "git" && layout.sidebar.workspaces(props.project.worktree)(),
     )
     const [open, setOpen] = createSignal(false)
+    const [menu, setMenu] = createSignal(false)
 
     const preview = createMemo(() => !props.mobile && layout.sidebar.opened())
     const overlay = createMemo(() => !props.mobile && !layout.sidebar.opened())
-    const active = createMemo(() => (preview() ? open() : overlay() && state.hoverProject === props.project.worktree))
+    const active = createMemo(
+      () => menu() || (preview() ? open() : overlay() && state.hoverProject === props.project.worktree),
+    )
 
     createEffect(() => {
       if (preview()) return
@@ -2352,35 +2356,79 @@ export default function Layout(props: ParentProps) {
 
     const projectName = () => props.project.name || getFilename(props.project.worktree)
     const trigger = (
-      <button
-        type="button"
-        aria-label={projectName()}
-        data-action="project-switch"
-        data-project={base64Encode(props.project.worktree)}
-        classList={{
-          "flex items-center justify-center size-10 p-1 rounded-lg overflow-hidden transition-colors cursor-default": true,
-          "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover": selected(),
-          "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
-            !selected() && !active(),
-          "bg-surface-base-hover border border-border-weak-base": !selected() && active(),
+      <ContextMenu
+        modal={!sidebarHovering()}
+        onOpenChange={(value) => {
+          setMenu(value)
+          if (value) setOpen(false)
         }}
-        onMouseEnter={() => {
-          if (!overlay()) return
-          globalSync.child(props.project.worktree)
-          setState("hoverProject", props.project.worktree)
-          setState("hoverSession", undefined)
-        }}
-        onFocus={() => {
-          if (!overlay()) return
-          globalSync.child(props.project.worktree)
-          setState("hoverProject", props.project.worktree)
-          setState("hoverSession", undefined)
-        }}
-        onClick={() => navigateToProject(props.project.worktree)}
-        onBlur={() => setOpen(false)}
       >
-        <ProjectIcon project={props.project} notify />
-      </button>
+        <ContextMenu.Trigger
+          as="button"
+          type="button"
+          aria-label={projectName()}
+          data-action="project-switch"
+          data-project={base64Encode(props.project.worktree)}
+          classList={{
+            "flex items-center justify-center size-10 p-1 rounded-lg overflow-hidden transition-colors cursor-default": true,
+            "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover": selected(),
+            "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
+              !selected() && !active(),
+            "bg-surface-base-hover border border-border-weak-base": !selected() && active(),
+          }}
+          onMouseEnter={() => {
+            if (!overlay()) return
+            globalSync.child(props.project.worktree)
+            setState("hoverProject", props.project.worktree)
+            setState("hoverSession", undefined)
+          }}
+          onFocus={() => {
+            if (!overlay()) return
+            globalSync.child(props.project.worktree)
+            setState("hoverProject", props.project.worktree)
+            setState("hoverSession", undefined)
+          }}
+          onClick={() => navigateToProject(props.project.worktree)}
+          onBlur={() => setOpen(false)}
+        >
+          <ProjectIcon project={props.project} notify />
+        </ContextMenu.Trigger>
+        <ContextMenu.Portal mount={!props.mobile ? state.nav : undefined}>
+          <ContextMenu.Content>
+            <ContextMenu.Item onSelect={() => dialog.show(() => <DialogEditProject project={props.project} />)}>
+              <ContextMenu.ItemLabel>{language.t("common.edit")}</ContextMenu.ItemLabel>
+            </ContextMenu.Item>
+            <ContextMenu.Item
+              data-action="project-workspaces-toggle"
+              data-project={base64Encode(props.project.worktree)}
+              disabled={props.project.vcs !== "git" && !layout.sidebar.workspaces(props.project.worktree)()}
+              onSelect={() => {
+                const enabled = layout.sidebar.workspaces(props.project.worktree)()
+                if (enabled) {
+                  layout.sidebar.toggleWorkspaces(props.project.worktree)
+                  return
+                }
+                if (props.project.vcs !== "git") return
+                layout.sidebar.toggleWorkspaces(props.project.worktree)
+              }}
+            >
+              <ContextMenu.ItemLabel>
+                {layout.sidebar.workspaces(props.project.worktree)()
+                  ? language.t("sidebar.workspaces.disable")
+                  : language.t("sidebar.workspaces.enable")}
+              </ContextMenu.ItemLabel>
+            </ContextMenu.Item>
+            <ContextMenu.Separator />
+            <ContextMenu.Item
+              data-action="project-close-menu"
+              data-project={base64Encode(props.project.worktree)}
+              onSelect={() => closeProject(props.project.worktree)}
+            >
+              <ContextMenu.ItemLabel>{language.t("common.close")}</ContextMenu.ItemLabel>
+            </ContextMenu.Item>
+          </ContextMenu.Content>
+        </ContextMenu.Portal>
+      </ContextMenu>
     )
 
     return (
@@ -2388,13 +2436,14 @@ export default function Layout(props: ParentProps) {
       <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
         <Show when={preview()} fallback={trigger}>
           <HoverCard
-            open={open()}
+            open={open() && !menu()}
             openDelay={0}
             closeDelay={0}
             placement="right-start"
             gutter={6}
             trigger={trigger}
             onOpenChange={(value) => {
+              if (menu()) return
               setOpen(value)
               if (value) setState("hoverSession", undefined)
             }}
