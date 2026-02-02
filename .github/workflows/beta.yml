@@ -1,13 +1,11 @@
 name: beta
 
 on:
-  workflow_dispatch:
-  pull_request:
-    types: [labeled, synchronize]
+  schedule:
+    - cron: "0 * * * *"
 
 jobs:
   sync:
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'beta')
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: write
