@@ -6,7 +6,6 @@ import { LSP } from "../lsp"
 import { FileTime } from "../file/time"
 import DESCRIPTION from "./read.txt"
 import { Instance } from "../project/instance"
-import { Identifier } from "../id/id"
 import { assertExternalDirectory } from "./external-directory"
 import { InstructionPrompt } from "../session/instruction"
 
@@ -60,7 +59,7 @@ export const ReadTool = Tool.define("read", {
       throw new Error(`File not found: ${filepath}`)
     }
 
-    const instructions = await InstructionPrompt.resolve(ctx.messages, filepath)
+    const instructions = await InstructionPrompt.resolve(ctx.messages, filepath, ctx.messageID)
 
     // Exclude SVG (XML-based) and vnd.fastbidsheet (.fbs extension, commonly FlatBuffers schema files)
     const isImage =
@@ -79,9 +78,6 @@ export const ReadTool = Tool.define("read", {
         },
         attachments: [
           {
-            id: Identifier.ascending("part"),
-            sessionID: ctx.sessionID,
-            messageID: ctx.messageID,
             type: "file",
             mime,
             url: `data:${mime};base64,${Buffer.from(await file.bytes()).toString("base64")}`,

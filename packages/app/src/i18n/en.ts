@@ -28,6 +28,8 @@ export const dict = {
   "command.settings.open": "Open settings",
   "command.session.previous": "Previous session",
   "command.session.next": "Next session",
+  "command.session.previous.unseen": "Previous unread session",
+  "command.session.next.unseen": "Next unread session",
   "command.session.archive": "Archive session",
 
   "command.palette": "Command palette",
@@ -43,6 +45,7 @@ export const dict = {
   "command.session.new": "New session",
   "command.file.open": "Open file",
   "command.file.open.description": "Search files and commands",
+  "command.tab.close": "Close tab",
   "command.context.addSelection": "Add selection to context",
   "command.context.addSelection.description": "Add selected lines from the current file",
   "command.terminal.toggle": "Toggle terminal",
@@ -166,8 +169,8 @@ export const dict = {
   "model.tooltip.context": "Context limit {{limit}}",
 
   "common.search.placeholder": "Search",
-  "common.goBack": "Go back",
-  "common.goForward": "Go forward",
+  "common.goBack": "Back",
+  "common.goForward": "Forward",
   "common.loading": "Loading",
   "common.loading.ellipsis": "...",
   "common.cancel": "Cancel",
@@ -216,6 +219,8 @@ export const dict = {
   "prompt.popover.emptyCommands": "No matching commands",
   "prompt.dropzone.label": "Drop images or PDFs here",
   "prompt.slash.badge.custom": "custom",
+  "prompt.slash.badge.skill": "skill",
+  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "active",
   "prompt.context.includeActiveFile": "Include active file",
   "prompt.context.removeActiveFile": "Remove active file from context",
@@ -337,6 +342,7 @@ export const dict = {
   "language.ar": "العربية",
   "language.no": "Norsk",
   "language.br": "Português (Brasil)",
+  "language.th": "ไทย",
 
   "toast.language.title": "Language",
   "toast.language.description": "Switched to {{language}}",
@@ -440,6 +446,7 @@ export const dict = {
 
   "session.files.selectToOpen": "Select a file to open",
   "session.files.all": "All files",
+  "session.files.binaryContent": "Binary file (content cannot be displayed)",
 
   "session.messages.renderEarlier": "Render earlier messages",
   "session.messages.loadingEarlier": "Loading earlier messages...",

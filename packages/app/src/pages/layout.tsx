@@ -576,7 +576,6 @@ export default function Layout(props: ParentProps) {
         openProject(next.worktree, false)
         navigateToProject(next.worktree)
       },
-      { defer: true },
     ),
   )
 
@@ -685,11 +684,33 @@ export default function Layout(props: ParentProps) {
     running: number
   }
 
-  const prefetchChunk = 600
+  const prefetchChunk = 200
   const prefetchConcurrency = 1
   const prefetchPendingLimit = 6
   const prefetchToken = { value: 0 }
   const prefetchQueues = new Map<string, PrefetchQueue>()
+
+  const PREFETCH_MAX_SESSIONS_PER_DIR = 10
+  const prefetchedByDir = new Map<string, Map<string, true>>()
+
+  const lruFor = (directory: string) => {
+    const existing = prefetchedByDir.get(directory)
+    if (existing) return existing
+    const created = new Map<string, true>()
+    prefetchedByDir.set(directory, created)
+    return created
+  }
+
+  const markPrefetched = (directory: string, sessionID: string) => {
+    const lru = lruFor(directory)
+    if (lru.has(sessionID)) lru.delete(sessionID)
+    lru.set(sessionID, true)
+    while (lru.size > PREFETCH_MAX_SESSIONS_PER_DIR) {
+      const oldest = lru.keys().next().value as string | undefined
+      if (!oldest) return
+      lru.delete(oldest)
+    }
+  }
 
   createEffect(() => {
     params.dir
@@ -783,6 +804,11 @@ export default function Layout(props: ParentProps) {
     if (q.inflight.has(session.id)) return
     if (q.pendingSet.has(session.id)) return
 
+    const lru = lruFor(directory)
+    const known = lru.has(session.id)
+    if (!known && lru.size >= PREFETCH_MAX_SESSIONS_PER_DIR && priority !== "high") return
+    markPrefetched(directory, session.id)
+
     if (priority === "high") q.pending.unshift(session.id)
     if (priority !== "high") q.pending.push(session.id)
     q.pendingSet.add(session.id)
@@ -858,6 +884,52 @@ export default function Layout(props: ParentProps) {
     }
     navigateToSession(session)
     queueMicrotask(() => scrollToSession(session.id, `${session.directory}:${session.id}`))
+  }
+
+  function navigateSessionByUnseen(offset: number) {
+    const sessions = currentSessions()
+    if (sessions.length === 0) return
+
+    const hasUnseen = sessions.some((session) => notification.session.unseen(session.id).length > 0)
+    if (!hasUnseen) return
+
+    const activeIndex = params.id ? sessions.findIndex((s) => s.id === params.id) : -1
+    const start = activeIndex === -1 ? (offset > 0 ? -1 : 0) : activeIndex
+
+    for (let i = 1; i <= sessions.length; i++) {
+      const index = offset > 0 ? (start + i) % sessions.length : (start - i + sessions.length) % sessions.length
+      const session = sessions[index]
+      if (!session) continue
+      if (notification.session.unseen(session.id).length === 0) continue
+
+      prefetchSession(session, "high")
+
+      const next = sessions[(index + 1) % sessions.length]
+      const prev = sessions[(index - 1 + sessions.length) % sessions.length]
+
+      if (offset > 0) {
+        if (next) prefetchSession(next, "high")
+        if (prev) prefetchSession(prev)
+      }
+
+      if (offset < 0) {
+        if (prev) prefetchSession(prev, "high")
+        if (next) prefetchSession(next)
+      }
+
+      if (import.meta.env.DEV) {
+        navStart({
+          dir: base64Encode(session.directory),
+          from: params.id,
+          to: session.id,
+          trigger: offset > 0 ? "shift+alt+arrowdown" : "shift+alt+arrowup",
+        })
+      }
+
+      navigateToSession(session)
+      queueMicrotask(() => scrollToSession(session.id, `${session.directory}:${session.id}`))
+      return
+    }
   }
 
   async function archiveSession(session: Session) {
@@ -999,6 +1071,20 @@ export default function Layout(props: ParentProps) {
         onSelect: () => navigateSessionByOffset(1),
       },
       {
+        id: "session.previous.unseen",
+        title: language.t("command.session.previous.unseen"),
+        category: language.t("command.category.session"),
+        keybind: "shift+alt+arrowup",
+        onSelect: () => navigateSessionByUnseen(-1),
+      },
+      {
+        id: "session.next.unseen",
+        title: language.t("command.session.next.unseen"),
+        category: language.t("command.category.session"),
+        keybind: "shift+alt+arrowdown",
+        onSelect: () => navigateSessionByUnseen(1),
+      },
+      {
         id: "session.archive",
         title: language.t("command.session.archive"),
         category: language.t("command.category.session"),
@@ -1109,6 +1195,46 @@ export default function Layout(props: ParentProps) {
     layout.projects.open(directory)
     if (navigate) navigateToProject(directory)
   }
+
+  const deepLinkEvent = "opencode:deep-link"
+
+  const parseDeepLink = (input: string) => {
+    if (!input.startsWith("opencode://")) return
+    const url = new URL(input)
+    if (url.hostname !== "open-project") return
+    const directory = url.searchParams.get("directory")
+    if (!directory) return
+    return directory
+  }
+
+  const handleDeepLinks = (urls: string[]) => {
+    if (!server.isLocal()) return
+    for (const input of urls) {
+      const directory = parseDeepLink(input)
+      if (!directory) continue
+      openProject(directory)
+    }
+  }
+
+  const drainDeepLinks = () => {
+    const pending = window.__OPENCODE__?.deepLinks ?? []
+    if (pending.length === 0) return
+    if (window.__OPENCODE__) window.__OPENCODE__.deepLinks = []
+    handleDeepLinks(pending)
+  }
+
+  onMount(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ urls: string[] }>).detail
+      const urls = detail?.urls ?? []
+      if (urls.length === 0) return
+      handleDeepLinks(urls)
+    }
+
+    drainDeepLinks()
+    window.addEventListener(deepLinkEvent, handler as EventListener)
+    onCleanup(() => window.removeEventListener(deepLinkEvent, handler as EventListener))
+  })
 
   const displayName = (project: LocalProject) => project.name || getFilename(project.worktree)
 
@@ -1669,6 +1795,22 @@ export default function Layout(props: ParentProps) {
       pendingRename: false,
     })
 
+    const hoverPrefetch = { current: undefined as ReturnType<typeof setTimeout> | undefined }
+    const cancelHoverPrefetch = () => {
+      if (hoverPrefetch.current === undefined) return
+      clearTimeout(hoverPrefetch.current)
+      hoverPrefetch.current = undefined
+    }
+    const scheduleHoverPrefetch = () => {
+      if (hoverPrefetch.current !== undefined) return
+      hoverPrefetch.current = setTimeout(() => {
+        hoverPrefetch.current = undefined
+        prefetchSession(props.session)
+      }, 200)
+    }
+
+    onCleanup(cancelHoverPrefetch)
+
     const messageLabel = (message: Message) => {
       const parts = sessionStore.part[message.id] ?? []
       const text = parts.find((part): part is TextPart => part?.type === "text" && !part.synthetic && !part.ignored)
@@ -1679,7 +1821,10 @@ export default function Layout(props: ParentProps) {
       <A
         href={`${props.slug}/session/${props.session.id}`}
         class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] ${menu.open ? "pr-7" : ""} group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
-        onMouseEnter={() => prefetchSession(props.session, "high")}
+        onPointerEnter={scheduleHoverPrefetch}
+        onPointerLeave={cancelHoverPrefetch}
+        onMouseEnter={scheduleHoverPrefetch}
+        onMouseLeave={cancelHoverPrefetch}
         onFocus={() => prefetchSession(props.session, "high")}
         onClick={() => {
           setState("hoverSession", undefined)
@@ -2029,12 +2174,20 @@ export default function Layout(props: ParentProps) {
       >
         <Collapsible variant="ghost" open={open()} class="shrink-0" onOpenChange={openWrapper}>
           <div class="px-2 py-1">
-            <div class="group/workspace relative">
+            <div
+              class="group/workspace relative"
+              data-component="workspace-item"
+              data-workspace={base64Encode(props.directory)}
+            >
               <div class="flex items-center gap-1">
                 <Show
                   when={workspaceEditActive()}
                   fallback={
-                    <Collapsible.Trigger class="flex items-center justify-between w-full pl-2 pr-16 py-1.5 rounded-md hover:bg-surface-raised-base-hover">
+                    <Collapsible.Trigger
+                      class="flex items-center justify-between w-full pl-2 pr-16 py-1.5 rounded-md hover:bg-surface-raised-base-hover"
+                      data-action="workspace-toggle"
+                      data-workspace={base64Encode(props.directory)}
+                    >
                       {header()}
                     </Collapsible.Trigger>
                   }
@@ -2061,6 +2214,8 @@ export default function Layout(props: ParentProps) {
                         icon="dot-grid"
                         variant="ghost"
                         class="size-6 rounded-md"
+                        data-action="workspace-menu"
+                        data-workspace={base64Encode(props.directory)}
                         aria-label={language.t("common.moreOptions")}
                       />
                     </Tooltip>
@@ -2200,6 +2355,8 @@ export default function Layout(props: ParentProps) {
       <button
         type="button"
         aria-label={projectName()}
+        data-action="project-switch"
+        data-project={base64Encode(props.project.worktree)}
         classList={{
           "flex items-center justify-center size-10 p-1 rounded-lg overflow-hidden transition-colors cursor-default": true,
           "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover": selected(),
@@ -2250,6 +2407,8 @@ export default function Layout(props: ParentProps) {
                     icon="circle-x"
                     variant="ghost"
                     class="shrink-0"
+                    data-action="project-close-hover"
+                    data-project={base64Encode(props.project.worktree)}
                     aria-label={language.t("common.close")}
                     onClick={(event) => {
                       event.stopPropagation()
@@ -2492,6 +2651,8 @@ export default function Layout(props: ParentProps) {
                       as={IconButton}
                       icon="dot-grid"
                       variant="ghost"
+                      data-action="project-menu"
+                      data-project={base64Encode(p.worktree)}
                       class="shrink-0 size-6 rounded-md opacity-0 group-hover/project:opacity-100 data-[expanded]:opacity-100 data-[expanded]:bg-surface-base-active"
                       aria-label={language.t("common.moreOptions")}
                     />
@@ -2501,6 +2662,8 @@ export default function Layout(props: ParentProps) {
                           <DropdownMenu.ItemLabel>{language.t("common.edit")}</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                         <DropdownMenu.Item
+                          data-action="project-workspaces-toggle"
+                          data-project={base64Encode(p.worktree)}
                           disabled={p.vcs !== "git" && !layout.sidebar.workspaces(p.worktree)()}
                           onSelect={() => {
                             const enabled = layout.sidebar.workspaces(p.worktree)()
@@ -2519,7 +2682,11 @@ export default function Layout(props: ParentProps) {
                           </DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                         <DropdownMenu.Separator />
-                        <DropdownMenu.Item onSelect={() => closeProject(p.worktree)}>
+                        <DropdownMenu.Item
+                          data-action="project-close-menu"
+                          data-project={base64Encode(p.worktree)}
+                          onSelect={() => closeProject(p.worktree)}
+                        >
                           <DropdownMenu.ItemLabel>{language.t("common.close")}</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                       </DropdownMenu.Content>
@@ -2729,6 +2896,7 @@ export default function Layout(props: ParentProps) {
       <div class="flex-1 min-h-0 flex">
         <nav
           aria-label={language.t("sidebar.nav.projectsAndSessions")}
+          data-component="sidebar-nav-desktop"
           classList={{
             "hidden xl:block": true,
             "relative shrink-0": true,
@@ -2788,6 +2956,7 @@ export default function Layout(props: ParentProps) {
           />
           <nav
             aria-label={language.t("sidebar.nav.projectsAndSessions")}
+            data-component="sidebar-nav-mobile"
             classList={{
               "@container fixed top-10 bottom-0 left-0 z-50 w-72 bg-background-base transition-transform duration-200 ease-out": true,
               "translate-x-0": layout.mobileSidebar.opened(),

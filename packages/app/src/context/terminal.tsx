@@ -155,8 +155,9 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
 
       batch(() => {
         setStore("all", index, {
-          ...pty,
-          ...clone.data,
+          id: clone.data.id,
+          title: clone.data.title ?? pty.title,
+          titleNumber: pty.titleNumber,
         })
         if (active) {
           setStore("active", clone.data.id)

@@ -18,7 +18,7 @@ describe("InstructionPrompt.resolve", () => {
         const system = await InstructionPrompt.systemPaths()
         expect(system.has(path.join(tmp.path, "AGENTS.md"))).toBe(true)
 
-        const results = await InstructionPrompt.resolve([], path.join(tmp.path, "src", "file.ts"))
+        const results = await InstructionPrompt.resolve([], path.join(tmp.path, "src", "file.ts"), "test-message-1")
         expect(results).toEqual([])
       },
     })
@@ -37,9 +37,33 @@ describe("InstructionPrompt.resolve", () => {
         const system = await InstructionPrompt.systemPaths()
         expect(system.has(path.join(tmp.path, "subdir", "AGENTS.md"))).toBe(false)
 
-        const results = await InstructionPrompt.resolve([], path.join(tmp.path, "subdir", "nested", "file.ts"))
+        const results = await InstructionPrompt.resolve(
+          [],
+          path.join(tmp.path, "subdir", "nested", "file.ts"),
+          "test-message-2",
+        )
         expect(results.length).toBe(1)
         expect(results[0].filepath).toBe(path.join(tmp.path, "subdir", "AGENTS.md"))
+      },
+    })
+  })
+
+  test("doesn't reload AGENTS.md when reading it directly", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "subdir", "AGENTS.md"), "# Subdir Instructions")
+        await Bun.write(path.join(dir, "subdir", "nested", "file.ts"), "const x = 1")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const filepath = path.join(tmp.path, "subdir", "AGENTS.md")
+        const system = await InstructionPrompt.systemPaths()
+        expect(system.has(filepath)).toBe(false)
+
+        const results = await InstructionPrompt.resolve([], filepath, "test-message-2")
+        expect(results).toEqual([])
       },
     })
   })
