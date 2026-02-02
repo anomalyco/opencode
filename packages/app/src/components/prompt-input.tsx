@@ -1801,7 +1801,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       }}
                     >
                       <div class="flex items-center gap-1.5">
-                        <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-7" />
+                        <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-3.5" />
                         <div class="flex items-center text-11-regular min-w-0 font-medium">
                           <span class="text-text-strong whitespace-nowrap">{getFilenameTruncated(item.path, 14)}</span>
                           <Show when={item.selection}>
@@ -1818,7 +1818,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           type="button"
                           icon="close-small"
                           variant="ghost"
-                          class="ml-auto size-7 opacity-0 group-hover:opacity-100 transition-all"
+                          class="ml-auto size-3.5 opacity-0 group-hover:opacity-100 transition-all"
                           onClick={(e) => {
                             e.stopPropagation()
                             if (item.commentID) comments.remove(item.path, item.commentID)
