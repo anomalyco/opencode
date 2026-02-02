@@ -153,7 +153,6 @@ export namespace Clipboard {
   })
 
   export async function copy(text: string): Promise<void> {
-    writeOsc52(text)
     await getCopyMethod()(text)
   }
 }
