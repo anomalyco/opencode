@@ -22,7 +22,7 @@ export namespace SessionStatus {
         type: z.literal("streaming"),
       }),
       z.object({
-        type: z.literal("waiting"),
+        type: z.literal("busy"),
       }),
       z.object({
         type: z.literal("retry"),

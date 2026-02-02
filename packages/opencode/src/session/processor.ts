@@ -128,7 +128,7 @@ export namespace SessionProcessor {
                 case "tool-call": {
                   const match = toolcalls[value.toolCallId]
                   if (match) {
-                    SessionStatus.set(input.sessionID, { type: "waiting" })
+                    SessionStatus.set(input.sessionID, { type: "busy" })
                     const part = await Session.updatePart({
                       ...match,
                       tool: value.toolName,

@@ -1,5 +1,5 @@
 import { createSignal, createMemo, createEffect, onCleanup, type Accessor } from "solid-js"
-import type { Message, Part, SessionStatus } from "@opencode-ai/sdk/v2"
+import type { Message, Part, Session, SessionStatus } from "@opencode-ai/sdk/v2"
 import { createRunningTools, ToolItemView } from "./running-tools.tsx"
 import { createLLMStatus, LLMStatusView } from "./running-llm.tsx"
 
@@ -9,12 +9,13 @@ export { ToolItemView } from "./running-tools.tsx"
 export { LLMStatusView } from "./running-llm.tsx"
 
 type SyncData = {
+  session: Session[]
   session_status: Record<string, SessionStatus>
   message: Record<string, Message[]>
   part: Record<string, Part[]>
 }
 
-const ACTIVE_STATUSES = new Set(["sending", "planning", "reasoning", "streaming", "waiting", "retry"])
+const ACTIVE_STATUSES = new Set(["sending", "planning", "reasoning", "streaming", "busy", "retry"])
 
 function isActive(status: SessionStatus): boolean {
   return ACTIVE_STATUSES.has(status.type)

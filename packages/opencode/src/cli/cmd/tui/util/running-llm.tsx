@@ -13,7 +13,7 @@ const STATUS_LABELS: Record<string, string> = {
   planning: "Planning...",
   reasoning: "Reasoning...",
   streaming: "Streaming...",
-  waiting: "Waiting...",
+  busy: "Busy...",
 }
 
 export function createLLMStatus(
@@ -45,7 +45,10 @@ export function createLLMStatus(
 
 export function LLMStatusView(props: { item: RunningItem; now: number }) {
   const { theme } = useTheme()
-  const elapsed = () => formatDuration(Math.floor((props.now - props.item.startTime) / 1000))
+  const elapsed = () => {
+    if (props.item.startTime === undefined) return ""
+    return formatDuration(Math.floor((props.now - props.item.startTime) / 1000))
+  }
 
   return (
     <box flexDirection="row" gap={1}>
@@ -54,7 +57,9 @@ export function LLMStatusView(props: { item: RunningItem; now: number }) {
       </text>
       <text fg={theme.text} wrapMode="none">
         {props.item.label}
-        <span style={{ fg: theme.textMuted }}> {elapsed()}</span>
+        <Show when={elapsed()}>
+          <span style={{ fg: theme.textMuted }}> {elapsed()}</span>
+        </Show>
         <Show when={props.item.suffix}>
           <span style={{ fg: theme.textMuted }}> ({props.item.suffix})</span>
         </Show>

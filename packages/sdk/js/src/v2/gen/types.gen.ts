@@ -539,7 +539,7 @@ export type SessionStatus =
       type: "streaming"
     }
   | {
-      type: "waiting"
+      type: "busy"
     }
   | {
       type: "retry"

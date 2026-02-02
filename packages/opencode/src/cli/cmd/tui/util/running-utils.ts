@@ -4,13 +4,12 @@ export const RUNNING_THRESHOLD_MS = 1000
 export type RunningItem = {
   id: string
   label: string
-  startTime: number
+  startTime?: number
   suffix?: string
+  subtext?: string
+  isAgent?: boolean
+  children?: RunningItem[]
 }
-
-// Task tool metadata types (for subagent tracking)
-export type TaskSummaryItem = { state?: { status?: string } }
-export type TaskMetadata = { summary?: TaskSummaryItem[] }
 
 // Helper to safely coerce unknown to string
 export function str(value: unknown): string {

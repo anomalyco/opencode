@@ -455,7 +455,25 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               draft.todo[sessionID] = todo.data ?? []
               draft.message[sessionID] = messages.data!.map((x) => x.info)
               for (const message of messages.data!) {
-                draft.part[message.info.id] = message.parts
+                // Mark stale "running" tools as "error" - if they were truly running,
+                // we'd receive live message.part.updated events instead of loading from sync
+                draft.part[message.info.id] = message.parts.map((p) =>
+                  p.type === "tool" && p.state.status === "running"
+                    ? {
+                        ...p,
+                        state: {
+                          status: "error" as const,
+                          input: p.state.input,
+                          error: "Interrupted",
+                          metadata: p.state.metadata,
+                          time: {
+                            start: p.state.time.start,
+                            end: Date.now(),
+                          },
+                        },
+                      }
+                    : p,
+                )
               }
               draft.session_diff[sessionID] = diff.data ?? []
             }),
