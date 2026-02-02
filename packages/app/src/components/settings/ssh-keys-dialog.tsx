@@ -7,9 +7,18 @@ import { useGlobalSDK } from "@/context/global-sdk"
 import type { SshKey } from "@opencode-ai/sdk/v2/client"
 
 const errorMessage = (err: unknown) => {
-  if (err && typeof err === "object" && "data" in err) {
-    const data = (err as { data?: { error?: { message?: string } } }).data
-    if (data?.error?.message) return data.error.message
+  if (err && typeof err === "object") {
+    if ("data" in err) {
+      const data = (err as { data?: { error?: { message?: string } } }).data
+      if (data?.error?.message) return data.error.message
+    }
+    if ("error" in err) {
+      const error = (err as { error?: { message?: string } }).error
+      if (error?.message) return error.message
+    }
+    if ("message" in err && typeof (err as { message?: unknown }).message === "string") {
+      return (err as { message: string }).message
+    }
   }
   if (err instanceof Error) return err.message
   return "Request failed"
