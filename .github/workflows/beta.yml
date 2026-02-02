@@ -1,17 +1,13 @@
 name: beta
 
 on:
-  push:
-    branches: [dev]
+  workflow_dispatch:
   pull_request:
-    types: [opened, synchronize, labeled, unlabeled]
+    types: [labeled, synchronize]
 
 jobs:
   sync:
-    if: |
-      github.event_name == 'push' || 
-      (github.event_name == 'pull_request' && 
-       contains(github.event.pull_request.labels.*.name, 'contributor'))
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'beta')
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: write

@@ -23,10 +23,13 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 export function CycleLabel(props: CycleLabelProps) {
   const getDuration = (text: string) => {
-    const d = props?.duration ?? 200
+    const d =
+      props.duration ??
+      Number(getComputedStyle(document.documentElement).getPropertyValue("--transition-duration")) ??
+      200
     return typeof d === "function" ? d(text) : d
   }
-  const stagger = () => props?.stagger ?? 20
+  const stagger = () => props?.stagger ?? 30
   const opacity = () => props?.opacity ?? [0, 1]
   const blur = () => props?.blur ?? [0, 0]
   const skewX = () => props?.skewX ?? 10
@@ -118,8 +121,8 @@ export function CycleLabel(props: CycleLabelProps) {
       ref={initRef}
       class={`cycle-label ${props.class ?? ""}`}
       style={{
-        "--c-dur": `${getDuration(currentText())}ms`,
-        "--c-stag": `${stagger()}ms`,
+        "--c-duration": `${getDuration(currentText())}ms`,
+        "--c-stagger": `${stagger()}ms`,
         "--c-opacity-start": opacity()[0],
         "--c-opacity-end": opacity()[1],
         "--c-blur-start": `${blur()[0]}px`,

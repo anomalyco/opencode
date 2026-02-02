@@ -63,8 +63,12 @@
 
   [data-slot="accordion-item"] {
     [data-slot="accordion-content"] {
-      /* Use grid-template-rows for smooth height transition */
-      display: grid;
+      display: none;
+    }
+    &[data-expanded] {
+      [data-slot="accordion-content"] {
+        display: block;
+      }
     }
   }
 
@@ -126,9 +130,7 @@
     cursor: pointer;
     border-radius: 4px;
     opacity: 0;
-    transition-property: opacity, background-color, color;
-    transition-duration: var(--transition-duration);
-    transition-timing-function: var(--transition-easing);
+    transition: opacity 0.15s ease;
 
     &:hover {
       color: var(--text-strong);

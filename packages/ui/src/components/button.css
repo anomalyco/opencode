@@ -8,6 +8,7 @@
   text-decoration: none;
   user-select: none;
   cursor: default;
+  outline: none;
   padding: 4px 8px;
   white-space: nowrap;
   transition-property: background-color, border-color, color, box-shadow, opacity;
@@ -113,9 +114,9 @@
   }
 
   &[data-size="small"] {
-    padding: 2px 8px;
+    padding: 4px 8px;
     &[data-icon] {
-      padding: 2px 12px 2px 4px;
+      padding: 4px 12px 4px 4px;
     }
 
     gap: 4px;
@@ -134,6 +135,10 @@
       padding: 4px 12px 4px 4px;
     }
 
+    &[aria-haspopup] {
+      padding: 4px 6px 4px 8px;
+    }
+
     gap: 6px;
 
     /* text-12-medium */
@@ -148,7 +153,7 @@
     padding: 6px 12px;
 
     &[data-icon] {
-      padding: 6px 12px 6px 8px;
+      padding: 0 12px 0 8px;
     }
 
     gap: 4px;
@@ -158,6 +163,7 @@
     font-size: 14px;
     font-style: normal;
     font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large); /* 142.857% */
     letter-spacing: var(--letter-spacing-normal);
   }
 

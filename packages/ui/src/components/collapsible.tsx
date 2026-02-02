@@ -1,8 +1,6 @@
 import { Collapsible as Kobalte, CollapsibleRootProps } from "@kobalte/core/collapsible"
-import { Accessor, ComponentProps, createContext, createSignal, ParentProps, splitProps, useContext } from "solid-js"
-import { MorphChevron } from "./morph-chevron"
-
-const CollapsibleContext = createContext<Accessor<boolean>>()
+import { ComponentProps, ParentProps, splitProps } from "solid-js"
+import { Icon } from "./icon"
 
 export interface CollapsibleProps extends ParentProps<CollapsibleRootProps> {
   class?: string
@@ -11,30 +9,17 @@ export interface CollapsibleProps extends ParentProps<CollapsibleRootProps> {
 }
 
 function CollapsibleRoot(props: CollapsibleProps) {
-  const [local, others] = splitProps(props, ["class", "classList", "variant", "open", "onOpenChange", "children"])
-  const [internalOpen, setInternalOpen] = createSignal(local.open ?? false)
-
-  const handleOpenChange = (open: boolean) => {
-    setInternalOpen(open)
-    local.onOpenChange?.(open)
-  }
-
+  const [local, others] = splitProps(props, ["class", "classList", "variant"])
   return (
-    <CollapsibleContext.Provider value={internalOpen}>
-      <Kobalte
-        data-component="collapsible"
-        data-variant={local.variant || "normal"}
-        open={local.open}
-        onOpenChange={handleOpenChange}
-        classList={{
-          ...(local.classList ?? {}),
-          [local.class ?? ""]: !!local.class,
-        }}
-        {...others}
-      >
-        {local.children}
-      </Kobalte>
-    </CollapsibleContext.Provider>
+    <Kobalte
+      data-component="collapsible"
+      data-variant={local.variant || "normal"}
+      classList={{
+        ...(local.classList ?? {}),
+        [local.class ?? ""]: !!local.class,
+      }}
+      {...others}
+    />
   )
 }
 
@@ -47,10 +32,9 @@ function CollapsibleContent(props: ComponentProps<typeof Kobalte.Content>) {
 }
 
 function CollapsibleArrow(props?: ComponentProps<"div">) {
-  const isOpen = useContext(CollapsibleContext)
   return (
     <div data-slot="collapsible-arrow" {...(props || {})}>
-      <MorphChevron expanded={isOpen?.() ?? false} />
+      <Icon name="chevron-grabber-vertical" size="small" />
     </div>
   )
 }

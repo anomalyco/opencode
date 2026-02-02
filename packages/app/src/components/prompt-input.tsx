@@ -115,6 +115,7 @@ interface SlashCommand {
   description?: string
   keybind?: string
   type: "builtin" | "custom"
+  source?: "command" | "mcp" | "skill"
 }
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
@@ -520,6 +521,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       title: cmd.name,
       description: cmd.description,
       type: "custom" as const,
+      source: cmd.source,
     }))
 
     return [...custom, ...builtin]
@@ -1726,9 +1728,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         </Show>
                       </div>
                       <div class="flex items-center gap-2 shrink-0">
-                        <Show when={cmd.type === "custom"}>
+                        <Show when={cmd.type === "custom" && cmd.source !== "command"}>
                           <span class="text-11-regular text-text-subtle px-1.5 py-0.5 bg-surface-base rounded">
-                            {language.t("prompt.slash.badge.custom")}
+                            {cmd.source === "skill"
+                              ? language.t("prompt.slash.badge.skill")
+                              : cmd.source === "mcp"
+                                ? language.t("prompt.slash.badge.mcp")
+                                : language.t("prompt.slash.badge.custom")}
                           </span>
                         </Show>
                         <Show when={command.keybind(cmd.id)}>
@@ -1937,6 +1943,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     onSelect={local.agent.set}
                     class="capitalize"
                     variant="ghost"
+                    gutter={12}
                   />
                 </TooltipKeybind>
                 <Show
@@ -1951,13 +1958,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         as="div"
                         variant="ghost"
                         class="px-2"
-                        onClick={() => dialog.render(<DialogSelectModelUnpaid />, "select-model")}
+                        onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}
                       >
                         <Show when={local.model.current()?.provider?.id}>
                           <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
                         </Show>
                         {local.model.current()?.name ?? language.t("dialog.model.select.title")}
-                        <MorphChevron expanded={dialog.isActive("select-model")} />
+                        <MorphChevron
+                          expanded={!!dialog.active?.id && dialog.active.id.startsWith("select-model-unpaid")}
+                        />
                       </Button>
                     </TooltipKeybind>
                   }
@@ -1967,7 +1976,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     title={language.t("command.model.choose")}
                     keybind={command.keybind("model.choose")}
                   >
-                    <ModelSelectorPopover triggerAs={Button} triggerProps={{ variant: "ghost" }}>
+                    <ModelSelectorPopover triggerAs={Button} triggerProps={{ variant: "ghost" }} gutter={12}>
                       {(open) => (
                         <>
                           <Show when={local.model.current()?.provider?.id}>

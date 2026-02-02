@@ -1,7 +1,6 @@
 .cycle-label {
-  --c-dur: 200ms;
-  --c-stag: 30ms;
-  --c-ease: cubic-bezier(0.25, 0, 0.5, 1);
+  --c-duration: 200ms;
+  --c-stagger: 30ms;
   --c-opacity-start: 0;
   --c-opacity-end: 1;
   --c-blur-start: 0px;
@@ -13,7 +12,7 @@
 
   transform-style: preserve-3d;
   perspective: 500px;
-  transition: width 200ms var(--c-ease);
+  transition: width var(--transition-duration) var(--transition-easing);
   will-change: width;
   overflow: hidden;
 
@@ -23,11 +22,10 @@
     min-width: 0.25em;
     backface-visibility: hidden;
 
-    transition:
-      transform var(--c-dur) var(--c-ease),
-      opacity var(--c-dur) var(--c-ease),
-      filter var(--c-dur) var(--c-ease);
-    transition-delay: calc(var(--i, 0) * var(--c-stag));
+    transition-property: transform, opacity, filter;
+    transition-duration: var(--transition-duration);
+    transition-timing-function: var(--transition-easing);
+    transition-delay: calc(var(--i, 0) * var(--c-stagger));
 
     &.enter {
       opacity: var(--c-opacity-end);
