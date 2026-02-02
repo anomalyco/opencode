@@ -199,10 +199,6 @@ function App() {
   const exit = useExit()
   const promptRef = usePromptRef()
 
-  onMount(() => {
-    exit.message.set("Goodbye")
-  })
-
   // Wire up console copy-to-clipboard via opentui's onCopySelection callback
   renderer.console.onCopySelection = async (text: string) => {
     if (!text || text.length === 0) return
