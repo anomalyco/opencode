@@ -1814,6 +1814,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
   const { navigate } = useRoute()
   const local = useLocal()
   const sync = useSync()
+  const [expanded, setExpanded] = createSignal(false)
 
   const tools = createMemo(() => {
     const sessionID = props.metadata.sessionId
@@ -1829,15 +1830,38 @@ function Task(props: ToolProps<typeof TaskTool>) {
 
   const isRunning = createMemo(() => props.part.state.status === "running")
 
+  const output = createMemo(() => {
+    if (props.part.state.status !== "completed") return ""
+    const sessionID = props.metadata.sessionId
+    if (!sessionID) return ""
+    const msgs = sync.data.message[sessionID] ?? []
+    const lastAssistant = msgs.findLast((m) => m.role === "assistant")
+    if (!lastAssistant) return ""
+    const parts = sync.data.part[lastAssistant.id] ?? []
+    const lastText = parts.findLast((p): p is TextPart => p.type === "text")
+    return stripAnsi(lastText?.text?.trim() ?? "")
+  })
+
+  const lines = createMemo(() => output().split("\n"))
+  const overflow = createMemo(() => lines().length > 10)
+  const limited = createMemo(() => {
+    if (expanded() || !overflow()) return output()
+    return [...lines().slice(0, 10), "…"].join("\n")
+  })
+
+  const hasOutput = createMemo(() => output().length > 0)
+
   return (
     <Switch>
       <Match when={props.input.description || props.input.subagent_type}>
         <BlockTool
           title={"# " + Locale.titlecase(props.input.subagent_type ?? "unknown") + " Task"}
           onClick={
-            props.metadata.sessionId
+            props.metadata.sessionId && !hasOutput()
               ? () => navigate({ type: "session", sessionID: props.metadata.sessionId! })
-              : undefined
+              : overflow()
+                ? () => setExpanded((prev) => !prev)
+                : undefined
           }
           part={props.part}
           spinner={isRunning()}
@@ -1857,6 +1881,14 @@ function Task(props: ToolProps<typeof TaskTool>) {
               }}
             </Show>
           </box>
+          <Show when={hasOutput()}>
+            <box gap={1} marginTop={1}>
+              <text fg={theme.text}>{limited()}</text>
+              <Show when={overflow()}>
+                <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
+              </Show>
+            </box>
+          </Show>
           <Show when={props.metadata.sessionId}>
             <text fg={theme.text}>
               {keybind.print("session_child_cycle")}
