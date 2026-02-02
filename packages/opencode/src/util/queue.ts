@@ -23,7 +23,7 @@ export class AsyncQueue<T> implements AsyncIterable<T> {
     })
   }
 
-  close() {
+  close(): T[] {
     this.closed = true
     const error = new Error("Queue closed")
     for (const reject of this.rejecters) {
@@ -31,7 +31,10 @@ export class AsyncQueue<T> implements AsyncIterable<T> {
     }
     this.resolvers = []
     this.rejecters = []
+    // Return remaining items instead of dropping them
+    const remaining = this.queue
     this.queue = []
+    return remaining
   }
 
   get isClosed() {

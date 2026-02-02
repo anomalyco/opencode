@@ -516,18 +516,14 @@ export namespace Patch {
 
   // Path validation helper to prevent path traversal attacks
   function validatePatchPath(filePath: string, cwd: string): string {
-    // If the path is absolute, use it directly without validation
-    // (absolute paths are explicitly specified and trusted)
-    if (path.isAbsolute(filePath)) {
-      return path.resolve(filePath)
-    }
-
-    // For relative paths, resolve against cwd and validate
+    // Resolve the file path against cwd. If filePath is absolute, path.resolve
+    // will return the normalized absolute path; if it's relative, it will be
+    // resolved under cwd.
     const resolved = path.resolve(cwd, filePath)
     const normalizedCwd = path.resolve(cwd)
 
-    // Ensure the resolved path is within the working directory
-    // Check both that it starts with cwd+sep OR equals cwd exactly
+    // Ensure the resolved path is within the working directory.
+    // Check both that it starts with cwd+sep OR equals cwd exactly.
     if (!resolved.startsWith(normalizedCwd + path.sep) && resolved !== normalizedCwd) {
       throw new Error(`Path traversal detected: ${filePath} escapes working directory`)
     }
@@ -557,16 +553,16 @@ export namespace Patch {
           }
 
           await fs.writeFile(resolvedPath, hunk.contents, "utf-8")
-          added.push(hunk.path)
-          log.info(`Added file: ${hunk.path}`)
+          added.push(resolvedPath)
+          log.info(`Added file: ${resolvedPath}`)
           break
         }
 
         case "delete": {
           const resolvedPath = validatePatchPath(hunk.path, workdir)
           await fs.unlink(resolvedPath)
-          deleted.push(hunk.path)
-          log.info(`Deleted file: ${hunk.path}`)
+          deleted.push(resolvedPath)
+          log.info(`Deleted file: ${resolvedPath}`)
           break
         }
 
@@ -584,13 +580,13 @@ export namespace Patch {
 
             await fs.writeFile(resolvedMovePath, fileUpdate.content, "utf-8")
             await fs.unlink(resolvedPath)
-            modified.push(hunk.move_path)
-            log.info(`Moved file: ${hunk.path} -> ${hunk.move_path}`)
+            modified.push(resolvedMovePath)
+            log.info(`Moved file: ${resolvedPath} -> ${resolvedMovePath}`)
           } else {
             // Regular update
             await fs.writeFile(resolvedPath, fileUpdate.content, "utf-8")
-            modified.push(hunk.path)
-            log.info(`Updated file: ${hunk.path}`)
+            modified.push(resolvedPath)
+            log.info(`Updated file: ${resolvedPath}`)
           }
           break
         }
