@@ -925,7 +925,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       .abort({
         sessionID,
       })
-      .catch(() => { })
+      .catch(() => {})
   }
 
   const addToHistory = (prompt: Prompt, mode: "normal" | "shell") => {
@@ -1351,18 +1351,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     const contextParts: Array<
       | {
-        id: string
-        type: "text"
-        text: string
-        synthetic?: boolean
-      }
+          id: string
+          type: "text"
+          text: string
+          synthetic?: boolean
+        }
       | {
-        id: string
-        type: "file"
-        mime: string
-        url: string
-        filename?: string
-      }
+          id: string
+          type: "file"
+          mime: string
+          url: string
+          filename?: string
+        }
     > = []
 
     const commentNote = (path: string, selection: FileSelection | undefined, comment: string) => {
@@ -1958,7 +1958,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
                         </Show>
                         {local.model.current()?.name ?? language.t("dialog.model.select.title")}
-                        <MorphChevron expanded={!!dialog.active?.id && dialog.active.id.startsWith("select-model-unpaid")} />
+                        <MorphChevron
+                          expanded={!!dialog.active?.id && dialog.active.id.startsWith("select-model-unpaid")}
+                        />
                       </Button>
                     </TooltipKeybind>
                   }
