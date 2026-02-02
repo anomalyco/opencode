@@ -16,6 +16,7 @@ import path from "path"
 import { useRoute, useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { SplitBorder } from "@tui/component/border"
+import { Spinner } from "@tui/component/spinner"
 import { useTheme } from "@tui/context/theme"
 import {
   BoxRenderable,
@@ -76,6 +77,7 @@ import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
+import { UI } from "@/cli/ui.ts"
 
 addDefaultParsers(parsers.parsers)
 
@@ -221,6 +223,19 @@ export function Session() {
 
   // Allow exit when in child session (prompt is hidden)
   const exit = useExit()
+
+  createEffect(() => {
+    const title = Locale.truncate(session()?.title ?? "", 50)
+    return exit.message.set(
+      [
+        ``,
+        `  █▀▀█  ${UI.Style.TEXT_DIM}${title}${UI.Style.TEXT_NORMAL}`,
+        `  █  █  ${UI.Style.TEXT_DIM}opencode -s ${session()?.id}${UI.Style.TEXT_NORMAL}`,
+        `  ▀▀▀▀  `,
+      ].join("\n"),
+    )
+  })
+
   useKeyboard((evt) => {
     if (!session()?.parentID) return
     if (keybind.match("app_exit", evt)) {
@@ -1559,7 +1574,13 @@ function InlineTool(props: {
   )
 }
 
-function BlockTool(props: { title: string; children: JSX.Element; onClick?: () => void; part?: ToolPart }) {
+function BlockTool(props: {
+  title: string
+  children: JSX.Element
+  onClick?: () => void
+  part?: ToolPart
+  spinner?: boolean
+}) {
   const { theme } = useTheme()
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
@@ -1582,9 +1603,16 @@ function BlockTool(props: { title: string; children: JSX.Element; onClick?: () =
         props.onClick?.()
       }}
     >
-      <text paddingLeft={3} fg={theme.textMuted}>
-        {props.title}
-      </text>
+      <Show
+        when={props.spinner}
+        fallback={
+          <text paddingLeft={3} fg={theme.textMuted}>
+            {props.title}
+          </text>
+        }
+      >
+        <Spinner color={theme.textMuted}>{props.title.replace(/^# /, "")}</Spinner>
+      </Show>
       {props.children}
       <Show when={error()}>
         <text fg={theme.error}>{error()}</text>
@@ -1799,9 +1827,21 @@ function Task(props: ToolProps<typeof TaskTool>) {
   const keybind = useKeybind()
   const { navigate } = useRoute()
   const local = useLocal()
+  const sync = useSync()
 
-  const current = createMemo(() => props.metadata.summary?.findLast((x) => x.state.status !== "pending"))
-  const color = createMemo(() => local.agent.color(props.input.subagent_type ?? "unknown"))
+  const tools = createMemo(() => {
+    const sessionID = props.metadata.sessionId
+    const msgs = sync.data.message[sessionID ?? ""] ?? []
+    return msgs.flatMap((msg) =>
+      (sync.data.part[msg.id] ?? [])
+        .filter((part): part is ToolPart => part.type === "tool")
+        .map((part) => ({ tool: part.tool, state: part.state })),
+    )
+  })
+
+  const current = createMemo(() => tools().findLast((x) => x.state.status !== "pending"))
+
+  const isRunning = createMemo(() => props.part.state.status === "running")
 
   return (
     <Switch>
@@ -1814,16 +1854,21 @@ function Task(props: ToolProps<typeof TaskTool>) {
               : undefined
           }
           part={props.part}
+          spinner={isRunning()}
         >
           <box>
             <text style={{ fg: theme.textMuted }}>
-              {props.input.description} ({props.metadata.summary?.length ?? 0} toolcalls)
+              {props.input.description} ({tools().length} toolcalls)
             </text>
             <Show when={current()}>
-              <text style={{ fg: current()!.state.status === "error" ? theme.error : theme.textMuted }}>
-                └ {Locale.titlecase(current()!.tool)}{" "}
-                {current()!.state.status === "completed" ? current()!.state.title : ""}
-              </text>
+              {(item) => {
+                const title = item().state.status === "completed" ? (item().state as any).title : ""
+                return (
+                  <text style={{ fg: item().state.status === "error" ? theme.error : theme.textMuted }}>
+                    └ {Locale.titlecase(item().tool)} {title}
+                  </text>
+                )
+              }}
             </Show>
           </box>
           <Show when={props.metadata.sessionId}>
