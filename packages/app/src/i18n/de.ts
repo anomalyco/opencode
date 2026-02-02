@@ -525,6 +525,8 @@ export const dict = {
   "sidebar.nav.projectsAndSessions": "Projekte und Sitzungen",
   "sidebar.settings": "Einstellungen",
   "sidebar.help": "Hilfe",
+  "sidebar.project.pin": "Oben anheften",
+  "sidebar.project.unpin": "Loslösen",
   "sidebar.workspaces.enable": "Arbeitsbereiche aktivieren",
   "sidebar.workspaces.disable": "Arbeitsbereiche deaktivieren",
   "sidebar.gettingStarted.title": "Erste Schritte",

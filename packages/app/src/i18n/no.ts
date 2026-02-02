@@ -581,6 +581,8 @@ export const dict = {
   "sidebar.nav.projectsAndSessions": "Prosjekter og sesjoner",
   "sidebar.settings": "Innstillinger",
   "sidebar.help": "Hjelp",
+  "sidebar.project.pin": "Fest øverst",
+  "sidebar.project.unpin": "Løsne",
   "sidebar.workspaces.enable": "Aktiver arbeidsområder",
   "sidebar.workspaces.disable": "Deaktiver arbeidsområder",
   "sidebar.gettingStarted.title": "Kom i gang",
@@ -610,7 +612,8 @@ export const dict = {
   "settings.general.section.desktop": "Desktop",
 
   "settings.general.desktop.dynamicSort.title": "Dynamic sidebar sorting",
-  "settings.general.desktop.dynamicSort.description": "Automatically move active projects and sessions to the top when Claude starts working on them",
+  "settings.general.desktop.dynamicSort.description":
+    "Automatically move active projects and sessions to the top when Claude starts working on them",
 
   "settings.general.row.language.title": "Språk",
   "settings.general.row.language.description": "Endre visningsspråket for OpenCode",

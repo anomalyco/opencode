@@ -1903,6 +1903,21 @@ export default function Layout(props: ParentProps) {
                           <DropdownMenu.ItemLabel>{language.t("common.edit")}</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                         <DropdownMenu.Item
+                          data-action="project-pin-toggle"
+                          data-project={base64Encode(p.worktree)}
+                          onSelect={() => {
+                            server.projects.isPinned(p.worktree)
+                              ? server.projects.unpin(p.worktree)
+                              : server.projects.pin(p.worktree)
+                          }}
+                        >
+                          <DropdownMenu.ItemLabel>
+                            {server.projects.isPinned(p.worktree)
+                              ? language.t("sidebar.project.unpin")
+                              : language.t("sidebar.project.pin")}
+                          </DropdownMenu.ItemLabel>
+                        </DropdownMenu.Item>
+                        <DropdownMenu.Item
                           data-action="project-workspaces-toggle"
                           data-project={base64Encode(p.worktree)}
                           disabled={p.vcs !== "git" && !layout.sidebar.workspaces(p.worktree)()}
