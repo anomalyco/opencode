@@ -24,7 +24,7 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>] [--root
 | `--hostname` | Hostname to listen on               | `127.0.0.1` |
 | `--mdns`     | Enable mDNS discovery               | `false`     |
 | `--cors`     | Additional browser origins to allow | `[]`        |
-| `--root-path` | Base path for reverse proxy                    | (empty)     |
+| `--root-path` | Base path for reverse proxy        | (empty)     |
 
 `--cors` can be passed multiple times:
 
@@ -32,10 +32,36 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>] [--root
 opencode serve --cors http://localhost:5173 --cors https://app.example.com
 ```
 
-Use `--root-path` when running behind a reverse proxy:
+---
+
+### Deployment Modes
+
+OpenCode server supports two deployment modes:
+
+1. **Standard Mode** (default)
+   - Serves app from local build if available
+   - Falls back to remote proxy (https://app.opencode.ai) if local build missing
+   - Best for development and simple deployments
+
+2. **Reverse Proxy Mode** (with `--root-path`)
+   - Requires local app build (no fallback)
+   - All routes prefixed with specified path
+   - Best for Jupyter, corporate proxies, and multi-tenant environments
 
 ```bash
+# Standard mode with auto-fallback
+opencode serve
+
+# Behind reverse proxy (requires: cd packages/app && bun run build)
 opencode serve --root-path /jupyter/proxy/opencode
+```
+
+⚠️ **Note**: When using `--root-path`, ensure the app is built first:
+```bash
+cd packages/app
+bun run build
+cd ../../packages/opencode
+opencode serve --root-path /your/path
 ```
 
 ---

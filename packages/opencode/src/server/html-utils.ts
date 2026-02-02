@@ -20,9 +20,19 @@ function escapeHtmlAttribute(value: string): string {
 
 /**
  * Safely injects rootPath configuration into index.html
- * - Prevents XSS by properly escaping values
- * - Checks for existing tags to avoid duplication
- * - Returns modified HTML or original on any error
+ * 
+ * Security measures:
+ * - HTML attribute escaping prevents XSS via DOM attributes
+ * - JSON.stringify prevents XSS via script injection
+ * - Duplicate tag detection prevents configuration conflicts
+ * 
+ * @param html - Original HTML content
+ * @param rootPath - Base path to inject (e.g., "/proxy")
+ * @returns Modified HTML with rootPath configuration, or original HTML on error
+ * 
+ * @example
+ * const html = await Bun.file("index.html").text()
+ * const modified = injectRootPath(html, "/jupyter/proxy")
  */
 export function injectRootPath(html: string, rootPath: string): string {
     if (!rootPath) return html
