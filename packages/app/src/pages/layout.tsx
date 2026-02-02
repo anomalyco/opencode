@@ -499,7 +499,7 @@ export default function Layout(props: ParentProps) {
       const bUpdated = b.time.updated ?? b.time.created
       const aRecent = aUpdated > oneMinuteAgo
       const bRecent = bUpdated > oneMinuteAgo
-      if (aRecent && bRecent) return a.id.localeCompare(b.id)
+      if (aRecent && bRecent) return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
       if (aRecent && !bRecent) return -1
       if (!aRecent && bRecent) return 1
       return bUpdated - aUpdated
@@ -739,7 +739,7 @@ export default function Layout(props: ParentProps) {
   }
 
   async function prefetchMessages(directory: string, sessionID: string, token: number) {
-    const [, setStore] = globalSync.child(directory, { bootstrap: false })
+    const [store, setStore] = globalSync.child(directory, { bootstrap: false })
 
     return retry(() => globalSDK.client.session.messages({ directory, sessionID, limit: prefetchChunk }))
       .then((messages) => {
@@ -750,23 +750,49 @@ export default function Layout(props: ParentProps) {
           .map((x) => x.info)
           .filter((m) => !!m?.id)
           .slice()
-          .sort((a, b) => a.id.localeCompare(b.id))
+          .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+
+        const current = store.message[sessionID] ?? []
+        const merged = (() => {
+          if (current.length === 0) return next
+
+          const map = new Map<string, Message>()
+          for (const item of current) {
+            if (!item?.id) continue
+            map.set(item.id, item)
+          }
+          for (const item of next) {
+            map.set(item.id, item)
+          }
+          return [...map.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+        })()
 
         batch(() => {
-          setStore("message", sessionID, reconcile(next, { key: "id" }))
+          setStore("message", sessionID, reconcile(merged, { key: "id" }))
 
           for (const message of items) {
-            setStore(
-              "part",
-              message.info.id,
-              reconcile(
-                message.parts
+            const currentParts = store.part[message.info.id] ?? []
+            const mergedParts = (() => {
+              if (currentParts.length === 0) {
+                return message.parts
                   .filter((p) => !!p?.id)
                   .slice()
-                  .sort((a, b) => a.id.localeCompare(b.id)),
-                { key: "id" },
-              ),
-            )
+                  .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+              }
+
+              const map = new Map<string, (typeof currentParts)[number]>()
+              for (const item of currentParts) {
+                if (!item?.id) continue
+                map.set(item.id, item)
+              }
+              for (const item of message.parts) {
+                if (!item?.id) continue
+                map.set(item.id, item)
+              }
+              return [...map.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+            })()
+
+            setStore("part", message.info.id, reconcile(mergedParts, { key: "id" }))
           }
         })
       })
