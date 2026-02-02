@@ -40,6 +40,7 @@ import { QuestionRoutes } from "./routes/question"
 import { PermissionRoutes } from "./routes/permission"
 import { GlobalRoutes } from "./routes/global"
 import { MDNS } from "./mdns"
+import { injectRootPath, normalizeUrl, HTML_CSP_HEADER } from "./html-utils"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -531,77 +532,7 @@ export namespace Server {
             })
           },
         )
-        .get("/", async (c) => {
-          try {
-            const indexFile = Bun.file("../app/dist/index.html")
-            if (await indexFile.exists()) {
-              const html = await indexFile.text()
-              let modifiedHtml = html
-
-              if (_rootPath) {
-                const baseTag = `<base href="${_rootPath}/">`
-                // Inject script to provide rootPath to the frontend router
-                const scriptTag = `<script>console.log("OPENCODE: Injecting rootPath", "${_rootPath}"); window.__OPENCODE__ = window.__OPENCODE__ || {}; window.__OPENCODE__.rootPath = "${_rootPath}";</script>`
-                modifiedHtml = html.replace(/<head([^>]*)>/i, `<head$1>${baseTag}${scriptTag}`)
-                  .replace(/<div id="root"([^>]*)>/i, `<div id="root" data-root-path="${_rootPath}"$1>`)
-              }
-
-              return c.html(modifiedHtml, 200, {
-                "Content-Security-Policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:"
-              })
-            }
-          } catch (e) {
-            // ignore
-          }
-          return c.text("Not Found", 404)
-        })
-        .get("/index.html", async (c) => {
-          try {
-            const indexFile = Bun.file("../app/dist/index.html")
-            if (await indexFile.exists()) {
-              const html = await indexFile.text()
-              let modifiedHtml = html
-
-              if (_rootPath) {
-                const baseTag = `<base href="${_rootPath}/">`
-                const scriptTag = `<script>console.log("OPENCODE: Injecting rootPath", "${_rootPath}"); window.__OPENCODE__ = window.__OPENCODE__ || {}; window.__OPENCODE__.rootPath = "${_rootPath}";</script>`
-                modifiedHtml = html.replace(/<head([^>]*)>/i, `<head$1>${baseTag}${scriptTag}`)
-                  .replace(/<div id="root"([^>]*)>/i, `<div id="root" data-root-path="${_rootPath}"$1>`)
-              }
-
-              return c.html(modifiedHtml, 200, {
-                "Content-Security-Policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:"
-              })
-            }
-          } catch (e) {
-            // ignore
-          }
-          return c.text("Not Found", 404)
-        })
-        .use("/*", serveStatic({ root: "../app/dist" }))
-        .all("/*", async (c) => {
-          // SPA Fallback: serve index.html with rootPath injection
-          try {
-            const indexFile = Bun.file("../app/dist/index.html")
-            if (await indexFile.exists()) {
-              const html = await indexFile.text()
-              let modifiedHtml = html
-
-              if (_rootPath) {
-                const baseTag = `<base href="${_rootPath}/">`
-                const scriptTag = `<script>console.log("OPENCODE: Injecting rootPath", "${_rootPath}"); window.__OPENCODE__ = window.__OPENCODE__ || {}; window.__OPENCODE__.rootPath = "${_rootPath}";</script>`
-                modifiedHtml = html.replace(/<head([^>]*)>/i, `<head$1>${baseTag}${scriptTag}`)
-              }
-
-              return c.html(modifiedHtml, 200, {
-                "Content-Security-Policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:"
-              })
-            }
-          } catch (e) {
-            // ignore
-          }
-          return c.text("Not Found", 404)
-        }) as unknown as Hono,
+        .use("/*", serveStatic({ root: "../app/dist" })) as unknown as Hono,
   )
 
   export async function openapi() {
@@ -619,59 +550,65 @@ export namespace Server {
     return result
   }
 
+  /**
+   * Creates a handler that serves index.html with rootPath injection
+   * Centralizes HTML serving logic to avoid duplication
+   */
+  function createIndexHandler(rootPath: string) {
+    return async (c: any) => {
+      try {
+        const indexFile = Bun.file("../app/dist/index.html")
+        if (!(await indexFile.exists())) {
+          log.warn("index.html not found at ../app/dist/index.html")
+          return c.text("Not Found", 404)
+        }
+
+        const html = await indexFile.text()
+        const modifiedHtml = injectRootPath(html, rootPath)
+
+        return c.html(modifiedHtml, 200, {
+          "Content-Security-Policy": HTML_CSP_HEADER,
+        })
+      } catch (error) {
+        log.error("Error serving index.html", { error })
+        return c.text("Internal Server Error", 500)
+      }
+    }
+  }
+
   export function listen(opts: { port: number; hostname: string; mdns?: boolean; cors?: string[]; rootPath?: string }) {
     _corsWhitelist = opts.cors ?? []
     _rootPath = opts.rootPath ?? ""
 
-    // Helper to serve index.html with rootPath injection
-    const serveIndexHtml = async (c: any) => {
-      try {
-        const indexFile = Bun.file("../app/dist/index.html")
-        if (await indexFile.exists()) {
-          const html = await indexFile.text()
-          let modifiedHtml = html
+    // Create single index handler (no duplication!)
+    const indexHandler = createIndexHandler(_rootPath)
 
-          if (_rootPath) {
-            const baseTag = `<base href="${_rootPath}/">`
-            const scriptTag = `<script>console.log("OPENCODE: Injecting rootPath", "${_rootPath}"); window.__OPENCODE__ = window.__OPENCODE__ || {}; window.__OPENCODE__.rootPath = "${_rootPath}";</script>`
-            modifiedHtml = html.replace(/<head([^>]*)>/i, `<head$1>${baseTag}${scriptTag}`)
-              .replace(/<div id="root"([^>]*)>/i, `<div id="root" data-root-path="${_rootPath}"$1>`)
-          }
-
-          return c.html(modifiedHtml, 200, {
-            "Content-Security-Policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:"
-          })
-        }
-      } catch (e) {
-        // ignore
-      }
-      return c.text("Not Found", 404)
-    }
-
-    // When rootPath is provided (for reverse proxy support), wrap the main app with a base path prefix.
-    // Hono's basePath() automatically prefixes all routes, including WebSocket upgrades.
-    // Also add a fallback at root level to proxy static assets that use absolute paths (e.g., /assets/...)
+    // Setup routing based on whether rootPath is provided
     let baseApp: Hono
+
     if (opts.rootPath) {
-      // 1. Create the app aimed at rootPath
-      const rootedApp = new Hono().basePath(opts.rootPath).route("/", App())
-        .get("/", serveIndexHtml) // Serve HTML at root
-        .get("/index.html", serveIndexHtml)
+      // When behind reverse proxy: mount app at rootPath
+      // This ensures all routes including WebSocket work correctly
+      const rootedApp = new Hono()
+        .basePath(opts.rootPath)
+        .route("/", App())
+        .get("/", indexHandler)
+        .get("/index.html", indexHandler)
         .use("/*", serveStatic({ root: "../app/dist" }))
-        .all("/*", serveIndexHtml) // SPA Fallback inside rooted path
+        .all("/*", indexHandler) // SPA fallback
 
-      // 2. Create a root-level app to perform dispatch
+      // Root app to handle both rooted and global asset paths
       baseApp = new Hono()
-
-      // 3. Mount the rooted app. Requests starting with rootPath will be handled here.
-      baseApp.route("/", rootedApp)
-
-      // 4. Handle everything else (e.g. static assets /assets/...) by proxying to upstream
-      // Since this is on the root app without basePath, it catches all unmatched global paths.
-      // Note: We don't serve HTML here typically, but we should prioritize static assets.
-      baseApp.use("/*", serveStatic({ root: "../app/dist" }))
+        .route("/", rootedApp)
+        // Serve static assets that may use absolute paths (e.g., /assets/...)
+        .use("/*", serveStatic({ root: "../app/dist" }))
     } else {
+      // Standard setup without rootPath
       baseApp = App()
+        .get("/", indexHandler)
+        .get("/index.html", indexHandler)
+        .use("/*", serveStatic({ root: "../app/dist" }))
+        .all("/*", indexHandler) as unknown as Hono
     }
 
     const args = {
@@ -690,7 +627,7 @@ export namespace Server {
     const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
     if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
 
-    _url = opts.rootPath ? new URL(opts.rootPath, server.url) : server.url
+    _url = opts.rootPath ? new URL(normalizeUrl(server.url.toString(), opts.rootPath)) : server.url
 
     const shouldPublishMDNS =
       opts.mdns &&

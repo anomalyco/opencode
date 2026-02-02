@@ -103,7 +103,17 @@ export function AppInterface(props: { defaultUrl?: string }) {
       return `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
 
     const rootPath = document.getElementById("root")?.dataset.rootPath || window.__OPENCODE__?.rootPath || ""
-    return (window.location.origin + rootPath).replace(/\/+$/, "")
+
+    // Properly normalize URL to avoid duplicate slashes
+    if (!rootPath) return window.location.origin
+
+    try {
+      const normalized = new URL(rootPath, window.location.origin).toString()
+      // Remove trailing slash
+      return normalized.replace(/\/+$/, "")
+    } catch {
+      return (window.location.origin + rootPath).replace(/\/+$/, "")
+    }
   }
 
   return (

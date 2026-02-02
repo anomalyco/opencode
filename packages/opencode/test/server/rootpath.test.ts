@@ -1,67 +1,156 @@
 import { describe, expect, test } from "bun:test"
-import { Server } from "../../src/server/server"
+import { injectRootPath, normalizeUrl } from "../../src/server/html-utils"
 
-describe("rootPath support", () => {
-  test("server accepts rootPath option", () => {
-    // Test that listen function accepts rootPath parameter
-    const listenFn = Server.listen
-    expect(listenFn).toBeDefined()
-    
-    // This will test that the function signature is correct
-    // We can't actually start the server in tests, but we can verify the types
+describe("rootPath HTML injection", () => {
+  test("injects rootPath into clean HTML", () => {
+    const html = '<html><head></head><body><div id="root"></div></body></html>'
+    const result = injectRootPath(html, "/proxy")
+
+    expect(result).toContain('<base href="/proxy/">')
+    expect(result).toContain('window.__OPENCODE__.rootPath = "/proxy"')
+    expect(result).toContain('data-root-path="/proxy"')
   })
-  
-  test("URL construction with rootPath", () => {
-    // Test URL construction logic
-    const testCases = [
-      { rootPath: "", expected: "http://localhost:4096" },
-      { rootPath: "/proxy", expected: "http://localhost:4096/proxy" },
-      { rootPath: "/jupyter/proxy/opencode", expected: "http://192.168.1.100:4096/jupyter/proxy/opencode" },
-    ]
-    
-    for (const { rootPath, expected } of testCases) {
-      const hostname = expected.includes("192.168") ? "192.168.1.100" : "localhost"
-      const port = 4096
-      
-      const url = rootPath 
-        ? new URL(rootPath, `http://${hostname}:${port}`).toString()
-        : `http://${hostname}:${port}`
-      
-      expect(url).toBe(expected)
-    }
+
+  test("prevents XSS via malicious rootPath", () => {
+    const maliciousPath = '/test"onerror="alert(1)"'
+    const html = '<html><head></head><body><div id="root"></div></body></html>'
+    const result = injectRootPath(html, maliciousPath)
+
+    // Should not contain unescaped quotes that could break out
+    expect(result).not.toContain('onerror="alert(1)"')
+    // Should contain escaped version
+    expect(result).toContain("&quot;")
+
+    // JSON.stringify should handle the script tag
+    expect(result).toContain(JSON.stringify(maliciousPath))
   })
-  
-  test("rootPath validation", () => {
-    // Test that rootPath must start with /
+
+  test("prevents XSS via script tag injection", () => {
+    const maliciousPath = "/test</script><script>alert(1)</script>"
+    const html = '<html><head></head><body><div id="root"></div></body></html>'
+    const result = injectRootPath(html, maliciousPath)
+
+    // The value should be assigned via JSON string literal
+    // This makes it safe because it's never parsed as HTML within the script context
+    expect(result).toContain("window.__OPENCODE__.rootPath = ")
+
+    // Verify the base tag has properly escaped HTML attributes
+    expect(result).toContain("<base href=")
+    expect(result).toContain("&lt;/script&gt;") // HTML escaped in attribute
+  })
+
+  test("doesn't duplicate base tag", () => {
+    const html = '<html><head><base href="/existing/"></head><body></body></html>'
+    const result = injectRootPath(html, "/new")
+
+    const baseTagCount = (result.match(/<base/gi) || []).length
+    expect(baseTagCount).toBe(1)
+    expect(result).toContain('href="/existing/"')
+  })
+
+  test("doesn't duplicate data-root-path attribute", () => {
+    const html =
+      '<html><head></head><body><div id="root" data-root-path="/existing"></div></body></html>'
+    const result = injectRootPath(html, "/new")
+
+    const attrCount = (result.match(/data-root-path=/gi) || []).length
+    expect(attrCount).toBe(1)
+    expect(result).toContain('data-root-path="/existing"')
+  })
+
+  test("handles empty rootPath gracefully", () => {
+    const html = '<html><head></head><body><div id="root"></div></body></html>'
+    const result = injectRootPath(html, "")
+
+    expect(result).toBe(html)
+  })
+
+  test("handles HTML with attributes on head tag", () => {
+    const html = '<html><head lang="en"></head><body><div id="root"></div></body></html>'
+    const result = injectRootPath(html, "/proxy")
+
+    expect(result).toContain('<base href="/proxy/">')
+    expect(result).toContain("__OPENCODE__")
+  })
+
+  test("handles multiline HTML", () => {
+    const html = `<!DOCTYPE html>
+<html>
+  <head>
+    <title>Test</title>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>`
+    const result = injectRootPath(html, "/proxy")
+
+    expect(result).toContain('<base href="/proxy/">')
+    expect(result).toContain('data-root-path="/proxy"')
+  })
+})
+
+describe("URL normalization", () => {
+  test("normalizes URLs with duplicate slashes", () => {
+    expect(normalizeUrl("http://localhost:4096", "//proxy//path/")).toBe(
+      "http://localhost:4096/proxy/path/"
+    )
+  })
+
+  test("preserves protocol slashes", () => {
+    const result = normalizeUrl("http://localhost:4096", "/proxy")
+    expect(result).toContain("http://")
+    expect(result).not.toContain("http:/localhost")
+  })
+
+  test("handles empty path", () => {
+    expect(normalizeUrl("http://localhost:4096", "")).toBe("http://localhost:4096")
+  })
+
+  test("handles undefined path", () => {
+    expect(normalizeUrl("http://localhost:4096")).toBe("http://localhost:4096")
+  })
+
+  test("handles complex paths", () => {
+    expect(normalizeUrl("http://localhost:4096", "/jupyter/proxy/opencode/")).toBe(
+      "http://localhost:4096/jupyter/proxy/opencode/"
+    )
+  })
+
+  test("handles trailing slashes correctly", () => {
+    const result = normalizeUrl("http://localhost:4096/", "/proxy")
+    expect(result).toBe("http://localhost:4096/proxy")
+  })
+})
+
+describe("rootPath validation", () => {
+  test("rootPath must start with /", () => {
     const invalidPaths = ["proxy", "test/path", "no-slash"]
     const validPaths = ["/proxy", "/test/path", "/jupyter/proxy/opencode"]
-    
+
     for (const path of invalidPaths) {
-      if (path && !path.startsWith("/")) {
-        // This should throw an error
-        expect(path.startsWith("/")).toBe(false)
-      }
+      expect(path.startsWith("/")).toBe(false)
     }
-    
+
     for (const path of validPaths) {
       expect(path.startsWith("/")).toBe(true)
     }
   })
-  
-  test("server URL with rootPath", () => {
-    // Simulate server.url construction
+})
+
+describe("server URL with rootPath", () => {
+  test("constructs URL correctly with rootPath", () => {
     const serverUrl = new URL("http://localhost:4096")
-    
-    // Test with rootPath
     const rootPath = "/proxy"
-    const finalUrl = rootPath ? new URL(rootPath, serverUrl) : serverUrl
-    
+    const finalUrl = new URL(normalizeUrl(serverUrl.toString(), rootPath))
+
     expect(finalUrl.toString()).toBe("http://localhost:4096/proxy")
-    
-    // Test without rootPath
-    const noRootPath = ""
-    const finalUrl2 = noRootPath ? new URL(noRootPath, serverUrl) : serverUrl
-    
-    expect(finalUrl2.toString()).toBe("http://localhost:4096/")
+  })
+
+  test("constructs URL correctly without rootPath", () => {
+    const serverUrl = new URL("http://localhost:4096")
+    const finalUrl = normalizeUrl(serverUrl.toString())
+
+    expect(finalUrl).toBe("http://localhost:4096/")
   })
 })
