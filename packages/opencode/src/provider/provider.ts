@@ -1048,7 +1048,11 @@ export namespace Provider {
 
       const mod = await import(installedPath)
 
-      const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
+      const createKey = Object.keys(mod).find((key) => key.startsWith("create"))
+      if (!createKey) {
+        throw new Error(`Provider module ${model.api.npm} has no exported create function`)
+      }
+      const fn = mod[createKey]
       const loaded = fn({
         name: model.providerID,
         ...options,

@@ -96,7 +96,11 @@ export namespace SessionCompaction {
     abort: AbortSignal
     auto: boolean
   }) {
-    const userMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
+    const parentMessage = input.messages.findLast((m) => m.info.id === input.parentID)
+    if (!parentMessage) {
+      throw new Error(`Parent message ${input.parentID} not found during compaction`)
+    }
+    const userMessage = parentMessage.info as MessageV2.User
     const agent = await Agent.get("compaction")
     const model = agent.model
       ? await Provider.getModel(agent.model.providerID, agent.model.modelID)

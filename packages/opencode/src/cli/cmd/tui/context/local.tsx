@@ -54,7 +54,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return agents()
         },
         current() {
-          return agents().find((x) => x.name === agentStore.current)!
+          const found = agents().find((x) => x.name === agentStore.current)
+          if (found) return found
+          const fallback = agents()[0]
+          setAgentStore("current", fallback.name)
+          return fallback
         },
         set(name: string) {
           if (!agents().some((x) => x.name === name))
