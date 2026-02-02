@@ -7,7 +7,6 @@ import {
   For,
   Match,
   on,
-  onMount,
   Show,
   Switch,
   useContext,
