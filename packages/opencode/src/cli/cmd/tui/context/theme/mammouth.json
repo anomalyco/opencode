@@ -9,14 +9,14 @@
     "darkStep6": "#3c3c3c",
     "darkStep7": "#484848",
     "darkStep8": "#606060",
-    "darkStep9": "#EC5B2B",
-    "darkStep10": "#EE7948",
+    "darkStep9": "#C8A37C",
+    "darkStep10": "#9F6C45",
     "darkStep11": "#808080",
     "darkStep12": "#eeeeee",
-    "darkSecondary": "#EE7948",
+    "darkSecondary": "#9F6C45",
     "darkAccent": "#FFF7F1",
     "darkRed": "#e06c75",
-    "darkOrange": "#EC5B2B",
+    "darkOrange": "#9F6C45",
     "darkBlue": "#6ba1e6",
     "darkCyan": "#56b6c2",
     "darkYellow": "#e5c07b",
@@ -28,14 +28,14 @@
     "lightStep6": "#d4d4d4",
     "lightStep7": "#b8b8b8",
     "lightStep8": "#a0a0a0",
-    "lightStep9": "#EC5B2B",
-    "lightStep10": "#c94d24",
+    "lightStep9": "#754533",
+    "lightStep10": "#9F6C45",
     "lightStep11": "#8a8a8a",
     "lightStep12": "#1a1a1a",
-    "lightSecondary": "#EE7948",
+    "lightSecondary": "#9F6C45",
     "lightAccent": "#c94d24",
     "lightRed": "#d1383d",
-    "lightOrange": "#EC5B2B",
+    "lightOrange": "#9F6C45",
     "lightBlue": "#0062d1",
     "lightCyan": "#318795",
     "lightYellow": "#b0851f"
@@ -94,12 +94,12 @@
       "light": "lightStep3"
     },
     "border": {
-      "dark": "#EC5B2B",
-      "light": "#EC5B2B"
+      "dark": "darkStep10",
+      "light": "lightStep10"
     },
     "borderActive": {
-      "dark": "#EE7948",
-      "light": "#c94d24"
+      "dark": "darkStep10",
+      "light": "lightStep10"
     },
     "borderSubtle": {
       "dark": "darkStep6",
