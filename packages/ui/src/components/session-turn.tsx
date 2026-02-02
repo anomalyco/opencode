@@ -161,12 +161,14 @@ export function SessionTurn(
   const messageIndex = createMemo(() => {
     const messages = allMessages() ?? emptyMessages
     const result = Binary.search(messages, props.messageID, (m) => m.id)
-    if (!result.found) return -1
 
-    const msg = messages[result.index]
+    const index = result.found ? result.index : messages.findIndex((m) => m.id === props.messageID)
+    if (index < 0) return -1
+
+    const msg = messages[index]
     if (!msg || msg.role !== "user") return -1
 
-    return result.index
+    return index
   })
 
   const message = createMemo(() => {
