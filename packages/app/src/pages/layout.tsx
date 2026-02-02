@@ -2114,12 +2114,20 @@ export default function Layout(props: ParentProps) {
       >
         <Collapsible variant="ghost" open={open()} class="shrink-0" onOpenChange={openWrapper}>
           <div class="px-2 py-1">
-            <div class="group/workspace relative">
+            <div
+              class="group/workspace relative"
+              data-component="workspace-item"
+              data-workspace={base64Encode(props.directory)}
+            >
               <div class="flex items-center gap-1">
                 <Show
                   when={workspaceEditActive()}
                   fallback={
-                    <Collapsible.Trigger class="flex items-center justify-between w-full pl-2 pr-16 py-1.5 rounded-md hover:bg-surface-raised-base-hover">
+                    <Collapsible.Trigger
+                      class="flex items-center justify-between w-full pl-2 pr-16 py-1.5 rounded-md hover:bg-surface-raised-base-hover"
+                      data-action="workspace-toggle"
+                      data-workspace={base64Encode(props.directory)}
+                    >
                       {header()}
                     </Collapsible.Trigger>
                   }
@@ -2146,6 +2154,8 @@ export default function Layout(props: ParentProps) {
                         icon="dot-grid"
                         variant="ghost"
                         class="size-6 rounded-md"
+                        data-action="workspace-menu"
+                        data-workspace={base64Encode(props.directory)}
                         aria-label={language.t("common.moreOptions")}
                       />
                     </Tooltip>
@@ -2592,6 +2602,8 @@ export default function Layout(props: ParentProps) {
                           <DropdownMenu.ItemLabel>{language.t("common.edit")}</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                         <DropdownMenu.Item
+                          data-action="project-workspaces-toggle"
+                          data-project={base64Encode(p.worktree)}
                           disabled={p.vcs !== "git" && !layout.sidebar.workspaces(p.worktree)()}
                           onSelect={() => {
                             const enabled = layout.sidebar.workspaces(p.worktree)()
