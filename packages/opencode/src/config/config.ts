@@ -593,6 +593,10 @@ export namespace Config {
   export const Agent = z
     .object({
       model: z.string().optional(),
+      variant: z
+        .string()
+        .optional()
+        .describe("Default model variant for this agent (applies only when using the agent's configured model)."),
       temperature: z.number().optional(),
       top_p: z.number().optional(),
       prompt: z.string().optional(),
@@ -624,6 +628,7 @@ export namespace Config {
       const knownKeys = new Set([
         "name",
         "model",
+        "variant",
         "prompt",
         "description",
         "temperature",
@@ -1074,29 +1079,6 @@ export namespace Config {
         .optional(),
       experimental: z
         .object({
-          hook: z
-            .object({
-              file_edited: z
-                .record(
-                  z.string(),
-                  z
-                    .object({
-                      command: z.string().array(),
-                      environment: z.record(z.string(), z.string()).optional(),
-                    })
-                    .array(),
-                )
-                .optional(),
-              session_completed: z
-                .object({
-                  command: z.string().array(),
-                  environment: z.record(z.string(), z.string()).optional(),
-                })
-                .array()
-                .optional(),
-            })
-            .optional(),
-          chatMaxRetries: z.number().optional().describe("Number of retries for chat completions on failure"),
           disable_paste_summary: z.boolean().optional(),
           batch_tool: z.boolean().optional().describe("Enable the batch tool"),
           openTelemetry: z

@@ -5723,9 +5723,12 @@
                       },
                       "location": {
                         "type": "string"
+                      },
+                      "content": {
+                        "type": "string"
                       }
                     },
-                    "required": ["name", "description", "location"]
+                    "required": ["name", "description", "location", "content"]
                   }
                 }
               }
@@ -9014,6 +9017,10 @@
           "model": {
             "type": "string"
           },
+          "variant": {
+            "description": "Default model variant for this agent (applies only when using the agent's configured model).",
+            "type": "string"
+          },
           "temperature": {
             "type": "number"
           },
@@ -9834,69 +9841,6 @@
           "experimental": {
             "type": "object",
             "properties": {
-              "hook": {
-                "type": "object",
-                "properties": {
-                  "file_edited": {
-                    "type": "object",
-                    "propertyNames": {
-                      "type": "string"
-                    },
-                    "additionalProperties": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "command": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          },
-                          "environment": {
-                            "type": "object",
-                            "propertyNames": {
-                              "type": "string"
-                            },
-                            "additionalProperties": {
-                              "type": "string"
-                            }
-                          }
-                        },
-                        "required": ["command"]
-                      }
-                    }
-                  },
-                  "session_completed": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "command": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        },
-                        "environment": {
-                          "type": "object",
-                          "propertyNames": {
-                            "type": "string"
-                          },
-                          "additionalProperties": {
-                            "type": "string"
-                          }
-                        }
-                      },
-                      "required": ["command"]
-                    }
-                  }
-                }
-              },
-              "chatMaxRetries": {
-                "description": "Number of retries for chat completions on failure",
-                "type": "number"
-              },
               "disable_paste_summary": {
                 "type": "boolean"
               },
@@ -10624,7 +10568,7 @@
         "properties": {
           "type": {
             "type": "string",
-            "const": "text"
+            "enum": ["text", "binary"]
           },
           "content": {
             "type": "string"
@@ -10833,8 +10777,9 @@
           "model": {
             "type": "string"
           },
-          "mcp": {
-            "type": "boolean"
+          "source": {
+            "type": "string",
+            "enum": ["command", "mcp", "skill"]
           },
           "template": {
             "anyOf": [
@@ -10900,6 +10845,9 @@
               }
             },
             "required": ["modelID", "providerID"]
+          },
+          "variant": {
+            "type": "string"
           },
           "prompt": {
             "type": "string"

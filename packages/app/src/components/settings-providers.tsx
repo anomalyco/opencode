@@ -12,6 +12,7 @@ import { useGlobalSync } from "@/context/global-sync"
 import { DialogConnectProvider } from "./dialog-connect-provider"
 import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogCustomProvider } from "./dialog-custom-provider"
+import { ScrollFade } from "@opencode-ai/ui/scroll-fade"
 
 type ProviderSource = "env" | "api" | "config" | "custom"
 type ProviderMeta = { source?: ProviderSource }
@@ -115,7 +116,12 @@ export const SettingsProviders: Component = () => {
   }
 
   return (
-    <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
+    <ScrollFade
+      direction="vertical"
+      fadeStartSize={0}
+      fadeEndSize={16}
+      class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10"
+    >
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 pt-6 pb-8 max-w-[720px]">
           <h2 class="text-16-medium text-text-strong">{language.t("settings.providers.title")}</h2>
@@ -123,7 +129,7 @@ export const SettingsProviders: Component = () => {
       </div>
 
       <div class="flex flex-col gap-8 max-w-[720px]">
-        <div class="flex flex-col gap-1">
+        <div class="flex flex-col gap-1" data-component="connected-providers-section">
           <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.providers.section.connected")}</h3>
           <div class="bg-surface-raised-base px-4 rounded-lg">
             <Show
@@ -225,7 +231,10 @@ export const SettingsProviders: Component = () => {
               )}
             </For>
 
-            <div class="flex items-center justify-between gap-4 h-16 border-b border-border-weak-base last:border-none">
+            <div
+              class="flex items-center justify-between gap-4 h-16 border-b border-border-weak-base last:border-none"
+              data-component="custom-provider-section"
+            >
               <div class="flex flex-col min-w-0">
                 <div class="flex items-center gap-x-3">
                   <ProviderIcon id={icon("synthetic")} class="size-5 shrink-0 icon-strong-base" />
@@ -258,6 +267,6 @@ export const SettingsProviders: Component = () => {
           </Button>
         </div>
       </div>
-    </div>
+    </ScrollFade>
   )
 }
