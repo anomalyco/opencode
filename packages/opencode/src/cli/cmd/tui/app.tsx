@@ -186,7 +186,6 @@ function App() {
   const route = useRoute()
   const dimensions = useTerminalDimensions()
   const renderer = useRenderer()
-  Clipboard.setRenderer(renderer)
   renderer.disableStdoutInterception()
   const dialog = useDialog()
   const local = useLocal()
