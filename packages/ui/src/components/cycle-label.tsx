@@ -23,7 +23,10 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 export function CycleLabel(props: CycleLabelProps) {
   const getDuration = (text: string) => {
-    const d = props.duration ?? Number(getComputedStyle(document.documentElement).getPropertyValue("--transition-duration")) ?? 200
+    const d =
+      props.duration ??
+      Number(getComputedStyle(document.documentElement).getPropertyValue("--transition-duration")) ??
+      200
     return typeof d === "function" ? d(text) : d
   }
   const stagger = () => props?.stagger ?? 30

@@ -92,7 +92,7 @@ export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
   provider?: string
   children?: JSX.Element | ((open: boolean) => JSX.Element)
   triggerAs?: T
-  triggerProps?: ComponentProps<T>,
+  triggerProps?: ComponentProps<T>
   gutter?: number
 }) {
   const [store, setStore] = createStore<{
