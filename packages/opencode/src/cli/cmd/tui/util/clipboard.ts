@@ -148,7 +148,8 @@ export namespace Clipboard {
   export async function copy(text: string): Promise<void> {
     const renderer = rendererRef.current
     if (renderer) {
-      renderer.copyToClipboardOSC52(text)
+      const copied = renderer.copyToClipboardOSC52(text)
+      if (copied) return
     }
     await getCopyMethod()(text)
   }
