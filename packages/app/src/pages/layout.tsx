@@ -2420,7 +2420,7 @@ export default function Layout(props: ParentProps) {
     }
 
     const projectName = () => props.project.name || getFilename(props.project.worktree)
-    const trigger = (
+    const Trigger = () => (
       <ContextMenu
         modal={!sidebarHovering()}
         onOpenChange={(value) => {
@@ -2499,14 +2499,14 @@ export default function Layout(props: ParentProps) {
     return (
       // @ts-ignore
       <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
-        <Show when={preview()} fallback={trigger}>
+        <Show when={preview()} fallback={<Trigger />}>
           <HoverCard
             open={open() && !menu()}
             openDelay={0}
             closeDelay={0}
             placement="right-start"
             gutter={6}
-            trigger={trigger}
+            trigger={<Trigger />}
             onOpenChange={(value) => {
               if (menu()) return
               setOpen(value)
