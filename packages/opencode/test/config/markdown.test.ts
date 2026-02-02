@@ -104,7 +104,7 @@ describe("ConfigMarkdown: frontmatter parsing", async () => {
   })
 
   test("should extract occupation field with colon in value", () => {
-    expect(parsed.data.occupation).toBe("This man has the following occupation: Software Engineer\n")
+    expect(parsed.data.occupation).toBe("This man has the following occupation: Software Engineer")
   })
 
   test("should extract title field with single quotes", () => {
@@ -128,15 +128,15 @@ describe("ConfigMarkdown: frontmatter parsing", async () => {
   })
 
   test("should extract URL with port", () => {
-    expect(parsed.data.url).toBe("https://example.com:8080/path?query=value\n")
+    expect(parsed.data.url).toBe("https://example.com:8080/path?query=value")
   })
 
   test("should extract time with colons", () => {
-    expect(parsed.data.time).toBe("The time is 12:30:00 PM\n")
+    expect(parsed.data.time).toBe("The time is 12:30:00 PM")
   })
 
   test("should extract value with multiple colons", () => {
-    expect(parsed.data.nested).toBe("First: Second: Third: Fourth\n")
+    expect(parsed.data.nested).toBe("First: Second: Third: Fourth")
   })
 
   test("should preserve already double-quoted values with colons", () => {
@@ -148,7 +148,7 @@ describe("ConfigMarkdown: frontmatter parsing", async () => {
   })
 
   test("should extract value with quotes and colons mixed", () => {
-    expect(parsed.data.mixed).toBe('He said "hello: world" and then left\n')
+    expect(parsed.data.mixed).toBe('He said "hello: world" and then left')
   })
 
   test("should handle empty values", () => {
@@ -188,5 +188,41 @@ describe("ConfigMarkdown: frontmatter parsing w/ no frontmatter", async () => {
     expect(result).toBeDefined()
     expect(result.data).toEqual({})
     expect(result.content.trim()).toBe("Content")
+  })
+})
+
+describe("ConfigMarkdown: frontmatter parsing w/ Markdown header", async () => {
+  const result = await ConfigMarkdown.parse(import.meta.dir + "/fixtures/markdown-header.md")
+
+  test("should parse and match", () => {
+    expect(result).toBeDefined()
+    expect(result.data).toEqual({})
+    expect(result.content.trim()).toBe(`# Response Formatting Requirements
+
+Always structure your responses using clear markdown formatting:
+
+- By default don't put information into tables for questions (but do put information into tables when creating or updating files)
+- Use headings (##, ###) to organise sections, always
+- Use bullet points or numbered lists for multiple items
+- Use code blocks with language tags for any code
+- Use **bold** for key terms and emphasis
+- Use tables when comparing options or listing structured data
+- Break long responses into logical sections with headings`)
+  })
+})
+
+describe("ConfigMarkdown: frontmatter has weird model id", async () => {
+  const result = await ConfigMarkdown.parse(import.meta.dir + "/fixtures/weird-model-id.md")
+
+  test("should parse and match", () => {
+    expect(result).toBeDefined()
+    expect(result.data["description"]).toEqual("General coding and planning agent")
+    expect(result.data["mode"]).toEqual("subagent")
+    expect(result.data["model"]).toEqual("synthetic/hf:zai-org/GLM-4.7")
+    expect(result.data["tools"]["write"]).toBeTrue()
+    expect(result.data["tools"]["read"]).toBeTrue()
+    expect(result.data["stuff"]).toBe("This is some stuff\n")
+
+    expect(result.content.trim()).toBe("Strictly follow da rules")
   })
 })
