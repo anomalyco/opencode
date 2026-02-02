@@ -4,7 +4,7 @@
   position: fixed;
   inset: 0;
   z-index: 50;
-  background-color: hsl(from var(--background-base) h s l / 0.2);
+  background-color: hsl(from var(--background-base) h s l / 0.3);
 }
 
 [data-component="dialog"] {
@@ -45,11 +45,12 @@
         display: none;
       }
 
-      /* padding: 8px; */
-      /* padding: 8px 8px 0 8px; */
+      padding: 12px;
       border-radius: var(--radius-xl);
-      background: var(--surface-raised-stronger-non-alpha);
+      background: hsl(from var(--surface-raised-stronger-non-alpha) h s l / 0.70);
       background-clip: padding-box;
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
       box-shadow: var(--shadow-lg-border-base);
 
       [data-slot="dialog-header"] {
