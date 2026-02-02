@@ -88,7 +88,9 @@ async function getPuppeteer(onProgress?: (msg: string) => void) {
 
   // First try to import from normal node_modules
   try {
+    // @ts-ignore - puppeteer-extra is optionally installed at runtime
     const puppeteerExtra = await import("puppeteer-extra")
+    // @ts-ignore - puppeteer-extra-plugin-stealth is optionally installed at runtime
     const stealthPlugin = await import("puppeteer-extra-plugin-stealth")
     if (!puppeteerInitialized) {
       puppeteerExtra.default.use(stealthPlugin.default())
