@@ -109,7 +109,7 @@ export default function Layout(props: ParentProps) {
   const command = useCommand()
   const theme = useTheme()
   const language = useLanguage()
-  const initialDir = params.dir
+  const initialDirectory = decode64(params.dir)
   const availableThemeEntries = createMemo(() => Object.entries(theme.themes()))
   const colorSchemeOrder: ColorScheme[] = ["system", "light", "dark"]
   const colorSchemeKey: Record<ColorScheme, "theme.scheme.system" | "theme.scheme.light" | "theme.scheme.dark"> = {
@@ -120,7 +120,7 @@ export default function Layout(props: ParentProps) {
   const colorSchemeLabel = (scheme: ColorScheme) => language.t(colorSchemeKey[scheme])
 
   const [state, setState] = createStore({
-    autoselect: !params.dir,
+    autoselect: !initialDirectory,
     busyWorkspaces: new Set<string>(),
     hoverSession: undefined as string | undefined,
     hoverProject: undefined as string | undefined,
@@ -180,13 +180,21 @@ export default function Layout(props: ParentProps) {
 
   const autoselecting = createMemo(() => {
     if (params.dir) return false
-    if (initialDir) return false
     if (!state.autoselect) return false
     if (!pageReady()) return true
     if (!layoutReady()) return true
     const list = layout.projects.list()
-    if (list.length === 0) return false
-    return true
+    if (list.length > 0) return true
+    return !!server.projects.last()
+  })
+
+  createEffect(() => {
+    if (!state.autoselect) return
+    const dir = params.dir
+    if (!dir) return
+    const directory = decode64(dir)
+    if (!directory) return
+    setState("autoselect", false)
   })
 
   const editorOpen = (id: string) => editor.active === id
@@ -566,11 +574,18 @@ export default function Layout(props: ParentProps) {
         if (!value.ready) return
         if (!value.layoutReady) return
         if (!state.autoselect) return
-        if (initialDir) return
         if (value.dir) return
-        if (value.list.length === 0) return
 
         const last = server.projects.last()
+
+        if (value.list.length === 0) {
+          if (!last) return
+          setState("autoselect", false)
+          openProject(last, false)
+          navigateToProject(last)
+          return
+        }
+
         const next = value.list.find((project) => project.worktree === last) ?? value.list[0]
         if (!next) return
         setState("autoselect", false)
