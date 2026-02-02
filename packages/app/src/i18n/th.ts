@@ -28,6 +28,8 @@ export const dict = {
   "command.settings.open": "เปิดการตั้งค่า",
   "command.session.previous": "เซสชันก่อนหน้า",
   "command.session.next": "เซสชันถัดไป",
+  "command.session.previous.unseen": "Previous unread session",
+  "command.session.next.unseen": "Next unread session",
   "command.session.archive": "จัดเก็บเซสชัน",
 
   "command.palette": "คำสั่งค้นหา",
