@@ -49,6 +49,52 @@
       }
     }
   }
+
+  &[data-trigger-style="settings"] {
+    [data-slot="select-select-trigger"] {
+      padding: 6px 6px 6px 10px;
+      box-shadow: none;
+      border-radius: 6px;
+      field-sizing: content;
+      height: 32px;
+      justify-content: flex-end;
+      gap: 12px;
+      background-color: transparent;
+
+      [data-slot="select-select-trigger-value"] {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: var(--font-size-base);
+        font-weight: var(--font-weight-regular);
+        padding: 4px 8px 4px 4px;
+      }
+      [data-slot="select-select-trigger-icon"] {
+        width: 16px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        color: var(--text-weak);
+        background-color: var(--surface-raised-base);
+        border-radius: 4px;
+        transition: transform 0.1s ease-in-out;
+      }
+
+      &[data-slot="select-select-trigger"]:hover:not(:disabled),
+      &[data-slot="select-select-trigger"][data-expanded],
+      &[data-slot="select-select-trigger"][data-expanded]:hover:not(:disabled) {
+        background-color: var(--input-base);
+        box-shadow: var(--shadow-xs-border-base);
+      }
+
+      &:not([data-expanded]):focus {
+        background-color: transparent;
+        box-shadow: none;
+      }
+    }
+  }
 }
 
 [data-component="select-content"] {
@@ -137,6 +183,22 @@
     &:hover {
       background: var(--surface-raised-base-hover);
     }
+  }
+}
+
+[data-component="select-content"][data-trigger-style="settings"] {
+  field-sizing: content;
+  border-radius: 8px;
+  padding: 0 0 0 4px;
+
+  [data-slot="select-select-item"] {
+    /* text-14-regular */
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-base);
+    font-style: normal;
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-large);
+    letter-spacing: var(--letter-spacing-normal);
   }
 }
 

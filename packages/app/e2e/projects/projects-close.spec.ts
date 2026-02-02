@@ -1,5 +1,5 @@
 import { test, expect } from "../fixtures"
-import { createTestProject, seedProjects, cleanupTestProject, openSidebar } from "../actions"
+import { createTestProject, seedProjects, cleanupTestProject, openSidebar, clickMenuItem } from "../actions"
 import { projectCloseHoverSelector, projectCloseMenuSelector, projectSwitchSelector } from "../selectors"
 import { dirSlug } from "../utils"
 
@@ -33,7 +33,7 @@ test("can close a project via project header more options menu", async ({ page, 
   await page.setViewportSize({ width: 1400, height: 800 })
 
   const other = await createTestProject()
-  const otherName = other.split("/").pop()
+  const otherName = other.split("/").pop() ?? other
   const otherSlug = dirSlug(other)
   await seedProjects(page, { directory, extra: [other] })
 
@@ -59,17 +59,10 @@ test("can close a project via project header more options menu", async ({ page, 
     await trigger.focus()
     await page.keyboard.press("Enter")
 
-    const close = page
-      .locator(projectCloseMenuSelector(otherSlug))
-      .or(page.getByRole("menuitem", { name: "Close" }))
-      .or(
-        page
-          .locator('[data-component="dropdown-menu-content"] [data-slot="dropdown-menu-item"]')
-          .filter({ hasText: "Close" }),
-      )
-      .first()
-    await expect(close).toBeVisible({ timeout: 10_000 })
-    await close.click({ force: true })
+    const menu = page.locator('[data-component="dropdown-menu-content"]').first()
+    await expect(menu).toBeVisible({ timeout: 10_000 })
+
+    await clickMenuItem(menu, /^Close$/i, { force: true })
     await expect(otherButton).toHaveCount(0)
   } finally {
     await cleanupTestProject(other)

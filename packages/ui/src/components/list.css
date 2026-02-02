@@ -1,21 +1,3 @@
-@property --bottom-fade {
-  syntax: "<length>";
-  inherits: false;
-  initial-value: 0px;
-}
-
-@keyframes scroll {
-  0% {
-    --bottom-fade: 20px;
-  }
-  90% {
-    --bottom-fade: 20px;
-  }
-  100% {
-    --bottom-fade: 0;
-  }
-}
-
 [data-component="list"] {
   display: flex;
   flex-direction: column;
