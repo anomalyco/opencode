@@ -501,10 +501,13 @@ export namespace SessionPrompt {
       const lastSummaryIndex = msgs.findLastIndex((m) => m.info.role === "assistant" && m.info.summary)
       const messagesSinceSummary = lastSummaryIndex === -1 ? Infinity : msgs.length - 1 - lastSummaryIndex
 
+      const modelKey = `${model.providerID}/${model.id}`
+      const minMessages = config.compaction?.models?.[modelKey]?.min_messages ?? config.compaction?.min_messages ?? 5
+
       if (
         lastFinished &&
         lastFinished.summary !== true &&
-        messagesSinceSummary > (config.compaction?.min_messages ?? 5) &&
+        messagesSinceSummary > minMessages &&
         (await SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model }))
       ) {
         await SessionCompaction.create({
@@ -621,7 +624,7 @@ export namespace SessionPrompt {
       })
       if (result === "stop") break
       if (result === "compact") {
-        if (messagesSinceSummary > (config.compaction?.min_messages ?? 5)) {
+        if (messagesSinceSummary > minMessages) {
           await SessionCompaction.create({
             sessionID,
             agent: lastUser.agent,
