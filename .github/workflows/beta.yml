@@ -29,4 +29,5 @@ jobs:
       - name: Sync beta branch
         env:
           GH_TOKEN: ${{ steps.setup-git-committer.outputs.token }}
+          DISCORD_ISSUES_WEBHOOK_URL: ${{ secrets.DISCORD_ISSUES_WEBHOOK_URL }}
         run: bun script/beta.ts
