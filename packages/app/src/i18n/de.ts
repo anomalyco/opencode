@@ -32,6 +32,8 @@ export const dict = {
   "command.settings.open": "Einstellungen öffnen",
   "command.session.previous": "Vorherige Sitzung",
   "command.session.next": "Nächste Sitzung",
+  "command.session.previous.unseen": "Previous unread session",
+  "command.session.next.unseen": "Next unread session",
   "command.session.archive": "Sitzung archivieren",
 
   "command.palette": "Befehlspalette",

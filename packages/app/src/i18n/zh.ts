@@ -32,6 +32,8 @@ export const dict = {
   "command.settings.open": "打开设置",
   "command.session.previous": "上一个会话",
   "command.session.next": "下一个会话",
+  "command.session.previous.unseen": "Previous unread session",
+  "command.session.next.unseen": "Next unread session",
   "command.session.archive": "归档会话",
 
   "command.palette": "命令面板",
