@@ -177,6 +177,24 @@ export const AuthListCommand = cmd({
     const homedir = os.homedir()
     const displayPath = authPath.startsWith(homedir) ? authPath.replace(homedir, "~") : authPath
     prompts.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
+    
+    // Read raw auth.json configuration to display metadata fields like $schema and provider
+    const authFile = Bun.file(authPath)
+    const rawConfig = await authFile.json().catch(() => ({}))
+    
+    // Display only metadata fields (non-credential fields)
+    const metadataFields = ['$schema', 'provider']
+    const metadataEntries = Object.entries(rawConfig).filter(([key]) => metadataFields.includes(key))
+    
+    if (metadataEntries.length > 0) {
+      prompts.intro("Configuration")
+      for (const [key, value] of metadataEntries) {
+        const displayValue = typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)
+        prompts.log.info(`${key} ${UI.Style.TEXT_DIM}${displayValue}`)
+      }
+      UI.empty()
+    }
+    
     const results = Object.entries(await Auth.all())
     const database = await ModelsDev.get()
 
