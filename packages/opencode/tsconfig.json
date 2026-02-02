@@ -8,9 +8,13 @@
     "types": [],
     "noUncheckedIndexedAccess": false,
     "customConditions": ["browser"],
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
     "paths": {
       "@/*": ["./src/*"],
       "@tui/*": ["./src/cli/cmd/tui/*"]
     }
-  }
+  },
+  "include": ["src/**/*", "test/**/*", "*.d.ts"]
 }

@@ -64,7 +64,10 @@
   },
   "devDependencies": {
     "@actions/artifact": "5.0.1",
+    "@babel/plugin-transform-react-jsx": "7.28.6",
+    "@babel/preset-react": "7.28.5",
     "@tsconfig/bun": "catalog:",
+    "@types/react": "19.2.10",
     "husky": "9.1.7",
     "prettier": "3.6.2",
     "semver": "^7.6.0",

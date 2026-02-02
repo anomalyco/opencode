@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "react"
+  },
+  "include": ["src/cli/ink/**/*"]
+}
