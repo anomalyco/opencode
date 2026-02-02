@@ -539,6 +539,11 @@ export const dict = {
   "settings.general.section.sounds": "Efeitos sonoros",
   "settings.general.section.feed": "Feed",
   "settings.general.section.display": "Tela",
+  "settings.general.section.desktop": "Desktop",
+  "settings.general.desktop.openLinksExternally.title": "Abrir links no navegador externo",
+  "settings.general.desktop.openLinksExternally.description":
+    "Quando ativado, clicar em links os abrirá no navegador padrão do sistema em vez de dentro do app",
+
   "settings.general.row.language.title": "Idioma",
   "settings.general.row.language.description": "Alterar o idioma de exibição do OpenCode",
   "settings.general.row.appearance.title": "Aparência",

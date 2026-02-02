@@ -533,6 +533,11 @@ export const dict = {
   "settings.general.section.sounds": "المؤثرات الصوتية",
   "settings.general.section.feed": "الخلاصة",
   "settings.general.section.display": "شاشة العرض",
+  "settings.general.section.desktop": "Desktop",
+  "settings.general.desktop.openLinksExternally.title": "فتح الروابط في متصفح خارجي",
+  "settings.general.desktop.openLinksExternally.description":
+    "عند التفعيل، سيتم فتح الروابط في متصفح النظام الافتراضي بدلاً من داخل التطبيق",
+
   "settings.general.row.language.title": "اللغة",
   "settings.general.row.language.description": "تغيير لغة العرض لـ OpenCode",
   "settings.general.row.appearance.title": "المظهر",

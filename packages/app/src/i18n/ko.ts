@@ -538,6 +538,11 @@ export const dict = {
   "settings.general.section.sounds": "효과음",
   "settings.general.section.feed": "피드",
   "settings.general.section.display": "디스플레이",
+  "settings.general.section.desktop": "Desktop",
+  "settings.general.desktop.openLinksExternally.title": "외부 브라우저에서 링크 열기",
+  "settings.general.desktop.openLinksExternally.description":
+    "활성화하면 링크를 클릭할 때 앱 내부가 아닌 기본 시스템 브라우저에서 열립니다",
+
   "settings.general.row.language.title": "언어",
   "settings.general.row.language.description": "OpenCode 표시 언어 변경",
   "settings.general.row.appearance.title": "모양",

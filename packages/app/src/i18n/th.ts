@@ -598,6 +598,10 @@ export const dict = {
   "settings.general.section.sounds": "เสียงเอฟเฟกต์",
   "settings.general.section.feed": "ฟีด",
   "settings.general.section.display": "การแสดงผล",
+  "settings.general.section.desktop": "Desktop",
+  "settings.general.desktop.openLinksExternally.title": "เปิดลิงก์ในเบราว์เซอร์ภายนอก",
+  "settings.general.desktop.openLinksExternally.description":
+    "เมื่อเปิดใช้งาน การคลิกลิงก์จะเปิดในเบราว์เซอร์เริ่มต้นของระบบแทนที่จะเปิดในแอป",
 
   "settings.general.row.language.title": "ภาษา",
   "settings.general.row.language.description": "เปลี่ยนภาษาที่แสดงสำหรับ OpenCode",

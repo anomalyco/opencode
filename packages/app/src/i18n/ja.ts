@@ -537,6 +537,11 @@ export const dict = {
   "settings.general.section.sounds": "効果音",
   "settings.general.section.feed": "フィード",
   "settings.general.section.display": "ディスプレイ",
+  "settings.general.section.desktop": "Desktop",
+  "settings.general.desktop.openLinksExternally.title": "外部ブラウザでリンクを開く",
+  "settings.general.desktop.openLinksExternally.description":
+    "有効にすると、リンクをクリックするとアプリ内ではなくシステムの既定ブラウザで開きます",
+
   "settings.general.row.language.title": "言語",
   "settings.general.row.language.description": "OpenCodeの表示言語を変更します",
   "settings.general.row.appearance.title": "外観",

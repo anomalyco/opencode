@@ -598,6 +598,10 @@ export const dict = {
   "settings.general.section.sounds": "Lydeffekter",
   "settings.general.section.feed": "Feed",
   "settings.general.section.display": "Skærm",
+  "settings.general.section.desktop": "Desktop",
+  "settings.general.desktop.openLinksExternally.title": "Åbn links i ekstern browser",
+  "settings.general.desktop.openLinksExternally.description":
+    "Når aktiveret, åbnes links i din standard systembrowser i stedet for i appen",
 
   "settings.general.row.language.title": "Sprog",
   "settings.general.row.language.description": "Ændr visningssproget for OpenCode",

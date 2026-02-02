@@ -538,6 +538,27 @@ export const SettingsGeneral: Component = () => {
             )
           }}
         </Show>
+
+        {/* Desktop Section - Desktop only */}
+        <Show when={platform.platform === "desktop"}>
+          <div class="flex flex-col gap-1">
+            <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.desktop")}</h3>
+
+            <div class="bg-surface-raised-base px-4 rounded-lg">
+              <SettingsRow
+                title={language.t("settings.general.desktop.openLinksExternally.title")}
+                description={language.t("settings.general.desktop.openLinksExternally.description")}
+              >
+                <div data-action="settings-open-links-externally">
+                  <Switch
+                    checked={settings.browser.openLinksExternally()}
+                    onChange={(checked) => settings.browser.setOpenLinksExternally(checked)}
+                  />
+                </div>
+              </SettingsRow>
+            </div>
+          </div>
+        </Show>
       </div>
     </div>
   )

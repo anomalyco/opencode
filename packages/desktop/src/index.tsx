@@ -58,6 +58,24 @@ const listenForDeepLinks = async () => {
   await onOpenUrl((urls) => emitDeepLinks(urls)).catch(() => undefined)
 }
 
+// Settings key for reading browser preferences
+const SETTINGS_KEY = "settings.v3"
+
+// Read browser settings from store to check if links should open externally
+async function shouldOpenLinksExternally(): Promise<boolean> {
+  try {
+    const store = await Store.load("opencode.global.dat")
+    const settings = await store.get(SETTINGS_KEY)
+    if (settings && typeof settings === "object" && "browser" in (settings as object)) {
+      const browser = (settings as { browser?: { openLinksExternally?: boolean } }).browser
+      return browser?.openLinksExternally !== false // Default to true
+    }
+  } catch {
+    // Ignore errors, default to true
+  }
+  return true // Default: open links externally
+}
+
 const createPlatform = (): Platform => {
   const os = (() => {
     const type = ostype()
@@ -112,7 +130,10 @@ const createPlatform = (): Platform => {
     },
 
     openLink(url: string) {
-      void shellOpen(url).catch(() => undefined)
+      void shouldOpenLinksExternally().then((external) => {
+        if (external) return shellOpen(url).catch(() => undefined)
+        window.open(url, "_blank")
+      })
     },
     async openPath(path: string, app?: string) {
       await commands.openPath(path, app ?? null)
@@ -419,11 +440,26 @@ render(() => {
   )
 
   function handleClick(e: MouseEvent) {
-    const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
-    if (link?.href) {
-      e.preventDefault()
-      platform.openLink(link.href)
-    }
+    const link = (e.target as HTMLElement).closest("a") as HTMLAnchorElement | null
+    if (!link?.href) return
+
+    // Check if it's an external link (http/https)
+    const isExternal = link.href.startsWith("http://") || link.href.startsWith("https://")
+    if (!isExternal) return
+
+    // MUST preventDefault immediately (before any async), otherwise browser handles it
+    e.preventDefault()
+    const url = link.href
+
+    // Check user preference and handle accordingly
+    shouldOpenLinksExternally().then((openExternally) => {
+      if (openExternally) {
+        platform.openLink(url)
+      } else {
+        // Open in app by navigating
+        window.location.href = url
+      }
+    })
   }
 
   onMount(() => {
