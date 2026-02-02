@@ -62,8 +62,14 @@ export namespace Config {
   export const state = Instance.state(async () => {
     const auth = await Auth.all()
 
-    // Load remote/well-known config first as the base layer (lowest precedence)
-    // This allows organizations to provide default configs that users can override
+    // Config loading order (low -> high precedence): https://opencode.ai/docs/config#precedence-order
+    // 1) Remote .well-known/opencode (org defaults)
+    // 2) Global config (~/.config/opencode/opencode.json{,c})
+    // 3) Custom config (OPENCODE_CONFIG)
+    // 4) Project config (opencode.json{,c})
+    // 5) .opencode directories (.opencode/agents/, .opencode/commands/, .opencode/plugins/, .opencode/opencode.json{,c})
+    // 6) Inline config (OPENCODE_CONFIG_CONTENT)
+    // Managed config directory is enterprise-only and always overrides everything above.
     let result: Info = {}
     for (const [key, value] of Object.entries(auth)) {
       if (value.type === "wellknown") {
@@ -85,16 +91,16 @@ export namespace Config {
       }
     }
 
-    // Global user config overrides remote config
+    // Global user config overrides remote config.
     result = mergeConfigConcatArrays(result, await global())
 
-    // Custom config path overrides global
+    // Custom config path overrides global config.
     if (Flag.OPENCODE_CONFIG) {
       result = mergeConfigConcatArrays(result, await loadFile(Flag.OPENCODE_CONFIG))
       log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
     }
 
-    // Project config has highest precedence (overrides global and remote)
+    // Project config overrides global and remote config.
     if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
       for (const file of ["opencode.jsonc", "opencode.json"]) {
         const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
@@ -102,12 +108,6 @@ export namespace Config {
           result = mergeConfigConcatArrays(result, await loadFile(resolved))
         }
       }
-    }
-
-    // Inline config content has highest precedence
-    if (Flag.OPENCODE_CONFIG_CONTENT) {
-      result = mergeConfigConcatArrays(result, JSON.parse(Flag.OPENCODE_CONFIG_CONTENT))
-      log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
     }
 
     result.agent = result.agent || {}
@@ -136,6 +136,7 @@ export namespace Config {
       )),
     ]
 
+    // .opencode directory config overrides (project and global) config sources.
     if (Flag.OPENCODE_CONFIG_DIR) {
       directories.push(Flag.OPENCODE_CONFIG_DIR)
       log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
@@ -161,6 +162,12 @@ export namespace Config {
       result.agent = mergeDeep(result.agent, await loadAgent(dir))
       result.agent = mergeDeep(result.agent, await loadMode(dir))
       result.plugin.push(...(await loadPlugin(dir)))
+    }
+
+    // Inline config content overrides all non-managed config sources.
+    if (Flag.OPENCODE_CONFIG_CONTENT) {
+      result = mergeConfigConcatArrays(result, JSON.parse(Flag.OPENCODE_CONFIG_CONTENT))
+      log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
     }
 
     // Load managed config files last (highest priority) - enterprise admin-controlled
