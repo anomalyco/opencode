@@ -1,5 +1,5 @@
 import { type JSX, onCleanup, splitProps } from "solid-js"
-import { ScrollFade, type ScrollFadeProps } from './scroll-fade'
+import { ScrollFade, type ScrollFadeProps } from "./scroll-fade"
 
 const SCROLL_SPEED = 60
 const PAUSE_DURATION = 800
