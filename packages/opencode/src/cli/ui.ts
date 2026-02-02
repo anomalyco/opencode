@@ -44,10 +44,9 @@ export namespace UI {
 
   export function logo(pad?: string) {
     const result: string[] = []
-    const fg = Style.TEXT_NORMAL
-    for (const row of glyphs.right) {
+    for (const row of glyphs) {
       if (pad) result.push(pad)
-      result.push(fg, row, reset, EOL)
+      result.push(row, EOL)
     }
     return result.join("").trimEnd()
   }
