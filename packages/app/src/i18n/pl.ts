@@ -435,6 +435,7 @@ export const dict = {
   "session.review.noChanges": "Brak zmian",
   "session.files.selectToOpen": "Wybierz plik do otwarcia",
   "session.files.all": "Wszystkie pliki",
+  "session.files.binaryContent": "Plik binarny (zawartość nie może być wyświetlona)",
   "session.messages.renderEarlier": "Renderuj wcześniejsze wiadomości",
   "session.messages.loadingEarlier": "Ładowanie wcześniejszych wiadomości...",
   "session.messages.loadEarlier": "Załaduj wcześniejsze wiadomości",

@@ -75,7 +75,9 @@ export namespace InstructionPrompt {
       for (const file of FILES) {
         const matches = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
         if (matches.length > 0) {
-          matches.forEach((p) => paths.add(path.resolve(p)))
+          matches.forEach((p) => {
+            paths.add(path.resolve(p))
+          })
           break
         }
       }
@@ -103,7 +105,9 @@ export namespace InstructionPrompt {
               }),
             ).catch(() => [])
           : await resolveRelative(instruction)
-        matches.forEach((p) => paths.add(path.resolve(p)))
+        matches.forEach((p) => {
+          paths.add(path.resolve(p))
+        })
       }
     }
 
@@ -168,12 +172,14 @@ export namespace InstructionPrompt {
     const already = loaded(messages)
     const results: { filepath: string; content: string }[] = []
 
-    let current = path.dirname(path.resolve(filepath))
+    const target = path.resolve(filepath)
+    let current = path.dirname(target)
     const root = path.resolve(Instance.directory)
 
-    while (current.startsWith(root)) {
+    while (current.startsWith(root) && current !== root) {
       const found = await find(current)
-      if (found && !system.has(found) && !already.has(found) && !isClaimed(messageID, found)) {
+
+      if (found && found !== target && !system.has(found) && !already.has(found) && !isClaimed(messageID, found)) {
         claim(messageID, found)
         const content = await Bun.file(found)
           .text()
@@ -182,7 +188,6 @@ export namespace InstructionPrompt {
           results.push({ filepath: found, content: "Instructions from: " + found + "\n" + content })
         }
       }
-      if (current === root) break
       current = path.dirname(current)
     }
 
