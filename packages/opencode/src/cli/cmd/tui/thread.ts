@@ -9,6 +9,7 @@ import { Log } from "@/util/log"
 import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
 import type { Event } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
+import { ExitMessage } from "./exit-message"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -161,5 +162,7 @@ export const TuiThreadCommand = cmd({
     }, 1000)
 
     await tuiPromise
+    const message = ExitMessage.get()
+    if (message) process.stdout.write(message + "\n")
   },
 })

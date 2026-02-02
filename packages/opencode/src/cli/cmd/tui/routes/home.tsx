@@ -14,6 +14,7 @@ import { usePromptRef } from "../context/prompt"
 import { Installation } from "@/installation"
 import { useKV } from "../context/kv"
 import { useCommandDialog } from "../component/dialog-command"
+import { useExit } from "../context/exit"
 
 // TODO: what is the best way to do this?
 let once = false
@@ -25,6 +26,7 @@ export function Home() {
   const route = useRouteData("home")
   const promptRef = usePromptRef()
   const command = useCommandDialog()
+  const exit = useExit()
   const mcp = createMemo(() => Object.keys(sync.data.mcp).length > 0)
   const mcpError = createMemo(() => {
     return Object.values(sync.data.mcp).some((x) => x.status === "failed")
@@ -77,6 +79,7 @@ export function Home() {
   let prompt: PromptRef
   const args = useArgs()
   onMount(() => {
+    // exit.message.clear()
     if (once) return
     if (route.initialPrompt) {
       prompt.set(route.initialPrompt)
