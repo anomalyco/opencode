@@ -1015,8 +1015,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </div>
           </Show>
         </div>
-        <div class="relative p-3 flex items-center justify-between gap-2">
-          <div class="flex items-center gap-2 min-w-0 flex-1">
+        <div class="relative py-3 px-1 md:px-3 flex items-center justify-between">
+          <div class="flex items-center justify-start gap-0 md:gap-2 [&_[data-component=button]]:px-0.5 [&_[data-component=button]]:md:px-2 [&_[data-slot=select-select-trigger]]:px-0.5 [&_[data-slot=select-select-trigger]]:md:px-2">
             <Switch>
               <Match when={store.mode === "shell"}>
                 <div class="flex items-center gap-2 px-2 h-6">
