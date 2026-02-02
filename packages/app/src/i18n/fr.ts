@@ -28,6 +28,8 @@ export const dict = {
   "command.settings.open": "Ouvrir les paramètres",
   "command.session.previous": "Session précédente",
   "command.session.next": "Session suivante",
+  "command.session.previous.unseen": "Previous unread session",
+  "command.session.next.unseen": "Next unread session",
   "command.session.archive": "Archiver la session",
 
   "command.palette": "Palette de commandes",
@@ -68,6 +70,7 @@ export const dict = {
   "command.model.variant.cycle.description": "Passer au niveau d'effort suivant",
   "command.permissions.autoaccept.enable": "Accepter automatiquement les modifications",
   "command.permissions.autoaccept.disable": "Arrêter l'acceptation automatique des modifications",
+  "command.workspace.toggle": "Basculer les espaces de travail",
   "command.session.undo": "Annuler",
   "command.session.undo.description": "Annuler le dernier message",
   "command.session.redo": "Rétablir",
@@ -210,6 +213,8 @@ export const dict = {
   "prompt.popover.emptyCommands": "Aucune commande correspondante",
   "prompt.dropzone.label": "Déposez des images ou des PDF ici",
   "prompt.slash.badge.custom": "personnalisé",
+  "prompt.slash.badge.skill": "skill",
+  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "actif",
   "prompt.context.includeActiveFile": "Inclure le fichier actif",
   "prompt.context.removeActiveFile": "Retirer le fichier actif du contexte",
@@ -347,6 +352,11 @@ export const dict = {
   "toast.permissions.autoaccept.off.title": "Arrêt acceptation auto des modifications",
   "toast.permissions.autoaccept.off.description":
     "Les permissions de modification et d'écriture nécessiteront une approbation",
+
+  "toast.workspace.enabled.title": "Espaces de travail activés",
+  "toast.workspace.enabled.description": "Plusieurs worktrees sont désormais affichés dans la barre latérale",
+  "toast.workspace.disabled.title": "Espaces de travail désactivés",
+  "toast.workspace.disabled.description": "Seul le worktree principal est affiché dans la barre latérale",
 
   "toast.model.none.title": "Aucun modèle sélectionné",
   "toast.model.none.description": "Connectez un fournisseur pour résumer cette session",

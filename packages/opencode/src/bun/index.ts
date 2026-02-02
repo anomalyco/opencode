@@ -5,12 +5,10 @@ import path from "path"
 import { Filesystem } from "../util/filesystem"
 import { NamedError } from "@opencode-ai/util/error"
 import { readableStreamToText } from "bun"
-import { createRequire } from "module"
 import { Lock } from "../util/lock"
 
 export namespace BunProc {
   const log = Log.create({ service: "bun" })
-  const req = createRequire(import.meta.url)
 
   export async function run(cmd: string[], options?: Bun.SpawnOptions.OptionsObject<any, any, any>) {
     log.info("running", {
