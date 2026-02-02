@@ -16,13 +16,14 @@ use std::{
     time::{Duration, Instant},
 };
 use tauri::{AppHandle, LogicalSize, Manager, RunEvent, State, WebviewWindowBuilder};
-#[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
-use tauri_plugin_deep_link::DeepLinkExt;
 #[cfg(windows)]
 use tauri_plugin_decorum::WebviewWindowExt;
+#[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
+use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_store::StoreExt;
+use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 use tokio::sync::oneshot;
 
 use crate::window_customizer::PinchZoomDisablePlugin;
@@ -345,6 +346,27 @@ pub fn run() {
                 .decorations(false);
 
             let window = window_builder.build().expect("Failed to create window");
+
+            window.on_window_event({
+                let last = Cell::new(Instant::ZERO);
+                let app = app.clone();
+
+                move |event| {
+                    if !matches!(event, WindowEvent::Moved(_) | WindowEvent::Resized(_)) {
+                        return;
+                    }
+
+                    let now = Instant::now();
+                    if now.duration_since(last.get()) < Duration::from_millis(200) {
+                        return;
+                    }
+
+                    last.set(now);
+                    let _ = app.save_window_state(
+                        StateFlags::all() - StateFlags::DECORATIONS,
+                    );
+                }
+            });
 
             #[cfg(windows)]
             let _ = window.create_overlay_titlebar();
