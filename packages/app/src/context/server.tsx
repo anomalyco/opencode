@@ -7,6 +7,30 @@ import { Persist, persisted } from "@/utils/persist"
 
 type StoredProject = { worktree: string; expanded: boolean }
 
+/**
+ * 规范化路径用于比较,避免在Windows上重复创建项目
+ * 处理大小写敏感性、斜杠类型和末尾斜杠
+ * 
+ * 问题: Windows路径可能以不同形式表示同一物理路径:
+ * - C:\Users\Project vs c:\users\project (大小写不同)
+ * - C:/Users/Project vs C:\Users\Project (斜杠类型不同)
+ * - C:\Users\Project\ vs C:\Users\Project (末尾斜杠不同)
+ * 
+ * 解决方案: 统一斜杠为正斜杠,统一为小写(Windows),移除末尾斜杠
+ */
+function normalizePathForComparison(path: string): string {
+  let normalized = path
+  // 统一斜杠为正斜杠
+  normalized = normalized.replace(/\\/g, '/')
+  // 移除末尾斜杠
+  normalized = normalized.replace(/\/$/, '')
+  // 在Windows上,统一为小写以进行不区分大小写的比较
+  if (process.platform === 'win32') {
+    normalized = normalized.toLowerCase()
+  }
+  return normalized
+}
+
 export function normalizeServerUrl(input: string) {
   const trimmed = input.trim()
   if (!trimmed) return
@@ -164,38 +188,54 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
           const key = origin()
           if (!key) return
           const current = store.projects[key] ?? []
-          if (current.find((x) => x.worktree === directory)) return
+          // 使用规范化路径检查项目是否已存在,避免Windows上的重复项目
+          // 修复Issue #11666: Windows路径规范化不一致导致重复创建项目
+          const normalizedDirectory = normalizePathForComparison(directory)
+          const existing = current.find((x) => normalizePathForComparison(x.worktree) === normalizedDirectory)
+          if (existing) return
           setStore("projects", key, [{ worktree: directory, expanded: true }, ...current])
         },
         close(directory: string) {
           const key = origin()
           if (!key) return
           const current = store.projects[key] ?? []
+          // 使用规范化路径查找项目,避免Windows上的路径不一致问题
+          // 修复Issue #11666: Windows路径规范化不一致导致重复创建项目
+          const normalizedDirectory = normalizePathForComparison(directory)
           setStore(
             "projects",
             key,
-            current.filter((x) => x.worktree !== directory),
+            current.filter((x) => normalizePathForComparison(x.worktree) !== normalizedDirectory),
           )
         },
         expand(directory: string) {
           const key = origin()
           if (!key) return
           const current = store.projects[key] ?? []
-          const index = current.findIndex((x) => x.worktree === directory)
+          // 使用规范化路径查找项目,避免Windows上的路径不一致问题
+          // 修复Issue #11666: Windows路径规范化不一致导致重复创建项目
+          const normalizedDirectory = normalizePathForComparison(directory)
+          const index = current.findIndex((x) => normalizePathForComparison(x.worktree) === normalizedDirectory)
           if (index !== -1) setStore("projects", key, index, "expanded", true)
         },
         collapse(directory: string) {
           const key = origin()
           if (!key) return
           const current = store.projects[key] ?? []
-          const index = current.findIndex((x) => x.worktree === directory)
+          // 使用规范化路径查找项目,避免Windows上的路径不一致问题
+          // 修复Issue #11666: Windows路径规范化不一致导致重复创建项目
+          const normalizedDirectory = normalizePathForComparison(directory)
+          const index = current.findIndex((x) => normalizePathForComparison(x.worktree) === normalizedDirectory)
           if (index !== -1) setStore("projects", key, index, "expanded", false)
         },
         move(directory: string, toIndex: number) {
           const key = origin()
           if (!key) return
           const current = store.projects[key] ?? []
-          const fromIndex = current.findIndex((x) => x.worktree === directory)
+          // 使用规范化路径查找项目,避免Windows上的路径不一致问题
+          // 修复Issue #11666: Windows路径规范化不一致导致重复创建项目
+          const normalizedDirectory = normalizePathForComparison(directory)
+          const fromIndex = current.findIndex((x) => normalizePathForComparison(x.worktree) === normalizedDirectory)
           if (fromIndex === -1 || fromIndex === toIndex) return
           const result = [...current]
           const [item] = result.splice(fromIndex, 1)
