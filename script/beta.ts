@@ -1,8 +1,11 @@
 #!/usr/bin/env bun
 
+import { Script } from "@opencode-ai/script"
+
 interface PR {
   number: number
   title: string
+  author: { login: string }
 }
 
 interface RunResult {
@@ -12,15 +15,29 @@ interface RunResult {
 }
 
 async function main() {
-  console.log("Fetching open contributor PRs...")
+  console.log("Fetching open PRs from team members...")
 
-  const prsResult = await $`gh pr list --label contributor --state open --json number,title --limit 100`.nothrow()
-  if (prsResult.exitCode !== 0) {
-    throw new Error(`Failed to fetch PRs: ${prsResult.stderr}`)
+  const allPrs: PR[] = []
+  for (const member of Script.team) {
+    const result = await $`gh pr list --state open --author ${member} --json number,title,author --limit 100`.nothrow()
+    if (result.exitCode !== 0) continue
+    const memberPrs: PR[] = JSON.parse(result.stdout)
+    allPrs.push(...memberPrs)
   }
 
-  const prs: PR[] = JSON.parse(prsResult.stdout)
-  console.log(`Found ${prs.length} open contributor PRs`)
+  const seen = new Set<number>()
+  const prs = allPrs.filter((pr) => {
+    if (seen.has(pr.number)) return false
+    seen.add(pr.number)
+    return true
+  })
+
+  console.log(`Found ${prs.length} open PRs from team members`)
+
+  if (prs.length === 0) {
+    console.log("No team PRs to merge")
+    return
+  }
 
   console.log("Fetching latest dev branch...")
   const fetchDev = await $`git fetch origin dev`.nothrow()
@@ -35,7 +52,6 @@ async function main() {
   }
 
   const applied: number[] = []
-  const skipped: Array<{ number: number; reason: string }> = []
 
   for (const pr of prs) {
     console.log(`\nProcessing PR #${pr.number}: ${pr.title}`)
@@ -43,9 +59,7 @@ async function main() {
     console.log("  Fetching PR head...")
     const fetch = await run(["git", "fetch", "origin", `pull/${pr.number}/head:pr/${pr.number}`])
     if (fetch.exitCode !== 0) {
-      console.log(`  Failed to fetch PR head: ${fetch.stderr}`)
-      skipped.push({ number: pr.number, reason: `Fetch failed: ${fetch.stderr}` })
-      continue
+      throw new Error(`Failed to fetch PR #${pr.number}: ${fetch.stderr}`)
     }
 
     console.log("  Merging...")
@@ -55,34 +69,24 @@ async function main() {
       await $`git merge --abort`.nothrow()
       await $`git checkout -- .`.nothrow()
       await $`git clean -fd`.nothrow()
-      skipped.push({ number: pr.number, reason: "Has conflicts" })
-      continue
+      throw new Error(`Failed to merge PR #${pr.number}: Has conflicts`)
     }
 
     const mergeHead = await $`git rev-parse -q --verify MERGE_HEAD`.nothrow()
     if (mergeHead.exitCode !== 0) {
       console.log("  No changes, skipping")
-      skipped.push({ number: pr.number, reason: "No changes" })
       continue
     }
 
     const add = await $`git add -A`.nothrow()
     if (add.exitCode !== 0) {
-      console.log("  Failed to stage")
-      await $`git checkout -- .`.nothrow()
-      await $`git clean -fd`.nothrow()
-      skipped.push({ number: pr.number, reason: "Failed to stage" })
-      continue
+      throw new Error(`Failed to stage changes for PR #${pr.number}`)
     }
 
     const commitMsg = `Apply PR #${pr.number}: ${pr.title}`
     const commit = await run(["git", "commit", "-m", commitMsg])
     if (commit.exitCode !== 0) {
-      console.log(`  Failed to commit: ${commit.stderr}`)
-      await $`git checkout -- .`.nothrow()
-      await $`git clean -fd`.nothrow()
-      skipped.push({ number: pr.number, reason: `Commit failed: ${commit.stderr}` })
-      continue
+      throw new Error(`Failed to commit PR #${pr.number}: ${commit.stderr}`)
     }
 
     console.log("  Applied successfully")
@@ -92,8 +96,6 @@ async function main() {
   console.log("\n--- Summary ---")
   console.log(`Applied: ${applied.length} PRs`)
   applied.forEach((num) => console.log(`  - PR #${num}`))
-  console.log(`Skipped: ${skipped.length} PRs`)
-  skipped.forEach((x) => console.log(`  - PR #${x.number}: ${x.reason}`))
 
   console.log("\nForce pushing beta branch...")
   const push = await $`git push origin beta --force --no-verify`.nothrow()
