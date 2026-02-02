@@ -1,5 +1,5 @@
 // @refresh reload
-import "./webview-zoom"
+import { webviewZoom } from "./webview-zoom"
 import { render } from "solid-js/web"
 import { AppBaseProviders, AppInterface, PlatformProvider, Platform } from "@opencode-ai/app"
 import { open, save } from "@tauri-apps/plugin-dialog"
@@ -346,6 +346,8 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
   parseMarkdown: async (markdown: string) => {
     return invoke<string>("parse_markdown_command", { markdown })
   },
+
+  webviewZoom,
 })
 
 createMenu()
