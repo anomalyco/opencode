@@ -24,7 +24,7 @@ import { createVertexAnthropic } from "@ai-sdk/google-vertex/anthropic"
 import { createOpenAI } from "@ai-sdk/openai"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import { createOpenRouter, type LanguageModelV2 } from "@openrouter/ai-sdk-provider"
-import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/openai-compatible/src"
+import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/copilot"
 import { createXai } from "@ai-sdk/xai"
 import { createMistral } from "@ai-sdk/mistral"
 import { createGroq } from "@ai-sdk/groq"
@@ -195,11 +195,13 @@ export namespace Provider {
 
       const awsAccessKeyId = Env.get("AWS_ACCESS_KEY_ID")
 
+      // TODO: Using process.env directly because Env.set only updates a process.env shallow copy,
+      // until the scope of the Env API is clarified (test only or runtime?)
       const awsBearerToken = iife(() => {
-        const envToken = Env.get("AWS_BEARER_TOKEN_BEDROCK")
+        const envToken = process.env.AWS_BEARER_TOKEN_BEDROCK
         if (envToken) return envToken
         if (auth?.type === "api") {
-          Env.set("AWS_BEARER_TOKEN_BEDROCK", auth.key)
+          process.env.AWS_BEARER_TOKEN_BEDROCK = auth.key
           return auth.key
         }
         return undefined
@@ -376,17 +378,19 @@ export namespace Provider {
     },
     "sap-ai-core": async () => {
       const auth = await Auth.get("sap-ai-core")
+      // TODO: Using process.env directly because Env.set only updates a shallow copy (not process.env),
+      // until the scope of the Env API is clarified (test only or runtime?)
       const envServiceKey = iife(() => {
-        const envAICoreServiceKey = Env.get("AICORE_SERVICE_KEY")
+        const envAICoreServiceKey = process.env.AICORE_SERVICE_KEY
         if (envAICoreServiceKey) return envAICoreServiceKey
         if (auth?.type === "api") {
-          Env.set("AICORE_SERVICE_KEY", auth.key)
+          process.env.AICORE_SERVICE_KEY = auth.key
           return auth.key
         }
         return undefined
       })
-      const deploymentId = Env.get("AICORE_DEPLOYMENT_ID")
-      const resourceGroup = Env.get("AICORE_RESOURCE_GROUP")
+      const deploymentId = process.env.AICORE_DEPLOYMENT_ID
+      const resourceGroup = process.env.AICORE_RESOURCE_GROUP
 
       return {
         autoload: !!envServiceKey,
@@ -1023,12 +1027,9 @@ export namespace Provider {
         })
       }
 
-      // Special case: google-vertex-anthropic uses a subpath import
-      const bundledKey =
-        model.providerID === "google-vertex-anthropic" ? "@ai-sdk/google-vertex/anthropic" : model.api.npm
-      const bundledFn = BUNDLED_PROVIDERS[bundledKey]
+      const bundledFn = BUNDLED_PROVIDERS[model.api.npm]
       if (bundledFn) {
-        log.info("using bundled provider", { providerID: model.providerID, pkg: bundledKey })
+        log.info("using bundled provider", { providerID: model.providerID, pkg: model.api.npm })
         const loaded = bundledFn({
           name: model.providerID,
           ...options,
