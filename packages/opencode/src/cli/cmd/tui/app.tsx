@@ -98,6 +98,7 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
 }
 
 import type { EventSource } from "./context/sdk"
+import { Changes } from "./routes/changes"
 
 export function tui(input: {
   url: string
@@ -317,6 +318,24 @@ function App() {
           type: "home",
           initialPrompt: currentPrompt,
         })
+        dialog.clear()
+      },
+    },
+    {
+      title: "View changes",
+      value: "changes.open",
+      category: "Session",
+      suggested: route.data.type === "session",
+      slash: {
+        name: "changes",
+      },
+      onSelect: () => {
+        if (route.data.type === "session") {
+          route.navigate({
+            type: "changes",
+            sessionID: route.data.sessionID,
+          })
+        }
         dialog.clear()
       },
     },
@@ -685,6 +704,9 @@ function App() {
         </Match>
         <Match when={route.data.type === "session"}>
           <Session />
+        </Match>
+        <Match when={route.data.type === "changes"}>
+          <Changes />
         </Match>
       </Switch>
     </box>
