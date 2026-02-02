@@ -16,10 +16,10 @@ use std::{
     time::{Duration, Instant},
 };
 use tauri::{AppHandle, LogicalSize, Manager, RunEvent, State, WebviewWindowBuilder};
-#[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
-use tauri_plugin_deep_link::DeepLinkExt;
 #[cfg(windows)]
 use tauri_plugin_decorum::WebviewWindowExt;
+#[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
+use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_store::StoreExt;
@@ -30,7 +30,7 @@ use crate::window_customizer::PinchZoomDisablePlugin;
 const SETTINGS_STORE: &str = "opencode.settings.dat";
 const DEFAULT_SERVER_URL_KEY: &str = "defaultServerUrl";
 
-#[derive(Clone, serde::Serialize)]
+#[derive(Clone, serde::Serialize, specta::Type)]
 struct ServerReadyData {
     url: String,
     password: Option<String>,
@@ -64,6 +64,7 @@ struct LogState(Arc<Mutex<VecDeque<String>>>);
 const MAX_LOG_ENTRIES: usize = 200;
 
 #[tauri::command]
+#[specta::specta]
 fn kill_sidecar(app: AppHandle) {
     let Some(server_state) = app.try_state::<ServerState>() else {
         println!("Server not running");
@@ -97,6 +98,7 @@ async fn get_logs(app: AppHandle) -> Result<String, String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn ensure_server_ready(state: State<'_, ServerState>) -> Result<ServerReadyData, String> {
     state
         .status
@@ -106,6 +108,7 @@ async fn ensure_server_ready(state: State<'_, ServerState>) -> Result<ServerRead
 }
 
 #[tauri::command]
+#[specta::specta]
 fn get_default_server_url(app: AppHandle) -> Result<Option<String>, String> {
     let store = app
         .store(SETTINGS_STORE)
@@ -119,6 +122,7 @@ fn get_default_server_url(app: AppHandle) -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 async fn set_default_server_url(app: AppHandle, url: Option<String>) -> Result<(), String> {
     let store = app
         .store(SETTINGS_STORE)
@@ -252,6 +256,26 @@ async fn check_server_health(url: &str, password: Option<&str>) -> bool {
 pub fn run() {
     let updater_enabled = option_env!("TAURI_SIGNING_PRIVATE_KEY").is_some();
 
+    let builder = tauri_specta::Builder::<tauri::Wry>::new()
+        // Then register them (separated by a comma)
+        .commands(tauri_specta::collect_commands![
+            kill_sidecar,
+            install_cli,
+            ensure_server_ready,
+            get_default_server_url,
+            set_default_server_url,
+            markdown::parse_markdown_command
+        ])
+        .error_handling(tauri_specta::ErrorHandlingMode::Throw);
+
+    #[cfg(debug_assertions)] // <- Only export on non-release builds
+    builder
+        .export(
+            specta_typescript::Typescript::default(),
+            "../src/bindings.ts",
+        )
+        .expect("Failed to export typescript bindings");
+
     #[cfg(all(target_os = "macos", not(debug_assertions)))]
     let _ = std::process::Command::new("killall")
         .arg("opencode-cli")
@@ -285,15 +309,10 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(PinchZoomDisablePlugin)
         .plugin(tauri_plugin_decorum::init())
-        .invoke_handler(tauri::generate_handler![
-            kill_sidecar,
-            install_cli,
-            ensure_server_ready,
-            get_default_server_url,
-            set_default_server_url,
-            markdown::parse_markdown_command
-        ])
+        .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
+            builder.mount_events(app);
+
             #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
             app.deep_link().register_all().ok();
 
