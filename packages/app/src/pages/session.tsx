@@ -1941,7 +1941,7 @@ export default function Page() {
                               "w-full": true,
                               "px-4 md:px-6": true,
                               "md:max-w-200 md:mx-auto 3xl:max-w-[1200px] 3xl:mx-auto 4xl:max-w-[1600px] 4xl:mx-auto 5xl:max-w-[1900px] 5xl:mx-auto":
-                              centered(),
+                                centered(),
                             }}
                           >
                             <div class="h-10 flex items-center gap-1">
@@ -1970,7 +1970,7 @@ export default function Page() {
                           classList={{
                             "w-full": true,
                             "md:max-w-200 md:mx-auto 3xl:max-w-[1200px] 3xl:mx-auto 4xl:max-w-[1600px] 4xl:mx-auto 5xl:max-w-[1900px] 5xl:mx-auto":
-                            centered(),
+                              centered(),
                             "mt-0.5": centered(),
                             "mt-0": !centered(),
                           }}
@@ -2023,8 +2023,7 @@ export default function Page() {
                                   data-message-id={message.id}
                                   classList={{
                                     "min-w-0 w-full max-w-full": true,
-                                    "md:max-w-200 3xl:max-w-[1200px] 4xl:max-w-[1600px] 5xl:max-w-[1900px]":
-                                    centered(),
+                                    "md:max-w-200 3xl:max-w-[1200px] 4xl:max-w-[1600px] 5xl:max-w-[1900px]": centered(),
                                   }}
                                 >
                                   <SessionTurn
