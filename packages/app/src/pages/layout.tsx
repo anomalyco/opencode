@@ -886,6 +886,52 @@ export default function Layout(props: ParentProps) {
     queueMicrotask(() => scrollToSession(session.id, `${session.directory}:${session.id}`))
   }
 
+  function navigateSessionByUnseen(offset: number) {
+    const sessions = currentSessions()
+    if (sessions.length === 0) return
+
+    const hasUnseen = sessions.some((session) => notification.session.unseen(session.id).length > 0)
+    if (!hasUnseen) return
+
+    const activeIndex = params.id ? sessions.findIndex((s) => s.id === params.id) : -1
+    const start = activeIndex === -1 ? (offset > 0 ? -1 : 0) : activeIndex
+
+    for (let i = 1; i <= sessions.length; i++) {
+      const index = offset > 0 ? (start + i) % sessions.length : (start - i + sessions.length) % sessions.length
+      const session = sessions[index]
+      if (!session) continue
+      if (notification.session.unseen(session.id).length === 0) continue
+
+      prefetchSession(session, "high")
+
+      const next = sessions[(index + 1) % sessions.length]
+      const prev = sessions[(index - 1 + sessions.length) % sessions.length]
+
+      if (offset > 0) {
+        if (next) prefetchSession(next, "high")
+        if (prev) prefetchSession(prev)
+      }
+
+      if (offset < 0) {
+        if (prev) prefetchSession(prev, "high")
+        if (next) prefetchSession(next)
+      }
+
+      if (import.meta.env.DEV) {
+        navStart({
+          dir: base64Encode(session.directory),
+          from: params.id,
+          to: session.id,
+          trigger: offset > 0 ? "shift+alt+arrowdown" : "shift+alt+arrowup",
+        })
+      }
+
+      navigateToSession(session)
+      queueMicrotask(() => scrollToSession(session.id, `${session.directory}:${session.id}`))
+      return
+    }
+  }
+
   async function archiveSession(session: Session) {
     const [store, setStore] = globalSync.child(session.directory)
     const sessions = store.session ?? []
@@ -1023,6 +1069,20 @@ export default function Layout(props: ParentProps) {
         category: language.t("command.category.session"),
         keybind: "alt+arrowdown",
         onSelect: () => navigateSessionByOffset(1),
+      },
+      {
+        id: "session.previous.unseen",
+        title: language.t("command.session.previous.unseen"),
+        category: language.t("command.category.session"),
+        keybind: "shift+alt+arrowup",
+        onSelect: () => navigateSessionByUnseen(-1),
+      },
+      {
+        id: "session.next.unseen",
+        title: language.t("command.session.next.unseen"),
+        category: language.t("command.category.session"),
+        keybind: "shift+alt+arrowdown",
+        onSelect: () => navigateSessionByUnseen(1),
       },
       {
         id: "session.archive",
