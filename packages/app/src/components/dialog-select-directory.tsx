@@ -129,8 +129,17 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   function row(absolute: string, input: string): Row {
     const full = trimTrailing(absolute)
     const tilde = tildeOf(full)
-    const alias = input.trim().startsWith("~") ? "~/" + full : ""
-    const search = [full, tilde, alias, getFilename(full)].filter(Boolean).join("\n")
+    const alias = tilde === "~" ? "~/" : tilde ? tilde : ""
+
+    const withSlash = (value: string) => {
+      if (!value) return ""
+      if (value.endsWith("/")) return value
+      return value + "/"
+    }
+
+    const search = [full, withSlash(full), tilde, withSlash(tilde), alias, withSlash(alias), getFilename(full)]
+      .filter(Boolean)
+      .join("\n")
     return { absolute: full, search }
   }
 
@@ -187,11 +196,14 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
 
     const query = normalizeDriveRoot(input.path)
 
-    if (raw.startsWith("~")) {
-      const results = await sdk.client.find
+    const find = () =>
+      sdk.client.find
         .files({ directory: input.directory, query, type: "directory", limit: 50 })
         .then((x) => x.data ?? [])
         .catch(() => [])
+
+    if (raw.startsWith("~")) {
+      const results = await find()
 
       const base = trimTrailing(input.directory)
       const out = results.map((rel) => join(base, rel))
@@ -199,10 +211,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     }
 
     if (!isPath) {
-      const results = await sdk.client.find
-        .files({ directory: input.directory, query, type: "directory", limit: 50 })
-        .then((x) => x.data ?? [])
-        .catch(() => [])
+      const results = await find()
 
       return results.map((rel) => join(input.directory, rel)).slice(0, 50)
     }
@@ -293,6 +302,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
                   <FileIcon node={{ path: item.absolute, type: "directory" }} class="shrink-0 size-4" />
                   <div class="flex items-center text-14-regular min-w-0">
                     <span class="text-text-strong whitespace-nowrap">~</span>
+                    <span class="text-text-weak whitespace-nowrap">/</span>
                   </div>
                 </div>
               </div>
@@ -307,6 +317,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
                     {getDirectory(path)}
                   </span>
                   <span class="text-text-strong whitespace-nowrap">{getFilename(path)}</span>
+                  <span class="text-text-weak whitespace-nowrap">/</span>
                 </div>
               </div>
             </div>
