@@ -51,6 +51,7 @@ export interface ListProps<T> extends FilteredListProps<T> {
 export interface ListRef {
   onKeyDown: (e: KeyboardEvent) => void
   setScrollRef: (el: HTMLDivElement | undefined) => void
+  setFilter: (value: string) => void
 }
 
 export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) {
@@ -80,7 +81,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     container.scrollTop = Math.max(0, Math.min(target, max))
   }
 
-  const { filter, grouped, flat, active, setActive, onKeyDown, onInput } = useFilteredList<T>(props)
+  const { filter, grouped, flat, active, setActive, onKeyDown, onInput, refetch } = useFilteredList<T>(props)
 
   const searchProps = () => (typeof props.search === "object" ? props.search : {})
   const searchAction = () => searchProps().action
@@ -89,21 +90,29 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
 
   const moved = (event: MouseEvent) => event.movementX !== 0 || event.movementY !== 0
 
-  createEffect(() => {
-    if (props.filter !== undefined) {
-      onInput(props.filter)
-    }
-  })
+  const applyFilter = (value: string, options?: { ref?: boolean }) => {
+    const prev = filter()
+    setInternalFilter(value)
+    onInput(value)
+    props.onFilter?.(value)
 
-  createEffect((prev) => {
-    if (!props.search) return
-    const current = internalFilter()
-    if (prev !== current) {
-      onInput(current)
-      props.onFilter?.(current)
+    if (!options?.ref) return
+
+    // Force a refetch even if the value is unchanged.
+    // This is important for programmatic changes like Tab completion.
+    if (prev === value) {
+      refetch()
+      return
     }
-    return current
-  }, "")
+    queueMicrotask(() => refetch())
+  }
+
+  createEffect(() => {
+    if (props.filter === undefined) return
+    if (props.filter === internalFilter()) return
+    setInternalFilter(props.filter)
+    onInput(props.filter)
+  })
 
   createEffect(
     on(
@@ -163,6 +172,8 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     const index = selected ? all.indexOf(selected) : -1
     props.onKeyEvent?.(e, selected)
 
+    if (e.defaultPrevented) return
+
     if (e.key === "Enter" && !e.isComposing) {
       e.preventDefault()
       if (selected) handleSelect(selected, index)
@@ -174,6 +185,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   props.ref?.({
     onKeyDown: handleKey,
     setScrollRef,
+    setFilter: (value) => applyFilter(value, { ref: true }),
   })
 
   const renderAdd = () => {
@@ -247,7 +259,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
                 data-slot="list-search-input"
                 type="text"
                 value={internalFilter()}
-                onChange={setInternalFilter}
+                onChange={(value) => applyFilter(value)}
                 onKeyDown={handleKey}
                 placeholder={searchProps().placeholder}
                 spellcheck={false}
@@ -260,7 +272,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
               <IconButton
                 icon="circle-x"
                 variant="ghost"
-                onClick={() => setInternalFilter("")}
+                onClick={() => applyFilter("")}
                 aria-label={i18n.t("ui.list.clearFilter")}
               />
             </Show>
@@ -295,6 +307,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
                             data-active={props.key(item) === active()}
                             data-selected={item === props.current}
                             onClick={() => handleSelect(item, i())}
+                            onKeyDown={handleKey}
                             type="button"
                             onMouseMove={(event) => {
                               if (!moved(event)) return
