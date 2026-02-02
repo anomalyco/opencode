@@ -2114,12 +2114,20 @@ export default function Layout(props: ParentProps) {
       >
         <Collapsible variant="ghost" open={open()} class="shrink-0" onOpenChange={openWrapper}>
           <div class="px-2 py-1">
-            <div class="group/workspace relative">
+            <div
+              class="group/workspace relative"
+              data-component="workspace-item"
+              data-workspace={base64Encode(props.directory)}
+            >
               <div class="flex items-center gap-1">
                 <Show
                   when={workspaceEditActive()}
                   fallback={
-                    <Collapsible.Trigger class="flex items-center justify-between w-full pl-2 pr-16 py-1.5 rounded-md hover:bg-surface-raised-base-hover">
+                    <Collapsible.Trigger
+                      class="flex items-center justify-between w-full pl-2 pr-16 py-1.5 rounded-md hover:bg-surface-raised-base-hover"
+                      data-action="workspace-toggle"
+                      data-workspace={base64Encode(props.directory)}
+                    >
                       {header()}
                     </Collapsible.Trigger>
                   }
@@ -2146,6 +2154,8 @@ export default function Layout(props: ParentProps) {
                         icon="dot-grid"
                         variant="ghost"
                         class="size-6 rounded-md"
+                        data-action="workspace-menu"
+                        data-workspace={base64Encode(props.directory)}
                         aria-label={language.t("common.moreOptions")}
                       />
                     </Tooltip>
@@ -2285,6 +2295,8 @@ export default function Layout(props: ParentProps) {
       <button
         type="button"
         aria-label={projectName()}
+        data-action="project-switch"
+        data-project={base64Encode(props.project.worktree)}
         classList={{
           "flex items-center justify-center size-10 p-1 rounded-lg overflow-hidden transition-colors cursor-default": true,
           "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover": selected(),
@@ -2335,6 +2347,8 @@ export default function Layout(props: ParentProps) {
                     icon="circle-x"
                     variant="ghost"
                     class="shrink-0"
+                    data-action="project-close-hover"
+                    data-project={base64Encode(props.project.worktree)}
                     aria-label={language.t("common.close")}
                     onClick={(event) => {
                       event.stopPropagation()
@@ -2577,6 +2591,8 @@ export default function Layout(props: ParentProps) {
                       as={IconButton}
                       icon="dot-grid"
                       variant="ghost"
+                      data-action="project-menu"
+                      data-project={base64Encode(p.worktree)}
                       class="shrink-0 size-6 rounded-md opacity-0 group-hover/project:opacity-100 data-[expanded]:opacity-100 data-[expanded]:bg-surface-base-active"
                       aria-label={language.t("common.moreOptions")}
                     />
@@ -2586,6 +2602,8 @@ export default function Layout(props: ParentProps) {
                           <DropdownMenu.ItemLabel>{language.t("common.edit")}</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                         <DropdownMenu.Item
+                          data-action="project-workspaces-toggle"
+                          data-project={base64Encode(p.worktree)}
                           disabled={p.vcs !== "git" && !layout.sidebar.workspaces(p.worktree)()}
                           onSelect={() => {
                             const enabled = layout.sidebar.workspaces(p.worktree)()
@@ -2604,7 +2622,11 @@ export default function Layout(props: ParentProps) {
                           </DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                         <DropdownMenu.Separator />
-                        <DropdownMenu.Item onSelect={() => closeProject(p.worktree)}>
+                        <DropdownMenu.Item
+                          data-action="project-close-menu"
+                          data-project={base64Encode(p.worktree)}
+                          onSelect={() => closeProject(p.worktree)}
+                        >
                           <DropdownMenu.ItemLabel>{language.t("common.close")}</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                       </DropdownMenu.Content>
@@ -2814,6 +2836,7 @@ export default function Layout(props: ParentProps) {
       <div class="flex-1 min-h-0 flex">
         <nav
           aria-label={language.t("sidebar.nav.projectsAndSessions")}
+          data-component="sidebar-nav-desktop"
           classList={{
             "hidden xl:block": true,
             "relative shrink-0": true,
@@ -2873,6 +2896,7 @@ export default function Layout(props: ParentProps) {
           />
           <nav
             aria-label={language.t("sidebar.nav.projectsAndSessions")}
+            data-component="sidebar-nav-mobile"
             classList={{
               "@container fixed top-10 bottom-0 left-0 z-50 w-72 bg-background-base transition-transform duration-200 ease-out": true,
               "translate-x-0": layout.mobileSidebar.opened(),
