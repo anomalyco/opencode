@@ -214,6 +214,8 @@ export const dict = {
   "prompt.popover.emptyCommands": "Keine passenden Befehle",
   "prompt.dropzone.label": "Bilder oder PDFs hier ablegen",
   "prompt.slash.badge.custom": "benutzerdefiniert",
+  "prompt.slash.badge.skill": "skill",
+  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "aktiv",
   "prompt.context.includeActiveFile": "Aktive Datei einbeziehen",
   "prompt.context.removeActiveFile": "Aktive Datei aus dem Kontext entfernen",

@@ -210,6 +210,8 @@ export const dict = {
   "prompt.popover.emptyCommands": "Aucune commande correspondante",
   "prompt.dropzone.label": "Déposez des images ou des PDF ici",
   "prompt.slash.badge.custom": "personnalisé",
+  "prompt.slash.badge.skill": "skill",
+  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "actif",
   "prompt.context.includeActiveFile": "Inclure le fichier actif",
   "prompt.context.removeActiveFile": "Retirer le fichier actif du contexte",
