@@ -57,6 +57,7 @@ pub fn parse_markdown(input: &str) -> String {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn parse_markdown_command(markdown: String) -> Result<String, String> {
     Ok(parse_markdown(&markdown))
 }
