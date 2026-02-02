@@ -28,7 +28,6 @@ export function getAvatarColors(key?: string) {
 type SessionTabs = {
   active?: string
   all: string[]
-  previous?: string
 }
 
 type SessionView = {
@@ -630,71 +629,50 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setActive(tab: string | undefined) {
             const session = key()
             if (tab === "review") return
-            const current = store.sessionTabs[session]
-            if (!current) {
+            if (!store.sessionTabs[session]) {
               setStore("sessionTabs", session, { all: [], active: tab })
-              return
+            } else {
+              setStore("sessionTabs", session, "active", tab)
             }
-            const active = current.active
-            if (tab && active && active !== tab) {
-              setStore("sessionTabs", session, "previous", active)
-            }
-            setStore("sessionTabs", session, "active", tab)
           },
           setAll(all: string[]) {
             const session = key()
             const next = all.filter((tab) => tab !== "review")
-            const current = store.sessionTabs[session]
-            if (!current) {
+            if (!store.sessionTabs[session]) {
               setStore("sessionTabs", session, { all: next, active: undefined })
-              return
+            } else {
+              setStore("sessionTabs", session, "all", next)
             }
-            setStore("sessionTabs", session, "all", next)
-            const previous = current.previous
-            if (!previous) return
-            if (next.includes(previous)) return
-            setStore("sessionTabs", session, "previous", undefined)
           },
           async open(tab: string) {
             if (tab === "review") return
             const session = key()
-            const current = store.sessionTabs[session]
-            const all = current?.all ?? []
-            const active = current?.active
+            const current = store.sessionTabs[session] ?? { all: [] }
 
             if (tab === "context") {
-              const next = [tab, ...all.filter((x) => x !== tab)]
-              if (!current) {
-                setStore("sessionTabs", session, { all: next, active: tab })
+              const all = [tab, ...current.all.filter((x) => x !== tab)]
+              if (!store.sessionTabs[session]) {
+                setStore("sessionTabs", session, { all, active: tab })
                 return
               }
-              if (active && active !== tab) {
-                setStore("sessionTabs", session, "previous", active)
-              }
-              setStore("sessionTabs", session, "all", next)
+              setStore("sessionTabs", session, "all", all)
               setStore("sessionTabs", session, "active", tab)
               return
             }
 
-            if (!all.includes(tab)) {
-              if (!current) {
+            if (!current.all.includes(tab)) {
+              if (!store.sessionTabs[session]) {
                 setStore("sessionTabs", session, { all: [tab], active: tab })
                 return
               }
-              if (active && active !== tab) {
-                setStore("sessionTabs", session, "previous", active)
-              }
-              setStore("sessionTabs", session, "all", [...all, tab])
+              setStore("sessionTabs", session, "all", [...current.all, tab])
               setStore("sessionTabs", session, "active", tab)
               return
             }
 
-            if (!current) {
-              setStore("sessionTabs", session, { all, active: tab })
+            if (!store.sessionTabs[session]) {
+              setStore("sessionTabs", session, { all: current.all, active: tab })
               return
-            }
-            if (active && active !== tab) {
-              setStore("sessionTabs", session, "previous", active)
             }
             setStore("sessionTabs", session, "active", tab)
           },
@@ -704,19 +682,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             if (!current) return
 
             const all = current.all.filter((x) => x !== tab)
-            const previous = current.previous
-            const nextPrevious = previous && all.includes(previous) ? previous : undefined
             batch(() => {
               setStore("sessionTabs", session, "all", all)
-              if (current.active !== tab) {
-                if (nextPrevious !== previous) {
-                  setStore("sessionTabs", session, "previous", nextPrevious)
-                }
-                return
-              }
+              if (current.active !== tab) return
 
-              const next = nextPrevious ?? all[0]
-              setStore("sessionTabs", session, "previous", undefined)
+              const index = current.all.findIndex((f) => f === tab)
+              const next = all[index - 1] ?? all[0]
               setStore("sessionTabs", session, "active", next)
             })
           },
