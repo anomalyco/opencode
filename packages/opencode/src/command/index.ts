@@ -61,6 +61,7 @@ export namespace Command {
       [Default.INIT]: {
         name: Default.INIT,
         description: "create/update AGENTS.md",
+        source: "command",
         get template() {
           return PROMPT_INITIALIZE.replace("${path}", Instance.worktree)
         },
@@ -69,6 +70,7 @@ export namespace Command {
       [Default.REVIEW]: {
         name: Default.REVIEW,
         description: "review changes [commit|branch|pr], defaults to uncommitted",
+        source: "command",
         get template() {
           return PROMPT_REVIEW.replace("${path}", Instance.worktree)
         },
@@ -88,6 +90,7 @@ export namespace Command {
         agent: command.agent,
         model: command.model,
         description: command.description,
+        source: "command",
         get template() {
           return command.template
         },
