@@ -1,18 +1,36 @@
-name: Build Forked Opencode (Fix JQ Null)
+name: Publish Forked OpenCode to npm (linux-x64 + windows-x64, OIDC)
 
 on:
+  push: {} # 所有分支 push 都触发
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. 1.0.42). Leave empty to use 1.0.<run_number>"
+        required: false
+        type: string
 
 permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: publish-opencode
+  cancel-in-progress: false
+
+env:
+  NPM_REGISTRY: "https://registry.npmjs.org/"
+  SCOPE: "@baixiangcpp"
+  WRAPPER_NAME: "opencode-ai"
+  # 严格白名单：按你 dist 实际目录名
+  ALLOW_DIST_DIRS: "opencode-linux-x64 opencode-windows-x64"
+
 jobs:
-  build-core:
+  build_and_publish:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -21,51 +39,357 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Install Dependencies
-        run: bun install
+      - name: Setup Node (for npm publish)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
 
-      - name: Build Project
-        run: |
-          cd packages/opencode
-          # Fix Musl build issue
-          sed -i '/linux-arm64-musl/d' script/build.ts
-          
-          # Build normally
-          bun run build
-
-      - name: Publish to NPM (Trusted Publishing / OIDC)
-        env:
-          NPM_CONFIG_WORKSPACES: "false"
+      - name: Resolve version
+        id: ver
+        shell: bash
         run: |
           set -euo pipefail
 
-          sudo npm install -g npm@11.5.1
-          
-          rm -rf "$HOME/opencode-release"
-          mkdir -p "$HOME/opencode-release"
-          cp -R packages/opencode/* "$HOME/opencode-release/"
-          cd "$HOME/opencode-release"
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            v="${GITHUB_REF_NAME#v}"
+            echo "version=$v" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
-          rm -f .npmrc
-          unset NODE_AUTH_TOKEN || true
-          unset NPM_TOKEN || true
+          if [[ -n "${{ inputs.version }}" ]]; then
+            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=1.0.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          fi
 
-          # FIX: Added 'if . then ... else . end' checks.
-          # This prevents jq from crashing if 'dependencies' or 'optionalDependencies' is missing (null).
-          jq '.name = "@baixiangcpp/opencode-ai" 
-              | .version = "1.0.${{ github.run_number }}" 
-              | .repository = { "type": "git", "url": "git+https://github.com/baixiangcpp/opencode.git" }
-              | del(.private) 
-              | del(.devDependencies)
-              | .dependencies |= (if . then map_values(if (tostring | test("^(catalog:|workspace:)")) then "latest" else . end) else . end)
-              | .optionalDependencies |= (if . then map_values(if (tostring | test("^(catalog:|workspace:)")) then "latest" else . end) else . end)' package.json > package.json.tmp
-          mv package.json.tmp package.json
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          bun install --frozen-lockfile
 
-          cat > .npmignore <<EOF
-          test/
-          src/**/*.test.ts
-          *.tgz
-          dist/
-          EOF
+      - name: Build (binaries + wrapper assets)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd packages/opencode
+          # 你之前遇到的 musl 构建问题，保留规避
+          sed -i '/linux-arm64-musl/d' script/build.ts || true
+          bun run build
 
-          npm publish --access public --provenance --no-git-checks
+      - name: Prepare standalone publish directory (.publish)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rm -rf .publish
+          mkdir -p .publish
+
+          # wrapper
+          mkdir -p ".publish/${WRAPPER_NAME}"
+          rsync -a --delete "packages/opencode/" ".publish/${WRAPPER_NAME}/"
+
+          # dist root
+          DIST_ROOT=""
+          for d in "packages/opencode/dist" "dist" "packages/opencode/.dist"; do
+            if [[ -d "$d" ]]; then
+              DIST_ROOT="$d"
+              break
+            fi
+          done
+          if [[ -z "$DIST_ROOT" ]]; then
+            echo "ERROR: cannot find dist directory"
+            exit 1
+          fi
+
+          echo "Using DIST_ROOT=$DIST_ROOT"
+          ls -la "$DIST_ROOT" || true
+
+          # 严格白名单拷贝
+          for base in ${ALLOW_DIST_DIRS}; do
+            if [[ ! -d "$DIST_ROOT/$base" ]]; then
+              echo "ERROR: missing dist dir: $DIST_ROOT/$base"
+              exit 1
+            fi
+            mkdir -p ".publish/$base"
+            rsync -a --delete "$DIST_ROOT/$base/" ".publish/$base/"
+          done
+
+          echo "Prepared publish dirs:"
+          find .publish -maxdepth 1 -mindepth 1 -type d -print
+
+      - name: Rewrite package.json (drop catalog/workspace + drop @opencode-ai/*; set names/version/os/cpu; wrapper optionalDeps)
+        shell: bash
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          export VERSION SCOPE WRAPPER_NAME ALLOW_DIST_DIRS
+
+          # 1) rewrite wrapper package.json
+          node -e '
+          const fs=require("fs");
+          const p=".publish/"+process.env.WRAPPER_NAME+"/package.json";
+          const pkg=JSON.parse(fs.readFileSync(p,"utf8"));
+          const version=process.env.VERSION;
+          const scope=process.env.SCOPE;
+          const wrapper=process.env.WRAPPER_NAME;
+          const allow=(process.env.ALLOW_DIST_DIRS||"").split(/\s+/).filter(Boolean);
+
+          function cleanDeps(obj){
+            for(const key of ["dependencies","optionalDependencies","peerDependencies"]){
+              const deps=obj[key];
+              if(!deps||typeof deps!=="object") continue;
+              for(const [dep,range] of Object.entries(deps)){
+                const r=String(range||"").trim();
+                if(r==="catalog:"||r.startsWith("catalog:")||r==="workspace:"||r.startsWith("workspace:")) delete deps[dep];
+                if(dep.startsWith("@opencode-ai/")) delete deps[dep];
+              }
+              if(Object.keys(deps).length===0) delete obj[key];
+            }
+          }
+
+          if(pkg.private) delete pkg.private;
+          if(pkg.devDependencies) delete pkg.devDependencies;
+
+          pkg.name=scope+"/"+wrapper;
+          pkg.version=version;
+          pkg.os=["win32","linux"];
+          pkg.repository={type:"git",url:"git+https://github.com/baixiangcpp/opencode.git"};
+
+          cleanDeps(pkg);
+
+          // wrapper 只依赖你发布的两个二进制包
+          pkg.optionalDependencies=Object.fromEntries(allow.map(d=>[scope+"/"+d, version]));
+
+          fs.writeFileSync(p, JSON.stringify(pkg,null,2)+"\n");
+          console.log("rewrote wrapper:", pkg.name, pkg.version);
+          '
+
+          # 2) rewrite binary package.json (linux-x64)
+          node -e '
+          const fs=require("fs");
+          const p=".publish/opencode-linux-x64/package.json";
+          const pkg=JSON.parse(fs.readFileSync(p,"utf8"));
+          const version=process.env.VERSION;
+          const scope=process.env.SCOPE;
+
+          function cleanDeps(obj){
+            for(const key of ["dependencies","optionalDependencies","peerDependencies"]){
+              const deps=obj[key];
+              if(!deps||typeof deps!=="object") continue;
+              for(const [dep,range] of Object.entries(deps)){
+                const r=String(range||"").trim();
+                if(r==="catalog:"||r.startsWith("catalog:")||r==="workspace:"||r.startsWith("workspace:")) delete deps[dep];
+                if(dep.startsWith("@opencode-ai/")) delete deps[dep];
+              }
+              if(Object.keys(deps).length===0) delete obj[key];
+            }
+          }
+
+          if(pkg.private) delete pkg.private;
+          if(pkg.devDependencies) delete pkg.devDependencies;
+
+          pkg.name=scope+"/opencode-linux-x64";
+          pkg.version=version;
+          pkg.os=["linux"];
+          pkg.cpu=["x64"];
+          pkg.repository={type:"git",url:"git+https://github.com/baixiangcpp/opencode.git"};
+
+          cleanDeps(pkg);
+
+          fs.writeFileSync(p, JSON.stringify(pkg,null,2)+"\n");
+          console.log("rewrote bin:", pkg.name, pkg.version);
+          '
+
+          # 3) rewrite binary package.json (windows-x64 -> npm os is win32)
+          node -e '
+          const fs=require("fs");
+          const p=".publish/opencode-windows-x64/package.json";
+          const pkg=JSON.parse(fs.readFileSync(p,"utf8"));
+          const version=process.env.VERSION;
+          const scope=process.env.SCOPE;
+
+          function cleanDeps(obj){
+            for(const key of ["dependencies","optionalDependencies","peerDependencies"]){
+              const deps=obj[key];
+              if(!deps||typeof deps!=="object") continue;
+              for(const [dep,range] of Object.entries(deps)){
+                const r=String(range||"").trim();
+                if(r==="catalog:"||r.startsWith("catalog:")||r==="workspace:"||r.startsWith("workspace:")) delete deps[dep];
+                if(dep.startsWith("@opencode-ai/")) delete deps[dep];
+              }
+              if(Object.keys(deps).length===0) delete obj[key];
+            }
+          }
+
+          if(pkg.private) delete pkg.private;
+          if(pkg.devDependencies) delete pkg.devDependencies;
+
+          pkg.name=scope+"/opencode-windows-x64";
+          pkg.version=version;
+          pkg.os=["win32"];
+          pkg.cpu=["x64"];
+          pkg.repository={type:"git",url:"git+https://github.com/baixiangcpp/opencode.git"};
+
+          cleanDeps(pkg);
+
+          fs.writeFileSync(p, JSON.stringify(pkg,null,2)+"\n");
+          console.log("rewrote bin:", pkg.name, pkg.version);
+          '
+
+          # 4) hard checks: forbid catalog/workspace and @opencode-ai/*
+          if grep -R --line-number -E '"(catalog:|workspace:|@opencode-ai/)' .publish/*/package.json; then
+            echo "ERROR: bad deps still present in published package.json"
+            exit 1
+          fi
+
+      - name: Fix wrapper bin to CommonJS (avoid ESM require error)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          WRAP=".publish/${WRAPPER_NAME}"
+          PKG="${WRAP}/package.json"
+          BIN_DIR="${WRAP}/bin"
+
+          if [[ ! -f "$PKG" ]]; then
+            echo "ERROR: wrapper package.json not found: $PKG"
+            exit 1
+          fi
+          if [[ ! -d "$BIN_DIR" ]]; then
+            echo "ERROR: bin dir not found: $BIN_DIR"
+            exit 1
+          fi
+
+          # locate old bin file
+          SRC=""
+          if [[ -f "$BIN_DIR/opencode" ]]; then SRC="$BIN_DIR/opencode"; fi
+          if [[ -z "$SRC" && -f "$BIN_DIR/opencode.js" ]]; then SRC="$BIN_DIR/opencode.js"; fi
+          if [[ -z "$SRC" && -f "$BIN_DIR/opencode.mjs" ]]; then SRC="$BIN_DIR/opencode.mjs"; fi
+          if [[ -z "$SRC" ]]; then
+            echo "ERROR: no bin entry found in $BIN_DIR"
+            ls -la "$BIN_DIR" || true
+            exit 1
+          fi
+
+          DST="$BIN_DIR/opencode.cjs"
+
+          # ensure shebang
+          if ! head -n 1 "$SRC" | grep -q '^#!'; then
+            tmp="$(mktemp)"
+            printf '%s\n' '#!/usr/bin/env node' > "$tmp"
+            cat "$SRC" >> "$tmp"
+            mv "$tmp" "$SRC"
+          fi
+
+          mv -f "$SRC" "$DST"
+          chmod +x "$DST"
+
+          export PKG
+          node -e '
+          const fs=require("fs");
+          const pkgPath=process.env.PKG;
+          const pkg=JSON.parse(fs.readFileSync(pkgPath,"utf8"));
+          const target="bin/opencode.cjs";
+
+          if(typeof pkg.bin==="string"){
+            pkg.bin=target;
+          } else if(pkg.bin && typeof pkg.bin==="object"){
+            let hit=false;
+            for(const k of Object.keys(pkg.bin)){
+              if(String(pkg.bin[k]).includes("bin/opencode")){ pkg.bin[k]=target; hit=true; }
+            }
+            if(!hit) pkg.bin.opencode=target;
+          } else {
+            pkg.bin={opencode:target};
+          }
+
+          fs.writeFileSync(pkgPath, JSON.stringify(pkg,null,2)+"\n");
+          console.log("bin updated:", pkg.bin);
+          '
+
+          echo "BIN_DIR:"
+          ls -la "$BIN_DIR"
+
+      - name: Compress binaries to fit npmmirror 80MB limit (UPX)
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y upx-ucl
+
+          compress_one () {
+            local f="$1"
+            [[ -f "$f" ]] || return 0
+            echo "Before: $f"
+            ls -lh "$f" || true
+
+            # UPX 压缩（对 linux elf / windows exe 都可用）
+            upx --best --lzma "$f" || upx --best "$f" || true
+
+            echo "After: $f"
+            ls -lh "$f" || true
+
+            # 80MB = 83886080
+            local sz
+            sz="$(stat -c%s "$f")"
+            if [[ "$sz" -gt 83886080 ]]; then
+              echo "ERROR: still >80MB ($sz bytes): $f"
+              exit 1
+            fi
+          }
+
+          compress_one ".publish/opencode-linux-x64/bin/opencode"
+          compress_one ".publish/opencode-windows-x64/bin/opencode.exe"
+          compress_one ".publish/opencode-windows-x64/bin/opencode"
+
+
+      - name: Publish to npm (OIDC) - dev/tags
+        if: github.ref == 'refs/heads/dev' || startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          rm -f .npmrc || true
+          rm -f "$HOME/.npmrc" || true
+          unset NODE_AUTH_TOKEN NPM_TOKEN || true
+
+          npm --version
+          npm config set registry "${NPM_REGISTRY}"
+
+          read_pkg_field () {
+            local file="$1"
+            local field="$2"
+            node -e "console.log(JSON.parse(require('fs').readFileSync('${file}','utf8'))['${field}'])"
+          }
+
+          publish_one () {
+            local dir="$1"
+            local pkgjson="${dir}/package.json"
+            local name ver
+            name="$(read_pkg_field "$pkgjson" "name")"
+            ver="$(read_pkg_field "$pkgjson" "version")"
+            echo "==> ${name}@${ver}"
+
+            if npm view "${name}@${ver}" version >/dev/null 2>&1; then
+              echo "Skip (already exists): ${name}@${ver}"
+              return 0
+            fi
+
+            (cd "$dir" && npm publish --access public --provenance --no-git-checks)
+          }
+
+          publish_one ".publish/opencode-linux-x64"
+          publish_one ".publish/opencode-windows-x64"
+          publish_one ".publish/${WRAPPER_NAME}"
+
+          echo "Done. Published version: ${VERSION}"
+
+      - name: Note
+        if: github.ref != 'refs/heads/dev' && !startsWith(github.ref, 'refs/tags/')
+        run: echo "Not on dev/tag; build finished, publish skipped."
