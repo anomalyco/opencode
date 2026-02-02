@@ -31,6 +31,10 @@ use crate::window_customizer::PinchZoomDisablePlugin;
 const SETTINGS_STORE: &str = "opencode.settings.dat";
 const DEFAULT_SERVER_URL_KEY: &str = "defaultServerUrl";
 
+fn window_state_flags() -> StateFlags {
+    StateFlags::all() - StateFlags::DECORATIONS
+}
+
 #[derive(Clone, serde::Serialize)]
 struct ServerReadyData {
     url: String,
@@ -271,8 +275,7 @@ pub fn run() {
         .plugin(
             tauri_plugin_window_state::Builder::new()
                 .with_state_flags(
-                    tauri_plugin_window_state::StateFlags::all()
-                        - tauri_plugin_window_state::StateFlags::DECORATIONS,
+                window_state_flags(),
                 )
                 .build(),
         )
@@ -563,7 +566,7 @@ fn setup_window_state_listener(app: &tauri::AppHandle, window: &tauri::WebviewWi
                 let handle = app.clone();
                 let app = app.clone();
                 let _ = handle.run_on_main_thread(move || {
-                    let _ = app.save_window_state(StateFlags::all() - StateFlags::DECORATIONS);
+                    let _ = app.save_window_state(window_state_flags());
                 });
             };
 
