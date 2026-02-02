@@ -9,6 +9,16 @@ import { authMiddleware } from "../../auth/middleware"
 import { config } from "../../config"
 import * as fs from "fs/promises"
 import * as path from "path"
+import {
+  SkillService,
+  ToolService,
+  AgentService,
+  ConfigService,
+  ProviderService,
+  VcsService,
+  CommandService,
+  getProjectInfo,
+} from "../../opencode"
 
 const createProjectSchema = z.object({
   name: z.string().min(1).max(255),
@@ -177,5 +187,411 @@ export function ProjectRoutes() {
       }
 
       return c.json({ success: true, message: "Repository cloned successfully" })
+    })
+
+    // ==========================================
+    // OpenCode Integration Endpoints
+    // ==========================================
+
+    // Get project info (comprehensive)
+    .get("/:id/info", async (c) => {
+      const { userId } = c.get("user")
+      const projectId = c.req.param("id")
+
+      const project = await db.query.projects.findFirst({
+        where: and(eq(schema.projects.id, projectId), eq(schema.projects.userId, userId)),
+      })
+
+      if (!project) {
+        throw new HTTPException(404, { message: "Project not found" })
+      }
+
+      if (!project.workspaceVolume) {
+        throw new HTTPException(400, { message: "Project has no workspace volume" })
+      }
+
+      try {
+        const info = await getProjectInfo(project.workspaceVolume)
+        return c.json({ project, ...info })
+      } catch (error) {
+        console.error("Failed to get project info:", error)
+        throw new HTTPException(500, {
+          message: error instanceof Error ? error.message : "Failed to get project info",
+        })
+      }
+    })
+
+    // List skills
+    .get("/:id/skills", async (c) => {
+      const { userId } = c.get("user")
+      const projectId = c.req.param("id")
+
+      const project = await db.query.projects.findFirst({
+        where: and(eq(schema.projects.id, projectId), eq(schema.projects.userId, userId)),
+      })
+
+      if (!project) {
+        throw new HTTPException(404, { message: "Project not found" })
+      }
+
+      if (!project.workspaceVolume) {
+        throw new HTTPException(400, { message: "Project has no workspace volume" })
+      }
+
+      try {
+        const skills = await SkillService.list(project.workspaceVolume)
+        return c.json({ skills })
+      } catch (error) {
+        console.error("Failed to list skills:", error)
+        throw new HTTPException(500, {
+          message: error instanceof Error ? error.message : "Failed to list skills",
+        })
+      }
+    })
+
+    // Get specific skill
+    .get("/:id/skills/:name", async (c) => {
+      const { userId } = c.get("user")
+      const projectId = c.req.param("id")
+      const skillName = c.req.param("name")
+
+      const project = await db.query.projects.findFirst({
+        where: and(eq(schema.projects.id, projectId), eq(schema.projects.userId, userId)),
+      })
+
+      if (!project) {
+        throw new HTTPException(404, { message: "Project not found" })
+      }
+
+      if (!project.workspaceVolume) {
+        throw new HTTPException(400, { message: "Project has no workspace volume" })
+      }
+
+      try {
+        const skill = await SkillService.get(project.workspaceVolume, skillName)
+        if (!skill) {
+          throw new HTTPException(404, { message: "Skill not found" })
+        }
+        return c.json({ skill })
+      } catch (error) {
+        if (error instanceof HTTPException) throw error
+        console.error("Failed to get skill:", error)
+        throw new HTTPException(500, {
+          message: error instanceof Error ? error.message : "Failed to get skill",
+        })
+      }
+    })
+
+    // List tools
+    .get("/:id/tools", async (c) => {
+      const { userId } = c.get("user")
+      const projectId = c.req.param("id")
+
+      const project = await db.query.projects.findFirst({
+        where: and(eq(schema.projects.id, projectId), eq(schema.projects.userId, userId)),
+      })
+
+      if (!project) {
+        throw new HTTPException(404, { message: "Project not found" })
+      }
+
+      if (!project.workspaceVolume) {
+        throw new HTTPException(400, { message: "Project has no workspace volume" })
+      }
+
+      try {
+        const tools = await ToolService.list(project.workspaceVolume)
+        return c.json({ tools })
+      } catch (error) {
+        console.error("Failed to list tools:", error)
+        throw new HTTPException(500, {
+          message: error instanceof Error ? error.message : "Failed to list tools",
+        })
+      }
+    })
+
+    // List tool IDs only
+    .get("/:id/tools/ids", async (c) => {
+      const { userId } = c.get("user")
+      const projectId = c.req.param("id")
+
+      const project = await db.query.projects.findFirst({
+        where: and(eq(schema.projects.id, projectId), eq(schema.projects.userId, userId)),
+      })
+
+      if (!project) {
+        throw new HTTPException(404, { message: "Project not found" })
+      }
+
+      if (!project.workspaceVolume) {
+        throw new HTTPException(400, { message: "Project has no workspace volume" })
+      }
+
+      try {
+        const ids = await ToolService.listIds(project.workspaceVolume)
+        return c.json({ tools: ids })
+      } catch (error) {
+        console.error("Failed to list tool IDs:", error)
+        throw new HTTPException(500, {
+          message: error instanceof Error ? error.message : "Failed to list tool IDs",
+        })
+      }
+    })
+
+    // List agents
+    .get("/:id/agents", async (c) => {
+      const { userId } = c.get("user")
+      const projectId = c.req.param("id")
+
+      const project = await db.query.projects.findFirst({
+        where: and(eq(schema.projects.id, projectId), eq(schema.projects.userId, userId)),
+      })
+
+      if (!project) {
+        throw new HTTPException(404, { message: "Project not found" })
+      }
+
+      if (!project.workspaceVolume) {
+        throw new HTTPException(400, { message: "Project has no workspace volume" })
+      }
+
+      try {
+        const agents = await AgentService.list(project.workspaceVolume)
+        return c.json({ agents })
+      } catch (error) {
+        console.error("Failed to list agents:", error)
+        throw new HTTPException(500, {
+          message: error instanceof Error ? error.message : "Failed to list agents",
+        })
+      }
+    })
+
+    // Get specific agent
+    .get("/:id/agents/:name", async (c) => {
+      const { userId } = c.get("user")
+      const projectId = c.req.param("id")
+      const agentName = c.req.param("name")
+
+      const project = await db.query.projects.findFirst({
+        where: and(eq(schema.projects.id, projectId), eq(schema.projects.userId, userId)),
+      })
+
+      if (!project) {
+        throw new HTTPException(404, { message: "Project not found" })
+      }
+
+      if (!project.workspaceVolume) {
+        throw new HTTPException(400, { message: "Project has no workspace volume" })
+      }
+
+      try {
+        const agent = await AgentService.get(project.workspaceVolume, agentName)
+        if (!agent) {
+          throw new HTTPException(404, { message: "Agent not found" })
+        }
+        return c.json({ agent })
+      } catch (error) {
+        if (error instanceof HTTPException) throw error
+        console.error("Failed to get agent:", error)
+        throw new HTTPException(500, {
+          message: error instanceof Error ? error.message : "Failed to get agent",
+        })
+      }
+    })
+
+    // Get default agent
+    .get("/:id/agents/default", async (c) => {
+      const { userId } = c.get("user")
+      const projectId = c.req.param("id")
+
+      const project = await db.query.projects.findFirst({
+        where: and(eq(schema.projects.id, projectId), eq(schema.projects.userId, userId)),
+      })
+
+      if (!project) {
+        throw new HTTPException(404, { message: "Project not found" })
+      }
+
+      if (!project.workspaceVolume) {
+        throw new HTTPException(400, { message: "Project has no workspace volume" })
+      }
+
+      try {
+        const agent = await AgentService.getDefault(project.workspaceVolume)
+        return c.json({ agent })
+      } catch (error) {
+        console.error("Failed to get default agent:", error)
+        throw new HTTPException(500, {
+          message: error instanceof Error ? error.message : "Failed to get default agent",
+        })
+      }
+    })
+
+    // Get project config
+    .get("/:id/config", async (c) => {
+      const { userId } = c.get("user")
+      const projectId = c.req.param("id")
+
+      const project = await db.query.projects.findFirst({
+        where: and(eq(schema.projects.id, projectId), eq(schema.projects.userId, userId)),
+      })
+
+      if (!project) {
+        throw new HTTPException(404, { message: "Project not found" })
+      }
+
+      if (!project.workspaceVolume) {
+        throw new HTTPException(400, { message: "Project has no workspace volume" })
+      }
+
+      try {
+        const config = await ConfigService.get(project.workspaceVolume)
+        return c.json({ config })
+      } catch (error) {
+        console.error("Failed to get config:", error)
+        throw new HTTPException(500, {
+          message: error instanceof Error ? error.message : "Failed to get config",
+        })
+      }
+    })
+
+    // Get config directories
+    .get("/:id/config/directories", async (c) => {
+      const { userId } = c.get("user")
+      const projectId = c.req.param("id")
+
+      const project = await db.query.projects.findFirst({
+        where: and(eq(schema.projects.id, projectId), eq(schema.projects.userId, userId)),
+      })
+
+      if (!project) {
+        throw new HTTPException(404, { message: "Project not found" })
+      }
+
+      if (!project.workspaceVolume) {
+        throw new HTTPException(400, { message: "Project has no workspace volume" })
+      }
+
+      try {
+        const directories = await ConfigService.directories(project.workspaceVolume)
+        return c.json({ directories })
+      } catch (error) {
+        console.error("Failed to get config directories:", error)
+        throw new HTTPException(500, {
+          message: error instanceof Error ? error.message : "Failed to get config directories",
+        })
+      }
+    })
+
+    // List providers
+    .get("/:id/providers", async (c) => {
+      const { userId } = c.get("user")
+      const projectId = c.req.param("id")
+
+      const project = await db.query.projects.findFirst({
+        where: and(eq(schema.projects.id, projectId), eq(schema.projects.userId, userId)),
+      })
+
+      if (!project) {
+        throw new HTTPException(404, { message: "Project not found" })
+      }
+
+      if (!project.workspaceVolume) {
+        throw new HTTPException(400, { message: "Project has no workspace volume" })
+      }
+
+      try {
+        const providers = await ProviderService.list(project.workspaceVolume)
+        return c.json({ providers })
+      } catch (error) {
+        console.error("Failed to list providers:", error)
+        throw new HTTPException(500, {
+          message: error instanceof Error ? error.message : "Failed to list providers",
+        })
+      }
+    })
+
+    // Get default model
+    .get("/:id/providers/default-model", async (c) => {
+      const { userId } = c.get("user")
+      const projectId = c.req.param("id")
+
+      const project = await db.query.projects.findFirst({
+        where: and(eq(schema.projects.id, projectId), eq(schema.projects.userId, userId)),
+      })
+
+      if (!project) {
+        throw new HTTPException(404, { message: "Project not found" })
+      }
+
+      if (!project.workspaceVolume) {
+        throw new HTTPException(400, { message: "Project has no workspace volume" })
+      }
+
+      try {
+        const model = await ProviderService.getDefaultModel(project.workspaceVolume)
+        return c.json({ model })
+      } catch (error) {
+        console.error("Failed to get default model:", error)
+        throw new HTTPException(500, {
+          message: error instanceof Error ? error.message : "Failed to get default model",
+        })
+      }
+    })
+
+    // Get VCS info
+    .get("/:id/vcs", async (c) => {
+      const { userId } = c.get("user")
+      const projectId = c.req.param("id")
+
+      const project = await db.query.projects.findFirst({
+        where: and(eq(schema.projects.id, projectId), eq(schema.projects.userId, userId)),
+      })
+
+      if (!project) {
+        throw new HTTPException(404, { message: "Project not found" })
+      }
+
+      if (!project.workspaceVolume) {
+        throw new HTTPException(400, { message: "Project has no workspace volume" })
+      }
+
+      try {
+        const branch = await VcsService.branch(project.workspaceVolume)
+        return c.json({ vcs: { branch } })
+      } catch (error) {
+        console.error("Failed to get VCS info:", error)
+        throw new HTTPException(500, {
+          message: error instanceof Error ? error.message : "Failed to get VCS info",
+        })
+      }
+    })
+
+    // List commands
+    .get("/:id/commands", async (c) => {
+      const { userId } = c.get("user")
+      const projectId = c.req.param("id")
+
+      const project = await db.query.projects.findFirst({
+        where: and(eq(schema.projects.id, projectId), eq(schema.projects.userId, userId)),
+      })
+
+      if (!project) {
+        throw new HTTPException(404, { message: "Project not found" })
+      }
+
+      if (!project.workspaceVolume) {
+        throw new HTTPException(400, { message: "Project has no workspace volume" })
+      }
+
+      try {
+        const commands = await CommandService.list(project.workspaceVolume)
+        return c.json({ commands })
+      } catch (error) {
+        console.error("Failed to list commands:", error)
+        throw new HTTPException(500, {
+          message: error instanceof Error ? error.message : "Failed to list commands",
+        })
+      }
     })
 }

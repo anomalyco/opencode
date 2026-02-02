@@ -18,6 +18,16 @@ OpenCode 是一个开源的 AI 编程代理工具，旨在为开发者提供一�
 - 项目的创建、读取和管理
 - 用户项目权限控制
 - 项目状态跟踪
+- Git 仓库克隆
+
+### OpenCode 集成
+- **Skills 发现**: 动态发现项目中的 `.opencode/skill/` 和 `.claude/skills/` 目录下的技能文件
+- **Tools 管理**: 获取所有可用的工具（bash、read、write、edit 等）
+- **Agents 配置**: 获取项目中定义的 AI 代理配置
+- **Config 管理**: 读取项目的 opencode 配置
+- **Providers**: 获取可用的 AI 提供商列表
+- **VCS 信息**: 获取版本控制系统信息（当前分支等）
+- **Commands**: 获取可用的命令列表
 
 ### 会话管理
 - 会话的创建、读取、更新和删除
@@ -55,6 +65,23 @@ OpenCode 是一个开源的 AI 编程代理工具，旨在为开发者提供一�
 - `GET /projects/:id` - 获取特定项目
 - `PUT /projects/:id` - 更新项目
 - `DELETE /projects/:id` - 删除项目
+- `POST /projects/:id/clone` - 克隆 Git 仓库到项目工作区
+
+### 项目 OpenCode 集成
+- `GET /projects/:id/info` - 获取项目完整信息（skills、agents、config、vcs、commands）
+- `GET /projects/:id/skills` - 获取项目所有 skills
+- `GET /projects/:id/skills/:name` - 获取特定 skill
+- `GET /projects/:id/tools` - 获取项目可用工具列表
+- `GET /projects/:id/tools/ids` - 获取工具 ID 列表
+- `GET /projects/:id/agents` - 获取项目所有 agents
+- `GET /projects/:id/agents/:name` - 获取特定 agent
+- `GET /projects/:id/agents/default` - 获取默认 agent
+- `GET /projects/:id/config` - 获取项目配置
+- `GET /projects/:id/config/directories` - 获取配置目录列表
+- `GET /projects/:id/providers` - 获取 AI 提供商列表
+- `GET /projects/:id/providers/default-model` - 获取默认模型
+- `GET /projects/:id/vcs` - 获取版本控制信息
+- `GET /projects/:id/commands` - 获取可用命令列表
 
 ### 会话相关
 - `GET /sessions` - 获取用户的所有会话
@@ -119,11 +146,39 @@ const envSchema = z.object({
 
 opencode-web 与 Docker 容器管理系统深度集成，能够动态管理沙盒环境容器的生命周期，为每个会话提供隔离的开发环境。
 
+## OpenCode 核心集成
+
+opencode-web 直接集成了 opencode 核心模块，能够在项目目录上下文中访问以下功能：
+
+### Skills 系统
+Skills 是专业知识库和分步指南，存储在以下位置：
+- 项目级：`.opencode/skill/<name>/SKILL.md` 或 `.claude/skills/<name>/SKILL.md`
+- 全局级：`~/.claude/skills/<name>/SKILL.md`
+
+每个 SKILL.md 文件包含 YAML 前置元数据（name、description）和 Markdown 内容。
+
+### Tools 系统
+支持 24+ 个内置工具，包括：
+- 文件操作：`read`、`write`、`edit`、`glob`、`grep`
+- 系统操作：`bash`
+- 网络操作：`webfetch`、`websearch`
+- AI 操作：`task`、`skill`、`todo`
+
+### Agents 系统
+预定义的代理类型：
+- `build` - 默认构建代理
+- `plan` - 计划模式代理
+- `general` - 通用子代理
+- `explore` - 代码探索代理
+- `compaction` - 压缩代理
+- `title` - 标题生成代理
+- `summary` - 摘要生成代理
+
 ## 项目关系
 
 opencode-web 是 OpenCode 项目生态系统的一部分，与以下组件协同工作：
 
-- **opencode**: 终端用户界面和 CLI 工具
+- **opencode**: 终端用户界面和 CLI 工具（核心模块直接集成）
 - **sandbox**: 沙盒执行环境
 - **plugin**: 插件系统
 - **ui**: UI 组件库
