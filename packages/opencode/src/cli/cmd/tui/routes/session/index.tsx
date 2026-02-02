@@ -1867,22 +1867,20 @@ function Task(props: ToolProps<typeof TaskTool>) {
           part={props.part}
           spinner={isRunning()}
         >
-          <box>
-            <text style={{ fg: theme.textMuted }}>
-              {props.input.description} ({tools().length} toolcalls)
-            </text>
-            <Show when={current()}>
-              {(item) => {
-                const title = item().state.status === "completed" ? (item().state as any).title : ""
-                return (
-                  <text style={{ fg: item().state.status === "error" ? theme.error : theme.textMuted }}>
-                    └ {Locale.titlecase(item().tool)}
-                    {title ? ` ${title}` : ""}
-                  </text>
-                )
-              }}
-            </Show>
-          </box>
+          <text style={{ fg: theme.textMuted }}>
+            {props.input.description} ({tools().length} toolcalls)
+          </text>
+          <Show when={current()}>
+            {(item) => {
+              const title = item().state.status === "completed" ? (item().state as any).title : ""
+              return (
+                <text style={{ fg: item().state.status === "error" ? theme.error : theme.textMuted }}>
+                  └ {Locale.titlecase(item().tool)}
+                  {title ? ` ${title}` : ""}
+                </text>
+              )
+            }}
+          </Show>
           <Show when={hasOutput()}>
             <box gap={1} marginTop={1} flexDirection="column">
               <code
@@ -1894,9 +1892,6 @@ function Task(props: ToolProps<typeof TaskTool>) {
                 conceal={ctx.conceal()}
                 fg={theme.text}
               />
-              <Show when={overflow()}>
-                <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
-              </Show>
             </box>
           </Show>
           <Show when={props.metadata.sessionId}>
