@@ -74,7 +74,7 @@ afterEach(() => {
 })
 
 function mockUnboundFetch(response: any = mockModelsResponse, ok: boolean = true) {
-  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+  const mockFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input.toString()
     if (url.includes("/models")) {
       return {
@@ -86,6 +86,7 @@ function mockUnboundFetch(response: any = mockModelsResponse, ok: boolean = true
     }
     return originalFetch(input, init)
   }
+  globalThis.fetch = mockFetch as unknown as typeof fetch
 }
 
 test("Unbound: provider loaded from UNBOUND_API_KEY env variable", async () => {
@@ -338,7 +339,7 @@ test("Unbound: falls back to default model on API failure", async () => {
 test("Unbound: env variable takes precedence over config apiKey", async () => {
   let capturedAuthHeader: string | null = null
 
-  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+  const mockFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input.toString()
     if (url.includes("/models")) {
       capturedAuthHeader = (init?.headers as Record<string, string>)?.["Authorization"] ?? null
@@ -351,6 +352,7 @@ test("Unbound: env variable takes precedence over config apiKey", async () => {
     }
     return originalFetch(input, init)
   }
+  globalThis.fetch = mockFetch as unknown as typeof fetch
 
   await using tmp = await tmpdir({
     init: async (dir) => {
