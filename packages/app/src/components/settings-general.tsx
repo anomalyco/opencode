@@ -226,7 +226,7 @@ export const SettingsGeneral: Component = () => {
                 variant="secondary"
                 size="small"
                 triggerVariant="settings"
-                triggerStyle={{ "font-family": monoFontFamily(settings.appearance.font()), "field-sizing": "content" }}
+                triggerStyle={{ "font-family": monoFontFamily(settings.appearance.font()), "min-width": "180px" }}
               >
                 {(option) => (
                   <span style={{ "font-family": monoFontFamily(option?.value) }}>
