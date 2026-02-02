@@ -8,6 +8,30 @@ import { normalizePathForComparison } from "@/utils/path"
 
 type StoredProject = { worktree: string; expanded: boolean }
 
+/**
+ * 规范化路径用于比较,避免在Windows上重复创建项目
+ * 处理大小写敏感性、斜杠类型和末尾斜杠
+ * 
+ * 问题: Windows路径可能以不同形式表示同一物理路径:
+ * - C:\Users\Project vs c:\users\project (大小写不同)
+ * - C:/Users/Project vs C:\Users\Project (斜杠类型不同)
+ * - C:\Users\Project\ vs C:\Users\Project (末尾斜杠不同)
+ * 
+ * 解决方案: 统一斜杠为正斜杠,统一为小写(Windows),移除末尾斜杠
+ */
+function normalizePathForComparison(path: string): string {
+  let normalized = path
+  // 统一斜杠为正斜杠
+  normalized = normalized.replace(/\\/g, '/')
+  // 移除末尾斜杠
+  normalized = normalized.replace(/\/$/, '')
+  // 在Windows上,统一为小写以进行不区分大小写的比较
+  if (process.platform === 'win32') {
+    normalized = normalized.toLowerCase()
+  }
+  return normalized
+}
+
 export function normalizeServerUrl(input: string) {
   const trimmed = input.trim()
   if (!trimmed) return

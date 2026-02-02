@@ -8,6 +8,7 @@ import { Project } from "@opencode-ai/sdk/v2"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
 import { same } from "@/utils/same"
 import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
+import { normalizePathForComparison } from "@/utils/path"
 
 const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
 export type AvatarColorKey = (typeof AVATAR_COLOR_KEYS)[number]
@@ -287,7 +288,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       for (const project of globalSync.data.project) {
         const sandboxes = project.sandboxes ?? []
         for (const sandbox of sandboxes) {
-          map.set(sandbox, project.worktree)
+          // 使用规范化路径作为键，避免Windows上的路径不一致问题
+          // 修复Issue #11666: Windows路径规范化不一致导致重复创建项目
+          map.set(normalizePathForComparison(sandbox), project.worktree)
         }
       }
       return map
@@ -304,7 +307,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const current = chain[chain.length - 1]
         if (!current) return directory
 
-        const next = map.get(current)
+        // 使用规范化路径查找，避免Windows上的路径不一致问题
+        // 修复Issue #11666: Windows路径规范化不一致导致重复创建项目
+        const next = map.get(normalizePathForComparison(current))
         if (!next) return current
 
         if (visited.has(next)) return directory
