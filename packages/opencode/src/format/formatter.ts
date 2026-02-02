@@ -355,3 +355,12 @@ export const pint: Info = {
     return false
   },
 }
+
+export const ormolu: Info = {
+  name: "ormolu",
+  command: ["ormolu", "-i", "$FILE"],
+  extensions: [".hs"],
+  async enabled() {
+    return Bun.which("ormolu") !== null
+  },
+}
