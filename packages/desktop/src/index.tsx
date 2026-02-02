@@ -339,7 +339,9 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
     return result
   },
 
-  setDefaultServerUrl: async (url: string | null) => { await commands.setDefaultServerUrl(url) },
+  setDefaultServerUrl: async (url: string | null) => {
+    await commands.setDefaultServerUrl(url)
+  },
 
   parseMarkdown: (markdown: string) => commands.parseMarkdownCommand(markdown),
 
