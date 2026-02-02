@@ -3,6 +3,7 @@ import { Bus } from "@/bus"
 import { Log } from "../util/log"
 import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
 import { Hono } from "hono"
+import type { MiddlewareHandler } from "hono"
 import { cors } from "hono/cors"
 import { streamSSE } from "hono/streaming"
 import { proxy } from "hono/proxy"
@@ -43,6 +44,39 @@ import { MDNS } from "./mdns"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
+
+const COMPRESSION_THRESHOLD = 1024 // Only compress responses > 1KB
+
+function gzipMiddleware(): MiddlewareHandler {
+  return async (c, next) => {
+    const acceptEncoding = c.req.header("Accept-Encoding") ?? c.req.header("accept-encoding") ?? ""
+    if (!acceptEncoding.includes("gzip")) return next()
+
+    await next()
+
+    const response = c.res
+    const contentType = response.headers.get("Content-Type") ?? ""
+    if (!contentType.includes("application/json")) return
+    if (response.headers.get("Content-Encoding")) return // Already encoded
+    if (!response.body) return
+
+    const body = await response.text()
+    if (body.length < COMPRESSION_THRESHOLD) {
+      c.res = new Response(body, response)
+      return
+    }
+
+    const compressed = Bun.gzipSync(body)
+    c.res = new Response(compressed, {
+      status: response.status,
+      headers: {
+        ...Object.fromEntries(response.headers.entries()),
+        "Content-Encoding": "gzip",
+        "Content-Length": String(compressed.byteLength),
+      },
+    })
+  }
+}
 
 export namespace Server {
   const log = Log.create({ service: "server" })
@@ -121,6 +155,7 @@ export namespace Server {
             },
           }),
         )
+        .use(gzipMiddleware())
         .route("/global", GlobalRoutes())
         .put(
           "/auth/:providerID",
