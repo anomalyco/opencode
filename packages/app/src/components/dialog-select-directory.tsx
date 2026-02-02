@@ -53,6 +53,11 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
 
   const cache = new Map<string, Promise<Array<{ name: string; absolute: string }>>>()
 
+  const clean = (value: string) => {
+    const first = (value ?? "").split(/\r?\n/)[0] ?? ""
+    return first.replace(/[\u0000-\u001F\u007F]/g, "").trim()
+  }
+
   function normalize(input: string) {
     const v = input.replaceAll("\\", "/")
     if (v.startsWith("//") && !v.startsWith("///")) return "//" + v.slice(2).replace(/\/+/g, "/")
@@ -88,6 +93,18 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     if (v.startsWith("/")) return "/"
     if (/^[A-Za-z]:\//.test(v)) return v.slice(0, 3)
     return ""
+  }
+
+  function parentOf(input: string) {
+    const v = trimTrailing(input)
+    if (v === "/") return v
+    if (v === "//") return v
+    if (/^[A-Za-z]:\/$/.test(v)) return v
+
+    const i = v.lastIndexOf("/")
+    if (i <= 0) return "/"
+    if (i === 2 && /^[A-Za-z]:/.test(v)) return v.slice(0, 3)
+    return v.slice(0, i)
   }
 
   function modeOf(input: string) {
@@ -126,7 +143,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     return ""
   }
 
-  function row(absolute: string, input: string): Row {
+  function row(absolute: string): Row {
     const full = trimTrailing(absolute)
     const tilde = tildeOf(full)
     const alias = tilde === "~" ? "~/" : tilde ? tilde : ""
@@ -143,11 +160,11 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     return { absolute: full, search }
   }
 
-  function scoped(filter: string) {
+  function scoped(value: string) {
     const base = start()
     if (!base) return
 
-    const raw = normalizeDriveRoot(filter.trim())
+    const raw = normalizeDriveRoot(value)
     if (!raw) return { directory: trimTrailing(base), path: "" }
 
     const h = home()
@@ -188,32 +205,25 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   }
 
   const directories = async (filter: string) => {
-    const input = scoped(filter)
-    if (!input) return [] as string[]
+    const value = clean(filter)
+    const scopedInput = scoped(value)
+    if (!scopedInput) return [] as string[]
 
-    const raw = normalizeDriveRoot(filter.trim())
+    const raw = normalizeDriveRoot(value)
     const isPath = raw.startsWith("~") || !!rootOf(raw) || raw.includes("/")
 
-    const query = normalizeDriveRoot(input.path)
+    const query = normalizeDriveRoot(scopedInput.path)
 
     const find = () =>
       sdk.client.find
-        .files({ directory: input.directory, query, type: "directory", limit: 50 })
+        .files({ directory: scopedInput.directory, query, type: "directory", limit: 50 })
         .then((x) => x.data ?? [])
         .catch(() => [])
-
-    if (raw.startsWith("~")) {
-      const results = await find()
-
-      const base = trimTrailing(input.directory)
-      const out = results.map((rel) => join(base, rel))
-      return Array.from(new Set([base, ...out])).slice(0, 50)
-    }
 
     if (!isPath) {
       const results = await find()
 
-      return results.map((rel) => join(input.directory, rel)).slice(0, 50)
+      return results.map((rel) => join(scopedInput.directory, rel)).slice(0, 50)
     }
 
     const segments = query.replace(/^\/+/, "").split("/")
@@ -222,17 +232,10 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
 
     const cap = 12
     const branch = 4
-    let paths = [input.directory]
+    let paths = [scopedInput.directory]
     for (const part of head) {
       if (part === "..") {
-        paths = paths.map((p) => {
-          const v = trimTrailing(p)
-          if (v === "/") return v
-          if (/^[A-Za-z]:\/$/.test(v)) return v
-          const i = v.lastIndexOf("/")
-          if (i <= 0) return "/"
-          return v.slice(0, i)
-        })
+        paths = paths.map(parentOf)
         continue
       }
 
@@ -243,9 +246,12 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
 
     const out = (await Promise.all(paths.map((p) => match(p, tail, 50)))).flat()
     const deduped = Array.from(new Set(out))
-
+    const base = raw.startsWith("~") ? trimTrailing(scopedInput.directory) : ""
     const expand = !raw.endsWith("/")
-    if (!expand || !tail) return deduped.slice(0, 50)
+    if (!expand || !tail) {
+      const items = base ? Array.from(new Set([base, ...deduped])) : deduped
+      return items.slice(0, 50)
+    }
 
     const needle = tail.toLowerCase()
     const exact = deduped.filter((p) => getFilename(p).toLowerCase() === needle)
@@ -253,12 +259,13 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     if (!target) return deduped.slice(0, 50)
 
     const children = await match(target, "", 30)
-    return Array.from(new Set([...deduped, ...children])).slice(0, 50)
+    const items = Array.from(new Set([...deduped, ...children]))
+    return (base ? Array.from(new Set([base, ...items])) : items).slice(0, 50)
   }
 
   const items = async (value: string) => {
     const results = await directories(value)
-    return results.map((absolute) => row(absolute, value))
+    return results.map(row)
   }
 
   function resolve(absolute: string) {
@@ -276,7 +283,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
         key={(x) => x.absolute}
         filterKeys={["search"]}
         ref={(r) => (list = r)}
-        onFilter={setFilter}
+        onFilter={(value) => setFilter(clean(value))}
         onKeyEvent={(e, item) => {
           if (e.key !== "Tab") return
           if (e.shiftKey) return

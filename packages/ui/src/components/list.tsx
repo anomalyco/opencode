@@ -81,7 +81,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     container.scrollTop = Math.max(0, Math.min(target, max))
   }
 
-  const { filter, grouped, flat, active, setActive, onKeyDown, onInput } = useFilteredList<T>(props)
+  const { filter, grouped, flat, active, setActive, onKeyDown, onInput, refetch } = useFilteredList<T>(props)
 
   const searchProps = () => (typeof props.search === "object" ? props.search : {})
   const searchAction = () => searchProps().action
@@ -90,21 +90,33 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
 
   const moved = (event: MouseEvent) => event.movementX !== 0 || event.movementY !== 0
 
-  createEffect(() => {
-    if (props.filter !== undefined) {
-      onInput(props.filter)
-    }
-  })
+  const applyFilter = (value: string) => {
+    setInternalFilter(value)
+    onInput(value)
+    props.onFilter?.(value)
+  }
 
-  createEffect((prev) => {
-    if (!props.search) return
-    const current = internalFilter()
-    if (prev !== current) {
-      onInput(current)
-      props.onFilter?.(current)
+  const applyFilterRef = (value: string) => {
+    const prev = filter()
+    setInternalFilter(value)
+    onInput(value)
+    props.onFilter?.(value)
+
+    // Force a refetch even if the value is unchanged.
+    // This is important for programmatic changes like Tab completion.
+    if (prev === value) {
+      refetch()
+      return
     }
-    return current
-  }, "")
+    queueMicrotask(() => refetch())
+  }
+
+  createEffect(() => {
+    if (props.filter === undefined) return
+    if (props.filter === internalFilter()) return
+    setInternalFilter(props.filter)
+    onInput(props.filter)
+  })
 
   createEffect(
     on(
@@ -177,7 +189,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   props.ref?.({
     onKeyDown: handleKey,
     setScrollRef,
-    setFilter: setInternalFilter,
+    setFilter: applyFilterRef,
   })
 
   const renderAdd = () => {
@@ -251,7 +263,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
                 data-slot="list-search-input"
                 type="text"
                 value={internalFilter()}
-                onChange={setInternalFilter}
+                onChange={applyFilter}
                 onKeyDown={handleKey}
                 placeholder={searchProps().placeholder}
                 spellcheck={false}
@@ -264,7 +276,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
               <IconButton
                 icon="circle-x"
                 variant="ghost"
-                onClick={() => setInternalFilter("")}
+                onClick={() => applyFilter("")}
                 aria-label={i18n.t("ui.list.clearFilter")}
               />
             </Show>
