@@ -1,3 +1,6 @@
+// IMPORTANT: Load main preload first to register Babel transforms
+import "../preload"
+
 // IMPORTANT: Set env vars BEFORE any imports from src/ directory
 // xdg-basedir reads env vars at import time, so we must set these first
 import os from "os"

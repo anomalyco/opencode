@@ -38,8 +38,14 @@ const inkExcludedPlugin: BunPlugin = {
 
       const code = await Bun.file(args.path).text()
 
-      // Detect if file imports from Ink (React-based)
-      const isInkFile = /from\s*["']ink["']/.test(code) || /require\(["']ink["']\)/.test(code)
+      // Detect if file is Ink-related (React-based)
+      const isInkFile =
+        /from\s*["']ink["']/.test(code) ||
+        /from\s*["']ink-/.test(code) ||
+        /require\(["']ink["']\)/.test(code) ||
+        /@jsxImportSource\s+react/.test(code) ||
+        args.path.includes("/cli/ink/") ||
+        args.path.includes("/test/cli/ink/")
 
       if (isInkFile) {
         // Transform with Babel React preset
