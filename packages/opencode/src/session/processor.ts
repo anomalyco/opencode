@@ -239,6 +239,12 @@ export namespace SessionProcessor {
                     usage: value.usage,
                     metadata: value.providerMetadata,
                   })
+                  log.debug("response", {
+                    messageID: input.assistantMessage.id,
+                    sessionID: input.assistantMessage.sessionID,
+                    model: input.model.id,
+                    serviceTier: value.providerMetadata?.openai?.serviceTier,
+                  })
                   input.assistantMessage.finish = value.finishReason
                   input.assistantMessage.cost += usage.cost
                   input.assistantMessage.tokens = usage.tokens

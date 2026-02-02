@@ -478,18 +478,24 @@ export namespace Session {
           ? input.model.cost.experimentalOver200K
           : input.model.cost
       const base = rate ?? costInfo
+      const cost = safe(
+        new Decimal(0)
+          .add(new Decimal(tokens.input).mul(base?.input ?? 0).div(1_000_000))
+          .add(new Decimal(tokens.output).mul(base?.output ?? 0).div(1_000_000))
+          .add(new Decimal(tokens.cache.read).mul(base?.cache?.read ?? 0).div(1_000_000))
+          .add(new Decimal(tokens.cache.write).mul(base?.cache?.write ?? 0).div(1_000_000))
+          // TODO: update models.dev to have better pricing model, for now:
+          // charge reasoning tokens at the same rate as output tokens
+          .add(new Decimal(tokens.reasoning).mul(base?.output ?? 0).div(1_000_000))
+          .toNumber(),
+      )
+      log.debug("usage", {
+        tier: rate ? tier : "base",
+        rate: base,
+        price: cost,
+      })
       return {
-        cost: safe(
-          new Decimal(0)
-            .add(new Decimal(tokens.input).mul(base?.input ?? 0).div(1_000_000))
-            .add(new Decimal(tokens.output).mul(base?.output ?? 0).div(1_000_000))
-            .add(new Decimal(tokens.cache.read).mul(base?.cache?.read ?? 0).div(1_000_000))
-            .add(new Decimal(tokens.cache.write).mul(base?.cache?.write ?? 0).div(1_000_000))
-            // TODO: update models.dev to have better pricing model, for now:
-            // charge reasoning tokens at the same rate as output tokens
-            .add(new Decimal(tokens.reasoning).mul(base?.output ?? 0).div(1_000_000))
-            .toNumber(),
-        ),
+        cost,
         tokens,
       }
     },
