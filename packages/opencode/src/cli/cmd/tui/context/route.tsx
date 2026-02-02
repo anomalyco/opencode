@@ -13,7 +13,12 @@ export type SessionRoute = {
   initialPrompt?: PromptInfo
 }
 
-export type Route = HomeRoute | SessionRoute
+export type ChangesRoute = {
+  type: "changes"
+  sessionID: string
+}
+
+export type Route = HomeRoute | SessionRoute | ChangesRoute
 
 export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
   name: "Route",
