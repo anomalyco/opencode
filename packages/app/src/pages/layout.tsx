@@ -27,6 +27,7 @@ import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
+import { List, type ListRef } from "@opencode-ai/ui/list"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { HoverCard } from "@opencode-ai/ui/hover-card"
 import { MessageNav } from "@opencode-ai/ui/message-nav"
@@ -2682,6 +2683,14 @@ export default function Layout(props: ParentProps) {
   }
 
   const SidebarPanel = (panelProps: { project: LocalProject | undefined; mobile?: boolean }) => {
+    type SearchItem = {
+      id: string
+      title: string
+      directory: string
+      label: string
+      archived?: number
+    }
+
     const projectName = createMemo(() => {
       const project = panelProps.project
       if (!project) return ""
@@ -2697,6 +2706,107 @@ export default function Layout(props: ParentProps) {
     })
     const homedir = createMemo(() => globalSync.data.path.home)
 
+    const [search, setSearch] = createStore({
+      value: "",
+    })
+    const searching = createMemo(() => search.value.trim().length > 0)
+    let searchRef: HTMLInputElement | undefined
+    let listRef: ListRef | undefined
+
+    const token = { value: 0 }
+    let inflight: Promise<SearchItem[]> | undefined
+    let all: SearchItem[] | undefined
+
+    const reset = () => {
+      token.value += 1
+      inflight = undefined
+      all = undefined
+      setSearch({ value: "" })
+      listRef = undefined
+    }
+
+    const open = (item: SearchItem | undefined) => {
+      if (!item) return
+
+      const href = `/${base64Encode(item.directory)}/session/${item.id}`
+      if (!layout.sidebar.opened()) {
+        setState("hoverSession", undefined)
+        setState("hoverProject", undefined)
+      }
+      reset()
+      navigate(href)
+      layout.mobileSidebar.hide()
+    }
+
+    const items = (filter: string) => {
+      const query = filter.trim()
+      if (!query) {
+        token.value += 1
+        inflight = undefined
+        all = undefined
+        return [] as SearchItem[]
+      }
+
+      const project = panelProps.project
+      if (!project) return [] as SearchItem[]
+      if (all) return all
+      if (inflight) return inflight
+
+      const current = token.value
+      const dirs = workspaceIds(project)
+      inflight = Promise.all(
+        dirs.map((input) => {
+          const directory = workspaceKey(input)
+          const [workspaceStore] = globalSync.child(directory, { bootstrap: false })
+          const kind =
+            directory === project.worktree ? language.t("workspace.type.local") : language.t("workspace.type.sandbox")
+          const name = workspaceLabel(directory, workspaceStore.vcs?.branch, project.id)
+          const label = `${kind} : ${name}`
+          return globalSDK.client.session
+            .list({ directory, roots: true })
+            .then((x) =>
+              (x.data ?? [])
+                .filter((s) => !!s?.id)
+                .map((s) => ({
+                  id: s.id,
+                  title: s.title ?? language.t("command.session.new"),
+                  directory,
+                  label,
+                  archived: s.time?.archived,
+                })),
+            )
+            .catch(() => [] as SearchItem[])
+        }),
+      )
+        .then((results) => {
+          if (token.value !== current) return [] as SearchItem[]
+
+          const seen = new Set<string>()
+          const next = results.flat().filter((item) => {
+            const key = `${item.directory}:${item.id}`
+            if (seen.has(key)) return false
+            seen.add(key)
+            return true
+          })
+          all = next
+          return next
+        })
+        .catch(() => [] as SearchItem[])
+        .finally(() => {
+          inflight = undefined
+        })
+
+      return inflight
+    }
+
+    createEffect(
+      on(
+        () => panelProps.project?.worktree,
+        () => reset(),
+        { defer: true },
+      ),
+    )
+
     return (
       <div
         classList={{
@@ -2705,7 +2815,7 @@ export default function Layout(props: ParentProps) {
         }}
         style={{ width: panelProps.mobile ? undefined : `${Math.max(layout.sidebar.width() - 64, 0)}px` }}
       >
-        <Show when={panelProps.project} keyed>
+        <Show when={panelProps.project}>
           {(p) => (
             <>
               <div class="shrink-0 px-2 py-1">
@@ -2714,7 +2824,7 @@ export default function Layout(props: ParentProps) {
                     <InlineEditor
                       id={`project:${projectId()}`}
                       value={projectName}
-                      onSave={(next) => renameProject(p, next)}
+                      onSave={(next) => renameProject(p(), next)}
                       class="text-16-medium text-text-strong truncate"
                       displayClass="text-16-medium text-text-strong truncate"
                       stopPropagation
@@ -2723,7 +2833,7 @@ export default function Layout(props: ParentProps) {
                     <Tooltip
                       placement="bottom"
                       gutter={2}
-                      value={p.worktree}
+                      value={p().worktree}
                       class="shrink-0"
                       contentStyle={{
                         "max-width": "640px",
@@ -2731,7 +2841,7 @@ export default function Layout(props: ParentProps) {
                       }}
                     >
                       <span class="text-12-regular text-text-base truncate select-text">
-                        {p.worktree.replace(homedir(), "~")}
+                        {p().worktree.replace(homedir(), "~")}
                       </span>
                     </Tooltip>
                   </div>
@@ -2742,31 +2852,31 @@ export default function Layout(props: ParentProps) {
                       icon="dot-grid"
                       variant="ghost"
                       data-action="project-menu"
-                      data-project={base64Encode(p.worktree)}
+                      data-project={base64Encode(p().worktree)}
                       class="shrink-0 size-6 rounded-md opacity-0 group-hover/project:opacity-100 data-[expanded]:opacity-100 data-[expanded]:bg-surface-base-active"
                       aria-label={language.t("common.moreOptions")}
                     />
                     <DropdownMenu.Portal mount={!panelProps.mobile ? state.nav : undefined}>
                       <DropdownMenu.Content class="mt-1">
-                        <DropdownMenu.Item onSelect={() => dialog.show(() => <DialogEditProject project={p} />)}>
+                        <DropdownMenu.Item onSelect={() => dialog.show(() => <DialogEditProject project={p()} />)}>
                           <DropdownMenu.ItemLabel>{language.t("common.edit")}</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                         <DropdownMenu.Item
                           data-action="project-workspaces-toggle"
-                          data-project={base64Encode(p.worktree)}
-                          disabled={p.vcs !== "git" && !layout.sidebar.workspaces(p.worktree)()}
+                          data-project={base64Encode(p().worktree)}
+                          disabled={p().vcs !== "git" && !layout.sidebar.workspaces(p().worktree)()}
                           onSelect={() => {
-                            const enabled = layout.sidebar.workspaces(p.worktree)()
+                            const enabled = layout.sidebar.workspaces(p().worktree)()
                             if (enabled) {
-                              layout.sidebar.toggleWorkspaces(p.worktree)
+                              layout.sidebar.toggleWorkspaces(p().worktree)
                               return
                             }
-                            if (p.vcs !== "git") return
-                            layout.sidebar.toggleWorkspaces(p.worktree)
+                            if (p().vcs !== "git") return
+                            layout.sidebar.toggleWorkspaces(p().worktree)
                           }}
                         >
                           <DropdownMenu.ItemLabel>
-                            {layout.sidebar.workspaces(p.worktree)()
+                            {layout.sidebar.workspaces(p().worktree)()
                               ? language.t("sidebar.workspaces.disable")
                               : language.t("sidebar.workspaces.enable")}
                           </DropdownMenu.ItemLabel>
@@ -2774,8 +2884,8 @@ export default function Layout(props: ParentProps) {
                         <DropdownMenu.Separator />
                         <DropdownMenu.Item
                           data-action="project-close-menu"
-                          data-project={base64Encode(p.worktree)}
-                          onSelect={() => closeProject(p.worktree)}
+                          data-project={base64Encode(p().worktree)}
+                          onSelect={() => closeProject(p().worktree)}
                         >
                           <DropdownMenu.ItemLabel>{language.t("common.close")}</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
@@ -2785,103 +2895,207 @@ export default function Layout(props: ParentProps) {
                 </div>
               </div>
 
-              <Show
-                when={workspacesEnabled()}
-                fallback={
+              <div class="shrink-0 px-2 pt-2">
+                <div
+                  class="flex items-center gap-2 p-2 rounded-md bg-surface-base shadow-xs-border-base focus-within:shadow-xs-border-select"
+                  onPointerDown={(event) => {
+                    const target = event.target
+                    if (!(target instanceof Element)) return
+                    if (target.closest("input, textarea, [contenteditable='true']")) return
+                    searchRef?.focus()
+                  }}
+                >
+                  <Icon name="magnifying-glass" />
+                  <InlineInput
+                    ref={(el) => {
+                      searchRef = el
+                    }}
+                    class="flex-1 min-w-0 text-14-regular text-text-strong placeholder:text-text-weak"
+                    style={{ "box-shadow": "none" }}
+                    value={search.value}
+                    onInput={(event) => setSearch("value", event.currentTarget.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape") {
+                        event.preventDefault()
+                        setSearch("value", "")
+                        queueMicrotask(() => searchRef?.focus())
+                        return
+                      }
+
+                      if (!searching()) return
+
+                      if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Enter") {
+                        const ref = listRef
+                        if (!ref) return
+                        event.stopPropagation()
+                        ref.onKeyDown(event)
+                        return
+                      }
+
+                      if (event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
+                        if (event.key === "n" || event.key === "p") {
+                          const ref = listRef
+                          if (!ref) return
+                          event.stopPropagation()
+                          ref.onKeyDown(event)
+                        }
+                      }
+                    }}
+                    placeholder={language.t("session.header.search.placeholder", { project: projectName() })}
+                    spellcheck={false}
+                    autocorrect="off"
+                    autocomplete="off"
+                    autocapitalize="off"
+                  />
+                  <Show when={search.value}>
+                    <IconButton
+                      icon="circle-x"
+                      variant="ghost"
+                      class="size-5"
+                      aria-label={language.t("common.close")}
+                      onClick={() => {
+                        setSearch("value", "")
+                        queueMicrotask(() => searchRef?.focus())
+                      }}
+                    />
+                  </Show>
+                </div>
+              </div>
+
+              <Show when={searching()}>
+                <List
+                  class="flex-1 min-h-0 pb-2 pt-2 !px-2 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0"
+                  items={items}
+                  filter={search.value}
+                  filterKeys={["title", "label", "id"]}
+                  key={(item) => `${item.directory}:${item.id}`}
+                  onSelect={open}
+                  ref={(ref) => {
+                    listRef = ref
+                  }}
+                >
+                  {(item) => (
+                    <div class="flex flex-col gap-0.5 min-w-0 pr-2 text-left">
+                      <span
+                        class="text-14-medium text-text-strong truncate"
+                        classList={{ "opacity-70": !!item.archived }}
+                      >
+                        {item.title}
+                      </span>
+                      <span
+                        class="text-12-regular text-text-weak truncate"
+                        classList={{ "opacity-70": !!item.archived }}
+                      >
+                        {item.label}
+                      </span>
+                    </div>
+                  )}
+                </List>
+              </Show>
+
+              <div class="flex-1 min-h-0 flex flex-col" classList={{ hidden: searching() }}>
+                <Show
+                  when={workspacesEnabled()}
+                  fallback={
+                    <>
+                      <div class="shrink-0 py-4 px-3">
+                        <TooltipKeybind
+                          title={language.t("command.session.new")}
+                          keybind={command.keybind("session.new")}
+                          placement="top"
+                        >
+                          <Button
+                            size="large"
+                            icon="plus-small"
+                            class="w-full"
+                            onClick={() => {
+                              if (!layout.sidebar.opened()) {
+                                setState("hoverSession", undefined)
+                                setState("hoverProject", undefined)
+                              }
+                              navigate(`/${base64Encode(p().worktree)}/session`)
+                              layout.mobileSidebar.hide()
+                            }}
+                          >
+                            {language.t("command.session.new")}
+                          </Button>
+                        </TooltipKeybind>
+                      </div>
+                      <div class="flex-1 min-h-0">
+                        <LocalWorkspace project={p()} mobile={panelProps.mobile} />
+                      </div>
+                    </>
+                  }
+                >
                   <>
-                    <div class="py-4 px-3">
+                    <div class="shrink-0 py-4 px-3">
                       <TooltipKeybind
-                        title={language.t("command.session.new")}
-                        keybind={command.keybind("session.new")}
+                        title={language.t("workspace.new")}
+                        keybind={command.keybind("workspace.new")}
                         placement="top"
                       >
-                        <Button
-                          size="large"
-                          icon="plus-small"
-                          class="w-full"
-                          onClick={() => {
-                            if (!layout.sidebar.opened()) {
-                              setState("hoverSession", undefined)
-                              setState("hoverProject", undefined)
-                            }
-                            navigate(`/${base64Encode(p.worktree)}/session`)
-                            layout.mobileSidebar.hide()
-                          }}
-                        >
-                          {language.t("command.session.new")}
+                        <Button size="large" icon="plus-small" class="w-full" onClick={() => createWorkspace(p())}>
+                          {language.t("workspace.new")}
                         </Button>
                       </TooltipKeybind>
                     </div>
-                    <div class="flex-1 min-h-0">
-                      <LocalWorkspace project={p} mobile={panelProps.mobile} />
+                    <div class="relative flex-1 min-h-0">
+                      <DragDropProvider
+                        onDragStart={handleWorkspaceDragStart}
+                        onDragEnd={handleWorkspaceDragEnd}
+                        onDragOver={handleWorkspaceDragOver}
+                        collisionDetector={closestCenter}
+                      >
+                        <DragDropSensors />
+                        <ConstrainDragXAxis />
+                        <div
+                          ref={(el) => {
+                            if (!panelProps.mobile) scrollContainerRef = el
+                          }}
+                          class="size-full flex flex-col py-2 gap-4 overflow-y-auto no-scrollbar [overflow-anchor:none]"
+                        >
+                          <SortableProvider ids={workspaces()}>
+                            <For each={workspaces()}>
+                              {(directory) => (
+                                <SortableWorkspace directory={directory} project={p()} mobile={panelProps.mobile} />
+                              )}
+                            </For>
+                          </SortableProvider>
+                        </div>
+                        <DragOverlay>
+                          <WorkspaceDragOverlay />
+                        </DragOverlay>
+                      </DragDropProvider>
                     </div>
                   </>
-                }
-              >
-                <>
-                  <div class="py-4 px-3">
-                    <TooltipKeybind
-                      title={language.t("workspace.new")}
-                      keybind={command.keybind("workspace.new")}
-                      placement="top"
-                    >
-                      <Button size="large" icon="plus-small" class="w-full" onClick={() => createWorkspace(p)}>
-                        {language.t("workspace.new")}
-                      </Button>
-                    </TooltipKeybind>
-                  </div>
-                  <div class="relative flex-1 min-h-0">
-                    <DragDropProvider
-                      onDragStart={handleWorkspaceDragStart}
-                      onDragEnd={handleWorkspaceDragEnd}
-                      onDragOver={handleWorkspaceDragOver}
-                      collisionDetector={closestCenter}
-                    >
-                      <DragDropSensors />
-                      <ConstrainDragXAxis />
-                      <div
-                        ref={(el) => {
-                          if (!panelProps.mobile) scrollContainerRef = el
-                        }}
-                        class="size-full flex flex-col py-2 gap-4 overflow-y-auto no-scrollbar [overflow-anchor:none]"
-                      >
-                        <SortableProvider ids={workspaces()}>
-                          <For each={workspaces()}>
-                            {(directory) => (
-                              <SortableWorkspace directory={directory} project={p} mobile={panelProps.mobile} />
-                            )}
-                          </For>
-                        </SortableProvider>
-                      </div>
-                      <DragOverlay>
-                        <WorkspaceDragOverlay />
-                      </DragOverlay>
-                    </DragDropProvider>
-                  </div>
-                </>
-              </Show>
+                </Show>
+              </div>
             </>
           )}
         </Show>
-        <Show when={providers.all().length > 0 && providers.paid().length === 0}>
-          <div class="shrink-0 px-2 py-3 border-t border-border-weak-base">
-            <div class="rounded-md bg-background-base shadow-xs-border-base">
-              <div class="p-3 flex flex-col gap-2">
-                <div class="text-12-medium text-text-strong">{language.t("sidebar.gettingStarted.title")}</div>
-                <div class="text-text-base">{language.t("sidebar.gettingStarted.line1")}</div>
-                <div class="text-text-base">{language.t("sidebar.gettingStarted.line2")}</div>
-              </div>
-              <Button
-                class="flex w-full text-left justify-start text-12-medium text-text-strong stroke-[1.5px] rounded-md rounded-t-none shadow-none border-t border-border-weak-base px-3"
-                size="large"
-                icon="plus"
-                onClick={connectProvider}
-              >
-                {language.t("command.provider.connect")}
-              </Button>
+
+        <div
+          class="shrink-0 px-2 py-3 border-t border-border-weak-base"
+          classList={{
+            hidden: searching() || !(providers.all().length > 0 && providers.paid().length === 0),
+          }}
+        >
+          <div class="rounded-md bg-background-base shadow-xs-border-base">
+            <div class="p-3 flex flex-col gap-2">
+              <div class="text-12-medium text-text-strong">{language.t("sidebar.gettingStarted.title")}</div>
+              <div class="text-text-base">{language.t("sidebar.gettingStarted.line1")}</div>
+              <div class="text-text-base">{language.t("sidebar.gettingStarted.line2")}</div>
             </div>
+            <Button
+              class="flex w-full text-left justify-start text-12-medium text-text-strong stroke-[1.5px] rounded-md rounded-t-none shadow-none border-t border-border-weak-base px-3"
+              size="large"
+              icon="plus"
+              onClick={connectProvider}
+            >
+              {language.t("command.provider.connect")}
+            </Button>
           </div>
-        </Show>
+        </div>
       </div>
     )
   }
