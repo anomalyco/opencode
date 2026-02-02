@@ -15,33 +15,18 @@ interface FailedPR {
   reason: string
 }
 
-async function postToDiscord(failures: FailedPR[]) {
-  const webhookUrl = process.env.DISCORD_ISSUES_WEBHOOK_URL
-  if (!webhookUrl) {
-    console.log("Warning: DISCORD_ISSUES_WEBHOOK_URL not set, skipping Discord notification")
-    return
-  }
+async function commentOnPR(prNumber: number, reason: string) {
+  const body = `⚠️ **Blocking Beta Release**
 
-  const message = `**Beta Branch Merge Failures**
+This PR cannot be merged into the beta branch due to: **${reason}**
 
-The following team PRs failed to merge into the beta branch:
+Please resolve this issue to include this PR in the next beta release.`
 
-${failures.map((f) => `- **#${f.number}**: ${f.title} - ${f.reason}`).join("\n")}
-
-Please resolve these conflicts manually.`
-
-  const content = JSON.stringify({ content: message })
-
-  const response = await fetch(webhookUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: content,
-  })
-
-  if (!response.ok) {
-    console.error("Failed to post to Discord:", await response.text())
-  } else {
-    console.log("Posted failures to Discord")
+  try {
+    await $`gh pr comment ${prNumber} --body ${body}`
+    console.log(`  Posted comment on PR #${prNumber}`)
+  } catch (err) {
+    console.log(`  Failed to post comment on PR #${prNumber}: ${err}`)
   }
 }
 
@@ -91,6 +76,7 @@ async function main() {
     } catch (err) {
       console.log(`  Failed to fetch: ${err}`)
       failed.push({ number: pr.number, title: pr.title, reason: "Fetch failed" })
+      await commentOnPR(pr.number, "Fetch failed")
       continue
     }
 
@@ -109,6 +95,7 @@ async function main() {
         await $`git clean -fd`
       } catch {}
       failed.push({ number: pr.number, title: pr.title, reason: "Merge conflicts" })
+      await commentOnPR(pr.number, "Merge conflicts with dev branch")
       continue
     }
 
@@ -124,6 +111,7 @@ async function main() {
     } catch {
       console.log("  Failed to stage changes")
       failed.push({ number: pr.number, title: pr.title, reason: "Staging failed" })
+      await commentOnPR(pr.number, "Failed to stage changes")
       continue
     }
 
@@ -133,6 +121,7 @@ async function main() {
     } catch (err) {
       console.log(`  Failed to commit: ${err}`)
       failed.push({ number: pr.number, title: pr.title, reason: "Commit failed" })
+      await commentOnPR(pr.number, "Failed to commit changes")
       continue
     }
 
@@ -147,10 +136,7 @@ async function main() {
   if (failed.length > 0) {
     console.log(`Failed: ${failed.length} PRs`)
     failed.forEach((f) => console.log(`  - PR #${f.number}: ${f.reason}`))
-
-    await postToDiscord(failed)
-
-    throw new Error(`${failed.length} PR(s) failed to merge. Check Discord for details.`)
+    throw new Error(`${failed.length} PR(s) failed to merge`)
   }
 
   console.log("\nForce pushing beta branch...")
