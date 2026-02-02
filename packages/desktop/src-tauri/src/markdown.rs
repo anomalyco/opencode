@@ -1,4 +1,6 @@
-use comrak::{create_formatter, parse_document, Arena, Options, html::ChildRendering, nodes::NodeValue};
+use comrak::{
+    Arena, Options, create_formatter, html::ChildRendering, nodes::NodeValue, parse_document,
+};
 use std::fmt::Write;
 
 create_formatter!(ExternalLinkFormatter, {

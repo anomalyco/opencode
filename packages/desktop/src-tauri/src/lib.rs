@@ -347,74 +347,7 @@ pub fn run() {
 
             let window = window_builder.build().expect("Failed to create window");
 
-            let (tx, mut rx) = mpsc::channel::<()>(1);
-
-            window.on_window_event({
-                let tx = tx.clone();
-
-                move |event| {
-                    if !matches!(event, WindowEvent::Moved(_) | WindowEvent::Resized(_)) {
-                        return;
-                    }
-                    let _ = tx.try_send(());
-                }
-            });
-
-            tauri::async_runtime::spawn({
-                let app = app.clone();
-
-                async move {
-                    let debounce = Duration::from_millis(200);
-                    let period = Duration::from_millis(200);
-
-                    let save = || {
-                        let handle = app.clone();
-                        let app = app.clone();
-                        let _ = handle.run_on_main_thread(move || {
-                            let _ = app.save_window_state(
-                                StateFlags::all() - StateFlags::DECORATIONS,
-                            );
-                        });
-                    };
-
-                    while rx.recv().await.is_some() {
-                        let mut last_event = Instant::now();
-                        let mut last_save = Instant::now() - period;
-
-                        loop {
-                            let now = Instant::now();
-                            if now.duration_since(last_save) >= period {
-                                save();
-                                last_save = now;
-                            }
-
-                            let now = Instant::now();
-                            if now.duration_since(last_event) >= debounce {
-                                if last_event > last_save {
-                                    save();
-                                }
-
-                                break;
-                            }
-
-                            let now = Instant::now();
-                            let wait = (period - now.duration_since(last_save))
-                                .min(debounce - now.duration_since(last_event));
-
-                            tokio::select! {
-                                _ = tokio::time::sleep(wait) => {}
-                                msg = rx.recv() => {
-                                    if msg.is_none() {
-                                        return;
-                                    }
-
-                                    last_event = Instant::now();
-                                }
-                            }
-                        }
-                    }
-                }
-            });
+            setup_window_state_listener(&app, &window);
 
             #[cfg(windows)]
             let _ = window.create_overlay_titlebar();
@@ -610,4 +543,35 @@ async fn spawn_local_server(
             break Ok(child);
         }
     }
+}
+
+fn setup_window_state_listener(app: &tauri::AppHandle, window: &tauri::WebviewWindow) {
+    let (tx, mut rx) = mpsc::channel::<()>(1);
+
+    window.on_window_event(move |event| {
+        if !matches!(event, WindowEvent::Moved(_) | WindowEvent::Resized(_)) {
+            return;
+        }
+        let _ = tx.try_send(());
+    });
+
+    tauri::async_runtime::spawn({
+        let app = app.clone();
+
+        async move {
+            let save = || {
+                let handle = app.clone();
+                let app = app.clone();
+                let _ = handle.run_on_main_thread(move || {
+                    let _ = app.save_window_state(StateFlags::all() - StateFlags::DECORATIONS);
+                });
+            };
+
+            while rx.recv().await.is_some() {
+                tokio::time::sleep(Duration::from_millis(200)).await;
+
+                save();
+            }
+        }
+    });
 }
