@@ -90,9 +90,10 @@ const ModelList: Component<{
 
 export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
   provider?: string
-  children?: JSX.Element
+  children?: JSX.Element | ((open: boolean) => JSX.Element)
   triggerAs?: T
-  triggerProps?: ComponentProps<T>
+  triggerProps?: ComponentProps<T>,
+  gutter?: number
 }) {
   const [store, setStore] = createStore<{
     open: boolean
@@ -175,14 +176,14 @@ export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
       }}
       modal={false}
       placement="top-start"
-      gutter={8}
+      gutter={props.gutter ?? 8}
     >
       <Kobalte.Trigger
         ref={(el) => setStore("trigger", el)}
         as={props.triggerAs ?? "div"}
         {...(props.triggerProps as any)}
       >
-        {props.children}
+        {typeof props.children === "function" ? props.children(store.open) : props.children}
       </Kobalte.Trigger>
       <Kobalte.Portal>
         <Kobalte.Content
