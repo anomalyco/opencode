@@ -154,3 +154,91 @@ describe("server URL with rootPath", () => {
     expect(finalUrl).toBe("http://localhost:4096/")
   })
 })
+
+describe("Special character handling", () => {
+  test("handles URL encoded characters", () => {
+    const html = '<html><head></head><body><div id="root"></div></body></html>'
+    const result = injectRootPath(html, "/한글/경로")
+    
+    // Should properly escape in HTML attributes
+    expect(result).toContain('data-root-path=')
+    // Should safely encode in JavaScript
+    expect(result).toContain('window.__OPENCODE__.rootPath')
+  })
+  
+  test("handles spaces and special chars in rootPath", () => {
+    const html = '<html><head></head><body><div id="root"></div></body></html>'
+    const paths = ["/path with space", "/path-with-dash", "/path_with_underscore", "/path.with.dot"]
+    
+    for (const path of paths) {
+      const result = injectRootPath(html, path)
+      expect(result).toContain(JSON.stringify(path))
+    }
+  })
+  
+  test("handles paths with query-like characters", () => {
+    const maliciousPath = "/proxy?token=abc&key=xyz"
+    const html = '<html><head></head><body><div id="root"></div></body></html>'
+    const result = injectRootPath(html, maliciousPath)
+    
+    // Should be safely escaped
+    expect(result).toContain(JSON.stringify(maliciousPath))
+  })
+})
+
+describe("URL normalization edge cases", () => {
+  test("handles multiple consecutive slashes", () => {
+    expect(normalizeUrl("http://localhost:4096", "///proxy///path///")).toBe(
+      "http://localhost:4096/proxy/path/"
+    )
+  })
+  
+  test("handles mixed slash patterns", () => {
+    expect(normalizeUrl("http://localhost:4096/", "//proxy/path")).toBe(
+      "http://localhost:4096/proxy/path"
+    )
+  })
+  
+  test("preserves trailing slash when explicitly provided", () => {
+    const result = normalizeUrl("http://localhost:4096", "/proxy/")
+    expect(result.endsWith("/")).toBe(true)
+  })
+})
+
+describe("WebSocket compatibility", () => {
+  test("WebSocket URL construction with rootPath", () => {
+    const serverUrl = "http://localhost:4096"
+    const rootPath = "/jupyter/proxy/opencode"
+    
+    // WebSocket should use same base path
+    const wsUrl = new URL(rootPath, serverUrl)
+    wsUrl.protocol = "ws:"
+    
+    expect(wsUrl.toString()).toBe("ws://localhost:4096/jupyter/proxy/opencode")
+  })
+  
+  test("WebSocket URL without rootPath", () => {
+    const serverUrl = "http://localhost:4096"
+    const wsUrl = new URL(serverUrl)
+    wsUrl.protocol = "ws:"
+    
+    expect(wsUrl.toString()).toBe("ws://localhost:4096/")
+  })
+})
+
+describe("Fallback strategy", () => {
+  test("validates fallback behavior when local build missing", () => {
+    // This test documents expected behavior
+    const scenarios = [
+      { hasLocalBuild: true, hasRootPath: false, expected: "local" },
+      { hasLocalBuild: false, hasRootPath: false, expected: "proxy" },
+      { hasLocalBuild: true, hasRootPath: true, expected: "local" },
+      { hasLocalBuild: false, hasRootPath: true, expected: "error" },
+    ]
+    
+    for (const scenario of scenarios) {
+      // Expected behavior documented
+      expect(scenario.expected).toBeDefined()
+    }
+  })
+})

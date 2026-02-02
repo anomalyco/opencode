@@ -57,7 +57,10 @@ export async function resolveNetworkOptions(args: NetworkOptions) {
   const rootPath = rootPathExplicitlySet ? args.rootPath : (config?.server?.rootPath ?? args.rootPath)
 
   if (rootPath && !rootPath.startsWith("/")) {
-    throw new Error(`rootPath must start with '/' if provided (got: '${rootPath}')`)
+    throw new Error(
+      `Invalid rootPath: must start with '/' (got: '${rootPath}')\n` +
+      `Example: --root-path /jupyter/proxy/opencode`
+    )
   }
 
   return { hostname, port, mdns, cors, rootPath }
