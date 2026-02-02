@@ -15,7 +15,7 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-use tauri::{AppHandle, LogicalSize, Manager, RunEvent, State, WebviewWindowBuilder};
+use tauri::{AppHandle, LogicalSize, Manager, RunEvent, State, WebviewWindowBuilder, WindowEvent};
 #[cfg(windows)]
 use tauri_plugin_decorum::WebviewWindowExt;
 #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
@@ -24,7 +24,7 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_store::StoreExt;
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
-use tokio::sync::oneshot;
+use tokio::sync::{mpsc, oneshot};
 
 use crate::window_customizer::PinchZoomDisablePlugin;
 
@@ -347,24 +347,72 @@ pub fn run() {
 
             let window = window_builder.build().expect("Failed to create window");
 
+            let (tx, mut rx) = mpsc::channel::<()>(1);
+
             window.on_window_event({
-                let last = Cell::new(Instant::ZERO);
-                let app = app.clone();
+                let tx = tx.clone();
 
                 move |event| {
                     if !matches!(event, WindowEvent::Moved(_) | WindowEvent::Resized(_)) {
                         return;
                     }
+                    let _ = tx.try_send(());
+                }
+            });
 
-                    let now = Instant::now();
-                    if now.duration_since(last.get()) < Duration::from_millis(200) {
-                        return;
+            tauri::async_runtime::spawn({
+                let app = app.clone();
+
+                async move {
+                    let debounce = Duration::from_millis(200);
+                    let period = Duration::from_millis(200);
+
+                    let save = || {
+                        let handle = app.clone();
+                        let app = app.clone();
+                        let _ = handle.run_on_main_thread(move || {
+                            let _ = app.save_window_state(
+                                StateFlags::all() - StateFlags::DECORATIONS,
+                            );
+                        });
+                    };
+
+                    while rx.recv().await.is_some() {
+                        let mut last_event = Instant::now();
+                        let mut last_save = Instant::now() - period;
+
+                        loop {
+                            let now = Instant::now();
+                            if now.duration_since(last_save) >= period {
+                                save();
+                                last_save = now;
+                            }
+
+                            let now = Instant::now();
+                            if now.duration_since(last_event) >= debounce {
+                                if last_event > last_save {
+                                    save();
+                                }
+
+                                break;
+                            }
+
+                            let now = Instant::now();
+                            let wait = (period - now.duration_since(last_save))
+                                .min(debounce - now.duration_since(last_event));
+
+                            tokio::select! {
+                                _ = tokio::time::sleep(wait) => {}
+                                msg = rx.recv() => {
+                                    if msg.is_none() {
+                                        return;
+                                    }
+
+                                    last_event = Instant::now();
+                                }
+                            }
+                        }
                     }
-
-                    last.set(now);
-                    let _ = app.save_window_state(
-                        StateFlags::all() - StateFlags::DECORATIONS,
-                    );
                 }
             });
 
