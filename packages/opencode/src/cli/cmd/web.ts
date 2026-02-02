@@ -69,14 +69,17 @@ export const WebCommand = cmd({
       }
 
       // Open localhost in browser
-      open(baseUrl.toString()).catch(() => {})
+      open(baseUrl.toString()).catch(() => { })
     } else {
-      const displayUrl = server.url.toString()
+      let displayUrl = server.url.toString()
+      if (opts.rootPath) {
+        displayUrl = new URL(opts.rootPath, server.url).toString()
+      }
       UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, displayUrl)
-      open(displayUrl).catch(() => {})
+      open(displayUrl).catch(() => { })
     }
 
-    await new Promise(() => {})
+    await new Promise(() => { })
     await server.stop()
   },
 })
