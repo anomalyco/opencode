@@ -7,6 +7,7 @@ interface PR {
   number: number
   title: string
   author: { login: string }
+  labels: Array<{ name: string }>
 }
 
 interface FailedPR {
@@ -31,12 +32,13 @@ Please resolve this issue to include this PR in the next beta release.`
 }
 
 async function main() {
-  console.log("Fetching open PRs from team members...")
+  console.log("Fetching open PRs with beta label from team members...")
 
   const allPrs: PR[] = []
   for (const member of Script.team) {
     try {
-      const stdout = await $`gh pr list --state open --author ${member} --json number,title,author --limit 100`.text()
+      const stdout =
+        await $`gh pr list --state open --author ${member} --label beta --json number,title,author,labels --limit 100`.text()
       const memberPrs: PR[] = JSON.parse(stdout)
       allPrs.push(...memberPrs)
     } catch {
@@ -51,7 +53,7 @@ async function main() {
     return true
   })
 
-  console.log(`Found ${prs.length} open PRs from team members`)
+  console.log(`Found ${prs.length} open PRs with beta label from team members`)
 
   if (prs.length === 0) {
     console.log("No team PRs to merge")
