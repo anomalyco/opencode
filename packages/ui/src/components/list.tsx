@@ -268,13 +268,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
           {searchAction()}
         </div>
       </Show>
-      <ScrollFade
-        ref={setScrollRef}
-        direction="vertical"
-        fadeStartSize={0}
-        fadeEndSize={20}
-        data-slot="list-scroll"
-      >
+      <ScrollFade ref={setScrollRef} direction="vertical" fadeStartSize={0} fadeEndSize={20} data-slot="list-scroll">
         <Show
           when={flat().length > 0 || showAdd()}
           fallback={
