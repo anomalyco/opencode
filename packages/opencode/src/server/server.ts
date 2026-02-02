@@ -185,12 +185,15 @@ export namespace Server {
           },
         )
         .use(async (c, next) => {
-          let directory = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
-          try {
-            directory = decodeURIComponent(directory)
-          } catch {
-            // fallback to original value
-          }
+          if (c.req.path === "/log") return next()
+          const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
+          const directory = (() => {
+            try {
+              return decodeURIComponent(raw)
+            } catch {
+              return raw
+            }
+          })()
           return Instance.provide({
             directory,
             init: InstanceBootstrap,
@@ -539,7 +542,7 @@ export namespace Server {
           })
           response.headers.set(
             "Content-Security-Policy",
-            "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' data:",
+            "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:",
           )
           return response
         }) as unknown as Hono,
