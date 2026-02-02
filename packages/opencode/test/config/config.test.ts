@@ -1719,3 +1719,153 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
     }
   })
 })
+
+// env field tests
+
+test("env field sets process.env variables", async () => {
+  const originalValue = process.env["CONFIG_TEST_VAR"]
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            env: {
+              CONFIG_TEST_VAR: "test_value",
+            },
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await Config.get()
+        expect(process.env["CONFIG_TEST_VAR"]).toBe("test_value")
+      },
+    })
+  } finally {
+    if (originalValue !== undefined) {
+      process.env["CONFIG_TEST_VAR"] = originalValue
+    } else {
+      delete process.env["CONFIG_TEST_VAR"]
+    }
+  }
+})
+
+test("env field with null unsets process.env variable", async () => {
+  const originalValue = process.env["CONFIG_UNSET_VAR"]
+  process.env["CONFIG_UNSET_VAR"] = "should_be_removed"
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            env: {
+              CONFIG_UNSET_VAR: null,
+            },
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await Config.get()
+        expect(process.env["CONFIG_UNSET_VAR"]).toBeUndefined()
+      },
+    })
+  } finally {
+    if (originalValue !== undefined) {
+      process.env["CONFIG_UNSET_VAR"] = originalValue
+    } else {
+      delete process.env["CONFIG_UNSET_VAR"]
+    }
+  }
+})
+
+test("env field merges with later config winning", async () => {
+  const originalValue = process.env["CONFIG_MERGE_VAR"]
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const projectDir = path.join(dir, "project")
+        const opencodeDir = path.join(projectDir, ".opencode")
+        await fs.mkdir(opencodeDir, { recursive: true })
+
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            env: {
+              CONFIG_MERGE_VAR: "global_value",
+            },
+          }),
+        )
+
+        await Bun.write(
+          path.join(opencodeDir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            env: {
+              CONFIG_MERGE_VAR: "local_value",
+            },
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: path.join(tmp.path, "project"),
+      fn: async () => {
+        await Config.get()
+        expect(process.env["CONFIG_MERGE_VAR"]).toBe("local_value")
+      },
+    })
+  } finally {
+    if (originalValue !== undefined) {
+      process.env["CONFIG_MERGE_VAR"] = originalValue
+    } else {
+      delete process.env["CONFIG_MERGE_VAR"]
+    }
+  }
+})
+
+test("env template does not see config env vars", async () => {
+  const originalValue = process.env["CONFIG_TEMPLATE_VAR"]
+  delete process.env["CONFIG_TEMPLATE_VAR"]
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            env: {
+              CONFIG_TEMPLATE_VAR: "should_not_appear",
+            },
+            theme: "{env:CONFIG_TEMPLATE_VAR}",
+          }),
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        // Template substitution happens before env is applied, so theme should be empty
+        expect(config.theme).toBe("")
+        // But process.env should have the value after config is loaded
+        expect(process.env["CONFIG_TEMPLATE_VAR"]).toBe("should_not_appear")
+      },
+    })
+  } finally {
+    if (originalValue !== undefined) {
+      process.env["CONFIG_TEMPLATE_VAR"] = originalValue
+    } else {
+      delete process.env["CONFIG_TEMPLATE_VAR"]
+    }
+  }
+})

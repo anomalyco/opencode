@@ -59,6 +59,17 @@ export namespace Config {
     return merged
   }
 
+  function applyEnv(env: Record<string, string | null> | undefined) {
+    if (!env) return
+    for (const [key, value] of Object.entries(env)) {
+      if (value === null) {
+        delete process.env[key]
+        continue
+      }
+      process.env[key] = value
+    }
+  }
+
   export const state = Instance.state(async () => {
     const auth = await Auth.all()
 
@@ -224,6 +235,8 @@ export namespace Config {
     if (Flag.OPENCODE_DISABLE_PRUNE) {
       result.compaction = { ...result.compaction, prune: false }
     }
+
+    applyEnv(result.env)
 
     result.plugin = deduplicatePlugins(result.plugin ?? [])
 
@@ -1088,6 +1101,10 @@ export namespace Config {
           prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
         })
         .optional(),
+      env: z
+        .record(z.string(), z.string().nullable())
+        .optional()
+        .describe("Environment variable overrides. Set to null to unset."),
       experimental: z
         .object({
           disable_paste_summary: z.boolean().optional(),

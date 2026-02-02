@@ -498,6 +498,37 @@ You can control context compaction behavior through the `compaction` option.
 
 ---
 
+### Environment Variables
+
+You can set environment variables through the `env` option. This is useful for configuring tools and providers that rely on environment variables.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "env": {
+    "API_KEY": "your-api-key",
+    "CUSTOM_VAR": "value"
+  }
+}
+```
+
+Use `null` to unset an environment variable:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "env": {
+    "UNWANTED_VAR": null
+  }
+}
+```
+
+:::note
+Environment variables set in config are applied after config loading completes. They won't be available for template substitution (`{env:VAR}`) in the same config file.
+:::
+
+---
+
 ### Watcher
 
 You can configure file watcher ignore patterns through the `watcher` option.
