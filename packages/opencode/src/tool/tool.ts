@@ -20,6 +20,7 @@ export namespace Tool {
     abort: AbortSignal
     callID?: string
     extra?: { [key: string]: any }
+    messages: MessageV2.WithParts[]
     metadata(input: { title?: string; metadata?: M }): void
     ask(input: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">): Promise<void>
   }
@@ -35,7 +36,7 @@ export namespace Tool {
         title: string
         metadata: M
         output: string
-        attachments?: MessageV2.FilePart[]
+        attachments?: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[]
       }>
       formatValidationError?(error: z.ZodError): string
     }>

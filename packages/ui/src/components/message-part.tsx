@@ -48,6 +48,7 @@ import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
 import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
+import { MorphChevron } from "./morph-chevron"
 
 interface Diagnostic {
   range: {
@@ -414,7 +415,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
               toggleExpanded()
             }}
           >
-            <Icon name="chevron-down" size="small" />
+            <MorphChevron expanded={expanded()} />
           </button>
           <div data-slot="user-message-copy-wrapper">
             <Tooltip
@@ -476,20 +477,7 @@ function HighlightedText(props: { text: string; references: FilePart[]; agents: 
     return result
   })
 
-  return (
-    <For each={segments()}>
-      {(segment) => (
-        <span
-          classList={{
-            "text-syntax-property": segment.type === "file",
-            "text-syntax-type": segment.type === "agent",
-          }}
-        >
-          {segment.text}
-        </span>
-      )}
-    </For>
-  )
+  return <For each={segments()}>{(segment) => <span data-highlight={segment.type}>{segment.text}</span>}</For>
 }
 
 export function Part(props: MessagePartProps) {
@@ -605,7 +593,12 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
 
   const input = () => part.state?.input ?? emptyInput
   // @ts-expect-error
-  const metadata = () => part.state?.metadata ?? emptyMetadata
+  const partMetadata = () => part.state?.metadata ?? emptyMetadata
+  const metadata = () => {
+    const perm = permission()
+    if (perm?.metadata) return { ...perm.metadata, ...partMetadata() }
+    return partMetadata()
+  }
 
   const render = ToolRegistry.render(part.tool) ?? GenericTool
 
@@ -731,20 +724,39 @@ PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
 ToolRegistry.register({
   name: "read",
   render(props) {
+    const data = useData()
     const i18n = useI18n()
     const args: string[] = []
     if (props.input.offset) args.push("offset=" + props.input.offset)
     if (props.input.limit) args.push("limit=" + props.input.limit)
+    const loaded = createMemo(() => {
+      if (props.status !== "completed") return []
+      const value = props.metadata.loaded
+      if (!value || !Array.isArray(value)) return []
+      return value.filter((p): p is string => typeof p === "string")
+    })
     return (
-      <BasicTool
-        {...props}
-        icon="glasses"
-        trigger={{
-          title: i18n.t("ui.tool.read"),
-          subtitle: props.input.filePath ? getFilename(props.input.filePath) : "",
-          args,
-        }}
-      />
+      <>
+        <BasicTool
+          {...props}
+          icon="glasses"
+          trigger={{
+            title: i18n.t("ui.tool.read"),
+            subtitle: props.input.filePath ? getFilename(props.input.filePath) : "",
+            args,
+          }}
+        />
+        <For each={loaded()}>
+          {(filepath) => (
+            <div data-component="tool-loaded-file">
+              <Icon name="enter" size="small" />
+              <span>
+                {i18n.t("ui.tool.loaded")} {relativizeProjectPaths(filepath, data.directory)}
+              </span>
+            </div>
+          )}
+        </For>
+      </>
     )
   },
 })

@@ -17,6 +17,7 @@ import { PermissionNext } from "@/permission/next"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
 import path from "path"
+import { Plugin } from "@/plugin"
 
 export namespace Agent {
   export const Info = z
@@ -36,6 +37,7 @@ export namespace Agent {
           providerID: z.string(),
         })
         .optional(),
+      variant: z.string().optional(),
       prompt: z.string().optional(),
       options: z.record(z.string(), z.any()),
       steps: z.number().int().positive().optional(),
@@ -72,6 +74,7 @@ export namespace Agent {
     const result: Record<string, Info> = {
       build: {
         name: "build",
+        description: "The default agent. Executes tools based on configured permissions.",
         options: {},
         permission: PermissionNext.merge(
           defaults,
@@ -86,6 +89,7 @@ export namespace Agent {
       },
       plan: {
         name: "plan",
+        description: "Plan mode. Disallows all edit tools.",
         options: {},
         permission: PermissionNext.merge(
           defaults,
@@ -211,6 +215,7 @@ export namespace Agent {
           native: false,
         }
       if (value.model) item.model = Provider.parseModel(value.model)
+      item.variant = value.variant ?? item.variant
       item.prompt = value.prompt ?? item.prompt
       item.description = value.description ?? item.description
       item.temperature = value.temperature ?? item.temperature
@@ -279,8 +284,8 @@ export namespace Agent {
     const model = await Provider.getModel(defaultModel.providerID, defaultModel.modelID)
     const language = await Provider.getLanguage(model)
 
-    const system = SystemPrompt.header(defaultModel.providerID)
-    system.push(PROMPT_GENERATE)
+    const system = [PROMPT_GENERATE]
+    await Plugin.trigger("experimental.chat.system.transform", { model }, { system })
     const existing = await list()
 
     const params = {

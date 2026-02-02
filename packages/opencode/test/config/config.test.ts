@@ -1,4 +1,4 @@
-import { test, expect, describe, mock } from "bun:test"
+import { test, expect, describe, mock, afterEach } from "bun:test"
 import { Config } from "../../src/config/config"
 import { Instance } from "../../src/project/instance"
 import { Auth } from "../../src/auth"
@@ -6,6 +6,23 @@ import { tmpdir } from "../fixture/fixture"
 import path from "path"
 import fs from "fs/promises"
 import { pathToFileURL } from "url"
+import { Global } from "../../src/global"
+
+// Get managed config directory from environment (set in preload.ts)
+const managedConfigDir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR!
+
+afterEach(async () => {
+  await fs.rm(managedConfigDir, { force: true, recursive: true }).catch(() => {})
+})
+
+async function writeManagedSettings(settings: object, filename = "opencode.json") {
+  await fs.mkdir(managedConfigDir, { recursive: true })
+  await Bun.write(path.join(managedConfigDir, filename), JSON.stringify(settings))
+}
+
+async function writeConfig(dir: string, config: object, name = "opencode.json") {
+  await Bun.write(path.join(dir, name), JSON.stringify(config))
+}
 
 test("loads config with defaults when no files exist", async () => {
   await using tmp = await tmpdir()
@@ -21,14 +38,11 @@ test("loads config with defaults when no files exist", async () => {
 test("loads JSON config file", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          model: "test/model",
-          username: "testuser",
-        }),
-      )
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        model: "test/model",
+        username: "testuser",
+      })
     },
   })
   await Instance.provide({
@@ -68,21 +82,19 @@ test("loads JSONC config file", async () => {
 test("merges multiple config files with correct precedence", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.jsonc"),
-        JSON.stringify({
+      await writeConfig(
+        dir,
+        {
           $schema: "https://opencode.ai/config.json",
           model: "base",
           username: "base",
-        }),
+        },
+        "opencode.jsonc",
       )
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          model: "override",
-        }),
-      )
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        model: "override",
+      })
     },
   })
   await Instance.provide({
@@ -102,13 +114,10 @@ test("handles environment variable substitution", async () => {
   try {
     await using tmp = await tmpdir({
       init: async (dir) => {
-        await Bun.write(
-          path.join(dir, "opencode.json"),
-          JSON.stringify({
-            $schema: "https://opencode.ai/config.json",
-            theme: "{env:TEST_VAR}",
-          }),
-        )
+        await writeConfig(dir, {
+          $schema: "https://opencode.ai/config.json",
+          theme: "{env:TEST_VAR}",
+        })
       },
     })
     await Instance.provide({
@@ -169,13 +178,10 @@ test("handles file inclusion substitution", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(path.join(dir, "included.txt"), "test_theme")
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          theme: "{file:included.txt}",
-        }),
-      )
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        theme: "{file:included.txt}",
+      })
     },
   })
   await Instance.provide({
@@ -190,13 +196,10 @@ test("handles file inclusion substitution", async () => {
 test("validates config schema and throws on invalid fields", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          invalid_field: "should cause error",
-        }),
-      )
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        invalid_field: "should cause error",
+      })
     },
   })
   await Instance.provide({
@@ -225,19 +228,16 @@ test("throws error for invalid JSON", async () => {
 test("handles agent configuration", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          agent: {
-            test_agent: {
-              model: "test/model",
-              temperature: 0.7,
-              description: "test agent",
-            },
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        agent: {
+          test_agent: {
+            model: "test/model",
+            temperature: 0.7,
+            description: "test agent",
           },
-        }),
-      )
+        },
+      })
     },
   })
   await Instance.provide({
@@ -255,22 +255,50 @@ test("handles agent configuration", async () => {
   })
 })
 
+test("treats agent variant as model-scoped setting (not provider option)", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        agent: {
+          test_agent: {
+            model: "openai/gpt-5.2",
+            variant: "xhigh",
+            max_tokens: 123,
+          },
+        },
+      })
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      const agent = config.agent?.["test_agent"]
+
+      expect(agent?.variant).toBe("xhigh")
+      expect(agent?.options).toMatchObject({
+        max_tokens: 123,
+      })
+      expect(agent?.options).not.toHaveProperty("variant")
+    },
+  })
+})
+
 test("handles command configuration", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
-      await Bun.write(
-        path.join(dir, "opencode.json"),
-        JSON.stringify({
-          $schema: "https://opencode.ai/config.json",
-          command: {
-            test_command: {
-              template: "test template",
-              description: "test command",
-              agent: "test_agent",
-            },
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        command: {
+          test_command: {
+            template: "test template",
+            description: "test command",
+            agent: "test_agent",
           },
-        }),
-      )
+        },
+      })
     },
   })
   await Instance.provide({
@@ -890,6 +918,86 @@ test("migrates legacy write tool to edit permission", async () => {
       expect(config.agent?.["test"]?.permission).toEqual({
         edit: "allow",
       })
+    },
+  })
+})
+
+// Managed settings tests
+// Note: preload.ts sets OPENCODE_TEST_MANAGED_CONFIG which Global.Path.managedConfig uses
+
+test("managed settings override user settings", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        model: "user/model",
+        share: "auto",
+        username: "testuser",
+      })
+    },
+  })
+
+  await writeManagedSettings({
+    $schema: "https://opencode.ai/config.json",
+    model: "managed/model",
+    share: "disabled",
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.model).toBe("managed/model")
+      expect(config.share).toBe("disabled")
+      expect(config.username).toBe("testuser")
+    },
+  })
+})
+
+test("managed settings override project settings", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        autoupdate: true,
+        disabled_providers: [],
+        theme: "dark",
+      })
+    },
+  })
+
+  await writeManagedSettings({
+    $schema: "https://opencode.ai/config.json",
+    autoupdate: false,
+    disabled_providers: ["openai"],
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.autoupdate).toBe(false)
+      expect(config.disabled_providers).toEqual(["openai"])
+      expect(config.theme).toBe("dark")
+    },
+  })
+})
+
+test("missing managed settings file is not an error", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        model: "user/model",
+      })
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.model).toBe("user/model")
     },
   })
 })

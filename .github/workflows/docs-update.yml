@@ -1,4 +1,4 @@
-name: Docs Update
+name: docs-update
 
 on:
   schedule:
