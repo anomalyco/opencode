@@ -57,6 +57,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   const i18n = useI18n()
   const [scrollRef, setScrollRef] = createSignal<HTMLDivElement | undefined>(undefined)
   const [internalFilter, setInternalFilter] = createSignal("")
+  let inputRef: HTMLInputElement | HTMLTextAreaElement | undefined
   const [store, setStore] = createStore({
     mouseActive: false,
   })
@@ -176,6 +177,14 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     if (e.key === "Enter" && !e.isComposing) {
       e.preventDefault()
       if (selected) handleSelect(selected, index)
+    } else if (props.search) {
+      if (e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && (e.key === "n" || e.key === "p")) {
+        onKeyDown(e)
+        return
+      }
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        onKeyDown(e)
+      }
     } else {
       onKeyDown(e)
     }
@@ -247,7 +256,21 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     <div data-component="list" classList={{ [props.class ?? ""]: !!props.class }}>
       <Show when={!!props.search}>
         <div data-slot="list-search-wrapper">
-          <div data-slot="list-search" classList={{ [searchProps().class ?? ""]: !!searchProps().class }}>
+          <div
+            data-slot="list-search"
+            classList={{ [searchProps().class ?? ""]: !!searchProps().class }}
+            onPointerDown={(event) => {
+              const container = event.currentTarget
+              if (!(container instanceof HTMLElement)) return
+
+              const node = container.querySelector("input, textarea")
+              const input = node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement ? node : inputRef
+              input?.focus()
+
+              // Prevent global listeners (e.g. dnd sensors) from cancelling focus.
+              event.stopPropagation()
+            }}
+          >
             <div data-slot="list-search-container">
               <Show when={!searchProps().hideIcon}>
                 <Icon name="magnifying-glass" />
@@ -257,6 +280,9 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
                 variant="ghost"
                 data-slot="list-search-input"
                 type="text"
+                ref={(el: HTMLInputElement | HTMLTextAreaElement) => {
+                  inputRef = el
+                }}
                 value={internalFilter()}
                 onChange={(value) => applyFilter(value)}
                 onKeyDown={handleKey}
@@ -271,7 +297,10 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
               <IconButton
                 icon="circle-x"
                 variant="ghost"
-                onClick={() => applyFilter("")}
+                onClick={() => {
+                  setInternalFilter("")
+                  queueMicrotask(() => inputRef?.focus())
+                }}
                 aria-label={i18n.t("ui.list.clearFilter")}
               />
             </Show>
