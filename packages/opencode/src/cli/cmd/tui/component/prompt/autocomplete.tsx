@@ -131,21 +131,12 @@ export function Autocomplete(props: {
 
   // filter() reads reactive props.value plus non-reactive cursor/text state.
   // On keypress those can be briefly out of sync, so filter() may return an empty/partial string.
-  // Copy it into search in an effect because effects run after reactive updates have/render and paint have
-  // been applied, so the input has settled and all consumers read the same stable value.
+  // Copy it into search in an effect because effects run after reactive updates have been rendered and painted
+  // so the input has settled and all consumers read the same stable value.
   const [search, setSearch] = createSignal("")
   createEffect(() => {
     const next = filter()
-    if (next === undefined) {
-      setSearch("")
-      return
-    }
-    if (next === "") {
-      setSearch("")
-      return
-    }
-
-    setSearch(next)
+    setSearch(next ? next : "");
   })
 
   // When the filter changes due to how TUI works, the mousemove might still be triggered
