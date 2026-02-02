@@ -101,6 +101,20 @@ export default function Layout(props: ParentProps) {
     if (buildSha) return buildSha
     return undefined
   })
+  const [showBuildInfo, setShowBuildInfo] = createSignal(true)
+  let buildInfoTimer: ReturnType<typeof setTimeout> | undefined
+  const clearBuildInfoTimer = () => {
+    if (buildInfoTimer) {
+      clearTimeout(buildInfoTimer)
+      buildInfoTimer = undefined
+    }
+  }
+  const scheduleBuildInfoHide = () => {
+    clearBuildInfoTimer()
+    buildInfoTimer = setTimeout(() => setShowBuildInfo(false), 5000)
+  }
+  onMount(scheduleBuildInfoHide)
+  onCleanup(clearBuildInfoTimer)
 
   let scrollContainerRef: HTMLDivElement | undefined
   const xlQuery = window.matchMedia("(min-width: 1280px)")
@@ -1866,7 +1880,18 @@ export default function Layout(props: ParentProps) {
         </main>
       </div>
       <Show when={builtAtLine() || forkLabel}>
-        <div class="fixed bottom-2 right-2 text-12-regular text-text-weak opacity-70 text-right pointer-events-auto">
+        <div
+          classList={{
+            "fixed bottom-2 right-2 text-12-regular text-text-weak text-right pointer-events-auto transition-opacity duration-300": true,
+            "opacity-70": showBuildInfo(),
+            "opacity-0": !showBuildInfo(),
+          }}
+          onMouseEnter={() => {
+            clearBuildInfoTimer()
+            setShowBuildInfo(true)
+          }}
+          onMouseLeave={scheduleBuildInfoHide}
+        >
           <Show when={builtAtLine()}>
             <div>{builtAtLine()}</div>
           </Show>
