@@ -5,7 +5,7 @@ import { DataProvider } from "@opencode-ai/ui/context"
 import { DiffComponentProvider } from "@opencode-ai/ui/context/diff"
 import { CodeComponentProvider } from "@opencode-ai/ui/context/code"
 import { WorkerPoolProvider } from "@opencode-ai/ui/context/worker-pool"
-import { createAsync, query, useParams } from "@solidjs/router"
+import { createAsync, query, useParams, useSearchParams } from "@solidjs/router"
 import { createEffect, createMemo, ErrorBoundary, For, Match, Show, Switch } from "solid-js"
 import { Share } from "~/core/share"
 import { Logo, Mark } from "@opencode-ai/ui/logo"
@@ -222,10 +222,12 @@ export default function () {
                   <CodeComponentProvider component={ClientOnlyCode}>
                     <DataProvider data={data()} directory={info().directory}>
                       {iife(() => {
-                        const [store, setStore] = createStore({
-                          messageId: undefined as string | undefined,
-                          expandedSteps: {} as Record<string, boolean>,
-                        })
+                        const [searchParams, setSearchParams] = useSearchParams()
+                        const getMessageId = () => {
+                          const msg = searchParams.message
+                          return Array.isArray(msg) ? msg[0] : msg
+                        }
+                        const [expandedSteps, setExpandedSteps] = createStore({} as Record<string, boolean>)
                         const messages = createMemo(() =>
                           data().sessionID
                             ? (data().message[data().sessionID]?.filter((m) => m.role === "user") ?? []).sort(
@@ -235,13 +237,13 @@ export default function () {
                         )
                         const firstUserMessage = createMemo(() => messages().at(0))
                         const activeMessage = createMemo(
-                          () => messages().find((m) => m.id === store.messageId) ?? firstUserMessage(),
+                          () => messages().find((m) => m.id === getMessageId()) ?? firstUserMessage(),
                         )
                         function setActiveMessage(message: UserMessage | undefined) {
                           if (message) {
-                            setStore("messageId", message.id)
+                            setSearchParams({ message: message.id }, { replace: true })
                           } else {
-                            setStore("messageId", undefined)
+                            setSearchParams({ message: undefined }, { replace: true })
                           }
                         }
                         const provider = createMemo(() => activeMessage()?.model?.providerID)
@@ -298,8 +300,8 @@ export default function () {
                                     sessionID={data().sessionID}
                                     sessionTitle={info().title}
                                     messageID={message.id}
-                                    stepsExpanded={store.expandedSteps[message.id] ?? false}
-                                    onStepsExpandedToggle={() => setStore("expandedSteps", message.id, (v) => !v)}
+                                    stepsExpanded={expandedSteps[message.id] ?? false}
+                                    onStepsExpandedToggle={() => setExpandedSteps(message.id, (v) => !v)}
                                     classes={{
                                       root: "min-w-0 w-full relative",
                                       content: "flex flex-col justify-between !overflow-visible",
@@ -374,13 +376,11 @@ export default function () {
                                     </Show>
                                     <SessionTurn
                                       sessionID={data().sessionID}
-                                      messageID={store.messageId ?? firstUserMessage()!.id!}
-                                      stepsExpanded={
-                                        store.expandedSteps[store.messageId ?? firstUserMessage()!.id!] ?? false
-                                      }
+                                      messageID={getMessageId() ?? firstUserMessage()!.id!}
+                                      stepsExpanded={expandedSteps[getMessageId() ?? firstUserMessage()!.id!] ?? false}
                                       onStepsExpandedToggle={() => {
-                                        const id = store.messageId ?? firstUserMessage()!.id!
-                                        setStore("expandedSteps", id, (v) => !v)
+                                        const id = getMessageId() ?? firstUserMessage()!.id!
+                                        setExpandedSteps(id, (v) => !v)
                                       }}
                                       classes={{
                                         root: "grow",
