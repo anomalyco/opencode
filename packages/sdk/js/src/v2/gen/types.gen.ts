@@ -96,6 +96,7 @@ export type FileDiff = {
   after: string
   additions: number
   deletions: number
+  status?: "added" | "deleted" | "modified"
 }
 
 export type UserMessage = {
