@@ -129,7 +129,7 @@ export function Code<T>(props: CodeProps<T>) {
   let findOverlay!: HTMLDivElement
   let findOverlayFrame: number | undefined
   let findOverlayScroll: HTMLElement[] = []
-  let findPositionFrame: number | undefined
+  let findScroll: HTMLElement | undefined
   let observer: MutationObserver | undefined
   let renderToken = 0
   let selectionFrame: number | undefined
@@ -303,27 +303,11 @@ export function Code<T>(props: CodeProps<T>) {
 
   const positionFindBar = () => {
     if (!findBar || !wrapper) return
-    const scrollParent = getScrollParent(wrapper)
-    if (!scrollParent) {
-      findBar.style.position = "absolute"
-      findBar.style.top = "8px"
-      findBar.style.right = "8px"
-      findBar.style.left = ""
-      return
-    }
-    const scrollTop = scrollParent.scrollTop
+    const scrollTop = findScroll ? findScroll.scrollTop : window.scrollY
     findBar.style.position = "absolute"
     findBar.style.top = `${scrollTop + 8}px`
     findBar.style.right = "8px"
     findBar.style.left = ""
-  }
-
-  const scheduleFindPosition = () => {
-    if (findPositionFrame !== undefined) return
-    findPositionFrame = requestAnimationFrame(() => {
-      findPositionFrame = undefined
-      positionFindBar()
-    })
   }
 
   const scanFind = (root: ShadowRoot, query: string) => {
@@ -440,13 +424,19 @@ export function Code<T>(props: CodeProps<T>) {
         syncOverlayScroll()
         scheduleOverlay()
       }
-      if (opts?.scroll && active) scrollToRange(active)
+      if (opts?.scroll && active) {
+        scrollToRange(active)
+        positionFindBar()
+      }
       return
     }
 
     clearHighlightFind()
     syncOverlayScroll()
-    if (opts?.scroll && active) scrollToRange(active)
+    if (opts?.scroll && active) {
+      scrollToRange(active)
+      positionFindBar()
+    }
     scheduleOverlay()
   }
 
@@ -474,12 +464,14 @@ export function Code<T>(props: CodeProps<T>) {
         return
       }
       scrollToRange(active)
+      positionFindBar()
       return
     }
 
     clearHighlightFind()
     syncOverlayScroll()
     scrollToRange(active)
+    positionFindBar()
     scheduleOverlay()
   }
 
@@ -492,13 +484,14 @@ export function Code<T>(props: CodeProps<T>) {
       findCurrent = host
       findTarget = host
 
+      findScroll = getScrollParent(wrapper) ?? undefined
       if (!findOpen()) setFindOpen(true)
       requestAnimationFrame(() => {
+        applyFind({ scroll: true })
         positionFindBar()
         findInput?.focus()
         findInput?.select()
       })
-      applyFind({ scroll: true })
     },
     close: closeFind,
   }
@@ -521,20 +514,18 @@ export function Code<T>(props: CodeProps<T>) {
 
   createEffect(() => {
     if (!findOpen()) return
-    const scrollParent = getScrollParent(wrapper)
-    const target = scrollParent ?? window
+    findScroll = getScrollParent(wrapper) ?? undefined
+    const target = findScroll ?? window
 
-    const handler = () => scheduleFindPosition()
+    const handler = () => positionFindBar()
     target.addEventListener("scroll", handler, { passive: true })
     window.addEventListener("resize", handler, { passive: true })
+    handler()
 
     onCleanup(() => {
       target.removeEventListener("scroll", handler)
       window.removeEventListener("resize", handler)
-      if (findPositionFrame !== undefined) {
-        cancelAnimationFrame(findPositionFrame)
-        findPositionFrame = undefined
-      }
+      findScroll = undefined
     })
   })
 
@@ -918,11 +909,6 @@ export function Code<T>(props: CodeProps<T>) {
       dragFrame = undefined
     }
 
-    if (findPositionFrame !== undefined) {
-      cancelAnimationFrame(findPositionFrame)
-      findPositionFrame = undefined
-    }
-
     dragStart = undefined
     dragEnd = undefined
     dragMoved = false
@@ -977,7 +963,7 @@ export function Code<T>(props: CodeProps<T>) {
               stepFind(e.shiftKey ? -1 : 1)
             }}
           />
-          <div class="shrink-0 text-12-regular text-text-weak tabular-nums">
+          <div class="shrink-0 text-12-regular text-text-weak tabular-nums text-right" style={{ width: "10ch" }}>
             {findCount() ? `${findIndex() + 1}/${findCount()}` : "0/0"}
           </div>
           <div class="flex items-center">
