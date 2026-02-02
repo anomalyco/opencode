@@ -74,30 +74,7 @@ import { DialogEditProject } from "@/components/dialog-edit-project"
 import { Titlebar } from "@/components/titlebar"
 import { useServer } from "@/context/server"
 import { useLanguage, type Locale } from "@/context/language"
-
-/**
- * 规范化路径用于比较,避免在Windows上重复创建项目
- * 处理大小写敏感性、斜杠类型和末尾斜杠
- * 
- * 问题: Windows路径可能以不同形式表示同一物理路径:
- * - C:\Users\Project vs c:\users\project (大小写不同)
- * - C:/Users/Project vs C:\Users\Project (斜杠类型不同)
- * - C:\Users\Project\ vs C:\Users\Project (末尾斜杠不同)
- * 
- * 解决方案: 统一斜杠为正斜杠,统一为小写(Windows),移除末尾斜杠
- */
-function normalizePathForComparison(path: string): string {
-  let normalized = path
-  // 统一斜杠为正斜杠
-  normalized = normalized.replace(/\\/g, '/')
-  // 移除末尾斜杠
-  normalized = normalized.replace(/\/$/, '')
-  // 在Windows上,统一为小写以进行不区分大小写的比较
-  if (process.platform === 'win32') {
-    normalized = normalized.toLowerCase()
-  }
-  return normalized
-}
+import { normalizePathForComparison } from "@/utils/path"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -631,7 +608,7 @@ export default function Layout(props: ParentProps) {
 
   const workspaceName = (directory: string, projectId?: string, branch?: string) => {
     const key = workspaceKey(directory)
-    const direct = store.workspaceName[key] ?? store.workspaceName[directory]
+    const direct = store.workspaceName[key]
     if (direct) return direct
     if (!projectId) return
     if (!branch) return
@@ -1297,17 +1274,24 @@ export default function Layout(props: ParentProps) {
 
   /**
    * 解析深度链接URL
-   * 返回规范化的项目目录路径,确保在Windows上不会重复创建项目
-   * 修复Issue #11666: 使用normalizePathForComparison规范化路径
+   * 返回原始项目目录路径，保留原始格式
+   * 在需要比较路径时再进行规范化
+   * 
+   * @param input - 深度链接URL字符串
+   * @returns 原始目录路径，如果URL无效则返回undefined
+   * 
+   * @example
+   * parseDeepLink('opencode://open-project?directory=C:\\Users\\Project')
+   * // 返回: 'C:\\Users\\Project'
    */
-  const parseDeepLink = (input: string) => {
+  const parseDeepLink = (input: string): string | undefined => {
     if (!input.startsWith("opencode://")) return
     const url = new URL(input)
     if (url.hostname !== "open-project") return
     const directory = url.searchParams.get("directory")
     if (!directory) return
-    // 规范化路径以避免Windows上的重复项目
-    return normalizePathForComparison(directory)
+    // 返回原始路径，保留原始格式
+    return directory
   }
 
   const handleDeepLinks = (urls: string[]) => {
@@ -2766,9 +2750,6 @@ export default function Layout(props: ParentProps) {
     setBusy(created.directory, true)
     WorktreeState.pending(created.directory)
     setStore("workspaceExpanded", key, true)
-    if (key !== created.directory) {
-      setStore("workspaceExpanded", created.directory, true)
-    }
     setStore("workspaceOrder", project.worktree, (prev) => {
       const existing = prev ?? []
       const next = existing.filter((item) => {
