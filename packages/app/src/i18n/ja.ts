@@ -70,6 +70,7 @@ export const dict = {
   "command.model.variant.cycle.description": "次の思考レベルに切り替え",
   "command.permissions.autoaccept.enable": "編集を自動承認",
   "command.permissions.autoaccept.disable": "編集の自動承認を停止",
+  "command.workspace.toggle": "ワークスペースを切り替え",
   "command.session.undo": "元に戻す",
   "command.session.undo.description": "最後のメッセージを元に戻す",
   "command.session.redo": "やり直す",

@@ -1139,6 +1139,29 @@ export default function Layout(props: ParentProps) {
         },
       },
       {
+        id: "workspace.toggle",
+        title: language.t("command.workspace.toggle"),
+        description: language.t("command.workspace.toggle.description"),
+        category: language.t("command.category.workspace"),
+        slash: "workspace",
+        disabled: !currentProject() || currentProject()?.vcs !== "git",
+        onSelect: () => {
+          const project = currentProject()
+          if (!project) return
+          if (project.vcs !== "git") return
+          const wasEnabled = layout.sidebar.workspaces(project.worktree)()
+          layout.sidebar.toggleWorkspaces(project.worktree)
+          showToast({
+            title: wasEnabled
+              ? language.t("toast.workspace.disabled.title")
+              : language.t("toast.workspace.enabled.title"),
+            description: wasEnabled
+              ? language.t("toast.workspace.disabled.description")
+              : language.t("toast.workspace.enabled.description"),
+          })
+        },
+      },
+      {
         id: "theme.cycle",
         title: language.t("command.theme.cycle"),
         category: language.t("command.category.theme"),
