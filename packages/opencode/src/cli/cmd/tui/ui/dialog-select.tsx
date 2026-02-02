@@ -230,7 +230,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
             esc
           </text>
         </box>
-        <box paddingTop={1} paddingBottom={1}>
+        <box paddingTop={1}>
           <input
             onInput={(e) => {
               batch(() => {
