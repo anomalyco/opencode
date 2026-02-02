@@ -6,6 +6,7 @@ const serverHost = process.env.PLAYWRIGHT_SERVER_HOST ?? "localhost"
 const serverPort = process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"
 const command = `bun run dev -- --host 0.0.0.0 --port ${port}`
 const reuse = !process.env.CI
+const win = process.platform === "win32"
 
 export default defineConfig({
   testDir: "./e2e",
@@ -14,7 +15,8 @@ export default defineConfig({
   expect: {
     timeout: 10_000,
   },
-  fullyParallel: true,
+  fullyParallel: !win,
+  workers: win ? 1 : undefined,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: [["html", { outputFolder: "e2e/playwright-report", open: "never" }], ["line"]],

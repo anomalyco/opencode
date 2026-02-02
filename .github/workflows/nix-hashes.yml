@@ -6,13 +6,7 @@ permissions:
 on:
   workflow_dispatch:
   push:
-    paths:
-      - "bun.lock"
-      - "package.json"
-      - "packages/*/package.json"
-      - "flake.lock"
-      - ".github/workflows/nix-hashes.yml"
-  pull_request:
+    branches: [dev]
     paths:
       - "bun.lock"
       - "package.json"
