@@ -1196,8 +1196,9 @@ export namespace Config {
               throw new InvalidError({ path: configFilepath, message: errMsg }, { cause: error })
             })
         ).trim()
-        // escape newlines/quotes, strip outer quotes
-        text = text.replace(match, JSON.stringify(fileContent).slice(1, -1))
+        // escape newlines/quotes, strip outer quotes, then escape $ for String.replace
+        const escaped = JSON.stringify(fileContent).slice(1, -1).replace(/\$/g, "$$$$")
+        text = text.replace(match, escaped)
       }
     }
 

@@ -193,6 +193,46 @@ test("handles file inclusion substitution", async () => {
   })
 })
 
+test("handles file inclusion with dollar sign replacement patterns", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      // Content with $ followed by backtick - triggers String.replace() special replacement
+      await Bun.write(path.join(dir, "dollar.txt"), "regex pattern: `[\\w-\\.]+@([\\w-]+\\.)+[\\w-]{2,4}$`")
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        theme: "{file:dollar.txt}",
+      })
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.theme).toBe("regex pattern: `[\\w-\\.]+@([\\w-]+\\.)+[\\w-]{2,4}$`")
+    },
+  })
+})
+
+test("handles file inclusion with all dollar sign patterns", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      // Test various $-patterns that have special meaning in String.replace()
+      await Bun.write(path.join(dir, "dollars.txt"), "Has $` and $' and $& and $$ and $1 patterns")
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        theme: "{file:dollars.txt}",
+      })
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.theme).toBe("Has $` and $' and $& and $$ and $1 patterns")
+    },
+  })
+})
+
 test("validates config schema and throws on invalid fields", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
