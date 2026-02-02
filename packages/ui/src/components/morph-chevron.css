@@ -1,0 +1,10 @@
+[data-slot="morph-chevron-svg"] {
+  width: 16px;
+  height: 16px;
+  display: block;
+  fill: none;
+  stroke-width: 1.5;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
