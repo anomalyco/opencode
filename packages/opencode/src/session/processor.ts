@@ -360,7 +360,14 @@ export namespace SessionProcessor {
                 message: retry,
                 next: Date.now() + delay,
               })
-              await SessionRetry.sleep(delay, input.abort).catch(() => {})
+              try {
+                await SessionRetry.sleep(delay, input.abort)
+              } catch {
+                // If sleep was aborted, check if we should stop
+                if (input.abort.aborted) {
+                  break
+                }
+              }
               continue
             }
             input.assistantMessage.error = error

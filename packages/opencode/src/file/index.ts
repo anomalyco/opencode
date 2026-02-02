@@ -16,6 +16,15 @@ import { Global } from "../global"
 export namespace File {
   const log = Log.create({ service: "file" })
 
+  async function resolveRealPath(filepath: string): Promise<string> {
+    try {
+      return await fs.promises.realpath(filepath)
+    } catch {
+      // If realpath fails (file doesn't exist yet), use the lexical path
+      return path.resolve(filepath)
+    }
+  }
+
   export const Info = z
     .object({
       path: z.string(),
@@ -429,9 +438,8 @@ export namespace File {
     const project = Instance.project
     const full = path.join(Instance.directory, file)
 
-    // TODO: Filesystem.contains is lexical only - symlinks inside the project can escape.
-    // TODO: On Windows, cross-drive paths bypass this check. Consider realpath canonicalization.
-    if (!Instance.containsPath(full)) {
+    const realFull = await resolveRealPath(full)
+    if (!Instance.containsPath(realFull)) {
       throw new Error(`Access denied: path escapes project directory`)
     }
 
@@ -509,9 +517,8 @@ export namespace File {
     }
     const resolved = dir ? path.join(Instance.directory, dir) : Instance.directory
 
-    // TODO: Filesystem.contains is lexical only - symlinks inside the project can escape.
-    // TODO: On Windows, cross-drive paths bypass this check. Consider realpath canonicalization.
-    if (!Instance.containsPath(resolved)) {
+    const realResolved = await resolveRealPath(resolved)
+    if (!Instance.containsPath(realResolved)) {
       throw new Error(`Access denied: path escapes project directory`)
     }
 

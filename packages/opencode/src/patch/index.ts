@@ -514,57 +514,86 @@ export namespace Patch {
     return hasChanges ? diff : ""
   }
 
+  // Path validation helper to prevent path traversal attacks
+  function validatePatchPath(filePath: string, cwd: string): string {
+    // If the path is absolute, use it directly without validation
+    // (absolute paths are explicitly specified and trusted)
+    if (path.isAbsolute(filePath)) {
+      return path.resolve(filePath)
+    }
+
+    // For relative paths, resolve against cwd and validate
+    const resolved = path.resolve(cwd, filePath)
+    const normalizedCwd = path.resolve(cwd)
+
+    // Ensure the resolved path is within the working directory
+    // Check both that it starts with cwd+sep OR equals cwd exactly
+    if (!resolved.startsWith(normalizedCwd + path.sep) && resolved !== normalizedCwd) {
+      throw new Error(`Path traversal detected: ${filePath} escapes working directory`)
+    }
+
+    return resolved
+  }
+
   // Apply hunks to filesystem
-  export async function applyHunksToFiles(hunks: Hunk[]): Promise<AffectedPaths> {
+  export async function applyHunksToFiles(hunks: Hunk[], cwd?: string): Promise<AffectedPaths> {
     if (hunks.length === 0) {
       throw new Error("No files were modified.")
     }
 
+    const workdir = cwd || process.cwd()
     const added: string[] = []
     const modified: string[] = []
     const deleted: string[] = []
 
     for (const hunk of hunks) {
       switch (hunk.type) {
-        case "add":
+        case "add": {
+          const resolvedPath = validatePatchPath(hunk.path, workdir)
           // Create parent directories
-          const addDir = path.dirname(hunk.path)
+          const addDir = path.dirname(resolvedPath)
           if (addDir !== "." && addDir !== "/") {
             await fs.mkdir(addDir, { recursive: true })
           }
 
-          await fs.writeFile(hunk.path, hunk.contents, "utf-8")
+          await fs.writeFile(resolvedPath, hunk.contents, "utf-8")
           added.push(hunk.path)
           log.info(`Added file: ${hunk.path}`)
           break
+        }
 
-        case "delete":
-          await fs.unlink(hunk.path)
+        case "delete": {
+          const resolvedPath = validatePatchPath(hunk.path, workdir)
+          await fs.unlink(resolvedPath)
           deleted.push(hunk.path)
           log.info(`Deleted file: ${hunk.path}`)
           break
+        }
 
-        case "update":
-          const fileUpdate = deriveNewContentsFromChunks(hunk.path, hunk.chunks)
+        case "update": {
+          const resolvedPath = validatePatchPath(hunk.path, workdir)
+          const fileUpdate = deriveNewContentsFromChunks(resolvedPath, hunk.chunks)
 
           if (hunk.move_path) {
+            const resolvedMovePath = validatePatchPath(hunk.move_path, workdir)
             // Handle file move
-            const moveDir = path.dirname(hunk.move_path)
+            const moveDir = path.dirname(resolvedMovePath)
             if (moveDir !== "." && moveDir !== "/") {
               await fs.mkdir(moveDir, { recursive: true })
             }
 
-            await fs.writeFile(hunk.move_path, fileUpdate.content, "utf-8")
-            await fs.unlink(hunk.path)
+            await fs.writeFile(resolvedMovePath, fileUpdate.content, "utf-8")
+            await fs.unlink(resolvedPath)
             modified.push(hunk.move_path)
             log.info(`Moved file: ${hunk.path} -> ${hunk.move_path}`)
           } else {
             // Regular update
-            await fs.writeFile(hunk.path, fileUpdate.content, "utf-8")
+            await fs.writeFile(resolvedPath, fileUpdate.content, "utf-8")
             modified.push(hunk.path)
             log.info(`Updated file: ${hunk.path}`)
           }
           break
+        }
       }
     }
 
@@ -572,9 +601,9 @@ export namespace Patch {
   }
 
   // Main patch application function
-  export async function applyPatch(patchText: string): Promise<AffectedPaths> {
+  export async function applyPatch(patchText: string, cwd?: string): Promise<AffectedPaths> {
     const { hunks } = parsePatch(patchText)
-    return applyHunksToFiles(hunks)
+    return applyHunksToFiles(hunks, cwd)
   }
 
   // Async version of maybeParseApplyPatchVerified

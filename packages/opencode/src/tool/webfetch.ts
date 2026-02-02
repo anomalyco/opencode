@@ -7,6 +7,36 @@ const MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5MB
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
 const MAX_TIMEOUT = 120 * 1000 // 2 minutes
 
+function isPrivateIP(hostname: string): boolean {
+  // Check for localhost variations
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
+    return true
+  }
+
+  // Check for private IPv4 ranges
+  const ipv4Match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
+  if (ipv4Match) {
+    const [, a, b] = ipv4Match.map(Number)
+    // 10.0.0.0/8
+    if (a === 10) return true
+    // 172.16.0.0/12
+    if (a === 172 && b >= 16 && b <= 31) return true
+    // 192.168.0.0/16
+    if (a === 192 && b === 168) return true
+    // 169.254.0.0/16 (link-local)
+    if (a === 169 && b === 254) return true
+    // 127.0.0.0/8 (loopback)
+    if (a === 127) return true
+  }
+
+  // Check for IPv6 private ranges
+  if (hostname.startsWith('fe80:') || hostname.startsWith('fc') || hostname.startsWith('fd')) {
+    return true
+  }
+
+  return false
+}
+
 export const WebFetchTool = Tool.define("webfetch", {
   description: DESCRIPTION,
   parameters: z.object({
@@ -21,6 +51,19 @@ export const WebFetchTool = Tool.define("webfetch", {
     // Validate URL
     if (!params.url.startsWith("http://") && !params.url.startsWith("https://")) {
       throw new Error("URL must start with http:// or https://")
+    }
+
+    // Check for private/internal IPs to prevent SSRF
+    try {
+      const url = new URL(params.url)
+      if (isPrivateIP(url.hostname)) {
+        throw new Error("Access to private/internal IP addresses is not allowed")
+      }
+    } catch (e) {
+      if (e instanceof Error && e.message.includes("private/internal")) {
+        throw e
+      }
+      throw new Error("Invalid URL format")
     }
 
     await ctx.ask({
