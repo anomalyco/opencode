@@ -5,7 +5,7 @@ import { DataProvider } from "@opencode-ai/ui/context"
 import { DiffComponentProvider } from "@opencode-ai/ui/context/diff"
 import { CodeComponentProvider } from "@opencode-ai/ui/context/code"
 import { WorkerPoolProvider } from "@opencode-ai/ui/context/worker-pool"
-import { createAsync, query, useParams } from "@solidjs/router"
+import { createAsync, query, useParams, useSearchParams } from "@solidjs/router"
 import { createEffect, createMemo, ErrorBoundary, For, Match, Show, Switch } from "solid-js"
 import { Share } from "~/core/share"
 import { Logo, Mark } from "@opencode-ai/ui/logo"
@@ -222,8 +222,11 @@ export default function () {
                   <CodeComponentProvider component={ClientOnlyCode}>
                     <DataProvider data={data()} directory={info().directory}>
                       {iife(() => {
+                        const [searchParams, setSearchParams] = useSearchParams()
+                        const getMessageId = createMemo(() =>
+                          Array.isArray(searchParams.message) ? searchParams.message[0] : searchParams.message
+                        )
                         const [store, setStore] = createStore({
-                          messageId: undefined as string | undefined,
                           expandedSteps: {} as Record<string, boolean>,
                         })
                         const messages = createMemo(() =>
@@ -235,13 +238,13 @@ export default function () {
                         )
                         const firstUserMessage = createMemo(() => messages().at(0))
                         const activeMessage = createMemo(
-                          () => messages().find((m) => m.id === store.messageId) ?? firstUserMessage(),
+                          () => messages().find((m) => m.id === getMessageId()) ?? firstUserMessage(),
                         )
                         function setActiveMessage(message: UserMessage | undefined) {
                           if (message) {
-                            setStore("messageId", message.id)
+                            setSearchParams({ message: message.id }, { replace: true })
                           } else {
-                            setStore("messageId", undefined)
+                            setSearchParams({ message: undefined }, { replace: true })
                           }
                         }
                         const provider = createMemo(() => activeMessage()?.model?.providerID)
@@ -374,12 +377,12 @@ export default function () {
                                     </Show>
                                     <SessionTurn
                                       sessionID={data().sessionID}
-                                      messageID={store.messageId ?? firstUserMessage()!.id!}
+                                      messageID={getMessageId() ?? firstUserMessage()!.id!}
                                       stepsExpanded={
-                                        store.expandedSteps[store.messageId ?? firstUserMessage()!.id!] ?? false
+                                        store.expandedSteps[getMessageId() ?? firstUserMessage()!.id!] ?? false
                                       }
                                       onStepsExpandedToggle={() => {
-                                        const id = store.messageId ?? firstUserMessage()!.id!
+                                        const id = getMessageId() ?? firstUserMessage()!.id!
                                         setStore("expandedSteps", id, (v) => !v)
                                       }}
                                       classes={{
