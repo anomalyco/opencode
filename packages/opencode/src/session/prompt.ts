@@ -62,7 +62,7 @@ export namespace SessionPrompt {
           abort: AbortController
           callbacks: {
             resolve(input: MessageV2.WithParts): void
-            reject(): void
+            reject(reason?: any): void
           }[]
         }
       > = {}
@@ -72,7 +72,7 @@ export namespace SessionPrompt {
       for (const item of Object.values(current)) {
         item.abort.abort()
         for (const callback of item.callbacks) {
-          callback.reject()
+          callback.reject(new DOMException("Aborted", "AbortError"))
         }
       }
     },
@@ -187,13 +187,17 @@ export namespace SessionPrompt {
         text: template,
       },
     ]
-    const files = ConfigMarkdown.files(template)
+    const matches = ConfigMarkdown.files(template)
     const seen = new Set<string>()
-    await Promise.all(
-      files.map(async (match) => {
-        const name = match[1]
-        if (seen.has(name)) return
+    const names = matches
+      .map((match) => match[1])
+      .filter((name) => {
+        if (seen.has(name)) return false
         seen.add(name)
+        return true
+      })
+    const resolved = await Promise.all(
+      names.map(async (name) => {
         const filepath = name.startsWith("~/")
           ? path.join(os.homedir(), name.slice(2))
           : path.resolve(Instance.worktree, name)
@@ -201,33 +205,34 @@ export namespace SessionPrompt {
         const stats = await fs.stat(filepath).catch(() => undefined)
         if (!stats) {
           const agent = await Agent.get(name)
-          if (agent) {
-            parts.push({
-              type: "agent",
-              name: agent.name,
-            })
-          }
-          return
+          if (!agent) return undefined
+          return {
+            type: "agent",
+            name: agent.name,
+          } satisfies PromptInput["parts"][number]
         }
 
         if (stats.isDirectory()) {
-          parts.push({
+          return {
             type: "file",
             url: `file://${filepath}`,
             filename: name,
             mime: "application/x-directory",
-          })
-          return
+          } satisfies PromptInput["parts"][number]
         }
 
-        parts.push({
+        return {
           type: "file",
           url: `file://${filepath}`,
           filename: name,
           mime: "text/plain",
-        })
+        } satisfies PromptInput["parts"][number]
       }),
     )
+    for (const item of resolved) {
+      if (!item) continue
+      parts.push(item)
+    }
     return parts
   }
 
@@ -246,10 +251,13 @@ export namespace SessionPrompt {
     log.info("cancel", { sessionID })
     const s = state()
     const match = s[sessionID]
-    if (!match) return
+    if (!match) {
+      SessionStatus.set(sessionID, { type: "idle" })
+      return
+    }
     match.abort.abort()
     for (const item of match.callbacks) {
-      item.reject()
+      item.reject(new DOMException("Aborted", "AbortError"))
     }
     delete s[sessionID]
     SessionStatus.set(sessionID, { type: "idle" })
@@ -424,6 +432,12 @@ export namespace SessionPrompt {
         assistantMessage.time.completed = Date.now()
         await Session.updateMessage(assistantMessage)
         if (result && part.state.status === "running") {
+          const attachments = result.attachments?.map((attachment) => ({
+            ...attachment,
+            id: Identifier.ascending("part"),
+            messageID: assistantMessage.id,
+            sessionID: assistantMessage.sessionID,
+          }))
           await Session.updatePart({
             ...part,
             state: {
@@ -432,7 +446,7 @@ export namespace SessionPrompt {
               title: result.title,
               metadata: result.metadata,
               output: result.output,
-              attachments: result.attachments,
+              attachments,
               time: {
                 ...part.state.time,
                 end: Date.now(),
@@ -771,16 +785,13 @@ export namespace SessionPrompt {
         )
 
         const textParts: string[] = []
-        const attachments: MessageV2.FilePart[] = []
+        const attachments: Omit<MessageV2.FilePart, "id" | "messageID" | "sessionID">[] = []
 
         for (const contentItem of result.content) {
           if (contentItem.type === "text") {
             textParts.push(contentItem.text)
           } else if (contentItem.type === "image") {
             attachments.push({
-              id: Identifier.ascending("part"),
-              sessionID: input.session.id,
-              messageID: input.processor.message.id,
               type: "file",
               mime: contentItem.mimeType,
               url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
@@ -792,9 +803,6 @@ export namespace SessionPrompt {
             }
             if (resource.blob) {
               attachments.push({
-                id: Identifier.ascending("part"),
-                sessionID: input.session.id,
-                messageID: input.processor.message.id,
                 type: "file",
                 mime: resource.mimeType ?? "application/octet-stream",
                 url: `data:${resource.mimeType ?? "application/octet-stream"};base64,${resource.blob}`,
@@ -827,6 +835,17 @@ export namespace SessionPrompt {
 
   async function createUserMessage(input: PromptInput) {
     const agent = await Agent.get(input.agent ?? (await Agent.defaultAgent()))
+
+    const model = input.model ?? agent.model ?? (await lastModel(input.sessionID))
+    const variant =
+      input.variant ??
+      (agent.variant &&
+      agent.model &&
+      model.providerID === agent.model.providerID &&
+      model.modelID === agent.model.modelID
+        ? agent.variant
+        : undefined)
+
     const info: MessageV2.Info = {
       id: input.messageID ?? Identifier.ascending("message"),
       role: "user",
@@ -836,9 +855,9 @@ export namespace SessionPrompt {
       },
       tools: input.tools,
       agent: agent.name,
-      model: input.model ?? agent.model ?? (await lastModel(input.sessionID)),
+      model,
       system: input.system,
-      variant: input.variant,
+      variant,
     }
     using _ = defer(() => InstructionPrompt.clear(info.id))
 
@@ -1032,6 +1051,7 @@ export namespace SessionPrompt {
                       pieces.push(
                         ...result.attachments.map((attachment) => ({
                           ...attachment,
+                          id: Identifier.ascending("part"),
                           synthetic: true,
                           filename: attachment.filename ?? part.filename,
                           messageID: info.id,
@@ -1169,7 +1189,18 @@ export namespace SessionPrompt {
           },
         ]
       }),
-    ).then((x) => x.flat())
+    )
+      .then((x) => x.flat())
+      .then((drafts) =>
+        drafts.map(
+          (part): MessageV2.Part => ({
+            ...part,
+            id: Identifier.ascending("part"),
+            messageID: info.id,
+            sessionID: input.sessionID,
+          }),
+        ),
+      )
 
     await Plugin.trigger(
       "chat.message",
