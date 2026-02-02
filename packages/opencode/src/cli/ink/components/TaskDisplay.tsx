@@ -43,11 +43,23 @@ export const TaskDisplay = ({ task, agent, elapsed }: TaskDisplayProps) => {
 
 const getToolSummary = (tool: Tool): string => {
   if (!tool?.input) return "starting"
+  if (typeof tool.input !== "object" || tool.input === null) return "starting"
   const values = Object.values(tool.input)
   if (values.length === 0) return "starting"
   const firstValue = values[0]
-  if (typeof firstValue === "string") return firstValue.slice(0, 40)
+  if (firstValue === undefined) return "starting"
+  if (typeof firstValue === "string") {
+    if (firstValue.length === 0) return "(empty)"
+    return firstValue.slice(0, 40)
+  }
   if (typeof firstValue === "number" || typeof firstValue === "boolean") return String(firstValue)
   if (firstValue === null) return "null"
+  if (typeof firstValue === "object") {
+    try {
+      return JSON.stringify(firstValue).slice(0, 40)
+    } catch {
+      return "(complex)"
+    }
+  }
   return "running"
 }

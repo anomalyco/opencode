@@ -110,6 +110,7 @@
     "ink-spinner": "5.0.0",
     "ink-text-input": "6.0.0",
     "jsonc-parser": "3.3.1",
+    "markdansi": "0.2.1",
     "minimatch": "10.0.3",
     "open": "10.1.2",
     "opentui-spinner": "0.0.6",
