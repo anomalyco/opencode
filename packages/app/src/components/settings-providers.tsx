@@ -7,6 +7,8 @@ import { useGlobalSDK } from "@/context/global-sdk"
 import { useProviders } from "@/hooks/use-providers"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogConnectProvider } from "./dialog-connect-provider"
+import { DialogCustomProvider } from "./dialog-custom-provider"
+import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 
 interface AccountUsage {
@@ -663,6 +665,7 @@ function ProviderDetailView(props: { providerID: string; providerName: string; o
 
 export const SettingsProviders: Component = () => {
   const dialog = useDialog()
+  const language = useLanguage()
   const providers = useProviders()
   const [view, setView] = createSignal<"list" | "add" | { detail: string }>("list")
   const [search, setSearch] = createSignal("")
@@ -832,6 +835,28 @@ export const SettingsProviders: Component = () => {
             <Icon name="plus-small" class="size-4 text-icon-muted" />
             <span class="text-13-medium text-text-muted">Add Provider</span>
           </button>
+
+          {/* Custom provider section */}
+          <div
+            class="flex items-center justify-between gap-4 p-3 rounded-lg bg-surface-raised-base"
+            data-component="custom-provider-section"
+          >
+            <div class="flex flex-col min-w-0">
+              <div class="flex items-center gap-x-3">
+                <ProviderIcon id={"synthetic" as IconName} class="size-5 shrink-0" />
+                <span class="text-14-medium text-text-strong">Custom provider</span>
+              </div>
+              <span class="text-12-regular text-text-weak pl-8">Add an OpenAI-compatible provider by base URL.</span>
+            </div>
+            <button
+              type="button"
+              class="flex items-center gap-2 px-3 py-1.5 rounded-md bg-fill-ghost-strong hover:bg-fill-ghost-base text-13-medium text-text-base transition-colors"
+              onClick={() => dialog.show(() => <DialogCustomProvider back="close" />)}
+            >
+              <Icon name="plus-small" class="size-4" />
+              {language.t("common.connect")}
+            </button>
+          </div>
 
           <div class="p-3 rounded-lg bg-fill-brand-ghost border border-fill-brand-base">
             <div class="text-12-medium text-text-strong mb-1">Multi-Account OAuth Rotation</div>
