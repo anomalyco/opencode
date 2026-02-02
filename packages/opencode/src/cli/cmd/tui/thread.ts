@@ -64,8 +64,7 @@ export const TuiThreadCommand = cmd({
         type: "string",
         describe: "session id to continue",
       })
-      .option("fork-session", {
-        alias: ["fork"],
+      .option("fork", {
         type: "boolean",
         describe: "fork the session when continuing (use with --continue or --session)",
       })
@@ -78,8 +77,8 @@ export const TuiThreadCommand = cmd({
         describe: "agent to use",
       }),
   handler: async (args) => {
-    if (args.forkSession && !args.continue && !args.session) {
-      UI.error("--fork-session requires --continue or --session")
+    if (args.fork && !args.continue && !args.session) {
+      UI.error("--fork requires --continue or --session")
       process.exit(1)
     }
 
@@ -160,7 +159,7 @@ export const TuiThreadCommand = cmd({
         agent: args.agent,
         model: args.model,
         prompt,
-        fork: args.forkSession,
+        fork: args.fork,
       },
       onExit: async () => {
         await client.call("shutdown", undefined)
