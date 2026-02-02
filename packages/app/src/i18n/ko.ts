@@ -543,9 +543,8 @@ export const dict = {
   "settings.general.section.sounds": "Sound effects",
   "settings.general.section.desktop": "Desktop",
 
-  "settings.general.desktop.dynamicSort.title": "Dynamic sidebar sorting",
-  "settings.general.desktop.dynamicSort.description":
-    "Automatically move active projects and sessions to the top when Claude starts working on them",
+  "settings.general.desktop.dynamicSort.title": "사이드바 동적 정렬",
+  "settings.general.desktop.dynamicSort.description": "최근 활성 프로젝트를 상단으로 이동",
 
   "settings.general.row.language.title": "언어",
   "settings.general.row.language.description": "OpenCode 표시 언어 변경",

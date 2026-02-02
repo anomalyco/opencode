@@ -1904,15 +1904,15 @@ export default function Layout(props: ParentProps) {
                         </DropdownMenu.Item>
                         <DropdownMenu.Item
                           data-action="project-pin-toggle"
-                          data-project={base64Encode(p.worktree)}
+                          data-project={base64Encode(p().worktree)}
                           onSelect={() => {
-                            server.projects.isPinned(p.worktree)
-                              ? server.projects.unpin(p.worktree)
-                              : server.projects.pin(p.worktree)
+                            server.projects.isPinned(p().worktree)
+                              ? server.projects.unpin(p().worktree)
+                              : server.projects.pin(p().worktree)
                           }}
                         >
                           <DropdownMenu.ItemLabel>
-                            {server.projects.isPinned(p.worktree)
+                            {server.projects.isPinned(p().worktree)
                               ? language.t("sidebar.project.unpin")
                               : language.t("sidebar.project.pin")}
                           </DropdownMenu.ItemLabel>

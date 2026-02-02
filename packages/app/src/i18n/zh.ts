@@ -604,9 +604,8 @@ export const dict = {
   "settings.general.section.sounds": "Sound effects",
   "settings.general.section.desktop": "Desktop",
 
-  "settings.general.desktop.dynamicSort.title": "Dynamic sidebar sorting",
-  "settings.general.desktop.dynamicSort.description":
-    "Automatically move active projects and sessions to the top when Claude starts working on them",
+  "settings.general.desktop.dynamicSort.title": "动态侧边栏排序",
+  "settings.general.desktop.dynamicSort.description": "将最近活跃的项目移至顶部",
 
   "settings.general.row.language.title": "语言",
   "settings.general.row.language.description": "更改 OpenCode 的显示语言",

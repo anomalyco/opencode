@@ -550,9 +550,8 @@ export const dict = {
   "settings.general.section.sounds": "Sound effects",
   "settings.general.section.desktop": "Desktop",
 
-  "settings.general.desktop.dynamicSort.title": "Dynamic sidebar sorting",
-  "settings.general.desktop.dynamicSort.description":
-    "Automatically move active projects and sessions to the top when Claude starts working on them",
+  "settings.general.desktop.dynamicSort.title": "Tri dynamique de la barre latérale",
+  "settings.general.desktop.dynamicSort.description": "Déplacer les projets récemment actifs vers le haut",
 
   "settings.general.row.language.title": "Langue",
   "settings.general.row.language.description": "Changer la langue d'affichage pour OpenCode",
