@@ -8910,6 +8910,10 @@
             "description": "Enable mDNS service discovery",
             "type": "boolean"
           },
+          "mdnsDomain": {
+            "description": "Custom domain name for mDNS service (default: opencode.local)",
+            "type": "string"
+          },
           "cors": {
             "description": "Additional domains to allow for CORS",
             "type": "array",

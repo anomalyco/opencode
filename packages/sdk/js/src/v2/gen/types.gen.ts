@@ -1333,6 +1333,10 @@ export type ServerConfig = {
    */
   mdns?: boolean
   /**
+   * Custom domain name for mDNS service (default: opencode.local)
+   */
+  mdnsDomain?: string
+  /**
    * Additional domains to allow for CORS
    */
   cors?: Array<string>
