@@ -51,6 +51,7 @@ export interface ListProps<T> extends FilteredListProps<T> {
 export interface ListRef {
   onKeyDown: (e: KeyboardEvent) => void
   setScrollRef: (el: HTMLDivElement | undefined) => void
+  setFilter: (value: string) => void
 }
 
 export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) {
@@ -163,6 +164,8 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     const index = selected ? all.indexOf(selected) : -1
     props.onKeyEvent?.(e, selected)
 
+    if (e.defaultPrevented) return
+
     if (e.key === "Enter" && !e.isComposing) {
       e.preventDefault()
       if (selected) handleSelect(selected, index)
@@ -174,6 +177,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   props.ref?.({
     onKeyDown: handleKey,
     setScrollRef,
+    setFilter: setInternalFilter,
   })
 
   const renderAdd = () => {

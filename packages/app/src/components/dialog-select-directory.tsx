@@ -4,15 +4,21 @@ import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { List } from "@opencode-ai/ui/list"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import fuzzysort from "fuzzysort"
-import { createMemo } from "solid-js"
+import { createMemo, createResource, createSignal } from "solid-js"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
+import type { ListRef } from "@opencode-ai/ui/list"
 
 interface DialogSelectDirectoryProps {
   title?: string
   multiple?: boolean
   onSelect: (result: string | string[] | null) => void
+}
+
+type Row = {
+  absolute: string
+  search: string
 }
 
 export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
@@ -21,9 +27,29 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const dialog = useDialog()
   const language = useLanguage()
 
-  const home = createMemo(() => sync.data.path.home)
+  const [filter, setFilter] = createSignal("")
 
-  const start = createMemo(() => sync.data.path.home || sync.data.path.directory)
+  let list: ListRef | undefined
+
+  const missingBase = createMemo(() => !(sync.data.path.home || sync.data.path.directory))
+
+  const [fallbackPath] = createResource(
+    missingBase,
+    async (missing) => {
+      if (!missing) return undefined
+      return sdk.client.path
+        .get()
+        .then((x) => x.data)
+        .catch(() => undefined)
+    },
+    { initialValue: undefined },
+  )
+
+  const home = createMemo(() => sync.data.path.home || fallbackPath()?.home || "")
+
+  const start = createMemo(
+    () => sync.data.path.home || sync.data.path.directory || fallbackPath()?.home || fallbackPath()?.directory,
+  )
 
   const cache = new Map<string, Promise<Array<{ name: string; absolute: string }>>>()
 
@@ -64,8 +90,18 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     return ""
   }
 
-  function display(path: string) {
+  function modeOf(input: string) {
+    const raw = normalizeDriveRoot(input.trim())
+    if (!raw) return "relative" as const
+    if (raw.startsWith("~")) return "tilde" as const
+    if (rootOf(raw)) return "absolute" as const
+    return "relative" as const
+  }
+
+  function display(path: string, input: string) {
     const full = trimTrailing(path)
+    if (modeOf(input) === "absolute") return full
+
     const h = home()
     if (!h) return full
 
@@ -75,6 +111,27 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     if (lc === hc) return "~"
     if (lc.startsWith(hc + "/")) return "~" + full.slice(hn.length)
     return full
+  }
+
+  function tildeOf(absolute: string) {
+    const full = trimTrailing(absolute)
+    const h = home()
+    if (!h) return ""
+
+    const hn = trimTrailing(h)
+    const lc = full.toLowerCase()
+    const hc = hn.toLowerCase()
+    if (lc === hc) return "~"
+    if (lc.startsWith(hc + "/")) return "~" + full.slice(hn.length)
+    return ""
+  }
+
+  function row(absolute: string, input: string): Row {
+    const full = trimTrailing(absolute)
+    const tilde = tildeOf(full)
+    const alias = input.trim().startsWith("~") ? "~/" + full : ""
+    const search = [full, tilde, alias, getFilename(full)].filter(Boolean).join("\n")
+    return { absolute: full, search }
   }
 
   function scoped(filter: string) {
@@ -130,6 +187,17 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
 
     const query = normalizeDriveRoot(input.path)
 
+    if (raw.startsWith("~")) {
+      const results = await sdk.client.find
+        .files({ directory: input.directory, query, type: "directory", limit: 50 })
+        .then((x) => x.data ?? [])
+        .catch(() => [])
+
+      const base = trimTrailing(input.directory)
+      const out = results.map((rel) => join(base, rel))
+      return Array.from(new Set([base, ...out])).slice(0, 50)
+    }
+
     if (!isPath) {
       const results = await sdk.client.find
         .files({ directory: input.directory, query, type: "directory", limit: 50 })
@@ -165,7 +233,23 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     }
 
     const out = (await Promise.all(paths.map((p) => match(p, tail, 50)))).flat()
-    return Array.from(new Set(out)).slice(0, 50)
+    const deduped = Array.from(new Set(out))
+
+    const expand = !raw.endsWith("/")
+    if (!expand || !tail) return deduped.slice(0, 50)
+
+    const needle = tail.toLowerCase()
+    const exact = deduped.filter((p) => getFilename(p).toLowerCase() === needle)
+    const target = exact[0]
+    if (!target) return deduped.slice(0, 50)
+
+    const children = await match(target, "", 30)
+    return Array.from(new Set([...deduped, ...children])).slice(0, 50)
+  }
+
+  const items = async (value: string) => {
+    const results = await directories(value)
+    return results.map((absolute) => row(absolute, value))
   }
 
   function resolve(absolute: string) {
@@ -179,19 +263,45 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
         search={{ placeholder: language.t("dialog.directory.search.placeholder"), autofocus: true }}
         emptyMessage={language.t("dialog.directory.empty")}
         loadingMessage={language.t("common.loading")}
-        items={directories}
-        key={(x) => x}
+        items={items}
+        key={(x) => x.absolute}
+        filterKeys={["search"]}
+        ref={(r) => (list = r)}
+        onFilter={setFilter}
+        onKeyEvent={(e, item) => {
+          if (e.key !== "Tab") return
+          if (e.shiftKey) return
+          if (!item) return
+
+          e.preventDefault()
+          e.stopPropagation()
+
+          const value = display(item.absolute, filter())
+          list?.setFilter(value.endsWith("/") ? value : value + "/")
+        }}
         onSelect={(path) => {
           if (!path) return
-          resolve(path)
+          resolve(path.absolute)
         }}
       >
-        {(absolute) => {
-          const path = display(absolute)
+        {(item) => {
+          const path = display(item.absolute, filter())
+          if (path === "~") {
+            return (
+              <div class="w-full flex items-center justify-between rounded-md">
+                <div class="flex items-center gap-x-3 grow min-w-0">
+                  <FileIcon node={{ path: item.absolute, type: "directory" }} class="shrink-0 size-4" />
+                  <div class="flex items-center text-14-regular min-w-0">
+                    <span class="text-text-strong whitespace-nowrap">~</span>
+                  </div>
+                </div>
+              </div>
+            )
+          }
           return (
             <div class="w-full flex items-center justify-between rounded-md">
               <div class="flex items-center gap-x-3 grow min-w-0">
-                <FileIcon node={{ path: absolute, type: "directory" }} class="shrink-0 size-4" />
+                <FileIcon node={{ path: item.absolute, type: "directory" }} class="shrink-0 size-4" />
                 <div class="flex items-center text-14-regular min-w-0">
                   <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
                     {getDirectory(path)}
