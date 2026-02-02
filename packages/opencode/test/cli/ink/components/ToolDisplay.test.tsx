@@ -68,7 +68,7 @@ describe("ToolDisplay", () => {
   })
 
   it("handles undefined input", () => {
-    const tool: Tool = { ...baseTool, input: undefined as any }
+    const tool: Tool = { ...baseTool, input: {} }
     const instance = render(<ToolDisplay tool={tool} />)
     instance.unmount()
     expect(true).toBe(true)

@@ -1,5 +1,5 @@
 /** @jsxImportSource react */
-import React, { useReducer } from "react"
+import { useReducer } from "react"
 import type { ReactElement } from "react"
 import { Box, Text } from "ink"
 import { appReducer, initialState } from "./state/reducer"
