@@ -28,6 +28,8 @@ export const dict = {
   "command.settings.open": "設定を開く",
   "command.session.previous": "前のセッション",
   "command.session.next": "次のセッション",
+  "command.session.previous.unseen": "Previous unread session",
+  "command.session.next.unseen": "Next unread session",
   "command.session.archive": "セッションをアーカイブ",
 
   "command.palette": "コマンドパレット",
