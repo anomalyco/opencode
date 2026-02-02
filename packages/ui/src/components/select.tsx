@@ -1,8 +1,10 @@
 import { Select as Kobalte } from "@kobalte/core/select"
-import { createMemo, onCleanup, splitProps, type ComponentProps, type JSX } from "solid-js"
+import { createMemo, createSignal, onCleanup, splitProps, type ComponentProps, type JSX } from "solid-js"
 import { pipe, groupBy, entries, map } from "remeda"
+import { Show } from "solid-js"
 import { Button, ButtonProps } from "./button"
 import { Icon } from "./icon"
+import { MorphChevron } from "./morph-chevron"
 
 export type SelectProps<T> = Omit<ComponentProps<typeof Kobalte<T>>, "value" | "onSelect" | "children"> & {
   placeholder?: string
@@ -37,6 +39,8 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
     "triggerStyle",
     "triggerVariant",
   ])
+
+  const [isOpen, setIsOpen] = createSignal(false)
 
   const state = {
     key: undefined as string | undefined,
@@ -85,7 +89,7 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
       data-component="select"
       data-trigger-style={local.triggerVariant}
       placement={local.triggerVariant === "settings" ? "bottom-end" : "bottom-start"}
-      gutter={4}
+      gutter={8}
       value={local.current}
       options={grouped()}
       optionValue={(x) => (local.value ? local.value(x) : (x as string))}
@@ -115,7 +119,7 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
                 : (itemProps.item.rawValue as string)}
           </Kobalte.ItemLabel>
           <Kobalte.ItemIndicator data-slot="select-select-item-indicator">
-            <Icon name="check-small" size="small" />
+            <Icon name="check" size="small" />
           </Kobalte.ItemIndicator>
         </Kobalte.Item>
       )}
@@ -124,6 +128,7 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
         stop()
       }}
       onOpenChange={(open) => {
+        setIsOpen(open)
         local.onOpenChange?.(open)
         if (!open) stop()
       }}
@@ -149,7 +154,12 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
           }}
         </Kobalte.Value>
         <Kobalte.Icon data-slot="select-select-trigger-icon">
-          <Icon name={local.triggerVariant === "settings" ? "selector" : "chevron-down"} size="small" />
+          <Show when={local.triggerVariant === "settings"}>
+            <Icon name="selector" size="small" />
+          </Show>
+          <Show when={local.triggerVariant !== "settings"}>
+            <MorphChevron expanded={isOpen()} />
+          </Show>
         </Kobalte.Icon>
       </Kobalte.Trigger>
       <Kobalte.Portal>

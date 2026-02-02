@@ -130,7 +130,6 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         ctx.metadata({
           title: params.description,
           metadata: {
-            summary: Object.values(parts).sort((a, b) => a.id.localeCompare(b.id)),
             sessionId: session.id,
             model,
           },
