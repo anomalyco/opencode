@@ -34,6 +34,7 @@ import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
 import { Provider } from "@/provider/provider"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
+import { getDefaultColors, type Mode } from "./default-colors"
 import open from "open"
 import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
@@ -720,13 +721,7 @@ function ErrorComponent(props: {
   const issueURL = new URL("https://github.com/anomalyco/opencode/issues/new?template=bug-report.yml")
 
   // Choose safe fallback colors per mode since theme context may not be available
-  const isLight = props.mode === "light"
-  const colors = {
-    bg: isLight ? "#ffffff" : "#0a0a0a",
-    text: isLight ? "#1a1a1a" : "#eeeeee",
-    muted: isLight ? "#8a8a8a" : "#808080",
-    primary: isLight ? "#3b7dd8" : "#fab283",
-  }
+  const colors = getDefaultColors(props.mode ?? "dark")
 
   if (props.error.message) {
     issueURL.searchParams.set("title", `opentui: fatal: ${props.error.message}`)
@@ -748,29 +743,29 @@ function ErrorComponent(props: {
   }
 
   return (
-    <box flexDirection="column" gap={1} backgroundColor={colors.bg}>
+    <box flexDirection="column" gap={1} backgroundColor={colors.background}>
       <box flexDirection="row" gap={1} alignItems="center">
         <text attributes={TextAttributes.BOLD} fg={colors.text}>
           Please report an issue.
         </text>
         <box onMouseUp={copyIssueURL} backgroundColor={colors.primary} padding={1}>
-          <text attributes={TextAttributes.BOLD} fg={colors.bg}>
+          <text attributes={TextAttributes.BOLD} fg={colors.background}>
             Copy issue URL (exception info pre-filled)
           </text>
         </box>
-        {copied() && <text fg={colors.muted}>Successfully copied</text>}
+        {copied() && <text fg={colors.textMuted}>Successfully copied</text>}
       </box>
       <box flexDirection="row" gap={2} alignItems="center">
         <text fg={colors.text}>A fatal error occurred!</text>
         <box onMouseUp={props.reset} backgroundColor={colors.primary} padding={1}>
-          <text fg={colors.bg}>Reset TUI</text>
+          <text fg={colors.background}>Reset TUI</text>
         </box>
         <box onMouseUp={handleExit} backgroundColor={colors.primary} padding={1}>
-          <text fg={colors.bg}>Exit</text>
+          <text fg={colors.background}>Exit</text>
         </box>
       </box>
       <scrollbox height={Math.floor(term().height * 0.7)}>
-        <text fg={colors.muted}>{props.error.stack}</text>
+        <text fg={colors.textMuted}>{props.error.stack}</text>
       </scrollbox>
       <text fg={colors.text}>{props.error.message}</text>
     </box>
