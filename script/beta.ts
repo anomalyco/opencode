@@ -124,7 +124,18 @@ async function main() {
     throw new Error(`${failed.length} PR(s) failed to merge`)
   }
 
-  console.log("\nForce pushing beta branch...")
+  console.log("\nChecking if beta branch has changes...")
+  await $`git fetch origin beta`
+
+  const localTree = await $`git rev-parse beta^{tree}`.text()
+  const remoteTree = await $`git rev-parse origin/beta^{tree}`.text()
+
+  if (localTree.trim() === remoteTree.trim()) {
+    console.log("Beta branch has identical contents, no push needed")
+    return
+  }
+
+  console.log("Force pushing beta branch...")
   await $`git push origin beta --force --no-verify`
 
   console.log("Successfully synced beta branch")
