@@ -70,6 +70,7 @@ export const dict = {
   "command.model.variant.cycle.description": "Переключиться к следующему уровню усилий",
   "command.permissions.autoaccept.enable": "Авто-принятие изменений",
   "command.permissions.autoaccept.disable": "Прекратить авто-принятие изменений",
+  "command.workspace.toggle": "Переключить рабочие пространства",
   "command.session.undo": "Отменить",
   "command.session.undo.description": "Отменить последнее сообщение",
   "command.session.redo": "Повторить",
@@ -349,6 +350,11 @@ export const dict = {
   "toast.permissions.autoaccept.on.description": "Разрешения на редактирование и запись будут автоматически одобрены",
   "toast.permissions.autoaccept.off.title": "Авто-принятие остановлено",
   "toast.permissions.autoaccept.off.description": "Редактирование и запись потребуют подтверждения",
+
+  "toast.workspace.enabled.title": "Рабочие пространства включены",
+  "toast.workspace.enabled.description": "В боковой панели теперь отображаются несколько рабочих деревьев",
+  "toast.workspace.disabled.title": "Рабочие пространства отключены",
+  "toast.workspace.disabled.description": "В боковой панели отображается только главное рабочее дерево",
 
   "toast.model.none.title": "Модель не выбрана",
   "toast.model.none.description": "Подключите провайдера для суммаризации сессии",
