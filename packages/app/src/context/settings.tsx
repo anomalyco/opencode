@@ -20,6 +20,9 @@ export interface Settings {
     autoSave: boolean
     releaseNotes: boolean
   }
+  updates: {
+    startup: boolean
+  }
   appearance: {
     fontSize: number
     font: string
@@ -36,6 +39,9 @@ const defaultSettings: Settings = {
   general: {
     autoSave: true,
     releaseNotes: true,
+  },
+  updates: {
+    startup: true,
   },
   appearance: {
     fontSize: 14,
@@ -102,6 +108,12 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         releaseNotes: createMemo(() => store.general?.releaseNotes ?? defaultSettings.general.releaseNotes),
         setReleaseNotes(value: boolean) {
           setStore("general", "releaseNotes", value)
+        },
+      },
+      updates: {
+        startup: createMemo(() => store.updates?.startup ?? defaultSettings.updates.startup),
+        setStartup(value: boolean) {
+          setStore("updates", "startup", value)
         },
       },
       appearance: {

@@ -42,28 +42,15 @@
           desktop = pkgs.callPackage ./nix/desktop.nix {
             inherit opencode;
           };
-          # nixpkgs cpu naming to bun cpu naming
-          cpuMap = { x86_64 = "x64"; aarch64 = "arm64"; };
-          # matrix of node_modules builds - these will always fail due to fakeHash usage
-          # but allow computation of the correct hash from any build machine for any cpu/os
-          # see the update-nix-hashes workflow for usage
-          moduleUpdaters = pkgs.lib.listToAttrs (
-            pkgs.lib.concatMap (cpu:
-              map (os: {
-                name = "${cpu}-${os}_node_modules";
-                value = node_modules.override {
-                  bunCpu = cpuMap.${cpu};
-                  bunOs = os;
-                  hash = pkgs.lib.fakeHash;
-                };
-              }) [ "linux" "darwin" ]
-            ) [ "x86_64" "aarch64" ]
-          );
         in
         {
           default = opencode;
           inherit opencode desktop;
-        } // moduleUpdaters
+          # Updater derivation with fakeHash - build fails and reveals correct hash
+          node_modules_updater = node_modules.override {
+            hash = pkgs.lib.fakeHash;
+          };
+        }
       );
     };
 }

@@ -31,6 +31,8 @@ export const dict = {
   "command.settings.open": "Åpne innstillinger",
   "command.session.previous": "Forrige sesjon",
   "command.session.next": "Neste sesjon",
+  "command.session.previous.unseen": "Previous unread session",
+  "command.session.next.unseen": "Next unread session",
   "command.session.archive": "Arkiver sesjon",
 
   "command.palette": "Kommandopalett",
@@ -213,6 +215,8 @@ export const dict = {
   "prompt.popover.emptyCommands": "Ingen matchende kommandoer",
   "prompt.dropzone.label": "Slipp bilder eller PDF-er her",
   "prompt.slash.badge.custom": "egendefinert",
+  "prompt.slash.badge.skill": "skill",
+  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "aktiv",
   "prompt.context.includeActiveFile": "Inkluder aktiv fil",
   "prompt.context.removeActiveFile": "Fjern aktiv fil fra kontekst",
@@ -334,6 +338,7 @@ export const dict = {
   "language.ar": "العربية",
   "language.no": "Norsk",
   "language.br": "Português (Brasil)",
+  "language.th": "ไทย",
 
   "toast.language.title": "Språk",
   "toast.language.description": "Byttet til {{language}}",
@@ -435,6 +440,7 @@ export const dict = {
   "session.review.noChanges": "Ingen endringer",
   "session.files.selectToOpen": "Velg en fil å åpne",
   "session.files.all": "Alle filer",
+  "session.files.binaryContent": "Binær fil (innhold kan ikke vises)",
   "session.messages.renderEarlier": "Vis tidligere meldinger",
   "session.messages.loadingEarlier": "Laster inn tidligere meldinger...",
   "session.messages.loadEarlier": "Last inn tidligere meldinger",
@@ -519,6 +525,7 @@ export const dict = {
 
   "settings.general.section.appearance": "Utseende",
   "settings.general.section.notifications": "Systemvarsler",
+  "settings.general.section.updates": "Oppdateringer",
   "settings.general.section.sounds": "Lydeffekter",
 
   "settings.general.row.language.title": "Språk",
@@ -529,6 +536,18 @@ export const dict = {
   "settings.general.row.theme.description": "Tilpass hvordan OpenCode er tematisert.",
   "settings.general.row.font.title": "Skrift",
   "settings.general.row.font.description": "Tilpass mono-skriften som brukes i kodeblokker",
+
+  "settings.general.row.releaseNotes.title": "Utgivelsesnotater",
+  "settings.general.row.releaseNotes.description": 'Vis "Hva er nytt"-vinduer etter oppdateringer',
+
+  "settings.updates.row.startup.title": "Se etter oppdateringer ved oppstart",
+  "settings.updates.row.startup.description": "Se automatisk etter oppdateringer når OpenCode starter",
+  "settings.updates.row.check.title": "Se etter oppdateringer",
+  "settings.updates.row.check.description": "Se etter oppdateringer manuelt og installer hvis tilgjengelig",
+  "settings.updates.action.checkNow": "Sjekk nå",
+  "settings.updates.action.checking": "Sjekker...",
+  "settings.updates.toast.latest.title": "Du er oppdatert",
+  "settings.updates.toast.latest.description": "Du bruker den nyeste versjonen av OpenCode.",
 
   "font.option.ibmPlexMono": "IBM Plex Mono",
   "font.option.cascadiaCode": "Cascadia Code",

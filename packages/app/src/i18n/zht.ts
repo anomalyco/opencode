@@ -32,6 +32,8 @@ export const dict = {
   "command.settings.open": "開啟設定",
   "command.session.previous": "上一個工作階段",
   "command.session.next": "下一個工作階段",
+  "command.session.previous.unseen": "Previous unread session",
+  "command.session.next.unseen": "Next unread session",
   "command.session.archive": "封存工作階段",
 
   "command.palette": "命令面板",
@@ -212,6 +214,8 @@ export const dict = {
   "prompt.popover.emptyCommands": "沒有符合的命令",
   "prompt.dropzone.label": "將圖片或 PDF 拖到這裡",
   "prompt.slash.badge.custom": "自訂",
+  "prompt.slash.badge.skill": "技能",
+  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "作用中",
   "prompt.context.includeActiveFile": "包含作用中檔案",
   "prompt.context.removeActiveFile": "從上下文移除目前檔案",
@@ -332,6 +336,7 @@ export const dict = {
   "language.ar": "العربية",
   "language.no": "Norsk",
   "language.br": "Português (Brasil)",
+  "language.th": "ไทย",
 
   "toast.language.title": "語言",
   "toast.language.description": "已切換到 {{language}}",
@@ -431,6 +436,7 @@ export const dict = {
   "session.review.noChanges": "沒有變更",
   "session.files.selectToOpen": "選取要開啟的檔案",
   "session.files.all": "所有檔案",
+  "session.files.binaryContent": "二進位檔案（無法顯示內容）",
   "session.messages.renderEarlier": "顯示更早的訊息",
   "session.messages.loadingEarlier": "正在載入更早的訊息...",
   "session.messages.loadEarlier": "載入更早的訊息",
@@ -512,6 +518,7 @@ export const dict = {
 
   "settings.general.section.appearance": "外觀",
   "settings.general.section.notifications": "系統通知",
+  "settings.general.section.updates": "更新",
   "settings.general.section.sounds": "音效",
 
   "settings.general.row.language.title": "語言",
@@ -522,6 +529,18 @@ export const dict = {
   "settings.general.row.theme.description": "自訂 OpenCode 的主題。",
   "settings.general.row.font.title": "字型",
   "settings.general.row.font.description": "自訂程式碼區塊使用的等寬字型",
+
+  "settings.general.row.releaseNotes.title": "發行說明",
+  "settings.general.row.releaseNotes.description": "更新後顯示「新功能」彈出視窗",
+
+  "settings.updates.row.startup.title": "啟動時檢查更新",
+  "settings.updates.row.startup.description": "在 OpenCode 啟動時自動檢查更新",
+  "settings.updates.row.check.title": "檢查更新",
+  "settings.updates.row.check.description": "手動檢查更新並在有更新時安裝",
+  "settings.updates.action.checkNow": "立即檢查",
+  "settings.updates.action.checking": "檢查中...",
+  "settings.updates.toast.latest.title": "已是最新版本",
+  "settings.updates.toast.latest.description": "你正在使用最新版本的 OpenCode。",
 
   "font.option.ibmPlexMono": "IBM Plex Mono",
   "font.option.cascadiaCode": "Cascadia Code",

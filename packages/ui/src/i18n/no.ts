@@ -57,6 +57,7 @@ export const dict: Record<Keys, string> = {
   "ui.imagePreview.alt": "Bildeforhåndsvisning",
 
   "ui.tool.read": "Les",
+  "ui.tool.loaded": "Lastet",
   "ui.tool.list": "Liste",
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",

@@ -126,7 +126,7 @@ function sliceHighlights(input: { releases: ParsedRelease[]; current?: string; p
     seen.add(key)
     return true
   })
-  return unique.slice(0, 3)
+  return unique.slice(0, 5)
 }
 
 export const { use: useHighlights, provider: HighlightsProvider } = createSimpleContext({

@@ -28,6 +28,8 @@ export const dict = {
   "command.settings.open": "فتح الإعدادات",
   "command.session.previous": "الجلسة السابقة",
   "command.session.next": "الجلسة التالية",
+  "command.session.previous.unseen": "Previous unread session",
+  "command.session.next.unseen": "Next unread session",
   "command.session.archive": "أرشفة الجلسة",
 
   "command.palette": "لوحة الأوامر",
@@ -210,6 +212,8 @@ export const dict = {
   "prompt.popover.emptyCommands": "لا توجد أوامر مطابقة",
   "prompt.dropzone.label": "أفلت الصور أو ملفات PDF هنا",
   "prompt.slash.badge.custom": "مخصص",
+  "prompt.slash.badge.skill": "مهارة",
+  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "نشط",
   "prompt.context.includeActiveFile": "تضمين الملف النشط",
   "prompt.context.removeActiveFile": "إزالة الملف النشط من السياق",
@@ -331,6 +335,7 @@ export const dict = {
   "language.ar": "العربية",
   "language.no": "Norsk",
   "language.br": "Português (Brasil)",
+  "language.th": "ไทย",
 
   "toast.language.title": "لغة",
   "toast.language.description": "تم التبديل إلى {{language}}",
@@ -431,6 +436,7 @@ export const dict = {
   "session.review.noChanges": "لا توجد تغييرات",
   "session.files.selectToOpen": "اختر ملفًا لفتحه",
   "session.files.all": "كل الملفات",
+  "session.files.binaryContent": "ملف ثنائي (لا يمكن عرض المحتوى)",
   "session.messages.renderEarlier": "عرض الرسائل السابقة",
   "session.messages.loadingEarlier": "جارٍ تحميل الرسائل السابقة...",
   "session.messages.loadEarlier": "تحميل الرسائل السابقة",
@@ -512,6 +518,7 @@ export const dict = {
 
   "settings.general.section.appearance": "المظهر",
   "settings.general.section.notifications": "إشعارات النظام",
+  "settings.general.section.updates": "التحديثات",
   "settings.general.section.sounds": "المؤثرات الصوتية",
 
   "settings.general.row.language.title": "اللغة",
@@ -522,6 +529,18 @@ export const dict = {
   "settings.general.row.theme.description": "تخصيص سمة OpenCode.",
   "settings.general.row.font.title": "الخط",
   "settings.general.row.font.description": "تخصيص الخط الأحادي المستخدم في كتل التعليمات البرمجية",
+
+  "settings.general.row.releaseNotes.title": "ملاحظات الإصدار",
+  "settings.general.row.releaseNotes.description": 'عرض نوافذ "ما الجديد" المنبثقة بعد التحديثات',
+
+  "settings.updates.row.startup.title": "التحقق من التحديثات عند بدء التشغيل",
+  "settings.updates.row.startup.description": "التحقق تلقائيًا من التحديثات عند تشغيل OpenCode",
+  "settings.updates.row.check.title": "التحقق من التحديثات",
+  "settings.updates.row.check.description": "التحقق يدويًا من التحديثات وتثبيتها إذا كانت متاحة",
+  "settings.updates.action.checkNow": "تحقق الآن",
+  "settings.updates.action.checking": "جارٍ التحقق...",
+  "settings.updates.toast.latest.title": "أنت على آخر إصدار",
+  "settings.updates.toast.latest.description": "أنت تستخدم أحدث إصدار من OpenCode.",
   "font.option.ibmPlexMono": "IBM Plex Mono",
   "font.option.cascadiaCode": "Cascadia Code",
   "font.option.firaCode": "Fira Code",

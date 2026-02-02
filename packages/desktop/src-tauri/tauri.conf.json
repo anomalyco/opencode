@@ -52,5 +52,12 @@
         "sidebarImage": "assets/nsis-sidebar.bmp"
       }
     }
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["opencode"]
+      }
+    }
   }
 }

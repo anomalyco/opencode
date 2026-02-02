@@ -81,6 +81,14 @@
     padding: 8px 12px;
     border-radius: 4px;
 
+    [data-highlight="file"] {
+      color: var(--syntax-property);
+    }
+
+    [data-highlight="agent"] {
+      color: var(--syntax-type);
+    }
+
     [data-slot="user-message-copy-wrapper"] {
       position: absolute;
       top: 7px;
@@ -799,5 +807,22 @@
 
   &::-webkit-scrollbar {
     display: none;
+  }
+}
+
+[data-component="tool-loaded-file"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0 4px 28px;
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-large);
+  color: var(--text-weak);
+
+  [data-component="icon"] {
+    flex-shrink: 0;
+    color: var(--icon-weak);
   }
 }

@@ -28,6 +28,8 @@ export const dict = {
   "command.settings.open": "設定を開く",
   "command.session.previous": "前のセッション",
   "command.session.next": "次のセッション",
+  "command.session.previous.unseen": "Previous unread session",
+  "command.session.next.unseen": "Next unread session",
   "command.session.archive": "セッションをアーカイブ",
 
   "command.palette": "コマンドパレット",
@@ -209,6 +211,8 @@ export const dict = {
   "prompt.popover.emptyCommands": "一致するコマンドがありません",
   "prompt.dropzone.label": "画像またはPDFをここにドロップ",
   "prompt.slash.badge.custom": "カスタム",
+  "prompt.slash.badge.skill": "スキル",
+  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "アクティブ",
   "prompt.context.includeActiveFile": "アクティブなファイルを含める",
   "prompt.context.removeActiveFile": "コンテキストからアクティブなファイルを削除",
@@ -331,6 +335,7 @@ export const dict = {
   "language.ar": "العربية",
   "language.no": "Norsk",
   "language.br": "Português (Brasil)",
+  "language.th": "ไทย",
 
   "toast.language.title": "言語",
   "toast.language.description": "{{language}}に切り替えました",
@@ -432,6 +437,7 @@ export const dict = {
   "session.review.noChanges": "変更なし",
   "session.files.selectToOpen": "開くファイルを選択",
   "session.files.all": "すべてのファイル",
+  "session.files.binaryContent": "バイナリファイル（内容を表示できません）",
   "session.messages.renderEarlier": "以前のメッセージを表示",
   "session.messages.loadingEarlier": "以前のメッセージを読み込み中...",
   "session.messages.loadEarlier": "以前のメッセージを読み込む",
@@ -516,6 +522,7 @@ export const dict = {
 
   "settings.general.section.appearance": "外観",
   "settings.general.section.notifications": "システム通知",
+  "settings.general.section.updates": "アップデート",
   "settings.general.section.sounds": "効果音",
 
   "settings.general.row.language.title": "言語",
@@ -526,6 +533,18 @@ export const dict = {
   "settings.general.row.theme.description": "OpenCodeのテーマをカスタマイズします。",
   "settings.general.row.font.title": "フォント",
   "settings.general.row.font.description": "コードブロックで使用する等幅フォントをカスタマイズします",
+
+  "settings.general.row.releaseNotes.title": "リリースノート",
+  "settings.general.row.releaseNotes.description": "アップデート後に「新機能」ポップアップを表示",
+
+  "settings.updates.row.startup.title": "起動時にアップデートを確認",
+  "settings.updates.row.startup.description": "OpenCode の起動時に自動でアップデートを確認します",
+  "settings.updates.row.check.title": "アップデートを確認",
+  "settings.updates.row.check.description": "手動でアップデートを確認し、利用可能ならインストールします",
+  "settings.updates.action.checkNow": "今すぐ確認",
+  "settings.updates.action.checking": "確認中...",
+  "settings.updates.toast.latest.title": "最新です",
+  "settings.updates.toast.latest.description": "OpenCode は最新バージョンです。",
 
   "font.option.ibmPlexMono": "IBM Plex Mono",
   "font.option.cascadiaCode": "Cascadia Code",

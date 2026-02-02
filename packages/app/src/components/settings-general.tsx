@@ -1,8 +1,13 @@
 import { Component, createMemo, type JSX } from "solid-js"
+import { createStore } from "solid-js/store"
+import { Button } from "@opencode-ai/ui/button"
 import { Select } from "@opencode-ai/ui/select"
 import { Switch } from "@opencode-ai/ui/switch"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
+import { showToast } from "@opencode-ai/ui/toast"
+import { ScrollFade } from "@opencode-ai/ui/scroll-fade"
 import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
 import { useSettings, monoFontFamily } from "@/context/settings"
 import { playSound, SOUND_OPTIONS } from "@/utils/sound"
 import { Link } from "./link"
@@ -29,7 +34,66 @@ const playDemoSound = (src: string) => {
 export const SettingsGeneral: Component = () => {
   const theme = useTheme()
   const language = useLanguage()
+  const platform = usePlatform()
   const settings = useSettings()
+
+  const [store, setStore] = createStore({
+    checking: false,
+  })
+
+  const check = () => {
+    if (!platform.checkUpdate) return
+    setStore("checking", true)
+
+    void platform
+      .checkUpdate()
+      .then((result) => {
+        if (!result.updateAvailable) {
+          showToast({
+            variant: "success",
+            icon: "circle-check",
+            title: language.t("settings.updates.toast.latest.title"),
+            description: language.t("settings.updates.toast.latest.description", { version: platform.version ?? "" }),
+          })
+          return
+        }
+
+        const actions =
+          platform.update && platform.restart
+            ? [
+                {
+                  label: language.t("toast.update.action.installRestart"),
+                  onClick: async () => {
+                    await platform.update!()
+                    await platform.restart!()
+                  },
+                },
+                {
+                  label: language.t("toast.update.action.notYet"),
+                  onClick: "dismiss" as const,
+                },
+              ]
+            : [
+                {
+                  label: language.t("toast.update.action.notYet"),
+                  onClick: "dismiss" as const,
+                },
+              ]
+
+        showToast({
+          persistent: true,
+          icon: "download",
+          title: language.t("toast.update.title"),
+          description: language.t("toast.update.description", { version: result.version ?? "" }),
+          actions,
+        })
+      })
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err)
+        showToast({ title: language.t("common.requestFailed"), description: message })
+      })
+      .finally(() => setStore("checking", false))
+  }
 
   const themeOptions = createMemo(() =>
     Object.entries(theme.themes()).map(([id, def]) => ({ id, name: def.name ?? id })),
@@ -67,14 +131,13 @@ export const SettingsGeneral: Component = () => {
   const soundOptions = [...SOUND_OPTIONS]
 
   return (
-    <div class="flex flex-col h-full overflow-y-auto no-scrollbar" style={{ padding: "0 40px 40px 40px" }}>
-      <div
-        class="sticky top-0 z-10"
-        style={{
-          background:
-            "linear-gradient(to bottom, var(--surface-raised-stronger-non-alpha) calc(100% - 24px), transparent)",
-        }}
-      >
+    <ScrollFade
+      direction="vertical"
+      fadeStartSize={0}
+      fadeEndSize={16}
+      class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10"
+    >
+      <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 pt-6 pb-8">
           <h2 class="text-16-medium text-text-strong">{language.t("settings.tab.general")}</h2>
         </div>
@@ -91,6 +154,7 @@ export const SettingsGeneral: Component = () => {
               description={language.t("settings.general.row.language.description")}
             >
               <Select
+                data-action="settings-language"
                 options={languageOptions()}
                 current={languageOptions().find((o) => o.value === language.locale())}
                 value={(o) => o.value}
@@ -107,6 +171,7 @@ export const SettingsGeneral: Component = () => {
               description={language.t("settings.general.row.appearance.description")}
             >
               <Select
+                data-action="settings-color-scheme"
                 options={colorSchemeOptions()}
                 current={colorSchemeOptions().find((o) => o.value === theme.colorScheme())}
                 value={(o) => o.value}
@@ -133,6 +198,7 @@ export const SettingsGeneral: Component = () => {
               }
             >
               <Select
+                data-action="settings-theme"
                 options={themeOptions()}
                 current={themeOptions().find((o) => o.id === theme.themeId())}
                 value={(o) => o.id}
@@ -157,6 +223,7 @@ export const SettingsGeneral: Component = () => {
               description={language.t("settings.general.row.font.description")}
             >
               <Select
+                data-action="settings-font"
                 options={fontOptionsList}
                 current={fontOptionsList.find((o) => o.value === settings.appearance.font())}
                 value={(o) => o.value}
@@ -165,7 +232,7 @@ export const SettingsGeneral: Component = () => {
                 variant="secondary"
                 size="small"
                 triggerVariant="settings"
-                triggerStyle={{ "font-family": monoFontFamily(settings.appearance.font()), "min-width": "180px" }}
+                triggerStyle={{ "font-family": monoFontFamily(settings.appearance.font()), "field-sizing": "content" }}
               >
                 {(option) => (
                   <span style={{ "font-family": monoFontFamily(option?.value) }}>
@@ -186,47 +253,36 @@ export const SettingsGeneral: Component = () => {
               title={language.t("settings.general.notifications.agent.title")}
               description={language.t("settings.general.notifications.agent.description")}
             >
-              <Switch
-                checked={settings.notifications.agent()}
-                onChange={(checked) => settings.notifications.setAgent(checked)}
-              />
+              <div data-action="settings-notifications-agent">
+                <Switch
+                  checked={settings.notifications.agent()}
+                  onChange={(checked) => settings.notifications.setAgent(checked)}
+                />
+              </div>
             </SettingsRow>
 
             <SettingsRow
               title={language.t("settings.general.notifications.permissions.title")}
               description={language.t("settings.general.notifications.permissions.description")}
             >
-              <Switch
-                checked={settings.notifications.permissions()}
-                onChange={(checked) => settings.notifications.setPermissions(checked)}
-              />
+              <div data-action="settings-notifications-permissions">
+                <Switch
+                  checked={settings.notifications.permissions()}
+                  onChange={(checked) => settings.notifications.setPermissions(checked)}
+                />
+              </div>
             </SettingsRow>
 
             <SettingsRow
               title={language.t("settings.general.notifications.errors.title")}
               description={language.t("settings.general.notifications.errors.description")}
             >
-              <Switch
-                checked={settings.notifications.errors()}
-                onChange={(checked) => settings.notifications.setErrors(checked)}
-              />
-            </SettingsRow>
-          </div>
-        </div>
-
-        {/* Updates Section */}
-        <div class="flex flex-col gap-1">
-          <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.updates")}</h3>
-
-          <div class="bg-surface-raised-base px-4 rounded-lg">
-            <SettingsRow
-              title={language.t("settings.general.row.releaseNotes.title")}
-              description={language.t("settings.general.row.releaseNotes.description")}
-            >
-              <Switch
-                checked={settings.general.releaseNotes()}
-                onChange={(checked) => settings.general.setReleaseNotes(checked)}
-              />
+              <div data-action="settings-notifications-errors">
+                <Switch
+                  checked={settings.notifications.errors()}
+                  onChange={(checked) => settings.notifications.setErrors(checked)}
+                />
+              </div>
             </SettingsRow>
           </div>
         </div>
@@ -241,6 +297,7 @@ export const SettingsGeneral: Component = () => {
               description={language.t("settings.general.sounds.agent.description")}
             >
               <Select
+                data-action="settings-sounds-agent"
                 options={soundOptions}
                 current={soundOptions.find((o) => o.id === settings.sounds.agent())}
                 value={(o) => o.id}
@@ -265,6 +322,7 @@ export const SettingsGeneral: Component = () => {
               description={language.t("settings.general.sounds.permissions.description")}
             >
               <Select
+                data-action="settings-sounds-permissions"
                 options={soundOptions}
                 current={soundOptions.find((o) => o.id === settings.sounds.permissions())}
                 value={(o) => o.id}
@@ -289,6 +347,7 @@ export const SettingsGeneral: Component = () => {
               description={language.t("settings.general.sounds.errors.description")}
             >
               <Select
+                data-action="settings-sounds-errors"
                 options={soundOptions}
                 current={soundOptions.find((o) => o.id === settings.sounds.errors())}
                 value={(o) => o.id}
@@ -309,8 +368,56 @@ export const SettingsGeneral: Component = () => {
             </SettingsRow>
           </div>
         </div>
+
+        {/* Updates Section */}
+        <div class="flex flex-col gap-1">
+          <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.updates")}</h3>
+
+          <div class="bg-surface-raised-base px-4 rounded-lg">
+            <SettingsRow
+              title={language.t("settings.updates.row.startup.title")}
+              description={language.t("settings.updates.row.startup.description")}
+            >
+              <div data-action="settings-updates-startup">
+                <Switch
+                  checked={settings.updates.startup()}
+                  disabled={!platform.checkUpdate}
+                  onChange={(checked) => settings.updates.setStartup(checked)}
+                />
+              </div>
+            </SettingsRow>
+
+            <SettingsRow
+              title={language.t("settings.general.row.releaseNotes.title")}
+              description={language.t("settings.general.row.releaseNotes.description")}
+            >
+              <div data-action="settings-release-notes">
+                <Switch
+                  checked={settings.general.releaseNotes()}
+                  onChange={(checked) => settings.general.setReleaseNotes(checked)}
+                />
+              </div>
+            </SettingsRow>
+
+            <SettingsRow
+              title={language.t("settings.updates.row.check.title")}
+              description={language.t("settings.updates.row.check.description")}
+            >
+              <Button
+                size="small"
+                variant="secondary"
+                disabled={store.checking || !platform.checkUpdate}
+                onClick={check}
+              >
+                {store.checking
+                  ? language.t("settings.updates.action.checking")
+                  : language.t("settings.updates.action.checkNow")}
+              </Button>
+            </SettingsRow>
+          </div>
+        </div>
       </div>
-    </div>
+    </ScrollFade>
   )
 }
 
@@ -322,8 +429,8 @@ interface SettingsRowProps {
 
 const SettingsRow: Component<SettingsRowProps> = (props) => {
   return (
-    <div class="flex items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
-      <div class="flex flex-col gap-0.5">
+    <div class="flex flex-wrap items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
+      <div class="flex flex-col gap-0.5 min-w-0">
         <span class="text-14-medium text-text-strong">{props.title}</span>
         <span class="text-12-regular text-text-weak">{props.description}</span>
       </div>

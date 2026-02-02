@@ -54,6 +54,7 @@ const ModelList: Component<{
           class="w-full"
           placement="right-start"
           gutter={12}
+          forceMount={false}
           value={
             <ModelTooltip
               model={item}
@@ -89,9 +90,10 @@ const ModelList: Component<{
 
 export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
   provider?: string
-  children?: JSX.Element
+  children?: JSX.Element | ((open: boolean) => JSX.Element)
   triggerAs?: T
   triggerProps?: ComponentProps<T>
+  gutter?: number
 }) {
   const [store, setStore] = createStore<{
     open: boolean
@@ -109,6 +111,11 @@ export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
   const handleManage = () => {
     setStore("open", false)
     dialog.show(() => <DialogManageModels />)
+  }
+
+  const handleConnectProvider = () => {
+    setStore("open", false)
+    dialog.show(() => <DialogSelectProvider />)
   }
   const language = useLanguage()
 
@@ -169,19 +176,19 @@ export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
       }}
       modal={false}
       placement="top-start"
-      gutter={8}
+      gutter={props.gutter ?? 8}
     >
       <Kobalte.Trigger
         ref={(el) => setStore("trigger", el)}
         as={props.triggerAs ?? "div"}
         {...(props.triggerProps as any)}
       >
-        {props.children}
+        {typeof props.children === "function" ? props.children(store.open) : props.children}
       </Kobalte.Trigger>
       <Kobalte.Portal>
         <Kobalte.Content
           ref={(el) => setStore("content", el)}
-          class="w-72 h-80 flex flex-col rounded-md border border-border-base bg-surface-raised-stronger-non-alpha shadow-md z-50 outline-none overflow-hidden"
+          class="w-72 h-80 flex flex-col p-2 rounded-md border border-border-base bg-surface-raised-stronger-non-alpha shadow-md z-50 outline-none overflow-hidden"
           onEscapeKeyDown={(event) => {
             setStore("dismiss", "escape")
             setStore("open", false)
@@ -207,15 +214,28 @@ export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
             onSelect={() => setStore("open", false)}
             class="p-1"
             action={
-              <IconButton
-                icon="sliders"
-                variant="ghost"
-                iconSize="normal"
-                class="size-6"
-                aria-label={language.t("dialog.model.manage")}
-                title={language.t("dialog.model.manage")}
-                onClick={handleManage}
-              />
+              <div class="flex items-center gap-1">
+                <Tooltip placement="top" forceMount={false} value={language.t("command.provider.connect")}>
+                  <IconButton
+                    icon="plus-small"
+                    variant="ghost"
+                    iconSize="normal"
+                    class="size-6"
+                    aria-label={language.t("command.provider.connect")}
+                    onClick={handleConnectProvider}
+                  />
+                </Tooltip>
+                <Tooltip placement="top" forceMount={false} value={language.t("dialog.model.manage")}>
+                  <IconButton
+                    icon="sliders"
+                    variant="ghost"
+                    iconSize="normal"
+                    class="size-6"
+                    aria-label={language.t("dialog.model.manage")}
+                    onClick={handleManage}
+                  />
+                </Tooltip>
+              </div>
             }
           />
         </Kobalte.Content>

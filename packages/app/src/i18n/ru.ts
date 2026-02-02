@@ -28,6 +28,8 @@ export const dict = {
   "command.settings.open": "Открыть настройки",
   "command.session.previous": "Предыдущая сессия",
   "command.session.next": "Следующая сессия",
+  "command.session.previous.unseen": "Previous unread session",
+  "command.session.next.unseen": "Next unread session",
   "command.session.archive": "Архивировать сессию",
 
   "command.palette": "Палитра команд",
@@ -210,6 +212,8 @@ export const dict = {
   "prompt.popover.emptyCommands": "Нет совпадающих команд",
   "prompt.dropzone.label": "Перетащите изображения или PDF сюда",
   "prompt.slash.badge.custom": "своё",
+  "prompt.slash.badge.skill": "навык",
+  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "активно",
   "prompt.context.includeActiveFile": "Включить активный файл",
   "prompt.context.removeActiveFile": "Удалить активный файл из контекста",
@@ -333,6 +337,7 @@ export const dict = {
   "language.ar": "العربية",
   "language.no": "Norsk",
   "language.br": "Português (Brasil)",
+  "language.th": "ไทย",
 
   "toast.language.title": "Язык",
   "toast.language.description": "Переключено на {{language}}",
@@ -436,6 +441,7 @@ export const dict = {
   "session.review.noChanges": "Нет изменений",
   "session.files.selectToOpen": "Выберите файл, чтобы открыть",
   "session.files.all": "Все файлы",
+  "session.files.binaryContent": "Двоичный файл (содержимое не может быть отображено)",
   "session.messages.renderEarlier": "Показать предыдущие сообщения",
   "session.messages.loadingEarlier": "Загрузка предыдущих сообщений...",
   "session.messages.loadEarlier": "Загрузить предыдущие сообщения",
@@ -521,6 +527,7 @@ export const dict = {
 
   "settings.general.section.appearance": "Внешний вид",
   "settings.general.section.notifications": "Системные уведомления",
+  "settings.general.section.updates": "Обновления",
   "settings.general.section.sounds": "Звуковые эффекты",
 
   "settings.general.row.language.title": "Язык",
@@ -531,6 +538,18 @@ export const dict = {
   "settings.general.row.theme.description": "Настройте оформление OpenCode.",
   "settings.general.row.font.title": "Шрифт",
   "settings.general.row.font.description": "Настройте моноширинный шрифт для блоков кода",
+
+  "settings.general.row.releaseNotes.title": "Примечания к выпуску",
+  "settings.general.row.releaseNotes.description": 'Показывать всплывающие окна "Что нового" после обновлений',
+
+  "settings.updates.row.startup.title": "Проверять обновления при запуске",
+  "settings.updates.row.startup.description": "Автоматически проверять обновления при запуске OpenCode",
+  "settings.updates.row.check.title": "Проверить обновления",
+  "settings.updates.row.check.description": "Проверить обновления вручную и установить, если доступны",
+  "settings.updates.action.checkNow": "Проверить сейчас",
+  "settings.updates.action.checking": "Проверка...",
+  "settings.updates.toast.latest.title": "У вас последняя версия",
+  "settings.updates.toast.latest.description": "Вы используете последнюю версию OpenCode.",
   "font.option.ibmPlexMono": "IBM Plex Mono",
   "font.option.cascadiaCode": "Cascadia Code",
   "font.option.firaCode": "Fira Code",

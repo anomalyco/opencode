@@ -28,6 +28,8 @@ export const dict = {
   "command.settings.open": "Ouvrir les paramètres",
   "command.session.previous": "Session précédente",
   "command.session.next": "Session suivante",
+  "command.session.previous.unseen": "Previous unread session",
+  "command.session.next.unseen": "Next unread session",
   "command.session.archive": "Archiver la session",
 
   "command.palette": "Palette de commandes",
@@ -210,6 +212,8 @@ export const dict = {
   "prompt.popover.emptyCommands": "Aucune commande correspondante",
   "prompt.dropzone.label": "Déposez des images ou des PDF ici",
   "prompt.slash.badge.custom": "personnalisé",
+  "prompt.slash.badge.skill": "skill",
+  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "actif",
   "prompt.context.includeActiveFile": "Inclure le fichier actif",
   "prompt.context.removeActiveFile": "Retirer le fichier actif du contexte",
@@ -333,6 +337,7 @@ export const dict = {
   "language.ar": "العربية",
   "language.no": "Norsk",
   "language.br": "Português (Brasil)",
+  "language.th": "ไทย",
 
   "toast.language.title": "Langue",
   "toast.language.description": "Passé à {{language}}",
@@ -440,6 +445,7 @@ export const dict = {
   "session.review.noChanges": "Aucune modification",
   "session.files.selectToOpen": "Sélectionnez un fichier à ouvrir",
   "session.files.all": "Tous les fichiers",
+  "session.files.binaryContent": "Fichier binaire (le contenu ne peut pas être affiché)",
   "session.messages.renderEarlier": "Afficher les messages précédents",
   "session.messages.loadingEarlier": "Chargement des messages précédents...",
   "session.messages.loadEarlier": "Charger les messages précédents",
@@ -526,6 +532,7 @@ export const dict = {
 
   "settings.general.section.appearance": "Apparence",
   "settings.general.section.notifications": "Notifications système",
+  "settings.general.section.updates": "Mises à jour",
   "settings.general.section.sounds": "Effets sonores",
 
   "settings.general.row.language.title": "Langue",
@@ -536,6 +543,18 @@ export const dict = {
   "settings.general.row.theme.description": "Personnaliser le thème d'OpenCode.",
   "settings.general.row.font.title": "Police",
   "settings.general.row.font.description": "Personnaliser la police mono utilisée dans les blocs de code",
+
+  "settings.general.row.releaseNotes.title": "Notes de version",
+  "settings.general.row.releaseNotes.description": 'Afficher des pop-ups "Quoi de neuf" après les mises à jour',
+
+  "settings.updates.row.startup.title": "Vérifier les mises à jour au démarrage",
+  "settings.updates.row.startup.description": "Vérifier automatiquement les mises à jour au lancement d'OpenCode",
+  "settings.updates.row.check.title": "Vérifier les mises à jour",
+  "settings.updates.row.check.description": "Vérifier manuellement les mises à jour et installer si disponible",
+  "settings.updates.action.checkNow": "Vérifier maintenant",
+  "settings.updates.action.checking": "Vérification...",
+  "settings.updates.toast.latest.title": "Vous êtes à jour",
+  "settings.updates.toast.latest.description": "Vous utilisez la dernière version d'OpenCode.",
 
   "font.option.ibmPlexMono": "IBM Plex Mono",
   "font.option.cascadiaCode": "Cascadia Code",

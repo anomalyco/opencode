@@ -28,6 +28,17 @@ export function DialogConnectProvider(props: { provider: string }) {
   const globalSDK = useGlobalSDK()
   const platform = usePlatform()
   const language = useLanguage()
+
+  const alive = { value: true }
+  const timer = { current: undefined as ReturnType<typeof setTimeout> | undefined }
+
+  onCleanup(() => {
+    alive.value = false
+    if (timer.current === undefined) return
+    clearTimeout(timer.current)
+    timer.current = undefined
+  })
+
   const provider = createMemo(() => globalSync.data.provider.all.find((x) => x.id === props.provider)!)
   const methods = createMemo(
     () =>
@@ -54,6 +65,11 @@ export function DialogConnectProvider(props: { provider: string }) {
   }
 
   async function selectMethod(index: number) {
+    if (timer.current !== undefined) {
+      clearTimeout(timer.current)
+      timer.current = undefined
+    }
+
     const method = methods()[index]
     setStore(
       produce((draft) => {
@@ -76,11 +92,15 @@ export function DialogConnectProvider(props: { provider: string }) {
           { throwOnError: true },
         )
         .then((x) => {
+          if (!alive.value) return
           const elapsed = Date.now() - start
           const delay = 1000 - elapsed
 
           if (delay > 0) {
-            setTimeout(() => {
+            if (timer.current !== undefined) clearTimeout(timer.current)
+            timer.current = setTimeout(() => {
+              timer.current = undefined
+              if (!alive.value) return
               setStore("state", "complete")
               setStore("authorization", x.data!)
             }, delay)
@@ -90,6 +110,7 @@ export function DialogConnectProvider(props: { provider: string }) {
           setStore("authorization", x.data!)
         })
         .catch((e) => {
+          if (!alive.value) return
           setStore("state", "error")
           setStore("error", String(e))
         })
@@ -411,26 +432,33 @@ export function DialogConnectProvider(props: { provider: string }) {
                       return instructions
                     })
 
-                    onMount(async () => {
-                      if (store.authorization?.url) {
-                        platform.openLink(store.authorization.url)
-                      }
-                      const result = await globalSDK.client.provider.oauth
-                        .callback({
-                          providerID: props.provider,
-                          method: store.methodIndex,
-                        })
-                        .then((value) =>
-                          value.error ? { ok: false as const, error: value.error } : { ok: true as const },
-                        )
-                        .catch((error) => ({ ok: false as const, error }))
-                      if (!result.ok) {
-                        const message = result.error instanceof Error ? result.error.message : String(result.error)
-                        setStore("state", "error")
-                        setStore("error", message)
-                        return
-                      }
-                      await complete()
+                    onMount(() => {
+                      void (async () => {
+                        if (store.authorization?.url) {
+                          platform.openLink(store.authorization.url)
+                        }
+
+                        const result = await globalSDK.client.provider.oauth
+                          .callback({
+                            providerID: props.provider,
+                            method: store.methodIndex,
+                          })
+                          .then((value) =>
+                            value.error ? { ok: false as const, error: value.error } : { ok: true as const },
+                          )
+                          .catch((error) => ({ ok: false as const, error }))
+
+                        if (!alive.value) return
+
+                        if (!result.ok) {
+                          const message = result.error instanceof Error ? result.error.message : String(result.error)
+                          setStore("state", "error")
+                          setStore("error", message)
+                          return
+                        }
+
+                        await complete()
+                      })()
                     })
 
                     return (

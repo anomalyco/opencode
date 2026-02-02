@@ -5,6 +5,7 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { showToast } from "@opencode-ai/ui/toast"
+import { ScrollFade } from "@opencode-ai/ui/scroll-fade"
 import fuzzysort from "fuzzysort"
 import { formatKeybind, parseKeybind, useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
@@ -352,14 +353,13 @@ export const SettingsKeybinds: Component = () => {
   })
 
   return (
-    <div class="flex flex-col h-full overflow-y-auto no-scrollbar" style={{ padding: "0 40px 40px 40px" }}>
-      <div
-        class="sticky top-0 z-10"
-        style={{
-          background:
-            "linear-gradient(to bottom, var(--surface-raised-stronger-non-alpha) calc(100% - 24px), transparent)",
-        }}
-      >
+    <ScrollFade
+      direction="vertical"
+      fadeStartSize={0}
+      fadeEndSize={16}
+      class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10"
+    >
+      <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-4 pt-6 pb-6 max-w-[720px]">
           <div class="flex items-center justify-between gap-4">
             <h2 class="text-16-medium text-text-strong">{language.t("settings.shortcuts.title")}</h2>
@@ -402,6 +402,7 @@ export const SettingsKeybinds: Component = () => {
                         <span class="text-14-regular text-text-strong">{title(id)}</span>
                         <button
                           type="button"
+                          data-keybind-id={id}
                           classList={{
                             "h-8 px-3 rounded-md text-12-regular": true,
                             "bg-surface-base text-text-subtle hover:bg-surface-raised-base-hover active:bg-surface-raised-base-active":
@@ -435,6 +436,6 @@ export const SettingsKeybinds: Component = () => {
           </div>
         </Show>
       </div>
-    </div>
+    </ScrollFade>
   )
 }

@@ -32,6 +32,8 @@ export const dict = {
   "command.settings.open": "설정 열기",
   "command.session.previous": "이전 세션",
   "command.session.next": "다음 세션",
+  "command.session.previous.unseen": "Previous unread session",
+  "command.session.next.unseen": "Next unread session",
   "command.session.archive": "세션 보관",
 
   "command.palette": "명령 팔레트",
@@ -213,6 +215,8 @@ export const dict = {
   "prompt.popover.emptyCommands": "일치하는 명령어 없음",
   "prompt.dropzone.label": "이미지나 PDF를 여기에 드롭하세요",
   "prompt.slash.badge.custom": "사용자 지정",
+  "prompt.slash.badge.skill": "스킬",
+  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "활성",
   "prompt.context.includeActiveFile": "활성 파일 포함",
   "prompt.context.removeActiveFile": "컨텍스트에서 활성 파일 제거",
@@ -334,6 +338,7 @@ export const dict = {
   "language.ar": "العربية",
   "language.no": "Norsk",
   "language.br": "Português (Brasil)",
+  "language.th": "ไทย",
 
   "toast.language.title": "언어",
   "toast.language.description": "{{language}}(으)로 전환됨",
@@ -434,6 +439,7 @@ export const dict = {
   "session.review.noChanges": "변경 없음",
   "session.files.selectToOpen": "열 파일을 선택하세요",
   "session.files.all": "모든 파일",
+  "session.files.binaryContent": "바이너리 파일 (내용을 표시할 수 없음)",
   "session.messages.renderEarlier": "이전 메시지 렌더링",
   "session.messages.loadingEarlier": "이전 메시지 로드 중...",
   "session.messages.loadEarlier": "이전 메시지 로드",
@@ -517,6 +523,7 @@ export const dict = {
 
   "settings.general.section.appearance": "모양",
   "settings.general.section.notifications": "시스템 알림",
+  "settings.general.section.updates": "업데이트",
   "settings.general.section.sounds": "효과음",
 
   "settings.general.row.language.title": "언어",
@@ -527,6 +534,18 @@ export const dict = {
   "settings.general.row.theme.description": "OpenCode 테마 사용자 지정",
   "settings.general.row.font.title": "글꼴",
   "settings.general.row.font.description": "코드 블록에 사용되는 고정폭 글꼴 사용자 지정",
+
+  "settings.general.row.releaseNotes.title": "릴리스 노트",
+  "settings.general.row.releaseNotes.description": "업데이트 후 '새 소식' 팝업 표시",
+
+  "settings.updates.row.startup.title": "시작 시 업데이트 확인",
+  "settings.updates.row.startup.description": "OpenCode를 실행할 때 업데이트를 자동으로 확인합니다",
+  "settings.updates.row.check.title": "업데이트 확인",
+  "settings.updates.row.check.description": "업데이트를 수동으로 확인하고, 사용 가능하면 설치합니다",
+  "settings.updates.action.checkNow": "지금 확인",
+  "settings.updates.action.checking": "확인 중...",
+  "settings.updates.toast.latest.title": "최신 상태입니다",
+  "settings.updates.toast.latest.description": "현재 최신 버전의 OpenCode를 사용 중입니다.",
 
   "font.option.ibmPlexMono": "IBM Plex Mono",
   "font.option.cascadiaCode": "Cascadia Code",

@@ -99,7 +99,13 @@ describe("session.retry.retryable", () => {
 
   test("handles json messages without code", () => {
     const error = wrap(JSON.stringify({ error: { message: "no_kv_space" } }))
-    expect(SessionRetry.retryable(error)).toBe("Provider Server Error")
+    expect(SessionRetry.retryable(error)).toBe(`{"error":{"message":"no_kv_space"}}`)
+  })
+
+  test("does not throw on numeric error codes", () => {
+    const error = wrap(JSON.stringify({ type: "error", error: { code: 123 } }))
+    const result = SessionRetry.retryable(error)
+    expect(result).toBeUndefined()
   })
 
   test("returns undefined for non-json message", () => {

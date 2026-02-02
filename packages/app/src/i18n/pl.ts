@@ -28,6 +28,8 @@ export const dict = {
   "command.settings.open": "Otwórz ustawienia",
   "command.session.previous": "Poprzednia sesja",
   "command.session.next": "Następna sesja",
+  "command.session.previous.unseen": "Previous unread session",
+  "command.session.next.unseen": "Next unread session",
   "command.session.archive": "Zarchiwizuj sesję",
 
   "command.palette": "Paleta poleceń",
@@ -210,6 +212,8 @@ export const dict = {
   "prompt.popover.emptyCommands": "Brak pasujących poleceń",
   "prompt.dropzone.label": "Upuść obrazy lub pliki PDF tutaj",
   "prompt.slash.badge.custom": "własne",
+  "prompt.slash.badge.skill": "skill",
+  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "aktywny",
   "prompt.context.includeActiveFile": "Dołącz aktywny plik",
   "prompt.context.removeActiveFile": "Usuń aktywny plik z kontekstu",
@@ -332,6 +336,7 @@ export const dict = {
   "language.ar": "العربية",
   "language.no": "Norsk",
   "language.br": "Português (Brasil)",
+  "language.th": "ไทย",
 
   "toast.language.title": "Język",
   "toast.language.description": "Przełączono na {{language}}",
@@ -434,6 +439,7 @@ export const dict = {
   "session.review.noChanges": "Brak zmian",
   "session.files.selectToOpen": "Wybierz plik do otwarcia",
   "session.files.all": "Wszystkie pliki",
+  "session.files.binaryContent": "Plik binarny (zawartość nie może być wyświetlona)",
   "session.messages.renderEarlier": "Renderuj wcześniejsze wiadomości",
   "session.messages.loadingEarlier": "Ładowanie wcześniejszych wiadomości...",
   "session.messages.loadEarlier": "Załaduj wcześniejsze wiadomości",
@@ -518,6 +524,7 @@ export const dict = {
 
   "settings.general.section.appearance": "Wygląd",
   "settings.general.section.notifications": "Powiadomienia systemowe",
+  "settings.general.section.updates": "Aktualizacje",
   "settings.general.section.sounds": "Efekty dźwiękowe",
 
   "settings.general.row.language.title": "Język",
@@ -528,6 +535,18 @@ export const dict = {
   "settings.general.row.theme.description": "Dostosuj motyw OpenCode.",
   "settings.general.row.font.title": "Czcionka",
   "settings.general.row.font.description": "Dostosuj czcionkę mono używaną w blokach kodu",
+
+  "settings.general.row.releaseNotes.title": "Informacje o wydaniu",
+  "settings.general.row.releaseNotes.description": 'Pokazuj wyskakujące okna "Co nowego" po aktualizacjach',
+
+  "settings.updates.row.startup.title": "Sprawdzaj aktualizacje przy uruchomieniu",
+  "settings.updates.row.startup.description": "Automatycznie sprawdzaj aktualizacje podczas uruchamiania OpenCode",
+  "settings.updates.row.check.title": "Sprawdź aktualizacje",
+  "settings.updates.row.check.description": "Ręcznie sprawdź aktualizacje i zainstaluj, jeśli są dostępne",
+  "settings.updates.action.checkNow": "Sprawdź teraz",
+  "settings.updates.action.checking": "Sprawdzanie...",
+  "settings.updates.toast.latest.title": "Masz najnowszą wersję",
+  "settings.updates.toast.latest.description": "Korzystasz z najnowszej wersji OpenCode.",
   "font.option.ibmPlexMono": "IBM Plex Mono",
   "font.option.cascadiaCode": "Cascadia Code",
   "font.option.firaCode": "Fira Code",

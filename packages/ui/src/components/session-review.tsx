@@ -44,6 +44,7 @@ export interface SessionReviewProps {
   comments?: SessionReviewComment[]
   focusedComment?: SessionReviewFocus | null
   onFocusedCommentChange?: (focus: SessionReviewFocus | null) => void
+  focusedFile?: string
   open?: string[]
   onOpenChange?: (open: string[]) => void
   scrollRef?: (el: HTMLDivElement) => void
@@ -501,6 +502,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                   id={diffId(diff.file)}
                   data-file={diff.file}
                   data-slot="session-review-accordion-item"
+                  data-selected={props.focusedFile === diff.file ? "" : undefined}
                 >
                   <StickyAccordionHeader>
                     <Accordion.Trigger>
