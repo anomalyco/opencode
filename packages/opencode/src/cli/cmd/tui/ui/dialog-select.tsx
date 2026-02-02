@@ -228,7 +228,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           </text>
           <text fg={theme.textMuted}>esc</text>
         </box>
-        <box paddingTop={1} paddingBottom={1}>
+        <box paddingTop={1}>
           <input
             onInput={(e) => {
               batch(() => {

@@ -65,6 +65,12 @@ const FIXTURES = {
     `data: {"choices":[{"finish_reason":"tool_calls","index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"function":{"arguments":"{\\"code\\":\\"1 + 1\\"}","name":"project_eval"},"id":"call_MHw3RDhmT1J5Z3B6WlhpVjlveTc","index":0,"type":"function"}],"reasoning_opaque":"ytGNWFf2doK38peANDvm7whkLPKrd+Fv6/k34zEPBF6Qwitj4bTZT0FBXleydLb6"}}],"created":1766068644,"id":"oBFEaafzD9DVlOoPkY3l4Qs","usage":{"completion_tokens":12,"prompt_tokens":8677,"prompt_tokens_details":{"cached_tokens":3692},"total_tokens":8768,"reasoning_tokens":79},"model":"gemini-3-pro-preview"}`,
     `data: [DONE]`,
   ],
+
+  reasoningOpaqueWithToolCallsNoReasoningText: [
+    `data: {"choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"function":{"arguments":"{}","name":"read_file"},"id":"call_reasoning_only","index":0,"type":"function"}],"reasoning_opaque":"opaque-xyz"}}],"created":1769917420,"id":"opaque-only","usage":{"completion_tokens":0,"prompt_tokens":0,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":0,"reasoning_tokens":0},"model":"gemini-3-flash-preview"}`,
+    `data: {"choices":[{"finish_reason":"tool_calls","index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"function":{"arguments":"{}","name":"read_file"},"id":"call_reasoning_only_2","index":1,"type":"function"}]}}],"created":1769917420,"id":"opaque-only","usage":{"completion_tokens":12,"prompt_tokens":123,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":135,"reasoning_tokens":0},"model":"gemini-3-flash-preview"}`,
+    `data: [DONE]`,
+  ],
 }
 
 function createMockFetch(chunks: string[]) {
@@ -444,6 +450,35 @@ describe("doStream", () => {
     expect(finish).toMatchObject({
       type: "finish",
       finishReason: "tool-calls",
+    })
+  })
+
+  test("should attach reasoning_opaque to tool calls without reasoning_text", async () => {
+    const mockFetch = createMockFetch(FIXTURES.reasoningOpaqueWithToolCallsNoReasoningText)
+    const model = createModel(mockFetch)
+
+    const { stream } = await model.doStream({
+      prompt: TEST_PROMPT,
+      includeRawChunks: false,
+    })
+
+    const parts = await convertReadableStreamToArray(stream)
+    const reasoningParts = parts.filter(
+      (p) => p.type === "reasoning-start" || p.type === "reasoning-delta" || p.type === "reasoning-end",
+    )
+
+    expect(reasoningParts).toHaveLength(0)
+
+    const toolCall = parts.find((p) => p.type === "tool-call" && p.toolCallId === "call_reasoning_only")
+    expect(toolCall).toMatchObject({
+      type: "tool-call",
+      toolCallId: "call_reasoning_only",
+      toolName: "read_file",
+      providerMetadata: {
+        copilot: {
+          reasoningOpaque: "opaque-xyz",
+        },
+      },
     })
   })
 

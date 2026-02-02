@@ -7,9 +7,6 @@
   user-select: none;
   aspect-ratio: 1;
   flex-shrink: 0;
-  transition-property: background-color, color, opacity, box-shadow;
-  transition-duration: var(--transition-duration);
-  transition-timing-function: var(--transition-easing);
 
   &[data-variant="primary"] {
     background-color: var(--icon-strong-base);
@@ -102,7 +99,7 @@
       /*   color: var(--icon-active); */
       /* } */
     }
-    &[data-selected]:not(:disabled) {
+    &:selected:not(:disabled) {
       background-color: var(--surface-raised-base-active);
       /* [data-slot="icon-svg"] { */
       /*   color: var(--icon-selected); */

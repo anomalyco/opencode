@@ -27,9 +27,12 @@
     content: "";
     opacity: var(--indicator-opacity, 1);
     position: absolute;
-    transition-property: opacity, box-shadow, width, height, transform;
-    transition-duration: var(--transition-duration);
-    transition-timing-function: var(--transition-easing);
+    transition:
+      opacity 300ms ease-in-out,
+      box-shadow 100ms ease-in-out,
+      width 150ms ease,
+      height 150ms ease,
+      transform 150ms ease;
   }
 
   [data-slot="radio-group-item"] {
@@ -43,9 +46,7 @@
     content: "";
     inset: 6px 0;
     position: absolute;
-    transition-property: opacity;
-    transition-duration: var(--transition-duration);
-    transition-timing-function: var(--transition-easing);
+    transition: opacity 150ms ease;
     width: 1px;
     transform: translateX(-0.5px);
   }
@@ -71,9 +72,9 @@
     padding: 6px 12px;
     place-content: center;
     position: relative;
+    transition-duration: 150ms;
     transition-property: color, opacity;
-    transition-duration: var(--transition-duration);
-    transition-timing-function: var(--transition-easing);
+    transition-timing-function: ease-in-out;
     user-select: none;
   }
 
