@@ -569,6 +569,7 @@ fn setup_window_state_listener(app: &tauri::AppHandle, window: &tauri::WebviewWi
     let (tx, mut rx) = mpsc::channel::<()>(1);
 
     window.on_window_event(move |event| {
+        use tauri::WindowEvent;
         if !matches!(event, WindowEvent::Moved(_) | WindowEvent::Resized(_)) {
             return;
         }
