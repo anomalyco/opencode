@@ -11,7 +11,7 @@ See: .planning/PROJECT.md (updated 2026-01-19)
 
 **Milestone 1:** Complete (Phases 1-11)
 **Phase:** 24 of 24 (Remote Terminal Reliability) - Complete
-**Next Phase:** None - Phase 24 complete
+**Next Phase:** 25 - Allow ssh keys to be generated in the webapp and allow the user to freely see the public key; this functionality should be integrated with the existing ssh key manager
 **Plan:** 02 of 02 - Complete
 **Status:** Phase complete
 **Last activity:** 2026-02-01 - Completed 24-02 plan
@@ -186,6 +186,7 @@ Recent decisions affecting current work:
 - Phase 21 added: Allow the user to add and manage SSH keys in the opencode webapp; prompt for SSH key on clone; add settings CRUD; install keys in ~/.ssh; update ssh config; add server routes as needed
 - Phase 22 added: Refactor the /auth/2fa/setup page from auth.ts into the SolidJS app at packages/app
 - Phase 23 added: During 2FA setup, make the server automatically set the .google_authenticator file in the appropriate user's home folder, instead of asking the user to run the command on their machine
+- Phase 25 added: Allow ssh keys to be generated in the webapp and allow the user to freely see the public key; this functionality should be integrated with the existing ssh key manager
 
 ### Pending Todos
 

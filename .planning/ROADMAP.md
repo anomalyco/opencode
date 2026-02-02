@@ -37,6 +37,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 22: Refactor the /auth/2fa/setup page from auth.ts into the SolidJS app at packages/app** - Refactor the /auth/2fa/setup page from auth.ts into the SolidJS app at packages/app
 - [ ] **Phase 23: During 2FA setup, make the server automatically set the .google_authenticator file in the appropriate user's home folder, instead of asking the user to run the command on their machine** - During 2FA setup, make the server automatically set the .google_authenticator file in the appropriate user's home folder, instead of asking the user to run the command on their machine
 - [ ] **Phase 24: Remote Terminal Reliability** - Investigate and fix remote terminal failures in the web app (PTY session creation, broker/session lifecycle, and /pty 500s)
+- [ ] **Phase 25: Allow ssh keys to be generated in the webapp and allow the user to freely see the public key; this functionality should be integrated with the existing ssh key manager** - Allow ssh keys to be generated in the webapp and allow the user to freely see the public key; this functionality should be integrated with the existing ssh key manager
 
 ## Phase Details
 
@@ -455,6 +456,19 @@ Plans:
 
 **Details:**
 Investigate the PTY session creation flow in the web UI and server. Focus on broker session registration lifecycle, session lookup, and any mismatches between UI/session IDs and broker sessions that cause `session not found` or `/pty` 500 errors. Add diagnostics and fixes as needed.
+
+### Phase 25: Allow ssh keys to be generated in the webapp and allow the user to freely see the public key; this functionality should be integrated with the existing ssh key manager
+
+**Goal:** [To be planned]
+**Depends on:** Phase 24
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd:plan-phase 25 to break down)
+
+**Details:**
+[To be added during planning]
 
 ## Progress
 
