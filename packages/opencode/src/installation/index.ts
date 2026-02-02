@@ -102,11 +102,22 @@ export namespace Installation {
     })
 
     for (const check of checks) {
-      const output = await check.command()
-      const installedName =
-        check.name === "brew" || check.name === "choco" || check.name === "scoop" ? "opencode" : "opencode-ai"
-      if (output.includes(installedName)) {
-        return check.name
+      try {
+        // 添加超时保护，防止包管理器检测命令挂起导致CLI启动失败
+        const output = await Promise.race([
+          check.command(),
+          new Promise<string>((_, reject) =>
+            setTimeout(() => reject(new Error("Timeout")), 5000) // 5秒超时
+          )
+        ])
+        const installedName =
+          check.name === "brew" || check.name === "choco" || check.name === "scoop" ? "opencode" : "opencode-ai"
+        if (output.includes(installedName)) {
+          return check.name
+        }
+      } catch (e) {
+        // 忽略超时或其他错误，继续尝试下一个包管理器检测
+        continue
       }
     }
 
