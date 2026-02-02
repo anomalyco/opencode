@@ -5,7 +5,7 @@ import { usePlatform } from "@/context/platform"
 import { Persist, persisted } from "@/utils/persist"
 import { checkServerHealth } from "@/utils/server-health"
 
-type StoredProject = { worktree: string; expanded: boolean }
+type StoredProject = { worktree: string; expanded: boolean; lastUsed?: number }
 type StoredServer = string | ServerConnection.HttpBase | ServerConnection.Http
 const HEALTH_POLL_INTERVAL_MS = 10_000
 
@@ -104,6 +104,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         list: [] as StoredServer[],
         projects: {} as Record<string, StoredProject[]>,
         lastProject: {} as Record<string, string>,
+        dynamicSort: true,
       }),
     )
 
@@ -290,6 +291,23 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
           const key = origin()
           if (!key) return
           setStore("lastProject", key, directory)
+        },
+        bringToTop(directory: string) {
+          if (!store.dynamicSort) return
+          const key = origin()
+          if (!key) return
+          const current = store.projects[key] ?? []
+          const index = current.findIndex((x) => x.worktree === directory)
+          if (index <= 0) return
+          const project = { ...current[index], lastUsed: Date.now() }
+          const rest = current.filter((_, i) => i !== index)
+          setStore("projects", key, [project, ...rest])
+        },
+      },
+      dynamicSort: {
+        enabled: createMemo(() => store.dynamicSort ?? true),
+        set(value: boolean) {
+          setStore("dynamicSort", value)
         },
       },
     }

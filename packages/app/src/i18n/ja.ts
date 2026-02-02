@@ -537,6 +537,12 @@ export const dict = {
   "settings.general.section.sounds": "効果音",
   "settings.general.section.feed": "フィード",
   "settings.general.section.display": "ディスプレイ",
+  "settings.general.section.sounds": "Sound effects",
+  "settings.general.section.desktop": "Desktop",
+
+  "settings.general.desktop.dynamicSort.title": "Dynamic sidebar sorting",
+  "settings.general.desktop.dynamicSort.description": "Automatically move active projects and sessions to the top when Claude starts working on them",
+
   "settings.general.row.language.title": "言語",
   "settings.general.row.language.description": "OpenCodeの表示言語を変更します",
   "settings.general.row.appearance.title": "外観",

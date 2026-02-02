@@ -46,6 +46,9 @@ export type State = {
   session_status: {
     [sessionID: string]: SessionStatus
   }
+  session_active: {
+    [sessionID: string]: number
+  }
   session_diff: {
     [sessionID: string]: FileDiff[]
   }

@@ -16,6 +16,7 @@ import { type Session } from "@opencode-ai/sdk/v2/client"
 import { type LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
+import { useServer } from "@/context/server"
 import { NewSessionItem, SessionItem, SessionSkeleton } from "./sidebar-items"
 import { childMapByParent, sortedRootSessions } from "./helpers"
 
@@ -309,6 +310,7 @@ export const SortableWorkspace = (props: {
   const params = useParams()
   const globalSync = useGlobalSync()
   const language = useLanguage()
+  const server = useServer()
   const sortable = createSortable(props.directory)
   const [workspaceStore, setWorkspaceStore] = globalSync.child(props.directory, { bootstrap: false })
   const [menu, setMenu] = createStore({
@@ -316,7 +318,7 @@ export const SortableWorkspace = (props: {
     pendingRename: false,
   })
   const slug = createMemo(() => base64Encode(props.directory))
-  const sessions = createMemo(() => sortedRootSessions(workspaceStore, props.sortNow()))
+  const sessions = createMemo(() => sortedRootSessions(workspaceStore, props.sortNow(), server.dynamicSort.enabled()))
   const children = createMemo(() => childMapByParent(workspaceStore.session))
   const local = createMemo(() => props.directory === props.project.worktree)
   const active = createMemo(() => props.ctx.currentDir() === props.directory)
@@ -470,12 +472,15 @@ export const LocalWorkspace = (props: {
 }): JSX.Element => {
   const globalSync = useGlobalSync()
   const language = useLanguage()
+  const server = useServer()
   const workspace = createMemo(() => {
     const [store, setStore] = globalSync.child(props.project.worktree)
     return { store, setStore }
   })
   const slug = createMemo(() => base64Encode(props.project.worktree))
-  const sessions = createMemo(() => sortedRootSessions(workspace().store, props.sortNow()))
+  const sessions = createMemo(() =>
+    sortedRootSessions(workspace().store, props.sortNow(), server.dynamicSort.enabled()),
+  )
   const children = createMemo(() => childMapByParent(workspace().store.session))
   const booted = createMemo((prev) => prev || workspace().store.status === "complete", false)
   const loading = createMemo(() => !booted() && sessions().length === 0)

@@ -593,6 +593,11 @@ export const dict = {
   "settings.general.section.sounds": "音效",
   "settings.general.section.feed": "資訊流",
   "settings.general.section.display": "顯示",
+  "settings.general.section.sounds": "Sound effects",
+  "settings.general.section.desktop": "Desktop",
+
+  "settings.general.desktop.dynamicSort.title": "Dynamic sidebar sorting",
+  "settings.general.desktop.dynamicSort.description": "Automatically move active projects and sessions to the top when Claude starts working on them",
 
   "settings.general.row.language.title": "語言",
   "settings.general.row.language.description": "變更 OpenCode 的顯示語言",

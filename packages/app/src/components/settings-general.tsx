@@ -9,6 +9,7 @@ import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
+import { useServer } from "@/context/server"
 import { useSettings, monoFontFamily } from "@/context/settings"
 import { playSound, SOUND_OPTIONS } from "@/utils/sound"
 import { Link } from "./link"
@@ -42,6 +43,7 @@ export const SettingsGeneral: Component = () => {
   const language = useLanguage()
   const platform = usePlatform()
   const settings = useSettings()
+  const server = useServer()
 
   const [store, setStore] = createStore({
     checking: false,
@@ -537,6 +539,27 @@ export const SettingsGeneral: Component = () => {
               </div>
             )
           }}
+        </Show>
+
+        {/* Desktop Section - Desktop only */}
+        <Show when={platform.platform === "desktop"}>
+          <div class="flex flex-col gap-1">
+            <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.desktop")}</h3>
+
+            <div class="bg-surface-raised-base px-4 rounded-lg">
+              <SettingsRow
+                title={language.t("settings.general.desktop.dynamicSort.title")}
+                description={language.t("settings.general.desktop.dynamicSort.description")}
+              >
+                <div data-action="settings-dynamic-sort">
+                  <Switch
+                    checked={server.dynamicSort.enabled()}
+                    onChange={(checked) => server.dynamicSort.set(checked)}
+                  />
+                </div>
+              </SettingsRow>
+            </div>
+          </div>
         </Show>
       </div>
     </div>

@@ -545,6 +545,12 @@ export const dict = {
   "settings.general.section.sounds": "Effets sonores",
   "settings.general.section.feed": "Flux",
   "settings.general.section.display": "Affichage",
+  "settings.general.section.sounds": "Sound effects",
+  "settings.general.section.desktop": "Desktop",
+
+  "settings.general.desktop.dynamicSort.title": "Dynamic sidebar sorting",
+  "settings.general.desktop.dynamicSort.description": "Automatically move active projects and sessions to the top when Claude starts working on them",
+
   "settings.general.row.language.title": "Langue",
   "settings.general.row.language.description": "Changer la langue d'affichage pour OpenCode",
   "settings.general.row.appearance.title": "Apparence",

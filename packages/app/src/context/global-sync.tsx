@@ -35,6 +35,7 @@ import type { ProjectMeta } from "./global-sync/types"
 import { SESSION_RECENT_LIMIT } from "./global-sync/types"
 import { sanitizeProject } from "./global-sync/utils"
 import { formatServerError } from "@/utils/server-errors"
+import { useServer } from "./server"
 
 type GlobalStore = {
   ready: boolean
@@ -53,6 +54,7 @@ type GlobalStore = {
 function createGlobalSync() {
   const globalSDK = useGlobalSDK()
   const language = useLanguage()
+  const server = useServer()
   const owner = getOwner()
   if (!owner) throw new Error("GlobalSync must be created within owner")
 
@@ -305,6 +307,11 @@ function createGlobalSync() {
         sdkFor(directory)
           .lsp.status()
           .then((x) => setStore("lsp", x.data ?? []))
+      },
+      onSessionBusy: (sessionID) => {
+        if (!server.dynamicSort.enabled()) return
+        server.projects.bringToTop(directory)
+        setStore("session_active", sessionID, Date.now())
       },
     })
   })
