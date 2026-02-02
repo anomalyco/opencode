@@ -1,6 +1,7 @@
 import { plugin, type BunPlugin } from "bun"
 import { transformAsync } from "@babel/core"
 import solid from "babel-preset-solid"
+import react from "@babel/preset-react"
 import ts from "@babel/preset-typescript"
 
 const inkExcludedPlugin: BunPlugin = {
@@ -35,15 +36,25 @@ const inkExcludedPlugin: BunPlugin = {
         return undefined
       }
 
-      const normalized = Bun.pathToFileURL(args.path).href
+      const code = await Bun.file(args.path).text()
 
-      if (normalized.includes("cli/ink/")) {
-        const code = await Bun.file(args.path).text()
-        return { contents: code, loader: "tsx" }
+      // Detect if file imports from Ink (React-based)
+      const isInkFile = /from\s*["']ink["']/.test(code) || /require\(["']ink["']\)/.test(code)
+
+      if (isInkFile) {
+        // Transform with Babel React preset
+        const result = await transformAsync(code, {
+          filename: args.path,
+          presets: [
+            ["@babel/preset-react", { runtime: "automatic", importSource: "react" }],
+            [ts, { isTSX: true, allExtensions: true }],
+          ],
+        })
+        return { contents: result?.code ?? "", loader: "js" }
       }
 
       try {
-        const code = await Bun.file(args.path).text()
+        // Transform with SolidJS preset
         const transforms = await transformAsync(code, {
           filename: args.path,
           presets: [

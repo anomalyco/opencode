@@ -1,0 +1,2 @@
+# Ink-specific config without SolidJS preload
+# This lets Bun handle React JSX natively for Ink apps

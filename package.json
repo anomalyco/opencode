@@ -67,6 +67,7 @@
     "@babel/plugin-transform-react-jsx": "7.28.6",
     "@babel/preset-react": "7.28.5",
     "@tsconfig/bun": "catalog:",
+    "@types/babel__preset-env": "7.10.0",
     "@types/react": "19.2.10",
     "husky": "9.1.7",
     "prettier": "3.6.2",
@@ -79,6 +80,7 @@
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
+    "react": "19.2.4",
     "typescript": "catalog:"
   },
   "repository": {

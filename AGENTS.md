@@ -323,20 +323,39 @@ git add . && git commit -m "feat(opencode): implement feature (#123)"
 
 # 5. Push and create PR
 git push -u origin feature/issue-123-description
-gh pr create --base dev
+gh pr create --base dev --title "feat(opencode): implement feature (#123)" --body "Fixes #123"
+# Code review happens on the PR before merge
 ```
 
 ---
 
-## Auto-Merge Policy
+## PR Workflow
 
-After code-review-specialist approval AND CI passes:
+### Code Review Requirements
 
-- Squash merge immediately
-- Delete feature branch
-- Close linked issue
+- PRs require code-review-specialist approval before merge
+- Code review happens via GitHub PR review functionality
+- Reviews check: style compliance, test coverage, security, architecture
+- If CHANGES_REQUESTED: fix issues and re-request review
+- If APPROVED: proceed with merge when CI passes
 
-Do not wait for additional approvals on reviewed PRs.
+### Auto-Merge Policy
+
+- PRs in APPROVED state with all CI checks passing:
+  - PR creator: Squash merge immediately
+  - GitHub: Auto-deletes feature branch
+  - Close linked issue
+- PRs in PENDING or CHANGES_REQUESTED: MUST NOT be merged
+- If CI fails after approval: Fix issues, re-push, approval must be re-requested
+- Do not wait for additional approvals on reviewed PRs
+
+### PR Batching
+
+- Related issues can be combined into single PR when:
+  - They share a logical unit of work
+  - Combined changes are under 500 lines
+  - All issues are from same epic
+- Each PR must reference all included issues with "Fixes #X" syntax
 
 ---
 
@@ -371,6 +390,12 @@ packages/opencode/
 2. Write minimal code to pass
 3. Refactor
 4. Repeat
+
+### Coverage Requirements
+
+- All new code must have tests written BEFORE implementation
+- Minimum 80% coverage for new code
+- Tests must be in corresponding test/ directory
 
 Run tests: `bun test` or `bun test --coverage`
 
@@ -468,12 +493,9 @@ Built-in tools: File operations, shell execution, search (glob, grep), web fetch
 
 ## CI Workflows
 
-| Workflow      | Trigger          | Purpose              |
-| ------------- | ---------------- | -------------------- |
-| typecheck.yml | PR               | Type checking        |
-| test.yml      | PR, push to main | Unit and E2E tests   |
-| review.yml    | PR               | Automated review     |
-| deploy.yml    | Push to main     | Deploy to production |
+| Workflow | Trigger          | Purpose              |
+| -------- | ---------------- | -------------------- |
+| ci.yml   | PR, push to main | Type check and tests |
 
 Monitor with: `gh run watch [run-id]`
 
@@ -531,8 +553,8 @@ bun run typecheck && bun test
 
 ### Before Merging
 
-- CI passes
-- Code review approved
+- PR is in APPROVED state
+- All CI checks pass
 - Issue requirements met
 - Conventional commit used
 
