@@ -3,7 +3,7 @@ import { SessionTurn } from "@opencode-ai/ui/session-turn"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import { DataProvider } from "@opencode-ai/ui/context"
 import { DiffComponentProvider } from "@opencode-ai/ui/context/diff"
-import { createAsync, query, useParams } from "@solidjs/router"
+import { createAsync, query, useParams, useSearchParams } from "@solidjs/router"
 import { createEffect, createMemo, ErrorBoundary, For, Match, Show, Switch } from "solid-js"
 import { Share } from "~/core/share"
 import { Logo, Mark } from "@opencode-ai/ui/logo"
@@ -15,7 +15,7 @@ import { Binary } from "@opencode-ai/util/binary"
 import { NamedError } from "@opencode-ai/util/error"
 import { DateTime } from "luxon"
 import { SessionMessageRail } from "@opencode-ai/ui/session-message-rail"
-import { createStore } from "solid-js/store"
+
 import z from "zod"
 import NotFound from "../[...404]"
 import { Tabs } from "@opencode-ai/ui/tabs"
@@ -198,8 +198,10 @@ export default function () {
               <DiffComponentProvider component={ClientOnlyDiff}>
                 <DataProvider data={data()} directory={info().directory}>
                   {iife(() => {
-                    const [store, setStore] = createStore({
-                      messageId: undefined as string | undefined,
+                    const [searchParams, setSearchParams] = useSearchParams()
+                    const messageId = createMemo(() => {
+                      const msg = searchParams.message
+                      return Array.isArray(msg) ? msg[0] : msg
                     })
                     const messages = createMemo(() =>
                       data().sessionID
@@ -210,13 +212,13 @@ export default function () {
                     )
                     const firstUserMessage = createMemo(() => messages().at(0))
                     const activeMessage = createMemo(
-                      () => messages().find((m) => m.id === store.messageId) ?? firstUserMessage(),
+                      () => messages().find((m) => m.id === messageId()) ?? firstUserMessage(),
                     )
                     function setActiveMessage(message: UserMessage | undefined) {
                       if (message) {
-                        setStore("messageId", message.id)
+                        setSearchParams({ message: message.id })
                       } else {
-                        setStore("messageId", undefined)
+                        setSearchParams({ message: undefined })
                       }
                     }
                     const provider = createMemo(() => activeMessage()?.model?.providerID)
@@ -339,7 +341,7 @@ export default function () {
                                 />
                                 <SessionTurn
                                   sessionID={data().sessionID}
-                                  messageID={store.messageId ?? firstUserMessage()!.id!}
+                                  messageID={messageId() ?? firstUserMessage()!.id!}
                                   classes={{
                                     root: "grow",
                                     content: "flex flex-col justify-between items-start",
