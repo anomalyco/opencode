@@ -393,6 +393,15 @@ function Prompt<const T extends Record<string, string>>(props: {
   useKeyboard((evt) => {
     if (dialog.stack.length > 0) return
 
+    if (/^[1-9]$/.test(evt.name)) {
+      evt.preventDefault()
+      const idx = parseInt(evt.name) - 1
+      if (idx < keys.length) {
+        props.onSelect(keys[idx])
+        return
+      }
+    }
+
     if (evt.name === "left" || evt.name == "h") {
       evt.preventDefault()
       const idx = keys.indexOf(store.selected)
@@ -465,7 +474,7 @@ function Prompt<const T extends Record<string, string>>(props: {
       >
         <box flexDirection="row" gap={1} flexShrink={0}>
           <For each={keys}>
-            {(option) => (
+            {(option, i) => (
               <box
                 paddingLeft={1}
                 paddingRight={1}
@@ -477,7 +486,7 @@ function Prompt<const T extends Record<string, string>>(props: {
                 }}
               >
                 <text fg={option === store.selected ? selectedForeground(theme, theme.warning) : theme.textMuted}>
-                  {props.options[option]}
+                  {i() + 1 + ". " + props.options[option]}
                 </text>
               </box>
             )}
