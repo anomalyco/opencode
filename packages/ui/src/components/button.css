@@ -114,6 +114,7 @@
   }
 
   &[data-size="small"] {
+    height: 22px;
     padding: 4px 8px;
     &[data-icon] {
       padding: 4px 12px 4px 4px;
@@ -130,6 +131,7 @@
   }
 
   &[data-size="normal"] {
+    height: 24px;
     padding: 4px 6px;
     &[data-icon] {
       padding: 4px 12px 4px 4px;
@@ -150,6 +152,7 @@
   }
 
   &[data-size="large"] {
+    height: 32px;
     padding: 6px 12px;
 
     &[data-icon] {
