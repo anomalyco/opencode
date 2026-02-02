@@ -9,7 +9,7 @@ import { Bus } from "@/bus"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
 import { Plugin } from "@/plugin"
-import type { Provider } from "@/provider/provider"
+import { Provider } from "@/provider/provider"
 import { LLM } from "./llm"
 import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
@@ -18,6 +18,7 @@ import { Question } from "@/question"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
+  const DEFAULT_MAX_RETRIES_BEFORE_FALLBACK = 3
   const log = Log.create({ service: "session.processor" })
 
   export type Info = Awaited<ReturnType<typeof create>>
@@ -33,6 +34,8 @@ export namespace SessionProcessor {
     let snapshot: string | undefined
     let blocked = false
     let attempt = 0
+    let attemptsOnCurrentModel = 0
+    let fallbackIndex = 0
     let needsCompaction = false
 
     const result = {
@@ -349,11 +352,54 @@ export namespace SessionProcessor {
               error: e,
               stack: JSON.stringify(e.stack),
             })
-            const error = MessageV2.fromError(e, { providerID: input.model.providerID })
+            const error = MessageV2.fromError(e, { providerID: streamInput.model.providerID })
             const retry = SessionRetry.retryable(error)
             if (retry !== undefined) {
               attempt++
-              const delay = SessionRetry.delay(attempt, error.name === "APIError" ? error : undefined)
+              attemptsOnCurrentModel++
+
+              // Check if we should fall back to a different model
+              const fallbackModels = streamInput.agent.fallbackModels
+              const maxRetries = streamInput.agent.maxRetriesBeforeFallback ?? DEFAULT_MAX_RETRIES_BEFORE_FALLBACK
+              if (fallbackModels?.length && attemptsOnCurrentModel >= maxRetries && fallbackIndex < fallbackModels.length) {
+                const fromModel = `${streamInput.model.providerID}/${streamInput.model.id}`
+                let fellBack = false
+                while (fallbackIndex < fallbackModels.length) {
+                  const next = fallbackModels[fallbackIndex]
+                  fallbackIndex++
+                  const toModel = `${next.providerID}/${next.modelID}`
+                  log.info("falling back to next model", {
+                    from: fromModel,
+                    to: toModel,
+                    attemptsExhausted: attemptsOnCurrentModel,
+                    fallbackIndex: fallbackIndex - 1,
+                  })
+                  try {
+                    const resolved = await Provider.getModel(next.providerID, next.modelID)
+                    streamInput.model = resolved
+                    input.model = resolved
+                    input.assistantMessage.modelID = resolved.id
+                    input.assistantMessage.providerID = resolved.providerID
+                    attemptsOnCurrentModel = 0
+                    SessionStatus.set(input.sessionID, {
+                      type: "fallback",
+                      from: fromModel,
+                      to: toModel,
+                    })
+                    fellBack = true
+                    break
+                  } catch (fallbackErr: any) {
+                    log.error("fallback model resolution failed", {
+                      model: toModel,
+                      error: fallbackErr.message,
+                    })
+                  }
+                }
+                if (fellBack) continue
+                // All fallbacks failed to resolve, fall through to normal backoff
+              }
+
+              const delay = SessionRetry.delay(attemptsOnCurrentModel, error.name === "APIError" ? error : undefined)
               SessionStatus.set(input.sessionID, {
                 type: "retry",
                 attempt,

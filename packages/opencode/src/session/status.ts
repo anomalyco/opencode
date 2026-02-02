@@ -18,6 +18,11 @@ export namespace SessionStatus {
       z.object({
         type: z.literal("busy"),
       }),
+      z.object({
+        type: z.literal("fallback"),
+        from: z.string(),
+        to: z.string(),
+      }),
     ])
     .meta({
       ref: "SessionStatus",

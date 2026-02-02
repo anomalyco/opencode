@@ -621,6 +621,18 @@ export namespace Config {
         .optional()
         .describe("Maximum number of agentic iterations before forcing text-only response"),
       maxSteps: z.number().int().positive().optional().describe("@deprecated Use 'steps' field instead."),
+      fallback_models: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Ordered list of fallback models (provider/model format) to try when the primary model exhausts retries",
+        ),
+      max_retries_before_fallback: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe("Number of retry attempts on the current model before falling back to the next one (default: 3)"),
       permission: Permission.optional(),
     })
     .catchall(z.any())
@@ -642,6 +654,8 @@ export namespace Config {
         "permission",
         "disable",
         "tools",
+        "fallback_models",
+        "max_retries_before_fallback",
       ])
 
       // Extract unknown properties into options
