@@ -3,6 +3,8 @@ import path from "path"
 import { createEffect, createMemo, onMount } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { createSimpleContext } from "./helper"
+import { LoadingScreen } from "@tui/component/loading-screen"
+import { useMode } from "@tui/context/mode"
 import aura from "./theme/aura.json" with { type: "json" }
 import ayu from "./theme/ayu.json" with { type: "json" }
 import catppuccin from "./theme/catppuccin.json" with { type: "json" }
@@ -278,12 +280,13 @@ function ansiToRgba(code: number): RGBA {
 
 export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   name: "Theme",
-  init: (props: { mode: "dark" | "light" }) => {
+  init: () => {
+    const mode = useMode()
     const sync = useSync()
     const kv = useKV()
     const [store, setStore] = createStore({
       themes: DEFAULT_THEMES,
-      mode: kv.get("theme_mode", props.mode),
+      mode: kv.get("theme_mode", mode),
       active: (sync.data.config.theme ?? kv.get("theme", "opencode")) as string,
       ready: false,
     })
@@ -359,6 +362,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     const subtleSyntax = createMemo(() => generateSubtleSyntax(values()))
 
     return {
+      fallback: <LoadingScreen message="Loading theme..." />,
       theme: new Proxy(values(), {
         get(_target, prop) {
           // @ts-expect-error

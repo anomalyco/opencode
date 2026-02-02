@@ -22,6 +22,7 @@ import { createStore, produce, reconcile } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { Binary } from "@opencode-ai/util/binary"
 import { createSimpleContext } from "./helper"
+import { LoadingScreen } from "@tui/component/loading-screen"
 import type { Snapshot } from "@/snapshot"
 import { useExit } from "./exit"
 import { useArgs } from "./args"
@@ -415,6 +416,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
     const fullSyncedSessions = new Set<string>()
     const result = {
+      fallback: <LoadingScreen message="Connecting to server..." />,
       data: store,
       set: setStore,
       get status() {

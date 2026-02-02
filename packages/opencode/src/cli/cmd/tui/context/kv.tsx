@@ -2,6 +2,7 @@ import { Global } from "@/global"
 import { createSignal, type Setter } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"
+import { LoadingScreen } from "@tui/component/loading-screen"
 import path from "path"
 
 export const { use: useKV, provider: KVProvider } = createSimpleContext({
@@ -22,6 +23,7 @@ export const { use: useKV, provider: KVProvider } = createSimpleContext({
       })
 
     const result = {
+      fallback: <LoadingScreen message="Loading preferences..." />,
       get ready() {
         return ready()
       },

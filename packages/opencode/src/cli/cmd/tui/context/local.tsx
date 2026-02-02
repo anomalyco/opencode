@@ -7,6 +7,7 @@ import path from "path"
 import { Global } from "@/global"
 import { iife } from "@/util/iife"
 import { createSimpleContext } from "./helper"
+import { LoadingScreen } from "@tui/component/loading-screen"
 import { useToast } from "../ui/toast"
 import { Provider } from "@/provider/provider"
 import { useArgs } from "./args"
@@ -393,9 +394,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     })
 
     const result = {
+      fallback: <LoadingScreen message="Loading models..." />,
       model,
       agent,
       mcp,
+      get ready() {
+        return model.ready
+      },
     }
     return result
   },
