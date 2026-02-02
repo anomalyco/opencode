@@ -74,6 +74,7 @@ export const dict = {
   "command.model.variant.cycle.description": "切换到下一个强度等级",
   "command.permissions.autoaccept.enable": "自动接受编辑",
   "command.permissions.autoaccept.disable": "停止自动接受编辑",
+  "command.workspace.toggle": "切换工作区",
   "command.session.undo": "撤销",
   "command.session.undo.description": "撤销上一条消息",
   "command.session.redo": "重做",
@@ -344,7 +345,12 @@ export const dict = {
   "toast.language.description": "已切换到{{language}}",
 
   "toast.theme.title": "主题已切换",
-  "toast.scheme.title": "配色方案",
+  "toast.scheme.title": "颜色方案",
+
+  "toast.workspace.enabled.title": "工作区已启用",
+  "toast.workspace.enabled.description": "侧边栏现在显示多个工作树",
+  "toast.workspace.disabled.title": "工作区已禁用",
+  "toast.workspace.disabled.description": "侧边栏只显示主工作树",
 
   "toast.permissions.autoaccept.on.title": "自动接受编辑",
   "toast.permissions.autoaccept.on.description": "编辑和写入权限将自动获批",

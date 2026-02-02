@@ -70,6 +70,7 @@ export const dict = {
   "command.model.variant.cycle.description": "Cambiar al siguiente nivel de esfuerzo",
   "command.permissions.autoaccept.enable": "Aceptar ediciones automáticamente",
   "command.permissions.autoaccept.disable": "Dejar de aceptar ediciones automáticamente",
+  "command.workspace.toggle": "Alternar espacios de trabajo",
   "command.session.undo": "Deshacer",
   "command.session.undo.description": "Deshacer el último mensaje",
   "command.session.redo": "Rehacer",
@@ -349,6 +350,11 @@ export const dict = {
   "toast.permissions.autoaccept.on.description": "Los permisos de edición y escritura serán aprobados automáticamente",
   "toast.permissions.autoaccept.off.title": "Se dejó de aceptar ediciones automáticamente",
   "toast.permissions.autoaccept.off.description": "Los permisos de edición y escritura requerirán aprobación",
+
+  "toast.workspace.enabled.title": "Espacios de trabajo habilitados",
+  "toast.workspace.enabled.description": "Ahora se muestran varios worktrees en la barra lateral",
+  "toast.workspace.disabled.title": "Espacios de trabajo deshabilitados",
+  "toast.workspace.disabled.description": "Solo se muestra el worktree principal en la barra lateral",
 
   "toast.model.none.title": "Ningún modelo seleccionado",
   "toast.model.none.description": "Conecta un proveedor para resumir esta sesión",
