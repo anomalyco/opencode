@@ -111,7 +111,7 @@ test("Unbound: provider loaded from UNBOUND_API_KEY env variable", async () => {
     fn: async () => {
       const providers = await Provider.list()
       expect(providers["unbound"]).toBeDefined()
-      expect(providers["unbound"].source).toBe("custom")
+      expect(providers["unbound"].source).toBe("env")
     },
   })
 })
