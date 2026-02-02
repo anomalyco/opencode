@@ -167,8 +167,13 @@ export namespace File {
         return
       }
 
-      const set = new Set<string>()
-      for await (const file of Fd.list({ cwd: Instance.directory })) {
+      for await (let file of Fd.list({ cwd: Instance.directory })) {
+        if (process.platform == "win32") {
+          // On a regular Windows PC, fd returns paths with backslashes '\\',
+          // but on Windows in GitHub Actions, it seems to return paths with forward slashes '/'
+          // (which causes the test to fail), we just replace '/' here simply.
+          file = file.replaceAll('/', '\\')
+        }
         if (file.endsWith("/") || file.endsWith("\\")) {
           result.dirs.push(file)
         } else {
