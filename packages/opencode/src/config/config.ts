@@ -1127,6 +1127,16 @@ export namespace Config {
             .positive()
             .optional()
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
+          parallel_execution: z
+            .boolean()
+            .optional()
+            .describe("Enable parallel tool execution with dependency analysis (default: true)"),
+          max_parallel_tools: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Maximum number of tools to execute in parallel (default: 10)"),
         })
         .optional(),
       checker: z
