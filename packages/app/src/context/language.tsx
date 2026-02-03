@@ -142,9 +142,15 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
 
     const label = (value: Locale) => t(labelKey[value])
 
+    // RTL locales
+    const RTL_LOCALES: readonly Locale[] = ["ar"]
+    const isRTL = createMemo(() => RTL_LOCALES.includes(locale()))
+    const direction = createMemo(() => isRTL() ? "rtl" : "ltr")
+
     createEffect(() => {
       if (typeof document !== "object") return
       document.documentElement.lang = locale()
+      document.documentElement.dir = direction()
     })
 
     return {
@@ -153,6 +159,8 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       locales: LOCALES,
       label,
       t,
+      isRTL,
+      direction,
       setLocale(next: Locale) {
         setStore("locale", next)
       },

@@ -1,0 +1,174 @@
+/* RTL (Right-to-Left) Support Styles */
+
+/* Base RTL styles applied when dir="rtl" is set on html */
+:root[dir="rtl"] {
+  /* Text alignment defaults to start which adapts to direction */
+  text-align: start;
+}
+
+/* 
+ * RTL Physical-to-Logical Property Conversion
+ * When RTL mode is active, swap left/right positioning
+ * This ensures existing pl-*, pr-*, left-*, right-* classes work correctly in RTL
+ */
+
+/* Convert padding-left to padding-right and vice versa in RTL */
+[dir="rtl"] {
+  /* Flex row reverse for main layout containers */
+  &:where(.rtl-reverse-row) {
+    flex-direction: row-reverse;
+  }
+}
+
+/* Position swapping for absolutely positioned elements */
+[dir="rtl"] .left-0 { left: auto; right: 0; }
+[dir="rtl"] .left-1 { left: auto; right: calc(var(--spacing) * 1); }
+[dir="rtl"] .left-2 { left: auto; right: calc(var(--spacing) * 2); }
+[dir="rtl"] .left-3 { left: auto; right: calc(var(--spacing) * 3); }
+[dir="rtl"] .left-4 { left: auto; right: calc(var(--spacing) * 4); }
+
+[dir="rtl"] .right-0 { right: auto; left: 0; }
+[dir="rtl"] .right-1 { right: auto; left: calc(var(--spacing) * 1); }
+[dir="rtl"] .right-2 { right: auto; left: calc(var(--spacing) * 2); }
+[dir="rtl"] .right-3 { right: auto; left: calc(var(--spacing) * 3); }
+[dir="rtl"] .right-4 { right: auto; left: calc(var(--spacing) * 4); }
+
+/* RTL-aware text alignment */
+[dir="rtl"] .text-left {
+  text-align: right;
+}
+
+[dir="rtl"] .text-right {
+  text-align: left;
+}
+
+/* Flex direction reversal for RTL */
+[dir="rtl"] .rtl\:flex-row-reverse {
+  flex-direction: row-reverse;
+}
+
+[dir="rtl"] .rtl\:flex-row {
+  flex-direction: row;
+}
+
+/* RTL-aware spacing using logical properties */
+/* These override physical margin/padding with logical equivalents */
+
+/* Margin start/end (replaces left/right in RTL context) */
+.ms-auto { margin-inline-start: auto; }
+.me-auto { margin-inline-end: auto; }
+
+/* Padding start/end */
+.ps-0 { padding-inline-start: 0; }
+.pe-0 { padding-inline-end: 0; }
+.ps-1 { padding-inline-start: calc(var(--spacing) * 1); }
+.pe-1 { padding-inline-end: calc(var(--spacing) * 1); }
+.ps-2 { padding-inline-start: calc(var(--spacing) * 2); }
+.pe-2 { padding-inline-end: calc(var(--spacing) * 2); }
+.ps-3 { padding-inline-start: calc(var(--spacing) * 3); }
+.pe-3 { padding-inline-end: calc(var(--spacing) * 3); }
+.ps-4 { padding-inline-start: calc(var(--spacing) * 4); }
+.pe-4 { padding-inline-end: calc(var(--spacing) * 4); }
+.ps-5 { padding-inline-start: calc(var(--spacing) * 5); }
+.pe-5 { padding-inline-end: calc(var(--spacing) * 5); }
+.ps-6 { padding-inline-start: calc(var(--spacing) * 6); }
+.pe-6 { padding-inline-end: calc(var(--spacing) * 6); }
+.ps-7 { padding-inline-start: calc(var(--spacing) * 7); }
+.pe-7 { padding-inline-end: calc(var(--spacing) * 7); }
+.ps-8 { padding-inline-start: calc(var(--spacing) * 8); }
+.pe-8 { padding-inline-end: calc(var(--spacing) * 8); }
+.ps-9 { padding-inline-start: calc(var(--spacing) * 9); }
+.pe-9 { padding-inline-end: calc(var(--spacing) * 9); }
+.ps-10 { padding-inline-start: calc(var(--spacing) * 10); }
+.pe-10 { padding-inline-end: calc(var(--spacing) * 10); }
+
+/* Margin start/end */
+.ms-0 { margin-inline-start: 0; }
+.me-0 { margin-inline-end: 0; }
+.ms-1 { margin-inline-start: calc(var(--spacing) * 1); }
+.me-1 { margin-inline-end: calc(var(--spacing) * 1); }
+.ms-2 { margin-inline-start: calc(var(--spacing) * 2); }
+.me-2 { margin-inline-end: calc(var(--spacing) * 2); }
+.ms-3 { margin-inline-start: calc(var(--spacing) * 3); }
+.me-3 { margin-inline-end: calc(var(--spacing) * 3); }
+.ms-4 { margin-inline-start: calc(var(--spacing) * 4); }
+.me-4 { margin-inline-end: calc(var(--spacing) * 4); }
+
+/* Inset logical properties (replaces left/right positioning) */
+.start-0 { inset-inline-start: 0; }
+.end-0 { inset-inline-end: 0; }
+.start-auto { inset-inline-start: auto; }
+.end-auto { inset-inline-end: auto; }
+.start-1 { inset-inline-start: calc(var(--spacing) * 1); }
+.end-1 { inset-inline-end: calc(var(--spacing) * 1); }
+.start-2 { inset-inline-start: calc(var(--spacing) * 2); }
+.end-2 { inset-inline-end: calc(var(--spacing) * 2); }
+.start-3 { inset-inline-start: calc(var(--spacing) * 3); }
+.end-3 { inset-inline-end: calc(var(--spacing) * 3); }
+.start-4 { inset-inline-start: calc(var(--spacing) * 4); }
+.end-4 { inset-inline-end: calc(var(--spacing) * 4); }
+
+/* Border radius logical properties */
+.rounded-s { border-start-start-radius: var(--radius-md); border-end-start-radius: var(--radius-md); }
+.rounded-e { border-start-end-radius: var(--radius-md); border-end-end-radius: var(--radius-md); }
+.rounded-ss { border-start-start-radius: var(--radius-md); }
+.rounded-se { border-start-end-radius: var(--radius-md); }
+.rounded-es { border-end-start-radius: var(--radius-md); }
+.rounded-ee { border-end-end-radius: var(--radius-md); }
+
+/* Border logical properties */
+.border-s { border-inline-start-width: 1px; }
+.border-e { border-inline-end-width: 1px; }
+.border-s-0 { border-inline-start-width: 0; }
+.border-e-0 { border-inline-end-width: 0; }
+
+/* Scroll margin/padding logical properties */
+.scroll-ms-0 { scroll-margin-inline-start: 0; }
+.scroll-me-0 { scroll-margin-inline-end: 0; }
+.scroll-ps-0 { scroll-padding-inline-start: 0; }
+.scroll-pe-0 { scroll-padding-inline-end: 0; }
+
+/* Icon/arrow flipping for RTL */
+[dir="rtl"] .rtl-flip {
+  transform: scaleX(-1);
+}
+
+/* Navigation arrows should flip in RTL */
+[dir="rtl"] [data-icon="chevron-left"],
+[dir="rtl"] [data-icon="chevron-right"],
+[dir="rtl"] [data-icon="arrow-left"],
+[dir="rtl"] [data-icon="arrow-right"] {
+  transform: scaleX(-1);
+}
+
+/* Preserve LTR for specific content like code, numbers */
+.ltr-content {
+  direction: ltr;
+  unicode-bidi: embed;
+}
+
+/* Keep code blocks LTR */
+[dir="rtl"] pre,
+[dir="rtl"] code,
+[dir="rtl"] .font-mono {
+  direction: ltr;
+  unicode-bidi: embed;
+  text-align: left;
+}
+
+/* Keep numbers LTR */
+[dir="rtl"] .tabular-nums {
+  direction: ltr;
+  unicode-bidi: embed;
+}
+
+/* Sidebar and fixed positioning adjustments for RTL */
+[dir="rtl"] .sidebar-left {
+  left: auto;
+  right: 0;
+}
+
+[dir="rtl"] .sidebar-right {
+  right: auto;
+  left: 0;
+}

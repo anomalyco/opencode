@@ -13,7 +13,41 @@
   overflow: hidden;
   white-space: nowrap;
   direction: rtl;
-  text-align: left;
+  text-align: start;
+}
+
+/* RTL Support Utilities */
+/* Use these with the rtl: and ltr: variants for directional styling */
+
+/* Flip horizontal transforms in RTL */
+@utility rtl-flip {
+  :where([dir="rtl"]) & {
+    transform: scaleX(-1);
+  }
+}
+
+/* Flip rotation direction in RTL */
+@utility rtl-rotate-180 {
+  :where([dir="rtl"]) & {
+    transform: rotate(180deg);
+  }
+}
+
+/* Force LTR direction (useful for code blocks, numbers, etc.) */
+@utility force-ltr {
+  direction: ltr;
+  unicode-bidi: embed;
+}
+
+/* Force RTL direction */
+@utility force-rtl {
+  direction: rtl;
+  unicode-bidi: embed;
+}
+
+/* Isolate direction for mixed content */
+@utility dir-isolate {
+  unicode-bidi: isolate;
 }
 
 @utility fade-up-text {
