@@ -134,6 +134,10 @@ export const rpc = {
     Config.global.reset()
     await Instance.disposeAll()
   },
+  async switchDirectory(input: { directory: string }) {
+    startEventStream(input.directory)
+    return { success: true }
+  },
   async shutdown() {
     Log.Default.info("worker shutting down")
     if (eventStream.abort) eventStream.abort.abort()

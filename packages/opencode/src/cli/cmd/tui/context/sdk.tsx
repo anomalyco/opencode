@@ -1,7 +1,7 @@
 import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "./helper"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
-import { batch, onCleanup, onMount } from "solid-js"
+import { batch, onCleanup, onMount, createSignal } from "solid-js"
 
 export type EventSource = {
   on: (handler: (event: Event) => void) => () => void
@@ -16,14 +16,17 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     headers?: RequestInit["headers"]
     events?: EventSource
   }) => {
+    const [directory, setDirectory] = createSignal(props.directory)
     const abort = new AbortController()
-    const sdk = createOpencodeClient({
-      baseUrl: props.url,
-      signal: abort.signal,
-      directory: props.directory,
-      fetch: props.fetch,
-      headers: props.headers,
-    })
+    const [client, setClient] = createSignal(
+      createOpencodeClient({
+        baseUrl: props.url,
+        signal: abort.signal,
+        directory: directory(),
+        fetch: props.fetch,
+        headers: props.headers,
+      }),
+    )
 
     const emitter = createGlobalEmitter<{
       [key in Event["type"]]: Extract<Event, { type: key }>
@@ -72,7 +75,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       // Fall back to SSE
       while (true) {
         if (abort.signal.aborted) break
-        const events = await sdk.event.subscribe(
+        const events = await client().event.subscribe(
           {},
           {
             signal: abort.signal,
@@ -96,6 +99,26 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       if (timer) clearTimeout(timer)
     })
 
-    return { client: sdk, event: emitter, url: props.url }
+    const updateDirectory = (newDirectory?: string) => {
+      setDirectory(newDirectory)
+      setClient(
+        createOpencodeClient({
+          baseUrl: props.url,
+          signal: abort.signal,
+          directory: newDirectory,
+          fetch: props.fetch,
+          headers: props.headers,
+        }),
+      )
+    }
+
+    return {
+      get client() {
+        return client()
+      },
+      event: emitter,
+      url: props.url,
+      setDirectory: updateDirectory,
+    }
   },
 })
