@@ -1900,7 +1900,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     options={local.agent.list().map((agent) => agent.name)}
                     current={local.agent.current()?.name ?? ""}
                     onSelect={local.agent.set}
-                    class={`capitalize ${local.model.variant.list().length > 0 ? "max-w-[80px]" : "max-w-[120px]"}`}
+                    class={`capitalize ${local.model.variant.list().length > 0 ? "max-w-[120px]" : "max-w-[160px]"}`}
                     valueClass="truncate"
                     variant="ghost"
                   />
@@ -1917,13 +1917,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       <Button
                         as="div"
                         variant="ghost"
-                        class="px-2 min-w-0 max-w-[140px]"
+                        class="px-2 min-w-0 max-w-[200px]"
                         onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}
                       >
                         <Show when={local.model.current()?.provider?.id}>
                           <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
                         </Show>
-                        <span class="truncate max-w-[100px]">
+                        <span class="truncate">
                           {local.model.current()?.name ?? language.t("dialog.model.select.title")}
                         </span>
                         <Icon name="chevron-down" size="small" class="shrink-0" />
@@ -1939,12 +1939,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   >
                     <ModelSelectorPopover
                       triggerAs={Button}
-                      triggerProps={{ variant: "ghost", class: "min-w-0 max-w-[140px]" }}
+                      triggerProps={{ variant: "ghost", class: "min-w-0 max-w-[200px]" }}
                     >
                       <Show when={local.model.current()?.provider?.id}>
                         <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
                       </Show>
-                      <span class="truncate max-w-[100px]">
+                      <span class="truncate">
                         {local.model.current()?.name ?? language.t("dialog.model.select.title")}
                       </span>
                       <Icon name="chevron-down" size="small" class="shrink-0" />

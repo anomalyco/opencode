@@ -285,7 +285,7 @@ export const SettingsGeneral: Component = () => {
                   size="small"
                   onClick={() => {
                     const current = settings.appearance.contentWidth()
-                    const widths = [200, 250, 300, 350]
+                    const widths = [200, 250, 300, 350, 400]
                     const currentIndex = widths.indexOf(current)
                     if (currentIndex > 0) {
                       settings.appearance.setContentWidth(widths[currentIndex - 1])
@@ -301,19 +301,20 @@ export const SettingsGeneral: Component = () => {
                   {settings.appearance.contentWidth() === 250 && "Medium"}
                   {settings.appearance.contentWidth() === 300 && "Wide"}
                   {settings.appearance.contentWidth() === 350 && "Extra Wide"}
+                  {settings.appearance.contentWidth() === 400 && "Full Width"}
                 </span>
                 <Button
                   variant="secondary"
                   size="small"
                   onClick={() => {
                     const current = settings.appearance.contentWidth()
-                    const widths = [200, 250, 300, 350]
+                    const widths = [200, 250, 300, 350, 400]
                     const currentIndex = widths.indexOf(current)
                     if (currentIndex >= 0 && currentIndex < widths.length - 1) {
                       settings.appearance.setContentWidth(widths[currentIndex + 1])
                     }
                   }}
-                  disabled={settings.appearance.contentWidth() >= 350}
+                  disabled={settings.appearance.contentWidth() >= 400}
                   aria-label="Increase content width"
                 >
                   +

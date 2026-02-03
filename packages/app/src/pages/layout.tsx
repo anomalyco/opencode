@@ -2477,20 +2477,33 @@ export default function Layout(props: ParentProps) {
               !selected() && !active(),
             "bg-surface-base-hover border border-border-weak-base": !selected() && active(),
           }}
-          onMouseEnter={() => {
-            if (!overlay()) return
+          onClick={(event: MouseEvent) => {
+            // 如果是在 preview 模式（侧边栏已打开），则导航到项目
+            if (preview()) {
+              navigateToProject(props.project.worktree)
+              return
+            }
+            // 在 overlay 模式下，切换 hoverProject 状态来显示/隐藏对话列表
+            event.preventDefault()
             globalSync.child(props.project.worktree)
-            setState("hoverProject", props.project.worktree)
+            const currentProject = state.hoverProject === props.project.worktree
+              ? undefined
+              : props.project.worktree
+            setState("hoverProject", currentProject)
             setState("hoverSession", undefined)
           }}
-          onFocus={() => {
+          onKeyDown={(event: KeyboardEvent) => {
             if (!overlay()) return
-            globalSync.child(props.project.worktree)
-            setState("hoverProject", props.project.worktree)
-            setState("hoverSession", undefined)
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              globalSync.child(props.project.worktree)
+              const currentProject = state.hoverProject === props.project.worktree
+                ? undefined
+                : props.project.worktree
+              setState("hoverProject", currentProject)
+              setState("hoverSession", undefined)
+            }
           }}
-          onClick={() => navigateToProject(props.project.worktree)}
-          onBlur={() => setOpen(false)}
         >
           <ProjectIcon project={props.project} notify />
         </ContextMenu.Trigger>
@@ -2538,14 +2551,17 @@ export default function Layout(props: ParentProps) {
         <Show when={preview()} fallback={<Trigger />}>
           <HoverCard
             open={open() && !menu()}
-            openDelay={0}
+            openDelay={999999}
             closeDelay={0}
             placement="right-start"
             gutter={6}
             trigger={<Trigger />}
             onOpenChange={(value) => {
               if (menu()) return
-              setOpen(value)
+              // 只允许关闭（value === false），不允许自动悬停打开
+              if (!value) {
+                setOpen(false)
+              }
               if (value) setState("hoverSession", undefined)
             }}
           >
