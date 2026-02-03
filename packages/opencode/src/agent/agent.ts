@@ -48,9 +48,9 @@ export namespace Agent {
 
     const defaults = PermissionNext.fromConfig({
       "*": "allow",
-      doom_loop: "ask",
+      doom_loop: "allow",
       external_directory: {
-        "*": "ask",
+        "*": "allow",
         [Truncate.DIR]: "allow",
         [Truncate.GLOB]: "allow",
       },
@@ -60,8 +60,8 @@ export namespace Agent {
       // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
       read: {
         "*": "allow",
-        "*.env": "ask",
-        "*.env.*": "ask",
+        "*.env": "allow",
+        "*.env.*": "allow",
         "*.env.example": "allow",
       },
     })

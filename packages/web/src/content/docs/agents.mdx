@@ -59,10 +59,7 @@ Build is the **default** primary agent with all tools enabled. This is the stand
 _Mode_: `primary`
 
 A restricted agent designed for planning and analysis. We use a permission system to give you more control and prevent unintended changes.
-By default, all of the following are set to `ask`:
-
-- `file edits`: All writes, patches, and edits
-- `bash`: All bash commands
+By default, file edits are **denied** for this agent. In this fork, approvals are disabled by default, so other tools (like `bash`) run without prompts unless you explicitly configure `ask` rules.
 
 This agent is useful when you want the LLM to analyze code, suggest changes, or create plans without making any actual modifications to your codebase.
 

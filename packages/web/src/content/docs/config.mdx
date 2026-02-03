@@ -461,7 +461,7 @@ You can configure code formatters through the `formatter` option.
 
 ### Permissions
 
-By default, opencode **allows all operations** without requiring explicit approval. You can change this using the `permission` option.
+This fork disables approvals by default (equivalent to `permission: "allow"`). You can re-enable prompts by configuring `ask` rules with the `permission` option.
 
 For example, to ensure that the `edit` and `bash` tools require user approval:
 

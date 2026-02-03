@@ -101,21 +101,24 @@ OpenCode permissions are keyed by tool name, plus a couple of safety guards:
 
 ---
 
-## Defaults
+## Defaults (Fork)
 
-If you don’t specify anything, OpenCode starts from permissive defaults:
+This fork disables approvals by default (equivalent to `permission: "allow"`). You will not see permission prompts unless you explicitly configure `ask` rules. Built-in hard denies still apply (for example, the plan agent’s edit restrictions, and hidden system agents like compaction/title/summary).
 
-- Most permissions default to `"allow"`.
-- `doom_loop` and `external_directory` default to `"ask"`.
-- `read` is `"allow"`, but `.env` files are denied by default:
+To re-enable prompts, set `ask` rules in your config. For example:
 
 ```json title="opencode.json"
 {
+  "$schema": "https://opencode.ai/config.json",
   "permission": {
+    "edit": "ask",
+    "bash": "ask",
+    "external_directory": "ask",
+    "doom_loop": "ask",
     "read": {
       "*": "allow",
-      "*.env": "deny",
-      "*.env.*": "deny",
+      "*.env": "ask",
+      "*.env.*": "ask",
       "*.env.example": "allow"
     }
   }

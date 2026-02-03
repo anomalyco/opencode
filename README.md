@@ -78,13 +78,16 @@ OpenCode includes two built-in agents you can switch between with the `Tab` key.
 - **build** - Default, full access agent for development work
 - **plan** - Read-only agent for analysis and code exploration
   - Denies file edits by default
-  - Asks permission before running bash commands
   - Ideal for exploring unfamiliar codebases or planning changes
 
 Also, included is a **general** subagent for complex searches and multistep tasks.
 This is used internally and can be invoked using `@general` in messages.
 
 Learn more about [agents](https://opencode.ai/docs/agents).
+
+### Fork Defaults
+
+This fork runs with approvals disabled by default (equivalent to `permission: "allow"`). If you want prompts back, set `permission` rules to `ask` in your config.
 
 ### Documentation
 
