@@ -131,10 +131,6 @@ describe("memory: abort controller leak", () => {
     console.log(`NEW pattern (bind): ${newGrowth.toFixed(2)} MB growth`)
     console.log(`Improvement: ${(oldGrowth - newGrowth).toFixed(2)} MB saved`)
 
-    // The bind pattern should use less or equal memory.
-    // GC behavior varies by platform, so we only assert that bind is not worse.
-    // On some platforms (macOS), this shows ~13MB improvement.
-    // On others (Linux CI), aggressive GC may show 0 for both.
     expect(newGrowth).toBeLessThanOrEqual(oldGrowth)
   })
 })
