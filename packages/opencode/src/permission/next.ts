@@ -184,7 +184,7 @@ export namespace PermissionNext {
               requestID: pending.info.id,
               reply: "reject",
             })
-            pending.reject(new RejectedError())
+            pending.reject(input.message ? new AutoRejectedError(input.message) : new RejectedError())
           }
         }
         return
@@ -262,6 +262,13 @@ export namespace PermissionNext {
   export class CorrectedError extends Error {
     constructor(message: string) {
       super(`The user rejected permission to use this specific tool call with the following feedback: ${message}`)
+    }
+  }
+
+  /** Auto-rejected due to another tool rejection with feedback - continues with guidance */
+  export class AutoRejectedError extends Error {
+    constructor(message?: string) {
+      super(`Permission to use this specific tool call was automatically rejected due to another rejected permission in the same message with the following feedback: ${message}`)
     }
   }
 
