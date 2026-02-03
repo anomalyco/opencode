@@ -1131,7 +1131,8 @@ export default function Layout(props: ParentProps) {
         title: language.t("command.session.archive"),
         category: language.t("command.category.session"),
         keybind: "mod+shift+backspace",
-        disabled: !params.dir || !params.id,
+        disabled: true, // WIP: archive session feature is work in progress
+         // TODO: enable this when there's a way to load/restore archive sessions from the UI
         onSelect: () => {
           const session = currentSessions().find((s) => s.id === params.id)
           if (session) archiveSession(session)
@@ -2022,7 +2023,10 @@ export default function Layout(props: ParentProps) {
                 >
                   <DropdownMenu.ItemLabel>{language.t("common.rename")}</DropdownMenu.ItemLabel>
                 </DropdownMenu.Item>
-                <DropdownMenu.Item onSelect={() => archiveSession(props.session)}>
+                <DropdownMenu.Item disabled>
+                  {/* WIP: archive session feature is work in progress */}
+                  {/* //TODO: enable this when there's a way to load/restore archive sessions from the UI */}
+
                   <DropdownMenu.ItemLabel>{language.t("common.archive")}</DropdownMenu.ItemLabel>
                 </DropdownMenu.Item>
                 <DropdownMenu.Separator />
