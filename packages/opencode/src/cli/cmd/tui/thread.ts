@@ -144,12 +144,16 @@ export const TuiThreadCommand = cmd({
       url,
       fetch: customFetch,
       events,
+      directory: cwd,
       args: {
         continue: args.continue,
         sessionID: args.session,
         agent: args.agent,
         model: args.model,
         prompt,
+      },
+      onSwitchDirectory: async (directory: string) => {
+        await client.call("switchDirectory", { directory })
       },
       onExit: async () => {
         await client.call("shutdown", undefined)

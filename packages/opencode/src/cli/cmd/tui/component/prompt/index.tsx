@@ -32,6 +32,7 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import path from "path"
 
 export type PromptProps = {
   sessionID?: string
@@ -520,6 +521,65 @@ export function Prompt(props: PromptProps) {
     if (trimmed === "exit" || trimmed === "quit" || trimmed === ":q") {
       exit()
       return
+    }
+
+    // Check for /new <path> or /clear <path> with directory argument
+    const newMatch = trimmed.match(/^\/(?:new|clear)\s+(.+)$/)
+    if (newMatch) {
+      const rawPath = newMatch[1].trim()
+      if (rawPath) {
+        // Resolve path
+        const homedir = process.env.HOME ?? process.env.USERPROFILE ?? "~"
+        const resolvedPath = rawPath.startsWith("~")
+          ? rawPath.replace("~", homedir)
+          : rawPath.startsWith("/")
+          ? rawPath
+          : path.resolve(sdk.directory ?? process.cwd(), rawPath)
+
+        // Validate path
+        const fs = await import("fs/promises")
+        const stat = await fs.stat(resolvedPath).catch(() => null)
+        if (!stat) {
+          toast.show({
+            variant: "error",
+            message: `Path does not exist: ${resolvedPath}`,
+            duration: 3000,
+          })
+          return
+        }
+        if (!stat.isDirectory()) {
+          toast.show({
+            variant: "error",
+            message: `Not a directory: ${resolvedPath}`,
+            duration: 3000,
+          })
+          return
+        }
+
+        // Execute directory switch
+        await sdk.switchDirectory(resolvedPath)
+        sync.reset()
+        await sync.bootstrap()
+
+        // Clear prompt and navigate to home
+        input.extmarks.clear()
+        setStore("prompt", {
+          input: "",
+          parts: [],
+        })
+        setStore("extmarkToPartIndex", new Map())
+        input.clear()
+
+        route.navigate({ type: "home" })
+
+        toast.show({
+          variant: "info",
+          message: `Switched to ${resolvedPath}`,
+          duration: 2000,
+        })
+
+        return
+      }
     }
     const selectedModel = local.model.current()
     if (!selectedModel) {

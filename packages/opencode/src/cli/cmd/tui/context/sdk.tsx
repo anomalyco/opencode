@@ -15,6 +15,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     fetch?: typeof fetch
     headers?: RequestInit["headers"]
     events?: EventSource
+    onSwitchDirectory?: (directory: string) => Promise<void>
   }) => {
     const [directory, setDirectory] = createSignal(props.directory)
     const abort = new AbortController()
@@ -112,13 +113,24 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       )
     }
 
+    const switchDirectory = async (newDirectory: string) => {
+      if (props.onSwitchDirectory) {
+        await props.onSwitchDirectory(newDirectory)
+      }
+      updateDirectory(newDirectory)
+    }
+
     return {
       get client() {
         return client()
       },
+      get directory() {
+        return directory()
+      },
       event: emitter,
       url: props.url,
       setDirectory: updateDirectory,
+      switchDirectory,
     }
   },
 })

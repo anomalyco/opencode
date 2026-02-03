@@ -106,6 +106,7 @@ export function tui(input: {
   fetch?: typeof fetch
   headers?: RequestInit["headers"]
   events?: EventSource
+  onSwitchDirectory?: (directory: string) => Promise<void>
   onExit?: () => Promise<void>
 }) {
   // promise to prevent immediate exit
@@ -133,6 +134,7 @@ export function tui(input: {
                         fetch={input.fetch}
                         headers={input.headers}
                         events={input.events}
+                        onSwitchDirectory={input.onSwitchDirectory}
                       >
                         <SyncProvider>
                           <ThemeProvider mode={mode}>
@@ -312,7 +314,6 @@ function App() {
       },
       onSelect: () => {
         const current = promptRef.current
-        // Don't require focus - if there's any text, preserve it
         const currentPrompt = current?.current?.input ? current.current : undefined
         route.navigate({
           type: "home",
