@@ -16,6 +16,7 @@
 @import "../components/collapsible.css" layer(components);
 @import "../components/diff.css" layer(components);
 @import "../components/diff-changes.css" layer(components);
+@import "../components/context-menu.css" layer(components);
 @import "../components/dropdown-menu.css" layer(components);
 @import "../components/dialog.css" layer(components);
 @import "../components/file-icon.css" layer(components);
@@ -40,7 +41,6 @@
 @import "../components/select.css" layer(components);
 @import "../components/spinner.css" layer(components);
 @import "../components/switch.css" layer(components);
-@import "../components/scroll-fade.css" layer(components);
 @import "../components/session-review.css" layer(components);
 @import "../components/session-turn.css" layer(components);
 @import "../components/sticky-accordion-header.css" layer(components);
@@ -49,8 +49,6 @@
 @import "../components/toast.css" layer(components);
 @import "../components/tooltip.css" layer(components);
 @import "../components/typewriter.css" layer(components);
-@import "../components/morph-chevron.css" layer(components);
-@import "../components/reasoning-icon.css" layer(components);
 
 @import "./utilities.css" layer(utilities);
 @import "./animations.css" layer(utilities);
