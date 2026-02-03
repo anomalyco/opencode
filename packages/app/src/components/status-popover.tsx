@@ -205,7 +205,7 @@ export function StatusPopover() {
           </Tabs.List>
 
           <Tabs.Content value="servers">
-            <div class="flex flex-col px-2 pb-2">
+            <div class="flex flex-col px-2 pb-2 max-h-[calc(100vh-120px)] overflow-y-auto">
               <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
                 <For each={sortedServers()}>
                   {(url) => {
@@ -301,7 +301,7 @@ export function StatusPopover() {
           </Tabs.Content>
 
           <Tabs.Content value="mcp">
-            <div class="flex flex-col px-2 pb-2">
+            <div class="flex flex-col px-2 pb-2 max-h-[calc(100vh-120px)] overflow-y-auto">
               <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
                 <Show
                   when={mcpItems().length > 0}
@@ -349,7 +349,7 @@ export function StatusPopover() {
           </Tabs.Content>
 
           <Tabs.Content value="lsp">
-            <div class="flex flex-col px-2 pb-2">
+            <div class="flex flex-col px-2 pb-2 max-h-[calc(100vh-120px)] overflow-y-auto">
               <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
                 <Show
                   when={lspItems().length > 0}
@@ -379,7 +379,7 @@ export function StatusPopover() {
           </Tabs.Content>
 
           <Tabs.Content value="plugins">
-            <div class="flex flex-col px-2 pb-2">
+            <div class="flex flex-col px-2 pb-2 max-h-[calc(100vh-120px)] overflow-y-auto">
               <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
                 <Show
                   when={plugins().length > 0}

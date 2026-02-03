@@ -140,6 +140,63 @@ async fn set_default_server_url(app: AppHandle, url: Option<String>) -> Result<(
     Ok(())
 }
 
+#[tauri::command]
+fn open_in_finder(path: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open in Finder: {}", e))?;
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open in Explorer: {}", e))?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open in file manager: {}", e))?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn open_in_vscode(path: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        // Try using 'open' command first (more reliable on macOS)
+        let result = std::process::Command::new("open")
+            .arg("-a")
+            .arg("Visual Studio Code")
+            .arg(&path)
+            .spawn();
+
+        if result.is_ok() {
+            return Ok(());
+        }
+
+        // Fallback to 'code' command
+        std::process::Command::new("code")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open in VSCode: {}", e))?;
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        std::process::Command::new("code")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open in VSCode: {}", e))?;
+    }
+    Ok(())
+}
+
 fn get_sidecar_port() -> u32 {
     option_env!("OPENCODE_PORT")
         .map(|s| s.to_string())
@@ -291,6 +348,8 @@ pub fn run() {
             ensure_server_ready,
             get_default_server_url,
             set_default_server_url,
+            open_in_finder,
+            open_in_vscode,
             markdown::parse_markdown_command
         ])
         .setup(move |app| {

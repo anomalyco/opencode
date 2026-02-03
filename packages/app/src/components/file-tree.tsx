@@ -199,7 +199,7 @@ export default function FileTree(props: {
           return (
             <span
               classList={{
-                "flex-1 min-w-0 text-12-medium whitespace-nowrap truncate": true,
+                "flex-1 min-w-0 text-12-mono whitespace-nowrap truncate": true,
                 "text-text-weaker": local.node.ignored,
                 "text-text-weak": !local.node.ignored && !active,
               }}

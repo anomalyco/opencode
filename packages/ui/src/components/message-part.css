@@ -5,6 +5,36 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 12px;
+
+  /* Override font sizes for tool labels to scale with user settings */
+  [data-slot="basic-tool-tool-title"],
+  [data-slot="basic-tool-tool-subtitle"],
+  [data-slot="basic-tool-tool-arg"] {
+    font-size: 0.9em;
+  }
+
+  /* Override font sizes for task tools to scale with user settings */
+  [data-slot="task-tool-title"],
+  [data-slot="task-tool-subtitle"] {
+    font-size: 0.9em;
+  }
+
+  /* Override font sizes for loaded files to scale with user settings */
+  [data-component="tool-loaded-file"] {
+    font-size: 0.9em;
+  }
+
+  /* Override font sizes for apply patch file elements to scale with user settings */
+  [data-slot="apply-patch-file-action"],
+  [data-slot="apply-patch-file-path"],
+  [data-slot="apply-patch-deletion-count"] {
+    font-size: 0.9em;
+  }
+
+  /* Override font sizes for diagnostics to scale with user settings */
+  [data-slot="diagnostic"] {
+    font-size: 0.9em;
+  }
 }
 
 [data-component="user-message"] {
@@ -594,7 +624,7 @@
     gap: 8px;
 
     [data-slot="question-text"] {
-      font-size: 14px;
+      font-size: 16px;
       color: var(--text-base);
       line-height: 1.5;
     }
@@ -638,35 +668,42 @@
       }
 
       [data-slot="option-label"] {
-        font-size: 14px;
+        font-size: 16px;
         color: var(--text-base);
         font-weight: 500;
       }
 
       [data-slot="option-description"] {
-        font-size: 12px;
+        font-size: 14px;
         color: var(--text-weak);
       }
     }
 
     [data-slot="custom-input-form"] {
       display: flex;
-      gap: 8px;
+      flex-direction: column;
+      gap: 12px;
       padding: 8px 0;
-      align-items: stretch;
 
       [data-slot="custom-input"] {
-        flex: 1;
-        padding: 8px 12px;
-        font-size: 14px;
-        border: 1px solid var(--border-default);
+        width: 100%;
+        padding: 10px 14px;
+        font-size: 16px;
+        border: 2px solid var(--border-default);
         border-radius: 6px;
-        background-color: var(--surface-base);
+        background-color: rgba(60, 56, 54, 0.4);
         color: var(--text-base);
         outline: none;
+        font-family: var(--font-family-sans);
+        line-height: 1.5;
+        resize: vertical;
+        min-height: 80px;
+        transition: all 0.2s ease;
 
         &:focus {
-          border-color: var(--border-focus);
+          border-color: #d79921;
+          background-color: rgba(60, 56, 54, 0.6);
+          box-shadow: 0 0 0 3px rgba(215, 153, 33, 0.1);
         }
 
         &::placeholder {
@@ -674,8 +711,16 @@
         }
       }
 
-      [data-component="button"] {
-        height: auto;
+      [data-slot="button-group"] {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+        align-items: center;
+
+        [data-component="button"] {
+          min-width: 80px;
+          height: 36px;
+        }
       }
     }
   }

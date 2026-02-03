@@ -98,6 +98,14 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
     void shellOpen(url).catch(() => undefined)
   },
 
+  async openInFinder(path: string) {
+    await invoke("open_in_finder", { path })
+  },
+
+  async openInVscode(path: string) {
+    await invoke("open_in_vscode", { path })
+  },
+
   back() {
     window.history.back()
   },

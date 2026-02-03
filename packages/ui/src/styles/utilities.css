@@ -100,6 +100,7 @@
   font-weight: var(--font-weight-medium);
   line-height: var(--line-height-large); /* 171.429% */
   letter-spacing: var(--letter-spacing-normal);
+  text-align: left;
 }
 
 .text-14-mono {
@@ -128,4 +129,13 @@
   font-weight: var(--font-weight-medium);
   line-height: var(--line-height-x-large); /* 120% */
   letter-spacing: var(--letter-spacing-tightest);
+}
+
+/* Custom utilities for project switcher */
+.pl-2 {
+  padding-left: calc(var(--spacing) * 4);
+}
+
+.w-\[200px\] {
+  width: 150px;
 }

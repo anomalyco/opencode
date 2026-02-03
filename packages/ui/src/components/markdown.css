@@ -121,7 +121,7 @@
   }
 
   .shiki {
-    font-size: 13px;
+    font-size: var(--font-size-base);
     padding: 8px 12px;
     border-radius: 4px;
     border: 0.5px solid var(--border-weak-base);
@@ -170,7 +170,7 @@
   :not(pre) > code {
     font-family: var(--font-family-mono);
     font-feature-settings: var(--font-family-mono--font-feature-settings);
-    color: var(--markdown-code, var(--syntax-string));
+    color: #e096ab;
     font-weight: var(--font-weight-medium);
     /* font-size: 13px; */
 

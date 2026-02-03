@@ -29,6 +29,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { HoverCard } from "@opencode-ai/ui/hover-card"
+import { Popover } from "@opencode-ai/ui/popover"
 import { MessageNav } from "@opencode-ai/ui/message-nav"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
@@ -70,6 +71,7 @@ import { ConstrainDragXAxis } from "@/utils/solid-dnd"
 import { navStart } from "@/utils/perf"
 import { DialogSelectDirectory } from "@/components/dialog-select-directory"
 import { DialogEditProject } from "@/components/dialog-edit-project"
+import { DialogSwitchProject } from "@/components/dialog-switch-project"
 import { Titlebar } from "@/components/titlebar"
 import { useServer } from "@/context/server"
 import { useLanguage, type Locale } from "@/context/language"
@@ -992,6 +994,16 @@ export default function Layout(props: ParentProps) {
         onSelect: () => chooseProject(),
       },
       {
+        id: "project.switch",
+        title: language.t("command.project.switch"),
+        category: language.t("command.category.project"),
+        keybind: "mod+t",
+        disabled: layout.projects.list().length === 0,
+        onSelect: () => {
+          dialog.show(() => <DialogSwitchProject onSelect={navigateToProject} />)
+        },
+      },
+      {
         id: "provider.connect",
         title: language.t("command.provider.connect"),
         category: language.t("command.category.provider"),
@@ -1009,6 +1021,30 @@ export default function Layout(props: ParentProps) {
         category: language.t("command.category.settings"),
         keybind: "mod+comma",
         onSelect: () => openSettings(),
+      },
+      {
+        id: "project.openInFinder",
+        title: platform.os === "macos" ? "Open in Finder" : platform.os === "windows" ? "Open in Explorer" : "Open in File Manager",
+        category: language.t("command.category.project"),
+        disabled: !params.dir || !platform.openInFinder,
+        onSelect: async () => {
+          const directory = params.dir ? decode64(params.dir) : null
+          if (directory && platform.openInFinder) {
+            await platform.openInFinder(directory)
+          }
+        },
+      },
+      {
+        id: "project.openInVscode",
+        title: "Open in VSCode",
+        category: language.t("command.category.project"),
+        disabled: !params.dir || !platform.openInVscode,
+        onSelect: async () => {
+          const directory = params.dir ? decode64(params.dir) : null
+          if (directory && platform.openInVscode) {
+            await platform.openInVscode(directory)
+          }
+        },
       },
       {
         id: "session.previous",
@@ -2297,16 +2333,20 @@ export default function Layout(props: ParentProps) {
         onMouseEnter={() => {
           if (!overlay()) return
           globalSync.child(props.project.worktree)
-          setState("hoverProject", props.project.worktree)
-          setState("hoverSession", undefined)
         }}
         onFocus={() => {
           if (!overlay()) return
           globalSync.child(props.project.worktree)
-          setState("hoverProject", props.project.worktree)
-          setState("hoverSession", undefined)
         }}
-        onClick={() => navigateToProject(props.project.worktree)}
+        onClick={(e) => {
+          if (overlay()) {
+            e.stopPropagation()
+            setState("hoverProject", props.project.worktree)
+            setState("hoverSession", undefined)
+          } else {
+            navigateToProject(props.project.worktree)
+          }
+        }}
         onBlur={() => setOpen(false)}
       >
         <ProjectIcon project={props.project} notify />
@@ -2317,10 +2357,8 @@ export default function Layout(props: ParentProps) {
       // @ts-ignore
       <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
         <Show when={preview()} fallback={trigger}>
-          <HoverCard
+          <Popover
             open={open()}
-            openDelay={0}
-            closeDelay={0}
             placement="right-start"
             gutter={6}
             trigger={trigger}
@@ -2408,7 +2446,7 @@ export default function Layout(props: ParentProps) {
                 </Button>
               </div>
             </div>
-          </HoverCard>
+          </Popover>
         </Show>
       </div>
     )

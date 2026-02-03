@@ -105,6 +105,7 @@
   }
 
   [data-slot="session-review-directory"] {
+    font-family: var(--font-family-mono);
     color: var(--text-base);
     text-overflow: ellipsis;
     overflow: hidden;
@@ -114,6 +115,7 @@
   }
 
   [data-slot="session-review-filename"] {
+    font-family: var(--font-family-mono);
     color: var(--text-strong);
     flex-shrink: 0;
   }

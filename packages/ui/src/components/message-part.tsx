@@ -1505,24 +1505,32 @@ function QuestionPrompt(props: { request: QuestionRequest }) {
             </button>
             <Show when={store.editing}>
               <form data-slot="custom-input-form" onSubmit={handleCustomSubmit}>
-                <input
+                <textarea
                   ref={(el) => setTimeout(() => el.focus(), 0)}
-                  type="text"
                   data-slot="custom-input"
                   placeholder={i18n.t("ui.question.custom.placeholder")}
                   value={input()}
+                  rows={3}
                   onInput={(e) => {
                     const inputs = [...store.custom]
                     inputs[store.tab] = e.currentTarget.value
                     setStore("custom", inputs)
                   }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault()
+                      handleCustomSubmit(e)
+                    }
+                  }}
                 />
-                <Button type="submit" variant="primary" size="small">
-                  {multi() ? i18n.t("ui.common.add") : i18n.t("ui.common.submit")}
-                </Button>
-                <Button type="button" variant="ghost" size="small" onClick={() => setStore("editing", false)}>
-                  {i18n.t("ui.common.cancel")}
-                </Button>
+                <div data-slot="button-group">
+                  <Button type="button" variant="ghost" size="normal" onClick={() => setStore("editing", false)}>
+                    {i18n.t("ui.common.cancel")}
+                  </Button>
+                  <Button type="submit" variant="primary" size="normal">
+                    {multi() ? i18n.t("ui.common.add") : i18n.t("ui.common.submit")}
+                  </Button>
+                </div>
               </form>
             </Show>
           </div>

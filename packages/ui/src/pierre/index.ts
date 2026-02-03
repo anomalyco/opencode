@@ -165,7 +165,7 @@ export function createDefaultOptions<T>(style: FileDiffOptions<T>["diffStyle"]) 
 
 export const styleVariables = {
   "--diffs-font-family": "var(--font-family-mono)",
-  "--diffs-font-size": "var(--font-size-small)",
+  "--diffs-font-size": "var(--font-size-base)",
   "--diffs-line-height": "24px",
   "--diffs-tab-size": 2,
   "--diffs-font-features": "var(--font-family-mono--font-feature-settings)",

@@ -27,6 +27,7 @@ export const dict = {
 
   "command.sidebar.toggle": "切换侧边栏",
   "command.project.open": "打开项目",
+  "command.project.switch": "切换项目",
   "command.provider.connect": "连接提供商",
   "command.server.switch": "切换服务器",
   "command.settings.open": "打开设置",
@@ -286,6 +287,12 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "工作区启动脚本",
   "dialog.project.edit.worktree.startup.description": "在创建新的工作区 (worktree) 后运行。",
   "dialog.project.edit.worktree.startup.placeholder": "例如 bun install",
+
+  "project.switch.title": "切换项目",
+  "project.switch.placeholder": "搜索项目...",
+  "project.switch.empty": "没有可用的项目",
+  "project.switch.current": "当前",
+
   "context.breakdown.title": "上下文拆分",
   "context.breakdown.note": "输入 token 的大致拆分。“其他”包含工具定义和开销。",
   "context.breakdown.system": "系统",
