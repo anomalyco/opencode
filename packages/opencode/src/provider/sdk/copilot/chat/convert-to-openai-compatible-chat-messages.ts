@@ -18,12 +18,7 @@ export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV2Pro
       case "system": {
         messages.push({
           role: "system",
-          content: [
-            {
-              type: "text",
-              text: content,
-            },
-          ],
+          content: content,
           ...metadata,
         })
         break
