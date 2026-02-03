@@ -684,10 +684,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             const all = current.all.filter((x) => x !== tab)
             batch(() => {
               setStore("sessionTabs", session, "all", all)
-              if (current.active !== tab) return
+              const active = current.active
+              if (active && active !== tab && all.includes(active)) return
 
-              const index = current.all.findIndex((f) => f === tab)
-              const next = all[index - 1] ?? all[0]
+              const base = active && current.all.includes(active) ? active : tab
+              const index = current.all.findIndex((f) => f === base)
+              const next = index === -1 ? all[all.length - 1] : (all[index - 1] ?? all[index] ?? all[all.length - 1])
               setStore("sessionTabs", session, "active", next)
             })
           },
