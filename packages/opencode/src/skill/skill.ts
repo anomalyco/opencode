@@ -40,8 +40,10 @@ export namespace Skill {
     }),
   )
 
-  // External skill patterns to search for (project-level and global)
-  const EXTERNAL_PATTERNS = [".claude/skills/**/SKILL.md", ".agents/skills/**/SKILL.md"]
+  // External skill directories to search for (project-level and global)
+  // These follow the directory layout used by Claude Code and other agents.
+  const EXTERNAL_DIRS = [".claude", ".agents"]
+  const EXTERNAL_SKILL_GLOB = new Bun.Glob("skills/**/SKILL.md")
 
   const OPENCODE_SKILL_GLOB = new Bun.Glob("{skill,skills}/**/SKILL.md")
   const SKILL_GLOB = new Bun.Glob("**/SKILL.md")
@@ -84,25 +86,41 @@ export namespace Skill {
     // Scan external skill directories (.claude/skills/, .agents/skills/, etc.)
     // Load global (home) first, then project-level (so project-level overwrites)
     if (!Flag.OPENCODE_DISABLE_EXTERNAL_SKILLS) {
-      for (const pattern of EXTERNAL_PATTERNS) {
-        // Scan global home directory for external skills first
-        const glob = new Bun.Glob(pattern)
-        for await (const match of glob.scan({
-          cwd: Global.Path.home,
-          absolute: true,
-          onlyFiles: true,
-          followSymlinks: true,
-          dot: true,
-        })) {
-          await addSkill(match)
+      for (const dir of EXTERNAL_DIRS) {
+        const root = path.join(Global.Path.home, dir)
+        if (!(await Filesystem.isDir(root))) continue
+        try {
+          for await (const match of EXTERNAL_SKILL_GLOB.scan({
+            cwd: root,
+            absolute: true,
+            onlyFiles: true,
+            followSymlinks: true,
+            dot: true,
+          })) {
+            await addSkill(match)
+          }
+        } catch (error) {
+          log.error("failed to scan global skills", { dir: root, error })
         }
+      }
 
-        // Then walk up from current directory to find project-level skills (overwrites globals)
-        for (const match of await Filesystem.globUp(pattern, Instance.directory, Instance.worktree).catch((error) => {
-          log.error("failed to scan project directories for skills", { pattern, error })
-          return []
-        })) {
-          await addSkill(match)
+      for await (const root of Filesystem.up({
+        targets: EXTERNAL_DIRS,
+        start: Instance.directory,
+        stop: Instance.worktree,
+      })) {
+        try {
+          for await (const match of EXTERNAL_SKILL_GLOB.scan({
+            cwd: root,
+            absolute: true,
+            onlyFiles: true,
+            followSymlinks: true,
+            dot: true,
+          })) {
+            await addSkill(match)
+          }
+        } catch (error) {
+          log.error("failed to scan project skills", { dir: root, error })
         }
       }
     }
