@@ -41,11 +41,20 @@ const VERSION = await (async () => {
       return res.json()
     })
     .then((data: any) => data.version)
-  const [major, minor, patch] = version.split(".").map((x: string) => Number(x) || 0)
+  let [major, minor, patch] = version.split(".").map((x: string) => Number(x) || 0)
   const t = env.OPENCODE_BUMP?.toLowerCase()
   if (t === "major") return `${major + 1}.0.0`
   if (t === "minor") return `${major}.${minor + 1}.0`
-  return `${major}.${minor}.${patch + 1}`
+  patch++
+
+  // Advance past any existing git tags to avoid conflicts
+  const existingTags = new Set(
+    await $`git tag -l`.text().then((t) => t.trim().split("\n")),
+  )
+  while (existingTags.has(`v${major}.${minor}.${patch}`)) {
+    patch++
+  }
+  return `${major}.${minor}.${patch}`
 })()
 
 const team = [
