@@ -4,18 +4,6 @@
   gap: 12px;
   cursor: default;
 
-  [data-slot="checkbox-checkbox-control"] {
-    transition-property: border-color, background-color, box-shadow;
-    transition-duration: var(--transition-duration);
-    transition-timing-function: var(--transition-easing);
-  }
-
-  [data-slot="checkbox-checkbox-indicator"] {
-    transition-property: opacity;
-    transition-duration: var(--transition-duration);
-    transition-timing-function: var(--transition-easing);
-  }
-
   [data-slot="checkbox-checkbox-input"] {
     position: absolute;
     width: 1px;
