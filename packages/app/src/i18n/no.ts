@@ -73,6 +73,7 @@ export const dict = {
   "command.model.variant.cycle.description": "Bytt til neste innsatsnivå",
   "command.permissions.autoaccept.enable": "Godta endringer automatisk",
   "command.permissions.autoaccept.disable": "Slutt å godta endringer automatisk",
+  "command.workspace.toggle": "Veksle arbeidsområder",
   "command.session.undo": "Angre",
   "command.session.undo.description": "Angre siste melding",
   "command.session.redo": "Gjør om",
@@ -350,6 +351,11 @@ export const dict = {
   "toast.permissions.autoaccept.on.description": "Redigerings- og skrivetillatelser vil bli godkjent automatisk",
   "toast.permissions.autoaccept.off.title": "Sluttet å godta endringer automatisk",
   "toast.permissions.autoaccept.off.description": "Redigerings- og skrivetillatelser vil kreve godkjenning",
+
+  "toast.workspace.enabled.title": "Arbeidsområder aktivert",
+  "toast.workspace.enabled.description": "Flere worktrees vises nå i sidefeltet",
+  "toast.workspace.disabled.title": "Arbeidsområder deaktivert",
+  "toast.workspace.disabled.description": "Kun hoved-worktree vises i sidefeltet",
 
   "toast.model.none.title": "Ingen modell valgt",
   "toast.model.none.description": "Koble til en leverandør for å oppsummere denne sesjonen",

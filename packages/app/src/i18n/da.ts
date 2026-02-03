@@ -70,6 +70,7 @@ export const dict = {
   "command.model.variant.cycle.description": "Skift til næste indsatsniveau",
   "command.permissions.autoaccept.enable": "Accepter ændringer automatisk",
   "command.permissions.autoaccept.disable": "Stop automatisk accept af ændringer",
+  "command.workspace.toggle": "Skift arbejdsområder",
   "command.session.undo": "Fortryd",
   "command.session.undo.description": "Fortryd den sidste besked",
   "command.session.redo": "Omgør",
@@ -348,6 +349,11 @@ export const dict = {
   "toast.permissions.autoaccept.on.description": "Redigerings- og skrivetilladelser vil automatisk blive godkendt",
   "toast.permissions.autoaccept.off.title": "Stoppede automatisk accept af ændringer",
   "toast.permissions.autoaccept.off.description": "Redigerings- og skrivetilladelser vil kræve godkendelse",
+
+  "toast.workspace.enabled.title": "Arbejdsområder aktiveret",
+  "toast.workspace.enabled.description": "Flere worktrees vises nu i sidepanelet",
+  "toast.workspace.disabled.title": "Arbejdsområder deaktiveret",
+  "toast.workspace.disabled.description": "Kun hoved-worktree vises i sidepanelet",
 
   "toast.model.none.title": "Ingen model valgt",
   "toast.model.none.description": "Forbind en udbyder for at opsummere denne session",

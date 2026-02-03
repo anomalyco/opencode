@@ -70,6 +70,7 @@ export const dict = {
   "command.model.variant.cycle.description": "สลับไปยังระดับความพยายามถัดไป",
   "command.permissions.autoaccept.enable": "ยอมรับการแก้ไขโดยอัตโนมัติ",
   "command.permissions.autoaccept.disable": "หยุดยอมรับการแก้ไขโดยอัตโนมัติ",
+  "command.workspace.toggle": "สลับพื้นที่ทำงาน",
   "command.session.undo": "ยกเลิก",
   "command.session.undo.description": "ยกเลิกข้อความล่าสุด",
   "command.session.redo": "ทำซ้ำ",
@@ -349,9 +350,14 @@ export const dict = {
   "toast.scheme.title": "โทนสี",
 
   "toast.permissions.autoaccept.on.title": "กำลังยอมรับการแก้ไขโดยอัตโนมัติ",
-  "toast.permissions.autoaccept.on.description": "สิทธิ์การแก้ไขและเขียนจะได้รับการอนุมัติโดยอัตโนมัติ",
+  "toast.permissions.autoaccept.on.description": "สิทธิ์การแก้ไขและจะได้รับเขียนการอนุมัติโดยอัตโนมัติ",
   "toast.permissions.autoaccept.off.title": "หยุดยอมรับการแก้ไขโดยอัตโนมัติ",
   "toast.permissions.autoaccept.off.description": "สิทธิ์การแก้ไขและเขียนจะต้องได้รับการอนุมัติ",
+
+  "toast.workspace.enabled.title": "เปิดใช้งานพื้นที่ทำงานแล้ว",
+  "toast.workspace.enabled.description": "ตอนนี้จะแสดง worktree หลายรายการในแถบด้านข้าง",
+  "toast.workspace.disabled.title": "ปิดใช้งานพื้นที่ทำงานแล้ว",
+  "toast.workspace.disabled.description": "จะแสดงเฉพาะ worktree หลักในแถบด้านข้าง",
 
   "toast.model.none.title": "ไม่ได้เลือกโมเดล",
   "toast.model.none.description": "เชื่อมต่อผู้ให้บริการเพื่อสรุปเซสชันนี้",
