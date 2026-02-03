@@ -413,6 +413,20 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       bootstrap()
     })
 
+    function reset() {
+      batch(() => {
+        setStore("message", {})
+        setStore("part", {})
+        setStore("permission", {})
+        setStore("question", {})
+        setStore("todo", {})
+        setStore("session_diff", {})
+        setStore("session_status", {})
+        setStore("status", "loading")
+      })
+      fullSyncedSessions.clear()
+    }
+
     const fullSyncedSessions = new Set<string>()
     const result = {
       data: store,
@@ -463,6 +477,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           fullSyncedSessions.add(sessionID)
         },
       },
+      reset,
       bootstrap,
     }
     return result
