@@ -7,9 +7,7 @@ import { ZenData } from "@opencode-ai/console-core/model.js"
 export function createRateLimiter(limit: ZenData.RateLimit | undefined, rawIp: string, headers: Headers) {
   if (!limit) return
 
-  const limitValue = (limit.checkHeader && !headers.get(limit.checkHeader))
-    ? limit.fallbackValue!
-    : limit.value
+  const limitValue = limit.checkHeader && !headers.get(limit.checkHeader) ? limit.fallbackValue! : limit.value
 
   const ip = !rawIp.length ? "unknown" : rawIp
   const now = Date.now()
