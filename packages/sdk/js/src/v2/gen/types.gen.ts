@@ -1090,6 +1090,14 @@ export type KeybindsConfig = {
    */
   tool_details?: string
   /**
+   * Expand/collapse all tool outputs
+   */
+  tool_output_expand_all?: string
+  /**
+   * Expand/collapse last tool output
+   */
+  tool_output_expand_last?: string
+  /**
    * List available models
    */
   model_list?: string

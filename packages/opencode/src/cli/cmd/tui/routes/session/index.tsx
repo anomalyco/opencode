@@ -100,6 +100,12 @@ const context = createContext<{
   showDetails: () => boolean
   diffWrapMode: () => "word" | "none"
   sync: ReturnType<typeof useSync>
+  expandAllToolOutputs: () => boolean
+  lastExpandablePartId: () => string | undefined
+  setLastExpandablePartId: (id: string) => void
+  expandedParts: () => Set<string>
+  togglePartExpanded: (partId: string) => void
+  isPartExpanded: (partId: string) => boolean
 }>()
 
 function use() {
@@ -151,6 +157,22 @@ export function Session() {
   const [showScrollbar, setShowScrollbar] = kv.signal("scrollbar_visible", false)
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [animationsEnabled, setAnimationsEnabled] = kv.signal("animations_enabled", true)
+
+  // Tool output expansion state
+  const [expandAllToolOutputs, setExpandAllToolOutputs] = createSignal(false)
+  const [lastExpandablePartId, setLastExpandablePartId] = createSignal<string | undefined>()
+  const [expandedParts, setExpandedParts] = createSignal<Set<string>>(new Set())
+
+  const togglePartExpanded = (partId: string) => {
+    setExpandedParts((prev) => {
+      const next = new Set(prev)
+      if (next.has(partId)) next.delete(partId)
+      else next.add(partId)
+      return next
+    })
+  }
+
+  const isPartExpanded = (partId: string) => expandedParts().has(partId)
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
@@ -578,6 +600,30 @@ export function Session() {
       },
     },
     {
+      title: expandAllToolOutputs() ? "Collapse all tool outputs" : "Expand all tool outputs",
+      value: "session.tool_output.expand_all",
+      keybind: "tool_output_expand_all",
+      category: "Session",
+      onSelect: (dialog) => {
+        setExpandAllToolOutputs((prev) => !prev)
+        dialog.clear()
+      },
+    },
+    {
+      title: "Expand/collapse last tool output",
+      value: "session.tool_output.expand_last",
+      keybind: "tool_output_expand_last",
+      category: "Session",
+      enabled: !!lastExpandablePartId(),
+      onSelect: (dialog) => {
+        const partId = lastExpandablePartId()
+        if (partId && !expandAllToolOutputs()) {
+          togglePartExpanded(partId)
+        }
+        dialog.clear()
+      },
+    },
+    {
       title: "Page up",
       value: "session.page.up",
       keybind: "messages_page_up",
@@ -953,6 +999,12 @@ export function Session() {
         showDetails,
         diffWrapMode,
         sync,
+        expandAllToolOutputs,
+        lastExpandablePartId,
+        setLastExpandablePartId,
+        expandedParts,
+        togglePartExpanded,
+        isPartExpanded,
       }}
     >
       <box flexDirection="row">
@@ -1625,15 +1677,33 @@ function BlockTool(props: {
 function Bash(props: ToolProps<typeof BashTool>) {
   const { theme } = useTheme()
   const sync = useSync()
+  const ctx = use()
+  const keybind = useKeybind()
   const isRunning = createMemo(() => props.part.state.status === "running")
   const output = createMemo(() => stripAnsi(props.metadata.output?.trim() ?? ""))
-  const [expanded, setExpanded] = createSignal(false)
   const lines = createMemo(() => output().split("\n"))
   const overflow = createMemo(() => lines().length > 10)
+
+  // Register as last expandable when this tool has overflow
+  createEffect(() => {
+    if (overflow() && props.part?.id) {
+      ctx.setLastExpandablePartId(props.part.id)
+    }
+  })
+
+  // Expanded if: global expand all is on OR this specific part is expanded
+  const expanded = createMemo(() => ctx.expandAllToolOutputs() || ctx.isPartExpanded(props.part?.id ?? ""))
+
   const limited = createMemo(() => {
     if (expanded() || !overflow()) return output()
     return [...lines().slice(0, 10), "…"].join("\n")
   })
+
+  const handleToggle = () => {
+    if (props.part?.id && !ctx.expandAllToolOutputs()) {
+      ctx.togglePartExpanded(props.part.id)
+    }
+  }
 
   const workdirDisplay = createMemo(() => {
     const workdir = props.input.workdir
@@ -1660,6 +1730,13 @@ function Bash(props: ToolProps<typeof BashTool>) {
     return `# ${desc} in ${wd}`
   })
 
+  // Generate hint text with keybind
+  const expandHint = createMemo(() => {
+    const key = keybind.print("tool_output_expand_last")
+    const keyHint = key !== "none" ? ` (${key})` : ""
+    return expanded() ? `Click to collapse${keyHint}` : `Click to expand${keyHint}`
+  })
+
   return (
     <Switch>
       <Match when={props.metadata.output !== undefined}>
@@ -1667,7 +1744,7 @@ function Bash(props: ToolProps<typeof BashTool>) {
           title={title()}
           part={props.part}
           spinner={isRunning()}
-          onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
+          onClick={overflow() ? handleToggle : undefined}
         >
           <box gap={1}>
             <text fg={theme.text}>$ {props.input.command}</text>
@@ -1675,7 +1752,7 @@ function Bash(props: ToolProps<typeof BashTool>) {
               <text fg={theme.text}>{limited()}</text>
             </Show>
             <Show when={overflow()}>
-              <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
+              <text fg={theme.textMuted}>{expandHint()}</text>
             </Show>
           </box>
         </BlockTool>
