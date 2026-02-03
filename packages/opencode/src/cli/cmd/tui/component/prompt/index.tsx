@@ -74,6 +74,10 @@ export function Prompt(props: PromptProps) {
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
   const kv = useKV()
+  const [modelHover, setModelHover] = createSignal(false)
+  const [agentHover, setAgentHover] = createSignal(false)
+  const [commandHover, setCommandHover] = createSignal(false)
+  const [titleHover, setTitleHover] = createSignal(false)
 
   function promptModelWarning() {
     toast.show({
@@ -974,11 +978,29 @@ export function Prompt(props: PromptProps) {
               syntaxStyle={syntax()}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
-              <text fg={highlight()}>
-                {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
-              </text>
+              <box
+                onMouseOver={() => setTitleHover(true)}
+                onMouseOut={() => setTitleHover(false)}
+                onMouseUp={() => command.trigger("agent.list")}
+                backgroundColor={titleHover() ? theme.backgroundPanel : undefined}
+                paddingLeft={1}
+                paddingRight={1}
+              >
+                <text fg={highlight()}>
+                  {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
+                </text>
+              </box>
               <Show when={store.mode === "normal"}>
-                <box flexDirection="row" gap={1}>
+                <box
+                  flexDirection="row"
+                  gap={1}
+                  onMouseOver={() => setModelHover(true)}
+                  onMouseOut={() => setModelHover(false)}
+                  onMouseUp={() => command.trigger("model.list")}
+                  backgroundColor={modelHover() ? theme.backgroundPanel : undefined}
+                  paddingLeft={1}
+                  paddingRight={1}
+                >
                   <text flexShrink={0} fg={keybind.leader ? theme.textMuted : theme.text}>
                     {local.model.parsed().model}
                   </text>
@@ -1110,12 +1132,32 @@ export function Prompt(props: PromptProps) {
                       {keybind.print("variant_cycle")} <span style={{ fg: theme.textMuted }}>variants</span>
                     </text>
                   </Show>
-                  <text fg={theme.text}>
-                    {keybind.print("agent_cycle")} <span style={{ fg: theme.textMuted }}>agents</span>
-                  </text>
-                  <text fg={theme.text}>
-                    {keybind.print("command_list")} <span style={{ fg: theme.textMuted }}>commands</span>
-                  </text>
+                  <box
+                    onMouseOver={() => setAgentHover(true)}
+                    onMouseOut={() => setAgentHover(false)}
+                    onMouseUp={() => command.trigger("agent.cycle")}
+                    backgroundColor={agentHover() ? theme.backgroundElement : undefined}
+                    paddingLeft={1}
+                    paddingRight={1}
+                  >
+                    <text fg={agentHover() ? theme.primary : theme.text}>
+                      {keybind.print("agent_cycle")}{" "}
+                      <span style={{ fg: agentHover() ? theme.text : theme.textMuted }}>agents</span>
+                    </text>
+                  </box>
+                  <box
+                    onMouseOver={() => setCommandHover(true)}
+                    onMouseOut={() => setCommandHover(false)}
+                    onMouseUp={() => command.show()}
+                    backgroundColor={commandHover() ? theme.backgroundElement : undefined}
+                    paddingLeft={1}
+                    paddingRight={1}
+                  >
+                    <text fg={commandHover() ? theme.primary : theme.text}>
+                      {keybind.print("command_list")}{" "}
+                      <span style={{ fg: commandHover() ? theme.text : theme.textMuted }}>commands</span>
+                    </text>
+                  </box>
                 </Match>
                 <Match when={store.mode === "shell"}>
                   <text fg={theme.text}>
