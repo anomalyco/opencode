@@ -1,4 +1,4 @@
-import { createMemo, Show } from "solid-js"
+import { createMemo, Show, type JSX } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useTheme } from "@tui/context/theme"
@@ -15,6 +15,34 @@ export interface Comment {
 
 export type LineType = "add" | "remove" | "context" | "empty"
 export type CommentSide = "left" | "right" | "unified"
+export type CommentInputState = {
+  line: number
+  side: CommentSide
+  lineType: LineType
+  anchor?: string
+}
+
+type SlotOptions = {
+  view: "split" | "unified"
+  input: CommentInputState | null
+  comments: Map<string, Comment>
+  focused: string | null
+  onSubmit: (line: number, side: CommentSide, text: string) => void
+  onCancel: () => void
+  onEdit: (key: string) => void
+  onDelete: (key: string) => void
+  onFocus: (key: string) => void
+}
+
+type Entry = {
+  left?: Comment
+  right?: Comment
+  unified?: Comment
+}
+
+export function makeKey(anchor: string, side: CommentSide): string {
+  return `${anchor}-${side}`
+}
 
 function getBorderColor(theme: ReturnType<typeof useTheme>["theme"], lineType: LineType | undefined) {
   switch (lineType) {
@@ -44,21 +72,26 @@ export function CommentInput(props: CommentInputProps) {
 
   useKeyboard((evt) => {
     if (!props.focused) return
-
-    if (evt.name === "escape") {
-      evt.preventDefault()
-      input?.blur()
-      props.onCancel()
-      return
-    }
-    if (evt.name === "return") {
-      evt.preventDefault()
-      const text = input?.plainText ?? ""
-      input?.blur()
-      if (text.trim()) {
-        props.onSubmit(props.line, text)
-      } else {
+    switch (evt.name) {
+      case "escape":
+        evt.preventDefault()
+        input?.blur()
         props.onCancel()
+        return
+
+      case "return": {
+        evt.preventDefault()
+        const text = input?.plainText?.trim()
+
+        input?.blur()
+
+        if (text) {
+          props.onSubmit(props.line, text)
+          return
+        }
+
+        props.onCancel()
+        return
       }
     }
   })
@@ -117,6 +150,7 @@ export function CommentDisplay(props: CommentDisplayProps) {
       props.onEdit()
       return
     }
+
     if (evt.name === "d") {
       evt.preventDefault()
       props.onDelete()
@@ -153,4 +187,204 @@ export function CommentDisplay(props: CommentDisplayProps) {
       </Show>
     </box>
   )
+}
+
+function SplitInput(props: {
+  input: CommentInputState
+  onSubmit: (line: number, side: CommentSide, text: string) => void
+  onCancel: () => void
+}) {
+  return (
+    <box flexDirection="row" width="100%">
+      {props.input.side === "left" ? (
+        <>
+          <box width="50%">
+            <CommentInput
+              line={props.input.line}
+              focused={true}
+              lineType={props.input.lineType}
+              onSubmit={(line, text) => props.onSubmit(line, props.input.side, text)}
+              onCancel={props.onCancel}
+            />
+          </box>
+          <box width="50%" />
+        </>
+      ) : (
+        <>
+          <box width="50%" />
+          <box width="50%">
+            <CommentInput
+              line={props.input.line}
+              focused={true}
+              lineType={props.input.lineType}
+              onSubmit={(line, text) => props.onSubmit(line, props.input.side, text)}
+              onCancel={props.onCancel}
+            />
+          </box>
+        </>
+      )}
+    </box>
+  )
+}
+
+function UnifiedInput(props: {
+  input: CommentInputState
+  onSubmit: (line: number, side: CommentSide, text: string) => void
+  onCancel: () => void
+}) {
+  return (
+    <CommentInput
+      line={props.input.line}
+      focused={true}
+      lineType={props.input.lineType}
+      onSubmit={(line, text) => props.onSubmit(line, "unified", text)}
+      onCancel={props.onCancel}
+    />
+  )
+}
+
+function SplitComments(props: {
+  line: number
+  entry: Entry
+  focused: string | null
+  onEdit: (key: string) => void
+  onDelete: (key: string) => void
+  onFocus: (key: string) => void
+}) {
+  return (
+    <box flexDirection="row" width="100%">
+      <box width="50%">
+        {props.entry.left
+          ? (() => {
+              const key = makeKey(props.entry.left.anchor ?? `v:${props.line}`, "left")
+              return (
+                <CommentDisplay
+                  comment={props.entry.left}
+                  focused={props.focused === key}
+                  onEdit={() => props.onEdit(key)}
+                  onDelete={() => props.onDelete(key)}
+                  onFocus={() => props.onFocus(key)}
+                />
+              )
+            })()
+          : null}
+      </box>
+      <box width="50%">
+        {props.entry.right
+          ? (() => {
+              const key = makeKey(props.entry.right.anchor ?? `v:${props.line}`, "right")
+              return (
+                <CommentDisplay
+                  comment={props.entry.right}
+                  focused={props.focused === key}
+                  onEdit={() => props.onEdit(key)}
+                  onDelete={() => props.onDelete(key)}
+                  onFocus={() => props.onFocus(key)}
+                />
+              )
+            })()
+          : null}
+      </box>
+    </box>
+  )
+}
+
+export function commentSlots(opts: SlotOptions): Map<number, JSX.Element> {
+  const slots = new Map<number, JSX.Element>()
+
+  // input slot
+  if (opts.input) {
+    const split = opts.view === "split" && opts.input.side !== "unified"
+
+    slots.set(
+      opts.input.line,
+      split ? (
+        <SplitInput input={opts.input} onSubmit={opts.onSubmit} onCancel={opts.onCancel} />
+      ) : (
+        <UnifiedInput input={opts.input} onSubmit={opts.onSubmit} onCancel={opts.onCancel} />
+      ),
+    )
+  }
+
+  if (opts.comments.size === 0) return slots
+
+  // group comments by line
+  const lines = new Map<number, Entry>()
+
+  for (const [key, comment] of opts.comments) {
+    const line = comment.lineIndex
+    const entry = lines.get(line) ?? (lines.set(line, {}), lines.get(line)!)
+
+    const side = key.slice(key.lastIndexOf("-") + 1) as CommentSide
+
+    switch (side) {
+      case "left":
+        entry.left = comment
+        break
+      case "right":
+        entry.right = comment
+        break
+      default:
+        entry.unified = comment
+    }
+  }
+
+  // render comment slots
+  if (opts.view === "split") {
+    for (const [line, entry] of lines) {
+      if (slots.has(line)) continue
+
+      if (entry.unified) {
+        const key = makeKey(entry.unified.anchor ?? `v:${line}`, "unified")
+        slots.set(
+          line,
+          <CommentDisplay
+            comment={entry.unified}
+            focused={opts.focused === key}
+            onEdit={() => opts.onEdit(key)}
+            onDelete={() => opts.onDelete(key)}
+            onFocus={() => opts.onFocus(key)}
+          />,
+        )
+        continue
+      }
+
+      slots.set(
+        line,
+        <SplitComments
+          line={line}
+          entry={entry}
+          focused={opts.focused}
+          onEdit={opts.onEdit}
+          onDelete={opts.onDelete}
+          onFocus={opts.onFocus}
+        />,
+      )
+    }
+
+    return slots
+  }
+
+  for (const [line, entry] of lines) {
+    if (slots.has(line)) continue
+
+    const comment = entry.unified ?? entry.right ?? entry.left
+    if (!comment) continue
+
+    const side = entry.unified ? "unified" : entry.right ? "right" : "left"
+    const key = makeKey(comment.anchor ?? `v:${line}`, side)
+
+    slots.set(
+      line,
+      <CommentDisplay
+        comment={comment}
+        focused={opts.focused === key}
+        onEdit={() => opts.onEdit(key)}
+        onDelete={() => opts.onDelete(key)}
+        onFocus={() => opts.onFocus(key)}
+      />,
+    )
+  }
+
+  return slots
 }

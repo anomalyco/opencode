@@ -4,34 +4,6 @@ import { useKeyboard } from "@opentui/solid"
 import type { Snapshot } from "@/snapshot"
 import path from "path"
 
-type GroupedFiles = {
-  directory: string
-  files: { file: Snapshot.FileDiff; index: number; name: string }[]
-}
-
-function truncateDirectory(dir: string, maxSegments = 3): string {
-  const segments = dir.split("/").filter(Boolean)
-  if (segments.length <= maxSegments) return dir
-  return "…/" + segments.slice(-maxSegments).join("/")
-}
-
-function groupFilesByDirectory(files: Snapshot.FileDiff[]): GroupedFiles[] {
-  const groups = new Map<string, { file: Snapshot.FileDiff; index: number; name: string }[]>()
-
-  files.forEach((file, index) => {
-    const dir = path.dirname(file.file)
-    const name = path.basename(file.file)
-    if (!groups.has(dir)) {
-      groups.set(dir, [])
-    }
-    groups.get(dir)!.push({ file, index, name })
-  })
-
-  return Array.from(groups.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([directory, files]) => ({ directory: truncateDirectory(directory), files }))
-}
-
 export function FileList(props: {
   files: Snapshot.FileDiff[]
   selected: number
@@ -47,11 +19,13 @@ export function FileList(props: {
   useKeyboard((evt) => {
     if (!props.focused) return
 
-    if ((evt.name === "j" || evt.name === "down") && props.selected < props.files.length - 1) {
-      props.onSelect(props.selected + 1)
+    if (evt.name === "j" || evt.name === "down") {
+      if (props.files.length === 0) return
+      props.onSelect(props.selected === props.files.length - 1 ? 0 : props.selected + 1)
     }
-    if ((evt.name === "k" || evt.name === "up") && props.selected > 0) {
-      props.onSelect(props.selected - 1)
+    if (evt.name === "k" || evt.name === "up") {
+      if (props.files.length === 0) return
+      props.onSelect(props.selected === 0 ? props.files.length - 1 : props.selected - 1)
     }
     if (evt.name === "return") {
       props.onSwitch?.()
@@ -104,4 +78,46 @@ export function FileList(props: {
       </scrollbox>
     </box>
   )
+}
+
+export function order(files: Snapshot.FileDiff[]) {
+  const items = files.map((file, index) => ({
+    file,
+    index,
+    dir: path.dirname(file.file),
+  }))
+  return items
+    .sort((a, b) => {
+      if (a.dir === b.dir) return a.index - b.index
+      return a.dir.localeCompare(b.dir)
+    })
+    .map((item) => item.file)
+}
+
+type GroupedFiles = {
+  directory: string
+  files: { file: Snapshot.FileDiff; index: number; name: string }[]
+}
+
+function truncateDirectory(dir: string, maxSegments = 3): string {
+  const segments = dir.split("/").filter(Boolean)
+  if (segments.length <= maxSegments) return dir
+  return "…/" + segments.slice(-maxSegments).join("/")
+}
+
+function groupFilesByDirectory(files: Snapshot.FileDiff[]): GroupedFiles[] {
+  const groups = new Map<string, { file: Snapshot.FileDiff; index: number; name: string }[]>()
+
+  files.forEach((file, index) => {
+    const dir = path.dirname(file.file)
+    const name = path.basename(file.file)
+    if (!groups.has(dir)) {
+      groups.set(dir, [])
+    }
+    groups.get(dir)!.push({ file, index, name })
+  })
+
+  return Array.from(groups.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([directory, files]) => ({ directory: truncateDirectory(directory), files }))
 }
