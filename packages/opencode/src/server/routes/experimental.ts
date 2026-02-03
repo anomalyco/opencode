@@ -74,8 +74,8 @@ export const ExperimentalRoutes = lazy(() =>
         }),
       ),
       async (c) => {
-        const { provider } = c.req.valid("query")
-        const tools = await ToolRegistry.tools(provider)
+        const { provider, model } = c.req.valid("query")
+        const tools = await ToolRegistry.tools({ providerID: provider, modelID: model })
         return c.json(
           tools.map((t) => ({
             id: t.id,
@@ -90,7 +90,7 @@ export const ExperimentalRoutes = lazy(() =>
       "/worktree",
       describeRoute({
         summary: "Create worktree",
-        description: "Create a new git worktree for the current project.",
+        description: "Create a new git worktree for the current project and run any configured startup scripts.",
         operationId: "worktree.create",
         responses: {
           200: {
@@ -131,6 +131,57 @@ export const ExperimentalRoutes = lazy(() =>
       async (c) => {
         const sandboxes = await Project.sandboxes(Instance.project.id)
         return c.json(sandboxes)
+      },
+    )
+    .delete(
+      "/worktree",
+      describeRoute({
+        summary: "Remove worktree",
+        description: "Remove a git worktree and delete its branch.",
+        operationId: "worktree.remove",
+        responses: {
+          200: {
+            description: "Worktree removed",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", Worktree.remove.schema),
+      async (c) => {
+        const body = c.req.valid("json")
+        await Worktree.remove(body)
+        await Project.removeSandbox(Instance.project.id, body.directory)
+        return c.json(true)
+      },
+    )
+    .post(
+      "/worktree/reset",
+      describeRoute({
+        summary: "Reset worktree",
+        description: "Reset a worktree branch to the primary default branch.",
+        operationId: "worktree.reset",
+        responses: {
+          200: {
+            description: "Worktree reset",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", Worktree.reset.schema),
+      async (c) => {
+        const body = c.req.valid("json")
+        await Worktree.reset(body)
+        return c.json(true)
       },
     )
     .get(

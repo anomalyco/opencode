@@ -56,15 +56,21 @@ export const WebFetchTool = Tool.define("webfetch", {
           "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
     }
 
-    const response = await fetch(params.url, {
-      signal: AbortSignal.any([controller.signal, ctx.abort]),
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
-        Accept: acceptHeader,
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-    })
+    const signal = AbortSignal.any([controller.signal, ctx.abort])
+    const headers = {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+      Accept: acceptHeader,
+      "Accept-Language": "en-US,en;q=0.9",
+    }
+
+    const initial = await fetch(params.url, { signal, headers })
+
+    // Retry with honest UA if blocked by Cloudflare bot detection (TLS fingerprint mismatch)
+    const response =
+      initial.status === 403 && initial.headers.get("cf-mitigated") === "challenge"
+        ? await fetch(params.url, { signal, headers: { ...headers, "User-Agent": "opencode" } })
+        : initial
 
     clearTimeout(timeoutId)
 

@@ -56,7 +56,7 @@ export const ProjectRoutes = lazy(() =>
       "/:projectID",
       describeRoute({
         summary: "Update project",
-        description: "Update project properties such as name, icon and color.",
+        description: "Update project properties such as name, icon, and commands.",
         operationId: "project.update",
         responses: {
           200: {
