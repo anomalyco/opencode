@@ -105,6 +105,15 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       document.documentElement.style.setProperty("--font-size-base", `${fontSize}px`)
     })
 
+    createEffect(() => {
+      if (typeof document === "undefined") return
+      const width = store.appearance?.contentWidth ?? defaultSettings.appearance.contentWidth
+      // Apply 0.8 scaling factor to reduce default width (1200px -> 960px)
+      const effectiveWidth = width * 0.8
+      // Convert to rem units (width units are in 0.25rem spacing scale)
+      document.documentElement.style.setProperty("--session-content-width", `${effectiveWidth * 0.25}rem`)
+    })
+
     return {
       ready,
       get current() {

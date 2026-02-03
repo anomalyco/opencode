@@ -243,18 +243,6 @@ export default function Page() {
   const comments = useComments()
   const permission = usePermission()
 
-  // Dynamic content width class based on user settings
-  const contentWidthClasses = createMemo(() => {
-    const width = settings.appearance.contentWidth()
-    return `md:max-w-${width} md:mx-auto 3xl:max-w-[1200px] 3xl:mx-auto 4xl:max-w-[1600px] 4xl:mx-auto 5xl:max-w-[1900px] 5xl:mx-auto`
-  })
-
-  // Content width classes without mx-auto (for message containers)
-  const contentWidthClassesNoCenter = createMemo(() => {
-    const width = settings.appearance.contentWidth()
-    return `md:max-w-${width} 3xl:max-w-[1200px] 4xl:max-w-[1600px] 5xl:max-w-[1900px]`
-  })
-
   const request = createMemo(() => {
     const sessionID = params.id
     if (!sessionID) return
@@ -339,6 +327,19 @@ export default function Page() {
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const centered = createMemo(() => isDesktop() && !layout.fileTree.opened())
+
+  // Content width using CSS variable (decoupled from centering logic)
+  const contentWidthClasses = createMemo(() => {
+    // Always apply max-width constraint; only toggle centering based on centered()
+    return centered()
+      ? "md:max-w-[var(--session-content-width)] md:mx-auto w-full"
+      : "md:max-w-[var(--session-content-width)] w-full"
+  })
+
+  // Content width classes without mx-auto (for message containers)
+  const contentWidthClassesNoCenter = createMemo(() => {
+    return "md:max-w-[var(--session-content-width)]"
+  })
 
   function normalizeTab(tab: string) {
     if (!tab.startsWith("file://")) return tab
