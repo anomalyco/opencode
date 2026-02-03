@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "version": "1.1.39",
-  "name": "opencode",
+  "name": "mammouth",
   "type": "module",
   "license": "MIT",
   "private": true,
@@ -18,7 +18,7 @@
     "deploy": "echo 'Deploying application...' && bun run build && echo 'Deployment completed successfully'"
   },
   "bin": {
-    "opencode": "./bin/opencode"
+    "mammouth": "./bin/mammouth"
   },
   "exports": {
     "./*": "./src/*.ts"

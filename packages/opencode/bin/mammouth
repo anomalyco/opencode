@@ -17,7 +17,7 @@ function run(target) {
   process.exit(code)
 }
 
-const envPath = process.env.OPENCODE_BIN_PATH
+const envPath = process.env.MAMMOUTH_BIN_PATH ?? process.env.OPENCODE_BIN_PATH
 if (envPath) {
   run(envPath)
 }
@@ -44,8 +44,8 @@ let arch = archMap[os.arch()]
 if (!arch) {
   arch = os.arch()
 }
-const base = "opencode-" + platform + "-" + arch
-const binary = platform === "windows" ? "opencode.exe" : "opencode"
+const base = "mammouth-" + platform + "-" + arch
+const binary = platform === "windows" ? "mammouth.exe" : "mammouth"
 
 function findBinary(startDir) {
   let current = startDir
