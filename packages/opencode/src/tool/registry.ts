@@ -31,6 +31,8 @@ import { ApplyPatchTool } from "./apply_patch"
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
 
+  const initializedCache = new Map<string, Awaited<ReturnType<Tool.Info["init"]>>>()
+
   export const state = Instance.state(async () => {
     const custom = [] as Tool.Info[]
     const glob = new Bun.Glob("{tool,tools}/*.{js,ts}")
@@ -134,15 +136,15 @@ export namespace ToolRegistry {
     agent?: Agent.Info,
   ) {
     const tools = await all()
+    const agentKey = agent?.name ?? "default"
+
     const result = await Promise.all(
       tools
         .filter((t) => {
-          // Enable websearch/codesearch for zen users OR via enable flag
           if (t.id === "codesearch" || t.id === "websearch") {
             return model.providerID === "opencode" || Flag.OPENCODE_ENABLE_EXA
           }
 
-          // use apply tool in same format as codex
           const usePatch =
             model.modelID.includes("gpt-") && !model.modelID.includes("oss") && !model.modelID.includes("gpt-4")
           if (t.id === "apply_patch") return usePatch
@@ -151,10 +153,18 @@ export namespace ToolRegistry {
           return true
         })
         .map(async (t) => {
-          using _ = log.time(t.id)
+          const cacheKey = `${t.id}:${agentKey}`
+          let initialized = initializedCache.get(cacheKey)
+
+          if (!initialized) {
+            using _ = log.time(t.id)
+            initialized = await t.init({ agent })
+            initializedCache.set(cacheKey, initialized)
+          }
+
           return {
             id: t.id,
-            ...(await t.init({ agent })),
+            ...initialized,
           }
         }),
     )
