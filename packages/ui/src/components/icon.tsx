@@ -80,16 +80,13 @@ const icons = {
 
 export interface IconProps extends ComponentProps<"svg"> {
   name: keyof typeof icons
-  size?: "small" | "normal" | "medium" | "large" | number
+  size?: "small" | "normal" | "medium" | "large"
 }
 
 export function Icon(props: IconProps) {
   const [local, others] = splitProps(props, ["name", "size", "class", "classList"])
   return (
-    <div
-      data-component="icon"
-      data-size={typeof local.size !== "number" ? local.size || "normal" : `size-[${local.size}px]`}
-    >
+    <div data-component="icon" data-size={local.size || "normal"}>
       <svg
         data-slot="icon-svg"
         classList={{

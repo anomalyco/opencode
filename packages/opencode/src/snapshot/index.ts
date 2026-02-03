@@ -188,6 +188,7 @@ export namespace Snapshot {
       after: z.string(),
       additions: z.number(),
       deletions: z.number(),
+      status: z.enum(["added", "deleted", "modified"]).optional(),
     })
     .meta({
       ref: "FileDiff",
@@ -196,6 +197,23 @@ export namespace Snapshot {
   export async function diffFull(from: string, to: string): Promise<FileDiff[]> {
     const git = gitdir()
     const result: FileDiff[] = []
+    const status = new Map<string, "added" | "deleted" | "modified">()
+
+    const statuses =
+      await $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --name-status --no-renames ${from} ${to} -- .`
+        .quiet()
+        .cwd(Instance.directory)
+        .nothrow()
+        .text()
+
+    for (const line of statuses.trim().split("\n")) {
+      if (!line) continue
+      const [code, file] = line.split("\t")
+      if (!code || !file) continue
+      const kind = code.startsWith("A") ? "added" : code.startsWith("D") ? "deleted" : "modified"
+      status.set(file, kind)
+    }
+
     for await (const line of $`git -c core.autocrlf=false -c core.quotepath=false --git-dir ${git} --work-tree ${Instance.worktree} diff --no-ext-diff --no-renames --numstat ${from} ${to} -- .`
       .quiet()
       .cwd(Instance.directory)
@@ -224,6 +242,7 @@ export namespace Snapshot {
         after,
         additions: Number.isFinite(added) ? added : 0,
         deletions: Number.isFinite(deleted) ? deleted : 0,
+        status: status.get(file) ?? "modified",
       })
     }
     return result
