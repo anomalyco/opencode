@@ -1,5 +1,7 @@
 # Lash Release Engineering
 
+> `bun run release`
+
 Lash uses a specialized release pipeline designed to exist alongside the upstream OpenCode project without modifying upstream source files. This ensures easier merges and cleaner separation of concerns.
 
 ## Release Scripts
