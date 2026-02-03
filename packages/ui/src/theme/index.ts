@@ -31,6 +31,7 @@ export { ThemeProvider, useTheme, type ColorScheme } from "./context"
 
 export {
   DEFAULT_THEMES,
+  // Original themes
   oc1Theme,
   tokyonightTheme,
   draculaTheme,
@@ -43,4 +44,29 @@ export {
   shadesOfPurpleTheme,
   nightowlTheme,
   vesperTheme,
+  carbonfoxTheme,
+  gruvboxTheme,
+  auraTheme,
+  // New themes from CLI conversion
+  catppuccinFrappeTheme,
+  catppuccinMacchiatoTheme,
+  cobalt2Theme,
+  cursorTheme,
+  everforestTheme,
+  flexokiTheme,
+  githubTheme,
+  kanagawaTheme,
+  lucentOrngTheme,
+  materialTheme,
+  matrixTheme,
+  mercuryTheme,
+  oneDarkTheme,
+  opencodeTheme,
+  orngTheme,
+  osakaJadeTheme,
+  palenightTheme,
+  rosepineTheme,
+  synthwave84Theme,
+  vercelTheme,
+  zenburnTheme,
 } from "./default-themes"

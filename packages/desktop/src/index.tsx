@@ -15,6 +15,7 @@ import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
 import { Store } from "@tauri-apps/plugin-store"
 import { Splash } from "@opencode-ai/ui/logo"
 import { createSignal, Show, Accessor, JSX, createResource, onMount, onCleanup } from "solid-js"
+import { invoke } from "@tauri-apps/api/core"
 
 import { UPDATER_ENABLED } from "./updater"
 import { createMenu } from "./menu"
