@@ -182,3 +182,57 @@ pub fn create_command(app: &tauri::AppHandle, args: &str) -> Command {
             .args(["-il", "-c", &cmd])
     };
 }
+
+/// Spawns the sidecar process on Linux with proper cleanup configuration.
+/// Uses pre_exec to set PR_SET_PDEATHSIG so the child dies when parent dies.
+#[cfg(target_os = "linux")]
+pub fn spawn_sidecar_linux(
+    app: &tauri::AppHandle,
+    hostname: &str,
+    port: u32,
+    password: &str,
+) -> std::io::Result<std::process::Child> {
+    use std::os::unix::process::CommandExt;
+    use std::process::Stdio;
+
+    let sidecar = get_sidecar_path(app);
+    let state_dir = app
+        .path()
+        .resolve("", BaseDirectory::AppLocalData)
+        .expect("Failed to resolve app local data dir");
+
+    let shell = get_user_shell();
+    let cmd = if shell.ends_with("/nu") {
+        format!(
+            "^\"{}\" serve --hostname {} --port {}",
+            sidecar.display(),
+            hostname,
+            port
+        )
+    } else {
+        format!(
+            "\"{}\" serve --hostname {} --port {}",
+            sidecar.display(),
+            hostname,
+            port
+        )
+    };
+
+    unsafe {
+        std::process::Command::new(&shell)
+            .args(["-il", "-c", &cmd])
+            .env("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY", "true")
+            .env("OPENCODE_EXPERIMENTAL_FILEWATCHER", "true")
+            .env("OPENCODE_CLIENT", "desktop")
+            .env("XDG_STATE_HOME", &state_dir)
+            .env("OPENCODE_SERVER_USERNAME", "opencode")
+            .env("OPENCODE_SERVER_PASSWORD", password)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .pre_exec(|| {
+                // This runs in the child process after fork but before exec
+                crate::process_group::configure_child_process()
+            })
+            .spawn()
+    }
+}

@@ -1,6 +1,8 @@
 mod cli;
 #[cfg(windows)]
 mod job_object;
+#[cfg(target_os = "linux")]
+mod process_group;
 mod markdown;
 mod window_customizer;
 
@@ -9,6 +11,8 @@ use futures::FutureExt;
 use futures::future;
 #[cfg(windows)]
 use job_object::*;
+#[cfg(target_os = "linux")]
+use process_group::ProcessGroupState;
 use std::{
     collections::VecDeque,
     net::TcpListener,
@@ -41,15 +45,44 @@ struct ServerReadyData {
     password: Option<String>,
 }
 
+/// Wrapper for child processes that works on all platforms.
+/// On Linux, we use std::process::Child with pre_exec for proper cleanup.
+/// On other platforms, we use Tauri's CommandChild.
+enum SidecarChild {
+    Tauri(CommandChild),
+    #[cfg(target_os = "linux")]
+    Native(std::process::Child),
+}
+
+impl SidecarChild {
+    fn pid(&self) -> u32 {
+        match self {
+            SidecarChild::Tauri(child) => child.pid(),
+            #[cfg(target_os = "linux")]
+            SidecarChild::Native(child) => child.id(),
+        }
+    }
+
+    fn kill(self) -> std::io::Result<()> {
+        match self {
+            SidecarChild::Tauri(child) => child.kill().map_err(|e| {
+                std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+            }),
+            #[cfg(target_os = "linux")]
+            SidecarChild::Native(mut child) => child.kill(),
+        }
+    }
+}
+
 #[derive(Clone)]
 struct ServerState {
-    child: Arc<Mutex<Option<CommandChild>>>,
+    child: Arc<Mutex<Option<SidecarChild>>>,
     status: future::Shared<oneshot::Receiver<Result<ServerReadyData, String>>>,
 }
 
 impl ServerState {
     pub fn new(
-        child: Option<CommandChild>,
+        child: Option<SidecarChild>,
         status: oneshot::Receiver<Result<ServerReadyData, String>>,
     ) -> Self {
         Self {
@@ -58,7 +91,7 @@ impl ServerState {
         }
     }
 
-    pub fn set_child(&self, child: Option<CommandChild>) {
+    pub fn set_child(&self, child: Option<SidecarChild>) {
         *self.child.lock().unwrap() = child;
     }
 }
@@ -76,7 +109,7 @@ fn kill_sidecar(app: AppHandle) {
         return;
     };
 
-    let Some(server_state) = server_state
+    let Some(mut child) = server_state
         .child
         .lock()
         .expect("Failed to acquire mutex lock")
@@ -86,7 +119,7 @@ fn kill_sidecar(app: AppHandle) {
         return;
     };
 
-    let _ = server_state.kill();
+    let _ = child.kill();
 
     println!("Killed server");
 }
@@ -215,6 +248,65 @@ fn spawn_sidecar(app: &AppHandle, hostname: &str, port: u32, password: &str) -> 
     child
 }
 
+/// Linux-specific sidecar spawn that uses pre_exec to set PR_SET_PDEATHSIG.
+/// This ensures child processes are killed when the parent dies, even on crash.
+#[cfg(target_os = "linux")]
+fn spawn_sidecar_linux(
+    app: &AppHandle,
+    hostname: &str,
+    port: u32,
+    password: &str,
+) -> Result<std::process::Child, String> {
+    use std::io::{BufRead, BufReader};
+
+    let log_state = app.state::<LogState>();
+
+    println!("spawning sidecar on port {port} (Linux with PR_SET_PDEATHSIG)");
+
+    let mut child = cli::spawn_sidecar_linux(app, hostname, port, password)
+        .map_err(|e| format!("Failed to spawn sidecar: {}", e))?;
+
+    // Handle stdout in a separate thread
+    if let Some(stdout) = child.stdout.take() {
+        let log_state_clone = log_state.inner().clone();
+        std::thread::spawn(move || {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    print!("{line}\n");
+                    if let Ok(mut logs) = log_state_clone.0.lock() {
+                        logs.push_back(format!("[STDOUT] {}\n", line));
+                        while logs.len() > MAX_LOG_ENTRIES {
+                            logs.pop_front();
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Handle stderr in a separate thread
+    if let Some(stderr) = child.stderr.take() {
+        let log_state_clone = log_state.inner().clone();
+        std::thread::spawn(move || {
+            let reader = BufReader::new(stderr);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    eprint!("{line}\n");
+                    if let Ok(mut logs) = log_state_clone.0.lock() {
+                        logs.push_back(format!("[STDERR] {}\n", line));
+                        while logs.len() > MAX_LOG_ENTRIES {
+                            logs.pop_front();
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    Ok(child)
+}
+
 fn url_is_localhost(url: &reqwest::Url) -> bool {
     url.host_str().is_some_and(|host| {
         host.eq_ignore_ascii_case("localhost")
@@ -326,6 +418,9 @@ pub fn run() {
             #[cfg(windows)]
             app.manage(JobObjectState::new());
 
+            #[cfg(target_os = "linux")]
+            app.manage(ProcessGroupState::new());
+
             let primary_monitor = app.primary_monitor().ok().flatten();
             let size = primary_monitor
                 .map(|m| m.size().to_logical(m.scale_factor()))
@@ -401,6 +496,12 @@ pub fn run() {
                                 job_state.assign_pid(child.pid());
                             }
 
+                            #[cfg(target_os = "linux")]
+                            if let Some(child) = &child {
+                                let pg_state = app.state::<ProcessGroupState>();
+                                pg_state.add_pid(child.pid());
+                            }
+
                             app.state::<ServerState>().set_child(child);
 
                             Ok(url)
@@ -436,6 +537,11 @@ pub fn run() {
                 println!("Received Exit");
 
                 kill_sidecar(app.clone());
+
+                #[cfg(target_os = "linux")]
+                if let Some(pg_state) = app.try_state::<ProcessGroupState>() {
+                    pg_state.kill_all();
+                }
             }
         });
 }
@@ -476,7 +582,7 @@ fn get_server_url_from_config(config: &cli::Config) -> Option<String> {
 async fn setup_server_connection(
     app: &AppHandle,
     custom_url: Option<String>,
-) -> Result<(Option<CommandChild>, ServerReadyData), String> {
+) -> Result<(Option<SidecarChild>, ServerReadyData), String> {
     if let Some(url) = custom_url {
         loop {
             if check_server_health(&url, None).await {
@@ -542,14 +648,34 @@ async fn spawn_local_server(
     hostname: &str,
     port: u32,
     password: &str,
-) -> Result<CommandChild, String> {
-    let child = spawn_sidecar(app, hostname, port, password);
+) -> Result<SidecarChild, String> {
+    // On Linux, use native spawn with pre_exec for proper cleanup
+    #[cfg(target_os = "linux")]
+    let child = {
+        let native_child = spawn_sidecar_linux(app, hostname, port, password)?;
+        SidecarChild::Native(native_child)
+    };
+
+    // On other platforms, use Tauri's shell plugin
+    #[cfg(not(target_os = "linux"))]
+    let child = SidecarChild::Tauri(spawn_sidecar(app, hostname, port, password));
+
     let url = format!("http://{hostname}:{port}");
+    let pid = child.pid();
 
     let timestamp = Instant::now();
+    let mut child = Some(child);
     loop {
         if timestamp.elapsed() > Duration::from_secs(30) {
-            let _ = child.kill();
+            // Kill using the PID directly since we need to consume child for the error path
+            #[cfg(target_os = "linux")]
+            unsafe {
+                libc::kill(pid as i32, libc::SIGTERM);
+            }
+            #[cfg(not(target_os = "linux"))]
+            if let Some(c) = child.take() {
+                let _ = c.kill();
+            }
             break Err(format!(
                 "Failed to spawn OpenCode Server. Logs:\n{}",
                 get_logs(app.clone()).await.unwrap()
@@ -560,7 +686,7 @@ async fn spawn_local_server(
 
         if check_server_health(&url, Some(password)).await {
             println!("Server ready after {:?}", timestamp.elapsed());
-            break Ok(child);
+            break Ok(child.take().expect("child should exist"));
         }
     }
 }

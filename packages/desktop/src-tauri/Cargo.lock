@@ -3068,6 +3068,7 @@ dependencies = [
  "comrak",
  "futures",
  "gtk",
+ "libc",
  "listeners",
  "objc2 0.6.3",
  "objc2-web-kit",

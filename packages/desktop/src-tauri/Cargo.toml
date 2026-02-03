@@ -50,6 +50,7 @@ tauri-specta = { version = "=2.0.0-rc.21", features = ["derive", "typescript"] }
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18.2"
 webkit2gtk = "=2.0.2"
+libc = "0.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
