@@ -1,6 +1,7 @@
 import z from "zod"
 import { iife } from "@/util/iife"
 import { Log } from "@/util/log"
+import { OAUTH_DUMMY_KEY } from "@/auth"
 import { Provider } from "./provider"
 
 export namespace ProviderModelDetection {
@@ -47,7 +48,7 @@ export namespace ProviderModelDetection.OpenAICompatible {
     const fetchFn = provider.options["fetch"] ?? fetch
     const apiKey = provider.options["apiKey"] ?? provider.key ?? ""
     const headers = new Headers()
-    if (apiKey) headers.append("Authorization", `Bearer ${apiKey}`)
+    if (apiKey && apiKey !== OAUTH_DUMMY_KEY) headers.append("Authorization", `Bearer ${apiKey}`)
 
     const res = await fetchFn(`${baseURL}/models`, {
       headers,
