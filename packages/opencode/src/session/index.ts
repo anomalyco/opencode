@@ -332,7 +332,9 @@ export namespace Session {
   export async function* list() {
     const project = Instance.project
     for (const item of await Storage.list(["session", project.id])) {
-      yield Storage.read<Info>(item)
+      const session = await Storage.read<Info>(item).catch(() => undefined)
+      if (!session) continue
+      yield session
     }
   }
 
@@ -340,7 +342,8 @@ export namespace Session {
     const project = Instance.project
     const result = [] as Session.Info[]
     for (const item of await Storage.list(["session", project.id])) {
-      const session = await Storage.read<Info>(item)
+      const session = await Storage.read<Info>(item).catch(() => undefined)
+      if (!session) continue
       if (session.parentID !== parentID) continue
       result.push(session)
     }
