@@ -5,6 +5,36 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 12px;
+
+  /* Override font sizes for tool labels to scale with user settings */
+  [data-slot="basic-tool-tool-title"],
+  [data-slot="basic-tool-tool-subtitle"],
+  [data-slot="basic-tool-tool-arg"] {
+    font-size: 0.9em;
+  }
+
+  /* Override font sizes for task tools to scale with user settings */
+  [data-slot="task-tool-title"],
+  [data-slot="task-tool-subtitle"] {
+    font-size: 0.9em;
+  }
+
+  /* Override font sizes for loaded files to scale with user settings */
+  [data-component="tool-loaded-file"] {
+    font-size: 0.9em;
+  }
+
+  /* Override font sizes for apply patch file elements to scale with user settings */
+  [data-slot="apply-patch-file-action"],
+  [data-slot="apply-patch-file-path"],
+  [data-slot="apply-patch-deletion-count"] {
+    font-size: 0.9em;
+  }
+
+  /* Override font sizes for diagnostics to scale with user settings */
+  [data-slot="diagnostic"] {
+    font-size: 0.9em;
+  }
 }
 
 [data-component="user-message"] {
@@ -912,22 +942,11 @@
     min-height: 0;
   }
 
-  [data-slot="question-text"] {
-    font-family: var(--font-family-sans);
-    font-size: 14px;
-    font-weight: var(--font-weight-medium);
-    line-height: var(--line-height-large);
-    color: var(--text-strong);
-    padding: 0 10px;
-  }
-
-  [data-slot="question-hint"] {
-    font-family: var(--font-family-sans);
-    font-size: 13px;
-    font-weight: var(--font-weight-regular);
-    line-height: var(--line-height-large);
-    color: var(--text-weak);
-    padding: 0 10px;
+    [data-slot="question-text"] {
+      font-size: 16px;
+      color: var(--text-base);
+      line-height: 1.5;
+    }
   }
 
   [data-slot="question-options"] {
@@ -942,7 +961,102 @@
     scrollbar-width: none;
     -ms-overflow-style: none;
 
-    &::-webkit-scrollbar {
+    [data-slot="question-option"] {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+      padding: 8px 12px;
+      background-color: var(--surface-base);
+      border: 1px solid var(--border-weaker-base);
+      border-radius: 6px;
+      cursor: pointer;
+      text-align: left;
+      width: 100%;
+      transition:
+        background-color 0.15s,
+        border-color 0.15s;
+      position: relative;
+
+      &:hover {
+        background-color: var(--surface-base-hover);
+        border-color: var(--border-default);
+      }
+
+      &[data-picked="true"] {
+        [data-component="icon"] {
+          position: absolute;
+          right: 12px;
+          top: 50%;
+          transform: translateY(-50%);
+          color: var(--text-strong);
+        }
+      }
+
+      [data-slot="option-label"] {
+        font-size: 16px;
+        color: var(--text-base);
+        font-weight: 500;
+      }
+
+      [data-slot="option-description"] {
+        font-size: 14px;
+        color: var(--text-weak);
+      }
+    }
+
+    [data-slot="custom-input-form"] {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 8px 0;
+
+      [data-slot="custom-input"] {
+        width: 100%;
+        padding: 10px 14px;
+        font-size: 16px;
+        border: 2px solid var(--border-default);
+        border-radius: 6px;
+        background-color: rgba(60, 56, 54, 0.4);
+        color: var(--text-base);
+        outline: none;
+        font-family: var(--font-family-sans);
+        line-height: 1.5;
+        resize: vertical;
+        min-height: 80px;
+        transition: all 0.2s ease;
+
+        &:focus {
+          border-color: #d79921;
+          background-color: rgba(60, 56, 54, 0.6);
+          box-shadow: 0 0 0 3px rgba(215, 153, 33, 0.1);
+        }
+
+        &::placeholder {
+          color: var(--text-weak);
+        }
+      }
+
+      [data-slot="button-group"] {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+        align-items: center;
+
+        [data-component="button"] {
+          min-width: 80px;
+          height: 36px;
+        }
+      }
+    }
+  }
+
+  [data-slot="question-review"] {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+
+    [data-slot="review-title"] {
       display: none;
     }
   }

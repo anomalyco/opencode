@@ -1243,18 +1243,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-      if (event.altKey || event.ctrlKey || event.metaKey) return
-      const { collapsed } = getCaretState()
-      if (!collapsed) return
+      const hasModifier = event.ctrlKey || event.metaKey
+      if (!hasModifier) return
 
-      const cursorPosition = getCursorPosition(editorRef)
-      const textContent = prompt
-        .current()
-        .map((part) => ("content" in part ? part.content : ""))
-        .join("")
-      const direction = event.key === "ArrowUp" ? "up" : "down"
-      if (!canNavigateHistoryAtCursor(direction, textContent, cursorPosition, store.historyIndex >= 0)) return
-      if (navigateHistory(direction)) {
+      if (event.key === "ArrowUp") {
+        if (navigateHistory("up")) {
+          event.preventDefault()
+        }
+        return
+      }
+
+      if (navigateHistory("down")) {
         event.preventDefault()
       }
       return

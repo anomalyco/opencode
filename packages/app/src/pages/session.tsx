@@ -1786,16 +1786,204 @@ export default function Page() {
                       content = el
                       autoScroll.contentRef(el)
 
-                      const root = scroller
-                      if (root) scheduleScrollState(root)
-                    }}
-                    historyShift={historyLoader.shift()}
-                    userMessages={historyLoader.userMessages()}
-                    anchor={anchor}
-                    setRevealMessage={(fn) => {
-                      revealMessage = fn
-                    }}
-                  />
+                          if (!(nested instanceof HTMLElement)) {
+                            markScrollGesture(root)
+                            return
+                          }
+
+                          const max = nested.scrollHeight - nested.clientHeight
+                          if (max <= 1) {
+                            markScrollGesture(root)
+                            return
+                          }
+
+                          const delta =
+                            e.deltaMode === 1
+                              ? e.deltaY * 40
+                              : e.deltaMode === 2
+                                ? e.deltaY * root.clientHeight
+                                : e.deltaY
+                          if (!delta) return
+
+                          if (delta < 0) {
+                            if (nested.scrollTop + delta <= 0) markScrollGesture(root)
+                            return
+                          }
+
+                          const remaining = max - nested.scrollTop
+                          if (delta > remaining) markScrollGesture(root)
+                        }}
+                        onTouchStart={(e) => {
+                          touchGesture = e.touches[0]?.clientY
+                        }}
+                        onTouchMove={(e) => {
+                          const next = e.touches[0]?.clientY
+                          const prev = touchGesture
+                          touchGesture = next
+                          if (next === undefined || prev === undefined) return
+
+                          const delta = prev - next
+                          if (!delta) return
+
+                          const root = e.currentTarget
+                          const target = e.target instanceof Element ? e.target : undefined
+                          const nested = target?.closest("[data-scrollable]")
+                          if (!nested || nested === root) {
+                            markScrollGesture(root)
+                            return
+                          }
+
+                          if (!(nested instanceof HTMLElement)) {
+                            markScrollGesture(root)
+                            return
+                          }
+
+                          const max = nested.scrollHeight - nested.clientHeight
+                          if (max <= 1) {
+                            markScrollGesture(root)
+                            return
+                          }
+
+                          if (delta < 0) {
+                            if (nested.scrollTop + delta <= 0) markScrollGesture(root)
+                            return
+                          }
+
+                          const remaining = max - nested.scrollTop
+                          if (delta > remaining) markScrollGesture(root)
+                        }}
+                        onTouchEnd={() => {
+                          touchGesture = undefined
+                        }}
+                        onTouchCancel={() => {
+                          touchGesture = undefined
+                        }}
+                        onPointerDown={(e) => {
+                          if (e.target !== e.currentTarget) return
+                          markScrollGesture(e.currentTarget)
+                        }}
+                        onScroll={(e) => {
+                          if (!hasScrollGesture()) return
+                          autoScroll.handleScroll()
+                          markScrollGesture(e.currentTarget)
+                          if (isDesktop()) scheduleScrollSpy(e.currentTarget)
+                        }}
+                        onClick={autoScroll.handleInteraction}
+                        class="relative min-w-0 w-full h-full overflow-y-auto session-scroller"
+                        style={{ "--session-title-height": info()?.title || info()?.parentID ? "40px" : "0px" }}
+                      >
+                        <Show when={info()?.title || info()?.parentID}>
+                          <div
+                            classList={{
+                              "sticky top-0 z-30 bg-background-stronger": true,
+                              "w-full": true,
+                              "px-4 md:px-6": true,
+                              "md:max-w-300 md:mx-auto": centered(),
+                            }}
+                          >
+                            <div class="h-10 flex items-center gap-1">
+                              <Show when={info()?.parentID}>
+                                <IconButton
+                                  tabIndex={-1}
+                                  icon="arrow-left"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    navigate(`/${params.dir}/session/${info()?.parentID}`)
+                                  }}
+                                  aria-label={language.t("common.goBack")}
+                                />
+                              </Show>
+                              <Show when={info()?.title}>
+                                <h1 class="text-16-medium text-text-strong truncate">{info()?.title}</h1>
+                              </Show>
+                            </div>
+                          </div>
+                        </Show>
+
+                        <div
+                          ref={autoScroll.contentRef}
+                          role="log"
+                          class="flex flex-col gap-32 items-start justify-start pb-[calc(var(--prompt-height,8rem)+64px)] md:pb-[calc(var(--prompt-height,10rem)+64px)] transition-[margin]"
+                          classList={{
+                            "w-full": true,
+                            "md:max-w-300 md:mx-auto": centered(),
+                            "mt-0.5": centered(),
+                            "mt-0": !centered(),
+                          }}
+                        >
+                          <Show when={store.turnStart > 0}>
+                            <div class="w-full flex justify-center">
+                              <Button
+                                variant="ghost"
+                                size="large"
+                                class="text-12-medium opacity-50"
+                                onClick={() => setStore("turnStart", 0)}
+                              >
+                                {language.t("session.messages.renderEarlier")}
+                              </Button>
+                            </div>
+                          </Show>
+                          <Show when={historyMore()}>
+                            <div class="w-full flex justify-center">
+                              <Button
+                                variant="ghost"
+                                size="large"
+                                class="text-12-medium opacity-50"
+                                disabled={historyLoading()}
+                                onClick={() => {
+                                  const id = params.id
+                                  if (!id) return
+                                  setStore("turnStart", 0)
+                                  sync.session.history.loadMore(id)
+                                }}
+                              >
+                                {historyLoading()
+                                  ? language.t("session.messages.loadingEarlier")
+                                  : language.t("session.messages.loadEarlier")}
+                              </Button>
+                            </div>
+                          </Show>
+                          <For each={renderedUserMessages()}>
+                            {(message) => {
+                              if (import.meta.env.DEV) {
+                                onMount(() => {
+                                  const id = params.id
+                                  if (!id) return
+                                  navMark({ dir: params.dir, to: id, name: "session:first-turn-mounted" })
+                                })
+                              }
+
+                              return (
+                                <div
+                                  id={anchor(message.id)}
+                                  data-message-id={message.id}
+                                  classList={{
+                                    "min-w-0 w-full max-w-full": true,
+                                    "md:max-w-300": centered(),
+                                  }}
+                                >
+                                  <SessionTurn
+                                    sessionID={params.id!}
+                                    messageID={message.id}
+                                    lastUserMessageID={lastUserMessage()?.id}
+                                    stepsExpanded={store.expanded[message.id] ?? false}
+                                    onStepsExpandedToggle={() =>
+                                      setStore("expanded", message.id, (open: boolean | undefined) => !open)
+                                    }
+                                    classes={{
+                                      root: "min-w-0 w-full relative",
+                                      content: "flex flex-col justify-between !overflow-visible",
+                                      container: "w-full px-4 md:px-6",
+                                    }}
+                                  />
+                                </div>
+                              )
+                            }}
+                          </For>
+                        </div>
+                      </div>
+                    </div>
+                  </Show>
                 </Show>
               </Match>
               <Match when={true}>
@@ -1808,7 +1996,66 @@ export default function Page() {
             </Switch>
           </div>
 
-          <Show when={params.id || !USE_NEW_SESSION_DESIGN}>{composerRegion("dock")}</Show>
+          {/* Prompt input */}
+          <div
+            ref={(el) => (promptDock = el)}
+            class="absolute inset-x-0 bottom-0 pt-12 pb-4 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none"
+          >
+            <div
+              classList={{
+                "w-full px-4 pointer-events-auto": true,
+                "md:max-w-300 md:mx-auto": centered(),
+              }}
+            >
+              <Show when={request()} keyed>
+                {(perm) => (
+                  <div data-component="tool-part-wrapper" data-permission="true" class="mb-3">
+                    <BasicTool
+                      icon="checklist"
+                      locked
+                      defaultOpen
+                      trigger={{
+                        title: language.t("notification.permission.title"),
+                        subtitle:
+                          perm.permission === "doom_loop"
+                            ? language.t("settings.permissions.tool.doom_loop.title")
+                            : perm.permission,
+                      }}
+                    >
+                      <Show when={perm.patterns.length > 0}>
+                        <div class="flex flex-col gap-1 py-2 px-3 max-h-40 overflow-y-auto no-scrollbar">
+                          <For each={perm.patterns}>
+                            {(pattern) => <code class="text-12-regular text-text-base break-all">{pattern}</code>}
+                          </For>
+                        </div>
+                      </Show>
+                      <Show when={perm.permission === "doom_loop"}>
+                        <div class="text-12-regular text-text-weak pb-2 px-3">
+                          {language.t("settings.permissions.tool.doom_loop.description")}
+                        </div>
+                      </Show>
+                    </BasicTool>
+                    <div data-component="permission-prompt">
+                      <div data-slot="permission-actions">
+                        <Button variant="ghost" size="small" onClick={() => decide("reject")} disabled={ui.responding}>
+                          {language.t("ui.permission.deny")}
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="small"
+                          onClick={() => decide("always")}
+                          disabled={ui.responding}
+                        >
+                          {language.t("ui.permission.allowAlways")}
+                        </Button>
+                        <Button variant="primary" size="small" onClick={() => decide("once")} disabled={ui.responding}>
+                          {language.t("ui.permission.allowOnce")}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </Show>
 
           <Show when={desktopReviewOpen()}>
             <div onPointerDown={() => size.start()}>
