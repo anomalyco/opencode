@@ -160,10 +160,16 @@ export namespace Config {
         await installDependencies(dir)
       }
 
-      result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
-      result.agent = mergeDeep(result.agent, await loadAgent(dir))
-      result.agent = mergeDeep(result.agent, await loadMode(dir))
-      result.plugin.push(...(await loadPlugin(dir)))
+      const [commands, agents, modes, plugins] = await Promise.all([
+        loadCommand(dir),
+        loadAgent(dir),
+        loadMode(dir),
+        loadPlugin(dir),
+      ])
+      result.command = mergeDeep(result.command ?? {}, commands)
+      result.agent = mergeDeep(result.agent, agents)
+      result.agent = mergeDeep(result.agent, modes)
+      result.plugin.push(...plugins)
     }
 
     // Inline config content overrides all non-managed config sources.

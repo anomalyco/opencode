@@ -168,9 +168,11 @@ export namespace ShareNext {
 
   async function fullSync(sessionID: string) {
     log.info("full sync", { sessionID })
-    const session = await Session.get(sessionID)
-    const diffs = await Session.diff(sessionID)
-    const messages = await Array.fromAsync(MessageV2.stream(sessionID))
+    const [session, diffs, messages] = await Promise.all([
+      Session.get(sessionID),
+      Session.diff(sessionID),
+      Array.fromAsync(MessageV2.stream(sessionID)),
+    ])
     const models = await Promise.all(
       messages
         .filter((m) => m.info.role === "user")

@@ -88,16 +88,13 @@ export namespace Format {
 
   export async function status() {
     const s = await state()
-    const result: Status[] = []
-    for (const formatter of Object.values(s.formatters)) {
-      const enabled = await isEnabled(formatter)
-      result.push({
-        name: formatter.name,
-        extensions: formatter.extensions,
-        enabled,
-      })
-    }
-    return result
+    const formatters = Object.values(s.formatters)
+    const enabledStatuses = await Promise.all(formatters.map((f) => isEnabled(f)))
+    return formatters.map((formatter, i) => ({
+      name: formatter.name,
+      extensions: formatter.extensions,
+      enabled: enabledStatuses[i],
+    }))
   }
 
   export function init() {

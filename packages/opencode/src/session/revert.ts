@@ -96,23 +96,27 @@ export namespace SessionRevert {
     const messageID = session.revert.messageID
     const [preserve, remove] = splitWhen(msgs, (x) => x.info.id === messageID)
     msgs = preserve
-    for (const msg of remove) {
-      await Storage.remove(["message", sessionID, msg.info.id])
-      await Bus.publish(MessageV2.Event.Removed, { sessionID: sessionID, messageID: msg.info.id })
-    }
+    await Promise.all(
+      remove.map(async (msg) => {
+        await Storage.remove(["message", sessionID, msg.info.id])
+        await Bus.publish(MessageV2.Event.Removed, { sessionID: sessionID, messageID: msg.info.id })
+      }),
+    )
     const last = preserve.at(-1)
     if (session.revert.partID && last) {
       const partID = session.revert.partID
       const [preserveParts, removeParts] = splitWhen(last.parts, (x) => x.id === partID)
       last.parts = preserveParts
-      for (const part of removeParts) {
-        await Storage.remove(["part", last.info.id, part.id])
-        await Bus.publish(MessageV2.Event.PartRemoved, {
-          sessionID: sessionID,
-          messageID: last.info.id,
-          partID: part.id,
-        })
-      }
+      await Promise.all(
+        removeParts.map(async (part) => {
+          await Storage.remove(["part", last.info.id, part.id])
+          await Bus.publish(MessageV2.Event.PartRemoved, {
+            sessionID: sessionID,
+            messageID: last.info.id,
+            partID: part.id,
+          })
+        }),
+      )
     }
     await Session.update(sessionID, (draft) => {
       draft.revert = undefined

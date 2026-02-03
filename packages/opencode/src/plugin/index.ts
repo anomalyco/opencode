@@ -37,11 +37,13 @@ export namespace Plugin {
       $: Bun.$,
     }
 
-    for (const plugin of INTERNAL_PLUGINS) {
-      log.info("loading internal plugin", { name: plugin.name })
-      const init = await plugin(input)
-      hooks.push(init)
-    }
+    const internalHooks = await Promise.all(
+      INTERNAL_PLUGINS.map(async (plugin) => {
+        log.info("loading internal plugin", { name: plugin.name })
+        return plugin(input)
+      }),
+    )
+    hooks.push(...internalHooks)
 
     const plugins = [...(config.plugin ?? [])]
     if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {

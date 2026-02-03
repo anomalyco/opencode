@@ -331,8 +331,9 @@ export namespace Session {
 
   export async function* list() {
     const project = Instance.project
-    for (const item of await Storage.list(["session", project.id])) {
-      const session = await Storage.read<Info>(item).catch(() => undefined)
+    const items = await Storage.list(["session", project.id])
+    const sessions = await Promise.all(items.map((item) => Storage.read<Info>(item).catch(() => undefined)))
+    for (const session of sessions) {
       if (!session) continue
       yield session
     }
@@ -340,30 +341,26 @@ export namespace Session {
 
   export const children = fn(Identifier.schema("session"), async (parentID) => {
     const project = Instance.project
-    const result = [] as Session.Info[]
-    for (const item of await Storage.list(["session", project.id])) {
-      const session = await Storage.read<Info>(item).catch(() => undefined)
-      if (!session) continue
-      if (session.parentID !== parentID) continue
-      result.push(session)
-    }
-    return result
+    const items = await Storage.list(["session", project.id])
+    const sessions = await Promise.all(items.map((item) => Storage.read<Info>(item).catch(() => undefined)))
+    return sessions.filter((session): session is Session.Info => session !== undefined && session.parentID === parentID)
   })
 
   export const remove = fn(Identifier.schema("session"), async (sessionID) => {
     const project = Instance.project
     try {
       const session = await get(sessionID)
-      for (const child of await children(sessionID)) {
-        await remove(child.id)
-      }
+      const childSessions = await children(sessionID)
+      await Promise.all(childSessions.map((child) => remove(child.id)))
       await unshare(sessionID).catch(() => {})
-      for (const msg of await Storage.list(["message", sessionID])) {
-        for (const part of await Storage.list(["part", msg.at(-1)!])) {
-          await Storage.remove(part)
-        }
-        await Storage.remove(msg)
-      }
+      const messages = await Storage.list(["message", sessionID])
+      await Promise.all(
+        messages.map(async (msg) => {
+          const parts = await Storage.list(["part", msg.at(-1)!])
+          await Promise.all(parts.map((part) => Storage.remove(part)))
+          await Storage.remove(msg)
+        }),
+      )
       await Storage.remove(["session", project.id, sessionID])
       Bus.publish(Event.Deleted, {
         info: session,

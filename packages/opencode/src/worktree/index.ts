@@ -501,11 +501,10 @@ export namespace Worktree {
     const remoteTarget = remoteRef ? remoteRef.replace(/^refs\/remotes\//, "") : ""
     const remoteBranch = remote && remoteTarget.startsWith(`${remote}/`) ? remoteTarget.slice(`${remote}/`.length) : ""
 
-    const mainCheck = await $`git show-ref --verify --quiet refs/heads/main`.quiet().nothrow().cwd(Instance.worktree)
-    const masterCheck = await $`git show-ref --verify --quiet refs/heads/master`
-      .quiet()
-      .nothrow()
-      .cwd(Instance.worktree)
+    const [mainCheck, masterCheck] = await Promise.all([
+      $`git show-ref --verify --quiet refs/heads/main`.quiet().nothrow().cwd(Instance.worktree),
+      $`git show-ref --verify --quiet refs/heads/master`.quiet().nothrow().cwd(Instance.worktree),
+    ])
     const localBranch = mainCheck.exitCode === 0 ? "main" : masterCheck.exitCode === 0 ? "master" : ""
 
     const target = remoteBranch ? `${remote}/${remoteBranch}` : localBranch
