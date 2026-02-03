@@ -95,12 +95,7 @@ For more complex pattern matching, you can use regular expressions by wrapping t
 }
 ```
 
-Regex patterns are evaluated as JavaScript regular expressions, so you can use:
-- Alternation: `(option1|option2|option3)`
-- Character classes: `[a-z]`, `[0-9]`
-- Quantifiers: `+`, `*`, `?`, `{n,m}`
-- Whitespace: `\\s`, `\\n`, `\\t`
-- Any other standard regex syntax
+Regex patterns are evaluated as JavaScript regular expressions.
 
 Note: Regex patterns are not anchored by default, so `/(foo|bar)/` will match anywhere in the string. Use `^` and `$` for exact matches if needed.
 
