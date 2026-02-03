@@ -18,6 +18,7 @@ const version = Object.values(binaries)[0]
 await $`mkdir -p ./dist/${pkg.name}`
 await $`cp -r ./bin ./dist/${pkg.name}/bin`
 await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
+await Bun.file(`./dist/${pkg.name}/LICENSE`).write(await Bun.file("../../LICENSE").text())
 
 await Bun.file(`./dist/${pkg.name}/package.json`).write(
   JSON.stringify(
@@ -30,6 +31,7 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
         postinstall: "bun ./postinstall.mjs || node ./postinstall.mjs",
       },
       version: version,
+      license: pkg.license,
       optionalDependencies: binaries,
     },
     null,
@@ -230,8 +232,14 @@ if (!Script.preview) {
     "",
   ].join("\n")
 
+  const token = process.env.GITHUB_TOKEN
+  if (!token) {
+    console.error("GITHUB_TOKEN is required to update homebrew tap")
+    process.exit(1)
+  }
+  const tap = `https://x-access-token:${token}@github.com/anomalyco/homebrew-tap.git`
   await $`rm -rf ./dist/homebrew-tap`
-  await $`git clone https://${process.env["GITHUB_TOKEN"]}@github.com/sst/homebrew-tap.git ./dist/homebrew-tap`
+  await $`git clone ${tap} ./dist/homebrew-tap`
   await Bun.file("./dist/homebrew-tap/opencode.rb").write(homebrewFormula)
   await $`cd ./dist/homebrew-tap && git add opencode.rb`
   await $`cd ./dist/homebrew-tap && git commit -m "Update to v${Script.version}"`

@@ -1,6 +1,8 @@
 ARG REGISTRY=ghcr.io/anomalyco
 FROM ${REGISTRY}/build/base:24.04
 
+SHELL ["/bin/bash", "-lc"]
+
 ARG NODE_VERSION=24.4.0
 ARG BUN_VERSION=1.3.5
 

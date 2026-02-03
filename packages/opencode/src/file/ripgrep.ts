@@ -214,7 +214,7 @@ export namespace Ripgrep {
     input.signal?.throwIfAborted()
 
     const args = [await filepath(), "--files", "--glob=!.git/*"]
-    if (input.follow !== false) args.push("--follow")
+    if (input.follow) args.push("--follow")
     if (input.hidden !== false) args.push("--hidden")
     if (input.maxDepth !== undefined) args.push(`--max-depth=${input.maxDepth}`)
     if (input.glob) {
@@ -275,100 +275,56 @@ export namespace Ripgrep {
     log.info("tree", input)
     const files = await Array.fromAsync(Ripgrep.files({ cwd: input.cwd, signal: input.signal }))
     interface Node {
-      path: string[]
-      children: Node[]
+      name: string
+      children: Map<string, Node>
     }
 
-    function getPath(node: Node, parts: string[], create: boolean) {
-      if (parts.length === 0) return node
-      let current = node
-      for (const part of parts) {
-        let existing = current.children.find((x) => x.path.at(-1) === part)
-        if (!existing) {
-          if (!create) return
-          existing = {
-            path: current.path.concat(part),
-            children: [],
-          }
-          current.children.push(existing)
-        }
-        current = existing
-      }
-      return current
+    function dir(node: Node, name: string) {
+      const existing = node.children.get(name)
+      if (existing) return existing
+      const next = { name, children: new Map() }
+      node.children.set(name, next)
+      return next
     }
 
-    const root: Node = {
-      path: [],
-      children: [],
-    }
+    const root: Node = { name: "", children: new Map() }
     for (const file of files) {
       if (file.includes(".opencode")) continue
       const parts = file.split(path.sep)
-      getPath(root, parts, true)
-    }
-
-    function sort(node: Node) {
-      node.children.sort((a, b) => {
-        if (!a.children.length && b.children.length) return 1
-        if (!b.children.length && a.children.length) return -1
-        return a.path.at(-1)!.localeCompare(b.path.at(-1)!)
-      })
-      for (const child of node.children) {
-        sort(child)
+      if (parts.length < 2) continue
+      let node = root
+      for (const part of parts.slice(0, -1)) {
+        node = dir(node, part)
       }
     }
-    sort(root)
 
-    let current = [root]
-    const result: Node = {
-      path: [],
-      children: [],
+    function count(node: Node): number {
+      let total = 0
+      for (const child of node.children.values()) {
+        total += 1 + count(child)
+      }
+      return total
     }
 
-    let processed = 0
-    const limit = input.limit ?? 50
-    while (current.length > 0) {
-      const next = []
-      for (const node of current) {
-        if (node.children.length) next.push(...node.children)
-      }
-      const max = Math.max(...current.map((x) => x.children.length))
-      for (let i = 0; i < max && processed < limit; i++) {
-        for (const node of current) {
-          const child = node.children[i]
-          if (!child) continue
-          getPath(result, child.path, true)
-          processed++
-          if (processed >= limit) break
-        }
-      }
-      if (processed >= limit) {
-        for (const node of [...current, ...next]) {
-          const compare = getPath(result, node.path, false)
-          if (!compare) continue
-          if (compare?.children.length !== node.children.length) {
-            const diff = node.children.length - compare.children.length
-            compare.children.push({
-              path: compare.path.concat(`[${diff} truncated]`),
-              children: [],
-            })
-          }
-        }
-        break
-      }
-      current = next
-    }
-
+    const total = count(root)
+    const limit = input.limit ?? total
     const lines: string[] = []
+    const queue: { node: Node; path: string }[] = []
+    for (const child of Array.from(root.children.values()).sort((a, b) => a.name.localeCompare(b.name))) {
+      queue.push({ node: child, path: child.name })
+    }
 
-    function render(node: Node, depth: number) {
-      const indent = "\t".repeat(depth)
-      lines.push(indent + node.path.at(-1) + (node.children.length ? "/" : ""))
-      for (const child of node.children) {
-        render(child, depth + 1)
+    let used = 0
+    for (let i = 0; i < queue.length && used < limit; i++) {
+      const { node, path } = queue[i]
+      lines.push(path)
+      used++
+      for (const child of Array.from(node.children.values()).sort((a, b) => a.name.localeCompare(b.name))) {
+        queue.push({ node: child, path: `${path}/${child.name}` })
       }
     }
-    result.children.map((x) => render(x, 0))
+
+    if (total > used) lines.push(`[${total - used} truncated]`)
 
     return lines.join("\n")
   }
@@ -381,7 +337,7 @@ export namespace Ripgrep {
     follow?: boolean
   }) {
     const args = [`${await filepath()}`, "--json", "--hidden", "--glob='!.git/*'"]
-    if (input.follow !== false) args.push("--follow")
+    if (input.follow) args.push("--follow")
 
     if (input.glob) {
       for (const g of input.glob) {

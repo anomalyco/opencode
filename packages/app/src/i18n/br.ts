@@ -28,6 +28,8 @@ export const dict = {
   "command.settings.open": "Abrir configurações",
   "command.session.previous": "Sessão anterior",
   "command.session.next": "Próxima sessão",
+  "command.session.previous.unseen": "Previous unread session",
+  "command.session.next.unseen": "Next unread session",
   "command.session.archive": "Arquivar sessão",
 
   "command.palette": "Paleta de comandos",
@@ -42,7 +44,6 @@ export const dict = {
 
   "command.session.new": "Nova sessão",
   "command.file.open": "Abrir arquivo",
-  "command.file.open.description": "Buscar arquivos e comandos",
   "command.context.addSelection": "Adicionar seleção ao contexto",
   "command.context.addSelection.description": "Adicionar as linhas selecionadas do arquivo atual",
   "command.terminal.toggle": "Alternar terminal",
@@ -68,6 +69,7 @@ export const dict = {
   "command.model.variant.cycle.description": "Mudar para o próximo nível de esforço",
   "command.permissions.autoaccept.enable": "Aceitar edições automaticamente",
   "command.permissions.autoaccept.disable": "Parar de aceitar edições automaticamente",
+  "command.workspace.toggle": "Alternar espaços de trabalho",
   "command.session.undo": "Desfazer",
   "command.session.undo.description": "Desfazer a última mensagem",
   "command.session.redo": "Refazer",
@@ -81,7 +83,7 @@ export const dict = {
   "command.session.unshare": "Parar de compartilhar sessão",
   "command.session.unshare.description": "Parar de compartilhar esta sessão",
 
-  "palette.search.placeholder": "Buscar arquivos e comandos",
+  "palette.search.placeholder": "Buscar arquivos, comandos e sessões",
   "palette.empty": "Nenhum resultado encontrado",
   "palette.group.commands": "Comandos",
   "palette.group.files": "Arquivos",
@@ -210,6 +212,8 @@ export const dict = {
   "prompt.popover.emptyCommands": "Nenhum comando correspondente",
   "prompt.dropzone.label": "Solte imagens ou PDFs aqui",
   "prompt.slash.badge.custom": "personalizado",
+  "prompt.slash.badge.skill": "skill",
+  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "ativo",
   "prompt.context.includeActiveFile": "Incluir arquivo ativo",
   "prompt.context.removeActiveFile": "Remover arquivo ativo do contexto",
@@ -343,6 +347,11 @@ export const dict = {
   "toast.permissions.autoaccept.off.title": "Parou de aceitar edições automaticamente",
   "toast.permissions.autoaccept.off.description": "Permissões de edição e escrita exigirão aprovação",
 
+  "toast.workspace.enabled.title": "Espaços de trabalho ativados",
+  "toast.workspace.enabled.description": "Várias worktrees agora são exibidas na barra lateral",
+  "toast.workspace.disabled.title": "Espaços de trabalho desativados",
+  "toast.workspace.disabled.description": "Apenas a worktree principal é exibida na barra lateral",
+
   "toast.model.none.title": "Nenhum modelo selecionado",
   "toast.model.none.description": "Conecte um provedor para resumir esta sessão",
 
@@ -433,6 +442,7 @@ export const dict = {
   "session.review.noChanges": "Sem alterações",
   "session.files.selectToOpen": "Selecione um arquivo para abrir",
   "session.files.all": "Todos os arquivos",
+  "session.files.binaryContent": "Arquivo binário (conteúdo não pode ser exibido)",
   "session.messages.renderEarlier": "Renderizar mensagens anteriores",
   "session.messages.loadingEarlier": "Carregando mensagens anteriores...",
   "session.messages.loadEarlier": "Carregar mensagens anteriores",
