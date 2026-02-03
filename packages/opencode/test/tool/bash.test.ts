@@ -6,6 +6,8 @@ import { tmpdir } from "../fixture/fixture"
 import type { PermissionNext } from "../../src/permission/next"
 import { Truncate } from "../../src/tool/truncation"
 
+const projectRoot = path.join(__dirname, "../..")
+
 const ctx = {
   sessionID: "test",
   messageID: "",
@@ -14,11 +16,9 @@ const ctx = {
   abort: AbortSignal.any([]),
   messages: [],
   metadata: () => {},
-  directory: process.cwd(),
+  directory: projectRoot,
   ask: async () => {},
 }
-
-const projectRoot = path.join(__dirname, "../..")
 
 describe("tool.bash", () => {
   test("basic", async () => {
@@ -50,6 +50,7 @@ describe("tool.bash permissions", () => {
         const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
         const testCtx = {
           ...ctx,
+          directory: tmp.path,
           ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
           },
@@ -77,6 +78,7 @@ describe("tool.bash permissions", () => {
         const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
         const testCtx = {
           ...ctx,
+          directory: tmp.path,
           ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
           },
@@ -105,6 +107,7 @@ describe("tool.bash permissions", () => {
         const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
         const testCtx = {
           ...ctx,
+          directory: tmp.path,
           ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
           },
@@ -131,6 +134,7 @@ describe("tool.bash permissions", () => {
         const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
         const testCtx = {
           ...ctx,
+          directory: tmp.path,
           ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
           },
@@ -164,6 +168,7 @@ describe("tool.bash permissions", () => {
         const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
         const testCtx = {
           ...ctx,
+          directory: tmp.path,
           ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
           },
@@ -194,6 +199,7 @@ describe("tool.bash permissions", () => {
         const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
         const testCtx = {
           ...ctx,
+          directory: tmp.path,
           ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
           },
@@ -224,6 +230,7 @@ describe("tool.bash permissions", () => {
         const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
         const testCtx = {
           ...ctx,
+          directory: tmp.path,
           ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
           },
@@ -251,6 +258,7 @@ describe("tool.bash permissions", () => {
         const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
         const testCtx = {
           ...ctx,
+          directory: tmp.path,
           ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
           },
@@ -277,6 +285,7 @@ describe("tool.bash permissions", () => {
         const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
         const testCtx = {
           ...ctx,
+          directory: tmp.path,
           ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
           },
@@ -298,6 +307,7 @@ describe("tool.bash permissions", () => {
         const requests: Array<Omit<PermissionNext.Request, "id" | "sessionID" | "tool">> = []
         const testCtx = {
           ...ctx,
+          directory: tmp.path,
           ask: async (req: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">) => {
             requests.push(req)
           },

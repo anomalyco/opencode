@@ -46,10 +46,11 @@ const execute = async (params: { patchText: string }, ctx: ToolCtx) => {
   return tool.execute(params, ctx)
 }
 
-const makeCtx = () => {
+const makeCtx = (directory?: string) => {
   const calls: AskInput[] = []
   const ctx: ToolCtx = {
     ...baseCtx,
+    directory: directory || baseCtx.directory,
     ask: async (input) => {
       calls.push(input)
     },
@@ -77,7 +78,7 @@ describe("tool.apply_patch freeform", () => {
 
   test("applies add/update/delete in one patch", async () => {
     await using fixture = await tmpdir({ git: true })
-    const { ctx, calls } = makeCtx()
+    const { ctx, calls } = makeCtx(fixture.path)
 
     await Instance.provide({
       directory: fixture.path,
@@ -122,7 +123,7 @@ describe("tool.apply_patch freeform", () => {
 
   test("permission metadata includes move file info", async () => {
     await using fixture = await tmpdir({ git: true })
-    const { ctx, calls } = makeCtx()
+    const { ctx, calls } = makeCtx(fixture.path)
 
     await Instance.provide({
       directory: fixture.path,
@@ -152,7 +153,7 @@ describe("tool.apply_patch freeform", () => {
 
   test("applies multiple hunks to one file", async () => {
     await using fixture = await tmpdir()
-    const { ctx } = makeCtx()
+    const { ctx } = makeCtx(fixture.path)
 
     await Instance.provide({
       directory: fixture.path,
@@ -172,7 +173,7 @@ describe("tool.apply_patch freeform", () => {
 
   test("inserts lines with insert-only hunk", async () => {
     await using fixture = await tmpdir()
-    const { ctx } = makeCtx()
+    const { ctx } = makeCtx(fixture.path)
 
     await Instance.provide({
       directory: fixture.path,
@@ -191,7 +192,7 @@ describe("tool.apply_patch freeform", () => {
 
   test("appends trailing newline on update", async () => {
     await using fixture = await tmpdir()
-    const { ctx } = makeCtx()
+    const { ctx } = makeCtx(fixture.path)
 
     await Instance.provide({
       directory: fixture.path,
@@ -213,7 +214,7 @@ describe("tool.apply_patch freeform", () => {
 
   test("moves file to a new directory", async () => {
     await using fixture = await tmpdir()
-    const { ctx } = makeCtx()
+    const { ctx } = makeCtx(fixture.path)
 
     await Instance.provide({
       directory: fixture.path,
@@ -236,7 +237,7 @@ describe("tool.apply_patch freeform", () => {
 
   test("moves file overwriting existing destination", async () => {
     await using fixture = await tmpdir()
-    const { ctx } = makeCtx()
+    const { ctx } = makeCtx(fixture.path)
 
     await Instance.provide({
       directory: fixture.path,
@@ -261,7 +262,7 @@ describe("tool.apply_patch freeform", () => {
 
   test("adds file overwriting existing file", async () => {
     await using fixture = await tmpdir()
-    const { ctx } = makeCtx()
+    const { ctx } = makeCtx(fixture.path)
 
     await Instance.provide({
       directory: fixture.path,
@@ -279,7 +280,7 @@ describe("tool.apply_patch freeform", () => {
 
   test("rejects update when target file is missing", async () => {
     await using fixture = await tmpdir()
-    const { ctx } = makeCtx()
+    const { ctx } = makeCtx(fixture.path)
 
     await Instance.provide({
       directory: fixture.path,
@@ -295,7 +296,7 @@ describe("tool.apply_patch freeform", () => {
 
   test("rejects delete when file is missing", async () => {
     await using fixture = await tmpdir()
-    const { ctx } = makeCtx()
+    const { ctx } = makeCtx(fixture.path)
 
     await Instance.provide({
       directory: fixture.path,
@@ -309,7 +310,7 @@ describe("tool.apply_patch freeform", () => {
 
   test("rejects delete when target is a directory", async () => {
     await using fixture = await tmpdir()
-    const { ctx } = makeCtx()
+    const { ctx } = makeCtx(fixture.path)
 
     await Instance.provide({
       directory: fixture.path,
@@ -326,7 +327,7 @@ describe("tool.apply_patch freeform", () => {
 
   test("rejects invalid hunk header", async () => {
     await using fixture = await tmpdir()
-    const { ctx } = makeCtx()
+    const { ctx } = makeCtx(fixture.path)
 
     await Instance.provide({
       directory: fixture.path,
@@ -340,7 +341,7 @@ describe("tool.apply_patch freeform", () => {
 
   test("rejects update with missing context", async () => {
     await using fixture = await tmpdir()
-    const { ctx } = makeCtx()
+    const { ctx } = makeCtx(fixture.path)
 
     await Instance.provide({
       directory: fixture.path,
@@ -358,7 +359,7 @@ describe("tool.apply_patch freeform", () => {
 
   test("verification failure leaves no side effects", async () => {
     await using fixture = await tmpdir()
-    const { ctx } = makeCtx()
+    const { ctx } = makeCtx(fixture.path)
 
     await Instance.provide({
       directory: fixture.path,
@@ -376,7 +377,7 @@ describe("tool.apply_patch freeform", () => {
 
   test("supports end of file anchor", async () => {
     await using fixture = await tmpdir()
-    const { ctx } = makeCtx()
+    const { ctx } = makeCtx(fixture.path)
 
     await Instance.provide({
       directory: fixture.path,
@@ -394,7 +395,7 @@ describe("tool.apply_patch freeform", () => {
 
   test("rejects missing second chunk context", async () => {
     await using fixture = await tmpdir()
-    const { ctx } = makeCtx()
+    const { ctx } = makeCtx(fixture.path)
 
     await Instance.provide({
       directory: fixture.path,
@@ -412,7 +413,7 @@ describe("tool.apply_patch freeform", () => {
 
   test("disambiguates change context with @@ header", async () => {
     await using fixture = await tmpdir()
-    const { ctx } = makeCtx()
+    const { ctx } = makeCtx(fixture.path)
 
     await Instance.provide({
       directory: fixture.path,
@@ -430,7 +431,7 @@ describe("tool.apply_patch freeform", () => {
 
   test("EOF anchor matches from end of file first", async () => {
     await using fixture = await tmpdir()
-    const { ctx } = makeCtx()
+    const { ctx } = makeCtx(fixture.path)
 
     await Instance.provide({
       directory: fixture.path,
@@ -452,7 +453,7 @@ describe("tool.apply_patch freeform", () => {
 
   test("parses heredoc-wrapped patch", async () => {
     await using fixture = await tmpdir()
-    const { ctx } = makeCtx()
+    const { ctx } = makeCtx(fixture.path)
 
     await Instance.provide({
       directory: fixture.path,
@@ -473,7 +474,7 @@ EOF`
 
   test("parses heredoc-wrapped patch without cat", async () => {
     await using fixture = await tmpdir()
-    const { ctx } = makeCtx()
+    const { ctx } = makeCtx(fixture.path)
 
     await Instance.provide({
       directory: fixture.path,
@@ -494,7 +495,7 @@ EOF`
 
   test("matches with trailing whitespace differences", async () => {
     await using fixture = await tmpdir()
-    const { ctx } = makeCtx()
+    const { ctx } = makeCtx(fixture.path)
 
     await Instance.provide({
       directory: fixture.path,
@@ -514,7 +515,7 @@ EOF`
 
   test("matches with leading whitespace differences", async () => {
     await using fixture = await tmpdir()
-    const { ctx } = makeCtx()
+    const { ctx } = makeCtx(fixture.path)
 
     await Instance.provide({
       directory: fixture.path,
@@ -534,7 +535,7 @@ EOF`
 
   test("matches with Unicode punctuation differences", async () => {
     await using fixture = await tmpdir()
-    const { ctx } = makeCtx()
+    const { ctx } = makeCtx(fixture.path)
 
     await Instance.provide({
       directory: fixture.path,
