@@ -1,4 +1,5 @@
 import path from "path"
+import { pathToFileURL } from "url"
 import z from "zod"
 import { Tool } from "./tool"
 import { Skill } from "../skill"
@@ -21,21 +22,29 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
 
   const description =
     accessibleSkills.length === 0
-      ? "Load a skill to get detailed instructions for a specific task. No skills are currently available."
+      ? "Load a specialized skill that provides domain-specific instructions and workflows. No skills are currently available."
       : [
-          "Load a skill to get detailed instructions for a specific task.",
-          "Skills provide specialized knowledge and step-by-step guidance.",
-          "Use this when a task matches an available skill's description.",
-          "Only the skills listed here are available:",
+          "Load a specialized skill that provides domain-specific instructions and workflows.",
+          "",
+          "When you recognize that a task matches one of the available skills listed below, use this tool to load the full skill instructions.",
+          "",
+          "The skill will inject detailed instructions, workflows, and access to bundled resources (scripts, references, templates) into the conversation context.",
+          "",
+          'Loaded skills appear as `<loaded_skill name="...">` in the conversation.',
+          "",
+          "The following skills provide specialized sets of instructions for particular tasks",
+          "Invoke this tool to load a skill when a task matches one of the available skills listed below:",
+          "",
           "<available_skills>",
           ...accessibleSkills.flatMap((skill) => [
             `  <skill>`,
             `    <name>${skill.name}</name>`,
             `    <description>${skill.description}</description>`,
+            `    <location>${pathToFileURL(skill.location).href}</location>`,
             `  </skill>`,
           ]),
           "</available_skills>",
-        ].join(" ")
+        ].join("\n")
 
   const examples = accessibleSkills
     .map((skill) => `'${skill.name}'`)
@@ -44,7 +53,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
   const hint = examples.length > 0 ? ` (e.g., ${examples}, ...)` : ""
 
   const parameters = z.object({
-    name: z.string().describe(`The skill identifier from available_skills${hint}`),
+    name: z.string().describe(`The name of the skill from available_skills${hint}`),
   })
 
   return {
@@ -66,6 +75,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
       })
 
       const dir = path.dirname(skill.location)
+      const base = pathToFileURL(dir).href
 
       const limit = 10
       const files = await iife(async () => {
@@ -104,7 +114,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
           "",
           skill.content.trim(),
           "",
-          `Base directory for this skill: ${dir}`,
+          `Base directory for this skill: ${base}`,
           "Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.",
           `Skill files list is limited to ${limit} entries and may be incomplete.`,
           "",
