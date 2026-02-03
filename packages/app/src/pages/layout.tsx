@@ -2636,21 +2636,104 @@ export default function Layout(props: ParentProps) {
         }}
         onBlur={() => setOpen(false)}
       >
-        <ProjectIcon project={props.project} notify />
-      </button>
+        <ContextMenu.Trigger
+          as="button"
+          type="button"
+          aria-label={projectName()}
+          data-action="project-switch"
+          data-project={base64Encode(props.project.worktree)}
+          classList={{
+            "flex items-center justify-center size-10 p-1 rounded-lg overflow-hidden transition-colors cursor-default": true,
+            "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover": selected(),
+            "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
+              !selected() && !active(),
+            "bg-surface-base-hover border border-border-weak-base": !selected() && active(),
+          }}
+          onClick={(event: MouseEvent) => {
+            // 如果是在 preview 模式（侧边栏已打开），则导航到项目
+            if (preview()) {
+              navigateToProject(props.project.worktree)
+              return
+            }
+            // 在 overlay 模式下，切换 hoverProject 状态来显示/隐藏对话列表
+            event.preventDefault()
+            globalSync.child(props.project.worktree)
+            const currentProject = state.hoverProject === props.project.worktree
+              ? undefined
+              : props.project.worktree
+            setState("hoverProject", currentProject)
+            setState("hoverSession", undefined)
+          }}
+          onKeyDown={(event: KeyboardEvent) => {
+            if (!overlay()) return
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              globalSync.child(props.project.worktree)
+              const currentProject = state.hoverProject === props.project.worktree
+                ? undefined
+                : props.project.worktree
+              setState("hoverProject", currentProject)
+              setState("hoverSession", undefined)
+            }
+          }}
+        >
+          <ProjectIcon project={props.project} notify />
+        </ContextMenu.Trigger>
+        <ContextMenu.Portal mount={!props.mobile ? state.nav : undefined}>
+          <ContextMenu.Content>
+            <ContextMenu.Item onSelect={() => dialog.show(() => <DialogEditProject project={props.project} />)}>
+              <ContextMenu.ItemLabel>{language.t("common.edit")}</ContextMenu.ItemLabel>
+            </ContextMenu.Item>
+            <ContextMenu.Item
+              data-action="project-workspaces-toggle"
+              data-project={base64Encode(props.project.worktree)}
+              disabled={props.project.vcs !== "git" && !layout.sidebar.workspaces(props.project.worktree)()}
+              onSelect={() => {
+                const enabled = layout.sidebar.workspaces(props.project.worktree)()
+                if (enabled) {
+                  layout.sidebar.toggleWorkspaces(props.project.worktree)
+                  return
+                }
+                if (props.project.vcs !== "git") return
+                layout.sidebar.toggleWorkspaces(props.project.worktree)
+              }}
+            >
+              <ContextMenu.ItemLabel>
+                {layout.sidebar.workspaces(props.project.worktree)()
+                  ? language.t("sidebar.workspaces.disable")
+                  : language.t("sidebar.workspaces.enable")}
+              </ContextMenu.ItemLabel>
+            </ContextMenu.Item>
+            <ContextMenu.Separator />
+            <ContextMenu.Item
+              data-action="project-close-menu"
+              data-project={base64Encode(props.project.worktree)}
+              onSelect={() => closeProject(props.project.worktree)}
+            >
+              <ContextMenu.ItemLabel>{language.t("common.close")}</ContextMenu.ItemLabel>
+            </ContextMenu.Item>
+          </ContextMenu.Content>
+        </ContextMenu.Portal>
+      </ContextMenu>
     )
 
     return (
       // @ts-ignore
       <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
-        <Show when={preview()} fallback={trigger}>
-          <Popover
-            open={open()}
+        <Show when={preview()} fallback={<Trigger />}>
+          <HoverCard
+            open={open() && !menu()}
+            openDelay={999999}
+            closeDelay={0}
             placement="right-start"
             gutter={6}
             trigger={trigger}
             onOpenChange={(value) => {
-              setOpen(value)
+              if (menu()) return
+              // 只允许关闭（value === false），不允许自动悬停打开
+              if (!value) {
+                setOpen(false)
+              }
               if (value) setState("hoverSession", undefined)
             }}
           >
