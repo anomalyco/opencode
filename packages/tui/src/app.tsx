@@ -362,7 +362,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   const sdk = useSDK()
   const toast = useToast()
   const themeState = useTheme()
-  const { theme, mode, setMode, locked, lock, unlock } = themeState
+  const { theme, mode, setMode, locked, lock, unlock, transparent, setTransparent } = themeState
   const sync = useSync()
   const project = useProject()
   const exit = useExit()
@@ -779,6 +779,15 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         run: () => {
           if (locked()) unlock()
           else lock()
+          dialog.clear()
+        },
+        category: "System",
+      },
+      {
+        name: "theme.transparency",
+        title: transparent() ? "Disable transparency" : "Enable transparency",
+        run: () => {
+          setTransparent(!transparent())
           dialog.clear()
         },
         category: "System",

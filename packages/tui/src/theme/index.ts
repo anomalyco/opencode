@@ -88,8 +88,9 @@ export type Theme = {
   readonly syntaxPunctuation: RGBA
   readonly thinkingOpacity: number
   _hasSelectedListItemText: boolean
+  transparent: boolean
 }
-type ThemeColor = Exclude<keyof Theme, "thinkingOpacity" | "_hasSelectedListItemText">
+type ThemeColor = Exclude<keyof Theme, "thinkingOpacity" | "_hasSelectedListItemText" | "transparent">
 export type SyntaxStyleOverrides = Record<string, { italic?: boolean }>
 
 export function selectedForeground(theme: Theme, bg?: RGBA): RGBA {
@@ -157,8 +158,8 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   solarized,
   synthwave84,
   tokyonight,
-  vesper,
   vercel,
+  vesper,
   zenburn,
   carbonfox,
 }
@@ -238,7 +239,7 @@ export function upsertTheme(name: string, theme: unknown) {
   return true
 }
 
-export function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
+export function resolveTheme(theme: ThemeJson, mode: "dark" | "light", transparent: boolean = false) {
   const defs = theme.defs ?? {}
   function resolveColor(c: ColorValue, chain: string[] = []): RGBA {
     if (c instanceof RGBA) return c
@@ -291,10 +292,17 @@ export function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
   // Handle thinkingOpacity - optional with default of 0.6
   const thinkingOpacity = theme.theme.thinkingOpacity ?? 0.6
 
+  if (transparent) {
+    resolved.background = RGBA.fromInts(0, 0, 0, 0)
+    // NOTE: Could alternatively apply an alpha channel to the theme's base background color
+    // instead of forcing full transparency, allowing for adjustable opacity levels
+  }
+
   return {
     ...resolved,
     _hasSelectedListItemText: hasSelectedListItemText,
     thinkingOpacity,
+    transparent,
   } as Theme
 }
 

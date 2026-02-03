@@ -86,6 +86,7 @@ type State = {
   mode: "dark" | "light"
   lock: "dark" | "light" | undefined
   active: string
+  transparent: boolean
   ready: boolean
 }
 
@@ -94,6 +95,7 @@ const [store, setStore] = createStore<State>({
   mode: "dark",
   lock: undefined,
   active: "opencode",
+  transparent: false,
   ready: false,
 })
 
@@ -120,6 +122,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         draft.lock = lock
         const active = config.theme ?? kv.get("theme", "opencode")
         draft.active = typeof active === "string" ? active : "opencode"
+        draft.transparent = kv.get("theme_transparent", false) === true
         draft.ready = false
       }),
     )
@@ -255,15 +258,15 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
     const values = createMemo(() => {
       const active = store.themes[store.active]
-      if (active) return resolveTheme(active, store.mode)
+      if (active) return resolveTheme(active, store.mode, store.transparent)
 
       const saved = kv.get("theme")
       if (typeof saved === "string") {
         const theme = store.themes[saved]
-        if (theme) return resolveTheme(theme, store.mode)
+        if (theme) return resolveTheme(theme, store.mode, store.transparent)
       }
 
-      return resolveTheme(store.themes.opencode, store.mode)
+      return resolveTheme(store.themes.opencode, store.mode, store.transparent)
     })
 
     createEffect(() => renderer.setBackgroundColor(values().background))
@@ -295,6 +298,13 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         setStore("active", theme)
         kv.set("theme", theme)
         return true
+      },
+      transparent() {
+        return store.transparent
+      },
+      setTransparent(transparent: boolean) {
+        setStore("transparent", transparent)
+        kv.set("theme_transparent", transparent)
       },
       get ready() {
         return store.ready
