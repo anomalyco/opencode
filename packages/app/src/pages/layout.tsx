@@ -2733,7 +2733,7 @@ export default function Layout(props: ParentProps) {
                 </Button>
               </div>
             </div>
-          </Popover>
+          </HoverCard>
         </Show>
       </div>
     )
