@@ -37,7 +37,6 @@ import { createPerplexity } from "@ai-sdk/perplexity"
 import { createVercel } from "@ai-sdk/vercel"
 import { createGitLab } from "@gitlab/gitlab-ai-provider"
 import { ProviderTransform } from "./transform"
-import { Installation } from "../installation"
 import { ProviderModelDetection } from "./model-detection"
 
 export namespace Provider {
@@ -933,18 +932,18 @@ export namespace Provider {
           if (!detectedSet.has(modelID)) delete provider.models[modelID]
         }
 
-        // add detected models not present in config/models.dev
-        for (const modelID of detectedModelIds) {
-          provider.models[modelID] = {
-            id: modelID,
-            providerID: provider.id,
-            name: modelID,
-            api: {
-              id: modelID,
-            },
-            capabilities: {}
-          } as Model
-        }
+        // TODO: add detected models not present in config/models.dev
+        // for (const modelID of detectedModelIds) {
+        //   provider.models[modelID] = {
+        //     id: modelID,
+        //     providerID: provider.id,
+        //     name: modelID,
+        //     api: {
+        //       id: modelID,
+        //     },
+        //     capabilities: {}
+        //   } as Model
+        // }
       }),
     )
 

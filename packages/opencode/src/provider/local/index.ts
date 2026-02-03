@@ -17,7 +17,7 @@ export interface LocalModel {
 }
 
 export namespace LocalProvider {
-  const log = Log.create({ service: "localprovider" })
+  const log = Log.create({ service: "provider.local" })
 
   function normalizeUrl(url: string): string {
     const base = url.endsWith("/v1") ? url.slice(0, -3) : url
