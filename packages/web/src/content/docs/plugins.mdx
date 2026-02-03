@@ -192,6 +192,10 @@ Plugins can subscribe to events as seen below in the Examples section. Here is a
 
 - `todo.updated`
 
+#### Shell Events
+
+- `shell.env`
+
 #### Tool Events
 
 - `tool.execute.after`
@@ -247,6 +251,23 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
       if (input.tool === "read" && output.args.filePath.includes(".env")) {
         throw new Error("Do not read .env files")
       }
+    },
+  }
+}
+```
+
+---
+
+### Inject environment variables
+
+Inject environment variables into all shell execution (AI tools and user terminals):
+
+```javascript title=".opencode/plugins/inject-env.js"
+export const InjectEnvPlugin = async () => {
+  return {
+    "shell.env": async (input, output) => {
+      output.env.MY_API_KEY = "secret"
+      output.env.PROJECT_ROOT = input.cwd
     },
   }
 }
