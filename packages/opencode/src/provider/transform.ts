@@ -772,6 +772,12 @@ export namespace ProviderTransform {
           result.items = {}
         }
 
+        // Remove properties/required from non-object types (Gemini rejects these)
+        if (result.type && result.type !== "object") {
+          delete result.properties
+          delete result.required
+        }
+
         return result
       }
 
