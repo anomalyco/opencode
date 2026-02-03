@@ -62,7 +62,7 @@ export namespace SessionPrompt {
           abort: AbortController
           callbacks: {
             resolve(input: MessageV2.WithParts): void
-            reject(): void
+            reject(reason?: any): void
           }[]
         }
       > = {}
@@ -72,7 +72,7 @@ export namespace SessionPrompt {
       for (const item of Object.values(current)) {
         item.abort.abort()
         for (const callback of item.callbacks) {
-          callback.reject()
+          callback.reject(new DOMException("Aborted", "AbortError"))
         }
       }
     },
@@ -246,10 +246,13 @@ export namespace SessionPrompt {
     log.info("cancel", { sessionID })
     const s = state()
     const match = s[sessionID]
-    if (!match) return
+    if (!match) {
+      SessionStatus.set(sessionID, { type: "idle" })
+      return
+    }
     match.abort.abort()
     for (const item of match.callbacks) {
-      item.reject()
+      item.reject(new DOMException("Aborted", "AbortError"))
     }
     delete s[sessionID]
     SessionStatus.set(sessionID, { type: "idle" })
@@ -827,6 +830,17 @@ export namespace SessionPrompt {
 
   async function createUserMessage(input: PromptInput) {
     const agent = await Agent.get(input.agent ?? (await Agent.defaultAgent()))
+
+    const model = input.model ?? agent.model ?? (await lastModel(input.sessionID))
+    const variant =
+      input.variant ??
+      (agent.variant &&
+      agent.model &&
+      model.providerID === agent.model.providerID &&
+      model.modelID === agent.model.modelID
+        ? agent.variant
+        : undefined)
+
     const info: MessageV2.Info = {
       id: input.messageID ?? Identifier.ascending("message"),
       role: "user",
@@ -836,9 +850,9 @@ export namespace SessionPrompt {
       },
       tools: input.tools,
       agent: agent.name,
-      model: input.model ?? agent.model ?? (await lastModel(input.sessionID)),
+      model,
       system: input.system,
-      variant: input.variant,
+      variant,
     }
     using _ = defer(() => InstructionPrompt.clear(info.id))
 

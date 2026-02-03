@@ -91,6 +91,10 @@ export const BashTool = Tool.define("bash", async () => {
 
       for (const node of tree.rootNode.descendantsOfType("command")) {
         if (!node) continue
+
+        // Get full command text including redirects if present
+        let commandText = node.parent?.type === "redirected_statement" ? node.parent.text : node.text
+
         const command = []
         for (let i = 0; i < node.childCount; i++) {
           const child = node.child(i)
@@ -124,23 +128,27 @@ export const BashTool = Tool.define("bash", async () => {
                 process.platform === "win32" && resolved.match(/^\/[a-z]\//)
                   ? resolved.replace(/^\/([a-z])\//, (_, drive) => `${drive.toUpperCase()}:\\`).replace(/\//g, "\\")
                   : resolved
-              if (!Instance.containsPath(normalized)) directories.add(normalized)
+              if (!Instance.containsPath(normalized)) {
+                const dir = (await Filesystem.isDir(normalized)) ? normalized : path.dirname(normalized)
+                directories.add(dir)
+              }
             }
           }
         }
 
         // cd covered by above check
         if (command.length && command[0] !== "cd") {
-          patterns.add(command.join(" "))
-          always.add(BashArity.prefix(command).join(" ") + "*")
+          patterns.add(commandText)
+          always.add(BashArity.prefix(command).join(" ") + " *")
         }
       }
 
       if (directories.size > 0) {
+        const globs = Array.from(directories).map((dir) => path.join(dir, "*"))
         await ctx.ask({
           permission: "external_directory",
-          patterns: Array.from(directories),
-          always: Array.from(directories).map((x) => path.dirname(x) + "*"),
+          patterns: globs,
+          always: globs,
           metadata: {},
         })
       }
