@@ -11,6 +11,7 @@ import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { PermissionNext } from "@/permission/next"
+import { Truncate } from "@/tool/truncation"
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
@@ -19,6 +20,19 @@ const parameters = z.object({
   session_id: z.string().describe("Existing Task session to continue").optional(),
   command: z.string().describe("The command that triggered this task").optional(),
 })
+
+export async function formatTaskOutput(text: string, sessionId: string, agent?: Agent.Info) {
+  const truncated = await Truncate.output(text, {}, agent)
+  const output = `${truncated.content}\n\n<task_metadata>\nsession_id: ${sessionId}\n</task_metadata>`
+
+  return {
+    output,
+    metadata: {
+      truncated: truncated.truncated,
+      ...(truncated.truncated ? { outputPath: truncated.outputPath } : {}),
+    },
+  }
+}
 
 export const TaskTool = Tool.define("task", async (ctx) => {
   const agents = await Agent.list().then((x) => x.filter((a) => a.mode !== "primary"))
@@ -175,8 +189,8 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           },
         }))
       const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
-
-      const output = text + "\n\n" + ["<task_metadata>", `session_id: ${session.id}`, "</task_metadata>"].join("\n")
+      const callerInfo = await Agent.get(ctx.agent)
+      const payload = await formatTaskOutput(text, session.id, callerInfo)
 
       return {
         title: params.description,
@@ -184,8 +198,9 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           summary,
           sessionId: session.id,
           model,
+          ...payload.metadata,
         },
-        output,
+        output: payload.output,
       }
     },
   }
