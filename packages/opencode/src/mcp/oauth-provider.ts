@@ -127,7 +127,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 
   async saveCodeVerifier(codeVerifier: string): Promise<void> {
-    await McpAuth.updateCodeVerifier(this.mcpName, codeVerifier)
+    await McpAuth.updateCodeVerifier(this.mcpName, codeVerifier, this.serverUrl)
   }
 
   async codeVerifier(): Promise<string> {
@@ -139,7 +139,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 
   async saveState(state: string): Promise<void> {
-    await McpAuth.updateOAuthState(this.mcpName, state)
+    await McpAuth.updateOAuthState(this.mcpName, state, this.serverUrl)
   }
 
   async state(): Promise<string> {

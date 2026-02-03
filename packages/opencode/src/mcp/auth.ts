@@ -86,10 +86,10 @@ export namespace McpAuth {
     await set(mcpName, entry, serverUrl)
   }
 
-  export async function updateCodeVerifier(mcpName: string, codeVerifier: string): Promise<void> {
+  export async function updateCodeVerifier(mcpName: string, codeVerifier: string, serverUrl?: string): Promise<void> {
     const entry = (await get(mcpName)) ?? {}
     entry.codeVerifier = codeVerifier
-    await set(mcpName, entry)
+    await set(mcpName, entry, serverUrl)
   }
 
   export async function clearCodeVerifier(mcpName: string): Promise<void> {
@@ -100,10 +100,10 @@ export namespace McpAuth {
     }
   }
 
-  export async function updateOAuthState(mcpName: string, oauthState: string): Promise<void> {
+  export async function updateOAuthState(mcpName: string, oauthState: string, serverUrl?: string): Promise<void> {
     const entry = (await get(mcpName)) ?? {}
     entry.oauthState = oauthState
-    await set(mcpName, entry)
+    await set(mcpName, entry, serverUrl)
   }
 
   export async function getOAuthState(mcpName: string): Promise<string | undefined> {

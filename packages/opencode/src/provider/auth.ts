@@ -58,7 +58,9 @@ export namespace ProviderAuth {
     }),
     async (input): Promise<Authorization | undefined> => {
       const auth = await state().then((s) => s.methods[input.providerID])
+      if (!auth) throw new OauthMissing({ providerID: input.providerID })
       const method = auth.methods[input.method]
+      if (!method) throw new OauthMethodNotFound({ providerID: input.providerID, methodIndex: input.method })
       if (method.type === "oauth") {
         const result = await method.authorize()
         await state().then((s) => (s.pending[input.providerID] = result))
@@ -140,6 +142,13 @@ export namespace ProviderAuth {
     "ProviderAuthOauthCodeMissing",
     z.object({
       providerID: z.string(),
+    }),
+  )
+  export const OauthMethodNotFound = NamedError.create(
+    "ProviderAuthOauthMethodNotFound",
+    z.object({
+      providerID: z.string(),
+      methodIndex: z.number(),
     }),
   )
 
