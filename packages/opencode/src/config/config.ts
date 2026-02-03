@@ -909,6 +909,17 @@ export namespace Config {
         .record(
           z.string(),
           ModelsDev.Model.partial().extend({
+            compaction_threshold: z
+              .number()
+              .int()
+              .min(1)
+              .max(100)
+              .optional()
+              .describe("Compact when context usage exceeds this percentage (1-100, overrides global threshold)"),
+            compaction_model: z
+              .string()
+              .optional()
+              .describe("Model to use for compaction (e.g., 'zhipu/glm-4-plus', overrides global compaction model)"),
             variants: z
               .record(
                 z.string(),
@@ -1115,6 +1126,19 @@ export namespace Config {
         .object({
           auto: z.boolean().optional().describe("Enable automatic compaction when context is full (default: true)"),
           prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
+          threshold: z
+            .number()
+            .int()
+            .min(1)
+            .max(100)
+            .optional()
+            .describe(
+              "Default compaction threshold percentage (1-100). Compaction triggers when context usage exceeds this percentage (default: 100)",
+            ),
+          model: z
+            .string()
+            .optional()
+            .describe("Default model to use for compaction (e.g., 'anthropic/claude-haiku-3-5-20241022')"),
         })
         .optional(),
       experimental: z

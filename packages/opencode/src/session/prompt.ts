@@ -495,6 +495,7 @@ export namespace SessionPrompt {
           abort,
           sessionID,
           auto: task.auto,
+          model,
         })
         if (result === "stop") break
         continue

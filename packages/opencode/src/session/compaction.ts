@@ -18,6 +18,8 @@ import { Config } from "@/config/config"
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
 
+  export const THRESHOLD_DEFAULT = 100
+
   export const Event = {
     Compacted: BusEvent.define(
       "session.compacted",
@@ -35,7 +37,8 @@ export namespace SessionCompaction {
     const count = input.tokens.input + input.tokens.cache.read + input.tokens.output
     const output = Math.min(input.model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) || SessionPrompt.OUTPUT_TOKEN_MAX
     const usable = input.model.limit.input || context - output
-    return count > usable
+    const threshold = input.model.compaction_threshold ?? config.compaction?.threshold ?? THRESHOLD_DEFAULT
+    return count > usable * (threshold / 100)
   }
 
   export const PRUNE_MINIMUM = 20_000
@@ -95,12 +98,18 @@ export namespace SessionCompaction {
     sessionID: string
     abort: AbortSignal
     auto: boolean
+    model: Provider.Model
   }) {
+    const config = await Config.get()
     const userMessage = input.messages.findLast((m) => m.info.id === input.parentID)!.info as MessageV2.User
     const agent = await Agent.get("compaction")
-    const model = agent.model
-      ? await Provider.getModel(agent.model.providerID, agent.model.modelID)
-      : await Provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
+    const compactionModelStr = input.model.compaction_model ?? config.compaction?.model
+    const parsed = compactionModelStr ? Provider.parseModel(compactionModelStr) : undefined
+    const model = parsed
+      ? await Provider.getModel(parsed.providerID, parsed.modelID)
+      : agent.model
+        ? await Provider.getModel(agent.model.providerID, agent.model.modelID)
+        : await Provider.getModel(userMessage.model.providerID, userMessage.model.modelID)
     const msg = (await Session.updateMessage({
       id: Identifier.ascending("message"),
       role: "assistant",

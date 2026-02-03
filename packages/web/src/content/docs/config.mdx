@@ -488,13 +488,37 @@ You can control context compaction behavior through the `compaction` option.
   "$schema": "https://opencode.ai/config.json",
   "compaction": {
     "auto": true,
-    "prune": true
+    "prune": true,
+    "threshold": 80,
+    "model": "anthropic/claude-haiku-3-5-20241022"
   }
 }
 ```
 
 - `auto` - Automatically compact the session when context is full (default: `true`).
 - `prune` - Remove old tool outputs to save tokens (default: `true`).
+- `threshold` - Percentage of context usage that triggers compaction, from 1-100 (default: `100`). Lower values trigger compaction earlier, which can help maintain model performance in long sessions.
+- `model` - Model to use for generating the compaction summary. Defaults to the session's current model.
+
+You can also configure compaction per-model. This is useful when different models have different optimal context thresholds.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "models": {
+        "claude-opus-4-20250514": {
+          "compaction_threshold": 50,
+          "compaction_model": "anthropic/claude-haiku-3-5-20241022"
+        }
+      }
+    }
+  }
+}
+```
+
+Per-model settings override the global `compaction` config. This lets you use different thresholds and models for each provider/model combination.
 
 ---
 

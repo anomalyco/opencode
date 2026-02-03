@@ -9284,6 +9284,16 @@
                     },
                     "additionalProperties": {}
                   }
+                },
+                "compaction_threshold": {
+                  "description": "Compact when context usage exceeds this percentage (1-100, overrides global threshold)",
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                "compaction_model": {
+                  "description": "Model to use for compaction (e.g., 'zhipu/glm-4-plus', overrides global compaction model)",
+                  "type": "string"
                 }
               }
             }
@@ -9843,6 +9853,16 @@
               "prune": {
                 "description": "Enable pruning of old tool outputs (default: true)",
                 "type": "boolean"
+              },
+              "threshold": {
+                "description": "Default compaction threshold percentage (1-100). Compaction triggers when context usage exceeds this percentage (default: 100)",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100
+              },
+              "model": {
+                "description": "Default model to use for compaction (e.g., 'anthropic/claude-haiku-3-5-20241022')",
+                "type": "string"
               }
             }
           },
@@ -10194,6 +10214,14 @@
               },
               "additionalProperties": {}
             }
+          },
+          "compaction_threshold": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "compaction_model": {
+            "type": "string"
           }
         },
         "required": [

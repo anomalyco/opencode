@@ -586,6 +586,8 @@ export namespace Provider {
       headers: z.record(z.string(), z.string()),
       release_date: z.string(),
       variants: z.record(z.string(), z.record(z.string(), z.any())).optional(),
+      compaction_threshold: z.number().int().min(1).max(100).optional(),
+      compaction_model: z.string().optional(),
     })
     .meta({
       ref: "Model",
@@ -810,6 +812,8 @@ export namespace Provider {
           family: model.family ?? existingModel?.family ?? "",
           release_date: model.release_date ?? existingModel?.release_date ?? "",
           variants: {},
+          compaction_threshold: model.compaction_threshold ?? existingModel?.compaction_threshold,
+          compaction_model: model.compaction_model ?? existingModel?.compaction_model,
         }
         const merged = mergeDeep(ProviderTransform.variants(parsedModel), model.variants ?? {})
         parsedModel.variants = mapValues(
