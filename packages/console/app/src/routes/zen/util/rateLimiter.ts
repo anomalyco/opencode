@@ -4,8 +4,12 @@ import { RateLimitError } from "./error"
 import { logger } from "./logger"
 import { ZenData } from "@opencode-ai/console-core/model.js"
 
-export function createRateLimiter(limit: ZenData.RateLimit | undefined, rawIp: string) {
+export function createRateLimiter(limit: ZenData.RateLimit | undefined, rawIp: string, headers: Headers) {
   if (!limit) return
+
+  const limitValue = (limit.checkHeader && !headers.get(limit.checkHeader))
+    ? limit.fallbackValue!
+    : limit.value
 
   const ip = !rawIp.length ? "unknown" : rawIp
   const now = Date.now()
@@ -32,7 +36,7 @@ export function createRateLimiter(limit: ZenData.RateLimit | undefined, rawIp: s
       )
       const total = rows.reduce((sum, r) => sum + r.count, 0)
       logger.debug(`rate limit total: ${total}`)
-      if (total >= limit.value) throw new RateLimitError(`Rate limit exceeded. Please try again later.`)
+      if (total >= limitValue) throw new RateLimitError(`Rate limit exceeded. Please try again later.`)
     },
   }
 }
