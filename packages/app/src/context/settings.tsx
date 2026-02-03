@@ -40,6 +40,7 @@ export interface Settings {
     fontSize: number
     font: string
     zoomLevel: number
+    contentWidth: number
   }
   keybinds: Record<string, string>
   permissions: {
@@ -124,6 +125,7 @@ const defaultSettings: Settings = {
     fontSize: 14,
     font: "ibm-plex-mono",
     zoomLevel: 1,
+    contentWidth: 300, // Default max-w-300 (1200px)
   },
   keybinds: {},
   permissions: {
@@ -267,6 +269,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         zoomLevel: createMemo(() => store.appearance?.zoomLevel ?? defaultSettings.appearance.zoomLevel),
         setZoomLevel(value: number) {
           setStore("appearance", "zoomLevel", value)
+        },
+        contentWidth: createMemo(() => store.appearance?.contentWidth ?? defaultSettings.appearance.contentWidth),
+        setContentWidth(value: number) {
+          setStore("appearance", "contentWidth", value)
         },
       },
       keybinds: {

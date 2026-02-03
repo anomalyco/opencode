@@ -26,8 +26,36 @@ import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Select } from "@opencode-ai/ui/select"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
-import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
-import { Button } from "@opencode-ai/ui/button"
+import { SessionReview } from "@opencode-ai/ui/session-review"
+import { Mark } from "@opencode-ai/ui/logo"
+
+import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
+import type { DragEvent } from "@thisbeyond/solid-dnd"
+import { useSync } from "@/context/sync"
+import { useTerminal, type LocalPTY } from "@/context/terminal"
+import { useLayout } from "@/context/layout"
+import { Terminal } from "@/components/terminal"
+import { checksum, base64Encode } from "@opencode-ai/util/encode"
+import { findLast } from "@opencode-ai/util/array"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { DialogSelectFile } from "@/components/dialog-select-file"
+import FileTree from "@/components/file-tree"
+import { DialogSelectModel } from "@/components/dialog-select-model"
+import { DialogSelectMcp } from "@/components/dialog-select-mcp"
+import { DialogFork } from "@/components/dialog-fork"
+import { useCommand } from "@/context/command"
+import { useLanguage } from "@/context/language"
+import { useSettings } from "@/context/settings"
+import { useNavigate, useParams } from "@solidjs/router"
+import { UserMessage } from "@opencode-ai/sdk/v2"
+import type { FileDiff } from "@opencode-ai/sdk/v2/client"
+import { useSDK } from "@/context/sdk"
+import { usePrompt } from "@/context/prompt"
+import { useComments, type LineComment } from "@/context/comments"
+import { extractPromptFromParts } from "@/utils/prompt"
+import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
+import { usePermission } from "@/context/permission"
+import { decode64 } from "@/utils/base64"
 import { showToast } from "@opencode-ai/ui/toast"
 import { checksum } from "@opencode-ai/core/util/encode"
 import { useLocation, useSearchParams } from "@solidjs/router"
@@ -190,6 +218,9 @@ export default function Page() {
   const queryClient = useQueryClient()
   const dialog = useDialog()
   const language = useLanguage()
+  const settings = useSettings()
+  const params = useParams()
+  const navigate = useNavigate()
   const sdk = useSDK()
   const settings = useSettings()
   const prompt = usePrompt()
@@ -199,15 +230,25 @@ export default function Page() {
   const location = useLocation()
   const { params, sessionKey, tabs, view } = useSessionLayout()
 
-  createEffect(() => {
-    if (!prompt.ready()) return
-    untrack(() => {
-      if (params.id) return
-      const text = searchParams.prompt
-      if (!text) return
-      prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
-      setSearchParams({ ...searchParams, prompt: undefined })
-    })
+  // Dynamic content width class based on user settings
+  const contentWidthClasses = createMemo(() => {
+    const width = settings.appearance.contentWidth()
+    return `md:max-w-${width} md:mx-auto 3xl:max-w-[1200px] 3xl:mx-auto 4xl:max-w-[1600px] 4xl:mx-auto 5xl:max-w-[1900px] 5xl:mx-auto`
+  })
+
+  // Content width classes without mx-auto (for message containers)
+  const contentWidthClassesNoCenter = createMemo(() => {
+    const width = settings.appearance.contentWidth()
+    return `md:max-w-${width} 3xl:max-w-[1200px] 4xl:max-w-[1600px] 5xl:max-w-[1900px]`
+  })
+
+  const request = createMemo(() => {
+    const sessionID = params.id
+    if (!sessionID) return
+    const next = sync.data.permission[sessionID]?.[0]
+    if (!next) return
+    if (next.tool) return
+    return next
   })
 
   const [ui, setUi] = createStore({
@@ -1878,7 +1919,7 @@ export default function Page() {
                               "sticky top-0 z-30 bg-background-stronger": true,
                               "w-full": true,
                               "px-4 md:px-6": true,
-                              "md:max-w-300 md:mx-auto": centered(),
+                              [contentWidthClasses()]: centered(),
                             }}
                           >
                             <div class="h-10 flex items-center gap-1">
@@ -1906,7 +1947,7 @@ export default function Page() {
                           class="flex flex-col gap-32 items-start justify-start pb-[calc(var(--prompt-height,8rem)+64px)] md:pb-[calc(var(--prompt-height,10rem)+64px)] transition-[margin]"
                           classList={{
                             "w-full": true,
-                            "md:max-w-300 md:mx-auto": centered(),
+                            [contentWidthClasses()]: centered(),
                             "mt-0.5": centered(),
                             "mt-0": !centered(),
                           }}
@@ -1959,7 +2000,7 @@ export default function Page() {
                                   data-message-id={message.id}
                                   classList={{
                                     "min-w-0 w-full max-w-full": true,
-                                    "md:max-w-300": centered(),
+                                    [contentWidthClassesNoCenter()]: centered(),
                                   }}
                                 >
                                   <SessionTurn
@@ -2004,7 +2045,7 @@ export default function Page() {
             <div
               classList={{
                 "w-full px-4 pointer-events-auto": true,
-                "md:max-w-300 md:mx-auto": centered(),
+                [contentWidthClassesNoCenter()]: centered(),
               }}
             >
               <Show when={request()} keyed>
