@@ -33,6 +33,7 @@ import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
 import path from "path"
+import fs from "fs/promises"
 
 export type PromptProps = {
   sessionID?: string
@@ -526,25 +527,24 @@ export function Prompt(props: PromptProps) {
     }
 
     // Check for /new <path> or /clear <path> with directory argument
-    const newMatch = trimmed.match(/^\/(?:new|clear)\s+(.+)$/)
-    if (newMatch) {
-      const rawPath = newMatch[1].trim()
-      if (rawPath) {
+    const match = trimmed.match(/^\/(?:new|clear)\s+(.+)$/)
+    if (match) {
+      const raw = match[1].trim()
+      if (raw) {
         // Resolve path
-        const homedir = process.env.HOME ?? process.env.USERPROFILE ?? "~"
-        const resolvedPath = rawPath.startsWith("~")
-          ? rawPath.replace("~", homedir)
-          : rawPath.startsWith("/")
-          ? rawPath
-          : path.resolve(sdk.directory ?? process.cwd(), rawPath)
+        const home = process.env.HOME ?? process.env.USERPROFILE ?? "~"
+        const resolved = raw.startsWith("~")
+          ? raw.replace("~", home)
+          : raw.startsWith("/")
+          ? raw
+          : path.resolve(sdk.directory ?? process.cwd(), raw)
 
         // Validate path
-        const fs = await import("fs/promises")
-        const stat = await fs.stat(resolvedPath).catch(() => null)
+        const stat = await fs.stat(resolved).catch(() => null)
         if (!stat) {
           toast.show({
             variant: "error",
-            message: `Path does not exist: ${resolvedPath}`,
+            message: `Path does not exist: ${resolved}`,
             duration: 3000,
           })
           return
@@ -552,7 +552,7 @@ export function Prompt(props: PromptProps) {
         if (!stat.isDirectory()) {
           toast.show({
             variant: "error",
-            message: `Not a directory: ${resolvedPath}`,
+            message: `Not a directory: ${resolved}`,
             duration: 3000,
           })
           return
@@ -569,10 +569,10 @@ export function Prompt(props: PromptProps) {
         }
 
         switching = true
-        const oldDirectory = sdk.directory
+        const prev = sdk.directory
 
         try {
-          await sdk.switchDirectory(resolvedPath)
+          await sdk.switchDirectory(resolved)
           sync.reset()
           await sync.bootstrap()
 
@@ -589,13 +589,13 @@ export function Prompt(props: PromptProps) {
 
           toast.show({
             variant: "info",
-            message: `Switched to ${resolvedPath}`,
+            message: `Switched to ${resolved}`,
             duration: 2000,
           })
         } catch (error) {
           // Revert to old directory
-          if (oldDirectory) {
-            await sdk.switchDirectory(oldDirectory).catch(() => {})
+          if (prev) {
+            await sdk.switchDirectory(prev).catch(() => {})
             sync.reset()
             await sync.bootstrap().catch(() => {})
           }

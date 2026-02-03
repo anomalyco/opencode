@@ -415,6 +415,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
     function reset() {
       batch(() => {
+        setStore("session", [])
         setStore("message", {})
         setStore("part", {})
         setStore("permission", {})
