@@ -9,6 +9,8 @@ import type { Message, Part } from "@opencode-ai/sdk/v2/client"
 
 const keyFor = (directory: string, id: string) => `${directory}\n${id}`
 
+const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
+
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
   init: () => {
@@ -16,7 +18,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const sdk = useSDK()
 
     type Child = ReturnType<(typeof globalSync)["child"]>
-    type Store = Child[0]
     type Setter = Child[1]
 
     const current = createMemo(() => globalSync.child(sdk.directory))
@@ -43,18 +44,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       return Math.ceil(count / chunk) * chunk
     }
 
-    const hydrateMessages = (directory: string, store: Store, sessionID: string) => {
-      const key = keyFor(directory, sessionID)
-      if (meta.limit[key] !== undefined) return
-
-      const messages = store.message[sessionID]
-      if (!messages) return
-
-      const limit = limitFor(messages.length)
-      setMeta("limit", key, limit)
-      setMeta("complete", key, messages.length < limit)
-    }
-
     const loadMessages = async (input: {
       directory: string
       client: typeof sdk.client
@@ -72,8 +61,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           const next = items
             .map((x) => x.info)
             .filter((m) => !!m?.id)
-            .slice()
-            .sort((a, b) => a.id.localeCompare(b.id))
+            .sort((a, b) => cmp(a.id, b.id))
 
           batch(() => {
             input.setStore("message", input.sessionID, reconcile(next, { key: "id" }))
@@ -83,10 +71,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                 "part",
                 message.info.id,
                 reconcile(
-                  message.parts
-                    .filter((p) => !!p?.id)
-                    .slice()
-                    .sort((a, b) => a.id.localeCompare(b.id)),
+                  message.parts.filter((p) => !!p?.id).sort((a, b) => cmp(a.id, b.id)),
                   { key: "id" },
                 ),
               )
@@ -146,10 +131,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                 const result = Binary.search(messages, input.messageID, (m) => m.id)
                 messages.splice(result.index, 0, message)
               }
-              draft.part[input.messageID] = input.parts
-                .filter((p) => !!p?.id)
-                .slice()
-                .sort((a, b) => a.id.localeCompare(b.id))
+              draft.part[input.messageID] = input.parts.filter((p) => !!p?.id).sort((a, b) => cmp(a.id, b.id))
             }),
           )
         },
@@ -157,21 +139,20 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           const directory = sdk.directory
           const client = sdk.client
           const [store, setStore] = globalSync.child(directory)
+          const key = keyFor(directory, sessionID)
           const hasSession = (() => {
             const match = Binary.search(store.session, sessionID, (s) => s.id)
             return match.found
           })()
 
-          hydrateMessages(directory, store, sessionID)
-
           const hasMessages = store.message[sessionID] !== undefined
-          if (hasSession && hasMessages) return
-
-          const key = keyFor(directory, sessionID)
+          const hydrated = meta.limit[key] !== undefined
+          if (hasSession && hasMessages && hydrated) return
           const pending = inflight.get(key)
           if (pending) return pending
 
-          const limit = meta.limit[key] ?? chunk
+          const count = store.message[sessionID]?.length ?? 0
+          const limit = hydrated ? (meta.limit[key] ?? chunk) : limitFor(count)
 
           const sessionReq = hasSession
             ? Promise.resolve()
@@ -191,15 +172,16 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                 )
               })
 
-          const messagesReq = hasMessages
-            ? Promise.resolve()
-            : loadMessages({
-                directory,
-                client,
-                setStore,
-                sessionID,
-                limit,
-              })
+          const messagesReq =
+            hasMessages && hydrated
+              ? Promise.resolve()
+              : loadMessages({
+                  directory,
+                  client,
+                  setStore,
+                  sessionID,
+                  limit,
+                })
 
           const promise = Promise.all([sessionReq, messagesReq])
             .then(() => {})
@@ -291,8 +273,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           await client.session.list().then((x) => {
             const sessions = (x.data ?? [])
               .filter((s) => !!s?.id)
-              .slice()
-              .sort((a, b) => a.id.localeCompare(b.id))
+              .sort((a, b) => cmp(a.id, b.id))
               .slice(0, store.limit)
             setStore("session", reconcile(sessions, { key: "id" }))
           })
