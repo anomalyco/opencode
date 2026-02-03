@@ -32,6 +32,8 @@ export const dict = {
   "command.settings.open": "Einstellungen öffnen",
   "command.session.previous": "Vorherige Sitzung",
   "command.session.next": "Nächste Sitzung",
+  "command.session.previous.unseen": "Previous unread session",
+  "command.session.next.unseen": "Next unread session",
   "command.session.archive": "Sitzung archivieren",
 
   "command.palette": "Befehlspalette",
@@ -72,6 +74,7 @@ export const dict = {
   "command.model.variant.cycle.description": "Zum nächsten Aufwandslevel wechseln",
   "command.permissions.autoaccept.enable": "Änderungen automatisch akzeptieren",
   "command.permissions.autoaccept.disable": "Automatische Annahme von Änderungen stoppen",
+  "command.workspace.toggle": "Arbeitsbereiche umschalten",
   "command.session.undo": "Rückgängig",
   "command.session.undo.description": "Letzte Nachricht rückgängig machen",
   "command.session.redo": "Wiederherstellen",

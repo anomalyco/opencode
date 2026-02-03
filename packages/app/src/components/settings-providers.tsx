@@ -12,7 +12,6 @@ import { useGlobalSync } from "@/context/global-sync"
 import { DialogConnectProvider } from "./dialog-connect-provider"
 import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogCustomProvider } from "./dialog-custom-provider"
-import { ScrollFade } from "@opencode-ai/ui/scroll-fade"
 
 type ProviderSource = "env" | "api" | "config" | "custom"
 type ProviderMeta = { source?: ProviderSource }
@@ -116,12 +115,7 @@ export const SettingsProviders: Component = () => {
   }
 
   return (
-    <ScrollFade
-      direction="vertical"
-      fadeStartSize={0}
-      fadeEndSize={16}
-      class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10"
-    >
+    <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-1 pt-6 pb-8 max-w-[720px]">
           <h2 class="text-16-medium text-text-strong">{language.t("settings.providers.title")}</h2>
@@ -232,11 +226,11 @@ export const SettingsProviders: Component = () => {
             </For>
 
             <div
-              class="flex items-center justify-between gap-4 h-16 border-b border-border-weak-base last:border-none"
+              class="flex items-center justify-between gap-4 min-h-16 border-b border-border-weak-base last:border-none flex-wrap py-3"
               data-component="custom-provider-section"
             >
               <div class="flex flex-col min-w-0">
-                <div class="flex items-center gap-x-3">
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <ProviderIcon id={icon("synthetic")} class="size-5 shrink-0 icon-strong-base" />
                   <span class="text-14-medium text-text-strong">Custom provider</span>
                   <Tag>{language.t("settings.providers.tag.custom")}</Tag>
@@ -267,6 +261,6 @@ export const SettingsProviders: Component = () => {
           </Button>
         </div>
       </div>
-    </ScrollFade>
+    </div>
   )
 }
