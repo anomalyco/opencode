@@ -326,3 +326,63 @@ description: A skill in the .agents/skills directory.
     },
   })
 })
+
+test("properly resolves directories that skills live in", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      const opencodeSkillDir = path.join(dir, ".opencode", "skill", "agent-skill")
+      const opencodeSkillsDir = path.join(dir, ".opencode", "skills", "agent-skill")
+      const claudeDir = path.join(dir, ".claude", "skills", "claude-skill")
+      const agentDir = path.join(dir, ".agents", "skills", "agent-skill")
+      await Bun.write(
+        path.join(claudeDir, "SKILL.md"),
+        `---
+name: claude-skill
+description: A skill in the .claude/skills directory.
+---
+
+# Claude Skill
+`,
+      )
+      await Bun.write(
+        path.join(agentDir, "SKILL.md"),
+        `---
+name: agent-skill
+description: A skill in the .agents/skills directory.
+---
+
+# Agent Skill
+`,
+      )
+      await Bun.write(
+        path.join(opencodeSkillDir, "SKILL.md"),
+        `---
+name: opencode-skill
+description: A skill in the .opencode/skill directory.
+---
+
+# OpenCode Skill
+`,
+      )
+      await Bun.write(
+        path.join(opencodeSkillsDir, "SKILL.md"),
+        `---
+name: opencode-skill
+description: A skill in the .opencode/skills directory.
+---
+
+# OpenCode Skill
+`,
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const dirs = await Skill.dirs()
+      expect(dirs.length).toBe(4)
+    },
+  })
+})
