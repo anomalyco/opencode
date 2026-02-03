@@ -500,9 +500,7 @@ export default function Page() {
     const out = new Map<string, "add" | "del" | "mix">()
     for (const diff of diffs()) {
       const file = normalize(diff.file)
-      const add = diff.additions > 0
-      const del = diff.deletions > 0
-      const kind = add && del ? "mix" : add ? "add" : del ? "del" : "mix"
+      const kind = diff.status === "added" ? "add" : diff.status === "deleted" ? "del" : "mix"
 
       out.set(file, kind)
 
@@ -683,11 +681,23 @@ export default function Page() {
     {
       id: "file.open",
       title: language.t("command.file.open"),
-      description: language.t("command.file.open.description"),
+      description: language.t("palette.search.placeholder"),
       category: language.t("command.category.file"),
       keybind: "mod+p",
       slash: "open",
       onSelect: () => dialog.show(() => <DialogSelectFile onOpenFile={() => showAllFiles()} />),
+    },
+    {
+      id: "tab.close",
+      title: language.t("command.tab.close"),
+      category: language.t("command.category.file"),
+      keybind: "mod+w",
+      disabled: !tabs().active(),
+      onSelect: () => {
+        const active = tabs().active()
+        if (!active) return
+        tabs().close(active)
+      },
     },
     {
       id: "context.addSelection",
@@ -1940,7 +1950,8 @@ export default function Page() {
                               "sticky top-0 z-30 bg-background-stronger": true,
                               "w-full": true,
                               "px-4 md:px-6": true,
-                              "md:max-w-200 md:mx-auto": centered(),
+                              "md:max-w-200 md:mx-auto 3xl:max-w-[1200px] 4xl:max-w-[1600px] 5xl:max-w-[1900px]":
+                                centered(),
                             }}
                           >
                             <div class="h-10 flex items-center gap-1">
@@ -1965,10 +1976,11 @@ export default function Page() {
                         <div
                           ref={autoScroll.contentRef}
                           role="log"
-                          class="flex flex-col gap-32 items-start justify-start pb-[calc(var(--prompt-height,8rem)+64px)] md:pb-[calc(var(--prompt-height,10rem)+64px)] transition-[margin]"
+                          class="flex flex-col gap-12 items-start justify-start pb-[calc(var(--prompt-height,8rem)+64px)] md:pb-[calc(var(--prompt-height,10rem)+64px)] transition-[margin]"
                           classList={{
                             "w-full": true,
-                            "md:max-w-200 md:mx-auto": centered(),
+                            "md:max-w-200 md:mx-auto 3xl:max-w-[1200px] 4xl:max-w-[1600px] 5xl:max-w-[1900px]":
+                              centered(),
                             "mt-0.5": centered(),
                             "mt-0": !centered(),
                           }}
@@ -2021,7 +2033,7 @@ export default function Page() {
                                   data-message-id={message.id}
                                   classList={{
                                     "min-w-0 w-full max-w-full": true,
-                                    "md:max-w-200": centered(),
+                                    "md:max-w-200 3xl:max-w-[1200px] 4xl:max-w-[1600px] 5xl:max-w-[1900px]": centered(),
                                   }}
                                 >
                                   <SessionTurn
@@ -2078,7 +2090,7 @@ export default function Page() {
             <div
               classList={{
                 "w-full px-4 pointer-events-auto": true,
-                "md:max-w-200 md:mx-auto": centered(),
+                "md:max-w-200 3xl:max-w-[1200px] 4xl:max-w-[1600px] 5xl:max-w-[1900px]": centered(),
               }}
             >
               <Show when={request()} keyed>
@@ -2342,6 +2354,7 @@ export default function Page() {
                             const c = state()?.content
                             return c?.mimeType === "image/svg+xml"
                           })
+                          const isBinary = createMemo(() => state()?.content?.type === "binary")
                           const svgContent = createMemo(() => {
                             if (!isSvg()) return
                             const c = state()?.content
@@ -2792,6 +2805,19 @@ export default function Page() {
                                         <img src={svgPreviewUrl()} alt={path()} class="max-w-full max-h-96" />
                                       </div>
                                     </Show>
+                                  </div>
+                                </Match>
+                                <Match when={state()?.loaded && isBinary()}>
+                                  <div class="h-full px-6 pb-42 flex flex-col items-center justify-center text-center gap-6">
+                                    <Mark class="w-14 opacity-10" />
+                                    <div class="flex flex-col gap-2 max-w-md">
+                                      <div class="text-14-semibold text-text-strong truncate">
+                                        {path()?.split("/").pop()}
+                                      </div>
+                                      <div class="text-14-regular text-text-weak">
+                                        {language.t("session.files.binaryContent")}
+                                      </div>
+                                    </div>
                                   </div>
                                 </Match>
                                 <Match when={state()?.loaded}>{renderCode(contents(), "pb-40")}</Match>

@@ -16,6 +16,7 @@ import path from "path"
 import { useRoute, useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { SplitBorder } from "@tui/component/border"
+import { Spinner } from "@tui/component/spinner"
 import { useTheme } from "@tui/context/theme"
 import {
   BoxRenderable,
@@ -43,6 +44,7 @@ import type { ApplyPatchTool } from "@/tool/apply_patch"
 import type { WebFetchTool } from "@/tool/webfetch"
 import type { TaskTool } from "@/tool/task"
 import type { QuestionTool } from "@/tool/question"
+import type { SkillTool } from "@/tool/skill"
 import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useSDK } from "@tui/context/sdk"
 import { useCommandDialog } from "@tui/component/dialog-command"
@@ -75,6 +77,7 @@ import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
+import { UI } from "@/cli/ui.ts"
 
 addDefaultParsers(parsers.parsers)
 
@@ -220,6 +223,19 @@ export function Session() {
 
   // Allow exit when in child session (prompt is hidden)
   const exit = useExit()
+
+  createEffect(() => {
+    const title = Locale.truncate(session()?.title ?? "", 50)
+    return exit.message.set(
+      [
+        ``,
+        `  █▀▀█  ${UI.Style.TEXT_DIM}${title}${UI.Style.TEXT_NORMAL}`,
+        `  █  █  ${UI.Style.TEXT_DIM}opencode -s ${session()?.id}${UI.Style.TEXT_NORMAL}`,
+        `  ▀▀▀▀  `,
+      ].join("\n"),
+    )
+  })
+
   useKeyboard((evt) => {
     if (!session()?.parentID) return
     if (keybind.match("app_exit", evt)) {
@@ -1447,6 +1463,9 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
         <Match when={props.part.tool === "question"}>
           <Question {...toolprops} />
         </Match>
+        <Match when={props.part.tool === "skill"}>
+          <Skill {...toolprops} />
+        </Match>
         <Match when={true}>
           <GenericTool {...toolprops} />
         </Match>
@@ -1555,7 +1574,13 @@ function InlineTool(props: {
   )
 }
 
-function BlockTool(props: { title: string; children: JSX.Element; onClick?: () => void; part?: ToolPart }) {
+function BlockTool(props: {
+  title: string
+  children: JSX.Element
+  onClick?: () => void
+  part?: ToolPart
+  spinner?: boolean
+}) {
   const { theme } = useTheme()
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
@@ -1578,9 +1603,16 @@ function BlockTool(props: { title: string; children: JSX.Element; onClick?: () =
         props.onClick?.()
       }}
     >
-      <text paddingLeft={3} fg={theme.textMuted}>
-        {props.title}
-      </text>
+      <Show
+        when={props.spinner}
+        fallback={
+          <text paddingLeft={3} fg={theme.textMuted}>
+            {props.title}
+          </text>
+        }
+      >
+        <Spinner color={theme.textMuted}>{props.title.replace(/^# /, "")}</Spinner>
+      </Show>
       {props.children}
       <Show when={error()}>
         <text fg={theme.error}>{error()}</text>
@@ -1636,7 +1668,9 @@ function Bash(props: ToolProps<typeof BashTool>) {
         >
           <box gap={1}>
             <text fg={theme.text}>$ {props.input.command}</text>
-            <text fg={theme.text}>{limited()}</text>
+            <Show when={output()}>
+              <text fg={theme.text}>{limited()}</text>
+            </Show>
             <Show when={overflow()}>
               <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
             </Show>
@@ -1701,7 +1735,9 @@ function Glob(props: ToolProps<typeof GlobTool>) {
   return (
     <InlineTool icon="✱" pending="Finding files..." complete={props.input.pattern} part={props.part}>
       Glob "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
-      <Show when={props.metadata.count}>({props.metadata.count} matches)</Show>
+      <Show when={props.metadata.count}>
+        ({props.metadata.count} {props.metadata.count === 1 ? "match" : "matches"})
+      </Show>
     </InlineTool>
   )
 }
@@ -1737,7 +1773,9 @@ function Grep(props: ToolProps<typeof GrepTool>) {
   return (
     <InlineTool icon="✱" pending="Searching content..." complete={props.input.pattern} part={props.part}>
       Grep "{props.input.pattern}" <Show when={props.input.path}>in {normalizePath(props.input.path)} </Show>
-      <Show when={props.metadata.matches}>({props.metadata.matches} matches)</Show>
+      <Show when={props.metadata.matches}>
+        ({props.metadata.matches} {props.metadata.matches === 1 ? "match" : "matches"})
+      </Show>
     </InlineTool>
   )
 }
@@ -1789,13 +1827,25 @@ function Task(props: ToolProps<typeof TaskTool>) {
   const keybind = useKeybind()
   const { navigate } = useRoute()
   const local = useLocal()
+  const sync = useSync()
 
-  const current = createMemo(() => props.metadata.summary?.findLast((x) => x.state.status !== "pending"))
-  const color = createMemo(() => local.agent.color(props.input.subagent_type ?? "unknown"))
+  const tools = createMemo(() => {
+    const sessionID = props.metadata.sessionId
+    const msgs = sync.data.message[sessionID ?? ""] ?? []
+    return msgs.flatMap((msg) =>
+      (sync.data.part[msg.id] ?? [])
+        .filter((part): part is ToolPart => part.type === "tool")
+        .map((part) => ({ tool: part.tool, state: part.state })),
+    )
+  })
+
+  const current = createMemo(() => tools().findLast((x) => x.state.status !== "pending"))
+
+  const isRunning = createMemo(() => props.part.state.status === "running")
 
   return (
     <Switch>
-      <Match when={props.metadata.summary?.length}>
+      <Match when={props.input.description || props.input.subagent_type}>
         <BlockTool
           title={"# " + Locale.titlecase(props.input.subagent_type ?? "unknown") + " Task"}
           onClick={
@@ -1804,34 +1854,34 @@ function Task(props: ToolProps<typeof TaskTool>) {
               : undefined
           }
           part={props.part}
+          spinner={isRunning()}
         >
           <box>
             <text style={{ fg: theme.textMuted }}>
-              {props.input.description} ({props.metadata.summary?.length} toolcalls)
+              {props.input.description} ({tools().length} toolcalls)
             </text>
             <Show when={current()}>
-              <text style={{ fg: current()!.state.status === "error" ? theme.error : theme.textMuted }}>
-                └ {Locale.titlecase(current()!.tool)}{" "}
-                {current()!.state.status === "completed" ? current()!.state.title : ""}
-              </text>
+              {(item) => {
+                const title = item().state.status === "completed" ? (item().state as any).title : ""
+                return (
+                  <text style={{ fg: item().state.status === "error" ? theme.error : theme.textMuted }}>
+                    └ {Locale.titlecase(item().tool)} {title}
+                  </text>
+                )
+              }}
             </Show>
           </box>
-          <text fg={theme.text}>
-            {keybind.print("session_child_cycle")}
-            <span style={{ fg: theme.textMuted }}> view subagents</span>
-          </text>
+          <Show when={props.metadata.sessionId}>
+            <text fg={theme.text}>
+              {keybind.print("session_child_cycle")}
+              <span style={{ fg: theme.textMuted }}> view subagents</span>
+            </text>
+          </Show>
         </BlockTool>
       </Match>
       <Match when={true}>
-        <InlineTool
-          icon="◉"
-          iconColor={color()}
-          pending="Delegating..."
-          complete={props.input.subagent_type ?? props.input.description}
-          part={props.part}
-        >
-          <span style={{ fg: theme.text }}>{Locale.titlecase(props.input.subagent_type ?? "unknown")}</span> Task "
-          {props.input.description}"
+        <InlineTool icon="#" pending="Delegating..." complete={props.input.subagent_type} part={props.part}>
+          {props.input.subagent_type} Task {props.input.description}
         </InlineTool>
       </Match>
     </Switch>
@@ -2033,6 +2083,14 @@ function Question(props: ToolProps<typeof QuestionTool>) {
         </InlineTool>
       </Match>
     </Switch>
+  )
+}
+
+function Skill(props: ToolProps<typeof SkillTool>) {
+  return (
+    <InlineTool icon="→" pending="Loading skill..." complete={props.input.name} part={props.part}>
+      Skill "{props.input.name}"
+    </InlineTool>
   )
 }
 

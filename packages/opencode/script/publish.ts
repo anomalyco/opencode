@@ -18,6 +18,7 @@ const version = Object.values(binaries)[0]
 await $`mkdir -p ./dist/${pkg.name}`
 await $`cp -r ./bin ./dist/${pkg.name}/bin`
 await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
+await Bun.file(`./dist/${pkg.name}/LICENSE`).write(await Bun.file("../../LICENSE").text())
 
 await Bun.file(`./dist/${pkg.name}/package.json`).write(
   JSON.stringify(
@@ -30,6 +31,7 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
         postinstall: "bun ./postinstall.mjs || node ./postinstall.mjs",
       },
       version: version,
+      license: pkg.license,
       optionalDependencies: binaries,
     },
     null,
@@ -37,7 +39,6 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
   ),
 )
 
-/*
 const tasks = Object.entries(binaries).map(async ([name]) => {
   if (process.platform !== "win32") {
     await $`chmod -R 755 .`.cwd(`./dist/${name}`)
@@ -53,7 +54,6 @@ const platforms = "linux/amd64,linux/arm64"
 const tags = [`${image}:${version}`, `${image}:${Script.channel}`]
 const tagFlags = tags.flatMap((t) => ["-t", t])
 await $`docker buildx build --platform ${platforms} ${tagFlags} --push .`
-*/
 
 // registries
 if (!Script.preview) {
@@ -65,7 +65,6 @@ if (!Script.preview) {
 
   const [pkgver, _subver = ""] = Script.version.split(/(-.*)/, 2)
 
-  /*
   // arch
   const binaryPkgbuild = [
     "# Maintainer: dax",
@@ -179,7 +178,6 @@ if (!Script.preview) {
       }
     }
   }
-  */
 
   // Homebrew formula
   const homebrewFormula = [
