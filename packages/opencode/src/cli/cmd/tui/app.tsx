@@ -257,10 +257,26 @@ export function tui(input: {
                 </KVProvider>
               </ExitProvider>
             </ArgsProvider>
-          </OpencodeKeymapProvider>
-        </ErrorBoundary>
-      )
-    }, renderer)
+          </ErrorBoundary>
+        )
+      },
+      {
+        targetFps: 60,
+        gatherStats: false,
+        exitOnCtrlC: false,
+        useKittyKeyboard: {},
+        // @ts-expect-error - autoFocus is not in CliRendererConfig types but is supported
+        autoFocus: false,
+        consoleOptions: {
+          keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
+          onCopySelection: (text) => {
+            Clipboard.copy(text).catch((error) => {
+              console.error(`Failed to copy console selection to clipboard: ${error}`)
+            })
+          },
+        },
+      },
+    )
   })
 }
 

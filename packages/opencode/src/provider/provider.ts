@@ -29,7 +29,30 @@ import { ModelID, ProviderID } from "./schema"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 
-const log = Log.create({ service: "provider" })
+// Direct imports for bundled providers
+import { createAmazonBedrock, type AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
+import { createAnthropic } from "@ai-sdk/anthropic"
+import { createAzure } from "@ai-sdk/azure"
+import { createGoogleGenerativeAI } from "@ai-sdk/google"
+import { createVertex } from "@ai-sdk/google-vertex"
+import { createVertexAnthropic } from "@ai-sdk/google-vertex/anthropic"
+import { createOpenAI } from "@ai-sdk/openai"
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
+import { createOpenRouter, type LanguageModelV2 } from "@openrouter/ai-sdk-provider"
+import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/copilot"
+import { createXai } from "@ai-sdk/xai"
+import { createMistral } from "@ai-sdk/mistral"
+import { createGroq } from "@ai-sdk/groq"
+import { createDeepInfra } from "@ai-sdk/deepinfra"
+import { createCerebras } from "@ai-sdk/cerebras"
+import { createCohere } from "@ai-sdk/cohere"
+import { createGateway } from "@ai-sdk/gateway"
+import { createTogetherAI } from "@ai-sdk/togetherai"
+import { createPerplexity } from "@ai-sdk/perplexity"
+import { createVercel } from "@ai-sdk/vercel"
+import { createGitLab } from "@gitlab/gitlab-ai-provider"
+import { ProviderTransform } from "./transform"
+import { Installation } from "../installation"
 
 function shouldUseCopilotResponsesApi(modelID: string): boolean {
   const match = /^gpt-(\d+)/.exec(modelID)
@@ -582,6 +605,9 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const providerConfig = (yield* dep.config()).provider?.["gitlab"]
       const directory = yield* InstanceState.directory
 
+      // GitLab provider version is not exported in newer versions
+      const GITLAB_PROVIDER_VERSION = "unknown"
+
       const aiGatewayHeaders = {
         "User-Agent": `opencode/${InstallationVersion} gitlab-ai-provider/${GITLAB_PROVIDER_VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`,
         "anthropic-beta": "context-1m-2025-08-07",
@@ -739,13 +765,16 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
             "User-Agent": `opencode/${InstallationVersion} cloudflare-workers-ai (${os.platform()} ${os.release()}; ${os.arch()})`,
           },
         },
-        async getModel(sdk: any, modelID: string) {
-          return sdk.languageModel(modelID)
-        },
-        vars(_options) {
-          return {
-            CLOUDFLARE_ACCOUNT_ID: accountId,
-          }
+        async getModel(sdk: ReturnType<typeof createGitLab>, modelID: string) {
+          return sdk.agenticChat(modelID, {
+            // @ts-expect-error - aiGatewayHeaders may not be in GitLabAgenticOptions types
+            aiGatewayHeaders,
+            featureFlags: {
+              duo_agent_platform_agentic_chat: true,
+              duo_agent_platform: true,
+              ...(providerConfig?.options?.featureFlags || {}),
+            },
+          })
         },
       }
     }),
