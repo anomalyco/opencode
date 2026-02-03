@@ -9,6 +9,7 @@ import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { useDiffComponent } from "../context/diff"
 import { useI18n } from "../context/i18n"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
+import { checksum } from "@opencode-ai/util/encode"
 import { createEffect, createMemo, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { type FileContent, type FileDiff } from "@opencode-ai/sdk/v2"
@@ -43,6 +44,7 @@ export interface SessionReviewProps {
   comments?: SessionReviewComment[]
   focusedComment?: SessionReviewFocus | null
   onFocusedCommentChange?: (focus: SessionReviewFocus | null) => void
+  focusedFile?: string
   open?: string[]
   onOpenChange?: (open: string[]) => void
   scrollRef?: (el: HTMLDivElement) => void
@@ -116,6 +118,12 @@ function dataUrlFromValue(value: unknown): string | undefined {
   if (!mime.startsWith("image/") && !mime.startsWith("audio/")) return
 
   return `data:${mime};base64,${content}`
+}
+
+function diffId(file: string): string | undefined {
+  const sum = checksum(file)
+  if (!sum) return
+  return `session-review-diff-${sum}`
 }
 
 type SessionReviewSelection = {
@@ -489,7 +497,13 @@ export const SessionReview = (props: SessionReviewProps) => {
               }
 
               return (
-                <Accordion.Item value={diff.file} data-slot="session-review-accordion-item">
+                <Accordion.Item
+                  value={diff.file}
+                  id={diffId(diff.file)}
+                  data-file={diff.file}
+                  data-slot="session-review-accordion-item"
+                  data-selected={props.focusedFile === diff.file ? "" : undefined}
+                >
                   <StickyAccordionHeader>
                     <Accordion.Trigger>
                       <div data-slot="session-review-trigger-content">
@@ -518,12 +532,12 @@ export const SessionReview = (props: SessionReviewProps) => {
                           <Switch>
                             <Match when={isAdded()}>
                               <span data-slot="session-review-change" data-type="added">
-                                Added
+                                {i18n.t("ui.sessionReview.change.added")}
                               </span>
                             </Match>
                             <Match when={isDeleted()}>
                               <span data-slot="session-review-change" data-type="removed">
-                                Removed
+                                {i18n.t("ui.sessionReview.change.removed")}
                               </span>
                             </Match>
                             <Match when={true}>
