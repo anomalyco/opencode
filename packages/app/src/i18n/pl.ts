@@ -28,6 +28,8 @@ export const dict = {
   "command.settings.open": "Otwórz ustawienia",
   "command.session.previous": "Poprzednia sesja",
   "command.session.next": "Następna sesja",
+  "command.session.previous.unseen": "Previous unread session",
+  "command.session.next.unseen": "Next unread session",
   "command.session.archive": "Zarchiwizuj sesję",
 
   "command.palette": "Paleta poleceń",
@@ -68,6 +70,7 @@ export const dict = {
   "command.model.variant.cycle.description": "Przełącz na następny poziom wysiłku",
   "command.permissions.autoaccept.enable": "Automatyczne akceptowanie edycji",
   "command.permissions.autoaccept.disable": "Zatrzymaj automatyczne akceptowanie edycji",
+  "command.workspace.toggle": "Przełącz przestrzenie robocze",
   "command.session.undo": "Cofnij",
   "command.session.undo.description": "Cofnij ostatnią wiadomość",
   "command.session.redo": "Ponów",
@@ -210,6 +213,8 @@ export const dict = {
   "prompt.popover.emptyCommands": "Brak pasujących poleceń",
   "prompt.dropzone.label": "Upuść obrazy lub pliki PDF tutaj",
   "prompt.slash.badge.custom": "własne",
+  "prompt.slash.badge.skill": "skill",
+  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "aktywny",
   "prompt.context.includeActiveFile": "Dołącz aktywny plik",
   "prompt.context.removeActiveFile": "Usuń aktywny plik z kontekstu",
@@ -345,6 +350,11 @@ export const dict = {
   "toast.permissions.autoaccept.off.title": "Zatrzymano automatyczne akceptowanie edycji",
   "toast.permissions.autoaccept.off.description": "Uprawnienia do edycji i zapisu będą wymagały zatwierdzenia",
 
+  "toast.workspace.enabled.title": "Przestrzenie robocze włączone",
+  "toast.workspace.enabled.description": "Kilka worktree jest teraz wyświetlanych na pasku bocznym",
+  "toast.workspace.disabled.title": "Przestrzenie robocze wyłączone",
+  "toast.workspace.disabled.description": "Tylko główny worktree jest wyświetlany na pasku bocznym",
+
   "toast.model.none.title": "Nie wybrano modelu",
   "toast.model.none.description": "Połącz dostawcę, aby podsumować tę sesję",
 
@@ -435,6 +445,7 @@ export const dict = {
   "session.review.noChanges": "Brak zmian",
   "session.files.selectToOpen": "Wybierz plik do otwarcia",
   "session.files.all": "Wszystkie pliki",
+  "session.files.binaryContent": "Plik binarny (zawartość nie może być wyświetlona)",
   "session.messages.renderEarlier": "Renderuj wcześniejsze wiadomości",
   "session.messages.loadingEarlier": "Ładowanie wcześniejszych wiadomości...",
   "session.messages.loadEarlier": "Załaduj wcześniejsze wiadomości",
