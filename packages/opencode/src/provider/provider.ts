@@ -1015,9 +1015,15 @@ export namespace Provider {
 
       // Sanitize options for official Google Vertex SDK to prevent conflicts
       if (model.api.npm === "@ai-sdk/google-vertex" || model.api.npm === "@ai-sdk/google") {
-        delete options.baseURL
-        delete options.fetch
-        delete options.headers
+        // Only strip if it's a standard Google URL (which conflicts with official SDK internals).
+        // Custom proxies and localhost will have a baseURL that doesn't include "googleapis.com", 
+        // so they will bypass this stripping.
+        const isGoogle = !options.baseURL || options.baseURL.includes("googleapis.com")
+        if (isGoogle) {
+          delete options.baseURL
+          delete options.fetch
+          delete options.headers
+        }
       }
 
       if (model.api.npm.includes("@ai-sdk/openai-compatible") && options["includeUsage"] !== false) {
