@@ -939,6 +939,10 @@ export namespace Provider {
             id: modelID,
             providerID: provider.id,
             name: modelID,
+            api: {
+              id: modelID,
+            },
+            capabilities: {}
           } as Model
         }
       }),

@@ -81,6 +81,9 @@ function expandLocalModels(provider: Provider.Info, localModels: LocalModel[]): 
       providerID: provider.id,
       name: localModel.id,
       status: "active",
+      api: {
+        id: localModel.id,
+      },
       limit: {
         context: localModel.context_length,
         // TODO: can we drop this field?
