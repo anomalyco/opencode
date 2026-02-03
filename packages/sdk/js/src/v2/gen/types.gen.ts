@@ -121,6 +121,7 @@ export type UserMessage = {
     [key: string]: boolean
   }
   variant?: string
+  clientMessageID?: string
 }
 
 export type ProviderAuthError = {

@@ -842,7 +842,7 @@ export namespace SessionPrompt {
         : undefined)
 
     const info: MessageV2.Info = {
-      id: input.messageID ?? Identifier.ascending("message"),
+      id: Identifier.ascending("message"),
       role: "user",
       sessionID: input.sessionID,
       time: {
@@ -853,6 +853,7 @@ export namespace SessionPrompt {
       model,
       system: input.system,
       variant,
+      clientMessageID: input.messageID,
     }
     using _ = defer(() => InstructionPrompt.clear(info.id))
 
@@ -1192,6 +1193,7 @@ export namespace SessionPrompt {
         agent: input.agent,
         model: input.model,
         messageID: input.messageID,
+        clientMessageID: input.messageID,
         variant: input.variant,
       },
       {
