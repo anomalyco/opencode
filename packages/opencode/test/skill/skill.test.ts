@@ -55,6 +55,42 @@ Instructions here.
   })
 })
 
+test("returns skill directories from Skill.dirs", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (dir) => {
+      const skillDir = path.join(dir, ".opencode", "skill", "dir-skill")
+      await Bun.write(
+        path.join(skillDir, "SKILL.md"),
+        `---
+name: dir-skill
+description: Skill for dirs test.
+---
+
+# Dir Skill
+`,
+      )
+    },
+  })
+
+  const home = process.env.OPENCODE_TEST_HOME
+  process.env.OPENCODE_TEST_HOME = tmp.path
+
+  try {
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const dirs = await Skill.dirs()
+        const skillDir = path.join(tmp.path, ".opencode", "skill", "dir-skill")
+        expect(dirs).toContain(skillDir)
+        expect(dirs.length).toBe(1)
+      },
+    })
+  } finally {
+    process.env.OPENCODE_TEST_HOME = home
+  }
+})
+
 test("discovers multiple skills from .opencode/skill/ directory", async () => {
   await using tmp = await tmpdir({
     git: true,
