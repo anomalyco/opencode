@@ -198,6 +198,26 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
+        title: "Copy session ID",
+        value: "session.copy_id",
+        category: "Session",
+        slash: {
+          name: "session-id",
+        },
+        enabled: !!props.sessionID,
+        onSelect: async (dialog) => {
+          if (props.sessionID) {
+            await Clipboard.copy(props.sessionID)
+            toast.show({
+              variant: "success",
+              message: `Copied: ${props.sessionID}`,
+              duration: 2000,
+            })
+          }
+          dialog.clear()
+        },
+      },
+      {
         title: "Interrupt session",
         value: "session.interrupt",
         keybind: "session_interrupt",
