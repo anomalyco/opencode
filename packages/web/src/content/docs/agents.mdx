@@ -494,6 +494,25 @@ Since the last matching rule takes precedence, put the `*` wildcard first and sp
 }
 ```
 
+For more complex patterns, you can use regular expressions by wrapping the pattern in forward slashes:
+
+```json title="opencode.json" {8}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "*": "ask",
+          "/brew (bundle|info|leaves|list|shellenv|uses)/": "allow",
+          "/git\\s+(status|log|diff)/": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
 [Learn more about permissions](/docs/permissions).
 
 ---

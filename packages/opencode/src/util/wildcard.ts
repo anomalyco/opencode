@@ -2,6 +2,12 @@ import { sortBy, pipe } from "remeda"
 
 export namespace Wildcard {
   export function match(str: string, pattern: string) {
+    // Check if pattern is a regex (starts and ends with /)
+    if (pattern.startsWith("/") && pattern.endsWith("/") && pattern.length > 2) {
+      const regex = pattern.slice(1, -1)
+      return new RegExp(regex).test(str)
+    }
+
     let escaped = pattern
       .replace(/[.+^${}()|[\]\\]/g, "\\$&") // escape special regex chars
       .replace(/\*/g, ".*") // * becomes .*

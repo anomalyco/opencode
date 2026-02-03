@@ -295,6 +295,30 @@ test("evaluate - glob permission pattern", () => {
   expect(result.action).toBe("allow")
 })
 
+test("evaluate - regex pattern with alternation", () => {
+  const result = PermissionNext.evaluate("bash", "brew install", [
+    { permission: "bash", pattern: "/brew (install|info|list)/", action: "allow" },
+  ])
+  expect(result.action).toBe("allow")
+  
+  const result2 = PermissionNext.evaluate("bash", "brew info", [
+    { permission: "bash", pattern: "/brew (install|info|list)/", action: "allow" },
+  ])
+  expect(result2.action).toBe("allow")
+  
+  const result3 = PermissionNext.evaluate("bash", "brew remove", [
+    { permission: "bash", pattern: "/brew (install|info|list)/", action: "allow" },
+  ])
+  expect(result3.action).toBe("ask")
+})
+
+test("evaluate - regex pattern with wildcards", () => {
+  const result = PermissionNext.evaluate("bash", "git status --short", [
+    { permission: "bash", pattern: "/git (status|log|diff).*/", action: "allow" },
+  ])
+  expect(result.action).toBe("allow")
+})
+
 test("evaluate - specific permission and wildcard permission combined", () => {
   const result = PermissionNext.evaluate("bash", "rm", [
     { permission: "*", pattern: "*", action: "deny" },

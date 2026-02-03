@@ -73,3 +73,24 @@ test("allStructured handles sed flags", () => {
   expect(Wildcard.allStructured({ head: "sed", tail: ["-n", "1p", "file"] }, rules)).toBe("allow")
   expect(Wildcard.allStructured({ head: "sed", tail: ["-i", "-n", "/./p", "myfile.txt"] }, rules)).toBe("ask")
 })
+
+test("match handles regex patterns", () => {
+  // Basic regex patterns
+  expect(Wildcard.match("brew install", "/brew (install|info|list)/")).toBe(true)
+  expect(Wildcard.match("brew info", "/brew (install|info|list)/")).toBe(true)
+  expect(Wildcard.match("brew list", "/brew (install|info|list)/")).toBe(true)
+  expect(Wildcard.match("brew remove", "/brew (install|info|list)/")).toBe(false)
+  
+  // With wildcards/flags
+  expect(Wildcard.match("brew install node", "/brew (install|info|list).*/")).toBe(true)
+  expect(Wildcard.match("brew install", "/brew (install|info|list).*/")).toBe(true)
+  
+  // Match multiple spaces
+  expect(Wildcard.match("git status", "/git\\s+(status|log|diff)/")).toBe(true)
+  expect(Wildcard.match("git log", "/git\\s+(status|log|diff)/")).toBe(true)
+  expect(Wildcard.match("git push", "/git\\s+(status|log|diff)/")).toBe(false)
+  
+  // Edge cases
+  expect(Wildcard.match("ls", "//")).toBe(false) // empty regex
+  expect(Wildcard.match("ls", "/")).toBe(false) // single slash not treated as regex
+})

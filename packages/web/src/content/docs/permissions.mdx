@@ -78,6 +78,32 @@ Permission patterns use simple wildcard matching:
 - `?` matches exactly one character
 - All other characters match literally
 
+### Regular Expressions
+
+For more complex pattern matching, you can use regular expressions by wrapping the pattern in forward slashes (`/pattern/`):
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "ask",
+      "/brew (bundle|info|leaves|list|shellenv|uses)/": "allow",
+      "/git\\s+(status|log|diff)/": "allow"
+    }
+  }
+}
+```
+
+Regex patterns are evaluated as JavaScript regular expressions, so you can use:
+- Alternation: `(option1|option2|option3)`
+- Character classes: `[a-z]`, `[0-9]`
+- Quantifiers: `+`, `*`, `?`, `{n,m}`
+- Whitespace: `\\s`, `\\n`, `\\t`
+- Any other standard regex syntax
+
+Note: Regex patterns are not anchored by default, so `/(foo|bar)/` will match anywhere in the string. Use `^` and `$` for exact matches if needed.
+
 ### Home Directory Expansion
 
 You can use `~` or `$HOME` at the start of a pattern to reference your home directory. This is particularly useful for [`external_directory`](#external-directories) rules.
