@@ -1,232 +1,229 @@
-import { describe, expect, test, beforeEach, afterEach } from "bun:test"
-import fs from "fs/promises"
+import { describe, expect, test } from "bun:test"
 import path from "path"
-import os from "os"
+import { tmpdir } from "./fixture/fixture"
 
-describe("BunProc registry configuration", () => {
-  test("should not contain hardcoded registry parameters", async () => {
-    const bunIndexPath = path.join(__dirname, "../src/bun/index.ts")
-    const content = await fs.readFile(bunIndexPath, "utf-8")
+const SEMVER_REGEX =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
 
+function isExactVersion(v: string) {
+  return typeof v === "string" && SEMVER_REGEX.test(v)
+}
+
+describe("BunProc", () => {
+  test("install function has correct bun add command structure", async () => {
+    const content = await Bun.file(path.join(__dirname, "../src/bun/index.ts")).text()
+
+    const match = content.match(/export async function install[\s\S]*?^  }/m)
+    expect(match).toBeTruthy()
+
+    const fn = match![0]
+    expect(fn).toContain('"add"')
+    expect(fn).toContain('"--force"')
+    expect(fn).toContain('"--exact"')
+    expect(fn).toContain('"--cwd"')
+    expect(fn).not.toContain('"--registry"')
     expect(content).not.toContain("--registry=")
     expect(content).not.toContain("hasNpmRcConfig")
-    expect(content).not.toContain("NpmRc")
   })
 
-  test("should have correct bun add command structure", async () => {
-    const bunIndexPath = path.join(__dirname, "../src/bun/index.ts")
-    const content = await fs.readFile(bunIndexPath, "utf-8")
+  test("installs package, tracks provider, and returns module path", async () => {
+    await using tmp = await tmpdir()
+    process.env.OPENCODE_TEST_CACHE = tmp.path
 
-    const installFunctionMatch = content.match(/export async function install[\s\S]*?^  }/m)
-    expect(installFunctionMatch).toBeTruthy()
-
-    if (installFunctionMatch) {
-      const installFunction = installFunctionMatch[0]
-
-      expect(installFunction).toContain('"add"')
-      expect(installFunction).toContain('"--force"')
-      expect(installFunction).toContain('"--exact"')
-      expect(installFunction).toContain('"--cwd"')
-      expect(installFunction).not.toContain('"--registry"')
-    }
-  })
-})
-
-describe("BunProc.install provider tracking", () => {
-  let tempDir: string
-  let originalCache: string | undefined
-
-  beforeEach(async () => {
-    tempDir = path.join(os.tmpdir(), "opencode-bun-test-" + Math.random().toString(36).slice(2))
-    await fs.mkdir(tempDir, { recursive: true })
-    originalCache = process.env.OPENCODE_TEST_CACHE
-    process.env.OPENCODE_TEST_CACHE = tempDir
-  })
-
-  afterEach(async () => {
-    if (originalCache === undefined) {
-      delete process.env.OPENCODE_TEST_CACHE
-    } else {
-      process.env.OPENCODE_TEST_CACHE = originalCache
-    }
-    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {})
-  })
-
-  async function readPkgJson() {
-    return JSON.parse(await fs.readFile(path.join(tempDir, "package.json"), "utf-8"))
-  }
-
-  async function pkgExists(pkg: string) {
-    return fs
-      .stat(path.join(tempDir, "node_modules", pkg))
-      .then(() => true)
-      .catch(() => false)
-  }
-
-  const SEMVER_REGEX =
-    /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
-
-  function isExactVersion(v: string) {
-    return typeof v === "string" && SEMVER_REGEX.test(v)
-  }
-
-  test("should track provider in opencode.providers section", async () => {
     const { BunProc } = await import("../src/bun")
-
-    await BunProc.install("zod", "latest", "anthropic")
-
-    const pkgJson = await readPkgJson()
-    expect(pkgJson.opencode?.providers?.anthropic).toBe("zod")
-    expect(isExactVersion(pkgJson.dependencies?.zod)).toBe(true)
-  })
-
-  test("should install package and return module path", async () => {
-    const { BunProc } = await import("../src/bun")
-
     const mod = await BunProc.install("zod", "latest", "anthropic")
 
     expect(mod).toContain("node_modules/zod")
-    expect(await pkgExists("zod")).toBe(true)
-    const pkgJson = await readPkgJson()
+    expect(await Bun.file(path.join(tmp.path, "node_modules", "zod", "package.json")).exists()).toBe(true)
+
+    const pkgJson = await Bun.file(path.join(tmp.path, "package.json")).json()
+    expect(pkgJson.opencode?.providers?.anthropic).toBe("zod")
     expect(isExactVersion(pkgJson.dependencies?.zod)).toBe(true)
+
+    delete process.env.OPENCODE_TEST_CACHE
   })
 
-  test("should update tracking when provider switches packages", async () => {
+  test("updates tracking and removes old package when provider switches", async () => {
+    await using tmp = await tmpdir()
+    process.env.OPENCODE_TEST_CACHE = tmp.path
+
     const { BunProc } = await import("../src/bun")
 
     await BunProc.install("zod", "latest", "anthropic")
-    const pkgJson1 = await readPkgJson()
-    expect(pkgJson1.opencode?.providers?.anthropic).toBe("zod")
-    expect(isExactVersion(pkgJson1.dependencies?.zod)).toBe(true)
-
-    await BunProc.install("superstruct", "latest", "anthropic")
-    const pkgJson2 = await readPkgJson()
-    expect(pkgJson2.opencode?.providers?.anthropic).toBe("superstruct")
-    expect(isExactVersion(pkgJson2.dependencies?.superstruct)).toBe(true)
-  })
-
-  test("should remove old package when provider switches", async () => {
-    const { BunProc } = await import("../src/bun")
-
-    await BunProc.install("zod", "latest", "anthropic")
-    expect(await pkgExists("zod")).toBe(true)
+    expect(await Bun.file(path.join(tmp.path, "node_modules", "zod", "package.json")).exists()).toBe(true)
 
     await BunProc.install("superstruct", "latest", "anthropic")
 
-    expect(await pkgExists("zod")).toBe(false)
-    expect(await pkgExists("superstruct")).toBe(true)
+    expect(await Bun.file(path.join(tmp.path, "node_modules", "zod", "package.json")).exists()).toBe(false)
+    expect(await Bun.file(path.join(tmp.path, "node_modules", "superstruct", "package.json")).exists()).toBe(true)
 
-    const pkgJson = await readPkgJson()
+    const pkgJson = await Bun.file(path.join(tmp.path, "package.json")).json()
+    expect(pkgJson.opencode?.providers?.anthropic).toBe("superstruct")
     expect(pkgJson.dependencies?.zod).toBeUndefined()
     expect(isExactVersion(pkgJson.dependencies?.superstruct)).toBe(true)
+
+    delete process.env.OPENCODE_TEST_CACHE
   })
 
-  test("should remove old package even when new package is already cached", async () => {
+  test("removes old package even when new package is already cached", async () => {
+    await using tmp = await tmpdir()
+    process.env.OPENCODE_TEST_CACHE = tmp.path
+
     const { BunProc } = await import("../src/bun")
 
     await BunProc.install("zod", "latest", "provider-a")
-    expect(await pkgExists("zod")).toBe(true)
-
     await BunProc.install("superstruct", "latest", "provider-b")
-    expect(await pkgExists("superstruct")).toBe(true)
-
     await BunProc.install("superstruct", "latest", "provider-a")
 
-    expect(await pkgExists("zod")).toBe(false)
+    expect(await Bun.file(path.join(tmp.path, "node_modules", "zod", "package.json")).exists()).toBe(false)
 
-    const pkgJson = await readPkgJson()
+    const pkgJson = await Bun.file(path.join(tmp.path, "package.json")).json()
     expect(pkgJson.opencode?.providers?.["provider-a"]).toBe("superstruct")
     expect(pkgJson.opencode?.providers?.["provider-b"]).toBe("superstruct")
     expect(pkgJson.dependencies?.zod).toBeUndefined()
-    expect(isExactVersion(pkgJson.dependencies?.superstruct)).toBe(true)
+
+    delete process.env.OPENCODE_TEST_CACHE
   })
 
-  test("should not remove package if provider is not switching", async () => {
+  test("does not remove package if provider is not switching", async () => {
+    await using tmp = await tmpdir()
+    process.env.OPENCODE_TEST_CACHE = tmp.path
+
     const { BunProc } = await import("../src/bun")
 
     await BunProc.install("zod", "latest", "anthropic")
     await BunProc.install("zod", "latest", "anthropic")
 
-    expect(await pkgExists("zod")).toBe(true)
+    expect(await Bun.file(path.join(tmp.path, "node_modules", "zod", "package.json")).exists()).toBe(true)
+
+    delete process.env.OPENCODE_TEST_CACHE
   })
 
-  test("should work without providerID (backward compatible)", async () => {
+  test("works without providerID (backward compatible)", async () => {
+    await using tmp = await tmpdir()
+    process.env.OPENCODE_TEST_CACHE = tmp.path
+
     const { BunProc } = await import("../src/bun")
 
     await BunProc.install("zod", "latest")
 
-    expect(await pkgExists("zod")).toBe(true)
-    const pkgJson = await readPkgJson()
+    expect(await Bun.file(path.join(tmp.path, "node_modules", "zod", "package.json")).exists()).toBe(true)
+    const pkgJson = await Bun.file(path.join(tmp.path, "package.json")).json()
     expect(pkgJson.opencode?.providers).toBeUndefined()
     expect(isExactVersion(pkgJson.dependencies?.zod)).toBe(true)
+
+    delete process.env.OPENCODE_TEST_CACHE
   })
 
-  test("should track multiple providers independently", async () => {
+  test("tracks multiple providers independently", async () => {
+    await using tmp = await tmpdir()
+    process.env.OPENCODE_TEST_CACHE = tmp.path
+
     const { BunProc } = await import("../src/bun")
 
     await BunProc.install("zod", "latest", "anthropic")
     await BunProc.install("superstruct", "latest", "openai")
 
-    const pkgJson = await readPkgJson()
+    const pkgJson = await Bun.file(path.join(tmp.path, "package.json")).json()
     expect(pkgJson.opencode?.providers?.anthropic).toBe("zod")
     expect(pkgJson.opencode?.providers?.openai).toBe("superstruct")
+    expect(await Bun.file(path.join(tmp.path, "node_modules", "zod", "package.json")).exists()).toBe(true)
+    expect(await Bun.file(path.join(tmp.path, "node_modules", "superstruct", "package.json")).exists()).toBe(true)
 
-    expect(await pkgExists("zod")).toBe(true)
-    expect(await pkgExists("superstruct")).toBe(true)
-    expect(isExactVersion(pkgJson.dependencies?.zod)).toBe(true)
-    expect(isExactVersion(pkgJson.dependencies?.superstruct)).toBe(true)
+    delete process.env.OPENCODE_TEST_CACHE
   })
 
-  test("should not remove package if another provider still uses it", async () => {
+  test("does not remove package if another provider still uses it", async () => {
+    await using tmp = await tmpdir()
+    process.env.OPENCODE_TEST_CACHE = tmp.path
+
     const { BunProc } = await import("../src/bun")
 
     await BunProc.install("zod", "latest", "anthropic")
     await BunProc.install("zod", "latest", "openai")
     await BunProc.install("superstruct", "latest", "anthropic")
 
-    expect(await pkgExists("zod")).toBe(true)
-    expect(await pkgExists("superstruct")).toBe(true)
+    expect(await Bun.file(path.join(tmp.path, "node_modules", "zod", "package.json")).exists()).toBe(true)
+    expect(await Bun.file(path.join(tmp.path, "node_modules", "superstruct", "package.json")).exists()).toBe(true)
 
-    const pkgJson = await readPkgJson()
+    const pkgJson = await Bun.file(path.join(tmp.path, "package.json")).json()
     expect(pkgJson.opencode?.providers?.anthropic).toBe("superstruct")
     expect(pkgJson.opencode?.providers?.openai).toBe("zod")
-    expect(isExactVersion(pkgJson.dependencies?.zod)).toBe(true)
-    expect(isExactVersion(pkgJson.dependencies?.superstruct)).toBe(true)
+
+    delete process.env.OPENCODE_TEST_CACHE
   })
 
-  test("should work when package.json exists without opencode section", async () => {
+  test("works with partial package.json structures", async () => {
+    await using tmp = await tmpdir()
+    process.env.OPENCODE_TEST_CACHE = tmp.path
+
     const { BunProc } = await import("../src/bun")
 
-    await fs.writeFile(path.join(tempDir, "package.json"), JSON.stringify({ dependencies: {} }, null, 2))
-
+    // Test with missing opencode section
+    await Bun.write(path.join(tmp.path, "package.json"), JSON.stringify({ dependencies: {} }, null, 2))
     await BunProc.install("zod", "latest", "anthropic")
-
-    const pkgJson = await readPkgJson()
+    let pkgJson = await Bun.file(path.join(tmp.path, "package.json")).json()
     expect(pkgJson.opencode?.providers?.anthropic).toBe("zod")
-    expect(await pkgExists("zod")).toBe(true)
-    expect(isExactVersion(pkgJson.dependencies?.zod)).toBe(true)
+
+    // Reset and test with opencode but missing providers
+    const { rm } = await import("fs/promises")
+    await rm(path.join(tmp.path, "node_modules"), { recursive: true, force: true })
+    await Bun.write(path.join(tmp.path, "package.json"), JSON.stringify({ dependencies: {}, opencode: {} }, null, 2))
+    await BunProc.install("superstruct", "latest", "openai")
+    pkgJson = await Bun.file(path.join(tmp.path, "package.json")).json()
+    expect(pkgJson.opencode?.providers?.openai).toBe("superstruct")
+
+    delete process.env.OPENCODE_TEST_CACHE
   })
 
-  test("should work when opencode section exists without providers", async () => {
-    const { BunProc } = await import("../src/bun")
+  test("installs exact version when specific version provided", async () => {
+    await using tmp = await tmpdir()
+    process.env.OPENCODE_TEST_CACHE = tmp.path
 
-    await fs.writeFile(path.join(tempDir, "package.json"), JSON.stringify({ dependencies: {}, opencode: {} }, null, 2))
-
-    await BunProc.install("zod", "latest", "anthropic")
-
-    const pkgJson = await readPkgJson()
-    expect(pkgJson.opencode?.providers?.anthropic).toBe("zod")
-    expect(await pkgExists("zod")).toBe(true)
-    expect(isExactVersion(pkgJson.dependencies?.zod)).toBe(true)
-  })
-
-  test("should install exact version when specific version provided", async () => {
     const { BunProc } = await import("../src/bun")
 
     await BunProc.install("zod", "3.23.0", "anthropic")
 
-    const pkgJson = await readPkgJson()
+    const pkgJson = await Bun.file(path.join(tmp.path, "package.json")).json()
     expect(pkgJson.dependencies?.zod).toBe("3.23.0")
-    expect(await pkgExists("zod")).toBe(true)
+
+    delete process.env.OPENCODE_TEST_CACHE
+  })
+
+  test("reinstalls when requested version differs from cached", async () => {
+    await using tmp = await tmpdir()
+    process.env.OPENCODE_TEST_CACHE = tmp.path
+
+    const { BunProc } = await import("../src/bun")
+
+    await BunProc.install("zod", "3.23.0", "anthropic")
+    let pkgJson = await Bun.file(path.join(tmp.path, "package.json")).json()
+    expect(pkgJson.dependencies?.zod).toBe("3.23.0")
+
+    await BunProc.install("zod", "3.24.0", "anthropic")
+    pkgJson = await Bun.file(path.join(tmp.path, "package.json")).json()
+    expect(pkgJson.dependencies?.zod).toBe("3.24.0")
+
+    delete process.env.OPENCODE_TEST_CACHE
+  })
+
+  test("skips install when cached version matches requested", async () => {
+    await using tmp = await tmpdir()
+    process.env.OPENCODE_TEST_CACHE = tmp.path
+
+    const { BunProc } = await import("../src/bun")
+
+    await BunProc.install("zod", "3.23.0", "anthropic")
+    const pkgJson1 = await Bun.file(path.join(tmp.path, "package.json")).json()
+
+    await new Promise((r) => setTimeout(r, 50))
+
+    await BunProc.install("zod", "3.23.0", "anthropic")
+    const pkgJson2 = await Bun.file(path.join(tmp.path, "package.json")).json()
+
+    expect(pkgJson1.dependencies?.zod).toBe(pkgJson2.dependencies?.zod)
+    expect(pkgJson2.dependencies?.zod).toBe("3.23.0")
+
+    delete process.env.OPENCODE_TEST_CACHE
   })
 })

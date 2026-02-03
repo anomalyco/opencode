@@ -86,6 +86,15 @@ export namespace BunProc {
     await writePackageJson(parsed)
   }
 
+  async function cleanup(provider: string, oldPkg: string) {
+    const parsed = await readPackageJson()
+    const providers = parsed.opencode?.providers ?? {}
+    const used = Object.entries(providers).some(([p, name]) => p !== provider && name === oldPkg)
+    if (used) return
+    log.info("removing unused package", { pkg: oldPkg })
+    await BunProc.run(["remove", "--cwd", Global.Path.cache, oldPkg]).catch(() => {})
+  }
+
   export async function install(pkg: string, version = "latest", provider?: string) {
     using _ = await Lock.write("bun-install")
 
@@ -93,23 +102,23 @@ export namespace BunProc {
     const parsed = await readPackageJson()
     const oldPkg = provider ? parsed.opencode?.providers?.[provider] : undefined
     const switched = oldPkg && oldPkg !== pkg
+    const dependencies = parsed.dependencies ?? {}
+    const modExists = await Filesystem.exists(mod)
+    const cachedVersion = dependencies[pkg]
+
+    const earlyReturn = async () => {
+      if (provider) await track(provider, pkg)
+      if (switched) await cleanup(provider!, oldPkg!)
+      return mod
+    }
 
     // Skip install if exact version already cached (always reinstall with "latest")
     const installed = parsed.dependencies?.[pkg]
     if (installed && version !== "latest" && installed === version && (await Filesystem.exists(mod))) {
-      if (provider) await track(provider, pkg)
-      if (switched) {
-        const providers = parsed.opencode?.providers ?? {}
-        const used = Object.entries(providers).some(([p, name]) => p !== provider && name === oldPkg)
-        if (!used) {
-          log.info("removing unused package", { pkg: oldPkg })
-          await BunProc.run(["remove", "--cwd", Global.Path.cache, oldPkg]).catch(() => {})
-        }
-      }
-      return mod
+      return earlyReturn()
     } else if (version === "latest") {
       const isOutdated = await PackageRegistry.isOutdated(pkg, cachedVersion, Global.Path.cache)
-      if (!isOutdated) return mod
+      if (!isOutdated) return earlyReturn()
       log.info("Cached version is outdated, proceeding with install", { pkg, cachedVersion })
     }
 
@@ -131,15 +140,7 @@ export namespace BunProc {
     })
 
     if (provider) await track(provider, pkg)
-    if (switched) {
-      const current = await readPackageJson()
-      const providers = current.opencode?.providers ?? {}
-      const used = Object.entries(providers).some(([p, name]) => p !== provider && name === oldPkg)
-      if (!used) {
-        log.info("removing unused package", { pkg: oldPkg })
-        await BunProc.run(["remove", "--cwd", Global.Path.cache, oldPkg!]).catch(() => {})
-      }
-    }
+    if (switched) await cleanup(provider!, oldPkg!)
     return mod
   }
 }
