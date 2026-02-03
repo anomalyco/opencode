@@ -31,6 +31,7 @@ export const dict = {
   "command.session.previous.unseen": "Previous unread session",
   "command.session.next.unseen": "Next unread session",
   "command.session.archive": "Archivar sesión",
+  "command.project.switch": "Cambiar al proyecto {{number}}",
 
   "command.palette": "Paleta de comandos",
 

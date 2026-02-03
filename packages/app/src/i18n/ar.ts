@@ -31,6 +31,7 @@ export const dict = {
   "command.session.previous.unseen": "Previous unread session",
   "command.session.next.unseen": "Next unread session",
   "command.session.archive": "أرشفة الجلسة",
+  "command.project.switch": "التبديل إلى المشروع {{number}}",
 
   "command.palette": "لوحة الأوامر",
 

@@ -1220,6 +1220,21 @@ export default function Layout(props: ParentProps) {
       })
     }
 
+    const projects = layout.projects.list()
+    for (let i = 0; i < 9; i++) {
+      const project = projects[i]
+      commands.push({
+        id: `project.switch.${i}`,
+        title: language.t("command.project.switch", { number: i + 1 }),
+        category: language.t("command.category.project"),
+        keybind: `mod+${i + 1}`,
+        disabled: !project,
+        onSelect: () => {
+          if (project) navigateToProject(project.worktree)
+        },
+      })
+    }
+
     return commands
   })
 
