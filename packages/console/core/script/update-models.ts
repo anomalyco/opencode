@@ -5,6 +5,57 @@ import path from "path"
 import os from "os"
 import { ZenData } from "../src/model"
 
+const OPENROUTER_PROVIDER_DEFAULTS = {
+  api: "https://openrouter.ai/api/v1",
+  apiKey: "REPLACE_ME",
+  format: "oa-compat",
+  headers: {
+    "HTTP-Referer": "https://opencode.ai/",
+    "X-Title": "opencode",
+  },
+}
+
+const OPENROUTER_FREE_MODELS = [
+  "openrouter/free",
+  "deepseek/deepseek-r1-0528:free",
+  "qwen/qwen3-coder:free",
+  "google/gemma-3-12b-it:free",
+  "meta-llama/llama-3.3-70b-instruct:free",
+] as const
+
+function applyOpenRouterPatch(input: any) {
+  if (!input || typeof input !== "object") return input
+
+  input.providers ??= {}
+  const provider = input.providers.openrouter ?? {}
+  input.providers.openrouter = {
+    ...OPENROUTER_PROVIDER_DEFAULTS,
+    ...provider,
+    headers: {
+      ...OPENROUTER_PROVIDER_DEFAULTS.headers,
+      ...(provider.headers ?? {}),
+    },
+  }
+
+  input.models ??= {}
+  for (const modelId of OPENROUTER_FREE_MODELS) {
+    if (input.models[modelId]) continue
+    input.models[modelId] = {
+      name: modelId,
+      cost: { input: 0, output: 0 },
+      byokProvider: "openrouter",
+      providers: [
+        {
+          id: "openrouter",
+          model: modelId,
+        },
+      ],
+    }
+  }
+
+  return input
+}
+
 const root = path.resolve(process.cwd(), "..", "..", "..")
 const models = await $`bun sst secret list`.cwd(root).text()
 const PARTS = 8
@@ -29,8 +80,10 @@ console.log("tempFile", tempFile.name)
 
 // open temp file in vim and read the file on close
 await $`vim ${tempFile.name}`
-const newValue = JSON.stringify(JSON.parse(await tempFile.text()))
-ZenData.validate(JSON.parse(newValue))
+const parsed = JSON.parse(await tempFile.text())
+const patched = applyOpenRouterPatch(parsed)
+ZenData.validate(patched)
+const newValue = JSON.stringify(patched)
 
 // update the secret
 const chunk = Math.ceil(newValue.length / PARTS)

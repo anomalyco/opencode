@@ -116,6 +116,9 @@ export async function handler(
         headers: (() => {
           const headers = new Headers(input.request.headers)
           providerInfo.modifyHeaders(headers, body, providerInfo.apiKey)
+          Object.entries(providerInfo.headers ?? {}).forEach(([k, v]) => {
+            headers.set(k, v)
+          })
           Object.entries(providerInfo.headerMappings ?? {}).forEach(([k, v]) => {
             headers.set(k, headers.get(v)!)
           })

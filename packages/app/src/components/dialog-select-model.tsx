@@ -10,6 +10,16 @@ import { List } from "@opencode-ai/ui/list"
 import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogManageModels } from "./dialog-manage-models"
 
+const isFreeModel = (model: { id: string; provider: { id: string }; cost?: { input?: number } }) => {
+  if (model.provider.id === "opencode") {
+    return !model.cost || model.cost.input === 0
+  }
+  if (model.provider.id === "openrouter") {
+    return model.id === "openrouter/free" || model.id.endsWith(":free")
+  }
+  return false
+}
+
 const ModelList: Component<{
   provider?: string
   class?: string
@@ -54,7 +64,7 @@ const ModelList: Component<{
       {(i) => (
         <div class="w-full flex items-center gap-x-2 text-13-regular">
           <span class="truncate">{i.name}</span>
-          <Show when={i.provider.id === "opencode" && (!i.cost || i.cost?.input === 0)}>
+          <Show when={isFreeModel(i)}>
             <Tag>Free</Tag>
           </Show>
           <Show when={i.latest}>

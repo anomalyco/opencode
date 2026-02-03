@@ -83,9 +83,19 @@ export const ConfigRoutes = lazy(() =>
       async (c) => {
         using _ = log.time("providers")
         const providers = await Provider.list().then((x) => mapValues(x, (item) => item))
+        const pickDefaultModelId = (provider: Provider.Info) => {
+          const models = Object.values(provider.models)
+          const freeModels =
+            provider.id === "openrouter"
+              ? models.filter((model) => model.id === "openrouter/free" || model.id.endsWith(":free"))
+              : []
+          const [best] = Provider.sort(freeModels.length > 0 ? freeModels : models)
+          if (!best) throw new Error(`no models found for provider ${provider.id}`)
+          return best.id
+        }
         return c.json({
           providers: Object.values(providers),
-          default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
+          default: mapValues(providers, (item) => pickDefaultModelId(item)),
         })
       },
     ),

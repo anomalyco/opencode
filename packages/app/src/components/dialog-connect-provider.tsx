@@ -20,7 +20,7 @@ import { usePlatform } from "@/context/platform"
 import { DialogSelectModel } from "./dialog-select-model"
 import { DialogSelectProvider } from "./dialog-select-provider"
 
-export function DialogConnectProvider(props: { provider: string }) {
+export function DialogConnectProvider(props: { provider: string; onBack?: () => void }) {
   const dialog = useDialog()
   const globalSync = useGlobalSync()
   const globalSDK = useGlobalSDK()
@@ -119,6 +119,10 @@ export function DialogConnectProvider(props: { provider: string }) {
 
   function goBack() {
     if (methods().length === 1) {
+      if (props.onBack) {
+        props.onBack()
+        return
+      }
       dialog.show(() => <DialogSelectProvider />)
       return
     }
@@ -129,6 +133,10 @@ export function DialogConnectProvider(props: { provider: string }) {
     }
     if (store.methodIndex) {
       setStore("methodIndex", undefined)
+      return
+    }
+    if (props.onBack) {
+      props.onBack()
       return
     }
     dialog.show(() => <DialogSelectProvider />)

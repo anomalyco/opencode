@@ -892,6 +892,25 @@ export namespace Config {
     })
   export type Provider = z.infer<typeof Provider>
 
+  export const OpenRouter = z
+    .object({
+      freeRouter: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe("Enable the OpenRouter free router model (openrouter/free)"),
+      freeVariants: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe("Enable free model variants for OpenRouter (append :free)"),
+    })
+    .strict()
+    .meta({
+      ref: "OpenRouterConfig",
+    })
+  export type OpenRouter = z.infer<typeof OpenRouter>
+
   export const Info = z
     .object({
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
@@ -980,6 +999,7 @@ export namespace Config {
         .record(z.string(), Provider)
         .optional()
         .describe("Custom provider configurations and model overrides"),
+      openrouter: OpenRouter.optional().describe("OpenRouter free model settings"),
       mcp: z
         .record(
           z.string(),

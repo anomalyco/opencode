@@ -34,7 +34,7 @@ export namespace ZenData {
     cost: ModelCostSchema,
     cost200K: ModelCostSchema.optional(),
     allowAnonymous: z.boolean().optional(),
-    byokProvider: z.enum(["openai", "anthropic", "google"]).optional(),
+    byokProvider: z.enum(["openai", "anthropic", "google", "openrouter"]).optional(),
     stickyProvider: z.enum(["strict", "prefer"]).optional(),
     trial: TrialSchema.optional(),
     rateLimit: z.number().optional(),
@@ -54,6 +54,7 @@ export namespace ZenData {
     api: z.string(),
     apiKey: z.string(),
     format: FormatSchema,
+    headers: z.record(z.string(), z.string()).optional(),
     headerMappings: z.record(z.string(), z.string()).optional(),
   })
 

@@ -1830,6 +1830,95 @@ test("custom model inherits api.url from models.dev provider", async () => {
   })
 })
 
+test("openrouter free models are disabled by default", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("OPENROUTER_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const openrouter = providers["openrouter"]
+      expect(openrouter).toBeDefined()
+      expect(openrouter.models["openrouter/free"]).toBeUndefined()
+      const freeVariants = Object.keys(openrouter.models).filter((id) => id.endsWith(":free"))
+      expect(freeVariants.length).toBe(0)
+    },
+  })
+})
+
+test("openrouter free models can be enabled via config", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          openrouter: {
+            freeRouter: true,
+            freeVariants: true,
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("OPENROUTER_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const openrouter = providers["openrouter"]
+      expect(openrouter).toBeDefined()
+      expect(openrouter.models["openrouter/free"]).toBeDefined()
+      const freeVariants = Object.keys(openrouter.models).filter((id) => id.endsWith(":free"))
+      expect(freeVariants.length).toBeGreaterThan(0)
+    },
+  })
+})
+
+test("defaultModel prefers openrouter free models when available", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          openrouter: {
+            freeRouter: true,
+            freeVariants: true,
+          },
+          provider: {
+            openrouter: {},
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("OPENROUTER_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const model = await Provider.defaultModel()
+      expect(model.providerID).toBe("openrouter")
+      expect(model.modelID === "openrouter/free" || model.modelID.endsWith(":free")).toBe(true)
+    },
+  })
+})
+
 test("model variants are generated for reasoning models", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

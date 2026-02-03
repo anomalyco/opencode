@@ -1506,6 +1506,20 @@ export type ProviderConfig = {
   }
 }
 
+/**
+ * OpenRouter free model settings
+ */
+export type OpenRouterConfig = {
+  /**
+   * Enable the OpenRouter free router model (openrouter/free)
+   */
+  freeRouter?: boolean
+  /**
+   * Enable free model variants for OpenRouter (append :free)
+   */
+  freeVariants?: boolean
+}
+
 export type McpLocalConfig = {
   /**
    * Type of MCP server connection
@@ -1780,6 +1794,7 @@ export type Config = {
   provider?: {
     [key: string]: ProviderConfig
   }
+  openrouter?: OpenRouterConfig
   /**
    * MCP (Model Context Protocol) server configurations
    */
@@ -2516,6 +2531,8 @@ export type AuthDeviceTrustStatusResponses = {
    */
   200: {
     twoFactorEnabled: boolean
+    twoFactorConfigured: boolean
+    twoFactorOptedOut: boolean
     deviceTrusted: boolean
   }
 }

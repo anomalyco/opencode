@@ -6,14 +6,27 @@ import { List } from "@opencode-ai/ui/list"
 import { Tag } from "@opencode-ai/ui/tag"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { IconName } from "@opencode-ai/ui/icons/provider"
+import { IconButton } from "@opencode-ai/ui/icon-button"
 import { DialogConnectProvider } from "./dialog-connect-provider"
 
-export const DialogSelectProvider: Component = () => {
+export const DialogSelectProvider: Component<{ onBack?: () => void }> = (props) => {
   const dialog = useDialog()
   const providers = useProviders()
+  const showProviderList = () => dialog.show(() => <DialogSelectProvider onBack={props.onBack} />)
 
   return (
-    <Dialog title="Connect provider">
+    <Dialog
+      title={
+        props.onBack ? (
+          <div class="flex items-center gap-2">
+            <IconButton tabIndex={-1} icon="arrow-left" variant="ghost" onClick={props.onBack} />
+            <span>Connect provider</span>
+          </div>
+        ) : (
+          "Connect provider"
+        )
+      }
+    >
       <List
         search={{ placeholder: "Search providers", autofocus: true }}
         activeIcon="plus-small"
@@ -33,7 +46,13 @@ export const DialogSelectProvider: Component = () => {
         }}
         onSelect={(x) => {
           if (!x) return
-          dialog.show(() => <DialogConnectProvider provider={x.id} />)
+          dialog.show(
+            () =>
+              <DialogConnectProvider
+                provider={x.id}
+                onBack={props.onBack ? showProviderList : undefined}
+              />,
+          )
         }}
       >
         {(i) => (
