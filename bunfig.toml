@@ -4,3 +4,7 @@ exact = true
 [test]
 root = "./do-not-run-tests-from-root"
 
+[jsx]
+importSource = "@opentui/solid"
+runtime = "automatic"
+
