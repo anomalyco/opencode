@@ -4,7 +4,6 @@ import z from "zod"
 import { Tool } from "./tool"
 import { Skill } from "../skill"
 import { PermissionNext } from "../permission/next"
-import { Session } from "../session"
 import { Ripgrep } from "../file/ripgrep"
 import { iife } from "@/util/iife"
 
@@ -96,15 +95,6 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
         }
         return arr
       }).then((f) => f.map((file) => `<file>${file}</file>`).join("\n"))
-
-      await Session.update(ctx.sessionID, (draft) => {
-        const ruleset = draft.permission ?? []
-        const glob = path.join(dir, "*")
-        if (!ruleset.some((r) => r.permission === "external_directory" && r.pattern === glob && r.action === "allow")) {
-          ruleset.push({ permission: "external_directory", pattern: glob, action: "allow" })
-        }
-        draft.permission = ruleset
-      })
 
       return {
         title: `Loaded skill: ${skill.name}`,

@@ -18,6 +18,7 @@ import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
 import path from "path"
 import { Plugin } from "@/plugin"
+import { Skill } from "../skill"
 
 export namespace Agent {
   export const Info = z
@@ -50,25 +51,34 @@ export namespace Agent {
   const state = Instance.state(async () => {
     const cfg = await Config.get()
 
-    const defaults = PermissionNext.fromConfig({
-      "*": "allow",
-      doom_loop: "ask",
-      external_directory: {
-        "*": "ask",
-        [Truncate.DIR]: "allow",
-        [Truncate.GLOB]: "allow",
-      },
-      question: "deny",
-      plan_enter: "deny",
-      plan_exit: "deny",
-      // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
-      read: {
+    const dirs = await Skill.dirs()
+    const allow = dirs.map((dir) => ({
+      permission: "external_directory",
+      pattern: path.join(dir, "*"),
+      action: "allow" as const,
+    }))
+    const defaults = PermissionNext.merge(
+      PermissionNext.fromConfig({
         "*": "allow",
-        "*.env": "ask",
-        "*.env.*": "ask",
-        "*.env.example": "allow",
-      },
-    })
+        doom_loop: "ask",
+        external_directory: {
+          "*": "ask",
+          [Truncate.DIR]: "allow",
+          [Truncate.GLOB]: "allow",
+        },
+        question: "deny",
+        plan_enter: "deny",
+        plan_exit: "deny",
+        // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
+        read: {
+          "*": "allow",
+          "*.env": "ask",
+          "*.env.*": "ask",
+          "*.env.example": "allow",
+        },
+      }),
+      allow,
+    )
     const user = PermissionNext.fromConfig(cfg.permission ?? {})
 
     const result: Record<string, Info> = {
