@@ -29,6 +29,7 @@ export const dict = {
   "command.session.previous.unseen": "الجلسة غير المقروءة السابقة",
   "command.session.next.unseen": "الجلسة غير المقروءة التالية",
   "command.session.archive": "أرشفة الجلسة",
+  "command.project.switch": "التبديل إلى المشروع {{number}}",
   "command.palette": "لوحة الأوامر",
   "command.theme.cycle": "تغيير السمة",
   "command.theme.set": "استخدام السمة: {{theme}}",
