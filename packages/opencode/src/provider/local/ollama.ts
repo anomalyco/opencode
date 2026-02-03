@@ -35,7 +35,7 @@ export interface OllamaModelShowResponse {
 }
 
 async function ollama_show_model(url: string, model: string): Promise<OllamaModelShowResponse> {
-  const endpoint = url.replace(/\/$/, "") + "/api/show"
+  const endpoint = url + "/api/show"
 
   const res = await fetch(endpoint, {
     method: "POST",
@@ -53,7 +53,7 @@ async function ollama_show_model(url: string, model: string): Promise<OllamaMode
 }
 
 export async function ollama_detect_provider(url: string): Promise<boolean> {
-  const endpoint = url.replace(/\/$/, "") + "/"
+  const endpoint = url + "/"
 
   try {
     const res = await fetch(endpoint, { signal: AbortSignal.timeout(2000) })
@@ -61,14 +61,14 @@ export async function ollama_detect_provider(url: string): Promise<boolean> {
       return false
     }
 
-    return await res.text() === "Ollama is running"
+    return (await res.text()) === "Ollama is running"
   } catch (e) {
     return false
   }
 }
 
 export async function ollama_probe_loaded_models(url: string): Promise<LocalModel[]> {
-  const endpoint = url.replace(/\/$/, "") + "/api/ps"
+  const endpoint = url + "/api/ps"
 
   const res = await fetch(endpoint, { signal: AbortSignal.timeout(3000) })
   if (!res.ok) {
@@ -83,7 +83,7 @@ export async function ollama_probe_loaded_models(url: string): Promise<LocalMode
 
   const models: LocalModel[] = await Promise.all(
     body.models.map(async (m) => {
-      const show = await ollama_show_model(url, m.model).catch(() => ({} as OllamaModelShowResponse))
+      const show = await ollama_show_model(url, m.model).catch(() => ({}) as OllamaModelShowResponse)
       const caps = show.capabilities ?? []
 
       return {
@@ -92,7 +92,7 @@ export async function ollama_probe_loaded_models(url: string): Promise<LocalMode
         tool_call: caps.includes("tools"),
         vision: caps.includes("vision"),
       }
-    })
+    }),
   )
 
   return models

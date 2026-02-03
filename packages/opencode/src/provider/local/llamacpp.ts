@@ -37,10 +37,6 @@ export interface LlamaCppPropsResponse {
   chat_template_caps?: Record<string, unknown>
 }
 
-function llamacpp_base_url(url: string): string {
-  return url.replace(/\/$/, "")
-}
-
 function llamacpp_tool_capable(caps?: Record<string, unknown>): boolean {
   if (!caps) return false
   const value = caps.supports_tool_calls
@@ -57,14 +53,14 @@ function llamacpp_context_from_meta(meta?: Record<string, unknown> | null): numb
 }
 
 async function llamacpp_fetch_models(url: string): Promise<LlamaCppModelsResponse | null> {
-  const endpoint = llamacpp_base_url(url) + "/models"
+  const endpoint = url + "/models"
   const res = await fetch(endpoint, { signal: AbortSignal.timeout(3000) })
   if (!res.ok) return null
   return res.json() as Promise<LlamaCppModelsResponse>
 }
 
 async function llamacpp_fetch_v1_models(url: string): Promise<LlamaCppV1ModelsResponse> {
-  const endpoint = llamacpp_base_url(url) + "/v1/models"
+  const endpoint = url + "/v1/models"
   const res = await fetch(endpoint, { signal: AbortSignal.timeout(3000) })
   if (!res.ok) {
     const respText = await res.text()
@@ -75,9 +71,8 @@ async function llamacpp_fetch_v1_models(url: string): Promise<LlamaCppV1ModelsRe
 }
 
 async function llamacpp_fetch_props(url: string, model?: string): Promise<LlamaCppPropsResponse> {
-  const base = llamacpp_base_url(url)
   const query = model ? `?model=${encodeURIComponent(model)}` : ""
-  const endpoint = `${base}/props${query}`
+  const endpoint = `${url}/props${query}`
   const res = await fetch(endpoint, { signal: AbortSignal.timeout(3000) })
   if (!res.ok) {
     const respText = await res.text()
@@ -117,15 +112,13 @@ async function llamacpp_model_from_props_or_meta(
 
 export async function llamacpp_detect_provider(url: string): Promise<boolean> {
   try {
-    const endpoint = llamacpp_base_url(url)
-    const res = await fetch(endpoint, { signal: AbortSignal.timeout(2000) })
+    const res = await fetch(url, { signal: AbortSignal.timeout(2000) })
     if (!res.ok) {
       return false
     }
 
     return res.headers.get("Server")?.toLowerCase() === "llama.cpp"
-  }
-  catch (e) {
+  } catch (e) {
     return false
   }
 }

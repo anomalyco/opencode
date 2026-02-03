@@ -27,22 +27,21 @@ interface LMStudioGreeting {
 
 export async function lmstudio_detect_provider(url: string): Promise<boolean> {
   try {
-    const endpoint = url.replace(/\/$/, "") + "/lmstudio-greeting"
+    const endpoint = url + "/lmstudio-greeting"
     const res = await fetch(endpoint, { signal: AbortSignal.timeout(2000) })
     if (!res.ok) {
       return false
     }
 
-    const greeting = await res.json() as LMStudioGreeting
+    const greeting = (await res.json()) as LMStudioGreeting
     return greeting.lmstudio === true
-  }
-  catch (e) {
+  } catch (e) {
     return false
   }
 }
 
 export async function lmstudio_probe_loaded_models(url: string): Promise<LocalModel[]> {
-  const endpoint = url.replace(/\/$/, "") + "/api/v0/models"
+  const endpoint = url + "/api/v0/models"
 
   const res = await fetch(endpoint, { signal: AbortSignal.timeout(3000) })
   if (!res.ok) {
