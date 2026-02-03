@@ -563,9 +563,16 @@ export function Autocomplete(props: {
             return
           }
           if (name === "return") {
-            select()
-            e.preventDefault()
-            return
+            // Only intercept Enter if there are matching options to select
+            // This allows paths like "/home/user" to be submitted when no commands match
+            if (options().length > 0) {
+              select()
+              e.preventDefault()
+              return
+            }
+            // No matching commands - user is typing a path, close autocomplete and allow submit
+            setStore("visible", false)
+            // Don't preventDefault() - let the normal submit handler process the input
           }
           if (name === "tab") {
             const selected = options()[store.selected]
