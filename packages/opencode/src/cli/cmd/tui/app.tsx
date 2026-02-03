@@ -657,7 +657,7 @@ function App() {
     toast.show({
       variant: "info",
       title: "Update Available",
-      message: `Mammouth CLI v${evt.properties.version} is available. Run 'mammouth-cli upgrade' to update manually.`,
+      message: `Mammouth CLI v${evt.properties.version} is available. Run 'mammouth upgrade' to update manually.`,
       duration: 10000,
     })
   })
@@ -715,7 +715,7 @@ function ErrorComponent(props: {
   })
   const [copied, setCopied] = createSignal(false)
 
-  const issueURL = new URL("https://github.com/anomalyco/opencode/issues/new?template=bug-report.yml")
+  const issueURL = new URL("https://github.com/mammouth-ai/opencode/issues/new?template=bug-report.yml")
 
   // Choose safe fallback colors per mode since theme context may not be available
   const isLight = props.mode === "light"
@@ -737,7 +737,7 @@ function ErrorComponent(props: {
     )
   }
 
-  issueURL.searchParams.set("opencode-version", Installation.VERSION)
+  issueURL.searchParams.set("mammouth-version", Installation.VERSION)
 
   const copyIssueURL = () => {
     Clipboard.copy(issueURL.toString()).then(() => {
