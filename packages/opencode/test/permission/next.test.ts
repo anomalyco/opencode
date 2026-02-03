@@ -649,6 +649,50 @@ test("reply - reject cancels all pending for same session", async () => {
   })
 })
 
+test("reply - reject with message propagates feedback to cascade rejections", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const askPromise1 = PermissionNext.ask({
+        id: "permission_test5a",
+        sessionID: "session_feedback",
+        permission: "bash",
+        patterns: ["bun run tauri dev"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      })
+
+      const askPromise2 = PermissionNext.ask({
+        id: "permission_test5b",
+        sessionID: "session_feedback",
+        permission: "edit",
+        patterns: ["important.ts"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      })
+
+      const result1 = askPromise1.catch((e) => e)
+      const result2 = askPromise2.catch((e) => e)
+
+      await PermissionNext.reply({
+        requestID: "permission_test5a",
+        reply: "reject",
+        message: "Keep that Desktop App out of my system!",
+      })
+
+      const error1 = await result1
+      const error2 = await result2
+
+      expect(error1).toBeInstanceOf(PermissionNext.CorrectedError)
+      expect(error2).toBeInstanceOf(PermissionNext.AutoRejectedError)
+      expect(error2.message).toContain("Keep that Desktop App out of my system!")
+    },
+  })
+})
+
 test("ask - checks all patterns and stops on first deny", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
