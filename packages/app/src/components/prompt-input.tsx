@@ -1934,13 +1934,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       <Button
                         as="div"
                         variant="ghost"
-                        class="px-2 min-w-0 max-w-[140px]"
+                        class="px-2 min-w-0 max-w-[240px]"
                         onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}
                       >
                         <Show when={local.model.current()?.provider?.id}>
                           <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
                         </Show>
-                        <span class="truncate max-w-[100px]">
+                        <span class="truncate">
                           {local.model.current()?.name ?? language.t("dialog.model.select.title")}
                         </span>
                         <Icon name="chevron-down" size="small" class="shrink-0" />
@@ -1956,12 +1956,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   >
                     <ModelSelectorPopover
                       triggerAs={Button}
-                      triggerProps={{ variant: "ghost", class: "min-w-0 max-w-[140px]" }}
+                      triggerProps={{ variant: "ghost", class: "min-w-0 max-w-[240px]" }}
                     >
                       <Show when={local.model.current()?.provider?.id}>
                         <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
                       </Show>
-                      <span class="truncate max-w-[100px]">
+                      <span class="truncate">
                         {local.model.current()?.name ?? language.t("dialog.model.select.title")}
                       </span>
                       <Icon name="chevron-down" size="small" class="shrink-0" />

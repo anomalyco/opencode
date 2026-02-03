@@ -48,7 +48,6 @@ export const dict = {
 
   "command.session.new": "Neue Sitzung",
   "command.file.open": "Datei öffnen",
-  "command.file.open.description": "Dateien und Befehle durchsuchen",
   "command.context.addSelection": "Auswahl zum Kontext hinzufügen",
   "command.context.addSelection.description": "Ausgewählte Zeilen aus der aktuellen Datei hinzufügen",
   "command.terminal.toggle": "Terminal umschalten",
@@ -88,7 +87,7 @@ export const dict = {
   "command.session.unshare": "Teilen der Sitzung aufheben",
   "command.session.unshare.description": "Teilen dieser Sitzung beenden",
 
-  "palette.search.placeholder": "Dateien und Befehle durchsuchen",
+  "palette.search.placeholder": "Dateien, Befehle und Sitzungen durchsuchen",
   "palette.empty": "Keine Ergebnisse gefunden",
   "palette.group.commands": "Befehle",
   "palette.group.files": "Dateien",
