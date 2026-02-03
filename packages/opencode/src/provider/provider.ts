@@ -360,8 +360,8 @@ export namespace Provider {
           location,
           baseURL:
             location === "global"
-              ? `https://aiplatform.googleapis.com/v1beta1/projects/${project}/locations/${location}/endpoints/openapi`
-              : `https://${location}-aiplatform.googleapis.com/v1beta1/projects/${project}/locations/${location}/endpoints/openapi`,
+              ? `https://aiplatform.googleapis.com/v1/projects/${project}/locations/${location}/endpoints/openapi`
+              : `https://${location}-aiplatform.googleapis.com/v1/projects/${project}/locations/${location}/endpoints/openapi`,
           fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
             const { GoogleAuth } = await import(await BunProc.install("google-auth-library"))
             const auth = new GoogleAuth()
