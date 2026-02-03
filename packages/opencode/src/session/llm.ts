@@ -39,6 +39,7 @@ export namespace LLM {
     small?: boolean
     tools: Record<string, Tool>
     retries?: number
+    sessionPermission?: PermissionNext.Ruleset
   }
 
   export type StreamOutput = StreamTextResult<ToolSet, unknown>
@@ -265,8 +266,11 @@ export namespace LLM {
     })
   }
 
-  async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "user">) {
-    const disabled = PermissionNext.disabled(Object.keys(input.tools), input.agent.permission)
+  async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "user" | "sessionPermission">) {
+    const disabled = PermissionNext.disabled(
+      Object.keys(input.tools),
+      PermissionNext.merge(input.agent.permission, input.sessionPermission ?? []),
+    )
     for (const tool of Object.keys(input.tools)) {
       if (input.user.tools?.[tool] === false || disabled.has(tool)) {
         delete input.tools[tool]
