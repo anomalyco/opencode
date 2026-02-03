@@ -62,6 +62,15 @@ export namespace LLM {
       Provider.getProvider(input.model.providerID),
       Auth.get(input.model.providerID),
     ])
+    // 如果 provider 启用了 enableMeta，初始化 metadata 用于缓存功能
+    if (provider.options?.enableMeta) {
+      input.model.options ||= {}
+      input.model.options.metadata = {
+        user_session_id: `user_${Instance.project.id ?? "unknown"}_account__session_${input.sessionID}`,
+        project_id: Instance.project.id,
+        session_id: input.sessionID,
+      }
+    }
     const isCodex = provider.id === "openai" && auth?.type === "oauth"
 
     const system = []
@@ -287,3 +296,4 @@ export namespace LLM {
     return false
   }
 }
+

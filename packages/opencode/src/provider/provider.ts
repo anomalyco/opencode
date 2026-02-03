@@ -1020,6 +1020,24 @@ export namespace Provider {
           opts.signal = combined
         }
 
+        // 如果 provider 启用了 enableMeta，注入 metadata 用于缓存功能
+        if (provider.options?.enableMeta && model.options?.metadata && opts.body && opts.method === "POST") {
+          try {
+            if (model.options.metadata.user_session_id) {
+              options.headers["x-opencode-session"] = model.options.metadata.user_session_id
+            }
+
+            const body = JSON.parse(opts.body as string)
+            body.metadata ||= {}
+            body.metadata.user_id = model.options.metadata.user_session_id
+            body.metadata.project_id = model.options.metadata.project_id
+            body.metadata.session_id = model.options.metadata.session_id
+            opts.body = JSON.stringify(body)
+          } catch (e) {
+            // 请求体不一定是 JSON；忽略解析失败，保持原请求体
+          }
+        }
+
         // Strip openai itemId metadata following what codex does
         // Codex uses #[serde(skip_serializing)] on id fields for all item types:
         // Message, Reasoning, FunctionCall, LocalShellCall, CustomToolCall, WebSearchCall

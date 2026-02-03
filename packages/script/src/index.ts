@@ -32,7 +32,7 @@ const IS_PREVIEW = CHANNEL !== "latest"
 
 const VERSION = await (async () => {
   if (env.OPENCODE_VERSION) return env.OPENCODE_VERSION
-  if (IS_PREVIEW) return `0.0.0-${CHANNEL}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
+  // 本地构建默认跟随官方版本号（避免 dev/preview 生成 0.0.0-* 版本）
   const version = await fetch("https://registry.npmjs.org/opencode-ai/latest")
     .then((res) => {
       if (!res.ok) throw new Error(res.statusText)
@@ -78,3 +78,4 @@ export const Script = {
   },
 }
 console.log(`opencode script`, JSON.stringify(Script, null, 2))
+
