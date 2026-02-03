@@ -1,6 +1,8 @@
 mod cli;
 #[cfg(windows)]
 mod job_object;
+#[cfg(target_os = "linux")]
+mod display;
 mod markdown;
 mod window_customizer;
 
@@ -149,6 +151,39 @@ async fn set_default_server_url(app: AppHandle, url: Option<String>) -> Result<(
     Ok(())
 }
 
+#[tauri::command]
+#[specta::specta]
+fn get_display_backend() -> Option<String> {
+    #[cfg(target_os = "linux")]
+    {
+        let prefer = display::read_wayland().unwrap_or(false);
+        if prefer {
+            return Some("wayland".to_string());
+        }
+        return Some("auto".to_string());
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    None
+}
+
+#[tauri::command]
+#[specta::specta]
+fn set_display_backend(backend: String) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        let prefer = match backend.as_str() {
+            "wayland" => true,
+            "auto" => false,
+            _ => return Err("Unknown display backend".to_string()),
+        };
+        return display::write_wayland(prefer);
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    Ok(())
+}
+
 fn get_sidecar_port() -> u32 {
     option_env!("OPENCODE_PORT")
         .map(|s| s.to_string())
@@ -269,6 +304,8 @@ pub fn run() {
             ensure_server_ready,
             get_default_server_url,
             set_default_server_url,
+            get_display_backend,
+            set_display_backend,
             markdown::parse_markdown_command
         ])
         .error_handling(tauri_specta::ErrorHandlingMode::Throw);

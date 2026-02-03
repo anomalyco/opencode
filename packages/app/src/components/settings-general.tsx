@@ -1,8 +1,10 @@
-import { Component, createMemo, type JSX } from "solid-js"
+import { Component, Show, createEffect, createMemo, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
+import { Icon } from "@opencode-ai/ui/icon"
 import { Select } from "@opencode-ai/ui/select"
 import { Switch } from "@opencode-ai/ui/switch"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useLanguage } from "@/context/language"
@@ -39,6 +41,38 @@ export const SettingsGeneral: Component = () => {
   const [store, setStore] = createStore({
     checking: false,
   })
+
+  const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
+  const synced = { value: false }
+
+  createEffect(() => {
+    if (!linux()) return
+    if (synced.value) return
+    if (!platform.getDisplayBackend) return
+    synced.value = true
+
+    const result = platform.getDisplayBackend?.()
+    if (result instanceof Promise) {
+      void result
+        .then((backend) => {
+          if (!backend) return
+          settings.general.setWayland(backend === "wayland")
+        })
+        .catch(() => undefined)
+      return
+    }
+    if (!result) return
+    settings.general.setWayland(result === "wayland")
+  })
+
+  const setBackend = (checked: boolean) => {
+    settings.general.setWayland(checked)
+    if (!platform.setDisplayBackend) return
+    const result = platform.setDisplayBackend(checked ? "wayland" : "auto")
+    if (result instanceof Promise) {
+      void result.catch(() => undefined)
+    }
+  }
 
   const check = () => {
     if (!platform.checkUpdate) return
@@ -410,13 +444,39 @@ export const SettingsGeneral: Component = () => {
             </SettingsRow>
           </div>
         </div>
+
+        <Show when={linux()}>
+          <div class="flex flex-col gap-1">
+            <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.display")}</h3>
+
+            <div class="bg-surface-raised-base px-4 rounded-lg">
+              <SettingsRow
+                title={
+                  <div class="flex items-center gap-2">
+                    <span>{language.t("settings.general.row.wayland.title")}</span>
+                    <Tooltip value={language.t("settings.general.row.wayland.tooltip")} placement="top">
+                      <span class="text-text-weak">
+                        <Icon name="help" size="small" />
+                      </span>
+                    </Tooltip>
+                  </div>
+                }
+                description={language.t("settings.general.row.wayland.description")}
+              >
+                <div data-action="settings-wayland">
+                  <Switch checked={settings.general.wayland()} onChange={setBackend} />
+                </div>
+              </SettingsRow>
+            </div>
+          </div>
+        </Show>
       </div>
     </div>
   )
 }
 
 interface SettingsRowProps {
-  title: string
+  title: string | JSX.Element
   description: string | JSX.Element
   children: JSX.Element
 }
