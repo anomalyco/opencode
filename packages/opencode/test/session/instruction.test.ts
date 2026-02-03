@@ -67,4 +67,39 @@ describe("InstructionPrompt.resolve", () => {
       },
     })
   })
+
+  test("loads .opencode/AGENTS.md in addition to root AGENTS.md", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "AGENTS.md"), "# Root Instructions")
+        await Bun.write(path.join(dir, ".opencode", "AGENTS.md"), "# OpenCode Instructions")
+        await Bun.write(path.join(dir, "src", "file.ts"), "const x = 1")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const system = await InstructionPrompt.systemPaths()
+        expect(system.has(path.join(tmp.path, "AGENTS.md"))).toBe(true)
+        expect(system.has(path.join(tmp.path, ".opencode", "AGENTS.md"))).toBe(true)
+      },
+    })
+  })
+
+  test("loads only .opencode/AGENTS.md when root AGENTS.md does not exist", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, ".opencode", "AGENTS.md"), "# OpenCode Instructions")
+        await Bun.write(path.join(dir, "src", "file.ts"), "const x = 1")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const system = await InstructionPrompt.systemPaths()
+        expect(system.has(path.join(tmp.path, "AGENTS.md"))).toBe(false)
+        expect(system.has(path.join(tmp.path, ".opencode", "AGENTS.md"))).toBe(true)
+      },
+    })
+  })
 })

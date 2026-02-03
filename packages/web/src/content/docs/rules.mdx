@@ -60,6 +60,8 @@ opencode also supports reading the `AGENTS.md` file from multiple locations. And
 
 Place an `AGENTS.md` in your project root for project-specific rules. These only apply when you are working in this directory or its sub-directories.
 
+You can also place rules in `.opencode/AGENTS.md`. These are loaded in addition to your normal project rules.
+
 ### Global
 
 You can also have global rules in a `~/.config/opencode/AGENTS.md` file. This gets applied across all opencode sessions.
@@ -88,11 +90,11 @@ export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 
 When opencode starts, it looks for rule files in this order:
 
-1. **Local files** by traversing up from the current directory (`AGENTS.md`, `CLAUDE.md`)
+1. **Local files** by traversing up from the current directory (`AGENTS.md`, `CLAUDE.md`, `CONTEXT.md`) plus `.opencode/AGENTS.md`
 2. **Global file** at `~/.config/opencode/AGENTS.md`
 3. **Claude Code file** at `~/.claude/CLAUDE.md` (unless disabled)
 
-The first matching file wins in each category. For example, if you have both `AGENTS.md` and `CLAUDE.md`, only `AGENTS.md` is used. Similarly, `~/.config/opencode/AGENTS.md` takes precedence over `~/.claude/CLAUDE.md`.
+For local rules, opencode prefers `AGENTS.md` over `CLAUDE.md` (and `CONTEXT.md`), but still loads any `.opencode/AGENTS.md` files it finds. For global rules, `~/.config/opencode/AGENTS.md` takes precedence over `~/.claude/CLAUDE.md`.
 
 ---
 

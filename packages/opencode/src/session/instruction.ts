@@ -81,6 +81,13 @@ export namespace InstructionPrompt {
           break
         }
       }
+      // Also search for .opencode/AGENTS.md files
+      const opencodeMatches = await Filesystem.findUp(
+        path.join(".opencode", "AGENTS.md"),
+        Instance.directory,
+        Instance.worktree,
+      )
+      opencodeMatches.forEach((p) => paths.add(path.resolve(p)))
     }
 
     for (const file of globalFiles()) {
