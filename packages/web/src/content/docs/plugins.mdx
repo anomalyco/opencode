@@ -317,10 +317,12 @@ Use `client.app.log()` instead of `console.log` for structured logging:
 ```ts title=".opencode/plugins/my-plugin.ts"
 export const MyPlugin = async ({ client }) => {
   await client.app.log({
-    service: "my-plugin",
-    level: "info",
-    message: "Plugin initialized",
-    extra: { foo: "bar" },
+    body: {
+      service: "my-plugin",
+      level: "info",
+      message: "Plugin initialized",
+      extra: { foo: "bar" },
+    },
   })
 }
 ```
