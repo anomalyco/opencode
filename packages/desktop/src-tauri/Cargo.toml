@@ -18,7 +18,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["macos-private-api", "devtools"] }
+tauri = { version = "2.9.5", features = ["macos-private-api", "devtools"] }
 tauri-plugin-opener = "2"
 tauri-plugin-deep-link = "2.4.6"
 tauri-plugin-shell = "2"
@@ -43,10 +43,13 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 uuid = { version = "1.19.0", features = ["v4"] }
 tauri-plugin-decorum = "1.1.1"
 comrak = { version = "0.50", default-features = false }
+specta = "=2.0.0-rc.22"
+specta-typescript = "0.0.9"
+tauri-specta = { version = "=2.0.0-rc.21", features = ["derive", "typescript"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18.2"
-webkit2gtk = "=2.0.1"
+webkit2gtk = "=2.0.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
@@ -59,3 +62,10 @@ windows = { version = "0.61", features = [
     "Win32_System_Threading",
     "Win32_Security"
 ] }
+
+[patch.crates-io]
+specta = { git = "https://github.com/specta-rs/specta", rev = "106425eac4964d8ff34d3a02f1612e33117b08bb" }
+specta-typescript = { git = "https://github.com/specta-rs/specta", rev = "106425eac4964d8ff34d3a02f1612e33117b08bb" }
+tauri-specta = { git = "https://github.com/specta-rs/tauri-specta", rev = "6720b2848eff9a3e40af54c48d65f6d56b640c0b" }
+# TODO: https://github.com/tauri-apps/tauri/pull/14812
+tauri  = { git = "https://github.com/tauri-apps/tauri", rev = "4d5d78daf636feaac20c5bc48a6071491c4291ee" }
