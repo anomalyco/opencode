@@ -1001,6 +1001,12 @@ export namespace Provider {
         const fetchFn = customFetch ?? fetch
         const opts = init ?? {}
 
+        // Merge configured headers into request headers
+        opts.headers = {
+          ...(typeof opts.headers === 'object' ? opts.headers : {}),
+          ...options["headers"],
+        }
+
         if (options["timeout"] !== undefined && options["timeout"] !== null) {
           const signals: AbortSignal[] = []
           if (opts.signal) signals.push(opts.signal)
