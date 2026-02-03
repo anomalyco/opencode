@@ -49,11 +49,9 @@ export namespace ProviderModelDetection {
 
 export namespace ProviderModelDetection.OpenAICompatible {
   const OpenAICompatibleResponse = z.object({
-    object: z.string(),
     data: z.array(
       z.object({
         id: z.string(),
-        object: z.string().optional(),
         created: z.number().optional(),
         owned_by: z.string().optional(),
       }),
