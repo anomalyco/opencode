@@ -33,12 +33,12 @@ export namespace Account {
   export type Entry = z.infer<typeof Entry>
 
   const MODEL_DISPLAY_NAMES: Record<string, string> = {
-    "claude": "Claude 4.5",
+    claude: "Claude 4.5",
     "gemini-antigravity:antigravity-gemini-3-pro": "G3 Pro",
     "gemini-antigravity:antigravity-gemini-3-pro-image": "G3 Image",
     "gemini-cli:gemini-3-flash-preview": "G3 Flash",
     "gemini-cli:gemini-3-pro-preview": "G3 Pro",
-    "codex": "Codex",
+    codex: "Codex",
     "codex-primary": "Primary (5H)",
     "codex-secondary": "Secondary (W)",
   }
@@ -54,7 +54,13 @@ export namespace Account {
     if (lowerKey.includes("gemini-3-flash") || lowerKey.includes("flash")) return "G3 Flash"
     if (lowerKey.includes("codex-primary") || lowerKey === "primary") return "Primary (5H)"
     if (lowerKey.includes("codex-secondary") || lowerKey === "secondary") return "Secondary (W)"
-    return modelKey.split(":").pop()?.replace(/-/g, " ").replace(/\b\w/g, l => l.toUpperCase()) || modelKey
+    return (
+      modelKey
+        .split(":")
+        .pop()
+        ?.replace(/-/g, " ")
+        .replace(/\b\w/g, (l) => l.toUpperCase()) || modelKey
+    )
   }
 
   function getOpenAIMultiPath(): string {
@@ -64,7 +70,11 @@ export namespace Account {
   function getAntigravityPath(): string {
     const platform = process.platform
     if (platform === "win32") {
-      return path.join(process.env.APPDATA || path.join(homedir(), "AppData", "Roaming"), "opencode", "antigravity-accounts.json")
+      return path.join(
+        process.env.APPDATA || path.join(homedir(), "AppData", "Roaming"),
+        "opencode",
+        "antigravity-accounts.json",
+      )
     }
     const xdgConfig = process.env.XDG_CONFIG_HOME || path.join(homedir(), ".config")
     return path.join(xdgConfig, "opencode", "antigravity-accounts.json")
@@ -74,15 +84,15 @@ export namespace Account {
 
   function parseQuotas(rateLimitResetTimes: Record<string, unknown> | undefined, now: number): ModelQuota[] {
     if (!rateLimitResetTimes || typeof rateLimitResetTimes !== "object") return []
-    
+
     const quotas: ModelQuota[] = []
     for (const [key, resetTime] of Object.entries(rateLimitResetTimes)) {
       if (typeof resetTime !== "number") continue
-      
+
       const isRecovered = resetTime <= now
       const timeRemaining = isRecovered ? 0 : resetTime - now
       const percentage = isRecovered ? 100 : Math.max(0, 100 - Math.round((timeRemaining / QUOTA_WINDOW_MS) * 100))
-      
+
       quotas.push({
         name: key,
         displayName: getDisplayName(key),
@@ -107,16 +117,16 @@ export namespace Account {
     const activeIndex = typeof data.activeIndex === "number" ? data.activeIndex : 0
 
     return data.accounts.map((acc: Record<string, unknown>, idx: number): Entry => {
-      let status: Status = "active"
-
-      if (typeof acc.coolingDownUntil === "number" && acc.coolingDownUntil > now) {
-        status = "cooling_down"
-      } else if (acc.rateLimitResetTimes && typeof acc.rateLimitResetTimes === "object") {
-        const hasActiveLimit = Object.values(acc.rateLimitResetTimes as Record<string, unknown>).some(
-          (time) => typeof time === "number" && time > now,
-        )
-        if (hasActiveLimit) status = "rate_limited"
-      }
+      const status: Status = (() => {
+        if (typeof acc.coolingDownUntil === "number" && acc.coolingDownUntil > now) return "cooling_down"
+        if (acc.rateLimitResetTimes && typeof acc.rateLimitResetTimes === "object") {
+          const hasActiveLimit = Object.values(acc.rateLimitResetTimes as Record<string, unknown>).some(
+            (time) => typeof time === "number" && time > now,
+          )
+          if (hasActiveLimit) return "rate_limited"
+        }
+        return "active"
+      })()
 
       const quotas = parseQuotas(acc.rateLimitResetTimes as Record<string, unknown> | undefined, now)
 
@@ -151,16 +161,16 @@ export namespace Account {
     const activeIndex = typeof data.activeIndex === "number" ? data.activeIndex : 0
 
     return data.accounts.map((acc: Record<string, unknown>, idx: number): Entry => {
-      let status: Status = "active"
-
-      if (typeof acc.coolingDownUntil === "number" && acc.coolingDownUntil > now) {
-        status = "cooling_down"
-      } else if (acc.rateLimitResetTimes && typeof acc.rateLimitResetTimes === "object") {
-        const hasActiveLimit = Object.values(acc.rateLimitResetTimes as Record<string, unknown>).some(
-          (time) => typeof time === "number" && time > now,
-        )
-        if (hasActiveLimit) status = "rate_limited"
-      }
+      const status: Status = (() => {
+        if (typeof acc.coolingDownUntil === "number" && acc.coolingDownUntil > now) return "cooling_down"
+        if (acc.rateLimitResetTimes && typeof acc.rateLimitResetTimes === "object") {
+          const hasActiveLimit = Object.values(acc.rateLimitResetTimes as Record<string, unknown>).some(
+            (time) => typeof time === "number" && time > now,
+          )
+          if (hasActiveLimit) return "rate_limited"
+        }
+        return "active"
+      })()
 
       const quotas = parseQuotas(acc.rateLimitResetTimes as Record<string, unknown> | undefined, now)
 
@@ -188,7 +198,7 @@ export namespace Account {
 
   export async function setActive(accountId: string): Promise<boolean> {
     const [providerType, indexStr] = accountId.split("-").slice(0, 2)
-    
+
     if (providerType === "openai" || accountId.startsWith("openai-multi-")) {
       const index = parseInt(accountId.replace("openai-multi-", ""), 10)
       if (isNaN(index)) return false
@@ -204,13 +214,13 @@ export namespace Account {
   async function setActiveOpenAI(index: number): Promise<boolean> {
     const filepath = getOpenAIMultiPath()
     const file = Bun.file(filepath)
-    
+
     if (!(await file.exists())) return false
-    
+
     const data = await file.json().catch(() => null)
     if (!data || typeof data !== "object") return false
     if (!Array.isArray(data.accounts) || index < 0 || index >= data.accounts.length) return false
-    
+
     data.activeIndex = index
     await Bun.write(filepath, JSON.stringify(data, null, 2))
     return true
@@ -219,13 +229,13 @@ export namespace Account {
   async function setActiveAntigravity(index: number): Promise<boolean> {
     const filepath = getAntigravityPath()
     const file = Bun.file(filepath)
-    
+
     if (!(await file.exists())) return false
-    
+
     const data = await file.json().catch(() => null)
     if (!data || typeof data !== "object") return false
     if (!Array.isArray(data.accounts) || index < 0 || index >= data.accounts.length) return false
-    
+
     data.activeIndex = index
     await Bun.write(filepath, JSON.stringify(data, null, 2))
     return true
@@ -247,20 +257,20 @@ export namespace Account {
   async function removeOpenAI(index: number): Promise<boolean> {
     const filepath = getOpenAIMultiPath()
     const file = Bun.file(filepath)
-    
+
     if (!(await file.exists())) return false
-    
+
     const data = await file.json().catch(() => null)
     if (!data || typeof data !== "object") return false
     if (!Array.isArray(data.accounts) || index < 0 || index >= data.accounts.length) return false
-    
+
     data.accounts.splice(index, 1)
     if (data.activeIndex >= data.accounts.length) {
       data.activeIndex = Math.max(0, data.accounts.length - 1)
     } else if (data.activeIndex > index) {
       data.activeIndex--
     }
-    
+
     await Bun.write(filepath, JSON.stringify(data, null, 2))
     return true
   }
@@ -268,20 +278,20 @@ export namespace Account {
   async function removeAntigravity(index: number): Promise<boolean> {
     const filepath = getAntigravityPath()
     const file = Bun.file(filepath)
-    
+
     if (!(await file.exists())) return false
-    
+
     const data = await file.json().catch(() => null)
     if (!data || typeof data !== "object") return false
     if (!Array.isArray(data.accounts) || index < 0 || index >= data.accounts.length) return false
-    
+
     data.accounts.splice(index, 1)
     if (data.activeIndex >= data.accounts.length) {
       data.activeIndex = Math.max(0, data.accounts.length - 1)
     } else if (data.activeIndex > index) {
       data.activeIndex--
     }
-    
+
     await Bun.write(filepath, JSON.stringify(data, null, 2))
     return true
   }
@@ -302,16 +312,16 @@ export namespace Account {
   async function clearRateLimitsOpenAI(index: number): Promise<boolean> {
     const filepath = getOpenAIMultiPath()
     const file = Bun.file(filepath)
-    
+
     if (!(await file.exists())) return false
-    
+
     const data = await file.json().catch(() => null)
     if (!data || typeof data !== "object") return false
     if (!Array.isArray(data.accounts) || index < 0 || index >= data.accounts.length) return false
-    
+
     data.accounts[index].rateLimitResetTimes = {}
     data.accounts[index].coolingDownUntil = 0
-    
+
     await Bun.write(filepath, JSON.stringify(data, null, 2))
     return true
   }
@@ -319,16 +329,16 @@ export namespace Account {
   async function clearRateLimitsAntigravity(index: number): Promise<boolean> {
     const filepath = getAntigravityPath()
     const file = Bun.file(filepath)
-    
+
     if (!(await file.exists())) return false
-    
+
     const data = await file.json().catch(() => null)
     if (!data || typeof data !== "object") return false
     if (!Array.isArray(data.accounts) || index < 0 || index >= data.accounts.length) return false
-    
+
     data.accounts[index].rateLimitResetTimes = {}
     data.accounts[index].coolingDownUntil = 0
-    
+
     await Bun.write(filepath, JSON.stringify(data, null, 2))
     return true
   }
@@ -337,16 +347,16 @@ export namespace Account {
     if (!resetTime) return "Ready"
     const diffMs = resetTime - Date.now()
     if (diffMs <= 0) return "Ready"
-    
+
     const hours = Math.floor(diffMs / 3600000)
     const mins = Math.floor((diffMs % 3600000) / 60000)
-    
+
     if (hours >= 24) {
       const days = Math.floor(hours / 24)
       const remainingHrs = hours % 24
       return `${days}d ${remainingHrs}h`
     }
-    
+
     return `${hours}h ${mins}m`
   }
 
