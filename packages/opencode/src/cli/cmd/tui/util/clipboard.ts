@@ -148,6 +148,7 @@ export namespace Clipboard {
   export async function copy(text: string): Promise<void> {
     const renderer = rendererRef.current
     if (renderer) {
+      // @ts-expect-error - copyToClipboardOSC52 is not in CliRenderer types but exists
       const copied = renderer.copyToClipboardOSC52(text)
       if (copied) return
     }

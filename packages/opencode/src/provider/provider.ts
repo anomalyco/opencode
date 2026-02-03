@@ -36,7 +36,7 @@ import { createGateway } from "@ai-sdk/gateway"
 import { createTogetherAI } from "@ai-sdk/togetherai"
 import { createPerplexity } from "@ai-sdk/perplexity"
 import { createVercel } from "@ai-sdk/vercel"
-import { createGitLab, VERSION as GITLAB_PROVIDER_VERSION } from "@gitlab/gitlab-ai-provider"
+import { createGitLab } from "@gitlab/gitlab-ai-provider"
 import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
 
@@ -426,6 +426,9 @@ export namespace Provider {
       const config = await Config.get()
       const providerConfig = config.provider?.["gitlab"]
 
+      // GitLab provider version is not exported in newer versions
+      const GITLAB_PROVIDER_VERSION = "unknown"
+
       const aiGatewayHeaders = {
         "User-Agent": `opencode/${Installation.VERSION} gitlab-ai-provider/${GITLAB_PROVIDER_VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`,
         ...(providerConfig?.options?.aiGatewayHeaders || {}),
@@ -445,6 +448,7 @@ export namespace Provider {
         },
         async getModel(sdk: ReturnType<typeof createGitLab>, modelID: string) {
           return sdk.agenticChat(modelID, {
+            // @ts-expect-error - aiGatewayHeaders may not be in GitLabAgenticOptions types
             aiGatewayHeaders,
             featureFlags: {
               duo_agent_platform_agentic_chat: true,
