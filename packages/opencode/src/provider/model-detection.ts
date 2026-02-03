@@ -3,17 +3,28 @@ import { iife } from "@/util/iife"
 import { Log } from "@/util/log"
 import { OAUTH_DUMMY_KEY } from "@/auth"
 import { Provider } from "./provider"
+import { LocalProvider, type LocalModel } from "./local"
 
 export namespace ProviderModelDetection {
-  export async function detect(provider: Provider.Info): Promise<string[] | undefined> {
+  export async function detect(provider: Provider.Info): Promise<string[] | Provider.Model[] | undefined> {
     const log = Log.create({ service: "provider.model-detection" })
 
     const model = Object.values(provider.models)[0]
     const providerNPM = model?.api?.npm ?? "@ai-sdk/openai-compatible"
     const providerBaseURL = provider.options["baseURL"] ?? model?.api?.url ?? ""
 
+    // TODO: this calls out to the provider at least once
+    //       figure out a way to not call it for cloud providers at all (??)
+    const localProvider = await LocalProvider.detect_provider(providerBaseURL)
+
     const detectedModels = await iife(async () => {
       try {
+        if (localProvider !== null) {
+          log.info("using local provider method", { providerID: provider.id, localProvider })
+          const localModels = await LocalProvider.probe_provider(localProvider, providerBaseURL)
+          return expandLocalModels(provider, localModels)
+        }
+
         if (providerNPM === "@ai-sdk/openai-compatible" && providerBaseURL) {
           log.info("using OpenAI-compatible method", { providerID: provider.id })
           return await ProviderModelDetection.OpenAICompatible.listModels(providerBaseURL, provider)
@@ -61,4 +72,32 @@ export namespace ProviderModelDetection.OpenAICompatible {
       .filter((model) => model.id && !model.id.includes("embedding") && !model.id.includes("embed"))
       .map((model) => model.id)
   }
+}
+
+function expandLocalModels(provider: Provider.Info, localModels: LocalModel[]): Provider.Model[] {
+  return localModels.map((localModel) => {
+    return {
+      id: localModel.id,
+      providerID: provider.id,
+      name: localModel.id,
+      status: "active",
+      limit: {
+        context: localModel.context_length,
+        // TODO: can we drop this field?
+        // properly detect the value?
+        output: 16 * 1024
+      },
+      capabilities: {
+        temperature: true,
+        toolcall: localModel.tool_call,
+        input: {
+          text: true,
+          image: localModel.vision,
+        },
+        output: {
+          text: true,
+        },
+      },
+    } as Provider.Model
+  })
 }

@@ -8,7 +8,7 @@ import { BunProc } from "../bun"
 import { Plugin } from "../plugin"
 import { ModelsDev } from "./models"
 import { NamedError } from "@opencode-ai/util/error"
-import { Auth, OAUTH_DUMMY_KEY } from "../auth"
+import { Auth } from "../auth"
 import { Env } from "../env"
 import { Instance } from "../project/instance"
 import { Flag } from "../flag/flag"
@@ -37,6 +37,8 @@ import { createPerplexity } from "@ai-sdk/perplexity"
 import { createVercel } from "@ai-sdk/vercel"
 import { createGitLab } from "@gitlab/gitlab-ai-provider"
 import { ProviderTransform } from "./transform"
+import { Installation } from "../installation"
+import { ProviderModelDetection } from "./model-detection"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -674,45 +676,6 @@ export namespace Provider {
     }
   }
 
-  const ModelsList = z.object({
-    object: z.string(),
-    data: z.array(
-      z
-        .object({
-          id: z.string(),
-          object: z.string().optional(),
-          created: z.number().optional(),
-          owned_by: z.string().optional(),
-        })
-        .catchall(z.any()),
-    ),
-  })
-  type ModelsList = z.infer<typeof ModelsList>
-
-  async function listModels(provider: Info) {
-    const baseURL = provider.options["baseURL"]
-    const fetchFn = (provider.options["fetch"] as typeof fetch) ?? fetch
-    const apiKey = provider.options["apiKey"] ?? provider.key ?? ""
-    const headers = new Headers()
-    if (apiKey && apiKey !== OAUTH_DUMMY_KEY) headers.append("Authorization", `Bearer ${apiKey}`)
-    const models = await fetchFn(`${baseURL}/models`, {
-      headers,
-      signal: AbortSignal.timeout(3 * 1000),
-    })
-      .then(async (resp) => {
-        if (!resp.ok) return
-        return ModelsList.parse(await resp.json())
-      })
-      .catch((err) => {
-        log.error(`Failed to fetch models from: ${baseURL}/models`, { error: err })
-      })
-    if (!models) return
-
-    return models.data
-      .filter((model) => model.id && !model.id.includes("embedding") && !model.id.includes("embed"))
-      .map((model) => model.id)
-  }
-
   const state = Instance.state(async () => {
     using _ = log.time("state")
     const config = await Config.get()
@@ -947,14 +910,37 @@ export namespace Provider {
     // detect models and prune invalid ones
     await Promise.all(
       Object.values(providers).map(async (provider) => {
-        const detected = await listModels(provider)
+        const detected = await ProviderModelDetection.detect(provider)
         if (!detected) return
-        const detectedSet = new Set(detected)
+        
+        // Local models return the actual loaded models
+        // Replace the entire models list with the detected models
+        if (detected.length > 0 && typeof detected[0] !== "string") {
+          const newModelsList = detected as Provider.Model[]
+          provider.models = {}
+          for (const model of newModelsList) {
+            provider.models[model.id] = model
+          }
+
+          return
+        } 
+        
+        const detectedModelIds = detected as string[]
+
+        // remove models that were not detected
+        const detectedSet = new Set(detectedModelIds)
         for (const modelID of Object.keys(provider.models)) {
           if (!detectedSet.has(modelID)) delete provider.models[modelID]
         }
-        // TODO: add detected models not present in config/models.dev
-        // for (const modelID of detected) {}
+
+        // add detected models not present in config/models.dev
+        for (const modelID of detectedModelIds) {
+          provider.models[modelID] = {
+            id: modelID,
+            providerID: provider.id,
+            name: modelID,
+          } as Model
+        }
       }),
     )
 
