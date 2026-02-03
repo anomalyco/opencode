@@ -48,6 +48,14 @@ export function SlottableDiff(props: SlottableDiffProps): JSX.Element {
 
   createEffect(() => {
     if (!diffRef) return
+    const wrapMode = props.wrapMode
+    if (wrapMode !== undefined) {
+      diffRef.wrapMode = wrapMode
+    }
+  })
+
+  createEffect(() => {
+    if (!diffRef) return
     diffRef.onLineClick = props.onLineClick
   })
 
