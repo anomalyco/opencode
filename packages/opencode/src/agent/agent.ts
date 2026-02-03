@@ -52,32 +52,25 @@ export namespace Agent {
     const cfg = await Config.get()
 
     const dirs = await Skill.dirs()
-    const allow = dirs.map((dir) => ({
-      permission: "external_directory",
-      pattern: path.join(dir, "*"),
-      action: "allow" as const,
-    }))
-    const defaults = PermissionNext.merge(
-      PermissionNext.fromConfig({
+    const defaults = PermissionNext.fromConfig({
+      "*": "allow",
+      doom_loop: "ask",
+      external_directory: {
+        "*": "ask",
+        [Truncate.GLOB]: "allow",
+        ...Object.fromEntries(dirs.map((dir) => [path.join(dir, "*"), "allow"])),
+      },
+      question: "deny",
+      plan_enter: "deny",
+      plan_exit: "deny",
+      // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
+      read: {
         "*": "allow",
-        doom_loop: "ask",
-        external_directory: {
-          "*": "ask",
-          [Truncate.GLOB]: "allow",
-        },
-        question: "deny",
-        plan_enter: "deny",
-        plan_exit: "deny",
-        // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
-        read: {
-          "*": "allow",
-          "*.env": "ask",
-          "*.env.*": "ask",
-          "*.env.example": "allow",
-        },
-      }),
-      allow,
-    )
+        "*.env": "ask",
+        "*.env.*": "ask",
+        "*.env.example": "allow",
+      },
+    })
     const user = PermissionNext.fromConfig(cfg.permission ?? {})
 
     const result: Record<string, Info> = {
