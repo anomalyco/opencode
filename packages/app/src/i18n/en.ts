@@ -44,7 +44,6 @@ export const dict = {
 
   "command.session.new": "New session",
   "command.file.open": "Open file",
-  "command.file.open.description": "Search files and commands",
   "command.tab.close": "Close tab",
   "command.context.addSelection": "Add selection to context",
   "command.context.addSelection.description": "Add selected lines from the current file",
@@ -86,7 +85,7 @@ export const dict = {
   "command.session.unshare": "Unshare session",
   "command.session.unshare.description": "Stop sharing this session",
 
-  "palette.search.placeholder": "Search files and commands",
+  "palette.search.placeholder": "Search files, commands, and sessions",
   "palette.empty": "No results found",
   "palette.group.commands": "Commands",
   "palette.group.files": "Files",
