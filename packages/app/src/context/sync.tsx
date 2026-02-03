@@ -9,6 +9,8 @@ import type { Message, Part } from "@opencode-ai/sdk/v2/client"
 
 const keyFor = (directory: string, id: string) => `${directory}\n${id}`
 
+const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
+
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
   init: () => {
@@ -59,7 +61,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           const next = items
             .map((x) => x.info)
             .filter((m) => !!m?.id)
-            .sort((a, b) => a.id.localeCompare(b.id))
+            .sort((a, b) => cmp(a.id, b.id))
 
           batch(() => {
             input.setStore("message", input.sessionID, reconcile(next, { key: "id" }))
@@ -69,7 +71,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                 "part",
                 message.info.id,
                 reconcile(
-                  message.parts.filter((p) => !!p?.id).sort((a, b) => a.id.localeCompare(b.id)),
+                  message.parts.filter((p) => !!p?.id).sort((a, b) => cmp(a.id, b.id)),
                   { key: "id" },
                 ),
               )
@@ -129,7 +131,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                 const result = Binary.search(messages, input.messageID, (m) => m.id)
                 messages.splice(result.index, 0, message)
               }
-              draft.part[input.messageID] = input.parts.filter((p) => !!p?.id).sort((a, b) => a.id.localeCompare(b.id))
+              draft.part[input.messageID] = input.parts.filter((p) => !!p?.id).sort((a, b) => cmp(a.id, b.id))
             }),
           )
         },
@@ -271,7 +273,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           await client.session.list().then((x) => {
             const sessions = (x.data ?? [])
               .filter((s) => !!s?.id)
-              .sort((a, b) => a.id.localeCompare(b.id))
+              .sort((a, b) => cmp(a.id, b.id))
               .slice(0, store.limit)
             setStore("session", reconcile(sessions, { key: "id" }))
           })

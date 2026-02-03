@@ -1,5 +1,6 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
+import type { Accessor } from "solid-js"
 
 export type Platform = {
   /** Platform discriminator */
@@ -55,6 +56,9 @@ export type Platform = {
 
   /** Parse markdown to HTML using native parser (desktop only, returns unprocessed code blocks) */
   parseMarkdown?(markdown: string): Promise<string>
+
+  /** Webview zoom level (desktop only) */
+  webviewZoom?: Accessor<number>
 }
 
 export const { use: usePlatform, provider: PlatformProvider } = createSimpleContext({
