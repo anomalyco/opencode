@@ -54,7 +54,6 @@ const ModelList: Component<{
           class="w-full"
           placement="right-start"
           gutter={12}
-          forceMount={false}
           value={
             <ModelTooltip
               model={item}
@@ -90,10 +89,9 @@ const ModelList: Component<{
 
 export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
   provider?: string
-  children?: JSX.Element | ((open: boolean) => JSX.Element)
+  children?: JSX.Element
   triggerAs?: T
   triggerProps?: ComponentProps<T>
-  gutter?: number
 }) {
   const [store, setStore] = createStore<{
     open: boolean
@@ -176,14 +174,14 @@ export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
       }}
       modal={false}
       placement="top-start"
-      gutter={props.gutter ?? 8}
+      gutter={8}
     >
       <Kobalte.Trigger
         ref={(el) => setStore("trigger", el)}
         as={props.triggerAs ?? "div"}
         {...(props.triggerProps as any)}
       >
-        {typeof props.children === "function" ? props.children(store.open) : props.children}
+        {props.children}
       </Kobalte.Trigger>
       <Kobalte.Portal>
         <Kobalte.Content
@@ -215,7 +213,7 @@ export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
             class="p-1"
             action={
               <div class="flex items-center gap-1">
-                <Tooltip placement="top" forceMount={false} value={language.t("command.provider.connect")}>
+                <Tooltip placement="top" value={language.t("command.provider.connect")}>
                   <IconButton
                     icon="plus-small"
                     variant="ghost"
@@ -225,7 +223,7 @@ export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
                     onClick={handleConnectProvider}
                   />
                 </Tooltip>
-                <Tooltip placement="top" forceMount={false} value={language.t("dialog.model.manage")}>
+                <Tooltip placement="top" value={language.t("dialog.model.manage")}>
                   <IconButton
                     icon="sliders"
                     variant="ghost"
