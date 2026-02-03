@@ -681,7 +681,7 @@ export default function Page() {
     {
       id: "file.open",
       title: language.t("command.file.open"),
-      description: language.t("command.file.open.description"),
+      description: language.t("palette.search.placeholder"),
       category: language.t("command.category.file"),
       keybind: "mod+p",
       slash: "open",
