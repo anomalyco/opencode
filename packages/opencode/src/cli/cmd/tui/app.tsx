@@ -104,6 +104,7 @@ export function tui(input: {
   args: Args
   directory?: string
   fetch?: typeof fetch
+  headers?: RequestInit["headers"]
   events?: EventSource
   onExit?: () => Promise<void>
 }) {
@@ -130,6 +131,7 @@ export function tui(input: {
                         url={input.url}
                         directory={input.directory}
                         fetch={input.fetch}
+                        headers={input.headers}
                         events={input.events}
                       >
                         <SyncProvider>
@@ -167,6 +169,7 @@ export function tui(input: {
         gatherStats: false,
         exitOnCtrlC: false,
         useKittyKeyboard: {},
+        autoFocus: false,
         consoleOptions: {
           keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
           onCopySelection: (text) => {
@@ -184,6 +187,7 @@ function App() {
   const route = useRoute()
   const dimensions = useTerminalDimensions()
   const renderer = useRenderer()
+  Clipboard.setRenderer(renderer)
   renderer.disableStdoutInterception()
   const dialog = useDialog()
   const local = useLocal()
@@ -567,6 +571,16 @@ function App() {
       category: "System",
       onSelect: (dialog) => {
         kv.set("animations_enabled", !kv.get("animations_enabled", true))
+        dialog.clear()
+      },
+    },
+    {
+      title: kv.get("diff_wrap_mode", "word") === "word" ? "Disable diff wrapping" : "Enable diff wrapping",
+      value: "app.toggle.diffwrap",
+      category: "System",
+      onSelect: (dialog) => {
+        const current = kv.get("diff_wrap_mode", "word")
+        kv.set("diff_wrap_mode", current === "word" ? "none" : "word")
         dialog.clear()
       },
     },

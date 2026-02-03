@@ -40,7 +40,7 @@
       transition: opacity 0.15s ease;
 
       &:hover:not(:disabled),
-      &:focus:not(:disabled),
+      &:focus-visible:not(:disabled),
       &:active:not(:disabled) {
         background-color: transparent;
         opacity: 0.7;
@@ -91,10 +91,28 @@
       transition: opacity 0.15s ease;
 
       &:hover:not(:disabled),
-      &:focus:not(:disabled),
+      &:focus-visible:not(:disabled),
       &:active:not(:disabled) {
         background-color: transparent;
         opacity: 0.7;
+      }
+
+      &:hover:not(:disabled) [data-slot="icon-svg"] {
+        color: var(--icon-hover);
+      }
+
+      &:active:not(:disabled) [data-slot="icon-svg"] {
+        color: var(--icon-active);
+      }
+    }
+
+    > [data-component="icon-button"] {
+      background-color: transparent;
+
+      &:hover:not(:disabled),
+      &:focus:not(:disabled),
+      &:active:not(:disabled) {
+        background-color: transparent;
       }
 
       &:hover:not(:disabled) [data-slot="icon-svg"] {
@@ -169,7 +187,7 @@
       [data-slot="list-header"] {
         display: flex;
         z-index: 10;
-        padding: 8px 12px 8px 12px;
+        padding: 8px 12px 8px 8px;
         justify-content: space-between;
         align-items: center;
         align-self: stretch;

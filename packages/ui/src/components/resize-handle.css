@@ -21,6 +21,12 @@
     transform: translateX(50%);
     cursor: col-resize;
 
+    &[data-edge="start"] {
+      inset-inline-start: 0;
+      inset-inline-end: auto;
+      transform: translateX(-50%);
+    }
+
     &::after {
       width: 3px;
       inset-block: 0;
@@ -35,6 +41,12 @@
     height: 8px;
     transform: translateY(-50%);
     cursor: row-resize;
+
+    &[data-edge="end"] {
+      inset-block-start: auto;
+      inset-block-end: 0;
+      transform: translateY(50%);
+    }
 
     &::after {
       height: 3px;
