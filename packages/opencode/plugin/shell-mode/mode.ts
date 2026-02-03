@@ -45,7 +45,7 @@ export class ModeController {
       case ExecutionMode.Agent:
         return { name: "Agent", icon: "◆", color: "syntaxType" }
       case ExecutionMode.Auto:
-        return { name: "Auto", icon: "∞", color: "diffAdded" }
+        return { name: "Auto ", icon: "∞", color: "diffAdded" }
     }
   }
 }
