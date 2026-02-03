@@ -112,7 +112,7 @@ export const ReadTool = Tool.define("read", {
     }
 
     const content = raw.map((line, index) => {
-      return `${(index + offset + 1).toString().padStart(5, "0")}| ${line}`
+      return `${(index + offset + 1).toString().padStart(5, "0")} |${line}`
     })
     const preview = raw.slice(0, 20).join("\n")
 
