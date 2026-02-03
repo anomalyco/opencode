@@ -1,18 +1,52 @@
-FROM alpine AS base
+# ========================================
+# Base images for musl vs glibc
+# ========================================
 
-# Disable the runtime transpiler cache by default inside Docker containers.
-# On ephemeral containers, the cache is not useful
+# Alpine base for musl
+FROM alpine AS base-musl
 ARG BUN_RUNTIME_TRANSPILER_CACHE_PATH=0
 ENV BUN_RUNTIME_TRANSPILER_CACHE_PATH=${BUN_RUNTIME_TRANSPILER_CACHE_PATH}
-RUN apk add libgcc libstdc++ ripgrep
+RUN apk add --no-cache libgcc libstdc++ ripgrep ca-certificates
 
-FROM base AS build-amd64
-COPY dist/opencode-linux-x64-baseline-musl/bin/opencode /usr/local/bin/opencode
+# Debian base for glibc / baseline
+FROM debian:13-slim AS base-glibc
+RUN apt-get update && apt-get install -y \
+        ca-certificates libgcc1 libstdc++6 ripgrep \
+    && rm -rf /var/lib/apt/lists/*
 
-FROM base AS build-arm64
+# ========================================
+# Build stages for Linux binaries
+# ========================================
+
+# x64 musl
+FROM base-musl AS build-x64-musl
+COPY dist/opencode-linux-x64-musl/bin/opencode /usr/local/bin/opencode
+
+# arm64 musl
+FROM base-musl AS build-arm64-musl
 COPY dist/opencode-linux-arm64-musl/bin/opencode /usr/local/bin/opencode
 
-ARG TARGETARCH
-FROM build-${TARGETARCH}
+# x64 glibc
+FROM base-glibc AS build-x64-glibc
+COPY dist/opencode-linux-x64/bin/opencode /usr/local/bin/opencode
+
+# x64 baseline
+FROM base-glibc AS build-x64-baseline
+COPY dist/opencode-linux-x64-baseline/bin/opencode /usr/local/bin/opencode
+
+# arm64 glibc
+FROM base-glibc AS build-arm64-glibc
+COPY dist/opencode-linux-arm64/bin/opencode /usr/local/bin/opencode
+
+# ========================================
+# Final stage selection
+# ========================================
+
+ARG TARGETARCH=amd64
+ARG LIBC=musl  # musl, glibc, baseline
+FROM build-${TARGETARCH}-${LIBC} AS final
+
+# Optional: verify binary
 RUN opencode --version
+
 ENTRYPOINT ["opencode"]
