@@ -2,7 +2,8 @@ import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import { Installation } from "@/installation"
 import { iife } from "@/util/iife"
 
-const CLIENT_ID = "Ov23li8tweQw6odWQebz"
+const CLIENT_ID_GITHUB_COM = "Ov23li8tweQw6odWQebz"
+const CLIENT_ID_GITHUB_ENTERPRISE = "Ov23ctDVkRmgkPke0Mmm"
 // Add a small safety buffer when polling to avoid hitting the server
 // slightly too early due to clock skew / timer drift.
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000 // 3 seconds
@@ -194,6 +195,9 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
 
             const urls = getUrls(domain)
 
+            // Use different client IDs for GitHub.com vs GitHub Enterprise
+            const clientId = deploymentType === "enterprise" ? CLIENT_ID_GITHUB_ENTERPRISE : CLIENT_ID_GITHUB_COM
+
             const deviceResponse = await fetch(urls.DEVICE_CODE_URL, {
               method: "POST",
               headers: {
@@ -202,7 +206,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                 "User-Agent": `opencode/${Installation.VERSION}`,
               },
               body: JSON.stringify({
-                client_id: CLIENT_ID,
+                client_id: clientId,
                 scope: "read:user",
               }),
             })
@@ -232,7 +236,7 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
                       "User-Agent": `opencode/${Installation.VERSION}`,
                     },
                     body: JSON.stringify({
-                      client_id: CLIENT_ID,
+                      client_id: clientId,
                       device_code: deviceData.device_code,
                       grant_type: "urn:ietf:params:oauth:grant-type:device_code",
                     }),
