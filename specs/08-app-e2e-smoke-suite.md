@@ -185,7 +185,7 @@ Steps:
 4. Click the matching file result.
 5. Ensure the new file tab is active (click the `package.json` tab if needed so the viewer mounts).
 6. Assert the code viewer contains a known substring:
-   - `"name": "@opencode-ai/app"`.
+   - `"name": "@lotioncode-ai/app"`.
 7. Optionally assert the file tab is active and visible.
 
 Acceptance criteria:

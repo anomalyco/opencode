@@ -1,6 +1,6 @@
-# OpenCode Desktop
+# LotionCode Desktop
 
-Native OpenCode desktop app, built with Tauri v2.
+Native LotionCode desktop app, built with Tauri v2.
 
 ## Development
 

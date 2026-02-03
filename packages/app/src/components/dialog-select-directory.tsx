@@ -1,14 +1,14 @@
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { FileIcon } from "@opencode-ai/ui/file-icon"
-import { List } from "@opencode-ai/ui/list"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
+import { useDialog } from "@lotioncode-ai/ui/context/dialog"
+import { Dialog } from "@lotioncode-ai/ui/dialog"
+import { FileIcon } from "@lotioncode-ai/ui/file-icon"
+import { List } from "@lotioncode-ai/ui/list"
+import { getDirectory, getFilename } from "@lotioncode-ai/util/path"
 import fuzzysort from "fuzzysort"
 import { createMemo, createResource, createSignal } from "solid-js"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
-import type { ListRef } from "@opencode-ai/ui/list"
+import type { ListRef } from "@lotioncode-ai/ui/list"
 
 interface DialogSelectDirectoryProps {
   title?: string

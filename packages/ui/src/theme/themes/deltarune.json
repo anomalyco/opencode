@@ -1,5 +1,5 @@
 {
-  "$schema": "https://opencode.ai/theme.json",
+  "$schema": "https://lotioncode.ai/theme.json",
   "defs": {
     "darkWorldBg": "#0B0B3B",
     "darkWorldDeep": "#050520",

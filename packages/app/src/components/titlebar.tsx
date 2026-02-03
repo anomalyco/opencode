@@ -1,11 +1,11 @@
 import { createEffect, createMemo, Show, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocation, useNavigate } from "@solidjs/router"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Icon } from "@opencode-ai/ui/icon"
-import { Button } from "@opencode-ai/ui/button"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { useTheme } from "@opencode-ai/ui/theme"
+import { IconButton } from "@lotioncode-ai/ui/icon-button"
+import { Icon } from "@lotioncode-ai/ui/icon"
+import { Button } from "@lotioncode-ai/ui/button"
+import { Tooltip, TooltipKeybind } from "@lotioncode-ai/ui/tooltip"
+import { useTheme } from "@lotioncode-ai/ui/theme"
 
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
@@ -220,11 +220,11 @@ export function Titlebar() {
             </Tooltip>
           </div>
         </div>
-        <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
+        <div id="lotioncode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
       </div>
 
       <div class="min-w-0 flex items-center justify-center pointer-events-none lg:absolute lg:inset-0 lg:flex lg:items-center lg:justify-center">
-        <div id="opencode-titlebar-center" class="pointer-events-auto w-full min-w-0 flex justify-center lg:w-fit" />
+        <div id="lotioncode-titlebar-center" class="pointer-events-auto w-full min-w-0 flex justify-center lg:w-fit" />
       </div>
 
       <div
@@ -234,7 +234,7 @@ export function Titlebar() {
         }}
         onMouseDown={drag}
       >
-        <div id="opencode-titlebar-right" class="flex items-center gap-3 shrink-0 justify-end" />
+        <div id="lotioncode-titlebar-right" class="flex items-center gap-3 shrink-0 justify-end" />
         <Show when={windows()}>
           <div class="w-6 shrink-0" />
           <div data-tauri-decorum-tb class="flex flex-row" />

@@ -1,5 +1,5 @@
 import { App } from "@slack/bolt"
-import { createOpencode, type ToolPart } from "@opencode-ai/sdk"
+import { createOpencode, type ToolPart } from "@lotioncode-ai/sdk"
 
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
@@ -13,15 +13,15 @@ console.log("- Bot token present:", !!process.env.SLACK_BOT_TOKEN)
 console.log("- Signing secret present:", !!process.env.SLACK_SIGNING_SECRET)
 console.log("- App token present:", !!process.env.SLACK_APP_TOKEN)
 
-console.log("🚀 Starting opencode server...")
-const opencode = await createOpencode({
+console.log("🚀 Starting lotioncode server...")
+const lotioncode = await createOpencode({
   port: 0,
 })
 console.log("✅ Opencode server ready")
 
 const sessions = new Map<string, { client: any; server: any; sessionId: string; channel: string; thread: string }>()
 ;(async () => {
-  const events = await opencode.client.event.subscribe()
+  const events = await lotioncode.client.event.subscribe()
   for await (const event of events.stream) {
     if (event.type === "message.part.updated") {
       const part = event.properties.part
@@ -72,8 +72,8 @@ app.message(async ({ message, say }) => {
   let session = sessions.get(sessionKey)
 
   if (!session) {
-    console.log("🆕 Creating new opencode session...")
-    const { client, server } = opencode
+    console.log("🆕 Creating new lotioncode session...")
+    const { client, server } = lotioncode
 
     const createResult = await client.session.create({
       body: { title: `Slack thread ${thread}` },
@@ -88,7 +88,7 @@ app.message(async ({ message, say }) => {
       return
     }
 
-    console.log("✅ Created opencode session:", createResult.data.id)
+    console.log("✅ Created lotioncode session:", createResult.data.id)
 
     session = { client, server, sessionId: createResult.data.id, channel, thread }
     sessions.set(sessionKey, session)
@@ -101,7 +101,7 @@ app.message(async ({ message, say }) => {
     }
   }
 
-  console.log("📝 Sending to opencode:", message.text)
+  console.log("📝 Sending to lotioncode:", message.text)
   const result = await session.client.session.prompt({
     path: { id: session.sessionId },
     body: { parts: [{ type: "text", text: message.text }] },

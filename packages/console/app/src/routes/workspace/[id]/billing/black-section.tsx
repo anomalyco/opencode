@@ -1,11 +1,11 @@
 import { action, useParams, useAction, useSubmission, json, query, createAsync } from "@solidjs/router"
 import { createStore } from "solid-js/store"
 import { Show } from "solid-js"
-import { Billing } from "@opencode-ai/console-core/billing.js"
-import { Database, eq, and, isNull, sql } from "@opencode-ai/console-core/drizzle/index.js"
-import { BillingTable, SubscriptionTable } from "@opencode-ai/console-core/schema/billing.sql.js"
-import { Actor } from "@opencode-ai/console-core/actor.js"
-import { Black } from "@opencode-ai/console-core/black.js"
+import { Billing } from "@lotioncode-ai/console-core/billing.js"
+import { Database, eq, and, isNull, sql } from "@lotioncode-ai/console-core/drizzle/index.js"
+import { BillingTable, SubscriptionTable } from "@lotioncode-ai/console-core/schema/billing.sql.js"
+import { Actor } from "@lotioncode-ai/console-core/actor.js"
+import { Black } from "@lotioncode-ai/console-core/black.js"
 import { withActor } from "~/context/auth.withActor"
 import { queryBillingInfo } from "../../common"
 import styles from "./black-section.module.css"
@@ -179,7 +179,7 @@ export function BlackSection() {
             <div data-slot="section-title">
               <h2>Subscription</h2>
               <div data-slot="title-row">
-                <p>You are subscribed to OpenCode Black for ${sub().plan} per month.</p>
+                <p>You are subscribed to LotionCode Black for ${sub().plan} per month.</p>
                 <button
                   data-color="primary"
                   disabled={sessionSubmission.pending || store.sessionRedirecting}
@@ -235,8 +235,8 @@ export function BlackSection() {
             <div data-slot="title-row">
               <p>
                 {billing()?.timeSubscriptionSelected
-                  ? `We're ready to enroll you into the $${billing()?.subscriptionPlan} per month OpenCode Black plan.`
-                  : `You are on the waitlist for the $${billing()?.subscriptionPlan} per month OpenCode Black plan.`}
+                  ? `We're ready to enroll you into the $${billing()?.subscriptionPlan} per month LotionCode Black plan.`
+                  : `You are on the waitlist for the $${billing()?.subscriptionPlan} per month LotionCode Black plan.`}
               </p>
               <button
                 data-color="danger"

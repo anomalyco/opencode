@@ -19,19 +19,19 @@ import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange
 import { createStore } from "solid-js/store"
 import { PromptInput } from "@/components/prompt-input"
 import { SessionContextUsage } from "@/components/session-context-usage"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Button } from "@opencode-ai/ui/button"
-import { Icon } from "@opencode-ai/ui/icon"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
-import { Tabs } from "@opencode-ai/ui/tabs"
-import { useCodeComponent } from "@opencode-ai/ui/context/code"
-import { LineComment as LineCommentView, LineCommentEditor } from "@opencode-ai/ui/line-comment"
-import { SessionTurn } from "@opencode-ai/ui/session-turn"
-import { BasicTool } from "@opencode-ai/ui/basic-tool"
-import { createAutoScroll } from "@opencode-ai/ui/hooks"
-import { SessionReview } from "@opencode-ai/ui/session-review"
-import { Mark } from "@opencode-ai/ui/logo"
+import { IconButton } from "@lotioncode-ai/ui/icon-button"
+import { Button } from "@lotioncode-ai/ui/button"
+import { Icon } from "@lotioncode-ai/ui/icon"
+import { Tooltip, TooltipKeybind } from "@lotioncode-ai/ui/tooltip"
+import { ResizeHandle } from "@lotioncode-ai/ui/resize-handle"
+import { Tabs } from "@lotioncode-ai/ui/tabs"
+import { useCodeComponent } from "@lotioncode-ai/ui/context/code"
+import { LineComment as LineCommentView, LineCommentEditor } from "@lotioncode-ai/ui/line-comment"
+import { SessionTurn } from "@lotioncode-ai/ui/session-turn"
+import { BasicTool } from "@lotioncode-ai/ui/basic-tool"
+import { createAutoScroll } from "@lotioncode-ai/ui/hooks"
+import { SessionReview } from "@lotioncode-ai/ui/session-review"
+import { Mark } from "@lotioncode-ai/ui/logo"
 
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
@@ -39,9 +39,9 @@ import { useSync } from "@/context/sync"
 import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLayout } from "@/context/layout"
 import { Terminal } from "@/components/terminal"
-import { checksum, base64Encode } from "@opencode-ai/util/encode"
-import { findLast } from "@opencode-ai/util/array"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { checksum, base64Encode } from "@lotioncode-ai/util/encode"
+import { findLast } from "@lotioncode-ai/util/array"
+import { useDialog } from "@lotioncode-ai/ui/context/dialog"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import FileTree from "@/components/file-tree"
 import { DialogSelectModel } from "@/components/dialog-select-model"
@@ -50,8 +50,8 @@ import { DialogFork } from "@/components/dialog-fork"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useNavigate, useParams } from "@solidjs/router"
-import { UserMessage } from "@opencode-ai/sdk/v2"
-import type { FileDiff } from "@opencode-ai/sdk/v2/client"
+import { UserMessage } from "@lotioncode-ai/sdk/v2"
+import type { FileDiff } from "@lotioncode-ai/sdk/v2/client"
 import { useSDK } from "@/context/sdk"
 import { usePrompt } from "@/context/prompt"
 import { useComments, type LineComment } from "@/context/comments"
@@ -59,7 +59,7 @@ import { extractPromptFromParts } from "@/utils/prompt"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { usePermission } from "@/context/permission"
 import { decode64 } from "@/utils/base64"
-import { showToast } from "@opencode-ai/ui/toast"
+import { showToast } from "@lotioncode-ai/ui/toast"
 import {
   SessionHeader,
   SessionContextTab,
@@ -1468,7 +1468,7 @@ export default function Page() {
   createEffect(() => {
     const sessionID = params.id
     if (!sessionID) return
-    const raw = sessionStorage.getItem("opencode.pendingMessage")
+    const raw = sessionStorage.getItem("lotioncode.pendingMessage")
     if (!raw) return
     const parts = raw.split("|")
     const pendingSessionID = parts[0]
@@ -1476,7 +1476,7 @@ export default function Page() {
     if (!pendingSessionID || !messageID) return
     if (pendingSessionID !== sessionID) return
 
-    sessionStorage.removeItem("opencode.pendingMessage")
+    sessionStorage.removeItem("lotioncode.pendingMessage")
     setUi("pendingMessage", messageID)
   })
 

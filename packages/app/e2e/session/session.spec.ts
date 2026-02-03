@@ -9,7 +9,7 @@ import {
 } from "../actions"
 import { sessionItemSelector, inlineInputSelector } from "../selectors"
 
-const shareDisabled = process.env.OPENCODE_DISABLE_SHARE === "true" || process.env.OPENCODE_DISABLE_SHARE === "1"
+const shareDisabled = process.env.LOTIONCODE_DISABLE_SHARE === "true" || process.env.LOTIONCODE_DISABLE_SHARE === "1"
 
 test("sidebar session can be renamed", async ({ page, sdk, gotoSession }) => {
   const stamp = Date.now()
@@ -66,7 +66,7 @@ test("sidebar session can be deleted", async ({ page, sdk, gotoSession }) => {
 })
 
 test("session can be shared and unshared via header button", async ({ page, sdk, gotoSession }) => {
-  test.skip(shareDisabled, "Share is disabled in this environment (OPENCODE_DISABLE_SHARE).")
+  test.skip(shareDisabled, "Share is disabled in this environment (LOTIONCODE_DISABLE_SHARE).")
 
   const stamp = Date.now()
   const title = `e2e share test ${stamp}`

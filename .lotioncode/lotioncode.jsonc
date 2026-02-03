@@ -1,0 +1,16 @@
+{
+  "$schema": "https://lotioncode.ai/config.json",
+  // "enterprise": {
+  //   "url": "https://enterprise.dev.lotioncode.ai",
+  // },
+  "provider": {
+    "lotioncode": {
+      "options": {},
+    },
+  },
+  "mcp": {},
+  "tools": {
+    "github-triage": false,
+    "github-pr-search": false,
+  },
+}

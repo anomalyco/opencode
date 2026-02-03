@@ -4,9 +4,9 @@ import { useSDK } from "@/context/sdk"
 import { monoFontFamily, useSettings } from "@/context/settings"
 import { SerializeAddon } from "@/addons/serialize"
 import { LocalPTY } from "@/context/terminal"
-import { resolveThemeVariant, useTheme, withAlpha, type HexColor } from "@opencode-ai/ui/theme"
+import { resolveThemeVariant, useTheme, withAlpha, type HexColor } from "@lotioncode-ai/ui/theme"
 import { useLanguage } from "@/context/language"
-import { showToast } from "@opencode-ai/ui/toast"
+import { showToast } from "@lotioncode-ai/ui/toast"
 
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
@@ -146,9 +146,9 @@ export const Terminal = (props: TerminalProps) => {
       const once = { value: false }
 
       const url = new URL(sdk.url + `/pty/${local.pty.id}/connect?directory=${encodeURIComponent(sdk.directory)}`)
-      if (window.__OPENCODE__?.serverPassword) {
-        url.username = "opencode"
-        url.password = window.__OPENCODE__?.serverPassword
+      if (window.__LOTIONCODE__?.serverPassword) {
+        url.username = "lotioncode"
+        url.password = window.__LOTIONCODE__?.serverPassword
       }
       const socket = new WebSocket(url)
       cleanups.push(() => {

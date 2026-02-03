@@ -1,7 +1,7 @@
 // @refresh reload
 import { webviewZoom } from "./webview-zoom"
 import { render } from "solid-js/web"
-import { AppBaseProviders, AppInterface, PlatformProvider, Platform } from "@opencode-ai/app"
+import { AppBaseProviders, AppInterface, PlatformProvider, Platform } from "@lotioncode-ai/app"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
@@ -13,7 +13,7 @@ import { relaunch } from "@tauri-apps/plugin-process"
 import { AsyncStorage } from "@solid-primitives/storage"
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
 import { Store } from "@tauri-apps/plugin-store"
-import { Splash } from "@opencode-ai/ui/logo"
+import { Splash } from "@lotioncode-ai/ui/logo"
 import { createSignal, Show, Accessor, JSX, createResource, onMount, onCleanup } from "solid-js"
 
 import { UPDATER_ENABLED } from "./updater"
@@ -43,13 +43,13 @@ window.getComputedStyle = ((elt: Element, pseudoElt?: string | null) => {
 
 let update: Update | null = null
 
-const deepLinkEvent = "opencode:deep-link"
+const deepLinkEvent = "lotioncode:deep-link"
 
 const emitDeepLinks = (urls: string[]) => {
   if (urls.length === 0) return
-  window.__OPENCODE__ ??= {}
-  const pending = window.__OPENCODE__.deepLinks ?? []
-  window.__OPENCODE__.deepLinks = [...pending, ...urls]
+  window.__LOTIONCODE__ ??= {}
+  const pending = window.__LOTIONCODE__.deepLinks ?? []
+  window.__LOTIONCODE__.deepLinks = [...pending, ...urls]
   window.dispatchEvent(new CustomEvent(deepLinkEvent, { detail: { urls } }))
 }
 
@@ -296,7 +296,7 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
       .then(() => {
         const notification = new Notification(title, {
           body: description ?? "",
-          icon: "https://opencode.ai/favicon-96x96-v3.png",
+          icon: "https://lotioncode.ai/favicon-96x96-v3.png",
         })
         notification.onclick = () => {
           const win = getCurrentWindow()
@@ -318,7 +318,7 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
     const pw = password()
 
     const addHeader = (headers: Headers, password: string) => {
-      headers.append("Authorization", `Basic ${btoa(`opencode:${password}`)}`)
+      headers.append("Authorization", `Basic ${btoa(`lotioncode:${password}`)}`)
     }
 
     if (input instanceof Request) {
@@ -376,8 +376,8 @@ render(() => {
         <ServerGate>
           {(data) => {
             setServerPassword(data().password)
-            window.__OPENCODE__ ??= {}
-            window.__OPENCODE__.serverPassword = data().password ?? undefined
+            window.__LOTIONCODE__ ??= {}
+            window.__LOTIONCODE__.serverPassword = data().password ?? undefined
 
             return <AppInterface defaultUrl={data().url} />
           }}

@@ -15,7 +15,7 @@ This report documents the remaining user-facing strings in `packages/ui/src` tha
 - `packages/ui/` currently has **hardcoded English UI copy** in several components (notably `session-turn.tsx`, `session-review.tsx`, `message-part.tsx`).
 - `packages/enterprise/` does not currently have an i18n system, so any i18n approach must be usable without depending on `packages/app/`.
 
-## Decision: How We Should Add i18n To `@opencode-ai/ui`
+## Decision: How We Should Add i18n To `@lotioncode-ai/ui`
 
 Introduce a small, app-agnostic i18n interface in `packages/ui/` and keep UI-owned strings in UI-owned dictionaries.
 
@@ -39,7 +39,7 @@ Why this is the best long-term shape:
 2. **UI owns UI strings (dictionaries live in UI)**
 
 - Add `packages/ui/src/i18n/en.ts` and `packages/ui/src/i18n/zh.ts`.
-- Export them from `@opencode-ai/ui` via `packages/ui/package.json` exports (e.g. `"./i18n/*": "./src/i18n/*.ts"`).
+- Export them from `@lotioncode-ai/ui` via `packages/ui/package.json` exports (e.g. `"./i18n/*": "./src/i18n/*.ts"`).
 - Use a clear namespace prefix for all UI keys to avoid collisions:
   - Recommended: `ui.*` (e.g. `ui.sessionReview.title`).
 
@@ -48,11 +48,11 @@ Why this is the best long-term shape:
 - `packages/app/`:
   - Keep `packages/app/src/context/language.tsx` as the source of truth for locale selection/persistence.
   - Extend it to merge UI dictionaries into its translation table.
-  - Add a tiny bridge provider in `packages/app/src/app.tsx` to feed `useLanguage()` into `@opencode-ai/ui`'s `I18nProvider`.
+  - Add a tiny bridge provider in `packages/app/src/app.tsx` to feed `useLanguage()` into `@lotioncode-ai/ui`'s `I18nProvider`.
 
 - `packages/enterprise/`:
   - Add a lightweight locale detector (similar to `packages/app/src/context/language.tsx`), likely based on `Accept-Language` on the server and/or `navigator.languages` on the client.
-  - Merge `@opencode-ai/ui` dictionaries and (optionally) enterprise-local dictionaries.
+  - Merge `@lotioncode-ai/ui` dictionaries and (optionally) enterprise-local dictionaries.
   - Wrap the share route in `I18nProvider`.
 
 ### Key Naming Conventions (UI)
@@ -138,7 +138,7 @@ Found during a full `packages/ui/src/components` + `packages/ui/src/context` swe
 
 ## Prioritized Implementation Plan
 
-1. Completed (2026-01-20): Add `@opencode-ai/ui` i18n context (`packages/ui/src/context/i18n.tsx`) + export it.
+1. Completed (2026-01-20): Add `@lotioncode-ai/ui` i18n context (`packages/ui/src/context/i18n.tsx`) + export it.
 2. Completed (2026-01-20): Add UI dictionaries (`packages/ui/src/i18n/en.ts`, `packages/ui/src/i18n/zh.ts`) + export them.
 3. Completed (2026-01-20): Wire `I18nProvider` into:
    - `packages/app/src/app.tsx`

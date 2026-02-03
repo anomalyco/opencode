@@ -1,10 +1,10 @@
-import { Button } from "@opencode-ai/ui/button"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { TextField } from "@opencode-ai/ui/text-field"
-import { showToast } from "@opencode-ai/ui/toast"
+import { Button } from "@lotioncode-ai/ui/button"
+import { useDialog } from "@lotioncode-ai/ui/context/dialog"
+import { Dialog } from "@lotioncode-ai/ui/dialog"
+import { IconButton } from "@lotioncode-ai/ui/icon-button"
+import { ProviderIcon } from "@lotioncode-ai/ui/provider-icon"
+import { TextField } from "@lotioncode-ai/ui/text-field"
+import { showToast } from "@lotioncode-ai/ui/toast"
 import { For } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Link } from "@/components/link"
@@ -284,7 +284,7 @@ export function DialogCustomProvider(props: Props) {
         <form onSubmit={save} class="px-2.5 pb-6 flex flex-col gap-6">
           <p class="text-14-regular text-text-base">
             Configure an OpenAI-compatible provider. See the{" "}
-            <Link href="https://opencode.ai/docs/providers/#custom-provider" tabIndex={-1}>
+            <Link href="https://lotioncode.ai/docs/providers/#custom-provider" tabIndex={-1}>
               provider config docs
             </Link>
             .

@@ -1,18 +1,18 @@
 {
   "$schema": "https://turborepo.com/schema.json",
-  "globalEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
-  "globalPassThroughEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
+  "globalEnv": ["CI", "LOTIONCODE_DISABLE_SHARE"],
+  "globalPassThroughEnv": ["CI", "LOTIONCODE_DISABLE_SHARE"],
   "tasks": {
     "typecheck": {},
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
-    "opencode#test": {
+    "lotioncode#test": {
       "dependsOn": ["^build"],
       "outputs": []
     },
-    "@opencode-ai/app#test": {
+    "@lotioncode-ai/app#test": {
       "dependsOn": ["^build"],
       "outputs": []
     }

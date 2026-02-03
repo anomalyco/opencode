@@ -6,7 +6,7 @@ import { dict as en } from "@/i18n/en"
 import { dict as zh } from "@/i18n/zh"
 import pkg from "../package.json"
 
-const DEFAULT_SERVER_URL_KEY = "opencode.settings.dat:defaultServerUrl"
+const DEFAULT_SERVER_URL_KEY = "lotioncode.settings.dat:defaultServerUrl"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -57,7 +57,7 @@ const platform: Platform = {
       .then(() => {
         const notification = new Notification(title, {
           body: description ?? "",
-          icon: "https://opencode.ai/favicon-96x96-v3.png",
+          icon: "https://lotioncode.ai/favicon-96x96-v3.png",
         })
         notification.onclick = () => {
           window.focus()

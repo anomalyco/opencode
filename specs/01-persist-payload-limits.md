@@ -154,7 +154,7 @@ Start with TTL-based cleanup (simpler, fewer cross-store dependencies), then con
   - treat missing `dataUrl` as “not hydrated yet”
   - treat missing `blobID` (legacy) as “not persisted” or “needs migration”
 - Desktop:
-  - blob files should be namespaced (e.g. `opencode/blobs/<blobID>`) to avoid collisions
+  - blob files should be namespaced (e.g. `lotioncode/blobs/<blobID>`) to avoid collisions
 
 ---
 

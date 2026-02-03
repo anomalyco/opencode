@@ -3,7 +3,7 @@ title: "Agent Skills"
 description: "Define reusable behavior via SKILL.md definitions"
 ---
 
-Agent skills let OpenCode discover reusable instructions from your repo or home directory.
+Agent skills let LotionCode discover reusable instructions from your repo or home directory.
 Skills are loaded on-demand via the native `skill` tool—agents see available skills and can load the full content when needed.
 
 ---
@@ -11,10 +11,10 @@ Skills are loaded on-demand via the native `skill` tool—agents see available s
 ## Place files
 
 Create one folder per skill name and put a `SKILL.md` inside it.
-OpenCode searches these locations:
+LotionCode searches these locations:
 
-- Project config: `.opencode/skills/<name>/SKILL.md`
-- Global config: `~/.config/opencode/skills/<name>/SKILL.md`
+- Project config: `.lotioncode/skills/<name>/SKILL.md`
+- Global config: `~/.config/lotioncode/skills/<name>/SKILL.md`
 - Project Claude-compatible: `.claude/skills/<name>/SKILL.md`
 - Global Claude-compatible: `~/.claude/skills/<name>/SKILL.md`
 
@@ -22,10 +22,10 @@ OpenCode searches these locations:
 
 ## Understand discovery
 
-For project-local paths, OpenCode walks up from your current working directory until it reaches the git worktree.
-It loads any matching `skills/*/SKILL.md` in `.opencode/` and any matching `.claude/skills/*/SKILL.md` along the way.
+For project-local paths, LotionCode walks up from your current working directory until it reaches the git worktree.
+It loads any matching `skills/*/SKILL.md` in `.lotioncode/` and any matching `.claude/skills/*/SKILL.md` along the way.
 
-Global definitions are also loaded from `~/.config/opencode/skills/*/SKILL.md` and `~/.claude/skills/*/SKILL.md`.
+Global definitions are also loaded from `~/.config/lotioncode/skills/*/SKILL.md` and `~/.claude/skills/*/SKILL.md`.
 
 ---
 
@@ -71,14 +71,14 @@ Keep it specific enough for the agent to choose correctly.
 
 ## Use an example
 
-Create `.opencode/skills/git-release/SKILL.md` like this:
+Create `.lotioncode/skills/git-release/SKILL.md` like this:
 
 ```markdown
 ---
 name: git-release
 description: Create consistent releases and changelogs
 license: MIT
-compatibility: opencode
+compatibility: lotioncode
 metadata:
   audience: maintainers
   workflow: github
@@ -100,7 +100,7 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ## Recognize tool description
 
-OpenCode lists available skills in the `skill` tool description.
+LotionCode lists available skills in the `skill` tool description.
 Each entry includes the skill name and description:
 
 ```xml
@@ -122,7 +122,7 @@ skill({ name: "git-release" })
 
 ## Configure permissions
 
-Control which skills agents can access using pattern-based permissions in `opencode.json`:
+Control which skills agents can access using pattern-based permissions in `lotioncode.json`:
 
 ```json
 {
@@ -161,7 +161,7 @@ permission:
 ---
 ```
 
-**For built-in agents** (in `opencode.json`):
+**For built-in agents** (in `lotioncode.json`):
 
 ```json
 {

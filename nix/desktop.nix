@@ -21,11 +21,11 @@
   openssl,
   webkitgtk_4_1,
   gst_all_1,
-  opencode,
+  lotioncode,
 }:
 rustPlatform.buildRustPackage (finalAttrs: {
-  pname = "opencode-desktop";
-  inherit (opencode)
+  pname = "lotioncode-desktop";
+  inherit (lotioncode)
     version
     src
     node_modules
@@ -72,7 +72,7 @@ rustPlatform.buildRustPackage (finalAttrs: {
     patchShebangs packages/desktop/node_modules
 
     mkdir -p packages/desktop/src-tauri/sidecars
-    cp ${opencode}/bin/opencode packages/desktop/src-tauri/sidecars/opencode-cli-${stdenv.hostPlatform.rust.rustcTarget}
+    cp ${lotioncode}/bin/lotioncode packages/desktop/src-tauri/sidecars/lotioncode-cli-${stdenv.hostPlatform.rust.rustcTarget}
   '';
 
   # see publish-tauri job in .github/workflows/publish.yml
@@ -86,15 +86,15 @@ rustPlatform.buildRustPackage (finalAttrs: {
   # should be removed once binary is renamed or decided otherwise
   # darwin output is a .app bundle so no conflict
   postFixup = lib.optionalString stdenv.hostPlatform.isLinux ''
-    mv $out/bin/OpenCode $out/bin/opencode-desktop
-    sed -i 's|^Exec=OpenCode$|Exec=opencode-desktop|' $out/share/applications/OpenCode.desktop
+    mv $out/bin/LotionCode $out/bin/lotioncode-desktop
+    sed -i 's|^Exec=LotionCode$|Exec=lotioncode-desktop|' $out/share/applications/LotionCode.desktop
   '';
 
   meta = {
-    description = "OpenCode Desktop App";
-    homepage = "https://opencode.ai";
+    description = "LotionCode Desktop App";
+    homepage = "https://lotioncode.ai";
     license = lib.licenses.mit;
-    mainProgram = "opencode-desktop";
-    inherit (opencode.meta) platforms;
+    mainProgram = "lotioncode-desktop";
+    inherit (lotioncode.meta) platforms;
   };
 })

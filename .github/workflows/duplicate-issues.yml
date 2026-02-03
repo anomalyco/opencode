@@ -18,14 +18,14 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
-      - name: Install opencode
-        run: curl -fsSL https://opencode.ai/install | bash
+      - name: Install lotioncode
+        run: curl -fsSL https://lotioncode.ai/install | bash
 
       - name: Check for duplicate issues
         env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          LOTIONCODE_API_KEY: ${{ secrets.LOTIONCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENCODE_PERMISSION: |
+          LOTIONCODE_PERMISSION: |
             {
               "bash": {
                 "*": "deny",
@@ -34,7 +34,7 @@ jobs:
               "webfetch": "deny"
             }
         run: |
-          opencode run -m opencode/claude-haiku-4-5 "A new issue has been created:'
+          lotioncode run -m lotioncode/claude-haiku-4-5 "A new issue has been created:'
 
           Issue number:
           ${{ github.event.issue.number }}

@@ -1,12 +1,12 @@
 import { json, query, action, useParams, createAsync, useSubmission } from "@solidjs/router"
 import { createEffect, createSignal, For, Show } from "solid-js"
 import { IconCopy, IconCheck } from "~/component/icon"
-import { Key } from "@opencode-ai/console-core/key.js"
+import { Key } from "@lotioncode-ai/console-core/key.js"
 import { withActor } from "~/context/auth.withActor"
 import { createStore } from "solid-js/store"
 import { formatDateUTC, formatDateForTable } from "../../common"
 import styles from "./key-section.module.css"
-import { Actor } from "@opencode-ai/console-core/actor.js"
+import { Actor } from "@lotioncode-ai/console-core/actor.js"
 
 const removeKey = action(async (form: FormData) => {
   "use server"
@@ -75,7 +75,7 @@ export function KeySection() {
       <div data-slot="section-title">
         <h2>API Keys</h2>
         <div data-slot="title-row">
-          <p>Manage your API keys for accessing opencode services.</p>
+          <p>Manage your API keys for accessing lotioncode services.</p>
           <button data-color="primary" onClick={() => show()}>
             Create API Key
           </button>
@@ -111,7 +111,7 @@ export function KeySection() {
           when={keys()?.length}
           fallback={
             <div data-component="empty-state">
-              <p>Create an opencode Gateway API key</p>
+              <p>Create an lotioncode Gateway API key</p>
             </div>
           }
         >

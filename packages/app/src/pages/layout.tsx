@@ -19,25 +19,25 @@ import { A, useNavigate, useParams } from "@solidjs/router"
 import { useLayout, getAvatarColors, LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { Persist, persisted } from "@/utils/persist"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@lotioncode-ai/util/encode"
 import { decode64 } from "@/utils/base64"
-import { Avatar } from "@opencode-ai/ui/avatar"
-import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
-import { Button } from "@opencode-ai/ui/button"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { InlineInput } from "@opencode-ai/ui/inline-input"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { HoverCard } from "@opencode-ai/ui/hover-card"
-import { MessageNav } from "@opencode-ai/ui/message-nav"
-import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
-import { ContextMenu } from "@opencode-ai/ui/context-menu"
-import { Collapsible } from "@opencode-ai/ui/collapsible"
-import { DiffChanges } from "@opencode-ai/ui/diff-changes"
-import { Spinner } from "@opencode-ai/ui/spinner"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { getFilename } from "@opencode-ai/util/path"
-import { Session, type Message, type TextPart } from "@opencode-ai/sdk/v2/client"
+import { Avatar } from "@lotioncode-ai/ui/avatar"
+import { ResizeHandle } from "@lotioncode-ai/ui/resize-handle"
+import { Button } from "@lotioncode-ai/ui/button"
+import { Icon } from "@lotioncode-ai/ui/icon"
+import { IconButton } from "@lotioncode-ai/ui/icon-button"
+import { InlineInput } from "@lotioncode-ai/ui/inline-input"
+import { Tooltip, TooltipKeybind } from "@lotioncode-ai/ui/tooltip"
+import { HoverCard } from "@lotioncode-ai/ui/hover-card"
+import { MessageNav } from "@lotioncode-ai/ui/message-nav"
+import { DropdownMenu } from "@lotioncode-ai/ui/dropdown-menu"
+import { ContextMenu } from "@lotioncode-ai/ui/context-menu"
+import { Collapsible } from "@lotioncode-ai/ui/collapsible"
+import { DiffChanges } from "@lotioncode-ai/ui/diff-changes"
+import { Spinner } from "@lotioncode-ai/ui/spinner"
+import { Dialog } from "@lotioncode-ai/ui/dialog"
+import { getFilename } from "@lotioncode-ai/util/path"
+import { Session, type Message, type TextPart } from "@lotioncode-ai/sdk/v2/client"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { createStore, produce, reconcile } from "solid-js/store"
@@ -51,18 +51,18 @@ import {
 } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { useProviders } from "@/hooks/use-providers"
-import { showToast, Toast, toaster } from "@opencode-ai/ui/toast"
+import { showToast, Toast, toaster } from "@lotioncode-ai/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
-import { Binary } from "@opencode-ai/util/binary"
-import { retry } from "@opencode-ai/util/retry"
+import { Binary } from "@lotioncode-ai/util/binary"
+import { retry } from "@lotioncode-ai/util/retry"
 import { playSound, soundSrc } from "@/utils/sound"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { agentColor } from "@/utils/agent"
 
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
+import { useDialog } from "@lotioncode-ai/ui/context/dialog"
+import { useTheme, type ColorScheme } from "@lotioncode-ai/ui/theme"
 import { DialogSelectProvider } from "@/components/dialog-select-provider"
 import { DialogSelectServer } from "@/components/dialog-select-server"
 import { DialogSettings } from "@/components/dialog-settings"
@@ -1261,10 +1261,10 @@ export default function Layout(props: ParentProps) {
     if (navigate) navigateToProject(directory)
   }
 
-  const deepLinkEvent = "opencode:deep-link"
+  const deepLinkEvent = "lotioncode:deep-link"
 
   const parseDeepLink = (input: string) => {
-    if (!input.startsWith("opencode://")) return
+    if (!input.startsWith("lotioncode://")) return
     const url = new URL(input)
     if (url.hostname !== "open-project") return
     const directory = url.searchParams.get("directory")
@@ -1282,9 +1282,9 @@ export default function Layout(props: ParentProps) {
   }
 
   const drainDeepLinks = () => {
-    const pending = window.__OPENCODE__?.deepLinks ?? []
+    const pending = window.__LOTIONCODE__?.deepLinks ?? []
     if (pending.length === 0) return
-    if (window.__OPENCODE__) window.__OPENCODE__.deepLinks = []
+    if (window.__LOTIONCODE__) window.__LOTIONCODE__.deepLinks = []
     handleDeepLinks(pending)
   }
 
@@ -1771,14 +1771,14 @@ export default function Layout(props: ParentProps) {
     const notifications = createMemo(() => notification.project.unseen(props.project.worktree))
     const hasError = createMemo(() => notifications().some((n) => n.type === "error"))
     const name = createMemo(() => props.project.name || getFilename(props.project.worktree))
-    const opencode = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
+    const lotioncode = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
     return (
       <div class={`relative size-8 shrink-0 rounded ${props.class ?? ""}`}>
         <div class="size-full rounded overflow-clip">
           <Avatar
             fallback={name()}
-            src={props.project.id === opencode ? "https://opencode.ai/favicon.svg" : props.project.icon?.override}
+            src={props.project.id === lotioncode ? "https://lotioncode.ai/favicon.svg" : props.project.icon?.override}
             {...getAvatarColors(props.project.icon?.color)}
             class="size-full rounded"
             classList={{ "badge-mask": notifications().length > 0 && props.notify }}
@@ -1972,7 +1972,7 @@ export default function Layout(props: ParentProps) {
                   getLabel={messageLabel}
                   onMessageSelect={(message) => {
                     if (!isActive()) {
-                      sessionStorage.setItem("opencode.pendingMessage", `${props.session.id}|${message.id}`)
+                      sessionStorage.setItem("lotioncode.pendingMessage", `${props.session.id}|${message.id}`)
                       navigate(`${props.slug}/session/${props.session.id}`)
                       return
                     }
@@ -2995,7 +2995,7 @@ export default function Layout(props: ParentProps) {
                 icon="help"
                 variant="ghost"
                 size="large"
-                onClick={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+                onClick={() => platform.openLink("https://lotioncode.ai/desktop-feedback")}
                 aria-label={language.t("sidebar.help")}
               />
             </Tooltip>

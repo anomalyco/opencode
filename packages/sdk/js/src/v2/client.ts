@@ -23,7 +23,7 @@ export function createOpencodeClient(config?: Config & { directory?: string }) {
     const encodedDirectory = isNonASCII ? encodeURIComponent(config.directory) : config.directory
     config.headers = {
       ...config.headers,
-      "x-opencode-directory": encodedDirectory,
+      "x-lotioncode-directory": encodedDirectory,
     }
   }
 

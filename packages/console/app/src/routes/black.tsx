@@ -63,25 +63,25 @@ export default function BlackLayout(props: RouteSectionProps) {
 
   return (
     <div data-page="black">
-      <Title>OpenCode Black | Access all the world's best coding models</Title>
+      <Title>LotionCode Black | Access all the world's best coding models</Title>
       <Meta
         name="description"
-        content="Get access to Claude, GPT, Gemini and more with OpenCode Black subscription plans."
+        content="Get access to Claude, GPT, Gemini and more with LotionCode Black subscription plans."
       />
       <Link rel="canonical" href={`${config.baseUrl}/black`} />
       <Meta property="og:type" content="website" />
       <Meta property="og:url" content={`${config.baseUrl}/black`} />
-      <Meta property="og:title" content="OpenCode Black | Access all the world's best coding models" />
+      <Meta property="og:title" content="LotionCode Black | Access all the world's best coding models" />
       <Meta
         property="og:description"
-        content="Get access to Claude, GPT, Gemini and more with OpenCode Black subscription plans."
+        content="Get access to Claude, GPT, Gemini and more with LotionCode Black subscription plans."
       />
       <Meta property="og:image" content="/social-share-black.png" />
       <Meta name="twitter:card" content="summary_large_image" />
-      <Meta name="twitter:title" content="OpenCode Black | Access all the world's best coding models" />
+      <Meta name="twitter:title" content="LotionCode Black | Access all the world's best coding models" />
       <Meta
         name="twitter:description"
-        content="Get access to Claude, GPT, Gemini and more with OpenCode Black subscription plans."
+        content="Get access to Claude, GPT, Gemini and more with LotionCode Black subscription plans."
       />
       <Meta name="twitter:image" content="/social-share-black.png" />
 
@@ -90,7 +90,7 @@ export default function BlackLayout(props: RouteSectionProps) {
       <header data-component="header">
         <A href="/" data-component="header-logo">
           <svg xmlns="http://www.w3.org/2000/svg" width="179" height="32" viewBox="0 0 179 32" fill="none">
-            <title>opencode</title>
+            <title>lotioncode</title>
             <g clip-path="url(#clip0_3654_210259)">
               <mask
                 id="mask0_3654_210259"

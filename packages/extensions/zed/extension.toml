@@ -1,36 +1,36 @@
-id = "opencode"
-name = "OpenCode"
+id = "lotioncode"
+name = "LotionCode"
 description = "The open source coding agent."
 version = "1.1.49"
 schema_version = 1
 authors = ["Anomaly"]
-repository = "https://github.com/anomalyco/opencode"
+repository = "https://github.com/anomalyco/lotioncode"
 
-[agent_servers.opencode]
-name = "OpenCode"
-icon = "./icons/opencode.svg"
+[agent_servers.lotioncode]
+name = "LotionCode"
+icon = "./icons/lotioncode.svg"
 
-[agent_servers.opencode.targets.darwin-aarch64]
-archive = "https://github.com/anomalyco/opencode/releases/download/v1.1.49/opencode-darwin-arm64.zip"
-cmd = "./opencode"
+[agent_servers.lotioncode.targets.darwin-aarch64]
+archive = "https://github.com/anomalyco/lotioncode/releases/download/v1.1.49/lotioncode-darwin-arm64.zip"
+cmd = "./lotioncode"
 args = ["acp"]
 
-[agent_servers.opencode.targets.darwin-x86_64]
-archive = "https://github.com/anomalyco/opencode/releases/download/v1.1.49/opencode-darwin-x64.zip"
-cmd = "./opencode"
+[agent_servers.lotioncode.targets.darwin-x86_64]
+archive = "https://github.com/anomalyco/lotioncode/releases/download/v1.1.49/lotioncode-darwin-x64.zip"
+cmd = "./lotioncode"
 args = ["acp"]
 
-[agent_servers.opencode.targets.linux-aarch64]
-archive = "https://github.com/anomalyco/opencode/releases/download/v1.1.49/opencode-linux-arm64.tar.gz"
-cmd = "./opencode"
+[agent_servers.lotioncode.targets.linux-aarch64]
+archive = "https://github.com/anomalyco/lotioncode/releases/download/v1.1.49/lotioncode-linux-arm64.tar.gz"
+cmd = "./lotioncode"
 args = ["acp"]
 
-[agent_servers.opencode.targets.linux-x86_64]
-archive = "https://github.com/anomalyco/opencode/releases/download/v1.1.49/opencode-linux-x64.tar.gz"
-cmd = "./opencode"
+[agent_servers.lotioncode.targets.linux-x86_64]
+archive = "https://github.com/anomalyco/lotioncode/releases/download/v1.1.49/lotioncode-linux-x64.tar.gz"
+cmd = "./lotioncode"
 args = ["acp"]
 
-[agent_servers.opencode.targets.windows-x86_64]
-archive = "https://github.com/anomalyco/opencode/releases/download/v1.1.49/opencode-windows-x64.zip"
-cmd = "./opencode.exe"
+[agent_servers.lotioncode.targets.windows-x86_64]
+archive = "https://github.com/anomalyco/lotioncode/releases/download/v1.1.49/lotioncode-windows-x64.zip"
+cmd = "./lotioncode.exe"
 args = ["acp"]

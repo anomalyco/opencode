@@ -39,10 +39,10 @@ export type ChangelogData = {
 }
 
 export async function loadChangelog(): Promise<ChangelogData> {
-  const response = await fetch("https://api.github.com/repos/anomalyco/opencode/releases?per_page=20", {
+  const response = await fetch("https://api.github.com/repos/anomalyco/lotioncode/releases?per_page=20", {
     headers: {
       Accept: "application/vnd.github.v3+json",
-      "User-Agent": "OpenCode-Console",
+      "User-Agent": "LotionCode-Console",
     },
     cf: {
       // best-effort edge caching (ignored outside Cloudflare)

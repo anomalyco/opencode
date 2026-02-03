@@ -9,9 +9,9 @@ import { Legal } from "~/component/legal"
 export default function PrivacyPolicy() {
   return (
     <main data-page="legal">
-      <Title>OpenCode | Privacy Policy</Title>
+      <Title>LotionCode | Privacy Policy</Title>
       <Link rel="canonical" href={`${config.baseUrl}/legal/privacy-policy`} />
-      <Meta name="description" content="OpenCode privacy policy" />
+      <Meta name="description" content="LotionCode privacy policy" />
       <div data-component="container">
         <Header />
 
@@ -22,7 +22,7 @@ export default function PrivacyPolicy() {
               <p class="effective-date">Effective date: Dec 16, 2025</p>
 
               <p>
-                At OpenCode, we take your privacy seriously. Please read this Privacy Policy to learn how we treat your
+                At LotionCode, we take your privacy seriously. Please read this Privacy Policy to learn how we treat your
                 personal data.{" "}
                 <strong>
                   By using or accessing our Services in any manner, you acknowledge that you accept the practices and
@@ -32,8 +32,8 @@ export default function PrivacyPolicy() {
               </p>
 
               <p>
-                Remember that your use of OpenCode is at all times subject to our Terms of Use,{" "}
-                <a href="/legal/terms-of-service">https://opencode.ai/legal/terms-of-service</a>, which incorporates
+                Remember that your use of LotionCode is at all times subject to our Terms of Use,{" "}
+                <a href="/legal/terms-of-service">https://lotioncode.ai/legal/terms-of-service</a>, which incorporates
                 this Privacy Policy. Any terms we use in this Policy without defining them have the definitions given to
                 them in the Terms of Use.
               </p>
@@ -42,7 +42,7 @@ export default function PrivacyPolicy() {
 
               <p>
                 As we continually work to improve our Services, we may need to change this Privacy Policy from time to
-                time. We will alert you of material changes by placing a notice on the OpenCode website, by sending you
+                time. We will alert you of material changes by placing a notice on the LotionCode website, by sending you
                 an email and/or by some other means. Please note that if you've opted not to receive legal notice emails
                 from us (or you haven't provided us with your email address), those legal notices will still govern your
                 use of the Services, and you are still responsible for reading and understanding them. If you use the
@@ -283,7 +283,7 @@ export default function PrivacyPolicy() {
               <ul>
                 <li>
                   Responding to correspondence that we receive from you, contacting you when necessary or requested, and
-                  sending you information about OpenCode.
+                  sending you information about LotionCode.
                 </li>
                 <li>Sending emails and other communications according to your preferences.</li>
               </ul>
@@ -295,7 +295,7 @@ export default function PrivacyPolicy() {
                 requirements and enforcing legal terms including: fulfilling our legal obligations under applicable law,
                 regulation, court order or other legal process, such as preventing, detecting and investigating security
                 incidents and potentially illegal or prohibited activities; protecting the rights, property or safety of
-                you, OpenCode or another party; enforcing any agreements with you; responding to claims that any posting
+                you, LotionCode or another party; enforcing any agreements with you; responding to claims that any posting
                 or other content violates third-party rights; and resolving disputes.
               </p>
 

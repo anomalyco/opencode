@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/console-function",
+  "name": "@lotioncode-ai/console-function",
   "version": "1.1.49",
   "$schema": "https://json.schemastore.org/package.json",
   "private": true,
@@ -21,8 +21,8 @@
     "@ai-sdk/openai": "2.0.2",
     "@ai-sdk/openai-compatible": "1.0.1",
     "@hono/zod-validator": "catalog:",
-    "@opencode-ai/console-core": "workspace:*",
-    "@opencode-ai/console-resource": "workspace:*",
+    "@lotioncode-ai/console-core": "workspace:*",
+    "@lotioncode-ai/console-resource": "workspace:*",
     "@openauthjs/openauth": "0.0.0-20250322224806",
     "ai": "catalog:",
     "hono": "catalog:",

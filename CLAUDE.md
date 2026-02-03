@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-This document provides an overview of the OpenCode codebase for AI assistants.
+This document provides an overview of the LotionCode codebase for AI assistants.
 
 ## Project Overview
 
-OpenCode is an open-source AI coding agent. It's a terminal-based (TUI) application built with SolidJS that supports multiple AI providers (Anthropic, OpenAI, Google, etc.) and includes features like LSP integration, MCP server support, and a client/server architecture.
+LotionCode is an open-source AI coding agent. It's a terminal-based (TUI) application built with SolidJS that supports multiple AI providers (Anthropic, OpenAI, Google, etc.) and includes features like LSP integration, MCP server support, and a client/server architecture.
 
 ## Quick Reference
 
@@ -12,7 +12,7 @@ OpenCode is an open-source AI coding agent. It's a terminal-based (TUI) applicat
 # Install dependencies
 bun install
 
-# Development (runs TUI in packages/opencode)
+# Development (runs TUI in packages/lotioncode)
 bun dev
 
 # Run against a different directory
@@ -25,22 +25,22 @@ bun dev serve --port 4096
 bun typecheck
 
 # Run tests (from package directory, NOT root)
-cd packages/opencode && bun test
+cd packages/lotioncode && bun test
 cd packages/app && bun test
 
 # Regenerate SDK after API changes
 ./script/generate.ts
 
 # Build standalone executable
-./packages/opencode/script/build.ts --single
+./packages/lotioncode/script/build.ts --single
 ```
 
 ## Repository Structure
 
 ```
-opencode/
+lotioncode/
 ├── packages/
-│   ├── opencode/          # Core CLI & business logic (main package)
+│   ├── lotioncode/          # Core CLI & business logic (main package)
 │   │   ├── src/
 │   │   │   ├── cli/       # CLI commands and TUI
 │   │   │   ├── tool/      # Agent tools (bash, edit, read, etc.)
@@ -58,18 +58,18 @@ opencode/
 │   │   └── e2e/           # Playwright E2E tests
 │   ├── desktop/           # Native desktop app (Tauri wrapper)
 │   ├── ui/                # Shared UI components library
-│   ├── sdk/js/            # Generated JavaScript SDK (@opencode-ai/sdk)
-│   ├── plugin/            # Plugin system (@opencode-ai/plugin)
-│   ├── util/              # Shared utilities (@opencode-ai/util)
+│   ├── sdk/js/            # Generated JavaScript SDK (@lotioncode-ai/sdk)
+│   ├── plugin/            # Plugin system (@lotioncode-ai/plugin)
+│   ├── util/              # Shared utilities (@lotioncode-ai/util)
 │   ├── console/           # Console web app (app, core, function, mail)
 │   ├── web/               # Marketing website
 │   └── docs/              # Documentation site
 ├── sdks/vscode/           # VS Code extension
 ├── script/                # Build & maintenance scripts
-├── .opencode/             # Project-specific OpenCode config
+├── .lotioncode/             # Project-specific LotionCode config
 │   ├── agent/             # Custom agent definitions
 │   ├── tool/              # Custom tool definitions
-│   └── opencode.jsonc     # Project configuration
+│   └── lotioncode.jsonc     # Project configuration
 └── infra/                 # Infrastructure code
 ```
 
@@ -84,7 +84,7 @@ opencode/
 
 | Command | Description |
 |---------|-------------|
-| `bun dev` | Run OpenCode TUI (development mode) |
+| `bun dev` | Run LotionCode TUI (development mode) |
 | `bun dev serve` | Start headless API server on port 4096 |
 | `bun dev web` | Start server + open web interface |
 | `bun typecheck` | Run TypeScript type checking (via turbo) |
@@ -99,7 +99,7 @@ opencode/
 
 ```bash
 # Unit tests
-cd packages/opencode && bun test
+cd packages/lotioncode && bun test
 
 # E2E tests
 cd packages/app && bun test:e2e
@@ -110,7 +110,7 @@ cd packages/app && bun test:e2e:ui
 
 ### Code Generation
 
-After modifying API endpoints in `packages/opencode/src/server/`:
+After modifying API endpoints in `packages/lotioncode/src/server/`:
 
 ```bash
 ./script/generate.ts
@@ -233,7 +233,7 @@ Follow conventional commits:
 - `refactor:` - Code refactoring
 - `test:` - Tests
 
-Optional scope: `feat(app):`, `fix(desktop):`, `chore(opencode):`
+Optional scope: `feat(app):`, `fix(desktop):`, `chore(lotioncode):`
 
 ### PR Requirements
 
@@ -247,20 +247,20 @@ Optional scope: `feat(app):`, `fix(desktop):`, `chore(opencode):`
 
 ### Client/Server Architecture
 
-OpenCode runs as a server that exposes an HTTP API. Clients (TUI, web app, desktop app) connect to this server.
+LotionCode runs as a server that exposes an HTTP API. Clients (TUI, web app, desktop app) connect to this server.
 
 ```bash
 # Server
 bun dev serve --port 4096
 
 # Connect TUI client
-opencode attach http://localhost:4096
+lotioncode attach http://localhost:4096
 ```
 
 ### AI Providers
 
 Supported providers include:
-- OpenCode (default)
+- LotionCode (default)
 - Anthropic Claude
 - OpenAI
 - Google (Gemini, Vertex)
@@ -270,7 +270,7 @@ Supported providers include:
 
 ### Tools
 
-Agent tools are defined in `packages/opencode/src/tool/`:
+Agent tools are defined in `packages/lotioncode/src/tool/`:
 - `bash.ts` - Command execution
 - `edit.ts` - File editing
 - `read.ts` - File reading
@@ -289,7 +289,7 @@ Built-in agents:
 - **plan** - Read-only agent for analysis/exploration
 - **general** - Subagent for complex searches (invoked via `@general`)
 
-Custom agents can be defined in `.opencode/agent/`.
+Custom agents can be defined in `.lotioncode/agent/`.
 
 ## Key Dependencies
 
@@ -309,10 +309,10 @@ Custom agents can be defined in `.opencode/agent/`.
 
 | Variable | Description |
 |----------|-------------|
-| `OPENCODE_DISABLE_SHARE` | Disable share functionality |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD` | Skip LSP binary downloads |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS` | Skip default plugin loading |
-| `OPENCODE_TEST_HOME` | Override home directory for tests |
+| `LOTIONCODE_DISABLE_SHARE` | Disable share functionality |
+| `LOTIONCODE_DISABLE_LSP_DOWNLOAD` | Skip LSP binary downloads |
+| `LOTIONCODE_DISABLE_DEFAULT_PLUGINS` | Skip default plugin loading |
+| `LOTIONCODE_TEST_HOME` | Override home directory for tests |
 
 ## Important Notes
 

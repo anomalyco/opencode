@@ -7,15 +7,15 @@ import {
   type QuestionRequest,
   TextPart,
   ToolPart,
-} from "@opencode-ai/sdk/v2/client"
-import { type FileDiff } from "@opencode-ai/sdk/v2"
+} from "@lotioncode-ai/sdk/v2/client"
+import { type FileDiff } from "@lotioncode-ai/sdk/v2"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
 import { type UiI18nKey, type UiI18nParams, useI18n } from "../context/i18n"
-import { findLast } from "@opencode-ai/util/array"
-import { getDirectory, getFilename } from "@opencode-ai/util/path"
+import { findLast } from "@lotioncode-ai/util/array"
+import { getDirectory, getFilename } from "@lotioncode-ai/util/path"
 
-import { Binary } from "@opencode-ai/util/binary"
+import { Binary } from "@lotioncode-ai/util/binary"
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { DiffChanges } from "./diff-changes"
 import { Message, Part } from "./message-part"

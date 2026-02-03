@@ -1,4 +1,4 @@
-import { base64Decode } from "@opencode-ai/util/encode"
+import { base64Decode } from "@lotioncode-ai/util/encode"
 import fs from "node:fs/promises"
 import path from "node:path"
 import type { Page } from "@playwright/test"

@@ -1,5 +1,5 @@
 {
-  description = "OpenCode development flake";
+  description = "LotionCode development flake";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -36,16 +36,16 @@
           node_modules = pkgs.callPackage ./nix/node_modules.nix {
             inherit rev;
           };
-          opencode = pkgs.callPackage ./nix/opencode.nix {
+          lotioncode = pkgs.callPackage ./nix/lotioncode.nix {
             inherit node_modules;
           };
           desktop = pkgs.callPackage ./nix/desktop.nix {
-            inherit opencode;
+            inherit lotioncode;
           };
         in
         {
-          default = opencode;
-          inherit opencode desktop;
+          default = lotioncode;
+          inherit lotioncode desktop;
           # Updater derivation with fakeHash - build fails and reveals correct hash
           node_modules_updater = node_modules.override {
             hash = pkgs.lib.fakeHash;

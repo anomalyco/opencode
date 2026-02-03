@@ -2,14 +2,14 @@ import { Popover as Kobalte } from "@kobalte/core/popover"
 import { Component, ComponentProps, createEffect, createMemo, JSX, onCleanup, Show, ValidComponent } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useDialog } from "@lotioncode-ai/ui/context/dialog"
 import { popularProviders } from "@/hooks/use-providers"
-import { Button } from "@opencode-ai/ui/button"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Tag } from "@opencode-ai/ui/tag"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { List } from "@opencode-ai/ui/list"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { Button } from "@lotioncode-ai/ui/button"
+import { IconButton } from "@lotioncode-ai/ui/icon-button"
+import { Tag } from "@lotioncode-ai/ui/tag"
+import { Dialog } from "@lotioncode-ai/ui/dialog"
+import { List } from "@lotioncode-ai/ui/list"
+import { Tooltip } from "@lotioncode-ai/ui/tooltip"
 import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogManageModels } from "./dialog-manage-models"
 import { ModelTooltip } from "./model-tooltip"
@@ -58,7 +58,7 @@ const ModelList: Component<{
             <ModelTooltip
               model={item}
               latest={item.latest}
-              free={item.provider.id === "opencode" && (!item.cost || item.cost.input === 0)}
+              free={item.provider.id === "lotioncode" && (!item.cost || item.cost.input === 0)}
             />
           }
         >
@@ -75,7 +75,7 @@ const ModelList: Component<{
       {(i) => (
         <div class="w-full flex items-center gap-x-2 text-13-regular">
           <span class="truncate">{i.name}</span>
-          <Show when={i.provider.id === "opencode" && (!i.cost || i.cost?.input === 0)}>
+          <Show when={i.provider.id === "lotioncode" && (!i.cost || i.cost?.input === 0)}>
             <Tag>{language.t("model.tag.free")}</Tag>
           </Show>
           <Show when={i.latest}>
