@@ -16,6 +16,7 @@ const ctx = {
   abort: AbortSignal.any([]),
   messages: [],
   metadata: () => {},
+  directory: process.cwd(),
   ask: async () => {},
 }
 

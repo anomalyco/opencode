@@ -76,6 +76,8 @@ export function Prompt(props: PromptProps) {
   const { theme, syntax } = useTheme()
   const kv = useKV()
 
+  let switching = false
+
   function promptModelWarning() {
     toast.show({
       variant: "warning",
@@ -556,27 +558,55 @@ export function Prompt(props: PromptProps) {
           return
         }
 
-        // Execute directory switch
-        await sdk.switchDirectory(resolvedPath)
-        sync.reset()
-        await sync.bootstrap()
+        // Execute directory switch with locking and error recovery
+        if (switching) {
+          toast.show({
+            variant: "warning",
+            message: "Directory switch in progress",
+            duration: 2000,
+          })
+          return
+        }
 
-        // Clear prompt and navigate to home
-        input.extmarks.clear()
-        setStore("prompt", {
-          input: "",
-          parts: [],
-        })
-        setStore("extmarkToPartIndex", new Map())
-        input.clear()
+        switching = true
+        const oldDirectory = sdk.directory
 
-        route.navigate({ type: "home" })
+        try {
+          await sdk.switchDirectory(resolvedPath)
+          sync.reset()
+          await sync.bootstrap()
 
-        toast.show({
-          variant: "info",
-          message: `Switched to ${resolvedPath}`,
-          duration: 2000,
-        })
+          // Clear prompt and navigate to home
+          input.extmarks.clear()
+          setStore("prompt", {
+            input: "",
+            parts: [],
+          })
+          setStore("extmarkToPartIndex", new Map())
+          input.clear()
+
+          route.navigate({ type: "home" })
+
+          toast.show({
+            variant: "info",
+            message: `Switched to ${resolvedPath}`,
+            duration: 2000,
+          })
+        } catch (error) {
+          // Revert to old directory
+          if (oldDirectory) {
+            await sdk.switchDirectory(oldDirectory).catch(() => {})
+            sync.reset()
+            await sync.bootstrap().catch(() => {})
+          }
+          toast.show({
+            variant: "error",
+            message: `Failed to switch directory: ${error instanceof Error ? error.message : "Unknown error"}`,
+            duration: 3000,
+          })
+        } finally {
+          switching = false
+        }
 
         return
       }

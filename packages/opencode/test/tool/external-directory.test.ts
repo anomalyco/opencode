@@ -13,6 +13,7 @@ const baseCtx: Omit<Tool.Context, "ask"> = {
   abort: AbortSignal.any([]),
   messages: [],
   metadata: () => {},
+  directory: process.cwd(),
 }
 
 describe("tool.assertExternalDirectory", () => {
