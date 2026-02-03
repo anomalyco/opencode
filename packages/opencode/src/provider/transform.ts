@@ -768,8 +768,15 @@ export namespace ProviderTransform {
           result.required = result.required.filter((field: any) => field in result.properties)
         }
 
-        if (result.type === "array" && result.items == null) {
-          result.items = {}
+        if (result.type === "array") {
+          if (result.items == null) {
+            result.items = {}
+          }
+          // Ensure items has at least a type if it's an empty object
+          // This handles nested arrays like { type: "array", items: { type: "array", items: {} } }
+          if (typeof result.items === "object" && !Array.isArray(result.items) && !result.items.type) {
+            result.items.type = "string"
+          }
         }
 
         // Remove properties/required from non-object types (Gemini rejects these)
