@@ -170,6 +170,7 @@ export function tui(input: {
         exitOnCtrlC: false,
         useMouse: !Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT,
         useKittyKeyboard: {},
+        autoFocus: false,
         consoleOptions: {
           keyBindings: [
             { name: "y", ctrl: true, action: "copy-selection" },
@@ -191,6 +192,7 @@ function App() {
   const route = useRoute()
   const dimensions = useTerminalDimensions()
   const renderer = useRenderer()
+  Clipboard.setRenderer(renderer)
   renderer.disableStdoutInterception()
   const dialog = useDialog()
   const local = useLocal()
