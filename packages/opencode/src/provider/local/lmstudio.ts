@@ -1,3 +1,4 @@
+import { ca } from "zod/v4/locales"
 import { type LocalModel } from "./index"
 
 export interface LMStudioModel {
@@ -17,6 +18,27 @@ export interface LMStudioModel {
 export interface LMStudioModelsResponse {
   data: LMStudioModel[]
   object: "list"
+}
+
+// Documented here: https://github.com/lmstudio-ai/lms/blob/main/src/createClient.ts#L18
+interface LMStudioGreeting {
+  lmstudio: boolean
+}
+
+export async function lmstudio_detect_provider(url: string): Promise<boolean> {
+  try {
+    const endpoint = url.replace(/\/$/, "") + "/lmstudio-greeting"
+    const res = await fetch(endpoint, { signal: AbortSignal.timeout(2000) })
+    if (!res.ok) {
+      return false
+    }
+
+    const greeting = await res.json() as LMStudioGreeting
+    return greeting.lmstudio === true
+  }
+  catch (e) {
+    return false
+  }
 }
 
 export async function lmstudio_probe_loaded_models(url: string): Promise<LocalModel[]> {

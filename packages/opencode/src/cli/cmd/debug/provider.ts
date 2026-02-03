@@ -7,24 +7,33 @@ export const ProviderCommand = cmd({
   describe: "probe local LLM providers",
   builder: (yargs) =>
     yargs.command({
-      command: "probe <type> <url>",
+      command: "probe <url>",
       describe: "probe a local provider for loaded models",
       builder: (yargs) =>
         yargs
-          .positional("type", {
-            describe: "provider type",
-            type: "string",
-            choices: Object.values(LocalProvider).filter((v) => typeof v === "string") as LocalProvider[],
-          })
           .positional("url", {
             describe: "provider URL",
             type: "string",
           }),
       async handler(args) {
-        const type = args.type as LocalProvider
         const url = args.url as string
-        const result = await LocalProvider.probe(type, url)
-        process.stdout.write(JSON.stringify(result, null, 2) + EOL)
+
+        const type = await LocalProvider.detect_provider(url);
+        if (!type) {
+          console.error(`No supported local provider detected at URL: ${url}`)
+          process.exit(1)
+        }
+
+        console.log(`Detected provider type: ${type} at URL: ${url}`)
+        const result = await LocalProvider.probe_provider(type, url)
+
+        if (result.length === 0) {
+          console.log("No loaded models found")
+          return
+        }
+
+        console.log(`Found ${result.length} loaded models:`)
+        console.log(JSON.stringify(result, null, 2))
       },
     }),
   async handler() {},

@@ -52,6 +52,21 @@ async function ollama_show_model(url: string, model: string): Promise<OllamaMode
   return res.json() as Promise<OllamaModelShowResponse>
 }
 
+export async function ollama_detect_provider(url: string): Promise<boolean> {
+  const endpoint = url.replace(/\/$/, "") + "/"
+
+  try {
+    const res = await fetch(endpoint, { signal: AbortSignal.timeout(2000) })
+    if (!res.ok) {
+      return false
+    }
+
+    return await res.text() === "Ollama is running"
+  } catch (e) {
+    return false
+  }
+}
+
 export async function ollama_probe_loaded_models(url: string): Promise<LocalModel[]> {
   const endpoint = url.replace(/\/$/, "") + "/api/ps"
 
