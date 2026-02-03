@@ -28,6 +28,8 @@ export const dict = {
   "command.settings.open": "Åbn indstillinger",
   "command.session.previous": "Forrige session",
   "command.session.next": "Næste session",
+  "command.session.previous.unseen": "Previous unread session",
+  "command.session.next.unseen": "Next unread session",
   "command.session.archive": "Arkivér session",
 
   "command.palette": "Kommandopalette",
@@ -68,6 +70,7 @@ export const dict = {
   "command.model.variant.cycle.description": "Skift til næste indsatsniveau",
   "command.permissions.autoaccept.enable": "Accepter ændringer automatisk",
   "command.permissions.autoaccept.disable": "Stop automatisk accept af ændringer",
+  "command.workspace.toggle": "Skift arbejdsområder",
   "command.session.undo": "Fortryd",
   "command.session.undo.description": "Fortryd den sidste besked",
   "command.session.redo": "Omgør",
@@ -210,6 +213,8 @@ export const dict = {
   "prompt.popover.emptyCommands": "Ingen matchende kommandoer",
   "prompt.dropzone.label": "Slip billeder eller PDF'er her",
   "prompt.slash.badge.custom": "brugerdefineret",
+  "prompt.slash.badge.skill": "skill",
+  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "aktiv",
   "prompt.context.includeActiveFile": "Inkluder aktiv fil",
   "prompt.context.removeActiveFile": "Fjern aktiv fil fra kontekst",
@@ -345,6 +350,11 @@ export const dict = {
   "toast.permissions.autoaccept.off.title": "Stoppede automatisk accept af ændringer",
   "toast.permissions.autoaccept.off.description": "Redigerings- og skrivetilladelser vil kræve godkendelse",
 
+  "toast.workspace.enabled.title": "Arbejdsområder aktiveret",
+  "toast.workspace.enabled.description": "Flere worktrees vises nu i sidepanelet",
+  "toast.workspace.disabled.title": "Arbejdsområder deaktiveret",
+  "toast.workspace.disabled.description": "Kun hoved-worktree vises i sidepanelet",
+
   "toast.model.none.title": "Ingen model valgt",
   "toast.model.none.description": "Forbind en udbyder for at opsummere denne session",
 
@@ -434,6 +444,7 @@ export const dict = {
   "session.review.noChanges": "Ingen ændringer",
   "session.files.selectToOpen": "Vælg en fil at åbne",
   "session.files.all": "Alle filer",
+  "session.files.binaryContent": "Binær fil (indhold kan ikke vises)",
   "session.messages.renderEarlier": "Vis tidligere beskeder",
   "session.messages.loadingEarlier": "Indlæser tidligere beskeder...",
   "session.messages.loadEarlier": "Indlæs tidligere beskeder",
