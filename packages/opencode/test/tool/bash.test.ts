@@ -18,8 +18,21 @@ const ctx = {
 
 const projectRoot = path.join(__dirname, "../..")
 
-const stripShellInit = (output: string): string =>
-  output.startsWith("Loading ~/.zshenv\n") ? output.replace("Loading ~/.zshenv\n", "") : output
+const stripShellInit = (output: string): string => {
+  const result = output
+    .split("\n")
+    .filter(
+      (line) =>
+        line !== "Loading ~/.zshenv" &&
+        line !== "Loading ~/.zprofile" &&
+        !line.startsWith("Agent pid "),
+    )
+    .join("\n")
+  if (output.endsWith("\n") && !result.endsWith("\n")) {
+    return result + "\n"
+  }
+  return result
+}
 
 describe("tool.bash", () => {
   test("basic", async () => {
