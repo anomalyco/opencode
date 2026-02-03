@@ -60,7 +60,7 @@ export function FileList(props: {
 
   return (
     <box width={props.width} height="100%">
-      <scrollbox flexGrow={1} paddingLeft={2} paddingRight={2} paddingTop={1}>
+      <scrollbox flexGrow={1} paddingLeft={2} paddingRight={2} paddingTop={1} scrollbarOptions={{ visible: false }}>
         <box gap={0}>
           <text fg={theme.text}>
             <b>Modified Files</b> ({props.files.length})
