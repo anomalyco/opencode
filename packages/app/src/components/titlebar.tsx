@@ -24,6 +24,8 @@ export function Titlebar() {
   const mac = createMemo(() => platform.platform === "desktop" && platform.os === "macos")
   const windows = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
   const web = createMemo(() => platform.platform === "web")
+  const zoom = () => platform.webviewZoom?.() ?? 1
+  const minHeight = () => (mac() ? `${40 / zoom()}px` : undefined)
 
   const [history, setHistory] = createStore({
     stack: [] as string[],
@@ -134,7 +136,7 @@ export function Titlebar() {
   return (
     <header
       class="h-10 shrink-0 bg-background-base relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-center"
-      data-tauri-drag-region
+      style={{ "min-height": minHeight() }}
     >
       <div
         classList={{
@@ -142,10 +144,9 @@ export function Titlebar() {
           "pl-2": !mac(),
         }}
         onMouseDown={drag}
-        data-tauri-drag-region
       >
         <Show when={mac()}>
-          <div class="w-[72px] h-full shrink-0" data-tauri-drag-region />
+          <div class="h-full shrink-0" style={{ width: `${72 / zoom()}px` }} />
           <div class="xl:hidden w-10 shrink-0 flex items-center justify-center">
             <IconButton
               icon="menu"
@@ -219,13 +220,10 @@ export function Titlebar() {
             </Tooltip>
           </div>
         </div>
-        <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" data-tauri-drag-region />
+        <div id="opencode-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
       </div>
 
-      <div
-        class="min-w-0 flex items-center justify-center pointer-events-none lg:absolute lg:inset-0 lg:flex lg:items-center lg:justify-center"
-        data-tauri-drag-region
-      >
+      <div class="min-w-0 flex items-center justify-center pointer-events-none lg:absolute lg:inset-0 lg:flex lg:items-center lg:justify-center">
         <div id="opencode-titlebar-center" class="pointer-events-auto w-full min-w-0 flex justify-center lg:w-fit" />
       </div>
 
@@ -235,9 +233,8 @@ export function Titlebar() {
           "pr-6": !windows(),
         }}
         onMouseDown={drag}
-        data-tauri-drag-region
       >
-        <div id="opencode-titlebar-right" class="flex items-center gap-3 shrink-0 justify-end" data-tauri-drag-region />
+        <div id="opencode-titlebar-right" class="flex items-center gap-3 shrink-0 justify-end" />
         <Show when={windows()}>
           <div class="w-6 shrink-0" />
           <div data-tauri-decorum-tb class="flex flex-row" />
