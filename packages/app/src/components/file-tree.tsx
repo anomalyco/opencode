@@ -321,7 +321,6 @@ export default function FileTree(props: {
 
             return (
               <Tooltip
-                forceMount={false}
                 openDelay={2000}
                 placement="bottom-start"
                 class="w-full"
