@@ -4,18 +4,24 @@ import { Log } from "@/util/log"
 import { OAUTH_DUMMY_KEY } from "@/auth"
 import { Provider } from "./provider"
 import { LocalProvider, type LocalModel } from "./local"
+import { ModelsDev } from "./models"
 
 export namespace ProviderModelDetection {
-  export async function detect(provider: Provider.Info): Promise<string[] | Provider.Model[] | undefined> {
-    const log = Log.create({ service: "provider.model-detection" })
+  const log = Log.create({ service: "provider.model-detection" })
 
-    const model = Object.values(provider.models)[0]
+  export async function detect(provider: Provider.Info): Promise<string[] | Provider.Model[] | undefined> {
+    const modelsDev = await ModelsDev.get();
+    delete modelsDev["lmstudio"]; // LMStudio is not a cloud provider
+
+    // provider.models.length can be 0 for local providers that rely on detection only
+    const model = Object.values(provider.models).at(0)
     const providerNPM = model?.api?.npm ?? "@ai-sdk/openai-compatible"
     const providerBaseURL = provider.options["baseURL"] ?? model?.api?.url ?? ""
 
-    // TODO: this calls out to the provider at least once
-    //       figure out a way to not call it for cloud providers at all (??)
-    const localProvider = await LocalProvider.detect_provider(providerBaseURL)
+    log.debug("starting model detection", { providerID: provider.id, providerNPM, providerBaseURL })
+    
+    // Skip local detection for known cloud providers
+    const localProvider = provider.id in modelsDev ? null : await LocalProvider.detect_provider(providerBaseURL)
 
     const detectedModels = await iife(async () => {
       try {
@@ -83,6 +89,8 @@ function expandLocalModels(provider: Provider.Info, localModels: LocalModel[]): 
       status: "active",
       api: {
         id: localModel.id,
+        npm: provider.options["npm"] ?? "@ai-sdk/openai-compatible",
+        url: provider.options["baseURL"] ?? "",
       },
       limit: {
         context: localModel.context_length,
