@@ -1138,6 +1138,10 @@ export namespace Config {
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
         })
         .optional(),
+      terminal: z
+        .string()
+        .optional()
+        .describe("Shell to use for executing commands. On Windows, use 'git-bash' for Unix commands or 'cmd' for Windows commands."),
     })
     .strict()
     .meta({
