@@ -1,6 +1,24 @@
 import { convertToOpenAICompatibleChatMessages as convertToCopilotMessages } from "@/provider/sdk/copilot/chat/convert-to-openai-compatible-chat-messages"
 import { describe, test, expect } from "bun:test"
 
+describe("system messages", () => {
+  test("should convert system message content to string", () => {
+    const result = convertToCopilotMessages([
+      {
+        role: "system",
+        content: "You are a helpful assistant with AGENTS.md instructions.",
+      },
+    ])
+
+    expect(result).toEqual([
+      {
+        role: "system",
+        content: "You are a helpful assistant with AGENTS.md instructions.",
+      },
+    ])
+  })
+})
+
 describe("user messages", () => {
   test("should convert messages with only a text part to a string content", () => {
     const result = convertToCopilotMessages([
@@ -354,7 +372,7 @@ describe("tool calls", () => {
 })
 
 describe("reasoning (copilot-specific)", () => {
-  test("should include reasoning_text from reasoning part", () => {
+  test("should omit reasoning_text without reasoning_opaque", () => {
     const result = convertToCopilotMessages([
       {
         role: "assistant",
@@ -370,7 +388,7 @@ describe("reasoning (copilot-specific)", () => {
         role: "assistant",
         content: "The answer is 42.",
         tool_calls: undefined,
-        reasoning_text: "Let me think about this...",
+        reasoning_text: undefined,
         reasoning_opaque: undefined,
       },
     ])
@@ -400,6 +418,33 @@ describe("reasoning (copilot-specific)", () => {
         tool_calls: undefined,
         reasoning_text: "Thinking...",
         reasoning_opaque: "opaque-signature-123",
+      },
+    ])
+  })
+
+  test("should include reasoning_opaque from text part providerOptions", () => {
+    const result = convertToCopilotMessages([
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "text",
+            text: "Done!",
+            providerOptions: {
+              copilot: { reasoningOpaque: "opaque-text-456" },
+            },
+          },
+        ],
+      },
+    ])
+
+    expect(result).toEqual([
+      {
+        role: "assistant",
+        content: "Done!",
+        tool_calls: undefined,
+        reasoning_text: undefined,
+        reasoning_opaque: "opaque-text-456",
       },
     ])
   })
