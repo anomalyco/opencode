@@ -16,6 +16,7 @@
 @import "../components/collapsible.css" layer(components);
 @import "../components/diff.css" layer(components);
 @import "../components/diff-changes.css" layer(components);
+@import "../components/context-menu.css" layer(components);
 @import "../components/dropdown-menu.css" layer(components);
 @import "../components/dialog.css" layer(components);
 @import "../components/file-icon.css" layer(components);

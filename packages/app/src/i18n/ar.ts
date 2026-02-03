@@ -28,6 +28,8 @@ export const dict = {
   "command.settings.open": "فتح الإعدادات",
   "command.session.previous": "الجلسة السابقة",
   "command.session.next": "الجلسة التالية",
+  "command.session.previous.unseen": "Previous unread session",
+  "command.session.next.unseen": "Next unread session",
   "command.session.archive": "أرشفة الجلسة",
 
   "command.palette": "لوحة الأوامر",
@@ -68,6 +70,7 @@ export const dict = {
   "command.model.variant.cycle.description": "التبديل إلى مستوى الجهد التالي",
   "command.permissions.autoaccept.enable": "قبول التعديلات تلقائيًا",
   "command.permissions.autoaccept.disable": "إيقاف قبول التعديلات تلقائيًا",
+  "command.workspace.toggle": "تبديل مساحات العمل",
   "command.session.undo": "تراجع",
   "command.session.undo.description": "تراجع عن الرسالة الأخيرة",
   "command.session.redo": "إعادة",
@@ -210,6 +213,8 @@ export const dict = {
   "prompt.popover.emptyCommands": "لا توجد أوامر مطابقة",
   "prompt.dropzone.label": "أفلت الصور أو ملفات PDF هنا",
   "prompt.slash.badge.custom": "مخصص",
+  "prompt.slash.badge.skill": "مهارة",
+  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "نشط",
   "prompt.context.includeActiveFile": "تضمين الملف النشط",
   "prompt.context.removeActiveFile": "إزالة الملف النشط من السياق",
@@ -344,6 +349,11 @@ export const dict = {
   "toast.permissions.autoaccept.off.title": "توقف قبول التعديلات تلقائيًا",
   "toast.permissions.autoaccept.off.description": "ستتطلب أذونات التحرير والكتابة موافقة",
 
+  "toast.workspace.enabled.title": "تم تمكين مساحات العمل",
+  "toast.workspace.enabled.description": "الآن يتم عرض عدة worktrees في الشريط الجانبي",
+  "toast.workspace.disabled.title": "تم تعطيل مساحات العمل",
+  "toast.workspace.disabled.description": "يتم عرض worktree الرئيسي فقط في الشريط الجانبي",
+
   "toast.model.none.title": "لم يتم تحديد نموذج",
   "toast.model.none.description": "قم بتوصيل موفر لتلخيص هذه الجلسة",
 
@@ -432,6 +442,7 @@ export const dict = {
   "session.review.noChanges": "لا توجد تغييرات",
   "session.files.selectToOpen": "اختر ملفًا لفتحه",
   "session.files.all": "كل الملفات",
+  "session.files.binaryContent": "ملف ثنائي (لا يمكن عرض المحتوى)",
   "session.messages.renderEarlier": "عرض الرسائل السابقة",
   "session.messages.loadingEarlier": "جارٍ تحميل الرسائل السابقة...",
   "session.messages.loadEarlier": "تحميل الرسائل السابقة",
