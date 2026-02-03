@@ -241,19 +241,19 @@ class StringSerializeHandler extends BaseSerializeHandler {
   protected _rowEnd(row: number, isLastRow: boolean): void {
     let rowSeparator = ""
 
-    if (this._nullCellCount > 0) {
+    const nextLine = isLastRow ? undefined : this._buffer.getLine(row + 1)
+    const wrapped = !!nextLine?.isWrapped
+
+    if (this._nullCellCount > 0 && wrapped) {
       this._currentRow += " ".repeat(this._nullCellCount)
-      this._nullCellCount = 0
     }
 
-    if (!isLastRow) {
-      const nextLine = this._buffer.getLine(row + 1)
+    this._nullCellCount = 0
 
-      if (!nextLine?.isWrapped) {
-        rowSeparator = "\r\n"
-        this._lastCursorRow = row + 1
-        this._lastCursorCol = 0
-      }
+    if (!isLastRow && !wrapped) {
+      rowSeparator = "\r\n"
+      this._lastCursorRow = row + 1
+      this._lastCursorCol = 0
     }
 
     this._allRows[this._rowIndex] = this._currentRow
@@ -389,7 +389,7 @@ class StringSerializeHandler extends BaseSerializeHandler {
 
     const sgrSeq = this._diffStyle(cell, this._cursorStyle)
 
-    const styleChanged = isEmptyCell ? !equalBg(this._cursorStyle, cell) : sgrSeq.length > 0
+    const styleChanged = sgrSeq.length > 0
 
     if (styleChanged) {
       if (this._nullCellCount > 0) {
