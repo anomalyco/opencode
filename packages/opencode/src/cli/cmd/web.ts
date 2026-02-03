@@ -43,7 +43,8 @@ export const WebCommand = effectCmd({
     const opts = yield* Effect.promise(() => resolveNetworkOptions(args))
     const server = yield* Effect.promise(() => Server.listen(opts))
     UI.empty()
-    UI.println(UI.logo("  "))
+    const logoText = await UI.logoAsync("  ")
+    if (logoText) UI.println(logoText)
     UI.empty()
 
     if (opts.hostname === "0.0.0.0") {

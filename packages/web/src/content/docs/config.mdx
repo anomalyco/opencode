@@ -435,6 +435,41 @@ Set your UI theme in `tui.json`.
 
 ---
 
+### Logo
+
+You can customize or disable the CLI logo through the `logo` option. This is useful for enterprise deployments or custom branding.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "logo": "~/.config/opencode/my-logo.txt"
+}
+```
+
+The logo file should contain plain text ASCII art:
+
+```text title="my-logo.txt"
+╔═══════════════════════════╗
+║    ACME Corporation       ║
+║    Powered by OpenCode    ║
+╚═══════════════════════════╝
+```
+
+To disable the logo entirely:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "logo": false
+}
+```
+
+:::note
+The custom logo appears in the TUI home screen and CLI commands like `opencode web`, `opencode upgrade`, and `opencode uninstall`. The CLI help (`--help`) always shows the default OpenCode logo. ANSI escape codes for colors are supported in CLI output but are stripped in the TUI.
+:::
+
+---
+
 ### Agents
 
 You can configure specialized agents for specific tasks through the `agent` option.

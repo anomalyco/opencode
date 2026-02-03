@@ -1,9 +1,11 @@
 import { BoxRenderable, MouseButton, MouseEvent, RGBA, TextAttributes } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
-import { For, createMemo, createSignal, onCleanup, onMount, type JSX } from "solid-js"
+import { For, Show, createMemo, createResource, createSignal, onCleanup, onMount, type JSX } from "solid-js"
 import { useTheme, tint } from "@tui/context/theme"
 import * as Sound from "@tui/util/sound"
 import { go, logo } from "@/cli/logo"
+import { Logo as LogoConfig } from "@/cli/logo"
+import { useSDK } from "@tui/context/sdk"
 
 export type LogoShape = {
   left: string[]
@@ -552,10 +554,24 @@ function buildIdleState(t: number, ctx: LogoContext): IdleState {
   return { cfg, reach, rings, active }
 }
 
+// Strip ANSI escape codes from text (TUI uses its own color system)
+const ANSI_REGEX = /\x1b\[[0-9;]*m/g
+function stripAnsi(text: string): string {
+  return text.replace(ANSI_REGEX, "")
+}
+
 export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = {}) {
   const ctx = props.shape ? build(props.shape) : DEFAULT
   const { theme } = useTheme()
   const renderer = useRenderer()
+  const sdk = useSDK()
+
+  const [customLogo] = createResource(async () => {
+    if (props.shape) return null
+    const result = await sdk.client.config.logo({}).catch(() => null)
+    return result?.data
+  })
+
   const [rings, setRings] = createSignal<Ring[]>([])
   const [hold, setHold] = createSignal<Hold>()
   const [release, setRelease] = createSignal<Release>()
@@ -853,7 +869,7 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
     }
   }
 
-  return (
+  const defaultLogo = (
     <box ref={(item: BoxRenderable) => (box = item)}>
       <box
         position="absolute"
@@ -886,6 +902,29 @@ export function Logo(props: { shape?: LogoShape; ink?: RGBA; idle?: boolean } = 
         )}
       </For>
     </box>
+  )
+
+  if (props.shape) return defaultLogo
+
+  return (
+    <Show when={!customLogo()?.disabled} fallback={null}>
+      <Show
+        when={customLogo()?.content}
+        fallback={defaultLogo}
+      >
+        <box>
+          <For each={stripAnsi(customLogo()!.content!).split("\n")}>
+            {(line) => (
+              <box flexDirection="row">
+                <text fg={theme.text} selectable={false}>
+                  {line}
+                </text>
+              </box>
+            )}
+          </For>
+        </box>
+      </Show>
+    </Show>
   )
 }
 

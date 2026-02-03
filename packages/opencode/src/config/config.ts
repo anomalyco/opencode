@@ -104,6 +104,10 @@ export const Info = Schema.Struct({
   shell: Schema.optional(Schema.String).annotate({
     description: "Default shell to use for terminal and bash tool",
   }),
+  logo: Schema.optional(Schema.Union([Schema.Literal(false), Schema.String])).annotate({
+    description:
+      "Custom logo configuration. Set to false to disable, or provide a path to a text file containing the logo (supports ANSI escape codes).",
+  }),
   logLevel: Schema.optional(LogLevelRef).annotate({ description: "Log level" }),
   server: Schema.optional(ConfigServer.Server).annotate({
     description: "Server configuration for opencode serve and web commands",

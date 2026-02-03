@@ -587,6 +587,58 @@
         ]
       }
     },
+    "/config/logo": {
+      "get": {
+        "operationId": "config.logo",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Get custom logo",
+        "description": "Get the custom logo content if configured, or null to use the default logo.",
+        "responses": {
+          "200": {
+            "description": "Logo content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "content": {
+                      "description": "Custom logo content, or null to use default",
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "disabled": {
+                      "description": "Whether the logo is disabled",
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["content", "disabled"]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.config.logo({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/config/providers": {
       "get": {
         "tags": ["config"],
@@ -11542,6 +11594,18 @@
           },
           "shell": {
             "type": "string"
+          },
+          "logo": {
+            "description": "Custom logo configuration. Set to false to disable, or provide a path to a text file containing the logo (supports ANSI escape codes).",
+            "anyOf": [
+              {
+                "type": "boolean",
+                "const": false
+              },
+              {
+                "type": "string"
+              }
+            ]
           },
           "logLevel": {
             "$ref": "#/components/schemas/LogLevel"

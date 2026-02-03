@@ -2,6 +2,7 @@ import z from "zod"
 import { EOL } from "os"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { logo as glyphs } from "./logo"
+import { Logo } from "./logo"
 
 const wordmark = [
   `⠀                                ▄     `,
@@ -57,6 +58,28 @@ export function logo(pad?: string) {
     return result.join("").trimEnd()
   }
 
+  return renderDefaultLogo(pad)
+}
+
+/**
+ * Load and render logo based on config (async version).
+ * Uses custom logo if configured, otherwise falls back to default.
+ * Returns empty string if logo is disabled.
+ */
+export async function logoAsync(pad?: string): Promise<string> {
+  const custom = await Logo.load()
+  if (custom === false) return ""
+  if (custom) return renderCustomLogo(custom, pad)
+  return renderDefaultLogo(pad)
+}
+
+function renderCustomLogo(content: string, pad?: string): string {
+  const lines = content.split("\n")
+  if (!pad) return lines.join(EOL)
+  return lines.map((line) => pad + line).join(EOL)
+}
+
+function renderDefaultLogo(pad?: string): string {
   const result: string[] = []
   const reset = "\x1b[0m"
   const left = {
