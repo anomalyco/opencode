@@ -15,11 +15,23 @@ function mimeToModality(mime: string): Modality | undefined {
   return undefined
 }
 
+/**
+ * Validates if a thinking block signature is a valid Claude/Anthropic signature.
+ * Claude signatures typically start with 'ErUB' (base64 encoded protobuf).
+ * Other models like GLM, MiniMax produce incompatible signatures.
+ */
+function isValidClaudeSignature(signature: string | undefined): boolean {
+  if (!signature) return false
+  // Claude thinking signatures are base64-encoded protobuf that starts with 'ErUB'
+  return signature.startsWith('ErUB')
+}
+
 export namespace ProviderTransform {
   // Maps npm package to the key the AI SDK expects for providerOptions
   function sdkKey(npm: string): string | undefined {
     switch (npm) {
       case "@ai-sdk/github-copilot":
+        return "copilot"
       case "@ai-sdk/openai":
       case "@ai-sdk/azure":
         return "openai"
@@ -37,6 +49,103 @@ export namespace ProviderTransform {
         return "openrouter"
     }
     return undefined
+  }
+
+  /**
+   * Normalizes thinking blocks for Claude when switching from other models.
+   * 
+   * Problem: When switching from models like GLM 4.7 or MiniMax to Claude with
+   * extended thinking enabled, users get API errors because other models produce
+   * thinking blocks with signatures that are incompatible with Claude's validation.
+   * 
+   * Solution: Convert incompatible thinking/reasoning blocks to wrapped text,
+   * preserving the content while removing invalid signatures.
+   * 
+   * @see https://github.com/anomalyco/opencode/issues/6418
+   */
+  function normalizeClaudeThinkingBlocks(
+    msgs: ModelMessage[],
+    options: Record<string, unknown>,
+  ): ModelMessage[] {
+    const thinkingEnabled = (options as { thinking?: { type?: string } })?.thinking?.type === "enabled"
+    const convertedThinkingMsgIndices = new Set<number>()
+
+    msgs = msgs
+      .map((msg, msgIdx) => {
+        if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
+          let hadThinkingBlock = false
+          
+          const newContent = msg.content
+            .map((part) => {
+              const partAny = part as { type: string; thinking?: string; text?: string; signature?: string; toolCallId?: string }
+              
+              // Convert thinking blocks with INVALID signatures to wrapped text
+              // Valid Claude signatures (starting with 'ErUB') are preserved
+              if (partAny.type === "thinking" && partAny.signature && !isValidClaudeSignature(partAny.signature)) {
+                const text = partAny.thinking || partAny.text || ""
+                hadThinkingBlock = true
+                if (!text) return null
+                return {
+                  type: "text" as const,
+                  text: `<assistant_thinking>${text}</assistant_thinking>`,
+                }
+              }
+              
+              // Convert reasoning parts to wrapped text (reasoning has no signature concept)
+              if (partAny.type === "reasoning") {
+                const text = partAny.text || ""
+                if (!text) return null
+                return {
+                  type: "text" as const,
+                  text: `<assistant_reasoning>${text}</assistant_reasoning>`,
+                }
+              }
+              
+              // Normalize tool call IDs for Claude compatibility
+              if ((partAny.type === "tool-call" || partAny.type === "tool-result") && "toolCallId" in partAny) {
+                return {
+                  ...part,
+                  toolCallId: partAny.toolCallId!.replace(/[^a-zA-Z0-9_-]/g, "_"),
+                }
+              }
+              
+              return part
+            })
+            .filter((part): part is NonNullable<typeof part> => part !== null)
+          
+          if (hadThinkingBlock) convertedThinkingMsgIndices.add(msgIdx)
+          
+          // Filter out messages with empty content after processing
+          if (newContent.length === 0) return undefined
+          
+          return { ...msg, content: newContent }
+        }
+        return msg
+      })
+      .filter((msg): msg is ModelMessage => msg !== undefined)
+
+    // When thinking is enabled, Claude requires the last assistant message to start
+    // with a valid thinking block. If it doesn't (and has no tool calls or converted
+    // thinking), remove it to let Claude generate fresh thinking.
+    if (thinkingEnabled) {
+      const lastAssistantIdx = msgs.findLastIndex((m) => m.role === "assistant")
+      if (lastAssistantIdx >= 0) {
+        const lastAssistant = msgs[lastAssistantIdx]
+        const hadConvertedThinking = convertedThinkingMsgIndices.has(lastAssistantIdx)
+        
+        if (Array.isArray(lastAssistant.content) && lastAssistant.content.length > 0 && !hadConvertedThinking) {
+          const firstPart = lastAssistant.content[0] as { type: string }
+          const startsWithValidThinking = firstPart.type === "thinking" || firstPart.type === "redacted_thinking"
+          const hasToolCall = lastAssistant.content.some((p) => (p as { type: string }).type === "tool-call")
+          
+          if (!startsWithValidThinking && !hasToolCall) {
+            msgs = msgs.filter((_, i) => i !== lastAssistantIdx)
+          }
+        }
+      }
+    }
+
+    return msgs
   }
 
   function normalizeMessages(
@@ -67,22 +176,13 @@ export namespace ProviderTransform {
     }
 
     if (model.api.id.includes("claude")) {
-      return msgs.map((msg) => {
-        if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
-          msg.content = msg.content.map((part) => {
-            if ((part.type === "tool-call" || part.type === "tool-result") && "toolCallId" in part) {
-              return {
-                ...part,
-                toolCallId: part.toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_"),
-              }
-            }
-            return part
-          })
-        }
-        return msg
-      })
+      return normalizeClaudeThinkingBlocks(msgs, options)
     }
-    if (model.providerID === "mistral" || model.api.id.toLowerCase().includes("mistral")) {
+    if (
+      model.providerID === "mistral" ||
+      model.api.id.toLowerCase().includes("mistral") ||
+      model.api.id.toLocaleLowerCase().includes("devstral")
+    ) {
       const result: ModelMessage[] = []
       for (let i = 0; i < msgs.length; i++) {
         const msg = msgs[i]
@@ -174,15 +274,19 @@ export namespace ProviderTransform {
         cacheControl: { type: "ephemeral" },
       },
       bedrock: {
-        cachePoint: { type: "ephemeral" },
+        cachePoint: { type: "default" },
       },
       openaiCompatible: {
         cache_control: { type: "ephemeral" },
       },
+      copilot: {
+        copilot_cache_control: { type: "ephemeral" },
+      },
     }
 
     for (const msg of unique([...system, ...final])) {
-      const shouldUseContentOptions = providerID !== "anthropic" && Array.isArray(msg.content) && msg.content.length > 0
+      const useMessageLevelOptions = providerID === "anthropic" || providerID.includes("bedrock")
+      const shouldUseContentOptions = !useMessageLevelOptions && Array.isArray(msg.content) && msg.content.length > 0
 
       if (shouldUseContentOptions) {
         const lastContent = msg.content[msg.content.length - 1]
@@ -284,8 +388,8 @@ export namespace ProviderTransform {
     if (id.includes("glm-4.7")) return 1.0
     if (id.includes("minimax-m2")) return 1.0
     if (id.includes("kimi-k2")) {
-      // kimi-k2-thinking & kimi-k2.5
-      if (id.includes("thinking") || id.includes("k2.")) {
+      // kimi-k2-thinking & kimi-k2.5 && kimi-k2p5
+      if (id.includes("thinking") || id.includes("k2.") || id.includes("k2p")) {
         return 1.0
       }
       return 0.6
@@ -296,7 +400,7 @@ export namespace ProviderTransform {
   export function topP(model: Provider.Model) {
     const id = model.id.toLowerCase()
     if (id.includes("qwen")) return 1
-    if (id.includes("minimax-m2") || id.includes("kimi-k2.5") || id.includes("gemini")) {
+    if (id.includes("minimax-m2") || id.includes("kimi-k2.5") || id.includes("kimi-k2p5") || id.includes("gemini")) {
       return 0.95
     }
     return undefined
@@ -319,7 +423,14 @@ export namespace ProviderTransform {
     if (!model.capabilities.reasoning) return {}
 
     const id = model.id.toLowerCase()
-    if (id.includes("deepseek") || id.includes("minimax") || id.includes("glm") || id.includes("mistral")) return {}
+    if (
+      id.includes("deepseek") ||
+      id.includes("minimax") ||
+      id.includes("glm") ||
+      id.includes("mistral") ||
+      id.includes("kimi")
+    )
+      return {}
 
     // see: https://docs.x.ai/docs/guides/reasoning#control-how-hard-the-model-thinks
     if (id.includes("grok") && id.includes("grok-3-mini")) {
@@ -346,6 +457,15 @@ export namespace ProviderTransform {
         return Object.fromEntries(OPENAI_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
 
       case "@ai-sdk/github-copilot":
+        if (model.id.includes("gemini")) {
+          // currently github copilot only returns thinking
+          return {}
+        }
+        if (model.id.includes("claude")) {
+          return {
+            thinking: { thinking_budget: 4000 },
+          }
+        }
         const copilotEfforts = iife(() => {
           if (id.includes("5.1-codex-max") || id.includes("5.2")) return [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
           return WIDELY_SUPPORTED_EFFORTS
@@ -428,13 +548,13 @@ export namespace ProviderTransform {
           high: {
             thinking: {
               type: "enabled",
-              budgetTokens: 16000,
+              budgetTokens: Math.min(16_000, Math.floor(model.limit.output / 2 - 1)),
             },
           },
           max: {
             thinking: {
               type: "enabled",
-              budgetTokens: 31999,
+              budgetTokens: Math.min(31_999, model.limit.output - 1),
             },
           },
         }
@@ -526,6 +646,26 @@ export namespace ProviderTransform {
       case "@ai-sdk/perplexity":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/perplexity
         return {}
+
+      case "@mymediset/sap-ai-provider":
+      case "@jerome-benoit/sap-ai-provider-v2":
+        if (model.api.id.includes("anthropic")) {
+          return {
+            high: {
+              thinking: {
+                type: "enabled",
+                budgetTokens: 16000,
+              },
+            },
+            max: {
+              thinking: {
+                type: "enabled",
+                budgetTokens: 31999,
+              },
+            },
+          }
+        }
+        return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
     }
     return {}
   }
@@ -587,9 +727,12 @@ export namespace ProviderTransform {
         result["reasoningEffort"] = "medium"
       }
 
+      // Only set textVerbosity for non-chat gpt-5.x models
+      // Chat models (e.g. gpt-5.2-chat-latest) only support "medium" verbosity
       if (
         input.model.api.id.includes("gpt-5.") &&
         !input.model.api.id.includes("codex") &&
+        !input.model.api.id.includes("-chat") &&
         input.model.providerID !== "azure"
       ) {
         result["textVerbosity"] = "low"
@@ -610,11 +753,18 @@ export namespace ProviderTransform {
   }
 
   export function smallOptions(model: Provider.Model) {
-    if (model.providerID === "openai" || model.api.id.includes("gpt-5")) {
-      if (model.api.id.includes("5.")) {
-        return { reasoningEffort: "low" }
+    if (
+      model.providerID === "openai" ||
+      model.api.npm === "@ai-sdk/openai" ||
+      model.api.npm === "@ai-sdk/github-copilot"
+    ) {
+      if (model.api.id.includes("gpt-5")) {
+        if (model.api.id.includes("5.")) {
+          return { store: false, reasoningEffort: "low" }
+        }
+        return { store: false, reasoningEffort: "minimal" }
       }
-      return { reasoningEffort: "minimal" }
+      return { store: false }
     }
     if (model.providerID === "google") {
       // gemini-3 uses thinkingLevel, gemini-2.5 uses thinkingBudget
