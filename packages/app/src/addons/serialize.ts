@@ -442,12 +442,24 @@ class StringSerializeHandler extends BaseSerializeHandler {
       }
     }
 
-    if (!excludeFinalCursorPosition) {
-      const absoluteCursorRow = (this._buffer.baseY ?? 0) + this._buffer.cursorY
-      const cursorRow = constrain(absoluteCursorRow - this._firstRow + 1, 1, Number.MAX_SAFE_INTEGER)
-      const cursorCol = this._buffer.cursorX + 1
-      content += `\u001b[${cursorRow};${cursorCol}H`
-    }
+    if (excludeFinalCursorPosition) return content
+
+    const absoluteCursorRow = (this._buffer.baseY ?? 0) + this._buffer.cursorY
+    const cursorRow = constrain(absoluteCursorRow - this._firstRow + 1, 1, Number.MAX_SAFE_INTEGER)
+    const cursorCol = this._buffer.cursorX + 1
+    content += `\u001b[${cursorRow};${cursorCol}H`
+
+    const line = this._buffer.getLine(absoluteCursorRow)
+    const cell = line?.getCell(this._buffer.cursorX)
+    const style = (() => {
+      if (!cell) return this._buffer.getNullCell()
+      if (cell.getWidth() !== 0) return cell
+      if (this._buffer.cursorX > 0) return line?.getCell(this._buffer.cursorX - 1) ?? cell
+      return cell
+    })()
+
+    const sgrSeq = this._diffStyle(style, this._cursorStyle)
+    if (sgrSeq.length) content += `\u001b[${sgrSeq.join(";")}m`
 
     return content
   }
