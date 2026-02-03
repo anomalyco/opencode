@@ -1606,6 +1606,10 @@ export type Config = {
    * Theme name to use for the interface
    */
   theme?: string
+  /**
+   * When set, only these themes will be available for selection. All other themes will be hidden
+   */
+  enabled_themes?: Array<string>
   keybinds?: KeybindsConfig
   logLevel?: LogLevel
   /**

@@ -314,6 +314,23 @@ You can configure the theme you want to use in your OpenCode config through the 
 
 ---
 
+### Enabled themes
+
+You can specify an allowlist of themes through the `enabled_themes` option. When set, only the specified themes will appear in the theme selector.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "enabled_themes": ["opencode", "tokyonight"]
+}
+```
+
+This is useful for enforcing a consistent look across a team or limiting theme choices to a curated selection. If `enabled_themes` is not set or is an empty array, all themes remain available.
+
+[Learn more here](/docs/themes#restricting-available-themes).
+
+---
+
 ### Agents
 
 You can configure specialized agents for specific tasks through the `agent` option.

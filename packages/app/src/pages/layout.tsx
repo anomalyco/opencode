@@ -110,7 +110,12 @@ export default function Layout(props: ParentProps) {
   const theme = useTheme()
   const language = useLanguage()
   const initialDirectory = decode64(params.dir)
-  const availableThemeEntries = createMemo(() => Object.entries(theme.themes()))
+  const availableThemeEntries = createMemo(() => {
+    const entries = Object.entries(theme.themes())
+    const enabled = globalSync.data.config.enabled_themes
+    if (!enabled || enabled.length === 0) return entries
+    return entries.filter(([id]) => enabled.includes(id))
+  })
   const colorSchemeOrder: ColorScheme[] = ["system", "light", "dark"]
   const colorSchemeKey: Record<ColorScheme, "theme.scheme.system" | "theme.scheme.light" | "theme.scheme.dark"> = {
     system: "theme.scheme.system",

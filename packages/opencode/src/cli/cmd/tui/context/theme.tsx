@@ -369,7 +369,9 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
         return store.active
       },
       all() {
-        return store.themes
+        const enabled = sync.data.config.enabled_themes
+        if (!enabled || enabled.length === 0) return store.themes
+        return Object.fromEntries(Object.entries(store.themes).filter(([id]) => enabled.includes(id)))
       },
       syntax,
       subtleSyntax,

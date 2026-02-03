@@ -958,6 +958,10 @@ export namespace Config {
     .object({
       $schema: z.string().optional().describe("JSON schema reference for configuration validation"),
       theme: z.string().optional().describe("Theme name to use for the interface"),
+      enabled_themes: z
+        .array(z.string())
+        .optional()
+        .describe("When set, only these themes will be available for selection. All other themes will be hidden"),
       keybinds: Keybinds.optional().describe("Custom keybind configurations"),
       logLevel: Log.Level.optional().describe("Log level"),
       tui: TUI.optional().describe("TUI specific settings"),

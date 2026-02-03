@@ -72,6 +72,27 @@ You can select a theme by bringing up the theme select with the `/theme` command
 
 ---
 
+## Restricting available themes
+
+You can restrict the available themes to a specific subset using the `enabled_themes` option. When set, only the specified themes will appear in the theme selector.
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "enabled_themes": ["opencode", "tokyonight"]
+}
+```
+
+This is useful for:
+
+- Enforcing a consistent look across a team or organization
+- Limiting choices to only themes that work well with your terminal
+- Creating a simplified theme selection experience
+
+If `enabled_themes` is not set or is an empty array, all themes remain available.
+
+---
+
 ## Custom themes
 
 OpenCode supports a flexible JSON-based theme system that allows users to create and customize themes easily.
