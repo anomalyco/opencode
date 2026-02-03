@@ -4,7 +4,7 @@
   "name": "lotioncode",
   "type": "module",
   "license": "MIT",
-  "private": true,
+  "private": false,
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "test": "bun test",
