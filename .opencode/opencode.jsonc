@@ -9,12 +9,7 @@
       "options": {},
     },
   },
-  "mcp": {
-    "context7": {
-      "type": "remote",
-      "url": "https://mcp.context7.com/mcp",
-    },
-  },
+  "mcp": {},
   "tools": {
     "github-triage": false,
     "github-pr-search": false,
