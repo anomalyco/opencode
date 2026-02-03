@@ -396,6 +396,33 @@ export function Session() {
       },
     },
     {
+      title: "Duplicate session",
+      value: "session.duplicate",
+      category: "Session",
+      slash: {
+        name: "duplicate",
+        aliases: ["clone"],
+      },
+      onSelect: async (dialog) => {
+        const next = await sdk.client.session
+          .fork({
+            sessionID: route.sessionID,
+          })
+          .then((res) => res.data)
+          .catch(() => undefined)
+        if (!next) {
+          toast.show({ message: "Failed to duplicate session", variant: "error" })
+          return
+        }
+        navigate({
+          type: "session",
+          sessionID: next.id,
+          initialPrompt: { input: "", parts: [] },
+        })
+        dialog.clear()
+      },
+    },
+    {
       title: "Compact session",
       value: "session.compact",
       keybind: "session_compact",
