@@ -51,14 +51,14 @@ export namespace Agent {
   const state = Instance.state(async () => {
     const cfg = await Config.get()
 
-    const dirs = await Skill.dirs()
+    const skillDirs = await Skill.dirs()
     const defaults = PermissionNext.fromConfig({
       "*": "allow",
       doom_loop: "ask",
       external_directory: {
         "*": "ask",
         [Truncate.GLOB]: "allow",
-        ...Object.fromEntries(dirs.map((dir) => [path.join(dir, "*"), "allow"])),
+        ...Object.fromEntries(skillDirs.map((dir) => [path.join(dir, "*"), "allow"])),
       },
       question: "deny",
       plan_enter: "deny",
