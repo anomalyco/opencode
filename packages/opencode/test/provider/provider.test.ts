@@ -2148,3 +2148,78 @@ test("custom model with variants enabled and disabled", async () => {
     },
   })
 })
+
+test("provider headers from config are applied to fetch requests", async () => {
+  let capturedHeaders: Record<string, string> | undefined
+
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            anthropic: {
+              options: {
+                headers: {
+                  "X-Custom-Header": "custom-value",
+                  "User-Agent": "MyCustomAgent/1.0",
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("ANTHROPIC_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["anthropic"]).toBeDefined()
+      // Verify headers are in provider options
+      expect(providers["anthropic"].options.headers).toBeDefined()
+      expect(providers["anthropic"].options.headers["X-Custom-Header"]).toBe("custom-value")
+      expect(providers["anthropic"].options.headers["User-Agent"]).toBe("MyCustomAgent/1.0")
+    },
+  })
+})
+
+test("model headers from config are merged with provider headers", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            anthropic: {
+              models: {
+                "claude-sonnet-4-20250514": {
+                  headers: {
+                    "X-Model-Header": "model-value",
+                  },
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("ANTHROPIC_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const model = providers["anthropic"].models["claude-sonnet-4-20250514"]
+      expect(model.headers).toBeDefined()
+      expect(model.headers["X-Model-Header"]).toBe("model-value")
+    },
+  })
+})

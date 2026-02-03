@@ -1020,6 +1020,11 @@ export namespace Provider {
           }
         }
 
+        opts.headers = {
+          ...(typeof opts.headers === "object" ? opts.headers : {}),
+          ...options["headers"],
+        }
+
         return fetchFn(input, {
           ...opts,
           // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
