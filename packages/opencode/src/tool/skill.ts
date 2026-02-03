@@ -2,12 +2,7 @@ import path from "path"
 import z from "zod"
 import { Tool } from "./tool"
 import { Skill } from "../skill"
-import { ConfigMarkdown } from "../config/markdown"
 import { PermissionNext } from "../permission/next"
-
-const parameters = z.object({
-  name: z.string().describe("The skill identifier from available_skills (e.g., 'code-review' or 'category/helper')"),
-})
 
 export const SkillTool = Tool.define("skill", async (ctx) => {
   const skills = await Skill.all()
@@ -28,6 +23,7 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
           "Load a skill to get detailed instructions for a specific task.",
           "Skills provide specialized knowledge and step-by-step guidance.",
           "Use this when a task matches an available skill's description.",
+          "Only the skills listed here are available:",
           "<available_skills>",
           ...accessibleSkills.flatMap((skill) => [
             `  <skill>`,
@@ -37,6 +33,16 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
           ]),
           "</available_skills>",
         ].join(" ")
+
+  const examples = accessibleSkills
+    .map((skill) => `'${skill.name}'`)
+    .slice(0, 3)
+    .join(", ")
+  const hint = examples.length > 0 ? ` (e.g., ${examples}, ...)` : ""
+
+  const parameters = z.object({
+    name: z.string().describe(`The skill identifier from available_skills${hint}`),
+  })
 
   return {
     description,
@@ -55,12 +61,11 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
         always: [params.name],
         metadata: {},
       })
-      // Load and parse skill content
-      const parsed = await ConfigMarkdown.parse(skill.location)
+      const content = skill.content
       const dir = path.dirname(skill.location)
 
       // Format output similar to plugin pattern
-      const output = [`## Skill: ${skill.name}`, "", `**Base directory**: ${dir}`, "", parsed.content.trim()].join("\n")
+      const output = [`## Skill: ${skill.name}`, "", `**Base directory**: ${dir}`, "", content.trim()].join("\n")
 
       return {
         title: `Loaded skill: ${skill.name}`,

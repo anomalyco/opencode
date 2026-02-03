@@ -32,11 +32,16 @@ export namespace FileWatcher {
     ),
   }
 
-  const watcher = lazy(() => {
-    const binding = require(
-      `@parcel/watcher-${process.platform}-${process.arch}${process.platform === "linux" ? `-${OPENCODE_LIBC || "glibc"}` : ""}`,
-    )
-    return createWrapper(binding) as typeof import("@parcel/watcher")
+  const watcher = lazy((): typeof import("@parcel/watcher") | undefined => {
+    try {
+      const binding = require(
+        `@parcel/watcher-${process.platform}-${process.arch}${process.platform === "linux" ? `-${OPENCODE_LIBC || "glibc"}` : ""}`,
+      )
+      return createWrapper(binding) as typeof import("@parcel/watcher")
+    } catch (error) {
+      log.error("failed to load watcher binding", { error })
+      return
+    }
   })
 
   const state = Instance.state(
@@ -54,6 +59,10 @@ export namespace FileWatcher {
         return {}
       }
       log.info("watcher backend", { platform: process.platform, backend })
+
+      const w = watcher()
+      if (!w) return {}
+
       const subscribe: ParcelWatcher.SubscribeCallback = (err, evts) => {
         if (err) return
         for (const evt of evts) {
@@ -67,7 +76,7 @@ export namespace FileWatcher {
       const cfgIgnores = cfg.watcher?.ignore ?? []
 
       if (Flag.OPENCODE_EXPERIMENTAL_FILEWATCHER) {
-        const pending = watcher().subscribe(Instance.directory, subscribe, {
+        const pending = w.subscribe(Instance.directory, subscribe, {
           ignore: [...FileIgnore.PATTERNS, ...cfgIgnores],
           backend,
         })
@@ -89,7 +98,7 @@ export namespace FileWatcher {
       if (vcsDir && !cfgIgnores.includes(".git") && !cfgIgnores.includes(vcsDir)) {
         const gitDirContents = await readdir(vcsDir).catch(() => [])
         const ignoreList = gitDirContents.filter((entry) => entry !== "HEAD")
-        const pending = watcher().subscribe(vcsDir, subscribe, {
+        const pending = w.subscribe(vcsDir, subscribe, {
           ignore: ignoreList,
           backend,
         })

@@ -33,6 +33,7 @@ import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { useExecutionMode, handleModeToggleKey, determineRouting, handleShellTabCompletion, shouldUseShellCompletion, applyCompletionAtIndex, type CompletionCycleState } from "@tui-integration"
 import { ExecutionMode } from "@shell-mode"
+import { DialogSkill } from "../dialog-skill"
 
 export type PromptProps = {
   sessionID?: string
@@ -97,8 +98,11 @@ export function Prompt(props: PromptProps) {
   let promptPartTypeId = 0
 
   sdk.event.on(TuiEvent.PromptAppend.type, (evt) => {
+    if (!input || input.isDestroyed) return
     input.insertText(evt.properties.text)
     setTimeout(() => {
+      // setTimeout is a workaround and needs to be addressed properly
+      if (!input || input.isDestroyed) return
       input.getLayoutNode().markDirty()
       input.gotoBufferEnd()
       renderer.requestRender()
@@ -313,6 +317,28 @@ export function Prompt(props: PromptProps) {
           })
           restoreExtmarksFromParts(updatedNonTextParts)
           input.cursorOffset = Bun.stringWidth(content)
+        },
+      },
+      {
+        title: "Skills",
+        value: "prompt.skills",
+        category: "Prompt",
+        slash: {
+          name: "skills",
+        },
+        onSelect: () => {
+          dialog.replace(() => (
+            <DialogSkill
+              onSelect={(skill) => {
+                input.setText(`/${skill} `)
+                setStore("prompt", {
+                  input: `/${skill} `,
+                  parts: [],
+                })
+                input.gotoBufferEnd()
+              }}
+            />
+          ))
         },
       },
     ]
@@ -561,16 +587,22 @@ export function Prompt(props: PromptProps) {
     } else if (
       inputText.startsWith("/") &&
       iife(() => {
-        const command = inputText.split(" ")[0].slice(1)
-        console.log(command)
+        const firstLine = inputText.split("\n")[0]
+        const command = firstLine.split(" ")[0].slice(1)
         return sync.data.command.some((x) => x.name === command)
       })
     ) {
-      let [command, ...args] = inputText.split(" ")
+      // Parse command from first line, preserve multi-line content in arguments
+      const firstLineEnd = inputText.indexOf("\n")
+      const firstLine = firstLineEnd === -1 ? inputText : inputText.slice(0, firstLineEnd)
+      const [command, ...firstLineArgs] = firstLine.split(" ")
+      const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
+      const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
+
       sdk.client.session.command({
         sessionID,
         command: command.slice(1),
-        arguments: args.join(" "),
+        arguments: args,
         agent: local.agent.current().name,
         model: `${selectedModel.providerID}/${selectedModel.modelID}`,
         messageID,
@@ -1016,6 +1048,8 @@ export function Prompt(props: PromptProps) {
 
                     // Force layout update and render for the pasted content
                     setTimeout(() => {
+                      // setTimeout is a workaround and needs to be addressed properly
+                      if (!input || input.isDestroyed) return
                       input.getLayoutNode().markDirty()
                       renderer.requestRender()
                     }, 0)
@@ -1027,6 +1061,8 @@ export function Prompt(props: PromptProps) {
                     }
                     props.ref?.(ref)
                     setTimeout(() => {
+                      // setTimeout is a workaround and needs to be addressed properly
+                      if (!input || input.isDestroyed) return
                       input.cursorColor = theme.text
                     }, 0)
                   }}

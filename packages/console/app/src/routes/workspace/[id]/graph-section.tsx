@@ -28,8 +28,6 @@ async function getCosts(workspaceID: string, year: number, month: number) {
   return withActor(async () => {
     const startDate = new Date(year, month, 1)
     const endDate = new Date(year, month + 1, 0)
-
-    // First query: get usage data without joining keys
     const usageData = await Database.use((tx) =>
       tx
         .select({
@@ -37,6 +35,7 @@ async function getCosts(workspaceID: string, year: number, month: number) {
           model: UsageTable.model,
           totalCost: sum(UsageTable.cost),
           keyId: UsageTable.keyID,
+          subscription: sql<boolean>`COALESCE(JSON_EXTRACT(${UsageTable.enrichment}, '$.plan') = 'sub', false)`,
         })
         .from(UsageTable)
         .where(
@@ -44,14 +43,19 @@ async function getCosts(workspaceID: string, year: number, month: number) {
             eq(UsageTable.workspaceID, workspaceID),
             gte(UsageTable.timeCreated, startDate),
             lte(UsageTable.timeCreated, endDate),
-            or(isNull(UsageTable.enrichment), sql`JSON_EXTRACT(${UsageTable.enrichment}, '$.plan') != 'sub'`),
           ),
         )
-        .groupBy(sql`DATE(${UsageTable.timeCreated})`, UsageTable.model, UsageTable.keyID)
+        .groupBy(
+          sql`DATE(${UsageTable.timeCreated})`,
+          UsageTable.model,
+          UsageTable.keyID,
+          sql`COALESCE(JSON_EXTRACT(${UsageTable.enrichment}, '$.plan') = 'sub', false)`,
+        )
         .then((x) =>
           x.map((r) => ({
             ...r,
             totalCost: r.totalCost ? parseInt(r.totalCost) : 0,
+            subscription: Boolean(r.subscription),
           })),
         ),
     )
@@ -213,29 +217,54 @@ export function GraphSection() {
     const colorTextSecondary = styles.getPropertyValue("--color-text-secondary").trim()
     const colorBorder = styles.getPropertyValue("--color-border").trim()
 
-    const dailyData = new Map<string, Map<string, number>>()
-    for (const dateKey of dates) dailyData.set(dateKey, new Map())
+    const dailyDataSub = new Map<string, Map<string, number>>()
+    const dailyDataNonSub = new Map<string, Map<string, number>>()
+    for (const dateKey of dates) {
+      dailyDataSub.set(dateKey, new Map())
+      dailyDataNonSub.set(dateKey, new Map())
+    }
 
     data.usage
       .filter((row) => (store.key ? row.keyId === store.key : true))
       .forEach((row) => {
-        const dayMap = dailyData.get(row.date)
+        const targetMap = row.subscription ? dailyDataSub : dailyDataNonSub
+        const dayMap = targetMap.get(row.date)
         if (!dayMap) return
         dayMap.set(row.model, (dayMap.get(row.model) ?? 0) + row.totalCost)
       })
 
     const filteredModels = store.model === null ? getModels() : [store.model]
 
-    const datasets = filteredModels.map((model) => {
-      const color = getModelColor(model)
-      return {
-        label: model,
-        data: dates.map((date) => (dailyData.get(date)?.get(model) || 0) / 100_000_000),
-        backgroundColor: color,
-        hoverBackgroundColor: color,
-        borderWidth: 0,
-      }
-    })
+    // Create datasets: non-subscription first, then subscription (with hatched pattern effect via opacity)
+    const datasets = [
+      ...filteredModels
+        .filter((model) => dates.some((date) => (dailyDataNonSub.get(date)?.get(model) || 0) > 0))
+        .map((model) => {
+          const color = getModelColor(model)
+          return {
+            label: model,
+            data: dates.map((date) => (dailyDataNonSub.get(date)?.get(model) || 0) / 100_000_000),
+            backgroundColor: color,
+            hoverBackgroundColor: color,
+            borderWidth: 0,
+            stack: "usage",
+          }
+        }),
+      ...filteredModels
+        .filter((model) => dates.some((date) => (dailyDataSub.get(date)?.get(model) || 0) > 0))
+        .map((model) => {
+          const color = getModelColor(model)
+          return {
+            label: `${model} (sub)`,
+            data: dates.map((date) => (dailyDataSub.get(date)?.get(model) || 0) / 100_000_000),
+            backgroundColor: addOpacityToColor(color, 0.5),
+            hoverBackgroundColor: addOpacityToColor(color, 0.7),
+            borderWidth: 1,
+            borderColor: color,
+            stack: "subscription",
+          }
+        }),
+    ]
 
     return {
       type: "bar",
@@ -292,12 +321,9 @@ export function GraphSection() {
             borderWidth: 1,
             padding: 12,
             displayColors: true,
+            filter: (item) => (item.parsed.y ?? 0) > 0,
             callbacks: {
-              label: (context) => {
-                const value = context.parsed.y
-                if (!value || value === 0) return
-                return `${context.dataset.label}: $${value.toFixed(2)}`
-              },
+              label: (context) => `${context.dataset.label}: $${(context.parsed.y ?? 0).toFixed(2)}`,
             },
           },
           legend: {
@@ -317,8 +343,12 @@ export function GraphSection() {
               const chart = legend.chart
               chart.data.datasets?.forEach((dataset, i) => {
                 const meta = chart.getDatasetMeta(i)
-                const baseColor = getModelColor(dataset.label || "")
-                const color = i === legendItem.datasetIndex ? baseColor : addOpacityToColor(baseColor, 0.3)
+                const label = dataset.label || ""
+                const isSub = label.endsWith(" (sub)")
+                const model = isSub ? label.slice(0, -6) : label
+                const baseColor = getModelColor(model)
+                const originalColor = isSub ? addOpacityToColor(baseColor, 0.5) : baseColor
+                const color = i === legendItem.datasetIndex ? originalColor : addOpacityToColor(baseColor, 0.15)
                 meta.data.forEach((bar: any) => {
                   bar.options.backgroundColor = color
                 })
@@ -329,9 +359,13 @@ export function GraphSection() {
               const chart = legend.chart
               chart.data.datasets?.forEach((dataset, i) => {
                 const meta = chart.getDatasetMeta(i)
-                const baseColor = getModelColor(dataset.label || "")
+                const label = dataset.label || ""
+                const isSub = label.endsWith(" (sub)")
+                const model = isSub ? label.slice(0, -6) : label
+                const baseColor = getModelColor(model)
+                const color = isSub ? addOpacityToColor(baseColor, 0.5) : baseColor
                 meta.data.forEach((bar: any) => {
-                  bar.options.backgroundColor = baseColor
+                  bar.options.backgroundColor = color
                 })
               })
               chart.update("none")

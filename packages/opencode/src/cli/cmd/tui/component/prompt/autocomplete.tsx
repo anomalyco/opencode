@@ -85,6 +85,7 @@ export function Autocomplete(props: {
     index: 0,
     selected: 0,
     visible: false as AutocompleteRef["visible"],
+    input: "keyboard" as "keyboard" | "mouse",
   })
 
   const [positionTick, setPositionTick] = createSignal(0)
@@ -126,6 +127,24 @@ export function Autocomplete(props: {
     props.value // <- there surely is a better way to do this, like making .input() reactive
 
     return props.input().getTextRange(store.index + 1, props.input().cursorOffset)
+  })
+
+  // filter() reads reactive props.value plus non-reactive cursor/text state.
+  // On keypress those can be briefly out of sync, so filter() may return an empty/partial string.
+  // Copy it into search in an effect because effects run after reactive updates have been rendered and painted
+  // so the input has settled and all consumers read the same stable value.
+  const [search, setSearch] = createSignal("")
+  createEffect(() => {
+    const next = filter()
+    setSearch(next ? next : "")
+  })
+
+  // When the filter changes due to how TUI works, the mousemove might still be triggered
+  // via a synthetic event as the layout moves underneath the cursor. This is a workaround to make sure the input mode remains keyboard so
+  // that the mouseover event doesn't trigger when filtering.
+  createEffect(() => {
+    filter()
+    setStore("input", "keyboard")
   })
 
   function insertPart(text: string, part: PromptInfo["parts"][number]) {
@@ -199,7 +218,7 @@ export function Autocomplete(props: {
   }
 
   const [files] = createResource(
-    () => filter(),
+    () => search(),
     async (query) => {
       if (!store.visible || store.visible === "/") return []
 
@@ -336,8 +355,10 @@ export function Autocomplete(props: {
     const results: AutocompleteOption[] = [...command.slashes()]
 
     for (const serverCommand of sync.data.command) {
+      if (serverCommand.source === "skill") continue
+      const label = serverCommand.source === "mcp" ? ":mcp" : ""
       results.push({
-        display: "/" + serverCommand.name + (serverCommand.mcp ? " (MCP)" : ""),
+        display: "/" + serverCommand.name + label,
         description: serverCommand.description,
         onSelect: () => {
           const newText = "/" + serverCommand.name + " "
@@ -367,9 +388,9 @@ export function Autocomplete(props: {
     const mixed: AutocompleteOption[] =
       store.visible === "@" ? [...agentsValue, ...(filesValue || []), ...mcpResources()] : [...commandsValue]
 
-    const currentFilter = filter()
+    const searchValue = search()
 
-    if (!currentFilter) {
+    if (!searchValue) {
       return mixed
     }
 
@@ -377,7 +398,7 @@ export function Autocomplete(props: {
       return prev
     }
 
-    const result = fuzzysort.go(removeLineRange(currentFilter), mixed, {
+    const result = fuzzysort.go(removeLineRange(searchValue), mixed, {
       keys: [
         (obj) => removeLineRange((obj.value ?? obj.display).trimEnd()),
         "description",
@@ -387,7 +408,7 @@ export function Autocomplete(props: {
       scoreFn: (objResults) => {
         const displayResult = objResults[0]
         let score = objResults.score
-        if (displayResult && displayResult.target.startsWith(store.visible + currentFilter)) {
+        if (displayResult && displayResult.target.startsWith(store.visible + searchValue)) {
           score *= 2
         }
         const frecencyScore = objResults.obj.path ? frecency.getFrecency(objResults.obj.path) : 0
@@ -525,11 +546,13 @@ export function Autocomplete(props: {
           const isNavDown = name === "down" || (ctrlOnly && name === "n")
 
           if (isNavUp) {
+            setStore("input", "keyboard")
             move(-1)
             e.preventDefault()
             return
           }
           if (isNavDown) {
+            setStore("input", "keyboard")
             move(1)
             e.preventDefault()
             return
@@ -612,7 +635,17 @@ export function Autocomplete(props: {
               paddingRight={1}
               backgroundColor={index === store.selected ? theme.primary : undefined}
               flexDirection="row"
-              onMouseOver={() => moveTo(index)}
+              onMouseMove={() => {
+                setStore("input", "mouse")
+              }}
+              onMouseOver={() => {
+                if (store.input !== "mouse") return
+                moveTo(index)
+              }}
+              onMouseDown={() => {
+                setStore("input", "mouse")
+                moveTo(index)
+              }}
               onMouseUp={() => select()}
             >
               <text fg={index === store.selected ? selectedForeground(theme) : theme.text} flexShrink={0}>

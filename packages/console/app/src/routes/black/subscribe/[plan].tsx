@@ -219,8 +219,6 @@ function IntentForm(props: { plan: PlanID; workspaceID: string; onSuccess: (data
       return
     }
 
-    // TODO
-    console.log(setupIntent)
     if (setupIntent?.status === "succeeded") {
       const pm = setupIntent.payment_method as PaymentMethod
 

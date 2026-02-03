@@ -1,6 +1,7 @@
 {
   lib,
   stdenvNoCC,
+  callPackage,
   bun,
   sysctl,
   makeBinaryWrapper,
@@ -9,81 +10,12 @@
   installShellFiles,
   versionCheckHook,
   writableTmpDirAsHomeHook,
-  rev ? "dirty",
+  node_modules ? callPackage ./node-modules.nix { },
 }:
-let
-  packageJson = lib.pipe ../packages/opencode/package.json [
-    builtins.readFile
-    builtins.fromJSON
-  ];
-in
 stdenvNoCC.mkDerivation (finalAttrs: {
   pname = "opencode";
-  version = "${packageJson.version}-${rev}";
-
-  src = lib.fileset.toSource {
-    root = ../.;
-    fileset = lib.fileset.intersection (lib.fileset.fromSource (lib.sources.cleanSource ../.)) (
-      lib.fileset.unions [
-        ../packages
-        ../bun.lock
-        ../package.json
-        ../patches
-        ../install
-      ]
-    );
-  };
-
-  node_modules = stdenvNoCC.mkDerivation {
-    pname = "${finalAttrs.pname}-node_modules";
-    inherit (finalAttrs) version src;
-
-    impureEnvVars = lib.fetchers.proxyImpureEnvVars ++ [
-      "GIT_PROXY_COMMAND"
-      "SOCKS_SERVER"
-    ];
-
-    nativeBuildInputs = [
-      bun
-    ];
-
-    dontConfigure = true;
-
-    buildPhase = ''
-      runHook preBuild
-      export HOME=$(mktemp -d)
-      export BUN_INSTALL_CACHE_DIR=$(mktemp -d)
-      bun install \
-        --cpu="${if stdenvNoCC.hostPlatform.isAarch64 then "arm64" else "x64"}" \
-        --os="${if stdenvNoCC.hostPlatform.isLinux then "linux" else "darwin"}" \
-        --frozen-lockfile \
-        --ignore-scripts \
-        --no-progress \
-        --linker=isolated
-      bun --bun ${./scripts/canonicalize-node-modules.ts}
-      bun --bun ${./scripts/normalize-bun-binaries.ts}
-      runHook postBuild
-    '';
-
-    installPhase = ''
-      runHook preInstall
-
-      mkdir -p $out
-      find . -type d -name node_modules -exec cp -R --parents {} $out \;
-
-      runHook postInstall
-    '';
-
-    dontFixup = true;
-
-    outputHashAlgo = "sha256";
-    outputHashMode = "recursive";
-    outputHash =
-      (lib.pipe ./hashes.json [
-        builtins.readFile
-        builtins.fromJSON
-      ]).nodeModules.${stdenvNoCC.hostPlatform.system};
-  };
+  inherit (node_modules) version src;
+  inherit node_modules;
 
   nativeBuildInputs = [
     bun
@@ -159,11 +91,6 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     homepage = "https://opencode.ai/";
     license = lib.licenses.mit;
     mainProgram = "opencode";
-    platforms = [
-      "aarch64-linux"
-      "x86_64-linux"
-      "aarch64-darwin"
-      "x86_64-darwin"
-    ];
+    inherit (node_modules.meta) platforms;
   };
 })
