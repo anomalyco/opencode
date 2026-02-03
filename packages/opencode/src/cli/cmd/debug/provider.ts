@@ -7,12 +7,12 @@ import { Instance } from "@/project/instance"
 export const ProviderCommand = cmd({
   command: "provider",
   describe: "Provider debugging utilities",
-  builder: (yargs) => yargs.command(ProviderProbeCommand).command(ProviderDetectCommand).demandCommand(),
+  builder: (yargs) => yargs.command(ProviderDetectCommand).command(ProviderProbeCommand).demandCommand(),
   async handler() { },
 })
 
 export const ProviderDetectCommand = cmd({
-  command: "probe provider <providerId>",
+  command: "detect <providerId>",
   describe: "probe models by provider ID",
   builder: (yargs) =>
     yargs
@@ -47,7 +47,7 @@ export const ProviderDetectCommand = cmd({
 })
 
 export const ProviderProbeCommand = cmd({
-  command: "probe url <url>",
+  command: "probe <url>",
   describe: "probe local provider by URL",
   builder: (yargs) =>
     yargs
