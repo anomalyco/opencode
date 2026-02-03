@@ -274,6 +274,52 @@ export const SettingsGeneral: Component = () => {
                 </Button>
               </div>
             </SettingsRow>
+
+            <SettingsRow
+              title="Content Width"
+              description="Adjust the maximum width of conversation messages"
+            >
+              <div class="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => {
+                    const current = settings.appearance.contentWidth()
+                    const widths = [200, 250, 300, 350]
+                    const currentIndex = widths.indexOf(current)
+                    if (currentIndex > 0) {
+                      settings.appearance.setContentWidth(widths[currentIndex - 1])
+                    }
+                  }}
+                  disabled={settings.appearance.contentWidth() <= 200}
+                  aria-label="Decrease content width"
+                >
+                  −
+                </Button>
+                <span class="text-14-regular text-text-strong min-w-[80px] text-center">
+                  {settings.appearance.contentWidth() === 200 && "Narrow"}
+                  {settings.appearance.contentWidth() === 250 && "Medium"}
+                  {settings.appearance.contentWidth() === 300 && "Wide"}
+                  {settings.appearance.contentWidth() === 350 && "Extra Wide"}
+                </span>
+                <Button
+                  variant="secondary"
+                  size="small"
+                  onClick={() => {
+                    const current = settings.appearance.contentWidth()
+                    const widths = [200, 250, 300, 350]
+                    const currentIndex = widths.indexOf(current)
+                    if (currentIndex >= 0 && currentIndex < widths.length - 1) {
+                      settings.appearance.setContentWidth(widths[currentIndex + 1])
+                    }
+                  }}
+                  disabled={settings.appearance.contentWidth() >= 350}
+                  aria-label="Increase content width"
+                >
+                  +
+                </Button>
+              </div>
+            </SettingsRow>
           </div>
         </div>
 

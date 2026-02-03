@@ -49,6 +49,7 @@ import { DialogSelectMcp } from "@/components/dialog-select-mcp"
 import { DialogFork } from "@/components/dialog-fork"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
+import { useSettings } from "@/context/settings"
 import { useNavigate, useParams } from "@solidjs/router"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import type { FileDiff } from "@opencode-ai/sdk/v2/client"
@@ -234,12 +235,25 @@ export default function Page() {
   const codeComponent = useCodeComponent()
   const command = useCommand()
   const language = useLanguage()
+  const settings = useSettings()
   const params = useParams()
   const navigate = useNavigate()
   const sdk = useSDK()
   const prompt = usePrompt()
   const comments = useComments()
   const permission = usePermission()
+
+  // Dynamic content width class based on user settings
+  const contentWidthClasses = createMemo(() => {
+    const width = settings.appearance.contentWidth()
+    return `md:max-w-${width} md:mx-auto 3xl:max-w-[1200px] 3xl:mx-auto 4xl:max-w-[1600px] 4xl:mx-auto 5xl:max-w-[1900px] 5xl:mx-auto`
+  })
+
+  // Content width classes without mx-auto (for message containers)
+  const contentWidthClassesNoCenter = createMemo(() => {
+    const width = settings.appearance.contentWidth()
+    return `md:max-w-${width} 3xl:max-w-[1200px] 4xl:max-w-[1600px] 5xl:max-w-[1900px]`
+  })
 
   const request = createMemo(() => {
     const sessionID = params.id
@@ -1950,8 +1964,7 @@ export default function Page() {
                               "sticky top-0 z-30 bg-background-stronger": true,
                               "w-full": true,
                               "px-4 md:px-6": true,
-                              "md:max-w-200 md:mx-auto 3xl:max-w-[1200px] 3xl:mx-auto 4xl:max-w-[1600px] 4xl:mx-auto 5xl:max-w-[1900px] 5xl:mx-auto":
-                                centered(),
+                              [contentWidthClasses()]: centered(),
                             }}
                           >
                             <div class="h-10 flex items-center gap-1">
@@ -1979,8 +1992,7 @@ export default function Page() {
                           class="flex flex-col gap-32 items-start justify-start pb-[calc(var(--prompt-height,8rem)+64px)] md:pb-[calc(var(--prompt-height,10rem)+64px)] transition-[margin]"
                           classList={{
                             "w-full": true,
-                            "md:max-w-200 md:mx-auto 3xl:max-w-[1200px] 3xl:mx-auto 4xl:max-w-[1600px] 4xl:mx-auto 5xl:max-w-[1900px] 5xl:mx-auto":
-                              centered(),
+                            [contentWidthClasses()]: centered(),
                             "mt-0.5": centered(),
                             "mt-0": !centered(),
                           }}
@@ -2033,7 +2045,7 @@ export default function Page() {
                                   data-message-id={message.id}
                                   classList={{
                                     "min-w-0 w-full max-w-full": true,
-                                    "md:max-w-200 3xl:max-w-[1200px] 4xl:max-w-[1600px] 5xl:max-w-[1900px]": centered(),
+                                    [contentWidthClassesNoCenter()]: centered(),
                                   }}
                                 >
                                   <SessionTurn
@@ -2090,7 +2102,7 @@ export default function Page() {
             <div
               classList={{
                 "w-full px-4 pointer-events-auto": true,
-                "md:max-w-200 3xl:max-w-[1200px] 4xl:max-w-[1600px] 5xl:max-w-[1900px]": centered(),
+                [contentWidthClassesNoCenter()]: centered(),
               }}
             >
               <Show when={request()} keyed>
