@@ -74,6 +74,7 @@ export const dict = {
   "command.model.variant.cycle.description": "다음 생각 수준으로 전환",
   "command.permissions.autoaccept.enable": "편집 자동 수락",
   "command.permissions.autoaccept.disable": "편집 자동 수락 중지",
+  "command.workspace.toggle": "작업 공간 전환",
   "command.session.undo": "실행 취소",
   "command.session.undo.description": "마지막 메시지 실행 취소",
   "command.session.redo": "다시 실행",
@@ -350,6 +351,11 @@ export const dict = {
   "toast.permissions.autoaccept.on.description": "편집 및 쓰기 권한이 자동으로 승인됩니다",
   "toast.permissions.autoaccept.off.title": "편집 자동 수락 중지됨",
   "toast.permissions.autoaccept.off.description": "편집 및 쓰기 권한 승인이 필요합니다",
+
+  "toast.workspace.enabled.title": "작업 공간 활성화됨",
+  "toast.workspace.enabled.description": "이제 사이드바에 여러 작업 트리가 표시됩니다",
+  "toast.workspace.disabled.title": "작업 공간 비활성화됨",
+  "toast.workspace.disabled.description": "사이드바에 메인 작업 트리만 표시됩니다",
 
   "toast.model.none.title": "선택된 모델 없음",
   "toast.model.none.description": "이 세션을 요약하려면 공급자를 연결하세요",

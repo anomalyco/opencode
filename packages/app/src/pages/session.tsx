@@ -500,9 +500,7 @@ export default function Page() {
     const out = new Map<string, "add" | "del" | "mix">()
     for (const diff of diffs()) {
       const file = normalize(diff.file)
-      const add = diff.additions > 0
-      const del = diff.deletions > 0
-      const kind = add && del ? "mix" : add ? "add" : del ? "del" : "mix"
+      const kind = diff.status === "added" ? "add" : diff.status === "deleted" ? "del" : "mix"
 
       out.set(file, kind)
 
