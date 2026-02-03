@@ -1,6 +1,6 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
 import { Persist, persisted } from "@/utils/persist"
@@ -36,15 +36,21 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       createStore({
         list: [] as string[],
         projects: {} as Record<string, StoredProject[]>,
+        lastProject: {} as Record<string, string>,
       }),
     )
 
-    const [active, setActiveRaw] = createSignal("")
+    const [state, setState] = createStore({
+      active: "",
+      healthy: undefined as boolean | undefined,
+    })
+
+    const healthy = () => state.healthy
 
     function setActive(input: string) {
       const url = normalizeServerUrl(input)
       if (!url) return
-      setActiveRaw(url)
+      setState("active", url)
     }
 
     function add(input: string) {
@@ -53,7 +59,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
       const fallback = normalizeServerUrl(props.defaultUrl)
       if (fallback && url === fallback) {
-        setActiveRaw(url)
+        setState("active", url)
         return
       }
 
@@ -61,7 +67,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         if (!store.list.includes(url)) {
           setStore("list", store.list.length, url)
         }
-        setActiveRaw(url)
+        setState("active", url)
       })
     }
 
@@ -70,31 +76,30 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       if (!url) return
 
       const list = store.list.filter((x) => x !== url)
-      const next = active() === url ? (list[0] ?? normalizeServerUrl(props.defaultUrl) ?? "") : active()
+      const next = state.active === url ? (list[0] ?? normalizeServerUrl(props.defaultUrl) ?? "") : state.active
 
       batch(() => {
         setStore("list", list)
-        setActiveRaw(next)
+        setState("active", next)
       })
     }
 
     createEffect(() => {
       if (!ready()) return
-      if (active()) return
+      if (state.active) return
       const url = normalizeServerUrl(props.defaultUrl)
       if (!url) return
-      setActiveRaw(url)
+      setState("active", url)
     })
 
-    const isReady = createMemo(() => ready() && !!active())
-
-    const [healthy, setHealthy] = createSignal<boolean | undefined>(undefined)
+    const isReady = createMemo(() => ready() && !!state.active)
 
     const check = (url: string) => {
+      const signal = (AbortSignal as unknown as { timeout?: (ms: number) => AbortSignal }).timeout?.(3000)
       const sdk = createOpencodeClient({
         baseUrl: url,
         fetch: platform.fetch,
-        signal: AbortSignal.timeout(3000),
+        signal,
       })
       return sdk.global
         .health()
@@ -103,10 +108,10 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     }
 
     createEffect(() => {
-      const url = active()
+      const url = state.active
       if (!url) return
 
-      setHealthy(undefined)
+      setState("healthy", undefined)
 
       let alive = true
       let busy = false
@@ -117,7 +122,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         void check(url)
           .then((next) => {
             if (!alive) return
-            setHealthy(next)
+            setState("healthy", next)
           })
           .finally(() => {
             busy = false
@@ -133,7 +138,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       })
     })
 
-    const origin = createMemo(() => projectsKey(active()))
+    const origin = createMemo(() => projectsKey(state.active))
     const projectsList = createMemo(() => store.projects[origin()] ?? [])
     const isLocal = createMemo(() => origin() === "local")
 
@@ -142,10 +147,10 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       healthy,
       isLocal,
       get url() {
-        return active()
+        return state.active
       },
       get name() {
-        return serverDisplayName(active())
+        return serverDisplayName(state.active)
       },
       get list() {
         return store.list
@@ -196,6 +201,16 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
           const [item] = result.splice(fromIndex, 1)
           result.splice(toIndex, 0, item)
           setStore("projects", key, result)
+        },
+        last() {
+          const key = origin()
+          if (!key) return
+          return store.lastProject[key]
+        },
+        touch(directory: string) {
+          const key = origin()
+          if (!key) return
+          setStore("lastProject", key, directory)
         },
       },
     }

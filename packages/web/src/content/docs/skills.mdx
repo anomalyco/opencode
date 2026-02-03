@@ -13,8 +13,8 @@ Skills are loaded on-demand via the native `skill` tool—agents see available s
 Create one folder per skill name and put a `SKILL.md` inside it.
 OpenCode searches these locations:
 
-- Project config: `.opencode/skill/<name>/SKILL.md`
-- Global config: `~/.config/opencode/skill/<name>/SKILL.md`
+- Project config: `.opencode/skills/<name>/SKILL.md`
+- Global config: `~/.config/opencode/skills/<name>/SKILL.md`
 - Project Claude-compatible: `.claude/skills/<name>/SKILL.md`
 - Global Claude-compatible: `~/.claude/skills/<name>/SKILL.md`
 
@@ -23,9 +23,9 @@ OpenCode searches these locations:
 ## Understand discovery
 
 For project-local paths, OpenCode walks up from your current working directory until it reaches the git worktree.
-It loads any matching `skill/*/SKILL.md` in `.opencode/` and any matching `.claude/skills/*/SKILL.md` along the way.
+It loads any matching `skills/*/SKILL.md` in `.opencode/` and any matching `.claude/skills/*/SKILL.md` along the way.
 
-Global definitions are also loaded from `~/.config/opencode/skill/*/SKILL.md` and `~/.claude/skills/*/SKILL.md`.
+Global definitions are also loaded from `~/.config/opencode/skills/*/SKILL.md` and `~/.claude/skills/*/SKILL.md`.
 
 ---
 
@@ -71,7 +71,7 @@ Keep it specific enough for the agent to choose correctly.
 
 ## Use an example
 
-Create `.opencode/skill/git-release/SKILL.md` like this:
+Create `.opencode/skills/git-release/SKILL.md` like this:
 
 ```markdown
 ---

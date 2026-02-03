@@ -1,5 +1,8 @@
 import { createMemo, createSignal, For } from "solid-js"
-import { useTheme } from "@tui/context/theme"
+import { DEFAULT_THEMES, useTheme } from "@tui/context/theme"
+
+const themeCount = Object.keys(DEFAULT_THEMES).length
+const themeTip = `Use {highlight}/theme{/highlight} or {highlight}Ctrl+X T{/highlight} to switch between ${themeCount} built-in themes`
 
 type TipPart = { text: string; highlight: boolean }
 
@@ -57,7 +60,7 @@ const TIPS = [
   "Press {highlight}Ctrl+X E{/highlight} or {highlight}/editor{/highlight} to compose messages in your external editor",
   "Run {highlight}/init{/highlight} to auto-generate project rules based on your codebase",
   "Run {highlight}/models{/highlight} or {highlight}Ctrl+X M{/highlight} to see and switch between available AI models",
-  "Use {highlight}/theme{/highlight} or {highlight}Ctrl+X T{/highlight} to switch between 50+ built-in themes",
+  themeTip,
   "Press {highlight}Ctrl+X N{/highlight} or {highlight}/new{/highlight} to start a fresh conversation session",
   "Use {highlight}/sessions{/highlight} or {highlight}Ctrl+X L{/highlight} to list and continue previous conversations",
   "Run {highlight}/compact{/highlight} to summarize long sessions near context limits",
@@ -97,13 +100,13 @@ const TIPS = [
   'Set {highlight}"formatter": false{/highlight} in config to disable all auto-formatting',
   "Define custom formatter commands with file extensions in config",
   "OpenCode uses LSP servers for intelligent code analysis",
-  "Create {highlight}.ts{/highlight} files in {highlight}.opencode/tool/{/highlight} to define new LLM tools",
+  "Create {highlight}.ts{/highlight} files in {highlight}.opencode/tools/{/highlight} to define new LLM tools",
   "Tool definitions can invoke scripts written in Python, Go, etc",
   "Add {highlight}.ts{/highlight} files to {highlight}.opencode/plugin/{/highlight} for event hooks",
   "Use plugins to send OS notifications when sessions complete",
   "Create a plugin to prevent OpenCode from reading sensitive files",
   "Use {highlight}opencode run{/highlight} for non-interactive scripting",
-  "Use {highlight}opencode run --continue{/highlight} to resume the last session",
+  "Use {highlight}opencode --continue{/highlight} to resume the last session",
   "Use {highlight}opencode run -f file.ts{/highlight} to attach files via CLI",
   "Use {highlight}--format json{/highlight} for machine-readable output in scripts",
   "Run {highlight}opencode serve{/highlight} for headless API access to OpenCode",

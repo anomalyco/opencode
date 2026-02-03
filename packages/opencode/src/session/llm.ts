@@ -1,4 +1,3 @@
-import os from "os"
 import { Installation } from "@/installation"
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
@@ -9,7 +8,8 @@ import {
   type StreamTextResult,
   type Tool,
   type ToolSet,
-  extractReasoningMiddleware,
+  tool,
+  jsonSchema,
 } from "ai"
 import { clone, mergeDeep, pipe } from "remeda"
 import { ProviderTransform } from "@/provider/transform"
@@ -51,6 +51,7 @@ export namespace LLM {
       .tag("sessionID", input.sessionID)
       .tag("small", (input.small ?? false).toString())
       .tag("agent", input.agent.name)
+      .tag("mode", input.agent.mode)
     l.info("stream", {
       modelID: input.model.id,
       providerID: input.model.providerID,
@@ -63,7 +64,7 @@ export namespace LLM {
     ])
     const isCodex = provider.id === "openai" && auth?.type === "oauth"
 
-    const system = SystemPrompt.header(input.model.providerID)
+    const system = []
     system.push(
       [
         // use agent prompt otherwise provider prompt
@@ -80,7 +81,11 @@ export namespace LLM {
 
     const header = system[0]
     const original = clone(system)
-    await Plugin.trigger("experimental.chat.system.transform", { sessionID: input.sessionID }, { system })
+    await Plugin.trigger(
+      "experimental.chat.system.transform",
+      { sessionID: input.sessionID, model: input.model },
+      { system },
+    )
     if (system.length === 0) {
       system.push(...original)
     }
@@ -129,16 +134,51 @@ export namespace LLM {
       },
     )
 
-    const maxOutputTokens = isCodex
-      ? undefined
-      : ProviderTransform.maxOutputTokens(
-          input.model.api.npm,
-          params.options,
-          input.model.limit.output,
-          OUTPUT_TOKEN_MAX,
-        )
+    const { headers } = await Plugin.trigger(
+      "chat.headers",
+      {
+        sessionID: input.sessionID,
+        agent: input.agent,
+        model: input.model,
+        provider,
+        message: input.user,
+      },
+      {
+        headers: {},
+      },
+    )
+
+    const maxOutputTokens =
+      isCodex || provider.id.includes("github-copilot")
+        ? undefined
+        : ProviderTransform.maxOutputTokens(
+            input.model.api.npm,
+            params.options,
+            input.model.limit.output,
+            OUTPUT_TOKEN_MAX,
+          )
 
     const tools = await resolveTools(input)
+
+    // LiteLLM and some Anthropic proxies require the tools parameter to be present
+    // when message history contains tool calls, even if no tools are being used.
+    // Add a dummy tool that is never called to satisfy this validation.
+    // This is enabled for:
+    // 1. Providers with "litellm" in their ID or API ID (auto-detected)
+    // 2. Providers with explicit "litellmProxy: true" option (opt-in for custom gateways)
+    const isLiteLLMProxy =
+      provider.options?.["litellmProxy"] === true ||
+      input.model.providerID.toLowerCase().includes("litellm") ||
+      input.model.api.id.toLowerCase().includes("litellm")
+
+    if (isLiteLLMProxy && Object.keys(tools).length === 0 && hasToolCalls(input.messages)) {
+      tools["_noop"] = tool({
+        description:
+          "Placeholder for LiteLLM/Anthropic proxy compatibility - required when message history contains tool calls but no active tools are needed",
+        inputSchema: jsonSchema({ type: "object", properties: {} }),
+        execute: async () => ({ output: "", title: "", metadata: {} }),
+      })
+    }
 
     return streamText({
       onError(error) {
@@ -176,13 +216,6 @@ export namespace LLM {
       maxOutputTokens,
       abortSignal: input.abort,
       headers: {
-        ...(isCodex
-          ? {
-              originator: "opencode",
-              "User-Agent": `opencode/${Installation.VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`,
-              session_id: input.sessionID,
-            }
-          : undefined),
         ...(input.model.providerID.startsWith("opencode")
           ? {
               "x-opencode-project": Instance.project.id,
@@ -190,24 +223,22 @@ export namespace LLM {
               "x-opencode-request": input.user.id,
               "x-opencode-client": Flag.OPENCODE_CLIENT,
             }
-          : undefined),
+          : input.model.providerID !== "anthropic"
+            ? {
+                "User-Agent": `opencode/${Installation.VERSION}`,
+              }
+            : undefined),
         ...input.model.headers,
+        ...headers,
       },
       maxRetries: input.retries ?? 0,
       messages: [
-        ...(isCodex
-          ? [
-              {
-                role: "user",
-                content: system.join("\n\n"),
-              } as ModelMessage,
-            ]
-          : system.map(
-              (x): ModelMessage => ({
-                role: "system",
-                content: x,
-              }),
-            )),
+        ...system.map(
+          (x): ModelMessage => ({
+            role: "system",
+            content: x,
+          }),
+        ),
         ...input.messages,
       ],
       model: wrapLanguageModel({
@@ -222,10 +253,15 @@ export namespace LLM {
               return args.params
             },
           },
-          extractReasoningMiddleware({ tagName: "think", startWithReasoning: false }),
         ],
       }),
-      experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
+      experimental_telemetry: {
+        isEnabled: cfg.experimental?.openTelemetry,
+        metadata: {
+          userId: cfg.username ?? "unknown",
+          sessionId: input.sessionID,
+        },
+      },
     })
   }
 
@@ -237,5 +273,17 @@ export namespace LLM {
       }
     }
     return input.tools
+  }
+
+  // Check if messages contain any tool-call content
+  // Used to determine if a dummy tool should be added for LiteLLM proxy compatibility
+  export function hasToolCalls(messages: ModelMessage[]): boolean {
+    for (const msg of messages) {
+      if (!Array.isArray(msg.content)) continue
+      for (const part of msg.content) {
+        if (part.type === "tool-call" || part.type === "tool-result") return true
+      }
+    }
+    return false
   }
 }

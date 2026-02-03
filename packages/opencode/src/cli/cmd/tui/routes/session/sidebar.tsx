@@ -73,6 +73,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
       <box
         backgroundColor={theme.backgroundPanel}
         width={42}
+        height="100%"
         paddingTop={1}
         paddingBottom={1}
         paddingLeft={2}
@@ -239,7 +240,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                     {(item) => {
                       return (
                         <box flexDirection="row" gap={1} justifyContent="space-between">
-                          <text fg={theme.textMuted} truncate={true} wrapMode="none">
+                          <text fg={theme.textMuted} wrapMode="none">
                             {item.file}
                           </text>
                           <box flexDirection="row" gap={1} flexShrink={0}>

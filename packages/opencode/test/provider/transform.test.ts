@@ -103,6 +103,78 @@ describe("ProviderTransform.options - setCacheKey", () => {
   })
 })
 
+describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
+  const sessionID = "test-session-123"
+
+  const createGpt5Model = (apiId: string) =>
+    ({
+      id: `openai/${apiId}`,
+      providerID: "openai",
+      api: {
+        id: apiId,
+        url: "https://api.openai.com",
+        npm: "@ai-sdk/openai",
+      },
+      name: apiId,
+      capabilities: {
+        temperature: true,
+        reasoning: true,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: false },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0.03, output: 0.06, cache: { read: 0.001, write: 0.002 } },
+      limit: { context: 128000, output: 4096 },
+      status: "active",
+      options: {},
+      headers: {},
+    }) as any
+
+  test("gpt-5.2 should have textVerbosity set to low", () => {
+    const model = createGpt5Model("gpt-5.2")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.textVerbosity).toBe("low")
+  })
+
+  test("gpt-5.1 should have textVerbosity set to low", () => {
+    const model = createGpt5Model("gpt-5.1")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.textVerbosity).toBe("low")
+  })
+
+  test("gpt-5.2-chat-latest should NOT have textVerbosity set (only supports medium)", () => {
+    const model = createGpt5Model("gpt-5.2-chat-latest")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.textVerbosity).toBeUndefined()
+  })
+
+  test("gpt-5.1-chat-latest should NOT have textVerbosity set (only supports medium)", () => {
+    const model = createGpt5Model("gpt-5.1-chat-latest")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.textVerbosity).toBeUndefined()
+  })
+
+  test("gpt-5.2-chat should NOT have textVerbosity set", () => {
+    const model = createGpt5Model("gpt-5.2-chat")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.textVerbosity).toBeUndefined()
+  })
+
+  test("gpt-5-chat should NOT have textVerbosity set", () => {
+    const model = createGpt5Model("gpt-5-chat")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.textVerbosity).toBeUndefined()
+  })
+
+  test("gpt-5.2-codex should NOT have textVerbosity set (codex models excluded)", () => {
+    const model = createGpt5Model("gpt-5.2-codex")
+    const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })
+    expect(result.textVerbosity).toBeUndefined()
+  })
+})
+
 describe("ProviderTransform.maxOutputTokens", () => {
   test("returns 32k when modelLimit > 32k", () => {
     const modelLimit = 100000
@@ -218,6 +290,116 @@ describe("ProviderTransform.schema - gemini array items", () => {
 
     expect(result.properties.nodes.items).toBeDefined()
     expect(result.properties.edges.items.type).toBe("string")
+  })
+})
+
+describe("ProviderTransform.schema - gemini non-object properties removal", () => {
+  const geminiModel = {
+    providerID: "google",
+    api: {
+      id: "gemini-3-pro",
+    },
+  } as any
+
+  test("removes properties from non-object types", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        data: {
+          type: "string",
+          properties: { invalid: { type: "string" } },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.data.type).toBe("string")
+    expect(result.properties.data.properties).toBeUndefined()
+  })
+
+  test("removes required from non-object types", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        data: {
+          type: "array",
+          items: { type: "string" },
+          required: ["invalid"],
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.data.type).toBe("array")
+    expect(result.properties.data.required).toBeUndefined()
+  })
+
+  test("removes properties and required from nested non-object types", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        outer: {
+          type: "object",
+          properties: {
+            inner: {
+              type: "number",
+              properties: { bad: { type: "string" } },
+              required: ["bad"],
+            },
+          },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.outer.properties.inner.type).toBe("number")
+    expect(result.properties.outer.properties.inner.properties).toBeUndefined()
+    expect(result.properties.outer.properties.inner.required).toBeUndefined()
+  })
+
+  test("keeps properties and required on object types", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        data: {
+          type: "object",
+          properties: { name: { type: "string" } },
+          required: ["name"],
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.data.type).toBe("object")
+    expect(result.properties.data.properties).toBeDefined()
+    expect(result.properties.data.required).toEqual(["name"])
+  })
+
+  test("does not affect non-gemini providers", () => {
+    const openaiModel = {
+      providerID: "openai",
+      api: {
+        id: "gpt-4",
+      },
+    } as any
+
+    const schema = {
+      type: "object",
+      properties: {
+        data: {
+          type: "string",
+          properties: { invalid: { type: "string" } },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(openaiModel, schema) as any
+
+    expect(result.properties.data.properties).toBeDefined()
   })
 })
 
@@ -649,7 +831,7 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
     headers: {},
   } as any
 
-  test("strips itemId and reasoningEncryptedContent when store=false", () => {
+  test("preserves itemId and reasoningEncryptedContent when store=false", () => {
     const msgs = [
       {
         role: "assistant",
@@ -680,12 +862,11 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
     const result = ProviderTransform.message(msgs, openaiModel, { store: false }) as any[]
 
     expect(result).toHaveLength(1)
-    expect(result[0].content[0].providerOptions?.openai?.itemId).toBeUndefined()
-    expect(result[0].content[0].providerOptions?.openai?.reasoningEncryptedContent).toBeUndefined()
-    expect(result[0].content[1].providerOptions?.openai?.itemId).toBeUndefined()
+    expect(result[0].content[0].providerOptions?.openai?.itemId).toBe("rs_123")
+    expect(result[0].content[1].providerOptions?.openai?.itemId).toBe("msg_456")
   })
 
-  test("strips itemId and reasoningEncryptedContent when store=false even when not openai", () => {
+  test("preserves itemId and reasoningEncryptedContent when store=false even when not openai", () => {
     const zenModel = {
       ...openaiModel,
       providerID: "zen",
@@ -720,12 +901,11 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
     const result = ProviderTransform.message(msgs, zenModel, { store: false }) as any[]
 
     expect(result).toHaveLength(1)
-    expect(result[0].content[0].providerOptions?.openai?.itemId).toBeUndefined()
-    expect(result[0].content[0].providerOptions?.openai?.reasoningEncryptedContent).toBeUndefined()
-    expect(result[0].content[1].providerOptions?.openai?.itemId).toBeUndefined()
+    expect(result[0].content[0].providerOptions?.openai?.itemId).toBe("rs_123")
+    expect(result[0].content[1].providerOptions?.openai?.itemId).toBe("msg_456")
   })
 
-  test("preserves other openai options when stripping itemId", () => {
+  test("preserves other openai options including itemId", () => {
     const msgs = [
       {
         role: "assistant",
@@ -746,11 +926,11 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
 
     const result = ProviderTransform.message(msgs, openaiModel, { store: false }) as any[]
 
-    expect(result[0].content[0].providerOptions?.openai?.itemId).toBeUndefined()
+    expect(result[0].content[0].providerOptions?.openai?.itemId).toBe("msg_123")
     expect(result[0].content[0].providerOptions?.openai?.otherOption).toBe("value")
   })
 
-  test("strips metadata for openai package even when store is true", () => {
+  test("preserves metadata for openai package when store is true", () => {
     const msgs = [
       {
         role: "assistant",
@@ -768,13 +948,13 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
       },
     ] as any[]
 
-    // openai package always strips itemId regardless of store value
+    // openai package preserves itemId regardless of store value
     const result = ProviderTransform.message(msgs, openaiModel, { store: true }) as any[]
 
-    expect(result[0].content[0].providerOptions?.openai?.itemId).toBeUndefined()
+    expect(result[0].content[0].providerOptions?.openai?.itemId).toBe("msg_123")
   })
 
-  test("strips metadata for non-openai packages when store is false", () => {
+  test("preserves metadata for non-openai packages when store is false", () => {
     const anthropicModel = {
       ...openaiModel,
       providerID: "anthropic",
@@ -801,10 +981,86 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
       },
     ] as any[]
 
-    // store=false triggers stripping even for non-openai packages
+    // store=false preserves metadata for non-openai packages
     const result = ProviderTransform.message(msgs, anthropicModel, { store: false }) as any[]
 
-    expect(result[0].content[0].providerOptions?.openai?.itemId).toBeUndefined()
+    expect(result[0].content[0].providerOptions?.openai?.itemId).toBe("msg_123")
+  })
+
+  test("preserves metadata using providerID key when store is false", () => {
+    const opencodeModel = {
+      ...openaiModel,
+      providerID: "opencode",
+      api: {
+        id: "opencode-test",
+        url: "https://api.opencode.ai",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    }
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "text",
+            text: "Hello",
+            providerOptions: {
+              opencode: {
+                itemId: "msg_123",
+                otherOption: "value",
+              },
+            },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, opencodeModel, { store: false }) as any[]
+
+    expect(result[0].content[0].providerOptions?.opencode?.itemId).toBe("msg_123")
+    expect(result[0].content[0].providerOptions?.opencode?.otherOption).toBe("value")
+  })
+
+  test("preserves itemId across all providerOptions keys", () => {
+    const opencodeModel = {
+      ...openaiModel,
+      providerID: "opencode",
+      api: {
+        id: "opencode-test",
+        url: "https://api.opencode.ai",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    }
+    const msgs = [
+      {
+        role: "assistant",
+        providerOptions: {
+          openai: { itemId: "msg_root" },
+          opencode: { itemId: "msg_opencode" },
+          extra: { itemId: "msg_extra" },
+        },
+        content: [
+          {
+            type: "text",
+            text: "Hello",
+            providerOptions: {
+              openai: { itemId: "msg_openai_part" },
+              opencode: { itemId: "msg_opencode_part" },
+              extra: { itemId: "msg_extra_part" },
+            },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, opencodeModel, { store: false }) as any[]
+
+    expect(result[0].providerOptions?.openai?.itemId).toBe("msg_root")
+    expect(result[0].providerOptions?.opencode?.itemId).toBe("msg_opencode")
+    expect(result[0].providerOptions?.extra?.itemId).toBe("msg_extra")
+    expect(result[0].content[0].providerOptions?.openai?.itemId).toBe("msg_openai_part")
+    expect(result[0].content[0].providerOptions?.opencode?.itemId).toBe("msg_opencode_part")
+    expect(result[0].content[0].providerOptions?.extra?.itemId).toBe("msg_extra_part")
   })
 
   test("does not strip metadata for non-openai packages when store is not false", () => {
@@ -840,6 +1096,123 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
   })
 })
 
+describe("ProviderTransform.message - providerOptions key remapping", () => {
+  const createModel = (providerID: string, npm: string) =>
+    ({
+      id: `${providerID}/test-model`,
+      providerID,
+      api: {
+        id: "test-model",
+        url: "https://api.test.com",
+        npm,
+      },
+      name: "Test Model",
+      capabilities: {
+        temperature: true,
+        reasoning: false,
+        attachment: true,
+        toolcall: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 0.001, output: 0.002, cache: { read: 0.0001, write: 0.0002 } },
+      limit: { context: 128000, output: 8192 },
+      status: "active",
+      options: {},
+      headers: {},
+    }) as any
+
+  test("azure keeps 'azure' key and does not remap to 'openai'", () => {
+    const model = createModel("azure", "@ai-sdk/azure")
+    const msgs = [
+      {
+        role: "user",
+        content: "Hello",
+        providerOptions: {
+          azure: { someOption: "value" },
+        },
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {})
+
+    expect(result[0].providerOptions?.azure).toEqual({ someOption: "value" })
+    expect(result[0].providerOptions?.openai).toBeUndefined()
+  })
+
+  test("copilot remaps providerID to 'copilot' key", () => {
+    const model = createModel("github-copilot", "@ai-sdk/github-copilot")
+    const msgs = [
+      {
+        role: "user",
+        content: "Hello",
+        providerOptions: {
+          copilot: { someOption: "value" },
+        },
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {})
+
+    expect(result[0].providerOptions?.copilot).toEqual({ someOption: "value" })
+    expect(result[0].providerOptions?.["github-copilot"]).toBeUndefined()
+  })
+
+  test("bedrock remaps providerID to 'bedrock' key", () => {
+    const model = createModel("my-bedrock", "@ai-sdk/amazon-bedrock")
+    const msgs = [
+      {
+        role: "user",
+        content: "Hello",
+        providerOptions: {
+          "my-bedrock": { someOption: "value" },
+        },
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {})
+
+    expect(result[0].providerOptions?.bedrock).toEqual({ someOption: "value" })
+    expect(result[0].providerOptions?.["my-bedrock"]).toBeUndefined()
+  })
+})
+
+describe("ProviderTransform.message - claude w/bedrock custom inference profile", () => {
+  test("adds cachePoint", () => {
+    const model = {
+      id: "amazon-bedrock/custom-claude-sonnet-4.5",
+      providerID: "amazon-bedrock",
+      api: {
+        id: "arn:aws:bedrock:xxx:yyy:application-inference-profile/zzz",
+        url: "https://api.test.com",
+        npm: "@ai-sdk/amazon-bedrock",
+      },
+      name: "Custom inference profile",
+      capabilities: {},
+      options: {},
+      headers: {},
+    } as any
+
+    const msgs = [
+      {
+        role: "user",
+        content: "Hello",
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, model, {})
+
+    expect(result[0].providerOptions?.bedrock).toEqual(
+      expect.objectContaining({
+        cachePoint: {
+          type: "default",
+        },
+      }),
+    )
+  })
+})
+
 describe("ProviderTransform.variants", () => {
   const createMockModel = (overrides: Partial<any> = {}): any => ({
     id: "test/test-model",
@@ -865,8 +1238,8 @@ describe("ProviderTransform.variants", () => {
       cache: { read: 0.0001, write: 0.0002 },
     },
     limit: {
-      context: 128000,
-      output: 8192,
+      context: 200_000,
+      output: 64_000,
     },
     status: "active",
     options: {},
@@ -984,7 +1357,7 @@ describe("ProviderTransform.variants", () => {
       expect(Object.keys(result)).toEqual(["none", "minimal", "low", "medium", "high", "xhigh"])
     })
 
-    test("grok-4 returns OPENAI_EFFORTS with reasoning", () => {
+    test("grok-4 returns empty object", () => {
       const model = createMockModel({
         id: "openrouter/grok-4",
         providerID: "openrouter",
@@ -995,7 +1368,23 @@ describe("ProviderTransform.variants", () => {
         },
       })
       const result = ProviderTransform.variants(model)
-      expect(Object.keys(result)).toEqual(["none", "minimal", "low", "medium", "high", "xhigh"])
+      expect(result).toEqual({})
+    })
+
+    test("grok-3-mini returns low and high with reasoning", () => {
+      const model = createMockModel({
+        id: "openrouter/grok-3-mini",
+        providerID: "openrouter",
+        api: {
+          id: "grok-3-mini",
+          url: "https://openrouter.ai",
+          npm: "@openrouter/ai-sdk-provider",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "high"])
+      expect(result.low).toEqual({ reasoning: { effort: "low" } })
+      expect(result.high).toEqual({ reasoning: { effort: "high" } })
     })
   })
 
@@ -1014,6 +1403,102 @@ describe("ProviderTransform.variants", () => {
       expect(Object.keys(result)).toEqual(["none", "minimal", "low", "medium", "high", "xhigh"])
       expect(result.low).toEqual({ reasoningEffort: "low" })
       expect(result.high).toEqual({ reasoningEffort: "high" })
+    })
+  })
+
+  describe("@ai-sdk/github-copilot", () => {
+    test("standard models return low, medium, high", () => {
+      const model = createMockModel({
+        id: "gpt-4.5",
+        providerID: "github-copilot",
+        api: {
+          id: "gpt-4.5",
+          url: "https://api.githubcopilot.com",
+          npm: "@ai-sdk/github-copilot",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+      expect(result.low).toEqual({
+        reasoningEffort: "low",
+        reasoningSummary: "auto",
+        include: ["reasoning.encrypted_content"],
+      })
+    })
+
+    test("gpt-5.1-codex-max includes xhigh", () => {
+      const model = createMockModel({
+        id: "gpt-5.1-codex-max",
+        providerID: "github-copilot",
+        api: {
+          id: "gpt-5.1-codex-max",
+          url: "https://api.githubcopilot.com",
+          npm: "@ai-sdk/github-copilot",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh"])
+    })
+
+    test("gpt-5.1-codex-mini does not include xhigh", () => {
+      const model = createMockModel({
+        id: "gpt-5.1-codex-mini",
+        providerID: "github-copilot",
+        api: {
+          id: "gpt-5.1-codex-mini",
+          url: "https://api.githubcopilot.com",
+          npm: "@ai-sdk/github-copilot",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+    })
+
+    test("gpt-5.1-codex does not include xhigh", () => {
+      const model = createMockModel({
+        id: "gpt-5.1-codex",
+        providerID: "github-copilot",
+        api: {
+          id: "gpt-5.1-codex",
+          url: "https://api.githubcopilot.com",
+          npm: "@ai-sdk/github-copilot",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+    })
+
+    test("gpt-5.2 includes xhigh", () => {
+      const model = createMockModel({
+        id: "gpt-5.2",
+        providerID: "github-copilot",
+        api: {
+          id: "gpt-5.2",
+          url: "https://api.githubcopilot.com",
+          npm: "@ai-sdk/github-copilot",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh"])
+      expect(result.xhigh).toEqual({
+        reasoningEffort: "xhigh",
+        reasoningSummary: "auto",
+        include: ["reasoning.encrypted_content"],
+      })
+    })
+
+    test("gpt-5.2-codex includes xhigh", () => {
+      const model = createMockModel({
+        id: "gpt-5.2-codex",
+        providerID: "github-copilot",
+        api: {
+          id: "gpt-5.2-codex",
+          url: "https://api.githubcopilot.com",
+          npm: "@ai-sdk/github-copilot",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "medium", "high", "xhigh"])
     })
   })
 
@@ -1054,7 +1539,7 @@ describe("ProviderTransform.variants", () => {
   })
 
   describe("@ai-sdk/xai", () => {
-    test("returns WIDELY_SUPPORTED_EFFORTS with reasoningEffort", () => {
+    test("grok-3 returns empty object", () => {
       const model = createMockModel({
         id: "xai/grok-3",
         providerID: "xai",
@@ -1065,7 +1550,21 @@ describe("ProviderTransform.variants", () => {
         },
       })
       const result = ProviderTransform.variants(model)
-      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+      expect(result).toEqual({})
+    })
+
+    test("grok-3-mini returns low and high with reasoningEffort", () => {
+      const model = createMockModel({
+        id: "xai/grok-3-mini",
+        providerID: "xai",
+        api: {
+          id: "grok-3-mini",
+          url: "https://api.x.ai",
+          npm: "@ai-sdk/xai",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["low", "high"])
       expect(result.low).toEqual({ reasoningEffort: "low" })
       expect(result.high).toEqual({ reasoningEffort: "high" })
     })

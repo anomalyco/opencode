@@ -51,6 +51,10 @@ Config sources are loaded in this order (later sources override earlier ones):
 
 This means project configs can override global defaults, and global configs can override remote organizational defaults.
 
+:::note
+The `.opencode` and `~/.config/opencode` directories use **plural names** for subdirectories: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/`, and `themes/`. Singular names (e.g., `agent/`) are also supported for backwards compatibility.
+:::
+
 ---
 
 ### Remote
@@ -330,7 +334,7 @@ You can configure specialized agents for specific tasks through the `agent` opti
 }
 ```
 
-You can also define agents using markdown files in `~/.config/opencode/agent/` or `.opencode/agent/`. [Learn more here](/docs/agents).
+You can also define agents using markdown files in `~/.config/opencode/agents/` or `.opencode/agents/`. [Learn more here](/docs/agents).
 
 ---
 
@@ -394,7 +398,7 @@ You can configure custom commands for repetitive tasks through the `command` opt
 }
 ```
 
-You can also define commands using markdown files in `~/.config/opencode/command/` or `.opencode/command/`. [Learn more here](/docs/commands).
+You can also define commands using markdown files in `~/.config/opencode/commands/` or `.opencode/commands/`. [Learn more here](/docs/commands).
 
 ---
 
@@ -425,6 +429,7 @@ OpenCode will automatically download any new updates when it starts up. You can 
 ```
 
 If you don't want updates but want to be notified when a new version is available, set `autoupdate` to `"notify"`.
+Notice that this only works if it was not installed using a package manager such as Homebrew.
 
 ---
 
@@ -529,7 +534,7 @@ You can configure MCP servers you want to use through the `mcp` option.
 
 [Plugins](/docs/plugins) extend OpenCode with custom tools, hooks, and integrations.
 
-Place plugin files in `.opencode/plugin/` or `~/.config/opencode/plugin/`. You can also load plugins from npm through the `plugin` option.
+Place plugin files in `.opencode/plugins/` or `~/.config/opencode/plugins/`. You can also load plugins from npm through the `plugin` option.
 
 ```json title="opencode.json"
 {

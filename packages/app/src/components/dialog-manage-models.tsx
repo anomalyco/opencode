@@ -1,17 +1,36 @@
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { Switch } from "@opencode-ai/ui/switch"
+import { Button } from "@opencode-ai/ui/button"
 import type { Component } from "solid-js"
 import { useLocal } from "@/context/local"
 import { popularProviders } from "@/hooks/use-providers"
+import { useLanguage } from "@/context/language"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { DialogSelectProvider } from "./dialog-select-provider"
 
 export const DialogManageModels: Component = () => {
   const local = useLocal()
+  const language = useLanguage()
+  const dialog = useDialog()
+
+  const handleConnectProvider = () => {
+    dialog.show(() => <DialogSelectProvider />)
+  }
+
   return (
-    <Dialog title="Manage models" description="Customize which models appear in the model selector.">
+    <Dialog
+      title={language.t("dialog.model.manage")}
+      description={language.t("dialog.model.manage.description")}
+      action={
+        <Button class="h-7 -my-1 text-14-medium" icon="plus-small" tabIndex={-1} onClick={handleConnectProvider}>
+          {language.t("command.provider.connect")}
+        </Button>
+      }
+    >
       <List
-        search={{ placeholder: "Search models", autofocus: true }}
-        emptyMessage="No model results"
+        search={{ placeholder: language.t("dialog.model.search.placeholder"), autofocus: true }}
+        emptyMessage={language.t("dialog.model.empty")}
         key={(x) => `${x?.provider?.id}:${x?.id}`}
         items={local.model.list()}
         filterKeys={["provider.name", "name", "id"]}

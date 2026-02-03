@@ -1,14 +1,21 @@
 import { $ } from "bun"
+import type { CliRenderer } from "@opentui/core"
 import { platform, release } from "os"
 import clipboardy from "clipboardy"
 import { lazy } from "../../../../util/lazy.js"
 import { tmpdir } from "os"
 import path from "path"
 
+const rendererRef = { current: undefined as CliRenderer | undefined }
+
 export namespace Clipboard {
   export interface Content {
     data: string
     mime: string
+  }
+
+  export function setRenderer(renderer: CliRenderer | undefined): void {
+    rendererRef.current = renderer
   }
 
   export async function read(): Promise<Content | undefined> {
@@ -110,9 +117,25 @@ export namespace Clipboard {
     if (os === "win32") {
       console.log("clipboard: using powershell")
       return async (text: string) => {
-        // need to escape backticks because powershell uses them as escape code
-        const escaped = text.replace(/"/g, '""').replace(/`/g, "``")
-        await $`powershell -NonInteractive -NoProfile -Command "Set-Clipboard -Value \"${escaped}\""`.nothrow().quiet()
+        // Pipe via stdin to avoid PowerShell string interpolation ($env:FOO, $(), etc.)
+        const proc = Bun.spawn(
+          [
+            "powershell.exe",
+            "-NonInteractive",
+            "-NoProfile",
+            "-Command",
+            "[Console]::InputEncoding = [System.Text.Encoding]::UTF8; Set-Clipboard -Value ([Console]::In.ReadToEnd())",
+          ],
+          {
+            stdin: "pipe",
+            stdout: "ignore",
+            stderr: "ignore",
+          },
+        )
+
+        proc.stdin.write(text)
+        proc.stdin.end()
+        await proc.exited.catch(() => {})
       }
     }
 
@@ -123,6 +146,11 @@ export namespace Clipboard {
   })
 
   export async function copy(text: string): Promise<void> {
+    const renderer = rendererRef.current
+    if (renderer) {
+      const copied = renderer.copyToClipboardOSC52(text)
+      if (copied) return
+    }
     await getCopyMethod()(text)
   }
 }
