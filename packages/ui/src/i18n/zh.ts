@@ -97,6 +97,7 @@ export const dict = {
   "ui.patch.action.created": "已创建",
   "ui.patch.action.moved": "已移动",
   "ui.patch.action.patched": "已应用补丁",
+  "ui.checker.feedbackTitle": "检测 Agent 反馈",
 
   "ui.question.subtitle.answered": "{{count}} 已回答",
   "ui.question.answer.none": "(无答案)",

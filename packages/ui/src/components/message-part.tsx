@@ -324,7 +324,15 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   )
 
   const textPart = createMemo(
-    () => props.parts?.find((p) => p.type === "text" && !(p as TextPart).synthetic) as TextPart | undefined,
+    () => props.parts?.find((p) => {
+      if (p.type !== "text") return false
+      const tp = p as TextPart
+      // Include synthetic parts if they are checker feedback, otherwise exclude them
+      if (tp.synthetic) {
+        return (tp.text ?? "").trim().startsWith("[Checker Agent Feedback]:")
+      }
+      return true
+    }) as TextPart | undefined,
   )
 
   const text = createMemo(() => textPart()?.text || "")
@@ -356,8 +364,19 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
     dialog.show(() => <ImagePreview src={url} alt={alt} />)
   }
 
+  const isCheckerFeedback = createMemo(() => {
+    return text().trim().startsWith("[Checker Agent Feedback]:")
+  })
+
+  const feedbackContent = createMemo(() => {
+    if (isCheckerFeedback()) {
+      return text().replace("[Checker Agent Feedback]:", "").trim()
+    }
+    return text()
+  })
+
   const handleCopy = async () => {
-    const content = text()
+    const content = isCheckerFeedback() ? feedbackContent() : text()
     if (!content) return
     await navigator.clipboard.writeText(content)
     setCopied(true)
@@ -365,12 +384,39 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   }
 
   const toggleExpanded = () => {
-    if (!canExpand()) return
+    if (!canExpand() || isCheckerFeedback()) return
     setExpanded((value) => !value)
   }
 
   return (
-    <div data-component="user-message" data-expanded={expanded()} data-can-expand={canExpand()}>
+    <div 
+      data-component="user-message" 
+      data-expanded={expanded()} 
+      data-can-expand={canExpand()}
+      data-checker-feedback={isCheckerFeedback()}
+      style={isCheckerFeedback() ? {
+        "border": "1px solid var(--color-warning-border, #f59e0b)",
+        "background-color": "var(--color-warning-bg, rgba(245, 158, 11, 0.05))",
+        "border-radius": "6px",
+        "padding": "12px",
+        "margin": "8px 0",
+        "width": "100%"
+      } : undefined}
+    >
+      <Show when={isCheckerFeedback()}>
+        <div style={{
+          "font-weight": "bold", 
+          "color": "var(--color-warning-text, #d97706)",
+          "margin-bottom": "8px",
+          "display": "flex",
+          "align-items": "center",
+          "gap": "6px",
+          "font-size": "0.9em"
+        }}>
+          <Icon name="warning" size="small" />
+          <span>{i18n.t("ui.checker.feedbackTitle") || "Checker Agent Feedback"}</span>
+        </div>
+      </Show>
       <Show when={attachments().length > 0}>
         <div data-slot="user-message-attachments">
           <For each={attachments()}>
@@ -405,7 +451,11 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
       </Show>
       <Show when={text()}>
         <div data-slot="user-message-text" ref={(el) => (textRef = el)} onClick={toggleExpanded}>
-          <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
+          <Show when={isCheckerFeedback()} fallback={
+            <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
+          }>
+            <Markdown text={feedbackContent()} />
+          </Show>
           <button
             data-slot="user-message-expand"
             type="button"
@@ -673,8 +723,20 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const throttledText = createThrottledValue(displayText)
   const [copied, setCopied] = createSignal(false)
 
+  const isCheckerFeedback = createMemo(() => {
+    return (part.text ?? "").trim().startsWith("[Checker Agent Feedback]:")
+  })
+
+  const feedbackContent = createMemo(() => {
+    const text = throttledText()
+    if (isCheckerFeedback()) {
+      return text.replace("[Checker Agent Feedback]:", "").trim()
+    }
+    return text
+  })
+
   const handleCopy = async () => {
-    const content = displayText()
+    const content = isCheckerFeedback() ? feedbackContent() : displayText()
     if (!content) return
     await navigator.clipboard.writeText(content)
     setCopied(true)
@@ -683,9 +745,33 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 
   return (
     <Show when={throttledText()}>
-      <div data-component="text-part">
+      <div 
+        data-component="text-part" 
+        data-checker-feedback={isCheckerFeedback()}
+        style={isCheckerFeedback() ? {
+          "border": "1px solid var(--color-warning-border, #f59e0b)",
+          "background-color": "var(--color-warning-bg, rgba(245, 158, 11, 0.05))",
+          "border-radius": "6px",
+          "padding": "12px",
+          "margin": "8px 0"
+        } : undefined}
+      >
+        <Show when={isCheckerFeedback()}>
+          <div style={{
+            "font-weight": "bold", 
+            "color": "var(--color-warning-text, #d97706)",
+            "margin-bottom": "8px",
+            "display": "flex",
+            "align-items": "center",
+            "gap": "6px",
+            "font-size": "0.9em"
+          }}>
+            <Icon name="warning" size="small" />
+            <span>{i18n.t("ui.checker.feedbackTitle") || "Checker Agent Feedback"}</span>
+          </div>
+        </Show>
         <div data-slot="text-part-body">
-          <Markdown text={throttledText()} cacheKey={part.id} />
+          <Markdown text={feedbackContent()} cacheKey={part.id} />
           <div data-slot="text-part-copy-wrapper">
             <Tooltip
               value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}

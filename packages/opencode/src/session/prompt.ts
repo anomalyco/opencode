@@ -46,6 +46,7 @@ import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncation"
+import { SessionChecker } from "./checker"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -185,6 +186,7 @@ export namespace SessionPrompt {
       {
         type: "text",
         text: template,
+        synthetic: true,
       },
     ]
     const files = ConfigMarkdown.files(template)
@@ -617,6 +619,14 @@ export namespace SessionPrompt {
         tools,
         model,
       })
+      if (result === "continue" || result === "stop") {
+        SessionChecker.check({
+          sessionID,
+          messages: await Session.messages({ sessionID }),
+          model,
+          abort,
+        }).catch(() => {})
+      }
       if (result === "stop") break
       if (result === "compact") {
         await SessionCompaction.create({
@@ -1688,6 +1698,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         error: error.toObject(),
       })
       throw error
+    }
+
+    if (input.command === Command.Default.INIT) {
+      await LSP.warmup()
     }
 
     const templateParts = await resolvePromptParts(template)
