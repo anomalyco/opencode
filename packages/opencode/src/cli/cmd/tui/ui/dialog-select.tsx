@@ -177,6 +177,13 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   useKeyboard((evt) => {
     setStore("input", "keyboard")
 
+    if (evt.name === "tab") {
+      evt.preventDefault()
+      evt.stopPropagation()
+      move(evt.shift ? -1 : 1)
+      return
+    }
+
     if (evt.name === "up" || (evt.ctrl && evt.name === "p")) move(-1)
     if (evt.name === "down" || (evt.ctrl && evt.name === "n")) move(1)
     if (evt.name === "pageup") move(-10)
