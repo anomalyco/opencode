@@ -17,6 +17,7 @@ export namespace Tool {
     sessionID: string
     messageID: string
     agent: string
+    directory: string
     abort: AbortSignal
     callID?: string
     extra?: { [key: string]: any }

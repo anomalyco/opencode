@@ -387,6 +387,7 @@ export namespace SessionPrompt {
           agent: task.agent,
           messageID: assistantMessage.id,
           sessionID: sessionID,
+          directory: session.directory,
           abort,
           callID: part.callID,
           extra: { bypassAgentCheck: true },
@@ -667,6 +668,7 @@ export namespace SessionPrompt {
       abort: options.abortSignal!,
       messageID: input.processor.message.id,
       callID: options.toolCallId,
+      directory: input.session.directory,
       extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck },
       agent: input.agent.name,
       messages: input.messages,
@@ -831,6 +833,7 @@ export namespace SessionPrompt {
   }
 
   async function createUserMessage(input: PromptInput) {
+    const session = await Session.get(input.sessionID)
     const agent = await Agent.get(input.agent ?? (await Agent.defaultAgent()))
 
     const model = input.model ?? agent.model ?? (await lastModel(input.sessionID))
@@ -1030,6 +1033,7 @@ export namespace SessionPrompt {
                       abort: new AbortController().signal,
                       agent: input.agent!,
                       messageID: info.id,
+                      directory: session.directory,
                       extra: { bypassCwdCheck: true, model },
                       messages: [],
                       metadata: async () => {},
@@ -1092,6 +1096,7 @@ export namespace SessionPrompt {
                   abort: new AbortController().signal,
                   agent: input.agent!,
                   messageID: info.id,
+                  directory: session.directory,
                   extra: { bypassCwdCheck: true },
                   messages: [],
                   metadata: async () => {},
