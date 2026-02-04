@@ -1,0 +1,82 @@
+name: nix-eval
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - "flake.nix"
+      - "flake.lock"
+      - "nix/**"
+      - "packages/app/**"
+      - "packages/desktop/**"
+      - ".github/workflows/nix-eval.yml"
+  pull_request:
+    paths:
+      - "flake.nix"
+      - "flake.lock"
+      - "nix/**"
+      - "packages/app/**"
+      - "packages/desktop/**"
+      - ".github/workflows/nix-eval.yml"
+  workflow_dispatch:
+
+jobs:
+  nix-eval:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Nix
+        uses: nixbuild/nix-quick-install-action@v34
+
+      - name: Evaluate flake outputs (all systems)
+        run: |
+          set -euo pipefail
+          nix --version
+
+          echo "=== Flake metadata ==="
+          nix flake metadata
+
+          echo ""
+          echo "=== Flake structure ==="
+          nix flake show --all-systems
+
+          SYSTEMS="x86_64-linux aarch64-linux x86_64-darwin aarch64-darwin"
+          PACKAGES="opencode desktop"
+
+          echo ""
+          echo "=== Evaluating all packages for all systems ==="
+          for system in $SYSTEMS; do
+            echo ""
+            echo "--- $system ---"
+            for pkg in $PACKAGES; do
+              printf "  %s: " "$pkg"
+              if nix eval ".#packages.$system.$pkg.drvPath" --raw > /dev/null 2>&1; then
+                echo "✓"
+              else
+                echo "✗"
+                echo "::error::Evaluation failed for packages.$system.$pkg"
+                nix eval ".#packages.$system.$pkg.drvPath" --raw
+                exit 1
+              fi
+            done
+          done
+
+          echo ""
+          echo "=== Evaluating devShells for all systems ==="
+          for system in $SYSTEMS; do
+            printf "%s: " "$system"
+            if nix eval ".#devShells.$system.default.drvPath" --raw > /dev/null 2>&1; then
+              echo "✓"
+            else
+              echo "✗"
+              echo "::error::Evaluation failed for devShells.$system.default"
+              nix eval ".#devShells.$system.default.drvPath" --raw
+              exit 1
+            fi
+          done
+
+          echo ""
+          echo "=== All evaluations passed ==="
