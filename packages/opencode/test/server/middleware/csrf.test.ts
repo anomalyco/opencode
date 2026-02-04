@@ -33,6 +33,7 @@ describe("CSRF middleware", () => {
       allowedUsers: [],
       sessionPersistence: true,
       csrfVerboseErrors: false,
+      debugBrokerErrors: true,
       csrfAllowlist: [],
       twoFactorEnabled: false,
       twoFactorTokenTimeout: "5m",

@@ -1654,6 +1654,10 @@ export type AuthConfig = {
    */
   csrfVerboseErrors?: boolean
   /**
+   * Include broker error details in login responses for debugging
+   */
+  debugBrokerErrors?: boolean
+  /**
    * Additional routes to exclude from CSRF validation
    */
   csrfAllowlist?: Array<string>
@@ -2426,8 +2430,24 @@ export type AuthLoginErrors = {
   /**
    * Rate limit exceeded
    */
-  429: unknown
+  429: {
+    error: "rate_limit_exceeded"
+    message: string
+  }
+  /**
+   * Authentication broker unavailable
+   */
+  503: {
+    error: "broker_unavailable"
+    message: string
+    details?: {
+      reason: string
+      requestId: string
+    }
+  }
 }
+
+export type AuthLoginError = AuthLoginErrors[keyof AuthLoginErrors]
 
 export type AuthLoginResponses = {
   /**

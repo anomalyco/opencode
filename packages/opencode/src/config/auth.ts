@@ -47,6 +47,11 @@ export const AuthConfig = z
       .optional()
       .default(false)
       .describe("Enable verbose CSRF error messages for debugging"),
+    debugBrokerErrors: z
+      .boolean()
+      .optional()
+      .default(true)
+      .describe("Include broker error details in login responses for debugging"),
     csrfAllowlist: z
       .array(z.string())
       .optional()

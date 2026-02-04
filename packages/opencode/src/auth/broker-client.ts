@@ -155,11 +155,85 @@ export interface SpawnPtyOptions {
 /**
  * Result of an authentication attempt.
  */
+export type AuthFailureCode = "auth_failed" | "broker_unavailable" | "rate_limit_exceeded"
+
+export type BrokerUnavailableReason =
+  | "socket_missing"
+  | "conn_refused"
+  | "timeout"
+  | "invalid_response"
+  | "connection_closed"
+  | "unknown"
+
 export interface AuthResult {
   /** Whether authentication succeeded */
   success: boolean
   /** Error message if failed (generic, no internal details) */
   error?: string
+  /** Failure classification for client handling */
+  code?: AuthFailureCode
+  /** Broker unavailability reason */
+  reason?: BrokerUnavailableReason
+  /** Retry-after seconds for broker-side rate limiting */
+  retryAfterSeconds?: number
+}
+
+const RATE_LIMIT_PREFIX = "too many authentication attempts"
+
+function parseRetryAfterSeconds(message: string): number | undefined {
+  const lower = message.toLowerCase()
+  const marker = "retry after"
+  const idx = lower.indexOf(marker)
+  if (idx === -1) return undefined
+  const tail = message.slice(idx + marker.length).trim()
+  if (!tail) return undefined
+
+  const token = tail.split(",")[0]?.trim() ?? ""
+  if (!token) return undefined
+
+  const pattern = /([0-9.]+)\s*(ms|s|m|h)/gi
+  let totalSeconds = 0
+  let matched = false
+  let match: RegExpExecArray | null
+
+  while ((match = pattern.exec(token))) {
+    const value = Number.parseFloat(match[1] ?? "")
+    if (!Number.isFinite(value)) continue
+    matched = true
+    const unit = (match[2] ?? "s").toLowerCase()
+    const multiplier = unit === "ms" ? 0.001 : unit === "s" ? 1 : unit === "m" ? 60 : 3600
+    totalSeconds += value * multiplier
+  }
+
+  if (!matched) return undefined
+  return Math.max(1, Math.ceil(totalSeconds))
+}
+
+function classifyBrokerError(error: unknown): { reason: BrokerUnavailableReason; message: string } {
+  const message =
+    error instanceof Error ? error.message : typeof error === "string" ? error : "unknown broker error"
+  const code = typeof error === "object" && error
+    ? (error as { code?: string }).code
+    : undefined
+  const normalized = message.toLowerCase()
+
+  if (code === "ENOENT" || normalized.includes("socket not found")) {
+    return { reason: "socket_missing", message }
+  }
+  if (code === "ECONNREFUSED" || normalized.includes("connrefused")) {
+    return { reason: "conn_refused", message }
+  }
+  if (normalized.includes("timeout")) {
+    return { reason: "timeout", message }
+  }
+  if (normalized.includes("invalid response")) {
+    return { reason: "invalid_response", message }
+  }
+  if (normalized.includes("connection closed")) {
+    return { reason: "connection_closed", message }
+  }
+
+  return { reason: "unknown", message }
 }
 
 /**
@@ -269,18 +343,36 @@ export class BrokerClient {
         return {
           success: false,
           error: "authentication service unavailable",
+          code: "broker_unavailable",
+          reason: "invalid_response",
         }
       }
 
-      return {
-        success: response.success,
-        error: response.error,
+      if (!response.success) {
+        const errorText = response.error ?? "authentication failed"
+        if (errorText.toLowerCase().includes(RATE_LIMIT_PREFIX)) {
+          return {
+            success: false,
+            error: errorText,
+            code: "rate_limit_exceeded",
+            retryAfterSeconds: parseRetryAfterSeconds(errorText),
+          }
+        }
+        return {
+          success: false,
+          error: errorText,
+          code: "auth_failed",
+        }
       }
-    } catch {
-      // Connection errors should not expose details
+
+      return { success: true }
+    } catch (error) {
+      const classified = classifyBrokerError(error)
       return {
         success: false,
         error: "authentication service unavailable",
+        code: "broker_unavailable",
+        reason: classified.reason,
       }
     }
   }

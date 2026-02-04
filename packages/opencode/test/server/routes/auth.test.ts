@@ -31,6 +31,7 @@ let mockAuthConfig: AuthConfig = {
   allowedUsers: [],
   sessionPersistence: true,
   csrfVerboseErrors: false,
+  debugBrokerErrors: true,
   csrfAllowlist: [],
   twoFactorEnabled: false,
   twoFactorTokenTimeout: "5m",
@@ -73,6 +74,7 @@ mock.module("../../../src/config/server-auth", () => ({
         allowedUsers: [],
         sessionPersistence: true,
         csrfVerboseErrors: false,
+        debugBrokerErrors: true,
         csrfAllowlist: [],
         twoFactorEnabled: false,
         twoFactorTokenTimeout: "5m",
@@ -105,6 +107,7 @@ function setMockAuthConfig(config: Partial<AuthConfig>) {
     allowedUsers: [],
     sessionPersistence: true,
     csrfVerboseErrors: false,
+    debugBrokerErrors: true,
     csrfAllowlist: [],
     twoFactorEnabled: false,
     twoFactorTokenTimeout: "5m",
@@ -191,6 +194,53 @@ describe("POST /auth/login", () => {
     const body = await res.json()
     expect(body.error).toBe("auth_failed")
     expect(body.message).toBe("Authentication failed") // Generic, no details
+  })
+
+  test("returns 503 when broker is unavailable", async () => {
+    mockAuthenticate.mockResolvedValue({
+      success: false,
+      code: "broker_unavailable",
+      reason: "socket_missing",
+      error: "authentication service unavailable",
+    })
+
+    const res = await app.request("/auth/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Requested-With": "XMLHttpRequest",
+      },
+      body: JSON.stringify({ username: "test", password: "wrong" }),
+    })
+    expect(res.status).toBe(503)
+    const body = await res.json()
+    expect(body.error).toBe("broker_unavailable")
+    expect(body.message).toBe("Authentication service unavailable. Please try again later.")
+    expect(body.details?.reason).toBe("socket_missing")
+    expect(typeof body.details?.requestId).toBe("string")
+  })
+
+  test("returns 429 when broker rate limits", async () => {
+    mockAuthenticate.mockResolvedValue({
+      success: false,
+      code: "rate_limit_exceeded",
+      error: "too many authentication attempts, retry after 10s",
+      retryAfterSeconds: 10,
+    })
+
+    const res = await app.request("/auth/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Requested-With": "XMLHttpRequest",
+      },
+      body: JSON.stringify({ username: "test", password: "wrong" }),
+    })
+    expect(res.status).toBe(429)
+    expect(res.headers.get("Retry-After")).toBe("10")
+    const body = await res.json()
+    expect(body.error).toBe("rate_limit_exceeded")
+    expect(body.message).toBe("too many authentication attempts, retry after 10s")
   })
 
   test("returns 200 with user info on successful login", async () => {

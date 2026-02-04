@@ -382,12 +382,45 @@ export const AuthRoutes = lazy(() =>
           400: { description: "Bad request (missing fields or invalid returnUrl)" },
           401: { description: "Authentication failed" },
           403: { description: "Authentication disabled" },
-          429: { description: "Rate limit exceeded" },
+          429: {
+            description: "Rate limit exceeded",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    error: z.literal("rate_limit_exceeded"),
+                    message: z.string(),
+                  }),
+                ),
+              },
+            },
+          },
+          503: {
+            description: "Authentication broker unavailable",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    error: z.literal("broker_unavailable"),
+                    message: z.string(),
+                    details: z
+                      .object({
+                        reason: z.string(),
+                        requestId: z.string(),
+                      })
+                      .optional(),
+                  }),
+                ),
+              },
+            },
+          },
         },
       }),
       async (c) => {
+        const requestId = crypto.randomUUID()
         // 1. Check if auth is enabled
         const authConfig = ServerAuth.get()
+        const debugBrokerErrorsEnabled = authConfig.debugBrokerErrors || process.env.NODE_ENV !== "production"
         if (!authConfig.enabled) {
           return c.json({ error: "auth_disabled", message: "Authentication is not enabled" }, 403)
         }
@@ -488,6 +521,40 @@ export const AuthRoutes = lazy(() =>
           })
           // Record failure for rate limiting
           limiter?.recordFailure(c)
+
+          if (authResult.code === "broker_unavailable") {
+            const details = debugBrokerErrorsEnabled
+              ? {
+                  reason: authResult.reason ?? "unknown",
+                  requestId,
+                }
+              : undefined
+
+            return c.json(
+              {
+                error: "broker_unavailable",
+                message: "Authentication service unavailable. Please try again later.",
+                ...(details ? { details } : {}),
+              },
+              503,
+            )
+          }
+
+          if (authResult.code === "rate_limit_exceeded") {
+            const headers: Record<string, string> = {}
+            if (authResult.retryAfterSeconds) {
+              headers["Retry-After"] = authResult.retryAfterSeconds.toString()
+            }
+            return c.json(
+              {
+                error: "rate_limit_exceeded",
+                message: authResult.error ?? "Too many login attempts. Please try again later.",
+              },
+              429,
+              headers,
+            )
+          }
+
           // Generic error message - no user enumeration
           return c.json({ error: "auth_failed", message: "Authentication failed" }, 401)
         }
