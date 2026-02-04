@@ -242,35 +242,32 @@ async fn initialize(app: AppHandle) {
         } => {
             let app = app.clone();
             Some(|| {
-                tokio::time::timeout(Duration::from_secs(30), health_check.0)
-                    .then({
-                        let app = app.clone();
-                        async move |v| {
-                            let Ok(Ok(_)) = v else {
-                                let _ = child.kill();
-                                return Err(format!(
-                                    "Failed to spawn OpenCode Server. Logs:\n{}",
-                                    get_logs(app.clone()).await.unwrap()
-                                ));
-                            };
+                async move {
+                    let Ok(Ok(_)) =
+                        tokio::time::timeout(Duration::from_secs(30), health_check.0).await
+                    else {
+                        let _ = child.kill();
+                        return Err(format!(
+                            "Failed to spawn OpenCode Server. Logs:\n{}",
+                            get_logs(app.clone()).await.unwrap()
+                        ));
+                    };
+                    Ok((child, app))
+                }
+                .map_ok(move |(child, app)| {
+                    #[cfg(windows)]
+                    {
+                        let job_state = app.state::<JobObjectState>();
+                        job_state.assign_pid(child.pid());
+                    }
 
-                            Ok(child)
-                        }
-                    })
-                    .map_ok(move |child| {
-                        #[cfg(windows)]
-                        {
-                            let job_state = app.state::<JobObjectState>();
-                            job_state.assign_pid(child.pid());
-                        }
+                    app.state::<ServerState>().set_child(Some(child));
 
-                        app.state::<ServerState>().set_child(Some(child));
-
-                        ServerReadyData { url, password }
-                    })
-                    .map(move |res| {
-                        let _ = server_ready_tx.send(res);
-                    })
+                    ServerReadyData { url, password }
+                })
+                .map(move |res| {
+                    let _ = server_ready_tx.send(res);
+                })
             })
         }
         ServerConnection::Existing { url } => {
