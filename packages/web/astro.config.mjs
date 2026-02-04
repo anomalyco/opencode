@@ -59,6 +59,20 @@ export default defineConfig({
             sizes: "180x180",
           },
         },
+        {
+          tag: "link",
+          attrs: {
+            rel: "manifest",
+            href: "/site.webmanifest",
+          },
+        },
+        {
+          tag: "meta",
+          attrs: {
+            name: "theme-color",
+            content: "#ffffff",
+          },
+        },
       ],
       lastUpdated: true,
       expressiveCode: { themes: ["github-light", "github-dark"] },
