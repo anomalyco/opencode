@@ -1864,7 +1864,10 @@ export default function Layout(props: ParentProps) {
                   getLabel={messageLabel}
                   onMessageSelect={(message) => {
                     if (!isActive()) {
-                      sessionStorage.setItem("opencode.pendingMessage", `${props.session.id}|${message.id}`)
+                      layout.pendingMessage.set(
+                        `${base64Encode(props.session.directory)}/${props.session.id}`,
+                        message.id,
+                      )
                       navigate(`${props.slug}/session/${props.session.id}`)
                       return
                     }
