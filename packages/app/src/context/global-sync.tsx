@@ -119,6 +119,8 @@ type ChildOptions = {
   bootstrap?: boolean
 }
 
+const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
+
 function normalizeProviderList(input: ProviderListResponse): ProviderListResponse {
   return {
     ...input,
@@ -188,7 +190,74 @@ function createGlobalSync() {
     config: {},
     reload: undefined,
   })
-  let bootstrapQueue: string[] = []
+
+  const queued = new Set<string>()
+  let root = false
+  let running = false
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  const paused = () => untrack(() => globalStore.reload) !== undefined
+
+  const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+  const take = (count: number) => {
+    if (queued.size === 0) return [] as string[]
+    const items: string[] = []
+    for (const item of queued) {
+      queued.delete(item)
+      items.push(item)
+      if (items.length >= count) break
+    }
+    return items
+  }
+
+  const schedule = () => {
+    if (timer) return
+    timer = setTimeout(() => {
+      timer = undefined
+      void drain()
+    }, 0)
+  }
+
+  const push = (directory: string) => {
+    if (!directory) return
+    queued.add(directory)
+    if (paused()) return
+    schedule()
+  }
+
+  const refresh = () => {
+    root = true
+    if (paused()) return
+    schedule()
+  }
+
+  async function drain() {
+    if (running) return
+    running = true
+    try {
+      while (true) {
+        if (paused()) return
+
+        if (root) {
+          root = false
+          await bootstrap()
+          await tick()
+          continue
+        }
+
+        const dirs = take(2)
+        if (dirs.length === 0) return
+
+        await Promise.all(dirs.map((dir) => bootstrapInstance(dir)))
+        await tick()
+      }
+    } finally {
+      running = false
+      if (paused()) return
+      if (root || queued.size) schedule()
+    }
+  }
 
   createEffect(() => {
     if (!projectCacheReady()) return
@@ -210,14 +279,8 @@ function createGlobalSync() {
 
   createEffect(() => {
     if (globalStore.reload !== "complete") return
-    if (bootstrapQueue.length) {
-      for (const directory of bootstrapQueue) {
-        bootstrapInstance(directory)
-      }
-      bootstrap()
-    }
-    bootstrapQueue = []
     setGlobalStore("reload", undefined)
+    refresh()
   })
 
   const children: Record<string, [Store<State>, SetStoreFunction<State>]> = {}
@@ -236,7 +299,7 @@ function createGlobalSync() {
     const aUpdated = sessionUpdatedAt(a)
     const bUpdated = sessionUpdatedAt(b)
     if (aUpdated !== bUpdated) return bUpdated - aUpdated
-    return a.id.localeCompare(b.id)
+    return cmp(a.id, b.id)
   }
 
   function takeRecentSessions(sessions: Session[], limit: number, cutoff: number) {
@@ -264,7 +327,7 @@ function createGlobalSync() {
     const all = input
       .filter((s) => !!s?.id)
       .filter((s) => !s.time?.archived)
-      .sort((a, b) => a.id.localeCompare(b.id))
+      .sort((a, b) => cmp(a.id, b.id))
 
     const roots = all.filter((s) => !s.parentID)
     const children = all.filter((s) => !!s.parentID)
@@ -281,7 +344,7 @@ function createGlobalSync() {
       return sessionUpdatedAt(s) > cutoff
     })
 
-    return [...keepRoots, ...keepChildren].sort((a, b) => a.id.localeCompare(b.id))
+    return [...keepRoots, ...keepChildren].sort((a, b) => cmp(a.id, b.id))
   }
 
   function ensureChild(directory: string) {
@@ -396,7 +459,7 @@ function createGlobalSync() {
         const nonArchived = (x.data ?? [])
           .filter((s) => !!s?.id)
           .filter((s) => !s.time?.archived)
-          .sort((a, b) => a.id.localeCompare(b.id))
+          .sort((a, b) => cmp(a.id, b.id))
 
         // Read the current limit at resolve-time so callers that bump the limit while
         // a request is in-flight still get the expanded result.
@@ -498,7 +561,7 @@ function createGlobalSync() {
                 "permission",
                 sessionID,
                 reconcile(
-                  permissions.filter((p) => !!p?.id).sort((a, b) => a.id.localeCompare(b.id)),
+                  permissions.filter((p) => !!p?.id).sort((a, b) => cmp(a.id, b.id)),
                   { key: "id" },
                 ),
               )
@@ -527,7 +590,7 @@ function createGlobalSync() {
                 "question",
                 sessionID,
                 reconcile(
-                  questions.filter((q) => !!q?.id).sort((a, b) => a.id.localeCompare(b.id)),
+                  questions.filter((q) => !!q?.id).sort((a, b) => cmp(a.id, b.id)),
                   { key: "id" },
                 ),
               )
@@ -584,9 +647,8 @@ function createGlobalSync() {
     if (directory === "global") {
       switch (event?.type) {
         case "global.disposed": {
-          if (globalStore.reload) return
-          bootstrap()
-          break
+          refresh()
+          return
         }
         case "project.updated": {
           const result = Binary.search(globalStore.project, event.properties.id, (s) => s.id)
@@ -647,12 +709,8 @@ function createGlobalSync() {
 
     switch (event.type) {
       case "server.instance.disposed": {
-        if (globalStore.reload) {
-          bootstrapQueue.push(directory)
-          return
-        }
-        bootstrapInstance(directory)
-        break
+        push(directory)
+        return
       }
       case "session.created": {
         const info = event.properties.info
@@ -893,6 +951,10 @@ function createGlobalSync() {
     }
   })
   onCleanup(unsub)
+  onCleanup(() => {
+    if (!timer) return
+    clearTimeout(timer)
+  })
 
   async function bootstrap() {
     const health = await globalSDK.client.global
@@ -916,7 +978,7 @@ function createGlobalSync() {
         }),
       ),
       retry(() =>
-        globalSDK.client.config.get().then((x) => {
+        globalSDK.client.global.config.get().then((x) => {
           setGlobalStore("config", x.data!)
         }),
       ),
@@ -926,7 +988,7 @@ function createGlobalSync() {
             .filter((p) => !!p?.id)
             .filter((p) => !!p.worktree && !p.worktree.includes("opencode-test"))
             .slice()
-            .sort((a, b) => a.id.localeCompare(b.id))
+            .sort((a, b) => cmp(a.id, b.id))
           setGlobalStore("project", projects)
         }),
       ),
@@ -999,13 +1061,13 @@ function createGlobalSync() {
     },
     child,
     bootstrap,
-    updateConfig: async (config: Config) => {
+    updateConfig: (config: Config) => {
       setGlobalStore("reload", "pending")
-      const response = await globalSDK.client.config.update({ config })
-      setTimeout(() => {
-        setGlobalStore("reload", "complete")
-      }, 1000)
-      return response
+      return globalSDK.client.global.config.update({ config }).finally(() => {
+        setTimeout(() => {
+          setGlobalStore("reload", "complete")
+        }, 1000)
+      })
     },
     project: {
       loadSessions,

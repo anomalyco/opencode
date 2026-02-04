@@ -5,12 +5,11 @@ import path from "path"
 import { Filesystem } from "../util/filesystem"
 import { NamedError } from "@opencode-ai/util/error"
 import { readableStreamToText } from "bun"
-import { createRequire } from "module"
 import { Lock } from "../util/lock"
+import { PackageRegistry } from "./registry"
 
 export namespace BunProc {
   const log = Log.create({ service: "bun" })
-  const req = createRequire(import.meta.url)
 
   export async function run(cmd: string[], options?: Bun.SpawnOptions.OptionsObject<any, any, any>) {
     log.info("running", {
@@ -75,7 +74,17 @@ export namespace BunProc {
     const dependencies = parsed.dependencies ?? {}
     if (!parsed.dependencies) parsed.dependencies = dependencies
     const modExists = await Filesystem.exists(mod)
-    if (dependencies[pkg] === version && modExists) return mod
+    const cachedVersion = dependencies[pkg]
+
+    if (!modExists || !cachedVersion) {
+      // continue to install
+    } else if (version !== "latest" && cachedVersion === version) {
+      return mod
+    } else if (version === "latest") {
+      const isOutdated = await PackageRegistry.isOutdated(pkg, cachedVersion, Global.Path.cache)
+      if (!isOutdated) return mod
+      log.info("Cached version is outdated, proceeding with install", { pkg, cachedVersion })
+    }
 
     const proxied = !!(
       process.env.HTTP_PROXY ||
