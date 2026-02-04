@@ -70,6 +70,14 @@ function createCommentSession(dir: string, id: string | undefined) {
     setFocus((current) => (current?.id === id ? null : current))
   }
 
+  const clear = () => {
+    batch(() => {
+      setStore("comments", {})
+      setFocus(null)
+      setActive(null)
+    })
+  }
+
   const all = createMemo(() => {
     const files = Object.keys(store.comments)
     const items = files.flatMap((file) => store.comments[file] ?? [])
@@ -82,6 +90,7 @@ function createCommentSession(dir: string, id: string | undefined) {
     all,
     add,
     remove,
+    clear,
     focus: createMemo(() => state.focus),
     setFocus,
     clearFocus: () => setFocus(null),
@@ -144,6 +153,7 @@ export const { use: useComments, provider: CommentsProvider } = createSimpleCont
       all: () => session().all(),
       add: (input: Omit<LineComment, "id" | "time">) => session().add(input),
       remove: (file: string, id: string) => session().remove(file, id),
+      clear: () => session().clear(),
       focus: () => session().focus(),
       setFocus: (focus: CommentFocus | null) => session().setFocus(focus),
       clearFocus: () => session().clearFocus(),
