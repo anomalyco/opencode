@@ -20,6 +20,7 @@ import { Spinner } from "@tui/component/spinner"
 import { useTheme } from "@tui/context/theme"
 import {
   BoxRenderable,
+  Renderable,
   ScrollBoxRenderable,
   addDefaultParsers,
   MacOSScrollAccel,
@@ -76,6 +77,7 @@ import { Global } from "@/global"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
+import { DialogPrompt } from "../../ui/dialog-prompt"
 import { formatTranscript } from "../../util/transcript"
 import { UI } from "@/cli/ui.ts"
 
@@ -1149,12 +1151,89 @@ function UserMessage(props: {
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const sync = useSync()
   const { theme } = useTheme()
+  const dialog = useDialog()
+  const sdk = useSDK()
+  const toast = useToast()
+  const renderer = useRenderer()
+  let container: BoxRenderable
   const [hover, setHover] = createSignal(false)
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
   const color = createMemo(() => (queued() ? theme.accent : local.agent.color(props.message.agent)))
   const metadataVisible = createMemo(() => queued() || ctx.showTimestamps())
 
   const compaction = createMemo(() => props.parts.find((x) => x.type === "compaction"))
+
+  const contains = (hit?: Renderable) => {
+    let current = hit
+    while (current) {
+      if (current === container) return true
+      current = current.parent ?? undefined
+    }
+    return false
+  }
+
+  const editQueued = async () => {
+    const part = text()
+    if (!part) {
+      toast.show({ variant: "error", message: "Queued message has no editable text" })
+      return
+    }
+    const next = await new Promise<string | null>((resolve) => {
+      dialog.replace(
+        () => (
+          <DialogPrompt
+            title="Edit queued message"
+            value={part.text}
+            placeholder="Edit queued message"
+            onConfirm={(value) => {
+              resolve(value)
+              dialog.clear()
+            }}
+            onCancel={() => {
+              resolve(null)
+              dialog.clear()
+            }}
+          />
+        ),
+        () => resolve(null),
+      )
+    })
+    if (next === null) return
+    if (next === part.text) return
+    const result = await sdk.client.part
+      .update({
+        sessionID: part.sessionID,
+        messageID: part.messageID,
+        partID: part.id,
+        part: {
+          ...part,
+          text: next,
+        },
+      })
+      .catch((err) => err)
+    if (result?.error) {
+      toast.show({ variant: "error", message: "Failed to update queued message" })
+    }
+  }
+
+  const removeQueued = async () => {
+    const part = text()
+    if (!part) {
+      toast.show({ variant: "error", message: "Queued message has no editable text" })
+      return
+    }
+    if (!queued()) return
+    const result = await sdk.client.part
+      .delete({
+        sessionID: part.sessionID,
+        messageID: part.messageID,
+        partID: part.id,
+      })
+      .catch((err) => err)
+    if (result?.error) {
+      toast.show({ variant: "error", message: "Failed to remove queued message" })
+    }
+  }
 
   return (
     <>
@@ -1167,13 +1246,19 @@ function UserMessage(props: {
           marginTop={props.index === 0 ? 0 : 1}
         >
           <box
-            onMouseOver={() => {
-              setHover(true)
-            }}
-            onMouseOut={() => {
+            ref={(val: BoxRenderable) => (container = val)}
+            onMouseOver={() => setHover(true)}
+            onMouseMove={() => setHover(true)}
+            onMouseOut={(evt) => {
+              const hit = Renderable.renderablesByNumber.get(renderer.hitTest(evt.x, evt.y))
+              if (contains(hit)) return
               setHover(false)
             }}
-            onMouseUp={props.onMouseUp}
+            onMouseUp={() => {
+              if (renderer.getSelection()?.getSelectedText()) return
+              if (queued()) return
+              props.onMouseUp()
+            }}
             paddingTop={1}
             paddingBottom={1}
             paddingLeft={2}
@@ -1212,9 +1297,32 @@ function UserMessage(props: {
                 </Show>
               }
             >
-              <text fg={theme.textMuted}>
-                <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
-              </text>
+              <box flexDirection="row" gap={1}>
+                <text fg={theme.textMuted}>
+                  <span style={{ bg: theme.accent, fg: theme.backgroundPanel, bold: true }}> QUEUED </span>
+                </text>
+                <Show when={hover()}>
+                  <box flexDirection="row" gap={1}>
+                    <box
+                      onMouseUp={(evt) => {
+                        evt.stopPropagation()
+                        editQueued()
+                      }}
+                    >
+                      <text fg={theme.textMuted}>edit</text>
+                    </box>
+                    <text fg={theme.textMuted}>·</text>
+                    <box
+                      onMouseUp={(evt) => {
+                        evt.stopPropagation()
+                        removeQueued()
+                      }}
+                    >
+                      <text fg={theme.textMuted}>delete</text>
+                    </box>
+                  </box>
+                </Show>
+              </box>
             </Show>
           </box>
         </box>
