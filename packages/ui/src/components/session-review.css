@@ -212,6 +212,6 @@
     position: relative;
     overflow: hidden;
     --line-comment-z: 5;
-    --line-comment-popover-z: 30;
+    --line-comment-popover-z: 70;
   }
 }

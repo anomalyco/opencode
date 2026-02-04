@@ -25,7 +25,7 @@ export type LineCommentAnchorProps = {
 export const LineCommentAnchor = (props: LineCommentAnchorProps) => {
   const hidden = () => props.top === undefined
   const variant = () => props.variant ?? "default"
-  const [position, setPosition] = createSignal({ x: 0, y: 0, z: "40" })
+  const [position, setPosition] = createSignal({ x: 0, y: 0, z: "70" })
   let anchorRef!: HTMLDivElement
   let popoverRef: HTMLDivElement | undefined
 
@@ -48,7 +48,7 @@ export const LineCommentAnchor = (props: LineCommentAnchorProps) => {
     const maxTop = Math.max(margin, viewportHeight - margin - popover.height)
     const clampedLeft = Math.min(Math.max(desiredLeft, margin), maxLeft)
     const clampedTop = Math.min(Math.max(desiredTop, margin), maxTop)
-    const z = getComputedStyle(anchorRef).getPropertyValue("--line-comment-popover-z").trim() || "40"
+    const z = getComputedStyle(anchorRef).getPropertyValue("--line-comment-popover-z").trim() || "70"
 
     setPosition({
       x: clampedLeft,

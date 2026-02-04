@@ -37,7 +37,7 @@
   position: absolute;
   top: calc(100% + 4px);
   right: -8px;
-  z-index: var(--line-comment-popover-z, 40);
+  z-index: var(--line-comment-popover-z, 70);
   min-width: 200px;
   max-width: min(320px, calc(100vw - 48px));
   border-radius: 8px;
@@ -50,7 +50,7 @@
   position: fixed;
   inset: 0;
   right: auto;
-  z-index: var(--line-comment-popover-z, 40);
+  z-index: var(--line-comment-popover-z, 70);
   pointer-events: none;
 }
 
