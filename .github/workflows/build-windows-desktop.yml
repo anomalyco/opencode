@@ -1,0 +1,112 @@
+name: Build Windows Desktop
+run-name: "Build Windows Desktop App"
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - build-windows
+
+permissions:
+  contents: write
+
+jobs:
+  build-cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-tags: true
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build CLI
+        run: |
+          cd packages/opencode
+          bun run build
+        env:
+          OPENCODE_VERSION: "1.1.52-fork"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opencode-cli
+          path: packages/opencode/dist
+
+  build-windows-desktop:
+    needs: build-cli
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-tags: true
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/desktop/src-tauri
+          shared-key: x86_64-pc-windows-msvc
+
+      - name: Download CLI artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: opencode-cli
+          path: packages/desktop/src-tauri/target/opencode-binaries/opencode-windows-x64
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Prepare Desktop
+        run: |
+          cd packages/desktop
+          # Update version
+          $pkg = Get-Content package.json | ConvertFrom-Json
+          $pkg.version = "1.1.52-fork"
+          $pkg | ConvertTo-Json -Depth 10 | Set-Content package.json
+
+          # Copy CLI binary to sidecar folder
+          New-Item -ItemType Directory -Force -Path src-tauri/sidecars
+          Copy-Item src-tauri/target/opencode-binaries/opencode-windows-x64/bin/opencode.exe src-tauri/sidecars/opencode-cli-x86_64-pc-windows-msvc.exe
+        shell: pwsh
+
+      - name: Build Desktop App
+        run: |
+          cd packages/desktop
+          bun run build
+          bun tauri build --target x86_64-pc-windows-msvc --config ./src-tauri/tauri.prod.conf.json
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      - name: Upload Windows Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-desktop-windows-x64
+          path: |
+            packages/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+            packages/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+
+      - name: Create Release (if tag exists)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            packages/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+            packages/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+          draft: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
