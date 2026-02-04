@@ -1369,7 +1369,7 @@ describe("ProviderTransform.variants", () => {
     expect(result).toEqual({})
   })
 
-  test("deepseek returns empty object", () => {
+  test("deepseek returns only none variant (toggle-only model)", () => {
     const model = createMockModel({
       id: "deepseek/deepseek-chat",
       providerID: "deepseek",
@@ -1380,10 +1380,12 @@ describe("ProviderTransform.variants", () => {
       },
     })
     const result = ProviderTransform.variants(model)
-    expect(result).toEqual({})
+    // deepseek models only support toggling reasoning on/off, not effort levels
+    expect(Object.keys(result)).toEqual(["none"])
+    expect(result.none).toEqual({ reasoningEffort: "none" })
   })
 
-  test("minimax returns empty object", () => {
+  test("minimax returns only none variant (toggle-only model)", () => {
     const model = createMockModel({
       id: "minimax/minimax-model",
       providerID: "minimax",
@@ -1394,10 +1396,12 @@ describe("ProviderTransform.variants", () => {
       },
     })
     const result = ProviderTransform.variants(model)
-    expect(result).toEqual({})
+    // minimax models only support toggling reasoning on/off, not effort levels
+    expect(Object.keys(result)).toEqual(["none"])
+    expect(result.none).toEqual({ reasoningEffort: "none" })
   })
 
-  test("glm returns empty object", () => {
+  test("glm returns only none variant (toggle-only model)", () => {
     const model = createMockModel({
       id: "glm/glm-4",
       providerID: "glm",
@@ -1408,10 +1412,12 @@ describe("ProviderTransform.variants", () => {
       },
     })
     const result = ProviderTransform.variants(model)
-    expect(result).toEqual({})
+    // glm models only support toggling reasoning on/off, not effort levels
+    expect(Object.keys(result)).toEqual(["none"])
+    expect(result.none).toEqual({ reasoningEffort: "none" })
   })
 
-  test("mistral returns empty object", () => {
+  test("mistral returns only none variant (toggle-only model)", () => {
     const model = createMockModel({
       id: "mistral/mistral-large",
       providerID: "mistral",
@@ -1422,11 +1428,13 @@ describe("ProviderTransform.variants", () => {
       },
     })
     const result = ProviderTransform.variants(model)
-    expect(result).toEqual({})
+    // mistral models only support toggling reasoning on/off, not effort levels
+    expect(Object.keys(result)).toEqual(["none"])
+    expect(result.none).toEqual({ reasoningEffort: "none" })
   })
 
   describe("@openrouter/ai-sdk-provider", () => {
-    test("returns empty object for non-qualifying models", () => {
+    test("returns default variants for unknown model families", () => {
       const model = createMockModel({
         id: "openrouter/test-model",
         providerID: "openrouter",
@@ -1437,7 +1445,9 @@ describe("ProviderTransform.variants", () => {
         },
       })
       const result = ProviderTransform.variants(model)
-      expect(result).toEqual({})
+      expect(Object.keys(result)).toEqual(["none", "minimal", "low", "medium", "high", "xhigh"])
+      expect(result.none).toEqual({ reasoning: { effort: "none" } })
+      expect(result.low).toEqual({ reasoning: { effort: "low" } })
     })
 
     test("gpt models return OPENAI_EFFORTS with reasoning", () => {
@@ -1498,6 +1508,134 @@ describe("ProviderTransform.variants", () => {
       expect(Object.keys(result)).toEqual(["low", "high"])
       expect(result.low).toEqual({ reasoning: { effort: "low" } })
       expect(result.high).toEqual({ reasoning: { effort: "high" } })
+    })
+
+    test("claude models return OPENAI_EFFORTS with reasoning", () => {
+      const model = createMockModel({
+        id: "openrouter/anthropic/claude-3-opus",
+        providerID: "openrouter",
+        api: {
+          id: "anthropic/claude-3-opus",
+          url: "https://openrouter.ai",
+          npm: "@openrouter/ai-sdk-provider",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["none", "minimal", "low", "medium", "high", "xhigh"])
+      expect(result.none).toEqual({ reasoning: { effort: "none" } })
+      expect(result.low).toEqual({ reasoning: { effort: "low" } })
+    })
+
+    test("deepseek models return only none variant (only supports toggle)", () => {
+      const model = createMockModel({
+        id: "openrouter/deepseek/deepseek-chat",
+        providerID: "openrouter",
+        api: {
+          id: "deepseek/deepseek-chat",
+          url: "https://openrouter.ai",
+          npm: "@openrouter/ai-sdk-provider",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      // deepseek models only support toggling reasoning on/off, not effort levels
+      expect(Object.keys(result)).toEqual(["none"])
+      expect(result.none).toEqual({ reasoning: { enabled: false } })
+    })
+
+    test("kimi models return only none variant (only supports toggle)", () => {
+      const model = createMockModel({
+        id: "openrouter/moonshotai/kimi-k2",
+        providerID: "openrouter",
+        api: {
+          id: "moonshotai/kimi-k2",
+          url: "https://openrouter.ai",
+          npm: "@openrouter/ai-sdk-provider",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      // kimi models only support toggling reasoning on/off, not effort levels
+      expect(Object.keys(result)).toEqual(["none"])
+      expect(result.none).toEqual({ reasoning: { enabled: false } })
+    })
+
+    test("llama models return OPENAI_EFFORTS with reasoning", () => {
+      const model = createMockModel({
+        id: "openrouter/meta/llama-3.1-70b",
+        providerID: "openrouter",
+        api: {
+          id: "meta/llama-3.1-70b",
+          url: "https://openrouter.ai",
+          npm: "@openrouter/ai-sdk-provider",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["none", "minimal", "low", "medium", "high", "xhigh"])
+      expect(result.none).toEqual({ reasoning: { effort: "none" } })
+      expect(result.low).toEqual({ reasoning: { effort: "low" } })
+    })
+
+    test("minimax models return only none variant (only supports toggle)", () => {
+      const model = createMockModel({
+        id: "openrouter/minimax/minimax-m2",
+        providerID: "openrouter",
+        api: {
+          id: "minimax/minimax-m2",
+          url: "https://openrouter.ai",
+          npm: "@openrouter/ai-sdk-provider",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      // minimax models only support toggling reasoning on/off, not effort levels
+      expect(Object.keys(result)).toEqual(["none"])
+      expect(result.none).toEqual({ reasoning: { enabled: false } })
+    })
+
+    test("glm models return only none variant (only supports toggle)", () => {
+      const model = createMockModel({
+        id: "openrouter/zai-org/glm-4",
+        providerID: "openrouter",
+        api: {
+          id: "zai-org/glm-4",
+          url: "https://openrouter.ai",
+          npm: "@openrouter/ai-sdk-provider",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      // glm models only support toggling reasoning on/off, not effort levels
+      expect(Object.keys(result)).toEqual(["none"])
+      expect(result.none).toEqual({ reasoning: { enabled: false } })
+    })
+
+    test("qwen models return OPENAI_EFFORTS with reasoning", () => {
+      const model = createMockModel({
+        id: "openrouter/qwen/qwen-72b",
+        providerID: "openrouter",
+        api: {
+          id: "qwen/qwen-72b",
+          url: "https://openrouter.ai",
+          npm: "@openrouter/ai-sdk-provider",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["none", "minimal", "low", "medium", "high", "xhigh"])
+      expect(result.none).toEqual({ reasoning: { effort: "none" } })
+      expect(result.low).toEqual({ reasoning: { effort: "low" } })
+    })
+
+    test("mistral models return only none variant (only supports toggle)", () => {
+      const model = createMockModel({
+        id: "openrouter/mistral/mistral-large",
+        providerID: "openrouter",
+        api: {
+          id: "mistral/mistral-large",
+          url: "https://openrouter.ai",
+          npm: "@openrouter/ai-sdk-provider",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      // mistral models only support toggling reasoning on/off, not effort levels
+      expect(Object.keys(result)).toEqual(["none"])
+      expect(result.none).toEqual({ reasoning: { enabled: false } })
     })
   })
 
@@ -1616,7 +1754,7 @@ describe("ProviderTransform.variants", () => {
   })
 
   describe("@ai-sdk/cerebras", () => {
-    test("returns WIDELY_SUPPORTED_EFFORTS with reasoningEffort", () => {
+    test("returns WIDELY_SUPPORTED_EFFORTS with reasoningEffort including none", () => {
       const model = createMockModel({
         id: "cerebras/llama-4",
         providerID: "cerebras",
@@ -1627,14 +1765,15 @@ describe("ProviderTransform.variants", () => {
         },
       })
       const result = ProviderTransform.variants(model)
-      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+      expect(Object.keys(result)).toEqual(["none", "low", "medium", "high"])
+      expect(result.none).toEqual({ reasoningEffort: "none" })
       expect(result.low).toEqual({ reasoningEffort: "low" })
       expect(result.high).toEqual({ reasoningEffort: "high" })
     })
   })
 
   describe("@ai-sdk/togetherai", () => {
-    test("returns WIDELY_SUPPORTED_EFFORTS with reasoningEffort", () => {
+    test("returns variants with reasoning_effort and reasoning.enabled for none", () => {
       const model = createMockModel({
         id: "togetherai/llama-4",
         providerID: "togetherai",
@@ -1645,9 +1784,59 @@ describe("ProviderTransform.variants", () => {
         },
       })
       const result = ProviderTransform.variants(model)
-      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
-      expect(result.low).toEqual({ reasoningEffort: "low" })
-      expect(result.high).toEqual({ reasoningEffort: "high" })
+      expect(Object.keys(result)).toEqual(["none", "low", "medium", "high"])
+      expect(result.none).toEqual({ reasoning: { enabled: false } })
+      expect(result.low).toEqual({ reasoning_effort: "low" })
+      expect(result.medium).toEqual({ reasoning_effort: "medium" })
+      expect(result.high).toEqual({ reasoning_effort: "high" })
+    })
+
+    test("returns only none variant for kimi models (only supports toggle)", () => {
+      const model = createMockModel({
+        id: "togetherai/moonshotai/Kimi-K2.5",
+        providerID: "togetherai",
+        api: {
+          id: "moonshotai/Kimi-K2.5",
+          url: "https://api.togetherai.com",
+          npm: "@ai-sdk/togetherai",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      // kimi models only support toggling reasoning on/off, not effort levels
+      expect(Object.keys(result)).toEqual(["none"])
+      expect(result.none).toEqual({ reasoningEffort: "none" })
+    })
+
+    test("returns only none variant for deepseek models (only supports toggle)", () => {
+      const model = createMockModel({
+        id: "togetherai/deepseek-ai/DeepSeek-R1",
+        providerID: "togetherai",
+        api: {
+          id: "deepseek-ai/DeepSeek-R1",
+          url: "https://api.togetherai.com",
+          npm: "@ai-sdk/togetherai",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      // deepseek models only support toggling reasoning on/off, not effort levels
+      expect(Object.keys(result)).toEqual(["none"])
+      expect(result.none).toEqual({ reasoningEffort: "none" })
+    })
+
+    test("returns only none variant for glm models (only supports toggle)", () => {
+      const model = createMockModel({
+        id: "togetherai/zai-org/GLM-4.7",
+        providerID: "togetherai",
+        api: {
+          id: "zai-org/GLM-4.7",
+          url: "https://api.togetherai.com",
+          npm: "@ai-sdk/togetherai",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      // glm models only support toggling reasoning on/off, not effort levels
+      expect(Object.keys(result)).toEqual(["none"])
+      expect(result.none).toEqual({ reasoningEffort: "none" })
     })
   })
 
@@ -1684,7 +1873,7 @@ describe("ProviderTransform.variants", () => {
   })
 
   describe("@ai-sdk/deepinfra", () => {
-    test("returns WIDELY_SUPPORTED_EFFORTS with reasoningEffort", () => {
+    test("returns WIDELY_SUPPORTED_EFFORTS with reasoningEffort including none", () => {
       const model = createMockModel({
         id: "deepinfra/llama-4",
         providerID: "deepinfra",
@@ -1695,14 +1884,15 @@ describe("ProviderTransform.variants", () => {
         },
       })
       const result = ProviderTransform.variants(model)
-      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+      expect(Object.keys(result)).toEqual(["none", "low", "medium", "high"])
+      expect(result.none).toEqual({ reasoningEffort: "none" })
       expect(result.low).toEqual({ reasoningEffort: "low" })
       expect(result.high).toEqual({ reasoningEffort: "high" })
     })
   })
 
   describe("@ai-sdk/openai-compatible", () => {
-    test("returns WIDELY_SUPPORTED_EFFORTS with reasoningEffort", () => {
+    test("returns WIDELY_SUPPORTED_EFFORTS with reasoningEffort including none", () => {
       const model = createMockModel({
         id: "custom-provider/custom-model",
         providerID: "custom-provider",
@@ -1713,9 +1903,90 @@ describe("ProviderTransform.variants", () => {
         },
       })
       const result = ProviderTransform.variants(model)
-      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+      expect(Object.keys(result)).toEqual(["none", "low", "medium", "high"])
+      expect(result.none).toEqual({ reasoningEffort: "none" })
       expect(result.low).toEqual({ reasoningEffort: "low" })
       expect(result.high).toEqual({ reasoningEffort: "high" })
+    })
+
+    test("returns only none variant for deepseek models on Synthetic.new (only supports toggle)", () => {
+      const model = createMockModel({
+        id: "synthetic/hf:deepseek-ai/DeepSeek-R1",
+        providerID: "synthetic",
+        api: {
+          id: "hf:deepseek-ai/DeepSeek-R1",
+          url: "https://synthetic.new",
+          npm: "@ai-sdk/openai-compatible",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      // deepseek models only support toggling reasoning on/off, not effort levels
+      expect(Object.keys(result)).toEqual(["none"])
+      expect(result.none).toEqual({ reasoningEffort: "none" })
+    })
+
+    test("returns only none variant for minimax models on Synthetic.new (only supports toggle)", () => {
+      const model = createMockModel({
+        id: "synthetic/hf:MiniMaxAI/MiniMax-M2",
+        providerID: "synthetic",
+        api: {
+          id: "hf:MiniMaxAI/MiniMax-M2",
+          url: "https://synthetic.new",
+          npm: "@ai-sdk/openai-compatible",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      // minimax models only support toggling reasoning on/off, not effort levels
+      expect(Object.keys(result)).toEqual(["none"])
+      expect(result.none).toEqual({ reasoningEffort: "none" })
+    })
+
+    test("returns only none variant for deepseek models on Fireworks AI (only supports toggle)", () => {
+      const model = createMockModel({
+        id: "fireworks-ai/accounts/fireworks/models/deepseek-r1-0528",
+        providerID: "fireworks-ai",
+        api: {
+          id: "accounts/fireworks/models/deepseek-r1-0528",
+          url: "https://api.fireworks.ai/inference/v1/",
+          npm: "@ai-sdk/openai-compatible",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      // deepseek models only support toggling reasoning on/off, not effort levels
+      expect(Object.keys(result)).toEqual(["none"])
+      expect(result.none).toEqual({ reasoningEffort: "none" })
+    })
+
+    test("returns only none variant for glm models on Fireworks AI (only supports toggle)", () => {
+      const model = createMockModel({
+        id: "fireworks-ai/accounts/fireworks/models/glm-4p7",
+        providerID: "fireworks-ai",
+        api: {
+          id: "accounts/fireworks/models/glm-4p7",
+          url: "https://api.fireworks.ai/inference/v1/",
+          npm: "@ai-sdk/openai-compatible",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      // glm models only support toggling reasoning on/off, not effort levels
+      expect(Object.keys(result)).toEqual(["none"])
+      expect(result.none).toEqual({ reasoningEffort: "none" })
+    })
+
+    test("returns only none variant for kimi models on Fireworks AI (only supports toggle)", () => {
+      const model = createMockModel({
+        id: "fireworks-ai/accounts/fireworks/models/kimi-k2p5",
+        providerID: "fireworks-ai",
+        api: {
+          id: "accounts/fireworks/models/kimi-k2p5",
+          url: "https://api.fireworks.ai/inference/v1/",
+          npm: "@ai-sdk/openai-compatible",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      // kimi models only support toggling reasoning on/off, not effort levels
+      expect(Object.keys(result)).toEqual(["none"])
+      expect(result.none).toEqual({ reasoningEffort: "none" })
     })
   })
 

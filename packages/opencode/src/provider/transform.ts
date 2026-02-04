@@ -329,6 +329,8 @@ export namespace ProviderTransform {
     if (!model.capabilities.reasoning) return {}
 
     const id = model.id.toLowerCase()
+
+    // These model families only support toggling reasoning on/off, not reasoning effort levels
     if (
       id.includes("deepseek") ||
       id.includes("minimax") ||
@@ -337,8 +339,12 @@ export namespace ProviderTransform {
       id.includes("kimi") ||
       // TODO: Remove this after models.dev data is fixed to use "kimi-k2.5" instead of "k2p5"
       id.includes("k2p5")
-    )
-      return {}
+    ) {
+      // OpenRouter uses { reasoning: { enabled: false } } to disable reasoning
+      if (model.api.npm === "@openrouter/ai-sdk-provider") return { none: { reasoning: { enabled: false } } }
+      // Other providers use reasoningEffort: "none"
+      return { none: { reasoningEffort: "none" } }
+    }
 
     // see: https://docs.x.ai/docs/guides/reasoning#control-how-hard-the-model-thinks
     if (id.includes("grok") && id.includes("grok-3-mini")) {
@@ -357,7 +363,9 @@ export namespace ProviderTransform {
 
     switch (model.api.npm) {
       case "@openrouter/ai-sdk-provider":
-        if (!model.id.includes("gpt") && !model.id.includes("gemini-3")) return {}
+        // OpenRouter normalizes reasoning control via { reasoning: { effort } }
+        // see: https://openrouter.ai/docs/guides/best-practices/reasoning-tokens
+        // Toggle-only families (deepseek, minimax, glm, mistral, kimi) are handled above with early return.
         return Object.fromEntries(OPENAI_EFFORTS.map((effort) => [effort, { reasoning: { effort } }]))
 
       // TODO: YOU CANNOT SET max_tokens if this is set!!!
@@ -389,16 +397,32 @@ export namespace ProviderTransform {
           ]),
         )
 
+      // https://v5.ai-sdk.dev/providers/ai-sdk-providers/togetherai
+      case "@ai-sdk/togetherai": {
+        // Together AI supports reasoning_effort (low/medium/high) and reasoning.enabled to disable
+        // Bypasses the exclusion list - all reasoning models get variants
+        const efforts = ["none", ...WIDELY_SUPPORTED_EFFORTS]
+        return Object.fromEntries(
+          efforts.map((effort) => [
+            effort,
+            effort === "none" ? { reasoning: { enabled: false } } : { reasoning_effort: effort },
+          ]),
+        )
+      }
+
       case "@ai-sdk/cerebras":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/cerebras
-      case "@ai-sdk/togetherai":
-      // https://v5.ai-sdk.dev/providers/ai-sdk-providers/togetherai
       case "@ai-sdk/xai":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/xai
       case "@ai-sdk/deepinfra":
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/deepinfra
-      case "@ai-sdk/openai-compatible":
-        return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
+      case "@ai-sdk/openai-compatible": {
+        // OpenAI-compatible providers support reasoningEffort
+        // Synthetic.new supports low/medium/high but not "none"
+        const efforts =
+          model.providerID === "synthetic" ? WIDELY_SUPPORTED_EFFORTS : ["none", ...WIDELY_SUPPORTED_EFFORTS]
+        return Object.fromEntries(efforts.map((effort) => [effort, { reasoningEffort: effort }]))
+      }
 
       case "@ai-sdk/azure":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/azure
@@ -575,6 +599,10 @@ export namespace ProviderTransform {
         }
         return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
     }
+
+    // Toggle-only model families (deepseek, minimax, glm, mistral, kimi, k2p5)
+    // are handled at the beginning of this function with early return.
+    // Any unhandled cases default to no variants.
     return {}
   }
 
@@ -682,10 +710,7 @@ export namespace ProviderTransform {
       return { thinkingConfig: { thinkingBudget: 0 } }
     }
     if (model.providerID === "openrouter") {
-      if (model.api.id.includes("google")) {
-        return { reasoning: { enabled: false } }
-      }
-      return { reasoningEffort: "minimal" }
+      return { reasoning: { effort: "low" } }
     }
     return {}
   }
