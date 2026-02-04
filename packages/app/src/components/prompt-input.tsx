@@ -1078,16 +1078,33 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-      const hasModifier = event.ctrlKey || event.metaKey
-      if (!hasModifier) return
+      if (event.altKey || event.ctrlKey || event.metaKey) return
+      const { collapsed } = getCaretState()
+      if (!collapsed) return
+
+      const cursorPosition = getCursorPosition(editorRef)
+      const textLength = promptLength(prompt.current())
+      const textContent = prompt
+        .current()
+        .map((part) => ("content" in part ? part.content : ""))
+        .join("")
+      const isEmpty = textContent.trim() === "" || textLength <= 1
+      const hasNewlines = textContent.includes("\n")
+      const inHistory = store.historyIndex >= 0
+      const atStart = cursorPosition <= (isEmpty ? 1 : 0)
+      const atEnd = cursorPosition >= (isEmpty ? textLength - 1 : textLength)
+      const allowUp = isEmpty || atStart || (!hasNewlines && !inHistory) || (inHistory && atEnd)
+      const allowDown = isEmpty || atEnd || (!hasNewlines && !inHistory) || (inHistory && atStart)
 
       if (event.key === "ArrowUp") {
+        if (!allowUp) return
         if (navigateHistory("up")) {
           event.preventDefault()
         }
         return
       }
 
+      if (!allowDown) return
       if (navigateHistory("down")) {
         event.preventDefault()
       }
@@ -1115,7 +1132,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const images = imageAttachments().slice()
     const mode = store.mode
 
-    if (text.trim().length === 0 && images.length === 0) {
+    if (text.trim().length === 0 && images.length === 0 && commentCount() === 0) {
       if (working()) abort()
       return
     }
@@ -1203,7 +1220,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           })
           return undefined
         })
-      if (session) navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
+      if (session) {
+        layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)
+        navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
+      }
     }
     if (!session) return
 
@@ -1900,7 +1920,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     options={local.agent.list().map((agent) => agent.name)}
                     current={local.agent.current()?.name ?? ""}
                     onSelect={local.agent.set}
-                    class={`capitalize ${local.model.variant.list().length > 0 ? "max-w-[120px]" : "max-w-[160px]"}`}
+                    class={`capitalize ${local.model.variant.list().length > 0 ? "max-w-[80px]" : "max-w-[120px]"}`}
                     valueClass="truncate"
                     variant="ghost"
                   />
@@ -1917,7 +1937,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       <Button
                         as="div"
                         variant="ghost"
-                        class="px-2 min-w-0 max-w-[200px]"
+                        class="px-2 min-w-0 max-w-[240px]"
                         onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}
                       >
                         <Show when={local.model.current()?.provider?.id}>
@@ -1939,7 +1959,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   >
                     <ModelSelectorPopover
                       triggerAs={Button}
-                      triggerProps={{ variant: "ghost", class: "min-w-0 max-w-[200px]" }}
+                      triggerProps={{ variant: "ghost", class: "min-w-0 max-w-[240px]" }}
                     >
                       <Show when={local.model.current()?.provider?.id}>
                         <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
@@ -2051,7 +2071,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             >
               <IconButton
                 type="submit"
-                disabled={!prompt.dirty() && !working()}
+                disabled={!prompt.dirty() && !working() && commentCount() === 0}
                 icon={working() ? "stop" : "arrow-up"}
                 variant="primary"
                 class="h-6 w-4.5"
