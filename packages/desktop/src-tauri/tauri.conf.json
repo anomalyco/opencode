@@ -44,9 +44,9 @@
     "externalBin": ["sidecars/opencode-cli"],
     "linux": {
       "rpm": {
-	      "compression": {
-	        "type": "none"
-	      }
+        "compression": {
+          "type": "none"
+        }
       }
     },
     "macOS": {
