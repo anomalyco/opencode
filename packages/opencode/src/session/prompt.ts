@@ -1511,6 +1511,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       env: {
         ...process.env,
         ...shellEnv.env,
+        OPENCODE_SESSION_ID: input.sessionID,
         TERM: "dumb",
       },
     })
