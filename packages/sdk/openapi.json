@@ -9071,9 +9071,17 @@
             "additionalProperties": {}
           },
           "color": {
-            "description": "Hex color code for the agent (e.g., #FF5733)",
-            "type": "string",
-            "pattern": "^#[0-9a-fA-F]{6}$"
+            "description": "Hex color code (e.g., #FF5733) or theme color (e.g., primary)",
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$"
+              },
+              {
+                "type": "string",
+                "enum": ["primary", "secondary", "accent", "success", "warning", "error", "info"]
+              }
+            ]
           },
           "steps": {
             "description": "Maximum number of agentic iterations before forcing text-only response",
