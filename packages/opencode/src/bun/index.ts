@@ -95,52 +95,73 @@ export namespace BunProc {
     await BunProc.run(["remove", "--cwd", Global.Path.cache, oldPkg]).catch(() => {})
   }
 
+  async function resolveVersion(mod: string, version: string) {
+    if (version !== "latest") return version
+    const file = Bun.file(path.join(mod, "package.json"))
+    const pkg = await file.json().catch(() => null)
+    return pkg?.version ?? version
+  }
+
+  async function finalize(provider: string | undefined, pkg: string, oldPkg: string | undefined) {
+    if (provider) await track(provider, pkg)
+    if (oldPkg && oldPkg !== pkg) await cleanup(provider!, oldPkg)
+  }
+
   export async function install(pkg: string, version = "latest", provider?: string) {
     using _ = await Lock.write("bun-install")
 
     const mod = path.join(Global.Path.cache, "node_modules", pkg)
-    const parsed = await readPackageJson()
-    const oldPkg = provider ? parsed.opencode?.providers?.[provider] : undefined
-    const switched = oldPkg && oldPkg !== pkg
-    const dependencies = parsed.dependencies ?? {}
+    const state = await readPackageJson()
+    const cached = state.dependencies?.[pkg]
+    const oldPkg = provider ? state.opencode?.providers?.[provider] : undefined
+
+    // Check if we can skip installation
     const modExists = await Filesystem.exists(mod)
-    const cachedVersion = dependencies[pkg]
-
-    const earlyReturn = async () => {
-      if (provider) await track(provider, pkg)
-      if (switched) await cleanup(provider!, oldPkg!)
-      return mod
+    if (version !== "latest") {
+      if (cached === version && modExists) {
+        await finalize(provider, pkg, oldPkg)
+        return mod
+      }
+    } else {
+      const outdated = await PackageRegistry.isOutdated(pkg, cached, Global.Path.cache)
+      if (!outdated && modExists) {
+        await finalize(provider, pkg, oldPkg)
+        return mod
+      }
+      if (outdated) log.info("cached version is outdated", { pkg, cached })
     }
-
-    // Skip install if exact version already cached (always reinstall with "latest")
-    const installed = parsed.dependencies?.[pkg]
-    if (installed && version !== "latest" && installed === version && (await Filesystem.exists(mod))) {
-      return earlyReturn()
-    } else if (version === "latest") {
-      const isOutdated = await PackageRegistry.isOutdated(pkg, cachedVersion, Global.Path.cache)
-      if (!isOutdated) return earlyReturn()
-      log.info("Cached version is outdated, proceeding with install", { pkg, cachedVersion })
-    }
-
-    const args = [
-      "add",
-      "--force",
-      "--exact",
-      // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
-      ...(proxied() ? ["--no-cache"] : []),
-      "--cwd",
-      Global.Path.cache,
-      pkg + "@" + version,
-    ]
 
     log.info("installing package", { pkg, version })
 
-    await BunProc.run(args, { cwd: Global.Path.cache }).catch((e) => {
+    await BunProc.run(
+      [
+        "add",
+        "--force",
+        "--exact",
+        // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
+        ...(proxied() ? ["--no-cache"] : []),
+        "--cwd",
+        Global.Path.cache,
+        `${pkg}@${version}`,
+      ],
+      { cwd: Global.Path.cache },
+    ).catch((e) => {
       throw new InstallFailedError({ pkg, version }, { cause: e })
     })
 
-    if (provider) await track(provider, pkg)
-    if (switched) await cleanup(provider!, oldPkg!)
+    // Persist resolved version and provider tracking
+    const resolved = await resolveVersion(mod, version)
+    const updated = await readPackageJson()
+    if (!updated.dependencies) updated.dependencies = {}
+    updated.dependencies[pkg] = resolved
+    if (provider) {
+      if (!updated.opencode) updated.opencode = {}
+      if (!updated.opencode.providers) updated.opencode.providers = {}
+      updated.opencode.providers[provider] = pkg
+    }
+    await writePackageJson(updated)
+
+    if (oldPkg && oldPkg !== pkg) await cleanup(provider!, oldPkg)
     return mod
   }
 }

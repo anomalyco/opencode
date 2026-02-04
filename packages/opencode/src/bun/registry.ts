@@ -33,7 +33,9 @@ export namespace PackageRegistry {
     return value
   }
 
-  export async function isOutdated(pkg: string, cachedVersion: string, cwd?: string): Promise<boolean> {
+  export async function isOutdated(pkg: string, cachedVersion: string | undefined, cwd?: string): Promise<boolean> {
+    if (!cachedVersion) return true
+
     const latestVersion = await info(pkg, "version", cwd)
     if (!latestVersion) {
       log.warn("Failed to resolve latest version, using cached", { pkg, cachedVersion })
