@@ -40,12 +40,12 @@ jobs:
             echo "--- $system ---"
             for pkg in $PACKAGES; do
               printf "  %s: " "$pkg"
-              if nix eval ".#packages.$system.$pkg.drvPath" --raw > /dev/null 2>&1; then
+              if output=$(nix eval ".#packages.$system.$pkg.drvPath" --raw 2>&1); then
                 echo "✓"
               else
                 echo "✗"
                 echo "::error::Evaluation failed for packages.$system.$pkg"
-                nix eval ".#packages.$system.$pkg.drvPath" --raw
+                echo "$output"
                 exit 1
               fi
             done
@@ -55,12 +55,12 @@ jobs:
           echo "=== Evaluating devShells for all systems ==="
           for system in $SYSTEMS; do
             printf "%s: " "$system"
-            if nix eval ".#devShells.$system.default.drvPath" --raw > /dev/null 2>&1; then
+            if output=$(nix eval ".#devShells.$system.default.drvPath" --raw 2>&1); then
               echo "✓"
             else
               echo "✗"
               echo "::error::Evaluation failed for devShells.$system.default"
-              nix eval ".#devShells.$system.default.drvPath" --raw
+              echo "$output"
               exit 1
             fi
           done
