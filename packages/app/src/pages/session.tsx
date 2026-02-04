@@ -964,6 +964,14 @@ export default function Page() {
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: () => dialog.show(() => <DialogFork />),
     },
+    {
+      id: "prompt.focus",
+      title: "Focus Input",
+      description: "Focus the prompt input box",
+      category: language.t("command.category.session"),
+      keybind: "mod+/",
+      onSelect: () => inputRef?.focus(),
+    },
     ...(sync.data.config.share !== "disabled"
       ? [
           {

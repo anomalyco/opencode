@@ -150,6 +150,7 @@ async fn set_default_server_url(app: AppHandle, url: Option<String>) -> Result<(
 }
 
 #[tauri::command]
+#[specta::specta]
 fn open_in_finder(path: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
@@ -176,6 +177,7 @@ fn open_in_finder(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+#[specta::specta]
 fn open_in_vscode(path: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
@@ -326,7 +328,9 @@ pub fn run() {
             ensure_server_ready,
             get_default_server_url,
             set_default_server_url,
-            markdown::parse_markdown_command
+            markdown::parse_markdown_command,
+            open_in_finder,
+            open_in_vscode
         ])
         .error_handling(tauri_specta::ErrorHandlingMode::Throw);
 

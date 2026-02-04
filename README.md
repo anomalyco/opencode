@@ -1,135 +1,142 @@
-<p align="center">
-  <a href="https://opencode.ai">
-    <picture>
-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
-    </picture>
-  </a>
-</p>
-<p align="center">The open source AI coding agent.</p>
-<p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
-</p>
+# OpenCode Desktop - 定制版
 
-<p align="center">
-  <a href="README.md">English</a> |
-  <a href="README.zh.md">简体中文</a> |
-  <a href="README.zht.md">繁體中文</a> |
-  <a href="README.ko.md">한국어</a> |
-  <a href="README.de.md">Deutsch</a> |
-  <a href="README.es.md">Español</a> |
-  <a href="README.fr.md">Français</a> |
-  <a href="README.it.md">Italiano</a> |
-  <a href="README.da.md">Dansk</a> |
-  <a href="README.ja.md">日本語</a> |
-  <a href="README.pl.md">Polski</a> |
-  <a href="README.ru.md">Русский</a> |
-  <a href="README.ar.md">العربية</a> |
-  <a href="README.no.md">Norsk</a> |
-  <a href="README.br.md">Português (Brasil)</a> |
-  <a href="README.th.md">ไทย</a> |
-  <a href="README.tr.md">Türkçe</a>
-</p>
+> 基于 [OpenCode](https://github.com/anomalyco/opencode) 的桌面应用定制版本
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+这是一个针对 OpenCode Desktop 应用进行深度 UI 优化和功能增强的个人定制版本。在保持 OpenCode 核心功能的基础上，大幅改进了用户界面交互体验和使用效率。
+
+## ✨ 主要改进
+
+### 🎨 UI 优化
+
+#### 主题系统增强
+
+- **完整主题支持**：加载了 OpenCode CLI 的所有主题配置
+- **语法高亮**：AI 助手的代码回复完美应用主题配色，提供一致的视觉体验
+
+#### 界面自定义
+
+- **对话宽度调节**：可自由调整消息显示宽度，适配不同屏幕和使用习惯
+- **字体大小设置**：支持动态调整字体大小，提升阅读舒适度
+- **标题栏优化**：调整了窗口标题栏按钮高度，更加美观
+
+#### 消息交互改进
+
+- **消息折叠功能**：用户消息和 AI 回复支持折叠/展开，便于浏览长对话
+- **Question 工具优化**：
+  - 问题界面支持折叠/展开
+  - 用户输入框支持多行输入，方便输入复杂内容
+
+### ⌨️ 快捷键增强
+
+| 快捷键          | 功能         | 说明                                    |
+| --------------- | ------------ | --------------------------------------- |
+| `Cmd+T`         | 项目切换面板 | 快速在多个项目间切换                    |
+| `Cmd+Shift+↑/↓` | 跳转用户消息 | 在对话中快速定位到上一条/下一条用户消息 |
+| `Cmd+↑/↓`       | 历史输入导航 | 载入之前的用户输入内容                  |
+
+### 🔧 交互优化
+
+- **对话列表触发方式改进**：点击左侧项目图标才弹出对话列表，避免误触
+- **图标资源优化**：更新应用图标，减小文件体积并提升视觉效果
+
+## 📦 安装使用
+
+### 从源码构建
+
+```bash
+# 克隆仓库
+git clone https://github.com/panyw5/opencode.git
+cd opencode
+
+# 安装依赖
+bun install
+
+# 构建桌面应用
+bun run --cwd packages/desktop build
+bun run --cwd packages/desktop tauri build
+```
+
+### macOS 快速构建脚本
+
+```bash
+# 一键构建并安装（macOS）
+bun run --cwd packages/desktop build && \
+bun run --cwd packages/desktop tauri build && \
+cp /opt/homebrew/Cellar/opencode/1.1.51/bin/opencode \
+  "packages/desktop/src-tauri/target/release/bundle/macos/OpenCode Dev.app/Contents/MacOS/opencode-cli" && \
+cp -R "packages/desktop/src-tauri/target/release/bundle/macos/OpenCode Dev.app" /Applications/
+```
+
+> **注意**：当前版本需要使用稳定版本 (v1.1.51) 的 `opencode-cli` 替换构建产物，详见 [构建文档](packages/desktop/AGENTS.md)。
+
+### 开发模式
+
+```bash
+# 启动开发服务器
+bun run --cwd packages/desktop tauri dev
+```
+
+## 📖 关于 OpenCode
+
+OpenCode 是一个开源的 AI 编码助手，具有以下特点：
+
+- 🔓 **100% 开源** - 完全开放的代码库
+- 🔌 **模型无关** - 支持 Claude、OpenAI、Google 等多种 AI 模型
+- 🛠️ **LSP 支持** - 开箱即用的语言服务器协议支持
+- 💻 **终端优先** - 为终端用户打造的强大 TUI 界面
+- 🏗️ **客户端/服务器架构** - 灵活的部署方式
+
+### 内置 Agent
+
+- **build** - 默认的全功能开发 agent
+- **plan** - 只读分析 agent，适合代码探索
+- **general** - 用于复杂搜索和多步骤任务的子 agent
+
+## 🔗 相关链接
+
+- **上游项目**：[anomalyco/opencode](https://github.com/anomalyco/opencode)
+- **官方网站**：[opencode.ai](https://opencode.ai)
+- **官方文档**：[opencode.ai/docs](https://opencode.ai/docs)
+- **Discord 社区**：[discord.gg/opencode](https://discord.gg/opencode)
+
+## 📝 版本信息
+
+- **基于版本**：OpenCode v1.1.51
+- **定制版本**：v1.1.51-custom
+- **最后同步**：2025-01
+
+## ⚠️ 免责声明
+
+本项目是基于 OpenCode 的个人定制版本，**不是** OpenCode 官方团队开发的产品，也**不隶属于** OpenCode 官方。
+
+如需使用官方版本，请访问：
+
+- 官方仓库：https://github.com/anomalyco/opencode
+- 官方下载：https://opencode.ai/download
+
+## 📄 许可证
+
+本项目遵循与上游 OpenCode 相同的 MIT 许可证。
 
 ---
 
-### Installation
+## 原版 OpenCode 安装方式
+
+如果你想使用官方原版 OpenCode，可以通过以下方式安装：
 
 ```bash
-# YOLO
+# 快速安装
 curl -fsSL https://opencode.ai/install | bash
 
-# Package managers
-npm i -g opencode-ai@latest        # or bun/pnpm/yarn
+# 包管理器
+npm i -g opencode-ai@latest        # npm/bun/pnpm/yarn
+brew install anomalyco/tap/opencode # macOS/Linux (推荐)
 scoop install opencode             # Windows
 choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS and Linux (recommended, always up to date)
-brew install opencode              # macOS and Linux (official brew formula, updated less)
-paru -S opencode-bin               # Arch Linux
-mise use -g opencode               # Any OS
-nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev branch
+
+# 桌面应用
+brew install --cask opencode-desktop # macOS
+scoop install extras/opencode-desktop # Windows
 ```
 
-> [!TIP]
-> Remove versions older than 0.1.x before installing.
-
-### Desktop App (BETA)
-
-OpenCode is also available as a desktop application. Download directly from the [releases page](https://github.com/anomalyco/opencode/releases) or [opencode.ai/download](https://opencode.ai/download).
-
-| Platform              | Download                              |
-| --------------------- | ------------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
-| Windows               | `opencode-desktop-windows-x64.exe`    |
-| Linux                 | `.deb`, `.rpm`, or AppImage           |
-
-```bash
-# macOS (Homebrew)
-brew install --cask opencode-desktop
-# Windows (Scoop)
-scoop bucket add extras; scoop install extras/opencode-desktop
-```
-
-#### Installation Directory
-
-The install script respects the following priority order for the installation path:
-
-1. `$OPENCODE_INSTALL_DIR` - Custom installation directory
-2. `$XDG_BIN_DIR` - XDG Base Directory Specification compliant path
-3. `$HOME/bin` - Standard user binary directory (if it exists or can be created)
-4. `$HOME/.opencode/bin` - Default fallback
-
-```bash
-# Examples
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
-```
-
-### Agents
-
-OpenCode includes two built-in agents you can switch between with the `Tab` key.
-
-- **build** - Default, full-access agent for development work
-- **plan** - Read-only agent for analysis and code exploration
-  - Denies file edits by default
-  - Asks permission before running bash commands
-  - Ideal for exploring unfamiliar codebases or planning changes
-
-Also included is a **general** subagent for complex searches and multistep tasks.
-This is used internally and can be invoked using `@general` in messages.
-
-Learn more about [agents](https://opencode.ai/docs/agents).
-
-### Documentation
-
-For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).
-
-### Contributing
-
-If you're interested in contributing to OpenCode, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.
-
-### Building on OpenCode
-
-If you are working on a project that's related to OpenCode and is using "opencode" as part of its name, for example "opencode-dashboard" or "opencode-mobile", please add a note to your README to clarify that it is not built by the OpenCode team and is not affiliated with us in any way.
-
-### FAQ
-
-#### How is this different from Claude Code?
-
-It's very similar to Claude Code in terms of capability. Here are the key differences:
-
-- 100% open source
-- Not coupled to any provider. Although we recommend the models we provide through [OpenCode Zen](https://opencode.ai/zen), OpenCode can be used with Claude, OpenAI, Google, or even local models. As models evolve, the gaps between them will close and pricing will drop, so being provider-agnostic is important.
-- Out-of-the-box LSP support
-- A focus on TUI. OpenCode is built by neovim users and the creators of [terminal.shop](https://terminal.shop); we are going to push the limits of what's possible in the terminal.
-- A client/server architecture. This, for example, can allow OpenCode to run on your computer while you drive it remotely from a mobile app, meaning that the TUI frontend is just one of the possible clients.
-
----
-
-**Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+更多安装选项请参考 [官方文档](https://opencode.ai/docs)。
