@@ -389,6 +389,7 @@ export namespace SessionPrompt {
               abort,
               callID: part.callID,
               extra: { bypassAgentCheck: true },
+              messages: msgs,
               async metadata(input) {
                 await Session.updatePart({
                   ...part,
