@@ -28,7 +28,7 @@ export namespace ProviderAuth {
       ref: "ProviderAuthMethod",
     })
   export type Method = z.infer<typeof Method>
-  
+
   export async function methods() {
     const s = await state().then((x) => x.methods)
     return mapValues(s, (x) =>

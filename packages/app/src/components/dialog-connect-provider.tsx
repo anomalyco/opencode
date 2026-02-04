@@ -326,23 +326,22 @@ export function DialogConnectProvider(props: { provider: string }) {
                         <Match when={prompts && prompts.length > 0}>
                           <For each={prompts}>
                             {(prompt) => (
-                              <Show when={
-                                !prompt.condition ||
-                                prompt.condition(formStore.values)
-                              }>
-                                <Switch fallback={
-                                  <TextField
-                                    autofocus={prompts![0] === prompt}
-                                    type="text"
-                                    label={prompt.message}
-                                    placeholder={prompt.placeholder}
-                                    name={prompt.key}
-                                    value={formStore.values[prompt.key] || ""}
-                                    onChange={(value) => setFormStore("values", prompt.key, value)}
-                                    validationState={formStore.errors[prompt.key] ? "invalid" : undefined}
-                                    error={formStore.errors[prompt.key]}
-                                  />
-                                }>
+                              <Show when={!prompt.condition || prompt.condition(formStore.values)}>
+                                <Switch
+                                  fallback={
+                                    <TextField
+                                      autofocus={prompts![0] === prompt}
+                                      type="text"
+                                      label={prompt.message}
+                                      placeholder={prompt.placeholder}
+                                      name={prompt.key}
+                                      value={formStore.values[prompt.key] || ""}
+                                      onChange={(value) => setFormStore("values", prompt.key, value)}
+                                      validationState={formStore.errors[prompt.key] ? "invalid" : undefined}
+                                      error={formStore.errors[prompt.key]}
+                                    />
+                                  }
+                                >
                                   <Match when={prompt.type === "select"}>
                                     <div class="flex flex-col gap-4">
                                       <label class="text-14-regular text-text-base">{prompt.message}</label>
@@ -356,15 +355,15 @@ export function DialogConnectProvider(props: { provider: string }) {
                                           {(option) => (
                                             <option value={option.value}>
                                               {option.label}
-                                              {option.hint && (
-                                                <span class="text-text-weak"> - {option.hint}</span>
-                                              )}
+                                              {option.hint && <span class="text-text-weak"> - {option.hint}</span>}
                                             </option>
                                           )}
                                         </For>
                                       </select>
                                       {formStore.errors[prompt.key] && (
-                                        <div class="text-14-regular text-text-critical">{formStore.errors[prompt.key]}</div>
+                                        <div class="text-14-regular text-text-critical">
+                                          {formStore.errors[prompt.key]}
+                                        </div>
                                       )}
                                     </div>
                                   </Match>
