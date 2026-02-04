@@ -1,6 +1,6 @@
 import { createMemo, Show, type JSX } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
-import type { TextareaRenderable } from "@opentui/core"
+import type { DiffLineClickInfo, TextareaRenderable } from "@opentui/core"
 import { useTheme } from "@tui/context/theme"
 import { useTextareaKeybindings } from "@tui/component/textarea-keybindings"
 import { SplitBorder } from "@tui/component/border"
@@ -387,4 +387,25 @@ export function commentSlots(opts: SlotOptions): Map<number, JSX.Element> {
   }
 
   return slots
+}
+
+export function getLineAnchor(info: DiffLineClickInfo): string {
+  const data = info as DiffLineClickInfo & {
+    oldLine?: number
+    newLine?: number
+    lineNumber?: number
+  }
+
+  const old = typeof data.oldLine === "number" ? data.oldLine : undefined
+  const next = typeof data.newLine === "number" ? data.newLine : undefined
+  const line = typeof data.lineNumber === "number" ? data.lineNumber : undefined
+
+  if (info.side === "left" && old !== undefined) return `old:${old}`
+  if (info.side === "right" && next !== undefined) return `new:${next}`
+
+  if (line !== undefined) return `ln:${line}`
+  if (next !== undefined) return `new:${next}`
+  if (old !== undefined) return `old:${old}`
+
+  return `v:${info.visualLineIndex}`
 }

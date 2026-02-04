@@ -5,8 +5,9 @@ import { createStore } from "solid-js/store"
 import { useTheme } from "@tui/context/theme"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { FileList, order } from "./file-list"
-import { commentSlots, makeKey, type Comment, type CommentInputState, type CommentSide } from "./comment-box"
+import { commentSlots, getLineAnchor, makeKey, type Comment, type CommentInputState, type CommentSide } from "./comment-box"
 import { SlottableDiff, type DiffLineClickInfo, type SlottableDiffProps } from "./slottable-diff"
+import { Footer } from "./footer"
 import { formatPatch, structuredPatch } from "diff"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import type { ScrollBoxRenderable } from "@opentui/core"
@@ -242,6 +243,7 @@ export function Changes() {
       width={dimensions().width}
       height={dimensions().height}
       backgroundColor={themeState.theme.background}
+      gap={0}
     >
       <box flexGrow={1} flexDirection="row">
         {/* File List Pane */}
@@ -267,6 +269,9 @@ export function Changes() {
             backgroundColor={themeState.theme.diffContextBg}
             scrollbarOptions={{ visible: false }}
           >
+            <box paddingBottom={1}>
+              <text fg={themeState.theme.textMuted}>{selectedFile()?.file}</text>
+            </box>
             <SlottableDiff
               diff={fullDiff()}
               view={view()}
@@ -281,27 +286,7 @@ export function Changes() {
           </box>
         )}
       </box>
+      <Footer mode={store.pane} />
     </box>
   )
-}
-
-function getLineAnchor(info: DiffLineClickInfo): string {
-  const data = info as DiffLineClickInfo & {
-    oldLine?: number
-    newLine?: number
-    lineNumber?: number
-  }
-
-  const old = typeof data.oldLine === "number" ? data.oldLine : undefined
-  const next = typeof data.newLine === "number" ? data.newLine : undefined
-  const line = typeof data.lineNumber === "number" ? data.lineNumber : undefined
-
-  if (info.side === "left" && old !== undefined) return `old:${old}`
-  if (info.side === "right" && next !== undefined) return `new:${next}`
-
-  if (line !== undefined) return `ln:${line}`
-  if (next !== undefined) return `new:${next}`
-  if (old !== undefined) return `old:${old}`
-
-  return `v:${info.visualLineIndex}`
 }
