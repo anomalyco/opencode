@@ -36,6 +36,7 @@ export type SessionReviewLineComment = {
 export type SessionReviewFocus = { file: string; id: string }
 
 export interface SessionReviewProps {
+  title?: JSX.Element
   split?: boolean
   diffStyle?: SessionReviewDiffStyle
   onDiffStyleChange?: (diffStyle: SessionReviewDiffStyle) => void
@@ -287,7 +288,7 @@ export const SessionReview = (props: SessionReviewProps) => {
           [props.classes?.header ?? ""]: !!props.classes?.header,
         }}
       >
-        <div data-slot="session-review-title">{i18n.t("ui.sessionReview.title")}</div>
+        <div data-slot="session-review-title">{props.title ?? i18n.t("ui.sessionReview.title")}</div>
         <div data-slot="session-review-actions">
           <Show when={props.onDiffStyleChange}>
             <RadioGroup
