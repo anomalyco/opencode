@@ -45,8 +45,5 @@
       "type": "image/png",
       "purpose": "any"
     }
-  ],
-  "categories": ["productivity", "development", "utilities"],
-  "lang": "en-US",
-  "dir": "ltr"
+  ]
 }

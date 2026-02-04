@@ -66,13 +66,6 @@ export default defineConfig({
             href: "/site.webmanifest",
           },
         },
-        {
-          tag: "meta",
-          attrs: {
-            name: "theme-color",
-            content: "#ffffff",
-          },
-        },
       ],
       lastUpdated: true,
       expressiveCode: { themes: ["github-light", "github-dark"] },
