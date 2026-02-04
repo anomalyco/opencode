@@ -43,7 +43,11 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
             return null
           }
         })
-        .filter((line): line is PromptInfo => line !== null)
+        .filter((line): line is PromptInfo => {
+          return (
+            line !== null && typeof line === "object" && typeof line.input === "string" && Array.isArray(line.parts)
+          )
+        })
         .slice(-MAX_HISTORY_ENTRIES)
 
       setStore("history", lines)
