@@ -115,9 +115,64 @@ export function Diff<T>(props: DiffProps<T>) {
     host.removeAttribute("data-color-scheme")
   }
 
-  const notifyRendered = () => {
-    if (!local.onRendered) return
+  const lineIndex = (split: boolean, element: HTMLElement) => {
+    const raw = element.dataset.lineIndex
+    if (!raw) return
+    const values = raw
+      .split(",")
+      .map((value) => parseInt(value, 10))
+      .filter((value) => !Number.isNaN(value))
+    if (values.length === 0) return
+    if (!split) return values[0]
+    if (values.length === 2) return values[1]
+    return values[0]
+  }
 
+  const rowIndex = (root: ShadowRoot, split: boolean, line: number, side: SelectionSide | undefined) => {
+    const nodes = Array.from(root.querySelectorAll(`[data-line="${line}"], [data-alt-line="${line}"]`)).filter(
+      (node): node is HTMLElement => node instanceof HTMLElement,
+    )
+    if (nodes.length === 0) return
+
+    const targetSide = side ?? "additions"
+
+    for (const node of nodes) {
+      if (findSide(node) === targetSide) return lineIndex(split, node)
+      if (parseInt(node.dataset.altLine ?? "", 10) === line) return lineIndex(split, node)
+    }
+  }
+
+  const fixSelection = (range: SelectedLineRange | null) => {
+    if (!range) return range
+    const root = getRoot()
+    if (!root) return
+
+    const diffs = root.querySelector("[data-diffs]")
+    if (!(diffs instanceof HTMLElement)) return
+
+    const split = diffs.dataset.type === "split"
+
+    const start = rowIndex(root, split, range.start, range.side)
+    const end = rowIndex(root, split, range.end, range.endSide ?? range.side)
+    if (start === undefined || end === undefined) {
+      if (root.querySelector("[data-line], [data-alt-line]") == null) return
+      return null
+    }
+    if (start <= end) return range
+
+    const side = range.endSide ?? range.side
+    const swapped: SelectedLineRange = {
+      start: range.end,
+      end: range.start,
+    }
+
+    if (side) swapped.side = side
+    if (range.endSide && range.side) swapped.endSide = range.side
+
+    return swapped
+  }
+
+  const notifyRendered = () => {
     observer?.disconnect()
     observer = undefined
     renderToken++
@@ -134,6 +189,7 @@ export function Diff<T>(props: DiffProps<T>) {
       observer = undefined
       requestAnimationFrame(() => {
         if (token !== renderToken) return
+        setSelectedLines(lastSelection)
         local.onRendered?.()
       })
     }
@@ -173,7 +229,8 @@ export function Diff<T>(props: DiffProps<T>) {
     const root = getRoot()
     if (typeof MutationObserver === "undefined") {
       if (!root || !isReady(root)) return
-      local.onRendered()
+      setSelectedLines(lastSelection)
+      local.onRendered?.()
       return
     }
 
@@ -214,41 +271,14 @@ export function Diff<T>(props: DiffProps<T>) {
     )
     if (code.length === 0) return
 
-    const lineIndex = (element: HTMLElement) => {
-      const raw = element.dataset.lineIndex
-      if (!raw) return
-      const values = raw
-        .split(",")
-        .map((value) => parseInt(value, 10))
-        .filter((value) => !Number.isNaN(value))
-      if (values.length === 0) return
-      if (!split) return values[0]
-      if (values.length === 2) return values[1]
-      return values[0]
-    }
-
-    const rowIndex = (line: number, side: SelectionSide | undefined) => {
-      const nodes = Array.from(root.querySelectorAll(`[data-line="${line}"], [data-alt-line="${line}"]`)).filter(
-        (node): node is HTMLElement => node instanceof HTMLElement,
-      )
-      if (nodes.length === 0) return
-
-      const targetSide = side ?? "additions"
-
-      for (const node of nodes) {
-        if (findSide(node) === targetSide) return lineIndex(node)
-        if (parseInt(node.dataset.altLine ?? "", 10) === line) return lineIndex(node)
-      }
-    }
-
     for (const range of ranges) {
-      const start = rowIndex(range.start, range.side)
+      const start = rowIndex(root, split, range.start, range.side)
       if (start === undefined) continue
 
       const end = (() => {
         const same = range.end === range.start && (range.endSide == null || range.endSide === range.side)
         if (same) return start
-        return rowIndex(range.end, range.endSide ?? range.side)
+        return rowIndex(root, split, range.end, range.endSide ?? range.side)
       })()
       if (end === undefined) continue
 
@@ -258,7 +288,7 @@ export function Diff<T>(props: DiffProps<T>) {
       for (const block of code) {
         for (const element of Array.from(block.children)) {
           if (!(element instanceof HTMLElement)) continue
-          const idx = lineIndex(element)
+          const idx = lineIndex(split, element)
           if (idx === undefined) continue
           if (idx > last) break
           if (idx < first) continue
@@ -275,8 +305,15 @@ export function Diff<T>(props: DiffProps<T>) {
   const setSelectedLines = (range: SelectedLineRange | null) => {
     const active = current()
     if (!active) return
-    lastSelection = range
-    active.setSelectedLines(range)
+
+    const fixed = fixSelection(range)
+    if (fixed === undefined) {
+      lastSelection = range
+      return
+    }
+
+    lastSelection = fixed
+    active.setSelectedLines(fixed)
   }
 
   const updateSelection = () => {

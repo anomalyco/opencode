@@ -66,6 +66,73 @@
         ]
       }
     },
+    "/global/config": {
+      "get": {
+        "operationId": "global.config.get",
+        "summary": "Get global configuration",
+        "description": "Retrieve the current global OpenCode configuration settings and preferences.",
+        "responses": {
+          "200": {
+            "description": "Get global config info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Config"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.global.config.get({\n  ...\n})"
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "global.config.update",
+        "summary": "Update global configuration",
+        "description": "Update global OpenCode configuration settings and preferences.",
+        "responses": {
+          "200": {
+            "description": "Successfully updated global config",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Config"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Config"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.global.config.update({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/global/dispose": {
       "post": {
         "operationId": "global.dispose",
@@ -87,6 +154,103 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.global.dispose({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/auth/{providerID}": {
+      "put": {
+        "operationId": "auth.set",
+        "summary": "Set auth credentials",
+        "description": "Set authentication credentials",
+        "responses": {
+          "200": {
+            "description": "Successfully set authentication credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "providerID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Auth"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.auth.set({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "auth.remove",
+        "summary": "Remove auth credentials",
+        "description": "Remove authentication credentials",
+        "responses": {
+          "200": {
+            "description": "Successfully removed authentication credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "providerID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.auth.remove({\n  ...\n})"
           }
         ]
       }
@@ -5604,9 +5768,12 @@
                       },
                       "location": {
                         "type": "string"
+                      },
+                      "content": {
+                        "type": "string"
                       }
                     },
-                    "required": ["name", "description", "location"]
+                    "required": ["name", "description", "location", "content"]
                   }
                 }
               }
@@ -5691,117 +5858,6 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.formatter.status({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/auth/{providerID}": {
-      "put": {
-        "operationId": "auth.set",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "directory",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "providerID",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
-          }
-        ],
-        "summary": "Set auth credentials",
-        "description": "Set authentication credentials",
-        "responses": {
-          "200": {
-            "description": "Successfully set authentication credentials",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "boolean"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
-                }
-              }
-            }
-          }
-        },
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Auth"
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.auth.set({\n  ...\n})"
-          }
-        ]
-      },
-      "delete": {
-        "operationId": "auth.remove",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "directory",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "providerID",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
-          }
-        ],
-        "summary": "Remove auth credentials",
-        "description": "Remove authentication credentials",
-        "responses": {
-          "200": {
-            "description": "Successfully removed authentication credentials",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "boolean"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.auth.remove({\n  ...\n})"
           }
         ]
       }
@@ -6076,6 +6132,10 @@
           },
           "deletions": {
             "type": "number"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["added", "deleted", "modified"]
           }
         },
         "required": ["file", "before", "after", "additions", "deletions"]
@@ -6493,6 +6553,49 @@
           }
         },
         "required": ["id", "sessionID", "messageID", "type", "text"]
+      },
+      "SubtaskPart": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "messageID": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "const": "subtask"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "agent": {
+            "type": "string"
+          },
+          "model": {
+            "type": "object",
+            "properties": {
+              "providerID": {
+                "type": "string"
+              },
+              "modelID": {
+                "type": "string"
+              }
+            },
+            "required": ["providerID", "modelID"]
+          },
+          "command": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "sessionID", "messageID", "type", "prompt", "description", "agent"]
       },
       "ReasoningPart": {
         "type": "object",
@@ -7117,47 +7220,7 @@
             "$ref": "#/components/schemas/TextPart"
           },
           {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "sessionID": {
-                "type": "string"
-              },
-              "messageID": {
-                "type": "string"
-              },
-              "type": {
-                "type": "string",
-                "const": "subtask"
-              },
-              "prompt": {
-                "type": "string"
-              },
-              "description": {
-                "type": "string"
-              },
-              "agent": {
-                "type": "string"
-              },
-              "model": {
-                "type": "object",
-                "properties": {
-                  "providerID": {
-                    "type": "string"
-                  },
-                  "modelID": {
-                    "type": "string"
-                  }
-                },
-                "required": ["providerID", "modelID"]
-              },
-              "command": {
-                "type": "string"
-              }
-            },
-            "required": ["id", "sessionID", "messageID", "type", "prompt", "description", "agent"]
+            "$ref": "#/components/schemas/SubtaskPart"
           },
           {
             "$ref": "#/components/schemas/ReasoningPart"
@@ -7573,6 +7636,41 @@
         },
         "required": ["type", "properties"]
       },
+      "Event.file.watcher.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "file.watcher.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "event": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "const": "add"
+                  },
+                  {
+                    "type": "string",
+                    "const": "change"
+                  },
+                  {
+                    "type": "string",
+                    "const": "unlink"
+                  }
+                ]
+              }
+            },
+            "required": ["file", "event"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "Todo": {
         "type": "object",
         "properties": {
@@ -7616,41 +7714,6 @@
               }
             },
             "required": ["sessionID", "todos"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.file.watcher.updated": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "file.watcher.updated"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "file": {
-                "type": "string"
-              },
-              "event": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "const": "add"
-                  },
-                  {
-                    "type": "string",
-                    "const": "change"
-                  },
-                  {
-                    "type": "string",
-                    "const": "unlink"
-                  }
-                ]
-              }
-            },
-            "required": ["file", "event"]
           }
         },
         "required": ["type", "properties"]
@@ -8321,10 +8384,10 @@
             "$ref": "#/components/schemas/Event.session.compacted"
           },
           {
-            "$ref": "#/components/schemas/Event.todo.updated"
+            "$ref": "#/components/schemas/Event.file.watcher.updated"
           },
           {
-            "$ref": "#/components/schemas/Event.file.watcher.updated"
+            "$ref": "#/components/schemas/Event.todo.updated"
           },
           {
             "$ref": "#/components/schemas/Event.tui.prompt.append"
@@ -8396,46 +8459,6 @@
           }
         },
         "required": ["directory", "payload"]
-      },
-      "BadRequestError": {
-        "type": "object",
-        "properties": {
-          "data": {},
-          "errors": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "propertyNames": {
-                "type": "string"
-              },
-              "additionalProperties": {}
-            }
-          },
-          "success": {
-            "type": "boolean",
-            "const": false
-          }
-        },
-        "required": ["data", "errors", "success"]
-      },
-      "NotFoundError": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "const": "NotFoundError"
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "message": {
-                "type": "string"
-              }
-            },
-            "required": ["message"]
-          }
-        },
-        "required": ["name", "data"]
       },
       "KeybindsConfig": {
         "description": "Custom keybind configurations",
@@ -8932,6 +8955,10 @@
             "description": "Enable mDNS service discovery",
             "type": "boolean"
           },
+          "mdnsDomain": {
+            "description": "Custom domain name for mDNS service (default: opencode.local)",
+            "type": "string"
+          },
           "cors": {
             "description": "Additional domains to allow for CORS",
             "type": "array",
@@ -9023,6 +9050,9 @@
               },
               "doom_loop": {
                 "$ref": "#/components/schemas/PermissionActionConfig"
+              },
+              "skill": {
+                "$ref": "#/components/schemas/PermissionRuleConfig"
               }
             },
             "additionalProperties": {
@@ -9038,6 +9068,10 @@
         "type": "object",
         "properties": {
           "model": {
+            "type": "string"
+          },
+          "variant": {
+            "description": "Default model variant for this agent (applies only when using the agent's configured model).",
             "type": "string"
           },
           "temperature": {
@@ -9082,9 +9116,17 @@
             "additionalProperties": {}
           },
           "color": {
-            "description": "Hex color code for the agent (e.g., #FF5733)",
-            "type": "string",
-            "pattern": "^#[0-9a-fA-F]{6}$"
+            "description": "Hex color code (e.g., #FF5733) or theme color (e.g., primary)",
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^#[0-9a-fA-F]{6}$"
+              },
+              {
+                "type": "string",
+                "enum": ["primary", "secondary", "accent", "success", "warning", "error", "info"]
+              }
+            ]
           },
           "steps": {
             "description": "Maximum number of agentic iterations before forcing text-only response",
@@ -9535,6 +9577,19 @@
               "required": ["template"]
             }
           },
+          "skills": {
+            "description": "Additional skill folder paths",
+            "type": "object",
+            "properties": {
+              "paths": {
+                "description": "Additional paths to skill folders",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "watcher": {
             "type": "object",
             "properties": {
@@ -9847,69 +9902,6 @@
           "experimental": {
             "type": "object",
             "properties": {
-              "hook": {
-                "type": "object",
-                "properties": {
-                  "file_edited": {
-                    "type": "object",
-                    "propertyNames": {
-                      "type": "string"
-                    },
-                    "additionalProperties": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "command": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          },
-                          "environment": {
-                            "type": "object",
-                            "propertyNames": {
-                              "type": "string"
-                            },
-                            "additionalProperties": {
-                              "type": "string"
-                            }
-                          }
-                        },
-                        "required": ["command"]
-                      }
-                    }
-                  },
-                  "session_completed": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "command": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          }
-                        },
-                        "environment": {
-                          "type": "object",
-                          "propertyNames": {
-                            "type": "string"
-                          },
-                          "additionalProperties": {
-                            "type": "string"
-                          }
-                        }
-                      },
-                      "required": ["command"]
-                    }
-                  }
-                }
-              },
-              "chatMaxRetries": {
-                "description": "Number of retries for chat completions on failure",
-                "type": "number"
-              },
               "disable_paste_summary": {
                 "type": "boolean"
               },
@@ -9942,6 +9934,113 @@
           }
         },
         "additionalProperties": false
+      },
+      "BadRequestError": {
+        "type": "object",
+        "properties": {
+          "data": {},
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "success": {
+            "type": "boolean",
+            "const": false
+          }
+        },
+        "required": ["data", "errors", "success"]
+      },
+      "OAuth": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "oauth"
+          },
+          "refresh": {
+            "type": "string"
+          },
+          "access": {
+            "type": "string"
+          },
+          "expires": {
+            "type": "number"
+          },
+          "accountId": {
+            "type": "string"
+          },
+          "enterpriseUrl": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "refresh", "access", "expires"]
+      },
+      "ApiAuth": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "api"
+          },
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "key"]
+      },
+      "WellKnownAuth": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "wellknown"
+          },
+          "key": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "key", "token"]
+      },
+      "Auth": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/OAuth"
+          },
+          {
+            "$ref": "#/components/schemas/ApiAuth"
+          },
+          {
+            "$ref": "#/components/schemas/WellKnownAuth"
+          }
+        ]
+      },
+      "NotFoundError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "const": "NotFoundError"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"]
+          }
+        },
+        "required": ["name", "data"]
       },
       "Model": {
         "type": "object",
@@ -10530,7 +10629,7 @@
         "properties": {
           "type": {
             "type": "string",
-            "const": "text"
+            "enum": ["text", "binary"]
           },
           "content": {
             "type": "string"
@@ -10739,8 +10838,9 @@
           "model": {
             "type": "string"
           },
-          "mcp": {
-            "type": "boolean"
+          "source": {
+            "type": "string",
+            "enum": ["command", "mcp", "skill"]
           },
           "template": {
             "anyOf": [
@@ -10807,6 +10907,9 @@
             },
             "required": ["modelID", "providerID"]
           },
+          "variant": {
+            "type": "string"
+          },
           "prompt": {
             "type": "string"
           },
@@ -10869,73 +10972,6 @@
           }
         },
         "required": ["name", "extensions", "enabled"]
-      },
-      "OAuth": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "oauth"
-          },
-          "refresh": {
-            "type": "string"
-          },
-          "access": {
-            "type": "string"
-          },
-          "expires": {
-            "type": "number"
-          },
-          "accountId": {
-            "type": "string"
-          },
-          "enterpriseUrl": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "refresh", "access", "expires"]
-      },
-      "ApiAuth": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "api"
-          },
-          "key": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "key"]
-      },
-      "WellKnownAuth": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "wellknown"
-          },
-          "key": {
-            "type": "string"
-          },
-          "token": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "key", "token"]
-      },
-      "Auth": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/OAuth"
-          },
-          {
-            "$ref": "#/components/schemas/ApiAuth"
-          },
-          {
-            "$ref": "#/components/schemas/WellKnownAuth"
-          }
-        ]
       }
     }
   }

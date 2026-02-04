@@ -4,25 +4,211 @@ import { UI } from "../ui"
 import { cmd } from "./cmd"
 import { Flag } from "../../flag/flag"
 import { bootstrap } from "../bootstrap"
-import { Command } from "../../command"
 import { EOL } from "os"
-import { select } from "@clack/prompts"
-import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2"
+import { createOpencodeClient, type Message, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
 import { Agent } from "../../agent/agent"
+import { PermissionNext } from "../../permission/next"
+import { Tool } from "../../tool/tool"
+import { GlobTool } from "../../tool/glob"
+import { GrepTool } from "../../tool/grep"
+import { ListTool } from "../../tool/ls"
+import { ReadTool } from "../../tool/read"
+import { WebFetchTool } from "../../tool/webfetch"
+import { EditTool } from "../../tool/edit"
+import { WriteTool } from "../../tool/write"
+import { CodeSearchTool } from "../../tool/codesearch"
+import { WebSearchTool } from "../../tool/websearch"
+import { TaskTool } from "../../tool/task"
+import { SkillTool } from "../../tool/skill"
+import { BashTool } from "../../tool/bash"
+import { TodoWriteTool } from "../../tool/todo"
+import { Locale } from "../../util/locale"
 
-const TOOL: Record<string, [string, string]> = {
-  todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
-  todoread: ["Todo", UI.Style.TEXT_WARNING_BOLD],
-  bash: ["Bash", UI.Style.TEXT_DANGER_BOLD],
-  edit: ["Edit", UI.Style.TEXT_SUCCESS_BOLD],
-  glob: ["Glob", UI.Style.TEXT_INFO_BOLD],
-  grep: ["Grep", UI.Style.TEXT_INFO_BOLD],
-  list: ["List", UI.Style.TEXT_INFO_BOLD],
-  read: ["Read", UI.Style.TEXT_HIGHLIGHT_BOLD],
-  write: ["Write", UI.Style.TEXT_SUCCESS_BOLD],
-  websearch: ["Search", UI.Style.TEXT_DIM_BOLD],
+type ToolProps<T extends Tool.Info> = {
+  input: Tool.InferParameters<T>
+  metadata: Tool.InferMetadata<T>
+  part: ToolPart
+}
+
+function props<T extends Tool.Info>(part: ToolPart): ToolProps<T> {
+  const state = part.state
+  return {
+    input: state.input as Tool.InferParameters<T>,
+    metadata: ("metadata" in state ? state.metadata : {}) as Tool.InferMetadata<T>,
+    part,
+  }
+}
+
+type Inline = {
+  icon: string
+  title: string
+  description?: string
+}
+
+function inline(info: Inline) {
+  const suffix = info.description ? UI.Style.TEXT_DIM + ` ${info.description}` + UI.Style.TEXT_NORMAL : ""
+  UI.println(UI.Style.TEXT_NORMAL + info.icon, UI.Style.TEXT_NORMAL + info.title + suffix)
+}
+
+function block(info: Inline, output?: string) {
+  UI.empty()
+  inline(info)
+  if (!output?.trim()) return
+  UI.println(output)
+  UI.empty()
+}
+
+function fallback(part: ToolPart) {
+  const state = part.state
+  const input = "input" in state ? state.input : undefined
+  const title =
+    ("title" in state && state.title ? state.title : undefined) ||
+    (input && typeof input === "object" && Object.keys(input).length > 0 ? JSON.stringify(input) : "Unknown")
+  inline({
+    icon: "⚙",
+    title: `${part.tool} ${title}`,
+  })
+}
+
+function glob(info: ToolProps<typeof GlobTool>) {
+  const root = info.input.path ?? ""
+  const title = `Glob "${info.input.pattern}"`
+  const suffix = root ? `in ${normalizePath(root)}` : ""
+  const num = info.metadata.count
+  const description =
+    num === undefined ? suffix : `${suffix}${suffix ? " · " : ""}${num} ${num === 1 ? "match" : "matches"}`
+  inline({
+    icon: "✱",
+    title,
+    ...(description && { description }),
+  })
+}
+
+function grep(info: ToolProps<typeof GrepTool>) {
+  const root = info.input.path ?? ""
+  const title = `Grep "${info.input.pattern}"`
+  const suffix = root ? `in ${normalizePath(root)}` : ""
+  const num = info.metadata.matches
+  const description =
+    num === undefined ? suffix : `${suffix}${suffix ? " · " : ""}${num} ${num === 1 ? "match" : "matches"}`
+  inline({
+    icon: "✱",
+    title,
+    ...(description && { description }),
+  })
+}
+
+function list(info: ToolProps<typeof ListTool>) {
+  const dir = info.input.path ? normalizePath(info.input.path) : ""
+  inline({
+    icon: "→",
+    title: dir ? `List ${dir}` : "List",
+  })
+}
+
+function read(info: ToolProps<typeof ReadTool>) {
+  const file = normalizePath(info.input.filePath)
+  const pairs = Object.entries(info.input).filter(([key, value]) => {
+    if (key === "filePath") return false
+    return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+  })
+  const description = pairs.length ? `[${pairs.map(([key, value]) => `${key}=${value}`).join(", ")}]` : undefined
+  inline({
+    icon: "→",
+    title: `Read ${file}`,
+    ...(description && { description }),
+  })
+}
+
+function write(info: ToolProps<typeof WriteTool>) {
+  block(
+    {
+      icon: "←",
+      title: `Write ${normalizePath(info.input.filePath)}`,
+    },
+    info.part.state.status === "completed" ? info.part.state.output : undefined,
+  )
+}
+
+function webfetch(info: ToolProps<typeof WebFetchTool>) {
+  inline({
+    icon: "%",
+    title: `WebFetch ${info.input.url}`,
+  })
+}
+
+function edit(info: ToolProps<typeof EditTool>) {
+  const title = normalizePath(info.input.filePath)
+  const diff = info.metadata.diff
+  block(
+    {
+      icon: "←",
+      title: `Edit ${title}`,
+    },
+    diff,
+  )
+}
+
+function codesearch(info: ToolProps<typeof CodeSearchTool>) {
+  inline({
+    icon: "◇",
+    title: `Exa Code Search "${info.input.query}"`,
+  })
+}
+
+function websearch(info: ToolProps<typeof WebSearchTool>) {
+  inline({
+    icon: "◈",
+    title: `Exa Web Search "${info.input.query}"`,
+  })
+}
+
+function task(info: ToolProps<typeof TaskTool>) {
+  const agent = Locale.titlecase(info.input.subagent_type)
+  const desc = info.input.description
+  const started = info.part.state.status === "running"
+  const name = desc ?? `${agent} Task`
+  inline({
+    icon: started ? "•" : "✓",
+    title: name,
+    description: desc ? `${agent} Agent` : undefined,
+  })
+}
+
+function skill(info: ToolProps<typeof SkillTool>) {
+  inline({
+    icon: "→",
+    title: `Skill "${info.input.name}"`,
+  })
+}
+
+function bash(info: ToolProps<typeof BashTool>) {
+  const output = info.part.state.status === "completed" ? info.part.state.output?.trim() : undefined
+  block(
+    {
+      icon: "$",
+      title: `${info.input.command}`,
+    },
+    output,
+  )
+}
+
+function todo(info: ToolProps<typeof TodoWriteTool>) {
+  block(
+    {
+      icon: "#",
+      title: "Todos",
+    },
+    info.input.todos.map((item) => `${item.status === "completed" ? "[x]" : "[ ]"} ${item.content}`).join("\n"),
+  )
+}
+
+function normalizePath(input?: string) {
+  if (!input) return ""
+  if (path.isAbsolute(input)) return path.relative(process.cwd(), input) || "."
+  return input
 }
 
 export const RunCommand = cmd({
@@ -91,17 +277,22 @@ export const RunCommand = cmd({
         type: "string",
         describe: "model variant (provider-specific reasoning effort, e.g., high, max, minimal)",
       })
+      .option("thinking", {
+        type: "boolean",
+        describe: "show thinking blocks",
+        default: false,
+      })
   },
   handler: async (args) => {
     let message = [...args.message, ...(args["--"] || [])]
       .map((arg) => (arg.includes(" ") ? `"${arg.replace(/"/g, '\\"')}"` : arg))
       .join(" ")
 
-    const fileParts: any[] = []
+    const files: { type: "file"; url: string; filename: string; mime: string }[] = []
     if (args.file) {
-      const files = Array.isArray(args.file) ? args.file : [args.file]
+      const list = Array.isArray(args.file) ? args.file : [args.file]
 
-      for (const filePath of files) {
+      for (const filePath of list) {
         const resolvedPath = path.resolve(process.cwd(), filePath)
         const file = Bun.file(resolvedPath)
         const stats = await file.stat().catch(() => {})
@@ -117,7 +308,7 @@ export const RunCommand = cmd({
         const stat = await file.stat()
         const mime = stat.isDirectory() ? "application/x-directory" : "text/plain"
 
-        fileParts.push({
+        files.push({
           type: "file",
           url: `file://${resolvedPath}`,
           filename: path.basename(resolvedPath),
@@ -133,17 +324,75 @@ export const RunCommand = cmd({
       process.exit(1)
     }
 
-    const execute = async (sdk: OpencodeClient, sessionID: string) => {
-      const printEvent = (color: string, type: string, title: string) => {
-        UI.println(
-          color + `|`,
-          UI.Style.TEXT_NORMAL + UI.Style.TEXT_DIM + ` ${type.padEnd(7, " ")}`,
-          "",
-          UI.Style.TEXT_NORMAL + title,
-        )
+    const rules: PermissionNext.Ruleset = [
+      {
+        permission: "question",
+        action: "deny",
+        pattern: "*",
+      },
+      {
+        permission: "plan_enter",
+        action: "deny",
+        pattern: "*",
+      },
+      {
+        permission: "plan_exit",
+        action: "deny",
+        pattern: "*",
+      },
+    ]
+
+    function title() {
+      if (args.title === undefined) return
+      if (args.title !== "") return args.title
+      return message.slice(0, 50) + (message.length > 50 ? "..." : "")
+    }
+
+    async function session(sdk: OpencodeClient) {
+      if (args.continue) {
+        const result = await sdk.session.list()
+        return result.data?.find((s) => !s.parentID)?.id
+      }
+      if (args.session) return args.session
+      const name = title()
+      const result = await sdk.session.create({ title: name, permission: rules })
+      return result.data?.id
+    }
+
+    async function share(sdk: OpencodeClient, sessionID: string) {
+      const cfg = await sdk.config.get()
+      if (!cfg.data) return
+      if (cfg.data.share !== "auto" && !Flag.OPENCODE_AUTO_SHARE && !args.share) return
+      const res = await sdk.session.share({ sessionID }).catch((error) => {
+        if (error instanceof Error && error.message.includes("disabled")) {
+          UI.println(UI.Style.TEXT_DANGER_BOLD + "!  " + error.message)
+        }
+        return { error }
+      })
+      if (!res.error && "data" in res && res.data?.share?.url) {
+        UI.println(UI.Style.TEXT_INFO_BOLD + "~  " + res.data.share.url)
+      }
+    }
+
+    async function execute(sdk: OpencodeClient) {
+      function tool(part: ToolPart) {
+        if (part.tool === "bash") return bash(props<typeof BashTool>(part))
+        if (part.tool === "glob") return glob(props<typeof GlobTool>(part))
+        if (part.tool === "grep") return grep(props<typeof GrepTool>(part))
+        if (part.tool === "list") return list(props<typeof ListTool>(part))
+        if (part.tool === "read") return read(props<typeof ReadTool>(part))
+        if (part.tool === "write") return write(props<typeof WriteTool>(part))
+        if (part.tool === "webfetch") return webfetch(props<typeof WebFetchTool>(part))
+        if (part.tool === "edit") return edit(props<typeof EditTool>(part))
+        if (part.tool === "codesearch") return codesearch(props<typeof CodeSearchTool>(part))
+        if (part.tool === "websearch") return websearch(props<typeof WebSearchTool>(part))
+        if (part.tool === "task") return task(props<typeof TaskTool>(part))
+        if (part.tool === "todowrite") return todo(props<typeof TodoWriteTool>(part))
+        if (part.tool === "skill") return skill(props<typeof SkillTool>(part))
+        return fallback(part)
       }
 
-      const outputJsonEvent = (type: string, data: any) => {
+      function emit(type: string, data: Record<string, unknown>) {
         if (args.format === "json") {
           process.stdout.write(JSON.stringify({ type, timestamp: Date.now(), sessionID, ...data }) + EOL)
           return true
@@ -152,41 +401,77 @@ export const RunCommand = cmd({
       }
 
       const events = await sdk.event.subscribe()
-      let errorMsg: string | undefined
+      let error: string | undefined
 
-      const eventProcessor = (async () => {
+      async function loop() {
+        const toggles = new Map<string, boolean>()
+
         for await (const event of events.stream) {
+          if (
+            event.type === "message.updated" &&
+            event.properties.info.role === "assistant" &&
+            args.format !== "json" &&
+            toggles.get("start") !== true
+          ) {
+            UI.empty()
+            UI.println(`> ${event.properties.info.agent} · ${event.properties.info.modelID}`)
+            UI.empty()
+            toggles.set("start", true)
+          }
+
           if (event.type === "message.part.updated") {
             const part = event.properties.part
             if (part.sessionID !== sessionID) continue
 
             if (part.type === "tool" && part.state.status === "completed") {
-              if (outputJsonEvent("tool_use", { part })) continue
-              const [tool, color] = TOOL[part.tool] ?? [part.tool, UI.Style.TEXT_INFO_BOLD]
-              const title =
-                part.state.title ||
-                (Object.keys(part.state.input).length > 0 ? JSON.stringify(part.state.input) : "Unknown")
-              printEvent(color, tool, title)
-              if (part.tool === "bash" && part.state.output?.trim()) {
-                UI.println()
-                UI.println(part.state.output)
-              }
+              if (emit("tool_use", { part })) continue
+              tool(part)
+            }
+
+            if (
+              part.type === "tool" &&
+              part.tool === "task" &&
+              part.state.status === "running" &&
+              args.format !== "json"
+            ) {
+              if (toggles.get(part.id) === true) continue
+              task(props<typeof TaskTool>(part))
+              toggles.set(part.id, true)
             }
 
             if (part.type === "step-start") {
-              if (outputJsonEvent("step_start", { part })) continue
+              if (emit("step_start", { part })) continue
             }
 
             if (part.type === "step-finish") {
-              if (outputJsonEvent("step_finish", { part })) continue
+              if (emit("step_finish", { part })) continue
             }
 
             if (part.type === "text" && part.time?.end) {
-              if (outputJsonEvent("text", { part })) continue
-              const isPiped = !process.stdout.isTTY
-              if (!isPiped) UI.println()
-              process.stdout.write((isPiped ? part.text : UI.markdown(part.text)) + EOL)
-              if (!isPiped) UI.println()
+              if (emit("text", { part })) continue
+              const text = part.text.trim()
+              if (!text) continue
+              if (!process.stdout.isTTY) {
+                process.stdout.write(text + EOL)
+                continue
+              }
+              UI.empty()
+              UI.println(text)
+              UI.empty()
+            }
+
+            if (part.type === "reasoning" && part.time?.end && args.thinking) {
+              if (emit("reasoning", { part })) continue
+              const text = part.text.trim()
+              if (!text) continue
+              const line = `Thinking: ${text}`
+              if (process.stdout.isTTY) {
+                UI.empty()
+                UI.println(`${UI.Style.TEXT_DIM}\u001b[3m${line}\u001b[0m${UI.Style.TEXT_NORMAL}`)
+                UI.empty()
+                continue
+              }
+              process.stdout.write(line + EOL)
             }
           }
 
@@ -197,42 +482,40 @@ export const RunCommand = cmd({
             if ("data" in props.error && props.error.data && "message" in props.error.data) {
               err = String(props.error.data.message)
             }
-            errorMsg = errorMsg ? errorMsg + EOL + err : err
-            if (outputJsonEvent("error", { error: props.error })) continue
+            error = error ? error + EOL + err : err
+            if (emit("error", { error: props.error })) continue
             UI.error(err)
           }
 
-          if (event.type === "session.idle" && event.properties.sessionID === sessionID) {
+          if (
+            event.type === "session.status" &&
+            event.properties.sessionID === sessionID &&
+            event.properties.status.type === "idle"
+          ) {
             break
           }
 
           if (event.type === "permission.asked") {
             const permission = event.properties
             if (permission.sessionID !== sessionID) continue
-            const result = await select({
-              message: `Permission required: ${permission.permission} (${permission.patterns.join(", ")})`,
-              options: [
-                { value: "once", label: "Allow once" },
-                { value: "always", label: "Always allow: " + permission.always.join(", ") },
-                { value: "reject", label: "Reject" },
-              ],
-              initialValue: "once",
-            }).catch(() => "reject")
-            const response = (result.toString().includes("cancel") ? "reject" : result) as "once" | "always" | "reject"
-            await sdk.permission.respond({
-              sessionID,
-              permissionID: permission.id,
-              response,
+            UI.println(
+              UI.Style.TEXT_WARNING_BOLD + "!",
+              UI.Style.TEXT_NORMAL +
+                `permission requested: ${permission.permission} (${permission.patterns.join(", ")}); auto-rejecting`,
+            )
+            await sdk.permission.reply({
+              requestID: permission.id,
+              reply: "reject",
             })
           }
         }
-      })()
+      }
 
       // Validate agent if specified
-      const resolvedAgent = await (async () => {
+      const agent = await (async () => {
         if (!args.agent) return undefined
-        const agent = await Agent.get(args.agent)
-        if (!agent) {
+        const entry = await Agent.get(args.agent)
+        if (!entry) {
           UI.println(
             UI.Style.TEXT_WARNING_BOLD + "!",
             UI.Style.TEXT_NORMAL,
@@ -240,7 +523,7 @@ export const RunCommand = cmd({
           )
           return undefined
         }
-        if (agent.mode === "subagent") {
+        if (entry.mode === "subagent") {
           UI.println(
             UI.Style.TEXT_WARNING_BOLD + "!",
             UI.Style.TEXT_NORMAL,
@@ -251,91 +534,42 @@ export const RunCommand = cmd({
         return args.agent
       })()
 
+      const sessionID = await session(sdk)
+      if (!sessionID) {
+        UI.error("Session not found")
+        process.exit(1)
+      }
+      await share(sdk, sessionID)
+
+      loop().catch((e) => {
+        console.error(e)
+        process.exit(1)
+      })
+
       if (args.command) {
         await sdk.session.command({
           sessionID,
-          agent: resolvedAgent,
+          agent,
           model: args.model,
           command: args.command,
           arguments: message,
           variant: args.variant,
         })
       } else {
-        const modelParam = args.model ? Provider.parseModel(args.model) : undefined
+        const model = args.model ? Provider.parseModel(args.model) : undefined
         await sdk.session.prompt({
           sessionID,
-          agent: resolvedAgent,
-          model: modelParam,
+          agent,
+          model,
           variant: args.variant,
-          parts: [...fileParts, { type: "text", text: message }],
+          parts: [...files, { type: "text", text: message }],
         })
       }
-
-      await eventProcessor
-      if (errorMsg) process.exit(1)
     }
 
     if (args.attach) {
       const sdk = createOpencodeClient({ baseUrl: args.attach })
-
-      const sessionID = await (async () => {
-        if (args.continue) {
-          const result = await sdk.session.list()
-          return result.data?.find((s) => !s.parentID)?.id
-        }
-        if (args.session) return args.session
-
-        const title =
-          args.title !== undefined
-            ? args.title === ""
-              ? message.slice(0, 50) + (message.length > 50 ? "..." : "")
-              : args.title
-            : undefined
-
-        const result = await sdk.session.create(
-          title
-            ? {
-                title,
-                permission: [
-                  {
-                    permission: "question",
-                    action: "deny",
-                    pattern: "*",
-                  },
-                ],
-              }
-            : {
-                permission: [
-                  {
-                    permission: "question",
-                    action: "deny",
-                    pattern: "*",
-                  },
-                ],
-              },
-        )
-        return result.data?.id
-      })()
-
-      if (!sessionID) {
-        UI.error("Session not found")
-        process.exit(1)
-      }
-
-      const cfgResult = await sdk.config.get()
-      if (cfgResult.data && (cfgResult.data.share === "auto" || Flag.OPENCODE_AUTO_SHARE || args.share)) {
-        const shareResult = await sdk.session.share({ sessionID }).catch((error) => {
-          if (error instanceof Error && error.message.includes("disabled")) {
-            UI.println(UI.Style.TEXT_DANGER_BOLD + "!  " + error.message)
-          }
-          return { error }
-        })
-        if (!shareResult.error && "data" in shareResult && shareResult.data?.share?.url) {
-          UI.println(UI.Style.TEXT_INFO_BOLD + "~  " + shareResult.data.share.url)
-        }
-      }
-
-      return await execute(sdk, sessionID)
+      return await execute(sdk)
     }
 
     await bootstrap(process.cwd(), async () => {
@@ -344,52 +578,7 @@ export const RunCommand = cmd({
         return Server.App().fetch(request)
       }) as typeof globalThis.fetch
       const sdk = createOpencodeClient({ baseUrl: "http://opencode.internal", fetch: fetchFn })
-
-      if (args.command) {
-        const exists = await Command.get(args.command)
-        if (!exists) {
-          UI.error(`Command "${args.command}" not found`)
-          process.exit(1)
-        }
-      }
-
-      const sessionID = await (async () => {
-        if (args.continue) {
-          const result = await sdk.session.list()
-          return result.data?.find((s) => !s.parentID)?.id
-        }
-        if (args.session) return args.session
-
-        const title =
-          args.title !== undefined
-            ? args.title === ""
-              ? message.slice(0, 50) + (message.length > 50 ? "..." : "")
-              : args.title
-            : undefined
-
-        const result = await sdk.session.create(title ? { title } : {})
-        return result.data?.id
-      })()
-
-      if (!sessionID) {
-        UI.error("Session not found")
-        process.exit(1)
-      }
-
-      const cfgResult = await sdk.config.get()
-      if (cfgResult.data && (cfgResult.data.share === "auto" || Flag.OPENCODE_AUTO_SHARE || args.share)) {
-        const shareResult = await sdk.session.share({ sessionID }).catch((error) => {
-          if (error instanceof Error && error.message.includes("disabled")) {
-            UI.println(UI.Style.TEXT_DANGER_BOLD + "!  " + error.message)
-          }
-          return { error }
-        })
-        if (!shareResult.error && "data" in shareResult && shareResult.data?.share?.url) {
-          UI.println(UI.Style.TEXT_INFO_BOLD + "~  " + shareResult.data.share.url)
-        }
-      }
-
-      await execute(sdk, sessionID)
+      await execute(sdk)
     })
   },
 })
