@@ -328,8 +328,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const exit = useExit()
     const args = useArgs()
 
+    let bootstrapId = 0
+
     async function bootstrap() {
-      console.log("bootstrapping")
+      const id = ++bootstrapId
       const start = Date.now() - 30 * 24 * 60 * 60 * 1000
       const sessionListPromise = sdk.client.session
         .list({ start: start })
@@ -363,6 +365,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             configResponse,
             ...(sessionListResponse ? [sessionListResponse] : []),
           ]).then((responses) => {
+            if (id !== bootstrapId) return
             const providers = responses[0]
             const providerList = responses[1]
             const agents = responses[2]
@@ -370,6 +373,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             const sessions = responses[4]
 
             batch(() => {
+              if (id !== bootstrapId) return
               setStore("provider", reconcile(providers.providers))
               setStore("provider_default", reconcile(providers.default))
               setStore("provider_next", reconcile(providerList))
@@ -380,26 +384,61 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           })
         })
         .then(() => {
+          if (id !== bootstrapId) return
           if (store.status !== "complete") setStore("status", "partial")
           // non-blocking
           Promise.all([
-            ...(args.continue ? [] : [sessionListPromise.then((sessions) => setStore("session", reconcile(sessions)))]),
-            sdk.client.command.list().then((x) => setStore("command", reconcile(x.data ?? []))),
-            sdk.client.lsp.status().then((x) => setStore("lsp", reconcile(x.data!))),
-            sdk.client.mcp.status().then((x) => setStore("mcp", reconcile(x.data!))),
-            sdk.client.experimental.resource.list().then((x) => setStore("mcp_resource", reconcile(x.data ?? {}))),
-            sdk.client.formatter.status().then((x) => setStore("formatter", reconcile(x.data!))),
+            ...(args.continue
+              ? []
+              : [
+                  sessionListPromise.then((sessions) => {
+                    if (id !== bootstrapId) return
+                    setStore("session", reconcile(sessions))
+                  }),
+                ]),
+            sdk.client.command.list().then((x) => {
+              if (id !== bootstrapId) return
+              setStore("command", reconcile(x.data ?? []))
+            }),
+            sdk.client.lsp.status().then((x) => {
+              if (id !== bootstrapId) return
+              setStore("lsp", reconcile(x.data!))
+            }),
+            sdk.client.mcp.status().then((x) => {
+              if (id !== bootstrapId) return
+              setStore("mcp", reconcile(x.data!))
+            }),
+            sdk.client.experimental.resource.list().then((x) => {
+              if (id !== bootstrapId) return
+              setStore("mcp_resource", reconcile(x.data ?? {}))
+            }),
+            sdk.client.formatter.status().then((x) => {
+              if (id !== bootstrapId) return
+              setStore("formatter", reconcile(x.data!))
+            }),
             sdk.client.session.status().then((x) => {
+              if (id !== bootstrapId) return
               setStore("session_status", reconcile(x.data!))
             }),
-            sdk.client.provider.auth().then((x) => setStore("provider_auth", reconcile(x.data ?? {}))),
-            sdk.client.vcs.get().then((x) => setStore("vcs", reconcile(x.data))),
-            sdk.client.path.get().then((x) => setStore("path", reconcile(x.data!))),
+            sdk.client.provider.auth().then((x) => {
+              if (id !== bootstrapId) return
+              setStore("provider_auth", reconcile(x.data ?? {}))
+            }),
+            sdk.client.vcs.get().then((x) => {
+              if (id !== bootstrapId) return
+              setStore("vcs", reconcile(x.data))
+            }),
+            sdk.client.path.get().then((x) => {
+              if (id !== bootstrapId) return
+              setStore("path", reconcile(x.data!))
+            }),
           ]).then(() => {
+            if (id !== bootstrapId) return
             setStore("status", "complete")
           })
         })
         .catch(async (e) => {
+          if (id !== bootstrapId) return
           Log.Default.error("tui bootstrap failed", {
             error: e instanceof Error ? e.message : String(e),
             name: e instanceof Error ? e.name : undefined,
