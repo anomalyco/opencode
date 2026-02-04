@@ -26440,7 +26440,7 @@
       },
       "arcee-ai/trinity-mini:free": {
         "id": "arcee-ai/trinity-mini:free",
-        "name": "Trinity Mini",
+        "name": "Trinity Mini (free)",
         "family": "trinity-mini",
         "attachment": false,
         "reasoning": false,
@@ -26456,7 +26456,7 @@
       },
       "arcee-ai/trinity-large-preview:free": {
         "id": "arcee-ai/trinity-large-preview:free",
-        "name": "Trinity Large Preview",
+        "name": "Trinity Large Preview (free)",
         "family": "trinity",
         "attachment": false,
         "reasoning": false,
