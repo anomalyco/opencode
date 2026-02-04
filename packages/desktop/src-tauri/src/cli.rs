@@ -445,14 +445,28 @@ pub fn spawn_command(
         let shell = get_user_shell();
         let envs = merge_shell_env(load_shell_env(&shell), envs);
 
-        let line = if shell.ends_with("/nu") {
-            format!("^\"{}\" {}", sidecar.display(), args)
+        // Build inline env prefix (e.g. "FOO=bar BAZ=qux") so the vars are set
+        // after the shell's login config has been sourced.
+        let env_prefix = extra_env
+            .iter()
+            .map(|(k, v)| format!("{}=\"{}\"", k, v.replace('"', "\\\"")))
+            .collect::<Vec<_>>()
+            .join(" ");
+
+        let binary = if shell.ends_with("/nu") {
+            format!("^\"{}\"", sidecar.display())
         } else {
-            format!("\"{}\" {}", sidecar.display(), args)
+            format!("\"{}\"", sidecar.display())
+        };
+
+        let invocation = if env_prefix.is_empty() {
+            format!("{binary} {args}")
+        } else {
+            format!("{env_prefix} {binary} {args}")
         };
 
         let mut cmd = Command::new(shell);
-        cmd.args(["-l", "-c", &line]);
+        cmd.args(["-l", "-c", &invocation]);
 
         for (key, value) in envs {
             cmd.env(key, value);

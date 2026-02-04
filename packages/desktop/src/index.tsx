@@ -400,6 +400,12 @@ const createPlatform = (): Platform => {
         }, "image/png")
       })
     },
+
+    startWebMirror: (config) => commands.startWebMirror(config),
+    stopWebMirror: async () => {
+      await commands.stopWebMirror()
+    },
+    getWebMirrorStatus: () => commands.getWebMirrorStatus(),
   }
 }
 

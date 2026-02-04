@@ -86,6 +86,31 @@ export type Platform = {
 
   /** Read image from clipboard (desktop only) */
   readClipboardImage?(): Promise<File | null>
+
+  /** Start/update web mirror server (desktop only) */
+  startWebMirror?(config: WebMirrorConfig): Promise<WebMirrorStatus>
+
+  /** Stop web mirror server (desktop only) */
+  stopWebMirror?(): Promise<void>
+
+  /** Get web mirror server status (desktop only) */
+  getWebMirrorStatus?(): Promise<WebMirrorStatus>
+}
+
+export type WebMirrorConfig = {
+  enabled: boolean
+  port: number | null
+  username: string | null
+  password: string | null
+}
+
+export type WebMirrorStatus = {
+  running: boolean
+  local_url: string | null
+  network_url: string | null
+  username: string
+  password: string
+  config: WebMirrorConfig
 }
 
 export type DisplayBackend = "auto" | "wayland"

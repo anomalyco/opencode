@@ -19,6 +19,9 @@ export const commands = {
 	wslPath: (path: string, mode: "windows" | "linux" | null) => __TAURI_INVOKE<string>("wsl_path", { path, mode }),
 	resolveAppPath: (appName: string) => __TAURI_INVOKE<string | null>("resolve_app_path", { appName }),
 	openPath: (path: string, appName: string | null) => __TAURI_INVOKE<null>("open_path", { path, appName }),
+	startWebMirror: (config: WebMirrorConfig) => __TAURI_INVOKE<WebMirrorStatus>("start_web_mirror", { config }),
+	stopWebMirror: () => __TAURI_INVOKE<null>("stop_web_mirror"),
+	getWebMirrorStatus: () => __TAURI_INVOKE<WebMirrorStatus>("get_web_mirror_status"),
 };
 
 /** Events */
@@ -66,3 +69,18 @@ function makeEvent<T>(name: string) {
     return Object.assign(fn, base);
 }
 
+export type WebMirrorConfig = {
+  enabled: boolean
+  port: number | null
+  username: string | null
+  password: string | null
+}
+
+export type WebMirrorStatus = {
+  running: boolean
+  local_url: string | null
+  network_url: string | null
+  username: string
+  password: string
+  config: WebMirrorConfig
+}

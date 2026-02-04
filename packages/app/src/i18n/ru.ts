@@ -821,7 +821,7 @@ export const dict = {
   "workspace.reset.archived.one": "1 сессия будет архивирована.",
   "workspace.reset.archived.many": "{{count}} сессий будет архивировано.",
   "workspace.reset.note": "Рабочее пространство будет сброшено в соответствие с веткой по умолчанию.",
-  "common.open": "Открыть",
+"common.open": "Открыть",
   "dialog.releaseNotes.action.getStarted": "Начать",
   "dialog.releaseNotes.action.next": "Далее",
   "dialog.releaseNotes.action.hideFuture": "Больше не показывать",
@@ -835,4 +835,23 @@ export const dict = {
   "common.time.daysAgo.short": "{{count}} д назад",
   "settings.providers.connected.environmentDescription": "Подключено из ваших переменных окружения",
   "settings.providers.custom.description": "Добавить провайдера, совместимого с OpenAI, по базовому URL.",
+"status.popover.webMirror": "Веб-зеркало",
+  "settings.general.webMirror.title": "Веб-зеркало",
+  "settings.general.webMirror.active": "АКТИВНО",
+  "settings.general.webMirror.description":
+    "Открыть десктопный сервер в локальной сети. Доступ к той же сессии из любого браузера — настоящее зеркало 1:1 с обновлениями в реальном времени.",
+  "settings.general.webMirror.enabled.title": "Включить веб-зеркало",
+  "settings.general.webMirror.enabled.description": "Автоматически открывать сервер при запуске десктопного приложения",
+  "settings.general.webMirror.port.title": "Порт",
+  "settings.general.webMirror.port.description": "Сетевой порт для удалённого доступа",
+  "settings.general.webMirror.password.title": "Пароль",
+  "settings.general.webMirror.password.description": "Оставьте пустым для автоматической генерации случайного пароля",
+  "settings.general.webMirror.password.placeholder": "Сгенерирован автоматически",
+  "settings.general.webMirror.username.title": "Имя пользователя",
+  "settings.general.webMirror.username.description":
+    "Имя пользователя для HTTP базовой аутентификации (по умолчанию: opencode)",
+  "settings.general.webMirror.credentials.restartHint":
+    "Изменения имени пользователя и пароля вступают в силу после перезапуска приложения.",
+  "settings.general.webMirror.localAccess": "Локальный доступ:",
+  "settings.general.webMirror.networkAccess": "Сетевой доступ:",
 }

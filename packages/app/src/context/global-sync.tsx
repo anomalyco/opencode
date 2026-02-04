@@ -48,6 +48,7 @@ type GlobalStore = {
   provider_auth: ProviderAuthResponse
   config: Config
   reload: undefined | "pending" | "complete"
+  mirrorSidebar: Array<{ worktree: string; expanded: boolean }> | undefined
 }
 
 function createGlobalSync() {
@@ -75,6 +76,7 @@ function createGlobalSync() {
     provider_auth: {},
     config: {},
     reload: undefined,
+    mirrorSidebar: undefined,
   })
 
   let active = true
@@ -275,6 +277,10 @@ function createGlobalSync() {
     const event = e.details
 
     if (directory === "global") {
+      if ((event as any)?.type === "mirror.sidebar.updated") {
+        setGlobalStore("mirrorSidebar", (event as any).properties)
+        return
+      }
       applyGlobalEvent({
         event,
         project: globalStore.project,

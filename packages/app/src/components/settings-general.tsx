@@ -8,7 +8,8 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useLanguage } from "@/context/language"
-import { usePlatform } from "@/context/platform"
+import { usePlatform, type WebMirrorConfig } from "@/context/platform"
+import { TextField } from "@opencode-ai/ui/text-field"
 import { useSettings, monoFontFamily } from "@/context/settings"
 import { playSound, SOUND_OPTIONS } from "@/utils/sound"
 import { Link } from "./link"
@@ -45,9 +46,66 @@ export const SettingsGeneral: Component = () => {
 
   const [store, setStore] = createStore({
     checking: false,
+    webMirror: {
+      enabled: false,
+      running: false,
+      local_url: null as string | null,
+      network_url: null as string | null,
+      username: "opencode",
+      password: "",
+      port: "4096",
+      configUsername: "",
+      configPassword: "",
+      loading: false,
+    },
   })
 
   const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
+
+  // Load web mirror status on mount
+  if (platform.getWebMirrorStatus) {
+    platform.getWebMirrorStatus().then((status) => {
+      setStore("webMirror", {
+        enabled: status.config.enabled,
+        running: status.running,
+        local_url: status.local_url,
+        network_url: status.network_url,
+        username: status.username,
+        password: status.password,
+        port: String(status.config.port ?? 4096),
+        configUsername: status.config.username ?? "",
+        configPassword: status.config.password ?? "",
+        loading: false,
+      })
+    })
+  }
+
+  const applyWebMirror = (enabled: boolean) => {
+    if (!platform.startWebMirror) return
+    setStore("webMirror", "loading", true)
+    const config: WebMirrorConfig = {
+      enabled,
+      port: parseInt(store.webMirror.port) || 4096,
+      username: store.webMirror.configUsername || null,
+      password: store.webMirror.configPassword || null,
+    }
+    platform
+      .startWebMirror(config)
+      .then((status) => {
+        setStore("webMirror", {
+          enabled: status.config.enabled,
+          running: status.running,
+          local_url: status.local_url,
+          network_url: status.network_url,
+          username: status.username,
+          password: status.password,
+          configUsername: status.config.username ?? "",
+          configPassword: status.config.password ?? "",
+          loading: false,
+        })
+      })
+      .catch(() => setStore("webMirror", "loading", false))
+  }
 
   const check = () => {
     if (!platform.checkUpdate) return
@@ -537,6 +595,107 @@ export const SettingsGeneral: Component = () => {
               </div>
             )
           }}
+        </Show>
+
+        {/* Web Mirror Section — Desktop only, hidden in mirror */}
+        <Show when={platform.startWebMirror}>
+          <div class="flex flex-col gap-1">
+            <div class="flex items-center gap-2 pb-2">
+              <h3 class="text-14-medium text-text-strong">{language.t("settings.general.webMirror.title")}</h3>
+              <Show when={store.webMirror.running}>
+                <span class="text-10-medium text-icon-success-base px-1.5 py-0.5 rounded-full bg-surface-success-base/10 leading-none">
+                  {language.t("settings.general.webMirror.active")}
+                </span>
+              </Show>
+            </div>
+            <p class="text-12-regular text-text-weak pb-2">{language.t("settings.general.webMirror.description")}</p>
+
+            <div class="bg-surface-raised-base px-4 rounded-lg">
+              <SettingsRow
+                title={language.t("settings.general.webMirror.enabled.title")}
+                description={language.t("settings.general.webMirror.enabled.description")}
+              >
+                <Switch
+                  checked={store.webMirror.enabled}
+                  disabled={store.webMirror.loading}
+                  onChange={(checked) => applyWebMirror(checked)}
+                />
+              </SettingsRow>
+
+              <SettingsRow
+                title={language.t("settings.general.webMirror.port.title")}
+                description={language.t("settings.general.webMirror.port.description")}
+              >
+                <TextField
+                  class="w-24"
+                  value={store.webMirror.port}
+                  onInput={(e: InputEvent) =>
+                    setStore("webMirror", "port", (e.currentTarget as HTMLInputElement).value)
+                  }
+                  onBlur={() => applyWebMirror(store.webMirror.enabled)}
+                />
+              </SettingsRow>
+
+              <SettingsRow
+                title={language.t("settings.general.webMirror.username.title")}
+                description={language.t("settings.general.webMirror.username.description")}
+              >
+                <TextField
+                  class="w-40"
+                  value={store.webMirror.configUsername}
+                  onInput={(e: InputEvent) =>
+                    setStore("webMirror", "configUsername", (e.currentTarget as HTMLInputElement).value)
+                  }
+                  onBlur={() => applyWebMirror(store.webMirror.enabled)}
+                />
+              </SettingsRow>
+
+              <SettingsRow
+                title={language.t("settings.general.webMirror.password.title")}
+                description={language.t("settings.general.webMirror.password.description")}
+              >
+                <TextField
+                  class="w-40"
+                  type="password"
+                  placeholder={language.t("settings.general.webMirror.password.placeholder")}
+                  value={store.webMirror.configPassword}
+                  onInput={(e: InputEvent) =>
+                    setStore("webMirror", "configPassword", (e.currentTarget as HTMLInputElement).value)
+                  }
+                  onBlur={() => applyWebMirror(store.webMirror.enabled)}
+                />
+              </SettingsRow>
+
+              <div class="py-3 text-12-regular text-text-weak">
+                {language.t("settings.general.webMirror.credentials.restartHint")}
+              </div>
+
+              <Show when={store.webMirror.running}>
+                <div class="py-3 border-t border-border-weak-base flex flex-col gap-1 text-12-mono">
+                  <Show when={store.webMirror.local_url}>
+                    <div>
+                      <span class="text-text-weak">{language.t("settings.general.webMirror.localAccess")} </span>
+                      <span class="text-text-strong">{store.webMirror.local_url}</span>
+                    </div>
+                  </Show>
+                  <Show when={store.webMirror.network_url}>
+                    <div>
+                      <span class="text-text-weak">{language.t("settings.general.webMirror.networkAccess")} </span>
+                      <span class="text-text-strong">{store.webMirror.network_url}</span>
+                    </div>
+                  </Show>
+                  <div>
+                    <span class="text-text-weak">User: </span>
+                    <span class="text-text-strong">{store.webMirror.username}</span>
+                  </div>
+                  <div>
+                    <span class="text-text-weak">Pass: </span>
+                    <span class="text-text-strong">{store.webMirror.password}</span>
+                  </div>
+                </div>
+              </Show>
+            </div>
+          </div>
         </Show>
       </div>
     </div>

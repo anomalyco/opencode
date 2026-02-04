@@ -749,7 +749,7 @@ export const dict = {
   "workspace.reset.archived.one": "1 session sera archivée.",
   "workspace.reset.archived.many": "{{count}} sessions seront archivées.",
   "workspace.reset.note": "Cela réinitialisera l'espace de travail pour correspondre à la branche par défaut.",
-  "common.open": "Ouvrir",
+"common.open": "Ouvrir",
   "dialog.releaseNotes.action.getStarted": "Commencer",
   "dialog.releaseNotes.action.next": "Suivant",
   "dialog.releaseNotes.action.hideFuture": "Ne plus afficher à l'avenir",
@@ -763,4 +763,24 @@ export const dict = {
   "common.time.daysAgo.short": "il y a {{count}}j",
   "settings.providers.connected.environmentDescription": "Connecté à partir de vos variables d'environnement",
   "settings.providers.custom.description": "Ajouter un fournisseur compatible avec OpenAI via l'URL de base.",
+"status.popover.webMirror": "Miroir web",
+  "settings.general.webMirror.title": "Miroir web",
+  "settings.general.webMirror.active": "ACTIF",
+  "settings.general.webMirror.description":
+    "Exposer le serveur de bureau sur votre réseau local. Accédez à la même session depuis n'importe quel navigateur — un vrai miroir 1:1 avec des mises à jour en direct.",
+  "settings.general.webMirror.enabled.title": "Activer le miroir web",
+  "settings.general.webMirror.enabled.description": "Exposer automatiquement le serveur au lancement de l'application",
+  "settings.general.webMirror.port.title": "Port",
+  "settings.general.webMirror.port.description": "Port réseau pour l'accès distant",
+  "settings.general.webMirror.password.title": "Mot de passe",
+  "settings.general.webMirror.password.description":
+    "Laisser vide pour générer automatiquement un mot de passe aléatoire",
+  "settings.general.webMirror.password.placeholder": "Auto-généré",
+  "settings.general.webMirror.username.title": "Nom d'utilisateur",
+  "settings.general.webMirror.username.description":
+    "Nom d'utilisateur pour l'auth HTTP basique (par défaut : opencode)",
+  "settings.general.webMirror.credentials.restartHint":
+    "Les changements de nom d'utilisateur et de mot de passe prennent effet après le redémarrage de l'application.",
+  "settings.general.webMirror.localAccess": "Accès local :",
+  "settings.general.webMirror.networkAccess": "Accès réseau :",
 }

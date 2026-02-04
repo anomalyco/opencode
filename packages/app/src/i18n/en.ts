@@ -844,4 +844,23 @@ export const dict = {
   "workspace.reset.archived.one": "1 session will be archived.",
   "workspace.reset.archived.many": "{{count}} sessions will be archived.",
   "workspace.reset.note": "This will reset the workspace to match the default branch.",
+
+  "status.popover.webMirror": "Web Mirror",
+  "settings.general.webMirror.title": "Web Mirror",
+  "settings.general.webMirror.active": "ACTIVE",
+  "settings.general.webMirror.description":
+    "Expose the desktop server to your local network. Access the exact same session from any browser — a true 1:1 mirror with live updates.",
+  "settings.general.webMirror.enabled.title": "Enable web mirror",
+  "settings.general.webMirror.enabled.description": "Automatically expose the server when the desktop app launches",
+  "settings.general.webMirror.port.title": "Port",
+  "settings.general.webMirror.port.description": "Network port for remote access",
+  "settings.general.webMirror.password.title": "Password",
+  "settings.general.webMirror.password.description": "Leave empty to auto-generate a random password",
+  "settings.general.webMirror.password.placeholder": "Auto-generated",
+  "settings.general.webMirror.username.title": "Username",
+  "settings.general.webMirror.username.description": "Username for HTTP basic auth (default: opencode)",
+  "settings.general.webMirror.credentials.restartHint":
+    "Username and password changes take effect after restarting the app.",
+  "settings.general.webMirror.localAccess": "Local access:",
+  "settings.general.webMirror.networkAccess": "Network access:",
 }

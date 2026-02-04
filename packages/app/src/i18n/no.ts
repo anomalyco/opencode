@@ -821,7 +821,7 @@ export const dict = {
   "workspace.reset.archived.one": "1 sesjon vil bli arkivert.",
   "workspace.reset.archived.many": "{{count}} sesjoner vil bli arkivert.",
   "workspace.reset.note": "Dette vil tilbakestille arbeidsområdet til å samsvare med standardgrenen.",
-  "common.open": "Åpne",
+"common.open": "Åpne",
   "dialog.releaseNotes.action.getStarted": "Kom i gang",
   "dialog.releaseNotes.action.next": "Neste",
   "dialog.releaseNotes.action.hideFuture": "Ikke vis disse igjen",
@@ -835,4 +835,23 @@ export const dict = {
   "common.time.daysAgo.short": "{{count}} d siden",
   "settings.providers.connected.environmentDescription": "Koblet til fra miljøvariablene dine",
   "settings.providers.custom.description": "Legg til en OpenAI-kompatibel leverandør via basis-URL.",
+"status.popover.webMirror": "Webspeil",
+  "settings.general.webMirror.title": "Webspeil",
+  "settings.general.webMirror.active": "AKTIV",
+  "settings.general.webMirror.description":
+    "Eksponer skrivebordsserveren til det lokale nettverket ditt. Få tilgang til nøyaktig samme økt fra hvilken som helst nettleser — et ekte 1:1-speil med live-oppdateringer.",
+  "settings.general.webMirror.enabled.title": "Aktiver webspeil",
+  "settings.general.webMirror.enabled.description": "Eksponer serveren automatisk når skrivebordsappen starter",
+  "settings.general.webMirror.port.title": "Port",
+  "settings.general.webMirror.port.description": "Nettverksport for fjerntilgang",
+  "settings.general.webMirror.password.title": "Passord",
+  "settings.general.webMirror.password.description": "La stå tomt for å automatisk generere et tilfeldig passord",
+  "settings.general.webMirror.password.placeholder": "Automatisk generert",
+  "settings.general.webMirror.username.title": "Brukernavn",
+  "settings.general.webMirror.username.description":
+    "Brukernavn for HTTP grunnleggende autentisering (standard: opencode)",
+  "settings.general.webMirror.credentials.restartHint":
+    "Endringer i brukernavn og passord trer i kraft etter omstart av appen.",
+  "settings.general.webMirror.localAccess": "Lokal tilgang:",
+  "settings.general.webMirror.networkAccess": "Nettverkstilgang:",
 } satisfies Partial<Record<Keys, string>>

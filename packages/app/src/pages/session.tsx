@@ -256,6 +256,7 @@ export default function Page() {
   const local = useLocal()
   const file = useFile()
   const sync = useSync()
+
   const dialog = useDialog()
   const language = useLanguage()
   const params = useParams()

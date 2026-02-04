@@ -42,6 +42,7 @@ import { QuestionRoutes } from "./routes/question"
 import { PermissionRoutes } from "./routes/permission"
 import { GlobalRoutes } from "./routes/global"
 import { MDNS } from "./mdns"
+import { GlobalBus } from "../bus/global"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -194,6 +195,22 @@ export namespace Server {
             return c.json(true)
           },
         )
+        // Mirror sidebar sync: desktop pushes state, mirror reads it.
+        .get("/mirror/sidebar", async (c) => {
+          const data = await Storage.read<unknown[]>(["mirror-sidebar"]).catch(() => [])
+          return c.json(data ?? [])
+        })
+        .put("/mirror/sidebar", async (c) => {
+          const body = await c.req.json()
+          await Storage.write(["mirror-sidebar"], body)
+          GlobalBus.emit("event", {
+            payload: {
+              type: "mirror.sidebar.updated",
+              properties: body,
+            },
+          })
+          return c.json(true)
+        })
         .use(async (c, next) => {
           if (c.req.path === "/log") return next()
           const workspaceID = c.req.query("workspace") || c.req.header("x-opencode-workspace")
@@ -559,6 +576,38 @@ export namespace Server {
           },
         )
         .all("/*", async (c) => {
+          const webDir = Flag.OPENCODE_WEB_DIR
+          if (webDir) {
+            const reqPath = c.req.path === "/" ? "/index.html" : c.req.path
+            const file = Bun.file(webDir + reqPath)
+            if (await file.exists()) {
+              const ext = reqPath.split(".").pop() ?? ""
+              const mime: Record<string, string> = {
+                html: "text/html",
+                js: "application/javascript",
+                css: "text/css",
+                json: "application/json",
+                png: "image/png",
+                svg: "image/svg+xml",
+                ico: "image/x-icon",
+                woff: "font/woff",
+                woff2: "font/woff2",
+                ttf: "font/ttf",
+                wasm: "application/wasm",
+              }
+              return new Response(file.stream(), {
+                headers: { "Content-Type": mime[ext] ?? "application/octet-stream" },
+              })
+            }
+            // SPA fallback: serve index.html for client-side routes
+            const index = Bun.file(webDir + "/index.html")
+            if (await index.exists()) {
+              return new Response(index.stream(), {
+                headers: { "Content-Type": "text/html" },
+              })
+            }
+          }
+
           const path = c.req.path
 
           const response = await proxy(`https://app.opencode.ai${path}`, {

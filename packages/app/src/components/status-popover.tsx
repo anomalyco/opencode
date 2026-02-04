@@ -10,7 +10,7 @@ import { type Accessor, createEffect, createMemo, createSignal, For, type JSXEle
 import { createStore, reconcile } from "solid-js/store"
 import { ServerHealthIndicator, ServerRow } from "@/components/server/server-row"
 import { useLanguage } from "@/context/language"
-import { usePlatform } from "@/context/platform"
+import { usePlatform, type WebMirrorStatus } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
@@ -183,6 +183,15 @@ export function StatusPopover() {
   const mcpNames = createMemo(() => Object.keys(sync.data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
   const mcpStatus = (name: string) => sync.data.mcp?.[name]?.status
   const mcpConnected = createMemo(() => mcpNames().filter((name) => mcpStatus(name) === "connected").length)
+
+  const [webMirror, setWebMirror] = createSignal<WebMirrorStatus | null>(null)
+  createEffect(() => {
+    if (!platform.getWebMirrorStatus) return
+    const refresh = () => platform.getWebMirrorStatus!().then((status) => setWebMirror(status))
+    void refresh()
+    const id = setInterval(() => void refresh(), pollMs)
+    onCleanup(() => clearInterval(id))
+  })
   const lspItems = createMemo(() => sync.data.lsp ?? [])
   const lspCount = createMemo(() => lspItems().length)
   const plugins = createMemo(() => sync.data.config.plugin ?? [])
@@ -298,6 +307,18 @@ export function StatusPopover() {
                     )
                   }}
                 </For>
+
+                <Show when={webMirror()?.running && (webMirror()?.network_url || webMirror()?.local_url)}>
+                  <div class="flex items-center gap-2 w-full h-8 pl-3 pr-1.5 py-1.5 rounded-md text-left mt-1 border-t border-border-weak-base pt-2">
+                    <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
+                    <span class="text-14-regular text-text-base truncate">
+                      {language.t("status.popover.webMirror")}
+                    </span>
+                    <span class="text-12-regular text-text-weak truncate">
+                      {webMirror()!.network_url ?? webMirror()!.local_url}
+                    </span>
+                  </div>
+                </Show>
 
                 <Button
                   variant="secondary"
