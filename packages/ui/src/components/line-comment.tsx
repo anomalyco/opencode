@@ -480,8 +480,10 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
                   onClick={() => insertFilePill(file.path)}
                 >
                   <FileIcon node={{ path: file.path, type: "file" }} class="size-4 shrink-0" />
-                  <span class="text-text-weak truncate">{getDirectory(file.path)}</span>
-                  <span class="shrink-0">{getFilename(file.path)}</span>
+                  <span class="truncate">
+                    <span class="text-text-weak">{getDirectory(file.path)}</span>
+                    <span>{getFilename(file.path)}</span>
+                  </span>
                 </button>
               )}
             </For>
