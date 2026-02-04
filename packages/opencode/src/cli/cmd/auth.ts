@@ -215,11 +215,11 @@ export const AuthListCommand = cmd({
 })
 
 export const AuthLoginCommand = cmd({
-  command: "login [url]",
+  command: "login [provider]",
   describe: "log in to a provider",
   builder: (yargs) =>
-    yargs.positional("url", {
-      describe: "opencode auth provider",
+    yargs.positional("provider", {
+      describe: "provider slug or well-known URL",
       type: "string",
     }),
   async handler(args) {
@@ -228,8 +228,11 @@ export const AuthLoginCommand = cmd({
       async fn() {
         UI.empty()
         prompts.intro("Add credential")
-        if (args.url) {
-          const wellknown = await fetch(`${args.url}/.well-known/opencode`).then((x) => x.json() as any)
+
+        const isURL = args.provider?.match(/^https?:\/\//)
+
+        if (args.provider && isURL) {
+          const wellknown = await fetch(`${args.provider}/.well-known/opencode`).then((x) => x.json() as any)
           prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
           const proc = Bun.spawn({
             cmd: wellknown.auth.command,
@@ -242,15 +245,16 @@ export const AuthLoginCommand = cmd({
             return
           }
           const token = await new Response(proc.stdout).text()
-          await Auth.set(args.url, {
+          await Auth.set(args.provider, {
             type: "wellknown",
             key: wellknown.auth.env,
             token: token.trim(),
           })
-          prompts.log.success("Logged into " + args.url)
+          prompts.log.success("Logged into " + args.provider)
           prompts.outro("Done")
           return
         }
+
         await ModelsDev.refresh().catch(() => {})
 
         const config = await Config.get()
@@ -268,44 +272,55 @@ export const AuthLoginCommand = cmd({
           return filtered
         })
 
-        const priority: Record<string, number> = {
-          opencode: 0,
-          anthropic: 1,
-          "github-copilot": 2,
-          openai: 3,
-          google: 4,
-          openrouter: 5,
-          vercel: 6,
-        }
-        let provider = await prompts.autocomplete({
-          message: "Select provider",
-          maxItems: 8,
-          options: [
-            ...pipe(
-              providers,
-              values(),
-              sortBy(
-                (x) => priority[x.id] ?? 99,
-                (x) => x.name ?? x.id,
+        let provider: string
+        if (args.provider) {
+          if (!(args.provider in providers)) {
+            prompts.log.error(`Provider "${args.provider}" not found`)
+            prompts.outro("Done")
+            return
+          }
+          provider = args.provider
+        } else {
+          const priority: Record<string, number> = {
+            opencode: 0,
+            anthropic: 1,
+            "github-copilot": 2,
+            openai: 3,
+            google: 4,
+            openrouter: 5,
+            vercel: 6,
+          }
+          const selected = await prompts.autocomplete({
+            message: "Select provider",
+            maxItems: 8,
+            options: [
+              ...pipe(
+                providers,
+                values(),
+                sortBy(
+                  (x) => priority[x.id] ?? 99,
+                  (x) => x.name ?? x.id,
+                ),
+                map((x) => ({
+                  label: x.name,
+                  value: x.id,
+                  hint: {
+                    opencode: "recommended",
+                    anthropic: "Claude Max or API key",
+                    openai: "ChatGPT Plus/Pro or API key",
+                  }[x.id],
+                })),
               ),
-              map((x) => ({
-                label: x.name,
-                value: x.id,
-                hint: {
-                  opencode: "recommended",
-                  anthropic: "Claude Max or API key",
-                  openai: "ChatGPT Plus/Pro or API key",
-                }[x.id],
-              })),
-            ),
-            {
-              value: "other",
-              label: "Other",
-            },
-          ],
-        })
+              {
+                value: "other",
+                label: "Other",
+              },
+            ],
+          })
 
-        if (prompts.isCancel(provider)) throw new UI.CancelledError()
+          if (prompts.isCancel(selected)) throw new UI.CancelledError()
+          provider = selected
+        }
 
         const plugin = await Plugin.list().then((x) => x.findLast((x) => x.auth?.provider === provider))
         if (plugin && plugin.auth) {
@@ -314,13 +329,12 @@ export const AuthLoginCommand = cmd({
         }
 
         if (provider === "other") {
-          provider = await prompts.text({
+          const input = await prompts.text({
             message: "Enter provider id",
             validate: (x) => (x && x.match(/^[0-9a-z-]+$/) ? undefined : "a-z, 0-9 and hyphens only"),
           })
-          if (prompts.isCancel(provider)) throw new UI.CancelledError()
-          provider = provider.replace(/^@ai-sdk\//, "")
-          if (prompts.isCancel(provider)) throw new UI.CancelledError()
+          if (prompts.isCancel(input)) throw new UI.CancelledError()
+          provider = input.replace(/^@ai-sdk\//, "")
 
           // Check if a plugin provides auth for this custom provider
           const customPlugin = await Plugin.list().then((x) => x.findLast((x) => x.auth?.provider === provider))
