@@ -177,6 +177,14 @@ export function sessionIDFromUrl(url: string) {
 export async function hoverSessionItem(page: Page, sessionID: string) {
   const sessionEl = page.locator(sessionItemSelector(sessionID)).first()
   await expect(sessionEl).toBeVisible()
+  // Ensure the element is in the viewport before hovering. In some layouts
+  // or viewport sizes, the session item may be off-screen and hover would fail.
+  // Scroll it into view if needed, then perform the hover.
+  try {
+    await sessionEl.scrollIntoViewIfNeeded()
+  } catch {
+    // If the environment doesn't support scrollIntoViewIfNeeded, fall back gracefully.
+  }
   await sessionEl.hover()
   return sessionEl
 }
