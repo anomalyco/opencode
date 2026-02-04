@@ -4,7 +4,7 @@
 
 当前分支存在**内存管理 bug**，`opencode-cli` 在启动后 10-20 秒崩溃。
 
-**临时解决方案**：使用稳定版本 (v1.1.44) 的 `opencode-cli` 替换构建产物。
+**临时解决方案**：使用稳定版本 (v1.1.51) 的 `opencode-cli` 替换构建产物。
 
 ---
 
@@ -18,7 +18,7 @@ bun run --cwd packages/desktop build && \
 bun run --cwd packages/desktop tauri build && \
 
 # 2. 替换为稳定版本的 opencode-cli（关键步骤）
-cp /opt/homebrew/Cellar/opencode/1.1.44/bin/opencode \
+cp /opt/homebrew/Cellar/opencode/1.1.51/bin/opencode \
   "packages/desktop/src-tauri/target/release/bundle/macos/OpenCode Dev.app/Contents/MacOS/opencode-cli" && \
 
 # 3. 安装到系统
@@ -39,7 +39,7 @@ bun run --cwd packages/desktop build
 bun run --cwd packages/desktop tauri build
 
 # 步骤 3: 替换 CLI（必须）
-cp /opt/homebrew/Cellar/opencode/1.1.44/bin/opencode \
+cp /opt/homebrew/Cellar/opencode/1.1.51/bin/opencode \
   "packages/desktop/src-tauri/target/release/bundle/macos/OpenCode Dev.app/Contents/MacOS/opencode-cli"
 
 # 步骤 4: 安装应用
@@ -85,7 +85,7 @@ ls -t ~/Library/Logs/DiagnosticReports/opencode-cli-*.ips 2>/dev/null | head -1
 | **症状** | `opencode-cli` 启动后 10-20 秒崩溃 |
 | **错误信息** | `malloc_report` → `abort()` in "Wasm Worklist Helper Thread" |
 | **影响范围** | 所有启动方式和构建类型 |
-| **临时方案** | 使用 v1.1.44 稳定版本的 `opencode-cli` |
+| **临时方案** | 使用 v1.1.51 稳定版本的 `opencode-cli` |
 | **根本原因** | 待定位（可能与 Wasm/线程管理相关） |
 
 ### Git 状态
