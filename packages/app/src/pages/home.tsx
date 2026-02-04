@@ -23,6 +23,7 @@ export default function Home() {
   const navigate = useNavigate()
   const server = useServer()
   const homedir = createMemo(() => sync.data.path.home)
+  const hasProjects = createMemo(() => sync.data.project.length > 0)
 
   function openProject(directory: string) {
     layout.projects.open(directory)
@@ -95,18 +96,24 @@ export default function Home() {
         {server.name}
       </Button>
       <Switch>
-        <Match when={sync.data.project.length > 0}>
+        <Match when={hasProjects()}>
           <div class="mt-20 w-full flex flex-col gap-4">
             <div class="flex gap-2 items-center justify-between pl-3">
               <div class="text-14-medium text-text-strong">Recent projects</div>
-              <div class="flex items-center gap-2">
-                <Button icon="folder-add-left" size="normal" class="pl-2 pr-3" onClick={chooseProject}>
+              <div class="flex flex-wrap items-center gap-2">
+                <Button
+                  icon="folder-add-left"
+                  size="large"
+                  variant="primary"
+                  class="pl-2 pr-3"
+                  onClick={chooseProject}
+                >
                   Open project
                 </Button>
-                <Button icon="download" size="normal" class="pl-2 pr-3" onClick={openCloneDialog}>
+                <Button icon="download" size="large" class="pl-2 pr-3" onClick={openCloneDialog}>
                   Clone repo
                 </Button>
-                <Button icon="branch" size="normal" class="pl-2 pr-3" onClick={openRepoManager}>
+                <Button icon="branch" size="large" class="pl-2 pr-3" onClick={openRepoManager}>
                   Manage repos
                 </Button>
               </div>
@@ -139,17 +146,14 @@ export default function Home() {
             <Icon name="folder-add-left" size="large" />
             <div class="flex flex-col gap-1 items-center justify-center">
               <div class="text-14-medium text-text-strong">No recent projects</div>
-              <div class="text-12-regular text-text-weak">Get started by opening a local project</div>
+              <div class="text-12-regular text-text-weak">Get started by cloning or adding a repository</div>
             </div>
             <div />
-            <div class="flex items-center gap-2">
-              <Button class="px-3" onClick={chooseProject}>
-                Open project
-              </Button>
-              <Button class="px-3" onClick={openCloneDialog}>
+            <div class="flex flex-wrap items-center gap-2">
+              <Button size="large" variant="primary" class="px-3" onClick={openCloneDialog}>
                 Clone repository
               </Button>
-              <Button class="px-3" onClick={openRepoManager}>
+              <Button size="large" class="px-3" onClick={openRepoManager}>
                 Manage repos
               </Button>
             </div>
