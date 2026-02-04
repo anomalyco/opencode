@@ -90,9 +90,26 @@ jobs:
       - name: Build Desktop App
         run: |
           cd packages/desktop
-          # Skip typecheck and build directly with vite
+
+          # Build frontend without typecheck
+          $env:NODE_ENV = "production"
           vite build
-          bun tauri build --target x86_64-pc-windows-msvc --config ./src-tauri/tauri.prod.conf.json --bundles nsis
+
+          # Create a temporary tauri config that skips beforeBuildCommand
+          $config = Get-Content src-tauri/tauri.prod.conf.json | ConvertFrom-Json
+          $baseConfig = Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json
+          $baseConfig.build.beforeBuildCommand = ""
+          $baseConfig | ConvertTo-Json -Depth 10 | Set-Content src-tauri/tauri.build.conf.json
+
+          # Merge prod config
+          $config.PSObject.Properties | ForEach-Object {
+            $baseConfig | Add-Member -MemberType NoteProperty -Name $_.Name -Value $_.Value -Force
+          }
+          $baseConfig | ConvertTo-Json -Depth 10 | Set-Content src-tauri/tauri.build.conf.json
+
+          # Build with Tauri
+          bun tauri build --target x86_64-pc-windows-msvc --config ./src-tauri/tauri.build.conf.json --bundles nsis
+        shell: pwsh
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
