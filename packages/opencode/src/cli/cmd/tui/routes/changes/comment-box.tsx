@@ -5,21 +5,23 @@ import { useTheme } from "@tui/context/theme"
 import { useTextareaKeybindings } from "@tui/component/textarea-keybindings"
 import { SplitBorder } from "@tui/component/border"
 
-export interface Comment {
-  id: string
-  lineIndex: number
-  text: string
+export type LineType = "add" | "remove" | "context" | "empty"
+export type CommentSide = "left" | "right" | "unified"
+
+type Line = {
+  line: number
   lineType?: LineType
   anchor?: string
 }
 
-export type LineType = "add" | "remove" | "context" | "empty"
-export type CommentSide = "left" | "right" | "unified"
-export type CommentInputState = {
-  line: number
+export interface Comment extends Line {
+  id: string
+  text: string
+}
+
+export type CommentInputState = Line & {
   side: CommentSide
   lineType: LineType
-  anchor?: string
 }
 
 type SlotOptions = {
@@ -312,7 +314,7 @@ export function commentSlots(opts: SlotOptions): Map<number, JSX.Element> {
   const lines = new Map<number, Entry>()
 
   for (const [key, comment] of opts.comments) {
-    const line = comment.lineIndex
+    const line = comment.line
     const entry = lines.get(line) ?? (lines.set(line, {}), lines.get(line)!)
 
     const side = key.slice(key.lastIndexOf("-") + 1) as CommentSide
