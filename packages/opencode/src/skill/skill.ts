@@ -50,6 +50,7 @@ export namespace Skill {
 
   export const state = Instance.state(async () => {
     const skills: Record<string, Info> = {}
+    const dirs = new Set<string>()
 
     const addSkill = async (match: string) => {
       const md = await ConfigMarkdown.parse(match).catch((err) => {
@@ -74,6 +75,8 @@ export namespace Skill {
           duplicate: match,
         })
       }
+
+      dirs.add(path.dirname(match))
 
       skills[parsed.data.name] = {
         name: parsed.data.name,
@@ -148,11 +151,9 @@ export namespace Skill {
       }
     }
 
-    const dirs = Array.from(new Set(Object.values(skills).map((item) => path.dirname(item.location))))
-
     return {
       skills,
-      dirs,
+      dirs: Array.from(dirs),
     }
   })
 
