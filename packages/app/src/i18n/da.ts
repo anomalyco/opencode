@@ -44,7 +44,6 @@ export const dict = {
 
   "command.session.new": "Ny session",
   "command.file.open": "Åbn fil",
-  "command.file.open.description": "Søg i filer og kommandoer",
   "command.context.addSelection": "Tilføj markering til kontekst",
   "command.context.addSelection.description": "Tilføj markerede linjer fra den aktuelle fil",
   "command.terminal.toggle": "Skift terminal",
@@ -84,7 +83,7 @@ export const dict = {
   "command.session.unshare": "Stop deling af session",
   "command.session.unshare.description": "Stop med at dele denne session",
 
-  "palette.search.placeholder": "Søg i filer og kommandoer",
+  "palette.search.placeholder": "Søg i filer, kommandoer og sessioner",
   "palette.empty": "Ingen resultater fundet",
   "palette.group.commands": "Kommandoer",
   "palette.group.files": "Filer",
