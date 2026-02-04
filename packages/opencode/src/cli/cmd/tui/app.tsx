@@ -3,6 +3,7 @@ import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
+import { reconcile } from "solid-js/store"
 import { Installation } from "@/installation"
 import { Flag } from "@/flag/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
@@ -198,6 +199,7 @@ function App() {
   const { theme, mode, setMode } = useTheme()
   const sync = useSync()
   const exit = useExit()
+  const [reloading, setReloading] = createSignal(false)
   const promptRef = usePromptRef()
 
   // Wire up console copy-to-clipboard via opentui's onCopySelection callback
@@ -489,6 +491,42 @@ function App() {
       onSelect: () => {
         open("https://opencode.ai/docs").catch(() => {})
         dialog.clear()
+      },
+      category: "System",
+    },
+    {
+      title: "Reload config",
+      value: "config.reload",
+      slash: {
+        name: "reload",
+        aliases: ["restart", "refresh"],
+      },
+      onSelect: (dialog) => {
+        if (reloading()) return
+        setReloading(true)
+        sdk.client.instance
+          .dispose({}, { throwOnError: true })
+          .then(() =>
+            Promise.all([
+              sdk.client.mcp.status().then((x) => x.data),
+              sdk.client.config.get().then((x) => x.data),
+            ]).then(([mcp, config]) => {
+              if (mcp) sync.set("mcp", reconcile(mcp))
+              if (config) sync.set("config", reconcile(config))
+            }),
+          )
+          .then(() => {
+            toast.show({
+              variant: "info",
+              message: "Reloaded",
+              duration: 2500,
+            })
+          })
+          .catch(toast.error)
+          .finally(() => {
+            setReloading(false)
+            dialog.clear()
+          })
       },
       category: "System",
     },
