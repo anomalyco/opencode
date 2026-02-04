@@ -6,6 +6,7 @@ import { ACP } from "@/acp/agent"
 import { Server } from "@/server/server"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
+import path from "path"
 
 const log = Log.create({ service: "acp-command" })
 
@@ -21,7 +22,15 @@ export const AcpCommand = cmd({
   },
   handler: async (args) => {
     process.env.OPENCODE_CLIENT = "acp"
-    await bootstrap(process.cwd(), async () => {
+    const baseCwd = process.env.PWD ?? process.cwd()
+    const cwd = path.resolve(baseCwd, args.cwd)
+    try {
+      process.chdir(cwd)
+    } catch {
+      log.error("Failed to change directory", { cwd })
+      process.exit(1)
+    }
+    await bootstrap(cwd, async () => {
       const opts = await resolveNetworkOptions(args)
       const server = Server.listen(opts)
 
