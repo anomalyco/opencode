@@ -16,13 +16,16 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Dynamic } from "solid-js/web"
 import { useLocal } from "@/context/local"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
-import { createStore } from "solid-js/store"
+import { createStore, produce } from "solid-js/store"
 import { PromptInput } from "@/components/prompt-input"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
+import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
+import { Dialog } from "@opencode-ai/ui/dialog"
+import { TextField } from "@opencode-ai/ui/text-field"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { useCodeComponent } from "@opencode-ai/ui/context/code"
@@ -436,6 +439,218 @@ export default function Page() {
     if (!id) return false
     return sync.session.history.loading(id)
   })
+
+  const errorMessage = (err: unknown) => {
+    if (err && typeof err === "object" && "data" in err) {
+      const data = (err as { data?: { message?: string } }).data
+      if (data?.message) return data.message
+    }
+    if (err instanceof Error) return err.message
+    return language.t("common.requestFailed")
+  }
+
+  async function archiveSession(sessionID: string) {
+    const session = sync.session.get(sessionID)
+    if (!session) return
+
+    const sessions = sync.data.session ?? []
+    const index = sessions.findIndex((s) => s.id === sessionID)
+    const nextSession = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
+
+    await sdk.client.session
+      .update({ sessionID, time: { archived: Date.now() } })
+      .then(() => {
+        sync.set(
+          produce((draft) => {
+            const index = draft.session.findIndex((s) => s.id === sessionID)
+            if (index !== -1) draft.session.splice(index, 1)
+          }),
+        )
+
+        if (params.id !== sessionID) return
+        if (session.parentID) {
+          navigate(`/${params.dir}/session/${session.parentID}`)
+          return
+        }
+        if (nextSession) {
+          navigate(`/${params.dir}/session/${nextSession.id}`)
+          return
+        }
+        navigate(`/${params.dir}/session`)
+      })
+      .catch((err) => {
+        showToast({
+          title: language.t("common.requestFailed"),
+          description: errorMessage(err),
+        })
+      })
+  }
+
+  async function deleteSession(sessionID: string) {
+    const session = sync.session.get(sessionID)
+    if (!session) return false
+
+    const sessions = (sync.data.session ?? []).filter((s) => !s.parentID && !s.time?.archived)
+    const index = sessions.findIndex((s) => s.id === sessionID)
+    const nextSession = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
+
+    const result = await sdk.client.session
+      .delete({ sessionID })
+      .then((x) => x.data)
+      .catch((err) => {
+        showToast({
+          title: language.t("session.delete.failed.title"),
+          description: errorMessage(err),
+        })
+        return false
+      })
+
+    if (!result) return false
+
+    sync.set(
+      produce((draft) => {
+        const removed = new Set<string>([sessionID])
+
+        const byParent = new Map<string, string[]>()
+        for (const item of draft.session) {
+          const parentID = item.parentID
+          if (!parentID) continue
+          const existing = byParent.get(parentID)
+          if (existing) {
+            existing.push(item.id)
+            continue
+          }
+          byParent.set(parentID, [item.id])
+        }
+
+        const stack = [sessionID]
+        while (stack.length) {
+          const parentID = stack.pop()
+          if (!parentID) continue
+
+          const children = byParent.get(parentID)
+          if (!children) continue
+
+          for (const child of children) {
+            if (removed.has(child)) continue
+            removed.add(child)
+            stack.push(child)
+          }
+        }
+
+        draft.session = draft.session.filter((s) => !removed.has(s.id))
+      }),
+    )
+
+    if (params.id !== sessionID) return true
+    if (session.parentID) {
+      navigate(`/${params.dir}/session/${session.parentID}`)
+      return true
+    }
+    if (nextSession) {
+      navigate(`/${params.dir}/session/${nextSession.id}`)
+      return true
+    }
+    navigate(`/${params.dir}/session`)
+    return true
+  }
+
+  function DialogRenameSession(props: { sessionID: string }) {
+    const [data, setData] = createStore({
+      title: sync.session.get(props.sessionID)?.title ?? "",
+      saving: false,
+    })
+
+    const submit = (event: Event) => {
+      event.preventDefault()
+      if (data.saving) return
+
+      const title = data.title.trim()
+      if (!title) {
+        dialog.close()
+        return
+      }
+
+      const current = sync.session.get(props.sessionID)?.title ?? ""
+      if (title === current) {
+        dialog.close()
+        return
+      }
+
+      setData("saving", true)
+      void sdk.client.session
+        .update({ sessionID: props.sessionID, title })
+        .then(() => {
+          sync.set(
+            produce((draft) => {
+              const index = draft.session.findIndex((s) => s.id === props.sessionID)
+              if (index !== -1) draft.session[index].title = title
+            }),
+          )
+          dialog.close()
+        })
+        .catch((err) => {
+          showToast({
+            title: language.t("common.requestFailed"),
+            description: errorMessage(err),
+          })
+        })
+        .finally(() => {
+          setData("saving", false)
+        })
+    }
+
+    return (
+      <Dialog title={language.t("common.rename")} fit>
+        <form onSubmit={submit} class="flex flex-col gap-4 pl-6 pr-2.5 pb-3">
+          <TextField
+            autofocus
+            type="text"
+            label={language.t("common.rename")}
+            value={data.title}
+            onChange={(value) => setData("title", value)}
+          />
+          <div class="flex justify-end gap-2">
+            <Button type="button" variant="ghost" size="large" disabled={data.saving} onClick={() => dialog.close()}>
+              {language.t("common.cancel")}
+            </Button>
+            <Button type="submit" variant="primary" size="large" disabled={data.saving || !data.title.trim()}>
+              {language.t("common.save")}
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+    )
+  }
+
+  function DialogDeleteSession(props: { sessionID: string }) {
+    const title = createMemo(() => sync.session.get(props.sessionID)?.title ?? language.t("command.session.new"))
+    const handleDelete = async () => {
+      await deleteSession(props.sessionID)
+      dialog.close()
+    }
+
+    return (
+      <Dialog title={language.t("session.delete.title")} fit>
+        <div class="flex flex-col gap-4 pl-6 pr-2.5 pb-3">
+          <div class="flex flex-col gap-1">
+            <span class="text-14-regular text-text-strong">
+              {language.t("session.delete.confirm", { name: title() })}
+            </span>
+          </div>
+          <div class="flex justify-end gap-2">
+            <Button variant="ghost" size="large" onClick={() => dialog.close()}>
+              {language.t("common.cancel")}
+            </Button>
+            <Button variant="primary" size="large" onClick={handleDelete}>
+              {language.t("session.delete.button")}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    )
+  }
+
   const emptyUserMessages: UserMessage[] = []
   const userMessages = createMemo(
     () => messages().filter((m) => m.role === "user") as UserMessage[],
@@ -1992,20 +2207,63 @@ export default function Page() {
                                 centered(),
                             }}
                           >
-                            <div class="h-10 flex items-center gap-1">
-                              <Show when={info()?.parentID}>
-                                <IconButton
-                                  tabIndex={-1}
-                                  icon="arrow-left"
-                                  variant="ghost"
-                                  onClick={() => {
-                                    navigate(`/${params.dir}/session/${info()?.parentID}`)
-                                  }}
-                                  aria-label={language.t("common.goBack")}
-                                />
-                              </Show>
-                              <Show when={info()?.title}>
-                                <h1 class="text-16-medium text-text-strong truncate">{info()?.title}</h1>
+                            <div class="h-10 w-full flex items-center justify-between gap-2">
+                              <div class="flex items-center gap-1 min-w-0">
+                                <Show when={info()?.parentID}>
+                                  <IconButton
+                                    tabIndex={-1}
+                                    icon="arrow-left"
+                                    variant="ghost"
+                                    onClick={() => {
+                                      navigate(`/${params.dir}/session/${info()?.parentID}`)
+                                    }}
+                                    aria-label={language.t("common.goBack")}
+                                  />
+                                </Show>
+                                <Show when={info()?.title}>
+                                  <h1 class="text-16-medium text-text-strong truncate min-w-0">{info()?.title}</h1>
+                                </Show>
+                              </div>
+                              <Show when={params.id}>
+                                {(id) => (
+                                  <div class="shrink-0 flex items-center">
+                                    <DropdownMenu>
+                                      <Tooltip value={language.t("common.moreOptions")} placement="top">
+                                        <DropdownMenu.Trigger
+                                          as={IconButton}
+                                          icon="dot-grid"
+                                          variant="ghost"
+                                          class="size-6 rounded-md data-[expanded]:bg-surface-base-active"
+                                          aria-label={language.t("common.moreOptions")}
+                                        />
+                                      </Tooltip>
+                                      <DropdownMenu.Portal>
+                                        <DropdownMenu.Content>
+                                          <DropdownMenu.Item
+                                            onSelect={() => dialog.show(() => <DialogRenameSession sessionID={id()} />)}
+                                          >
+                                            <DropdownMenu.ItemLabel>
+                                              {language.t("common.rename")}
+                                            </DropdownMenu.ItemLabel>
+                                          </DropdownMenu.Item>
+                                          <DropdownMenu.Item onSelect={() => void archiveSession(id())}>
+                                            <DropdownMenu.ItemLabel>
+                                              {language.t("common.archive")}
+                                            </DropdownMenu.ItemLabel>
+                                          </DropdownMenu.Item>
+                                          <DropdownMenu.Separator />
+                                          <DropdownMenu.Item
+                                            onSelect={() => dialog.show(() => <DialogDeleteSession sessionID={id()} />)}
+                                          >
+                                            <DropdownMenu.ItemLabel>
+                                              {language.t("common.delete")}
+                                            </DropdownMenu.ItemLabel>
+                                          </DropdownMenu.Item>
+                                        </DropdownMenu.Content>
+                                      </DropdownMenu.Portal>
+                                    </DropdownMenu>
+                                  </div>
+                                )}
                               </Show>
                             </div>
                           </div>
