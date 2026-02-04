@@ -1,9 +1,5 @@
 preload = ["@opentui/solid/preload"]
 
-[jsx]
-importSource = "@opentui/solid"
-runtime = "automatic"
-
 [test]
 preload = ["./test/preload.ts"]
 timeout = 10000  # 10 seconds (default is 5000ms)
