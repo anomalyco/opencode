@@ -182,13 +182,30 @@ export async function hoverSessionItem(page: Page, sessionID: string) {
 }
 
 export async function openSessionMoreMenu(page: Page, sessionID: string) {
-  const sessionEl = await hoverSessionItem(page, sessionID)
+  await expect(page).toHaveURL(new RegExp(`/session/${sessionID}(?:[/?#]|$)`))
 
-  const menuTrigger = sessionEl.locator(dropdownMenuTriggerSelector).first()
+  const scroller = page.locator(".session-scroller").first()
+  await expect(scroller).toBeVisible()
+  await expect(scroller.getByRole("heading", { level: 1 }).first()).toBeVisible({ timeout: 30_000 })
+
+  const menu = page
+    .locator(dropdownMenuContentSelector)
+    .filter({ has: page.getByRole("menuitem", { name: /rename/i }) })
+    .filter({ has: page.getByRole("menuitem", { name: /archive/i }) })
+    .filter({ has: page.getByRole("menuitem", { name: /delete/i }) })
+    .first()
+
+  const opened = await menu
+    .isVisible()
+    .then((x) => x)
+    .catch(() => false)
+
+  if (opened) return menu
+
+  const menuTrigger = scroller.getByRole("button", { name: /more options/i }).first()
   await expect(menuTrigger).toBeVisible()
   await menuTrigger.click()
 
-  const menu = page.locator(dropdownMenuContentSelector).first()
   await expect(menu).toBeVisible()
   return menu
 }
