@@ -1,10 +1,11 @@
-import { createEffect, createMemo, createSignal, For, onMount, Show, splitProps, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js"
 import { Button } from "./button"
 import { Icon } from "./icon"
 import { FileIcon } from "./file-icon"
 import { useI18n } from "../context/i18n"
 import { useFilteredList } from "../hooks/use-filtered-list"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
+import { Portal } from "solid-js/web"
 
 export type LineCommentVariant = "default" | "editor"
 
@@ -24,37 +25,114 @@ export type LineCommentAnchorProps = {
 export const LineCommentAnchor = (props: LineCommentAnchorProps) => {
   const hidden = () => props.top === undefined
   const variant = () => props.variant ?? "default"
+  const [position, setPosition] = createSignal({ x: 0, y: 0, z: "40" })
+  let anchorRef!: HTMLDivElement
+  let popoverRef: HTMLDivElement | undefined
+
+  const place = () => {
+    if (!props.open) return
+    if (!anchorRef || !popoverRef) return
+    const viewport = document.documentElement
+
+    const anchor = anchorRef.getBoundingClientRect()
+    const popover = popoverRef.getBoundingClientRect()
+    const gap = 4
+    const margin = 8
+    const viewportWidth = viewport.clientWidth
+    const viewportHeight = viewport.clientHeight
+    const below = viewportHeight - anchor.bottom - gap
+    const above = anchor.top - gap
+    const desiredTop = below >= popover.height || below >= above ? anchor.bottom + gap : anchor.top - gap - popover.height
+    const desiredLeft = anchor.right + 8 - popover.width
+    const maxLeft = Math.max(margin, viewportWidth - margin - popover.width)
+    const maxTop = Math.max(margin, viewportHeight - margin - popover.height)
+    const clampedLeft = Math.min(Math.max(desiredLeft, margin), maxLeft)
+    const clampedTop = Math.min(Math.max(desiredTop, margin), maxTop)
+    const z = getComputedStyle(anchorRef).getPropertyValue("--line-comment-popover-z").trim() || "40"
+
+    setPosition({
+      x: clampedLeft,
+      y: clampedTop,
+      z,
+    })
+  }
+
+  createEffect(() => {
+    const open = props.open
+    props.top
+    if (!open) return
+    requestAnimationFrame(place)
+  })
+
+  createEffect(() => {
+    if (!props.open) return
+    if (!anchorRef || !popoverRef) return
+    const observer = new ResizeObserver(() => place())
+    observer.observe(popoverRef)
+    observer.observe(anchorRef)
+    requestAnimationFrame(place)
+    onCleanup(() => observer.disconnect())
+  })
+
+  onMount(() => {
+    const onResize = () => place()
+    const onScroll = () => place()
+    window.addEventListener("resize", onResize)
+    window.addEventListener("scroll", onScroll, true)
+    onCleanup(() => {
+      window.removeEventListener("resize", onResize)
+      window.removeEventListener("scroll", onScroll, true)
+    })
+  })
 
   return (
-    <div
-      data-component="line-comment"
-      data-variant={variant()}
-      data-comment-id={props.id}
-      data-open={props.open ? "" : undefined}
-      classList={{
-        [props.class ?? ""]: !!props.class,
-      }}
-      style={{
-        top: `${props.top ?? 0}px`,
-        opacity: hidden() ? 0 : 1,
-        "pointer-events": hidden() ? "none" : "auto",
-      }}
-    >
-      <button type="button" data-slot="line-comment-button" onClick={props.onClick} onMouseEnter={props.onMouseEnter}>
-        <Icon name="comment" size="small" />
-      </button>
+    <>
+      <div
+        ref={anchorRef}
+        data-component="line-comment"
+        data-variant={variant()}
+        data-comment-id={props.id}
+        data-open={props.open ? "" : undefined}
+        classList={{
+          [props.class ?? ""]: !!props.class,
+        }}
+        style={{
+          top: `${props.top ?? 0}px`,
+          opacity: hidden() ? 0 : 1,
+          "pointer-events": hidden() ? "none" : "auto",
+        }}
+      >
+        <button type="button" data-slot="line-comment-button" onClick={props.onClick} onMouseEnter={props.onMouseEnter}>
+          <Icon name="comment" size="small" />
+        </button>
+      </div>
       <Show when={props.open}>
-        <div
-          data-slot="line-comment-popover"
-          classList={{
-            [props.popoverClass ?? ""]: !!props.popoverClass,
-          }}
-          onFocusOut={props.onPopoverFocusOut}
-        >
-          {props.children}
-        </div>
+        <Portal>
+          <div
+            data-component="line-comment"
+            data-overlay
+            data-variant={variant()}
+            data-open
+            style={{
+              "--line-comment-popover-x": `${position().x}px`,
+              "--line-comment-popover-y": `${position().y}px`,
+              "--line-comment-popover-z": position().z,
+            }}
+          >
+            <div
+              ref={popoverRef}
+              data-slot="line-comment-popover"
+              classList={{
+                [props.popoverClass ?? ""]: !!props.popoverClass,
+              }}
+              onFocusOut={props.onPopoverFocusOut}
+            >
+              {props.children}
+            </div>
+          </div>
+        </Portal>
       </Show>
-    </div>
+    </>
   )
 }
 
@@ -455,7 +533,12 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
   return (
     <LineCommentAnchor {...rest} open={true} variant="editor" onClick={() => focus()}>
       <div data-slot="line-comment-editor">
-        <div data-slot="line-comment-editor-scroll">
+        <div
+          data-slot="line-comment-editor-scroll"
+          style={{
+            "--line-comment-rows": `${split.rows ?? 3}`,
+          }}
+        >
           <div
             ref={editorRef}
             contenteditable="true"

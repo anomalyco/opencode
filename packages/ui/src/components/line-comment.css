@@ -46,6 +46,23 @@
   padding: 12px;
 }
 
+[data-component="line-comment"][data-overlay] {
+  position: fixed;
+  inset: 0;
+  right: auto;
+  z-index: var(--line-comment-popover-z, 40);
+  pointer-events: none;
+}
+
+[data-component="line-comment"][data-overlay] [data-slot="line-comment-popover"] {
+  position: fixed;
+  top: var(--line-comment-popover-y, 0);
+  left: var(--line-comment-popover-x, 0);
+  right: auto;
+  bottom: auto;
+  pointer-events: auto;
+}
+
 [data-component="line-comment"][data-variant="editor"] [data-slot="line-comment-popover"] {
   width: 380px;
   max-width: min(380px, calc(100vw - 48px));
@@ -99,7 +116,7 @@
   line-height: var(--line-height-large);
 }
 
-[data-component="line-comment"] [data-slot="line-comment-textarea"]:focus {
+[data-component="line-comment"] [data-slot="line-comment-textarea"]:focus:not([contenteditable]) {
   outline: none;
   box-shadow: var(--shadow-xs-border-select);
 }
@@ -116,17 +133,26 @@
 
 [data-component="line-comment"] [data-slot="line-comment-editor-scroll"] {
   position: relative;
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-large);
+  min-height: calc(var(--line-comment-rows, 3) * 1.5em + 16px);
+  min-height: calc(var(--line-comment-rows, 3) * 1lh + 16px);
   max-height: 150px;
   overflow-y: auto;
+  border-radius: var(--radius-md);
+  background: var(--surface-base);
+  border: 1px solid var(--border-base);
+  resize: vertical;
+}
+
+[data-component="line-comment"] [data-slot="line-comment-editor-scroll"]:focus-within {
+  box-shadow: var(--shadow-xs-border-select);
 }
 
 [data-component="line-comment"] [data-slot="line-comment-textarea"][contenteditable] {
   width: 100%;
-  min-height: calc(var(--line-height-large) * 3);
+  min-height: 100%;
   padding: 8px;
-  border-radius: var(--radius-md);
-  background: var(--surface-base);
-  border: 1px solid var(--border-base);
   color: var(--text-strong);
   font-family: var(--font-family-sans);
   font-size: var(--font-size-small);
@@ -134,10 +160,11 @@
   outline: none;
   white-space: pre-wrap;
   word-break: break-word;
-}
-
-[data-component="line-comment"] [data-slot="line-comment-textarea"][contenteditable]:focus {
-  box-shadow: var(--shadow-xs-border-select);
+  /* Reset styles inherited from base textarea rule */
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  resize: none;
 }
 
 [data-component="line-comment"] [data-slot="line-comment-textarea"] [data-type="file"] {
