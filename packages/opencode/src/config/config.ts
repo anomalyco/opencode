@@ -1153,7 +1153,7 @@ export namespace Config {
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
       permission: Permission.optional(),
-      tools: z.record(z.string(), z.boolean()).optional(),
+      tools: z.record(z.string(), z.boolean()).optional().describe("@deprecated Use 'permission' field instead."),
       enterprise: z
         .object({
           url: z.string().optional().describe("Enterprise URL"),
