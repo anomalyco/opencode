@@ -3,11 +3,35 @@ description: "Setup Bun with caching and install dependencies"
 runs:
   using: "composite"
   steps:
+    - name: Detect Bun version
+      id: bun
+      run: |
+        version=$(node -p "require(process.env.GITHUB_WORKSPACE ? process.env.GITHUB_WORKSPACE + '/package.json' : './package.json').packageManager" 2>/dev/null || true)
+        version=${version##*@}
+        if [ -z "$version" ]; then version=unknown; fi
+        printf '%s\n' "version=$version" >> "$GITHUB_OUTPUT"
+      shell: bash
+
     - name: Mount Bun Cache
+      if: runner.os != 'Windows'
       uses: useblacksmith/stickydisk@v1
       with:
         key: ${{ github.repository }}-bun-cache
         path: ~/.bun
+
+    - name: Cache Bun (Windows)
+      if: runner.os == 'Windows'
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.bun
+          ~/.bun/install/cache
+          ${{ env.LOCALAPPDATA }}\bun\install\cache
+          ${{ runner.tool_cache }}\Bun
+          ${{ runner.tool_cache }}\bun
+        key: bun-${{ runner.os }}-${{ runner.arch }}-${{ steps.bun.outputs.version }}
+        restore-keys: |
+          bun-${{ runner.os }}-${{ runner.arch }}-
 
     - name: Setup Bun
       uses: oven-sh/setup-bun@v2
