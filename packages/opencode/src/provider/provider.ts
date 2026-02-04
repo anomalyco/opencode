@@ -767,7 +767,6 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         },
         async getModel(sdk: ReturnType<typeof createGitLab>, modelID: string) {
           return sdk.agenticChat(modelID, {
-            // @ts-expect-error - aiGatewayHeaders may not be in GitLabAgenticOptions types
             aiGatewayHeaders,
             featureFlags: {
               duo_agent_platform_agentic_chat: true,
