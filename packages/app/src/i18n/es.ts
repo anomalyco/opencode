@@ -44,7 +44,6 @@ export const dict = {
 
   "command.session.new": "Nueva sesión",
   "command.file.open": "Abrir archivo",
-  "command.file.open.description": "Buscar archivos y comandos",
   "command.context.addSelection": "Añadir selección al contexto",
   "command.context.addSelection.description": "Añadir las líneas seleccionadas del archivo actual",
   "command.terminal.toggle": "Alternar terminal",
@@ -84,7 +83,7 @@ export const dict = {
   "command.session.unshare": "Dejar de compartir sesión",
   "command.session.unshare.description": "Dejar de compartir esta sesión",
 
-  "palette.search.placeholder": "Buscar archivos y comandos",
+  "palette.search.placeholder": "Buscar archivos, comandos y sesiones",
   "palette.empty": "No se encontraron resultados",
   "palette.group.commands": "Comandos",
   "palette.group.files": "Archivos",
