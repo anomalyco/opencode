@@ -55,6 +55,12 @@ export type PromptRef = {
 
 const PLACEHOLDERS = ["Fix a TODO in the codebase", "What is the tech stack of this project?", "Fix broken tests"]
 
+function truncate(text: string, max: number) {
+  const line = text.split("\n")[0]
+  if (line.length <= max) return line
+  return line.slice(0, max) + "..."
+}
+
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
   let anchor: BoxRenderable
@@ -778,6 +784,13 @@ export function Prompt(props: PromptProps) {
         agentStyleId={agentStyleId}
         promptPartTypeId={() => promptPartTypeId}
       />
+      <Show when={stash.list().length > 0 && props.visible !== false}>
+        <box paddingLeft={3} paddingBottom={1}>
+          <text fg={theme.textMuted}>
+            Stash ({stash.list().length}): {truncate(stash.list().at(-1)?.input ?? "", 40)}
+          </text>
+        </box>
+      </Show>
       <box ref={(r) => (anchor = r)} visible={props.visible !== false}>
         <box
           border={["left"]}
@@ -830,6 +843,35 @@ export function Prompt(props: PromptProps) {
                     return
                   }
                   // If no image, let the default paste behavior continue
+                }
+                if (keybind.match("stash_toggle", e)) {
+                  if (store.prompt.input !== "") {
+                    stash.push({
+                      input: store.prompt.input,
+                      parts: store.prompt.parts,
+                    })
+                    input.extmarks.clear()
+                    input.clear()
+                    setStore("prompt", { input: "", parts: [] })
+                    setStore("extmarkToPartIndex", new Map())
+                  } else if (stash.list().length > 0) {
+                    const entry = stash.pop()
+                    if (entry) {
+                      input.setText(entry.input)
+                      setStore("prompt", { input: entry.input, parts: entry.parts })
+                      restoreExtmarksFromParts(entry.parts)
+                      input.gotoBufferEnd()
+                    }
+                  }
+                  e.preventDefault()
+                  return
+                }
+                if (keybind.match("stash_delete", e) && stash.list().length > 0) {
+                  const list = stash.list()
+                  const lastIndex = list.length - 1
+                  stash.remove(lastIndex)
+                  e.preventDefault()
+                  return
                 }
                 if (keybind.match("input_clear", e) && store.prompt.input !== "") {
                   input.clear()
