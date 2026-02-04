@@ -1,5 +1,5 @@
 import { test, expect } from "../fixtures"
-import { openStatusPopover, defocus } from "../actions"
+import { openStatusPopover } from "../actions"
 
 test("status popover opens and shows tabs", async ({ page, gotoSession }) => {
   await gotoSession()
@@ -88,7 +88,7 @@ test("status popover closes when clicking outside", async ({ page, gotoSession }
   const { popoverBody } = await openStatusPopover(page)
   await expect(popoverBody).toBeVisible()
 
-  await defocus(page)
+  await page.getByRole("main").click({ position: { x: 5, y: 5 } })
 
   await expect(popoverBody).toHaveCount(0)
 })
