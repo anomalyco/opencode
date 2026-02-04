@@ -44,7 +44,6 @@ export const dict = {
 
   "command.session.new": "New session",
   "command.file.open": "Open file",
-  "command.file.open.description": "Search files and commands",
   "command.tab.close": "Close tab",
   "command.context.addSelection": "Add selection to context",
   "command.context.addSelection.description": "Add selected lines from the current file",
@@ -71,6 +70,8 @@ export const dict = {
   "command.model.variant.cycle.description": "Switch to the next effort level",
   "command.permissions.autoaccept.enable": "Auto-accept edits",
   "command.permissions.autoaccept.disable": "Stop auto-accepting edits",
+  "command.workspace.toggle": "Toggle workspaces",
+  "command.workspace.toggle.description": "Enable or disable multiple workspaces in the sidebar",
   "command.session.undo": "Undo",
   "command.session.undo.description": "Undo the last message",
   "command.session.redo": "Redo",
@@ -84,7 +85,7 @@ export const dict = {
   "command.session.unshare": "Unshare session",
   "command.session.unshare.description": "Stop sharing this session",
 
-  "palette.search.placeholder": "Search files and commands",
+  "palette.search.placeholder": "Search files, commands, and sessions",
   "palette.empty": "No results found",
   "palette.group.commands": "Commands",
   "palette.group.files": "Files",
@@ -349,6 +350,11 @@ export const dict = {
 
   "toast.theme.title": "Theme switched",
   "toast.scheme.title": "Color scheme",
+
+  "toast.workspace.enabled.title": "Workspaces enabled",
+  "toast.workspace.enabled.description": "Multiple worktrees are now shown in the sidebar",
+  "toast.workspace.disabled.title": "Workspaces disabled",
+  "toast.workspace.disabled.description": "Only the main worktree is shown in the sidebar",
 
   "toast.permissions.autoaccept.on.title": "Auto-accepting edits",
   "toast.permissions.autoaccept.on.description": "Edit and write permissions will be automatically approved",

@@ -44,7 +44,6 @@ export const dict = {
 
   "command.session.new": "Ny session",
   "command.file.open": "Åbn fil",
-  "command.file.open.description": "Søg i filer og kommandoer",
   "command.context.addSelection": "Tilføj markering til kontekst",
   "command.context.addSelection.description": "Tilføj markerede linjer fra den aktuelle fil",
   "command.terminal.toggle": "Skift terminal",
@@ -70,6 +69,7 @@ export const dict = {
   "command.model.variant.cycle.description": "Skift til næste indsatsniveau",
   "command.permissions.autoaccept.enable": "Accepter ændringer automatisk",
   "command.permissions.autoaccept.disable": "Stop automatisk accept af ændringer",
+  "command.workspace.toggle": "Skift arbejdsområder",
   "command.session.undo": "Fortryd",
   "command.session.undo.description": "Fortryd den sidste besked",
   "command.session.redo": "Omgør",
@@ -83,7 +83,7 @@ export const dict = {
   "command.session.unshare": "Stop deling af session",
   "command.session.unshare.description": "Stop med at dele denne session",
 
-  "palette.search.placeholder": "Søg i filer og kommandoer",
+  "palette.search.placeholder": "Søg i filer, kommandoer og sessioner",
   "palette.empty": "Ingen resultater fundet",
   "palette.group.commands": "Kommandoer",
   "palette.group.files": "Filer",
@@ -348,6 +348,11 @@ export const dict = {
   "toast.permissions.autoaccept.on.description": "Redigerings- og skrivetilladelser vil automatisk blive godkendt",
   "toast.permissions.autoaccept.off.title": "Stoppede automatisk accept af ændringer",
   "toast.permissions.autoaccept.off.description": "Redigerings- og skrivetilladelser vil kræve godkendelse",
+
+  "toast.workspace.enabled.title": "Arbejdsområder aktiveret",
+  "toast.workspace.enabled.description": "Flere worktrees vises nu i sidepanelet",
+  "toast.workspace.disabled.title": "Arbejdsområder deaktiveret",
+  "toast.workspace.disabled.description": "Kun hoved-worktree vises i sidepanelet",
 
   "toast.model.none.title": "Ingen model valgt",
   "toast.model.none.description": "Forbind en udbyder for at opsummere denne session",

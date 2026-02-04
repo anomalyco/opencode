@@ -48,7 +48,6 @@ export const dict = {
 
   "command.session.new": "새 세션",
   "command.file.open": "파일 열기",
-  "command.file.open.description": "파일 및 명령어 검색",
   "command.context.addSelection": "선택 영역을 컨텍스트에 추가",
   "command.context.addSelection.description": "현재 파일에서 선택한 줄을 추가",
   "command.terminal.toggle": "터미널 토글",
@@ -74,6 +73,7 @@ export const dict = {
   "command.model.variant.cycle.description": "다음 생각 수준으로 전환",
   "command.permissions.autoaccept.enable": "편집 자동 수락",
   "command.permissions.autoaccept.disable": "편집 자동 수락 중지",
+  "command.workspace.toggle": "작업 공간 전환",
   "command.session.undo": "실행 취소",
   "command.session.undo.description": "마지막 메시지 실행 취소",
   "command.session.redo": "다시 실행",
@@ -87,7 +87,7 @@ export const dict = {
   "command.session.unshare": "세션 공유 중지",
   "command.session.unshare.description": "이 세션 공유 중지",
 
-  "palette.search.placeholder": "파일 및 명령어 검색",
+  "palette.search.placeholder": "파일, 명령어 및 세션 검색",
   "palette.empty": "결과 없음",
   "palette.group.commands": "명령어",
   "palette.group.files": "파일",
@@ -350,6 +350,11 @@ export const dict = {
   "toast.permissions.autoaccept.on.description": "편집 및 쓰기 권한이 자동으로 승인됩니다",
   "toast.permissions.autoaccept.off.title": "편집 자동 수락 중지됨",
   "toast.permissions.autoaccept.off.description": "편집 및 쓰기 권한 승인이 필요합니다",
+
+  "toast.workspace.enabled.title": "작업 공간 활성화됨",
+  "toast.workspace.enabled.description": "이제 사이드바에 여러 작업 트리가 표시됩니다",
+  "toast.workspace.disabled.title": "작업 공간 비활성화됨",
+  "toast.workspace.disabled.description": "사이드바에 메인 작업 트리만 표시됩니다",
 
   "toast.model.none.title": "선택된 모델 없음",
   "toast.model.none.description": "이 세션을 요약하려면 공급자를 연결하세요",
