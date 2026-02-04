@@ -28,4 +28,7 @@ logs/
 *.bun-build
 
 # Trellis workflow (developer-specific)
-.trellis/
+.trellis/workspace/
+.trellis/tasks/
+.trellis/.developer
+.trellis/.current-task
