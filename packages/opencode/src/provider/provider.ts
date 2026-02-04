@@ -421,6 +421,7 @@ export namespace Provider {
       const providerConfig = config.provider?.["gitlab"]
 
       return {
+        key: apiKey || undefined,
         autoload: !!apiKey,
         options: {
           instanceUrl,
