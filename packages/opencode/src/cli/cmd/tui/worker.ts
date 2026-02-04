@@ -97,6 +97,9 @@ const startEventStream = (directory: string) => {
 startEventStream(process.cwd())
 
 export const rpc = {
+  async setDirectory(input: { directory: string }) {
+    startEventStream(input.directory)
+  },
   async fetch(input: { url: string; method: string; headers: Record<string, string>; body?: string }) {
     const headers = { ...input.headers }
     const auth = getAuthorizationHeader()
