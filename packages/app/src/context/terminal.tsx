@@ -1,6 +1,6 @@
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { batch, createMemo, createRoot, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, createRoot, onCleanup } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { useSDK } from "./sdk"
 import { Persist, persisted } from "@/utils/persist"
@@ -9,6 +9,7 @@ export type LocalPTY = {
   id: string
   title: string
   titleNumber: number
+  order?: number
   rows?: number
   cols?: number
   buffer?: string
@@ -73,13 +74,48 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
     }),
   )
 
+  const withSequentialOrder = (list: LocalPTY[]) =>
+    list.map((item, index) => (item.order === index ? item : { ...item, order: index }))
+
+  const normalizeOrder = () => {
+    const current = store.all
+    if (current.length === 0) return
+    const indexed = current.map((item, index) => ({
+      item,
+      index,
+      order: item.order ?? index,
+    }))
+    const sorted = [...indexed].sort((a, b) => {
+      if (a.order !== b.order) return a.order - b.order
+      return a.index - b.index
+    })
+    const next = sorted.map((entry, index) =>
+      entry.item.order === index ? entry.item : { ...entry.item, order: index },
+    )
+    const changed =
+      next.length !== current.length || next.some((item, index) => item.id !== current[index]?.id || item !== current[index])
+    if (changed) {
+      setStore("all", next)
+    }
+  }
+
+  let normalized = false
+  createEffect(() => {
+    if (!ready()) return
+    if (normalized) return
+    if (store.all.length === 0) return
+    normalized = true
+    normalizeOrder()
+  })
+
   const removeLocal = (id: string) => {
     batch(() => {
       const current = store.all
       const index = current.findIndex((item) => item.id === id)
+      const nextAll = withSequentialOrder(current.filter((x) => x.id !== id))
       setStore(
         "all",
-        current.filter((x) => x.id !== id),
+        nextAll,
       )
       if (store.active === id) {
         const next = index >= 0 ? current[index + 1] : undefined
@@ -105,7 +141,21 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
 
   return {
     ready,
-    all: createMemo(() => Object.values(store.all)),
+    all: createMemo(() => {
+      const current = store.all
+      if (current.length <= 1) return current
+      const indexed = current.map((item, index) => ({
+        item,
+        index,
+        order: item.order ?? index,
+      }))
+      return indexed
+        .sort((a, b) => {
+          if (a.order !== b.order) return a.order - b.order
+          return a.index - b.index
+        })
+        .map((entry) => entry.item)
+    }),
     active: createMemo(() => store.active),
     removeLocal,
     markError,
@@ -122,6 +172,9 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
         nextNumber++
       }
 
+      const nextOrder =
+        store.all.reduce((max, pty, index) => Math.max(max, pty.order ?? index), -1) + 1
+
       sdk.client.pty
         .create({ title: `Terminal ${nextNumber}` })
         .then((pty) => {
@@ -133,6 +186,7 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
               id,
               title: pty.data?.title ?? "Terminal",
               titleNumber: nextNumber,
+              order: nextOrder,
               status: "running",
               retryCount: 0,
             },
@@ -263,6 +317,10 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
         "all",
         produce((all) => {
           all.splice(to, 0, all.splice(index, 1)[0])
+          for (let i = 0; i < all.length; i++) {
+            if (all[i].order === i) continue
+            all[i] = { ...all[i], order: i }
+          }
         }),
       )
     },
