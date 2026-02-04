@@ -715,6 +715,38 @@ describe("HTTPS detection and enforcement", () => {
     expect(html).not.toContain('id="httpWarning"') // Should not warn because X-Forwarded-Proto says https
   })
 
+  test("respects multi-value X-Forwarded-Proto when trustProxy is true", async () => {
+    setMockAuthConfig({ requireHttps: "warn", trustProxy: true })
+    app = new Hono().route("/auth", AuthRoutes())
+
+    const res = await app.request("http://example.com/auth/login", {
+      method: "GET",
+      headers: {
+        Host: "example.com",
+        "X-Forwarded-Proto": "https, http",
+      },
+    })
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).not.toContain('id="httpWarning"')
+  })
+
+  test("respects Forwarded proto when trustProxy is true", async () => {
+    setMockAuthConfig({ requireHttps: "warn", trustProxy: true })
+    app = new Hono().route("/auth", AuthRoutes())
+
+    const res = await app.request("http://example.com/auth/login", {
+      method: "GET",
+      headers: {
+        Host: "example.com",
+        Forwarded: "proto=https;host=example.com",
+      },
+    })
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).not.toContain('id="httpWarning"')
+  })
+
   test("ignores X-Forwarded-Proto when trustProxy is false", async () => {
     setMockAuthConfig({ requireHttps: "warn", trustProxy: false })
     app = new Hono().route("/auth", AuthRoutes())

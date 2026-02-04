@@ -75,6 +75,38 @@ describe("isSecureConnection", () => {
     expect(isSecureConnection(c, true)).toBe(true)
   })
 
+  test("accepts mixed-case X-Forwarded-Proto when trustProxy is true", () => {
+    const c = mockContext("http://example.com/test", {
+      Host: "example.com",
+      "X-Forwarded-Proto": "HTTPS",
+    })
+    expect(isSecureConnection(c, true)).toBe(true)
+  })
+
+  test("uses first X-Forwarded-Proto value when trustProxy is true", () => {
+    const c = mockContext("http://example.com/test", {
+      Host: "example.com",
+      "X-Forwarded-Proto": "https, http",
+    })
+    expect(isSecureConnection(c, true)).toBe(true)
+  })
+
+  test("treats first X-Forwarded-Proto value as authoritative when trustProxy is true", () => {
+    const c = mockContext("http://example.com/test", {
+      Host: "example.com",
+      "X-Forwarded-Proto": "http, https",
+    })
+    expect(isSecureConnection(c, true)).toBe(false)
+  })
+
+  test("accepts Forwarded header proto when trustProxy is true", () => {
+    const c = mockContext("http://example.com/test", {
+      Host: "example.com",
+      Forwarded: "proto=https;host=example.com",
+    })
+    expect(isSecureConnection(c, true)).toBe(true)
+  })
+
   test("ignores X-Forwarded-Proto when trustProxy is false", () => {
     const c = mockContext("http://example.com/test", {
       Host: "example.com",
@@ -152,6 +184,17 @@ describe("getConnectionSecurityInfo", () => {
     const c = mockContext("http://example.com/test", {
       Host: "example.com",
       "X-Forwarded-Proto": "https",
+    })
+    const info = getConnectionSecurityInfo(c, { requireHttps: "warn", trustProxy: true })
+    expect(info.isSecure).toBe(true)
+    expect(info.shouldWarn).toBe(false)
+    expect(info.shouldBlock).toBe(false)
+  })
+
+  test("respects Forwarded header when trustProxy is true", () => {
+    const c = mockContext("http://example.com/test", {
+      Host: "example.com",
+      Forwarded: "proto=https;host=example.com",
     })
     const info = getConnectionSecurityInfo(c, { requireHttps: "warn", trustProxy: true })
     expect(info.isSecure).toBe(true)

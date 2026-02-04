@@ -20,17 +20,20 @@ export function isLocalhost<E extends Env = Env, P extends string = string, I ex
 /**
  * Check if the current connection is secure (HTTPS).
  *
- * When trustProxy is true, checks X-Forwarded-Proto header first.
+ * When trustProxy is true, checks Forwarded/X-Forwarded-Proto headers first.
  * Falls back to direct connection protocol check.
  */
 export function isSecureConnection<E extends Env = Env, P extends string = string, I extends Input = Input>(
   c: Context<E, P, I>,
   trustProxy: boolean,
 ): boolean {
-  // Check X-Forwarded-Proto when behind proxy
+  // Check proxy headers when behind proxy
   if (trustProxy) {
-    const forwardedProto = c.req.header("X-Forwarded-Proto")
-    if (forwardedProto === "https") return true
+    const forwardedProto = parseForwardedProto(c.req.header("Forwarded"))
+    if (forwardedProto) return forwardedProto === "https"
+
+    const xForwardedProto = parseXForwardedProto(c.req.header("X-Forwarded-Proto"))
+    if (xForwardedProto) return xForwardedProto === "https"
   }
 
   // Fall back to checking direct connection protocol
@@ -40,6 +43,37 @@ export function isSecureConnection<E extends Env = Env, P extends string = strin
   } catch {
     return false
   }
+}
+
+function parseXForwardedProto(header: string | undefined): string | undefined {
+  if (!header) return undefined
+
+  const first = header.split(",")[0]?.trim()
+  if (!first) return undefined
+
+  return first.toLowerCase()
+}
+
+function parseForwardedProto(header: string | undefined): string | undefined {
+  if (!header) return undefined
+
+  const first = header.split(",")[0]?.trim()
+  if (!first) return undefined
+
+  for (const part of first.split(";")) {
+    const [rawKey, rawValue] = part.split("=", 2)
+    if (!rawKey || rawValue === undefined) continue
+    if (rawKey.trim().toLowerCase() !== "proto") continue
+
+    let value = rawValue.trim()
+    if (value.startsWith('"') && value.endsWith('"') && value.length >= 2) {
+      value = value.slice(1, -1)
+    }
+    if (!value) return undefined
+    return value.toLowerCase()
+  }
+
+  return undefined
 }
 
 /**
