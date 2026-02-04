@@ -53,7 +53,7 @@ const parser = lazy(async () => {
 
 // TODO: we may wanna rename this tool so it works better on other shells
 export const BashTool = Tool.define("bash", async () => {
-  const shell = Shell.acceptable()
+  const shell = Shell.forCommand("")
   log.info("bash tool using shell", { shell })
 
   return {
@@ -81,6 +81,12 @@ export const BashTool = Tool.define("bash", async () => {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
       const timeout = params.timeout ?? DEFAULT_TIMEOUT
+
+      // Use the appropriate shell for the command
+      // This will automatically use Git bash for Unix commands on Windows
+      const shell = Shell.forCommand(params.command)
+      log.info("bash tool using shell", { shell, command: params.command })
+
       const tree = await parser().then((p) => p.parse(params.command))
       if (!tree) {
         throw new Error("Failed to parse command")

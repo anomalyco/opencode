@@ -1140,6 +1140,14 @@ export namespace Config {
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
         })
         .optional(),
+      terminal: z
+        .string()
+        .optional()
+        .describe(
+          "Terminal shell to use for PTY sessions. On Windows, use 'cmd.exe', 'powershell.exe', or a full path. " +
+            "Defaults to PowerShell on Windows if available, otherwise cmd.exe. " +
+            "Git bash.exe is NOT recommended due to compatibility issues with OpenCode's PTY implementation.",
+        ),
     })
     .strict()
     .meta({
