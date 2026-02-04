@@ -20,6 +20,7 @@ export namespace Pty {
 
   const BUFFER_LIMIT = 1024 * 1024 * 2
   const BUFFER_CHUNK = 64 * 1024
+  const TERMINAL_EXIT_MESSAGE = "\r\n[opencode] Terminal session ended.\r\n"
 
   const pty = lazy(async () => {
     const { spawn } = await import("bun-pty")
@@ -102,6 +103,14 @@ export namespace Pty {
       sessions.clear()
     },
   )
+
+  BrokerPty.onExit((info) => {
+    const brokerInfo = brokerState().get(info.id)
+    if (!brokerInfo) return
+    brokerInfo.status = "exited"
+    void Bus.publish(Event.Exited, { id: info.id, exitCode: 0 })
+    brokerState().delete(info.id)
+  })
 
   export function list() {
     return [...Array.from(state().values()).map((s) => s.info), ...Array.from(brokerState().values())]
@@ -234,6 +243,15 @@ export namespace Pty {
     ptyProcess.onExit(({ exitCode }) => {
       log.info("session exited", { id, exitCode })
       session.info.status = "exited"
+      for (const ws of session.subscribers) {
+        if (ws.readyState === 1) {
+          try {
+            ws.send(TERMINAL_EXIT_MESSAGE)
+          } catch {}
+        }
+        ws.close()
+      }
+      session.subscribers.clear()
       Bus.publish(Event.Exited, { id, exitCode })
       state().delete(id)
     })

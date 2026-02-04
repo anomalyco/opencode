@@ -16,6 +16,7 @@ const BUFFER_LIMIT = 1024 * 1024 * 2
 const BUFFER_CHUNK = 64 * 1024
 const POLL_INTERVAL_MS = 200
 const decoder = new TextDecoder()
+const TERMINAL_EXIT_MESSAGE = "\r\n[opencode] Terminal session ended.\r\n"
 
 export class BrokerSessionNotFoundError extends Error {
   code = "broker_session_not_found"
@@ -54,6 +55,13 @@ interface BrokerPtySession {
 
 /** Active broker PTY sessions by ID */
 const sessions = new Map<string, BrokerPtySession>()
+type BrokerPtyExitListener = (info: BrokerPtyInfo, reason?: { code?: string; error?: string }) => void
+const exitListeners = new Set<BrokerPtyExitListener>()
+
+export function onExit(listener: BrokerPtyExitListener): () => void {
+  exitListeners.add(listener)
+  return () => exitListeners.delete(listener)
+}
 
 /**
  * Create a broker-backed PTY session.
@@ -162,21 +170,7 @@ export async function kill(id: string, requestId?: string): Promise<void> {
   const brokerClient = new BrokerClient()
   await brokerClient.killPty(session.info.ptyId, requestId)
 
-  session.info.status = "exited"
-  stopPolling(session)
-  sessions.delete(id)
-
-  // Close any subscribers
-  for (const ws of session.subscribers) {
-    ws.close()
-  }
-
-  log.info("Broker PTY killed", {
-    ptyId: id,
-    sessionId: session.info.sessionId,
-    requestId,
-    method: "killpty",
-  })
+  closeSession(session, { code: "killpty" })
 }
 
 /**
@@ -257,12 +251,17 @@ export function connect(
     onMessage: async (msg: string | ArrayBuffer) => {
       const brokerClient = new BrokerClient()
       const data = typeof msg === "string" ? msg : new Uint8Array(msg as ArrayBuffer)
-      const success = await brokerClient.ptyWrite(session.info.ptyId, data, options.requestId)
-      if (!success) {
+      const result = await brokerClient.ptyWriteDetailed(session.info.ptyId, data, options.requestId)
+      if (!result.ok) {
+        if (result.code === "pty_closed" || result.code === "pty_session_not_found") {
+          closeSession(session, { code: result.code, error: result.error })
+          return
+        }
         log.warn("Failed to write to broker PTY", {
           ptyId: id,
           sessionId: session.info.sessionId,
           requestId: options.requestId,
+          error: result.error,
           method: "ptywrite",
         })
       }
@@ -295,8 +294,16 @@ async function pollOutput(session: BrokerPtySession): Promise<void> {
     let iterations = 0
     let more = true
     while (more && iterations < 4) {
-      const result = await brokerClient.ptyRead(session.info.ptyId, 4096)
-      if (!result || result.data.length === 0) {
+      const result = await brokerClient.ptyReadDetailed(session.info.ptyId, 4096)
+      if (!result.ok) {
+        if (result.code === "pty_closed" || result.code === "pty_session_not_found") {
+          closeSession(session, { code: result.code, error: result.error })
+          return
+        }
+        log.warn("Broker PTY poll failed", { ptyId: session.info.ptyId, error: result.error })
+        break
+      }
+      if (!result.data || result.data.length === 0) {
         break
       }
       const text = decoder.decode(result.data)
@@ -318,7 +325,7 @@ async function pollOutput(session: BrokerPtySession): Promise<void> {
           session.buffer = session.buffer.slice(-BUFFER_LIMIT)
         }
       }
-      more = result.more
+      more = result.more ?? false
       iterations += 1
     }
   } catch (error) {
@@ -326,6 +333,36 @@ async function pollOutput(session: BrokerPtySession): Promise<void> {
   } finally {
     session.reading = false
   }
+}
+
+function closeSession(session: BrokerPtySession, reason?: { code?: string; error?: string }) {
+  if (session.info.status === "exited") return
+  session.info.status = "exited"
+  stopPolling(session)
+  sessions.delete(session.info.id)
+  for (const ws of session.subscribers) {
+    try {
+      if (ws.readyState === 1) {
+        ws.send(TERMINAL_EXIT_MESSAGE)
+      }
+      ws.close()
+    } catch {}
+  }
+  session.subscribers.clear()
+  session.buffer = ""
+  for (const listener of exitListeners) {
+    try {
+      listener(session.info, reason)
+    } catch (error) {
+      log.warn("Broker PTY exit listener failed", { ptyId: session.info.ptyId, error })
+    }
+  }
+  log.info("Broker PTY closed", {
+    ptyId: session.info.ptyId,
+    sessionId: session.info.sessionId,
+    reason: reason?.code,
+    error: reason?.error,
+  })
 }
 
 // TODO: Implement PTY output streaming

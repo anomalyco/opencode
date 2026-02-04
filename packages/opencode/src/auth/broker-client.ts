@@ -107,6 +107,27 @@ export interface PtyReadResult {
   more: boolean
 }
 
+export type PtyErrorCode =
+  | "pty_closed"
+  | "pty_session_not_found"
+  | "broker_unavailable"
+  | "invalid_response"
+  | "unknown"
+
+export interface PtyReadDetailedResult {
+  ok: boolean
+  data?: Uint8Array
+  more?: boolean
+  code?: PtyErrorCode
+  error?: string
+}
+
+export interface PtyWriteDetailedResult {
+  ok: boolean
+  code?: PtyErrorCode
+  error?: string
+}
+
 /**
  * UNIX user information required for session registration.
  * Must match the broker's UserInfo struct.
@@ -865,6 +886,21 @@ export class BrokerClient {
    * ```
    */
   async ptyWrite(ptyId: string, data: string | Uint8Array, requestId?: string): Promise<boolean> {
+    const result = await this.ptyWriteDetailed(ptyId, data, requestId)
+    if (!result.ok) {
+      this.log.warn("broker ptywrite failed", { method: "ptywrite", ptyId, requestId, error: result.error })
+    }
+    return result.ok
+  }
+
+  /**
+   * Write data to a PTY with detailed error information.
+   */
+  async ptyWriteDetailed(
+    ptyId: string,
+    data: string | Uint8Array,
+    requestId?: string,
+  ): Promise<PtyWriteDetailedResult> {
     const id = crypto.randomUUID()
 
     // Convert to base64
@@ -881,13 +917,16 @@ export class BrokerClient {
 
     try {
       const response = await this.sendRequest(request)
-      if (response.id !== id || !response.success) {
-        this.log.warn("broker ptywrite failed", { method: "ptywrite", ptyId, requestId, error: response.error })
+      if (response.id !== id) {
+        return { ok: false, code: "invalid_response", error: "invalid response" }
       }
-      return response.id === id && response.success
-    } catch {
-      this.log.warn("broker ptywrite unavailable", { method: "ptywrite", ptyId, requestId })
-      return false
+      if (!response.success) {
+        return { ok: false, code: this.mapPtyError(response.error), error: response.error }
+      }
+      return { ok: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      return { ok: false, code: "broker_unavailable", error: message }
     }
   }
 
@@ -914,6 +953,28 @@ export class BrokerClient {
    * ```
    */
   async ptyRead(ptyId: string, maxBytes = 4096, requestId?: string): Promise<PtyReadResult | null> {
+    const result = await this.ptyReadDetailed(ptyId, maxBytes, requestId)
+    if (!result.ok || !result.data) {
+      this.log.warn("broker ptyread failed", {
+        method: "ptyread",
+        ptyId,
+        maxBytes,
+        requestId,
+        error: result.error,
+      })
+      return null
+    }
+
+    return {
+      data: result.data,
+      more: result.more ?? false,
+    }
+  }
+
+  /**
+   * Read data from a PTY with detailed error information.
+   */
+  async ptyReadDetailed(ptyId: string, maxBytes = 4096, requestId?: string): Promise<PtyReadDetailedResult> {
     const id = crypto.randomUUID()
 
     const request: BrokerRequest = {
@@ -926,24 +987,27 @@ export class BrokerClient {
 
     try {
       const response = await this.sendRequest(request)
-      if (response.id !== id || !response.success || !response.data) {
-        this.log.warn("broker ptyread failed", { method: "ptyread", ptyId, maxBytes, requestId, error: response.error })
-        return null
+      if (response.id !== id) {
+        return { ok: false, code: "invalid_response", error: "invalid response" }
+      }
+      if (!response.success || !response.data) {
+        return { ok: false, code: this.mapPtyError(response.error), error: response.error }
       }
 
       const base64Data = response.data.data
       if (typeof base64Data !== "string") {
-        return null
+        return { ok: false, code: "invalid_response", error: "invalid response" }
       }
 
       const decoded = Buffer.from(base64Data, "base64")
       return {
+        ok: true,
         data: new Uint8Array(decoded),
         more: response.data.more ?? false,
       }
-    } catch {
-      this.log.warn("broker ptyread unavailable", { method: "ptyread", ptyId, maxBytes, requestId })
-      return null
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      return { ok: false, code: "broker_unavailable", error: message }
     }
   }
 
@@ -1036,5 +1100,30 @@ export class BrokerClient {
         }
       })
     })
+  }
+
+  private mapPtyError(error?: string): PtyErrorCode {
+    if (!error) return "unknown"
+    const normalized = error.toLowerCase()
+    if (normalized.includes("pty_closed")) return "pty_closed"
+    if (
+      normalized.includes("input/output error") ||
+      normalized.includes("i/o error") ||
+      normalized.includes("os error 5") ||
+      normalized.includes("eio") ||
+      normalized.includes("broken pipe")
+    ) {
+      return "pty_closed"
+    }
+    if (normalized.includes("session not found")) return "pty_session_not_found"
+    if (
+      normalized.includes("socket") ||
+      normalized.includes("timeout") ||
+      normalized.includes("connection") ||
+      normalized.includes("broker unavailable")
+    ) {
+      return "broker_unavailable"
+    }
+    return "unknown"
   }
 }

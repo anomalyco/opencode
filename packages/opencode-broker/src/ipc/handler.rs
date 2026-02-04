@@ -27,6 +27,24 @@ use crate::pty::session::{PtyId, PtySession, SessionManager};
 use crate::session::user::UserSessionStore;
 use tracing::{debug, error, info, warn};
 
+fn is_pty_closed_error(err: &std::io::Error) -> bool {
+    if matches!(err.kind(), std::io::ErrorKind::BrokenPipe) {
+        return true;
+    }
+
+    match err.raw_os_error() {
+        Some(code)
+            if code == libc::EIO
+                || code == libc::EBADF
+                || code == libc::ENXIO
+                || code == libc::EPIPE =>
+        {
+            true
+        }
+        _ => false,
+    }
+}
+
 /// Handle a single IPC request.
 ///
 /// This function dispatches to the appropriate handler based on the request
@@ -806,8 +824,8 @@ async fn handle_pty_write(request: Request, pty_sessions: &SessionManager) -> Re
 
     let pty_id = PtyId::from(params.pty_id.clone());
 
-    let session = match pty_sessions.get(&pty_id) {
-        Some(s) => s,
+    let fd = match pty_sessions.get(&pty_id) {
+        Some(s) => s.master_fd.as_raw_fd(),
         None => {
             warn!(
                 id = %request.id,
@@ -830,8 +848,6 @@ async fn handle_pty_write(request: Request, pty_sessions: &SessionManager) -> Re
     // Write to master fd
     // Note: We need to be careful here - the fd is owned by the session.
     // We'll create a temporary File reference to write, then forget it so we don't close the fd.
-    let fd = session.master_fd.as_raw_fd();
-
     // Use unsafe to create a File from the raw fd for writing
     // We must NOT drop this File or it will close the fd
     let result = {
@@ -854,6 +870,16 @@ async fn handle_pty_write(request: Request, pty_sessions: &SessionManager) -> Re
             Response::success(&request.id)
         }
         Err(e) => {
+            if is_pty_closed_error(&e) {
+                warn!(
+                    id = %request.id,
+                    pty_id = %params.pty_id,
+                    error = %e,
+                    "pty_write: pty closed"
+                );
+                pty_sessions.remove(&pty_id);
+                return Response::failure(&request.id, "pty_closed");
+            }
             error!(error = %e, "failed to write to PTY");
             Response::failure(&request.id, format!("write failed: {}", e))
         }
@@ -875,8 +901,8 @@ async fn handle_pty_read(request: Request, pty_sessions: &SessionManager) -> Res
 
     let pty_id = PtyId::from(params.pty_id.clone());
 
-    let session = match pty_sessions.get(&pty_id) {
-        Some(s) => s,
+    let fd = match pty_sessions.get(&pty_id) {
+        Some(s) => s.master_fd.as_raw_fd(),
         None => {
             warn!(
                 id = %request.id,
@@ -886,8 +912,6 @@ async fn handle_pty_read(request: Request, pty_sessions: &SessionManager) -> Res
             return Response::failure(&request.id, "PTY session not found");
         }
     };
-
-    let fd = session.master_fd.as_raw_fd();
     let max_bytes = if params.max_bytes == 0 {
         4096
     } else {
@@ -924,6 +948,15 @@ async fn handle_pty_read(request: Request, pty_sessions: &SessionManager) -> Res
 
     match result {
         Ok(data) => {
+            if data.is_empty() {
+                warn!(
+                    id = %request.id,
+                    pty_id = %params.pty_id,
+                    "pty_read: pty closed"
+                );
+                pty_sessions.remove(&pty_id);
+                return Response::failure(&request.id, "pty_closed");
+            }
             let encoded = base64::engine::general_purpose::STANDARD.encode(&data);
             let more = data.len() == max_bytes; // Heuristic: if we got max, there might be more
 
@@ -957,6 +990,16 @@ async fn handle_pty_read(request: Request, pty_sessions: &SessionManager) -> Res
             )
         }
         Err(e) => {
+            if is_pty_closed_error(&e) {
+                warn!(
+                    id = %request.id,
+                    pty_id = %params.pty_id,
+                    error = %e,
+                    "pty_read: pty closed"
+                );
+                pty_sessions.remove(&pty_id);
+                return Response::failure(&request.id, "pty_closed");
+            }
             error!(error = %e, "failed to read from PTY");
             Response::failure(&request.id, format!("read failed: {}", e))
         }

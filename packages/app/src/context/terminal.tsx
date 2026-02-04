@@ -73,10 +73,40 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
     }),
   )
 
+  const removeLocal = (id: string) => {
+    batch(() => {
+      setStore(
+        "all",
+        store.all.filter((x) => x.id !== id),
+      )
+      if (store.active === id) {
+        const index = store.all.findIndex((f) => f.id === id)
+        const previous = store.all[Math.max(0, index - 1)]
+        setStore("active", previous?.id)
+      }
+    })
+  }
+
+  const markError = (id: string, details?: PtyErrorDetails) => {
+    setStore("all", (items) =>
+      items.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              status: "error",
+              lastError: details,
+            }
+          : item,
+      ),
+    )
+  }
+
   return {
     ready,
     all: createMemo(() => Object.values(store.all)),
     active: createMemo(() => store.active),
+    removeLocal,
+    markError,
     new() {
       const existingTitleNumbers = new Set(
         store.all.map((pty) => {
@@ -216,17 +246,7 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
       setStore("active", id)
     },
     async close(id: string) {
-      batch(() => {
-        setStore(
-          "all",
-          store.all.filter((x) => x.id !== id),
-        )
-        if (store.active === id) {
-          const index = store.all.findIndex((f) => f.id === id)
-          const previous = store.all[Math.max(0, index - 1)]
-          setStore("active", previous?.id)
-        }
-      })
+      removeLocal(id)
       await sdk.client.pty.remove({ ptyID: id }).catch((e) => {
         console.error("Failed to close terminal", e)
       })
@@ -291,6 +311,22 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
     }
 
     const session = createMemo(() => load(params.dir!, params.id))
+
+    const unsubscribe = sdk.event.listen((e) => {
+      const event = e.details
+      const id = event.properties.id
+      if (!id) return
+      const existing = session().all().find((pty) => pty.id === id)
+      if (!existing) return
+      if (event.type === "pty.deleted") {
+        session().removeLocal(id)
+        return
+      }
+      if (event.type === "pty.exited") {
+        session().markError(id, { code: "pty_closed", message: "Terminal session ended" })
+      }
+    })
+    onCleanup(unsubscribe)
 
     return {
       ready: () => session().ready(),

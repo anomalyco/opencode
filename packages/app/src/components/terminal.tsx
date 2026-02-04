@@ -48,6 +48,9 @@ export const Terminal = (props: TerminalProps) => {
   let handleResize: () => void
   let handleTextareaFocus: () => void
   let handleTextareaBlur: () => void
+  let handleBeforeUnload: () => void
+  let handlePageHide: () => void
+  let handleVisibilityChange: () => void
   let reconnect: number | undefined
   let disposed = false
   let currentPtyId = local.pty.id
@@ -270,6 +273,29 @@ export const Terminal = (props: TerminalProps) => {
     // console.log("Scroll position:", ydisp)
     // })
     connectSocket(local.pty.id)
+
+    const persistSnapshot = () => {
+      if (disposed) return
+      if (!serializeAddon || !props.onCleanup || !term) return
+      const buffer = serializeAddon.serialize()
+      props.onCleanup({
+        ...local.pty,
+        buffer,
+        rows: term.rows,
+        cols: term.cols,
+        scrollY: term.getViewportY(),
+      })
+    }
+
+    handleBeforeUnload = () => persistSnapshot()
+    handlePageHide = () => persistSnapshot()
+    handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") persistSnapshot()
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload)
+    window.addEventListener("pagehide", handlePageHide)
+    document.addEventListener("visibilitychange", handleVisibilityChange)
   })
 
   createEffect(() => {
@@ -280,8 +306,18 @@ export const Terminal = (props: TerminalProps) => {
   })
 
   onCleanup(() => {
+    disposed = true
     if (handleResize) {
       window.removeEventListener("resize", handleResize)
+    }
+    if (handleBeforeUnload) {
+      window.removeEventListener("beforeunload", handleBeforeUnload)
+    }
+    if (handlePageHide) {
+      window.removeEventListener("pagehide", handlePageHide)
+    }
+    if (handleVisibilityChange) {
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
     }
     container.removeEventListener("pointerdown", handlePointerDown)
     term?.textarea?.removeEventListener("focus", handleTextareaFocus)
