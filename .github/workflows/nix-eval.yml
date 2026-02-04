@@ -3,21 +3,8 @@ name: nix-eval
 on:
   push:
     branches: [dev]
-    paths:
-      - "flake.nix"
-      - "flake.lock"
-      - "nix/**"
-      - "packages/app/**"
-      - "packages/desktop/**"
-      - ".github/workflows/nix-eval.yml"
   pull_request:
-    paths:
-      - "flake.nix"
-      - "flake.lock"
-      - "nix/**"
-      - "packages/app/**"
-      - "packages/desktop/**"
-      - ".github/workflows/nix-eval.yml"
+    branches: [dev]
   workflow_dispatch:
 
 jobs:
