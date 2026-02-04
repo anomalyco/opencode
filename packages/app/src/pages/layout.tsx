@@ -2874,7 +2874,9 @@ export default function Layout(props: ParentProps) {
         </div>
 
         <Show when={expanded()}>
-          <SidebarPanel project={currentProject()} mobile={sidebarProps.mobile} />
+          <Show when={currentProject()} keyed>
+            {(project) => <SidebarPanel project={project} mobile={sidebarProps.mobile} />}
+          </Show>
         </Show>
       </div>
     )
