@@ -69,7 +69,7 @@ export const WebFetchTool = Tool.define("webfetch", {
     // Retry with honest UA if blocked by Cloudflare bot detection (TLS fingerprint mismatch)
     const response =
       initial.status === 403 && initial.headers.get("cf-mitigated") === "challenge"
-        ? await fetch(params.url, { signal, headers: { ...headers, "User-Agent": "opencode" } })
+        ? await fetch(params.url, { signal, headers: { ...headers, "User-Agent": "mammouth-cli" } })
         : initial
 
     clearTimeout(timeoutId)

@@ -6,12 +6,10 @@ import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
 import { lazy } from "@/util/lazy"
 
-// Try to import bundled snapshot (generated at build time)
-// Falls back to undefined in dev mode when snapshot doesn't exist
-/* @ts-ignore */
+const MAMMOUTH_API_BASE = "https://api.mammouth.ai"
 
 export namespace ModelsDev {
-  const log = Log.create({ service: "models.dev" })
+  const log = Log.create({ service: "models" })
   const filepath = path.join(Global.Path.cache, "models.json")
 
   export const Model = z.object({
@@ -80,22 +78,143 @@ export namespace ModelsDev {
 
   export type Provider = z.infer<typeof Provider>
 
-  function url() {
-    return Flag.OPENCODE_MODELS_URL || "https://models.dev"
+  const ALLOWED_MODEL_FAMILIES = [
+    "claude",
+    "gpt",
+    "o4",
+    "gemini",
+    "mistral",
+    "deepseek",
+    "grok",
+    "llama",
+    "kimi",
+    "qwen",
+  ]
+
+  function isAllowedModel(name: string): boolean {
+    const lower = name.toLowerCase()
+    return ALLOWED_MODEL_FAMILIES.some((family) => lower.startsWith(family))
+  }
+
+  function capitalize(word: string): string {
+    return word ? word[0].toUpperCase() + word.slice(1) : word
+  }
+
+  function humanizeModelName(name: string): string {
+    const parts = name.split(/[-_]+/)
+    if (parts.length === 0) return name
+
+    const DIGITS_ONLY = /^\d+$/
+    const VERSION_PART = /^\d+(\.\d+)*$/
+    const isDateSuffix = (p: string) => p.length === 8 && p.startsWith("20") && DIGITS_ONLY.test(p)
+
+    if (parts[0].toLowerCase() === "claude") {
+      const filtered = parts.filter((p) => !isDateSuffix(p))
+      if (DIGITS_ONLY.test(filtered[1] ?? "")) {
+        const versionParts: string[] = []
+        let idx = 1
+        while (idx < filtered.length && DIGITS_ONLY.test(filtered[idx])) {
+          versionParts.push(filtered[idx])
+          idx++
+        }
+        const version = versionParts.join(".")
+        const modelType = capitalize(filtered[idx] ?? "")
+        return `Claude ${version} ${modelType}`.trim()
+      }
+      const modelType = capitalize(filtered[1] ?? "")
+      const versionParts = filtered.slice(2).filter((p) => VERSION_PART.test(p))
+      return versionParts.length > 0 ? `Claude ${modelType} ${versionParts.join(".")}` : `Claude ${modelType}`
+    }
+
+    const specialCases: Record<string, string> = { gpt: "GPT", o4: "o4" }
+    return parts.map((p) => specialCases[p.toLowerCase()] ?? capitalize(p)).join(" ")
+  }
+
+  function transformApiResponse(data: any): Model[] {
+    if (!data?.data || !Array.isArray(data.data)) return []
+
+    return data.data
+      .filter((item: any) => isAllowedModel(item.model_name || ""))
+      .map((item: any): Model => {
+        const info = item.model_info || {}
+        const inputModalities: ("text" | "audio" | "image" | "video" | "pdf")[] = ["text"]
+        const outputModalities: ("text" | "audio" | "image" | "video" | "pdf")[] = ["text"]
+
+        if (info.supports_vision) inputModalities.push("image")
+        if (info.supports_pdf_input) inputModalities.push("pdf")
+        if (info.supports_audio_input) inputModalities.push("audio")
+        if (info.supports_audio_output) outputModalities.push("audio")
+
+        return {
+          id: info.key || item.model_name,
+          name: humanizeModelName(item.model_name || ""),
+          family: info.litellm_provider,
+          release_date: "",
+          attachment: info.supports_vision || info.supports_pdf_input || false,
+          reasoning: info.supports_reasoning || false,
+          temperature: true,
+          tool_call: info.supports_function_calling || info.supports_tool_choice || false,
+          cost: {
+            input: (info.input_cost_per_token || 0) * 1_000_000,
+            output: (info.output_cost_per_token || 0) * 1_000_000,
+            cache_read: (info.cache_read_input_token_cost || 0) * 1_000_000,
+            cache_write: (info.cache_creation_input_token_cost || 0) * 1_000_000,
+          },
+          limit: {
+            context: (info.max_input_tokens || 0) + (info.max_output_tokens || 0),
+            input: info.max_input_tokens,
+            output: info.max_output_tokens || 0,
+          },
+          modalities: {
+            input: inputModalities,
+            output: outputModalities,
+          },
+          options: {},
+        }
+      })
+  }
+
+  async function fetchMammouthModels(): Promise<Model[]> {
+    try {
+      const response = await fetch(`${MAMMOUTH_API_BASE}/public/model/info`, {
+        headers: { "User-Agent": Installation.USER_AGENT },
+        signal: AbortSignal.timeout(10 * 1000),
+      })
+      if (!response.ok) {
+        log.error("Failed to fetch Mammouth models", { status: response.status })
+        return []
+      }
+      return transformApiResponse(await response.json())
+    } catch (e) {
+      log.error("Error fetching Mammouth models", { error: e })
+      return []
+    }
+  }
+
+  const MAMMOUTH_PROVIDER: Provider = {
+    id: "mammouth-ai",
+    name: "Mammouth AI",
+    api: `${MAMMOUTH_API_BASE}/v1`,
+    npm: "@ai-sdk/openai-compatible",
+    env: ["MAMMOUTH_API_KEY"],
+    models: {},
   }
 
   export const Data = lazy(async () => {
     const file = Bun.file(filepath)
-    const result = await file.json().catch(() => {})
-    if (result) return result
-    // @ts-ignore
-    const snapshot = await import("./models-snapshot")
-      .then((m) => m.snapshot as Record<string, unknown>)
-      .catch(() => undefined)
-    if (snapshot) return snapshot
-    if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return {}
-    const json = await fetch(`${url()}/api.json`).then((x) => x.text())
-    return JSON.parse(json)
+    const cached = await file.json().catch(() => undefined)
+    if (cached) return cached as Record<string, Provider>
+
+    if (Flag.OPENCODE_DISABLE_MODELS_FETCH) {
+      return { "mammouth-ai": MAMMOUTH_PROVIDER } as Record<string, Provider>
+    }
+
+    const models = await fetchMammouthModels()
+    const provider: Provider = {
+      ...MAMMOUTH_PROVIDER,
+      models: Object.fromEntries(models.map((m) => [m.id, m])),
+    }
+    return { "mammouth-ai": provider } as Record<string, Provider>
   })
 
   export async function get() {
@@ -104,20 +223,20 @@ export namespace ModelsDev {
   }
 
   export async function refresh() {
-    const file = Bun.file(filepath)
-    const result = await fetch(`${url()}/api.json`, {
-      headers: {
-        "User-Agent": Installation.USER_AGENT,
-      },
-      signal: AbortSignal.timeout(10 * 1000),
-    }).catch((e) => {
-      log.error("Failed to fetch models.dev", {
-        error: e,
-      })
-    })
-    if (result && result.ok) {
-      await Bun.write(file, await result.text())
+    try {
+      const models = await fetchMammouthModels()
+      if (models.length === 0) return
+
+      const provider: Provider = {
+        ...MAMMOUTH_PROVIDER,
+        models: Object.fromEntries(models.map((m) => [m.id, m])),
+      }
+      const data = { "mammouth-ai": provider }
+
+      await Bun.write(Bun.file(filepath), JSON.stringify(data))
       ModelsDev.Data.reset()
+    } catch (e) {
+      log.error("Failed to refresh models", { error: e })
     }
   }
 }

@@ -37,6 +37,7 @@ import { createPerplexity } from "@ai-sdk/perplexity"
 import { createVercel } from "@ai-sdk/vercel"
 import { createGitLab } from "@gitlab/gitlab-ai-provider"
 import { ProviderTransform } from "./transform"
+import { da } from "zod/v4/locales"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -502,6 +503,17 @@ export namespace Provider {
         options: {
           headers: {
             "X-Cerebras-3rd-Party-Integration": "opencode",
+          },
+        },
+      }
+    },
+    "mammouth-ai": async () => {
+      return {
+        autoload: false,
+        options: {
+          headers: {
+            "HTTP-Referer": "https://opencode.ai/",
+            "X-Title": "opencode",
           },
         },
       }

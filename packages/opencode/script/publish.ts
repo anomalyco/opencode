@@ -10,8 +10,8 @@ process.chdir(dir)
 const { binaries } = await import("./build.ts")
 {
   const name = `${pkg.name}-${process.platform}-${process.arch}`
-  console.log(`smoke test: running dist/${name}/bin/opencode --version`)
-  await $`./dist/${name}/bin/opencode --version`
+  console.log(`smoke test: running dist/${name}/bin/mammouth --version`)
+  await $`./dist/${name}/bin/mammouth --version`
 }
 
 await $`mkdir -p ./dist/${pkg.name}`
