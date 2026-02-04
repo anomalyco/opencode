@@ -65,7 +65,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: opencode-cli
-          path: packages/desktop/src-tauri/target/opencode-binaries/opencode-windows-x64
+          path: packages/desktop/src-tauri/target/opencode-binaries
 
       - name: Install dependencies
         run: bun install
@@ -77,6 +77,10 @@ jobs:
           $pkg = Get-Content package.json | ConvertFrom-Json
           $pkg.version = "1.1.52-fork"
           $pkg | ConvertTo-Json -Depth 10 | Set-Content package.json
+
+          # List downloaded files for debugging
+          Write-Host "Downloaded files:"
+          Get-ChildItem -Recurse src-tauri/target/opencode-binaries
 
           # Copy CLI binary to sidecar folder
           New-Item -ItemType Directory -Force -Path src-tauri/sidecars
