@@ -457,41 +457,23 @@ export namespace Provider {
         },
       }
     },
-    // Cloudflare
-    // data: {"id":"id-1770181099419","created":1770181099,"model":"@cf/openai/gpt-oss-120b","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"logprobs":null,"finish_reason":"tool_calls","stop_reason":200012,"token_ids":null}]}
-    // data: {"id":"id-1770181099419","object":"chat.completion.chunk","created":1770181099,"model":"@cf/openai/gpt-oss-120b","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":13200,"total_tokens":13272,"completion_tokens":72}}
-    // data: {"id":"id-1770181099419","object":"chat.completion.chunk","created":1770181099,"model":"@cf/openai/gpt-oss-120b","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":13200,"completion_tokens":72,"total_tokens":13272}}
-
-    // Vercel
-    // data: {"type":"reasoning-end","id":"reasoning-0"}
-    // data: {"type":"text-end","id":"txt-0"}
-    // data: {"type":"finish","finishReason":"stop","usage":{"inputTokens":23070,"outputTokens":1323,"totalTokens":24393,"cachedInputTokens":20736},"providerMetadata":{"gateway":{"routing":{"originalModelId":"openai/gpt-oss-safeguard-20b","resolvedProvider":"groq","resolvedProviderApiModelId":"openai/gpt-oss-safeguard-20b","internalResolvedModelId":"groq:openai/gpt-oss-safeguard-20b","fallbacksAvailable":[],"internalReasoning":"Selected groq as preferred provider for gpt-oss-safeguard-20b. 0 fallback(s) available: ","planningReasoning":"System credentials planned for: groq. Total execution order: groq(system)","canonicalSlug":"openai/gpt-oss-safeguard-20b","finalProvider":"groq","attempts":[{"provider":"groq","internalModelId":"groq:openai:gpt-oss-safeguard-20b","providerApiModelId":"openai/gpt-oss-safeguard-20b","credentialType":"system","success":true,"startTime":1745804.194121,"endTime":1745980.755015,"statusCode":200}],"modelAttemptCount":1,"modelAttempts":[{"modelId":"openai/gpt-oss-safeguard-20b","canonicalSlug":"openai/gpt-oss-safeguard-20b","success":true,"providerAttemptCount":1,"providerAttempts":[{"provider":"groq","internalModelId":"groq:openai:gpt-oss-safeguard-20b","providerApiModelId":"openai/gpt-oss-safeguard-20b","credentialType":"system","success":true,"startTime":1745804.194121,"endTime":1745980.755015,"statusCode":200}]}],"totalProviderAttemptCount":1},"cost":"0.002894382","marketCost":"0.002894382","generationId":"gen_01KGKGB62XAAEFB44Z0FYXRDGJ","billableWebSearchCalls":0}}}
-
-    // openrouter
-    // data: {"id":"gen-1770181425-2H1N7QXzh0rwkVi4x447","provider":"OpenAI","model":"openai/gpt-4.1","object":"chat.completion.chunk","created":1770181425,"choices":[{"index":0,"delta":{"role":"assistant","content":"!"},"finish_reason":null,"native_finish_reason":null,"logprobs":null}]}
-    // data: {"id":"gen-1770181425-2H1N7QXzh0rwkVi4x447","provider":"OpenAI","model":"openai/gpt-4.1","object":"chat.completion.chunk","created":1770181425,"choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":"stop","native_finish_reason":"completed","logprobs":null}]}
-    // data: {"id":"gen-1770181425-2H1N7QXzh0rwkVi4x447","provider":"OpenAI","model":"openai/gpt-4.1","object":"chat.completion.chunk","created":1770181425,"choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null,"native_finish_reason":null,"logprobs":null}],"usage":{"prompt_tokens":36599,"completion_tokens":1146,"total_tokens":37745,"cost":0.027838,"is_byok":false,"prompt_tokens_details":{"cached_tokens":36352},"cost_details":{"upstream_inference_cost":0.027838,"upstream_inference_prompt_cost":0.01867,"upstream_inference_completions_cost":0.009168},"completion_tokens_details":{"reasoning_tokens":0,"image_tokens":0}}}
-    // data: [DONE]
-
     "cloudflare-workers-ai": async (input) => {
-      const accountId = process.env.CLOUDFLARE_ACCOUNT_ID ?? Env.get("CLOUDFLARE_ACCOUNT_ID")
-      const token =
-        process.env.CLOUDFLARE_API_TOKEN ??
-        process.env.CLOUDFLARE_API_KEY ??
-        Env.get("CLOUDFLARE_API_TOKEN") ??
-        Env.get("CLOUDFLARE_API_KEY")
-      const auth = await Auth.get(input.id)
-      const key = (token ?? (auth?.type === "api" ? auth.key : undefined))?.trim()
+      const accountId = Env.get("CLOUDFLARE_ACCOUNT_ID")
       if (!accountId) return { autoload: false }
-      // createOpenAICompatible().
+
+      const apiKey = await iife(async () => {
+        const envToken = Env.get("CLOUDFLARE_API_KEY") ?? Env.get("CLOUDFLARE_API_TOKEN")
+        if (envToken) return envToken
+        const auth = await Auth.get(input.id)
+        if (auth?.type === "api") return auth.key
+        return undefined
+      })
 
       return {
-        autoload: true,
+        autoload: !!apiKey,
         options: {
+          apiKey,
           baseURL: `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1`,
-          // apiKey
-          ...(key ? { apiKey: key } : {}),
-          headers: {},
         },
         async getModel(sdk: any, modelID: string) {
           return sdk.languageModel(modelID)
