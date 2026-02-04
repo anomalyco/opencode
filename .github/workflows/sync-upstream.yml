@@ -1,0 +1,85 @@
+name: Sync Upstream
+
+on:
+  schedule:
+    - cron: "0 8 * * *" # Daily at 8am UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ultrawork/dev
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-bun
+
+      - uses: ./.github/actions/setup-git-committer
+        id: git
+        with:
+          app-id: ${{ vars.OPENCODE_APP_ID }}
+          private-key: ${{ secrets.OPENCODE_APP_SECRET }}
+
+      - name: Add upstream remote
+        run: git remote add upstream https://github.com/anomalyco/opencode.git
+
+      - name: Sync upstream
+        id: sync
+        run: bun script/sync-upstream.ts
+        env:
+          GH_TOKEN: ${{ steps.git.outputs.token }}
+
+      - name: Create PR (clean merge)
+        if: steps.sync.outputs.has_changes == 'true' && steps.sync.outputs.has_conflicts == 'false'
+        uses: peter-evans/create-pull-request@v8
+        id: cpr
+        with:
+          token: ${{ steps.git.outputs.token }}
+          branch: ${{ steps.sync.outputs.sync_branch }}
+          base: ultrawork/dev
+          title: "🔄 Sync upstream"
+          body: |
+            ## Upstream Sync
+
+            **Status:** ✅ Clean merge
+            **Upstream SHA:** ${{ steps.sync.outputs.upstream_sha }}
+
+            This PR will auto-merge once CI passes.
+          labels: upstream-sync
+          delete-branch: true
+
+      - name: Create PR (with conflicts)
+        if: steps.sync.outputs.has_changes == 'true' && steps.sync.outputs.has_conflicts == 'true'
+        uses: peter-evans/create-pull-request@v8
+        id: cpr_conflicts
+        with:
+          token: ${{ steps.git.outputs.token }}
+          branch: ${{ steps.sync.outputs.sync_branch }}
+          base: ultrawork/dev
+          title: "⚠️ Sync upstream (conflicts)"
+          body: |
+            ## Upstream Sync
+
+            **Status:** ⚠️ Conflicts detected - manual resolution required
+            **Upstream SHA:** ${{ steps.sync.outputs.upstream_sha }}
+
+            The merge could not be completed automatically. Please:
+            1. Check out this branch locally
+            2. Merge `dev` and resolve conflicts
+            3. Push the resolved changes
+          labels: |
+            upstream-sync
+            sync-conflict
+          delete-branch: true
+
+      - name: Enable auto-merge
+        if: steps.cpr.outputs.pull-request-number
+        run: gh pr merge --auto --merge "${{ steps.cpr.outputs.pull-request-url }}"
+        env:
+          GH_TOKEN: ${{ steps.git.outputs.token }}
