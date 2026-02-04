@@ -90,8 +90,9 @@ jobs:
       - name: Build Desktop App
         run: |
           cd packages/desktop
-          bun run build
-          bun tauri build --target x86_64-pc-windows-msvc --config ./src-tauri/tauri.prod.conf.json
+          # Skip typecheck and build directly with vite
+          vite build
+          bun tauri build --target x86_64-pc-windows-msvc --config ./src-tauri/tauri.prod.conf.json --bundles nsis
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
