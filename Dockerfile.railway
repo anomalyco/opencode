@@ -1,0 +1,41 @@
+# Railway 배포용 Dockerfile - Monorepo 빌드
+FROM oven/bun:1.1-alpine AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apk add --no-cache git
+
+# Copy all necessary files for install
+COPY package.json bun.lock bunfig.toml tsconfig.json ./
+COPY patches ./patches
+COPY packages ./packages
+COPY sdks ./sdks
+
+# Install dependencies - use frozen lockfile to resolve catalog deps
+RUN bun install --frozen-lockfile || bun install
+
+# Production stage
+FROM oven/bun:1.1-alpine AS runner
+
+WORKDIR /app
+
+# Install runtime dependencies
+RUN apk add --no-cache ripgrep git
+
+# Copy entire app from builder
+COPY --from=builder /app .
+
+# Set environment variables
+ENV NODE_ENV=production
+ENV PORT=8080
+
+# Expose port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT}/health || exit 1
+
+# Start the server from packages/opencode
+CMD ["bun", "run", "--cwd", "packages/opencode", "--conditions=browser", "src/index.ts", "serve", "--host", "0.0.0.0", "--port", "8080"]
