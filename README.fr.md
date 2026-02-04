@@ -6,7 +6,7 @@
     </picture>
   </a>
 </p>
-<p align="center">L'agent de codage Mammouth AI.</p>
+<p align="center">L'agent de code Mammouth AI.</p>
 
 <p align="center">
   <a href="README.md">English</a> |
