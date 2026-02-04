@@ -3,6 +3,11 @@ run-name: "Build Windows Desktop App"
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.1.51). Leave empty to skip release creation.'
+        required: false
+        type: string
   push:
     branches:
       - build-windows
@@ -14,9 +19,7 @@ jobs:
   build-cli:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-tags: true
+      - uses: actions/checkout@v4
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -35,16 +38,14 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: opencode-cli
+          name: opencode-binaries
           path: packages/opencode/dist
 
   build-windows-desktop:
     needs: build-cli
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-tags: true
+      - uses: actions/checkout@v4
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -64,7 +65,7 @@ jobs:
       - name: Download CLI artifacts
         uses: actions/download-artifact@v4
         with:
-          name: opencode-cli
+          name: opencode-binaries
           path: packages/desktop/src-tauri/target/opencode-binaries
 
       - name: Install dependencies
@@ -133,10 +134,11 @@ jobs:
             packages/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
             packages/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
 
-      - name: Create Release (if tag exists)
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.version != '')
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: ${{ inputs.version || github.ref_name }}
           files: |
             packages/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
             packages/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
