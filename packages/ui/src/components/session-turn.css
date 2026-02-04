@@ -409,10 +409,11 @@
 
   [data-component="sticky-accordion-header"] {
     top: var(--sticky-header-height, 0px);
+  }
 
-    &[data-expanded]::before {
-      top: calc(-1 * var(--sticky-header-height, 0px));
-    }
+  [data-component="sticky-accordion-header"][data-expanded]::before,
+  [data-slot="accordion-item"][data-expanded] [data-component="sticky-accordion-header"]::before {
+    top: calc(-1 * var(--sticky-header-height, 0px));
   }
 
   [data-slot="session-turn-accordion-trigger-content"] {
