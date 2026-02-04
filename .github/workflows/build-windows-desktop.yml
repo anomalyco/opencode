@@ -106,9 +106,9 @@ jobs:
             $baseConfig | Add-Member -MemberType NoteProperty -Name $_.Name -Value $_.Value -Force
           }
 
-          # Remove updater pubkey to disable signing requirement
-          if ($baseConfig.plugins.updater) {
-            $baseConfig.plugins.updater.PSObject.Properties.Remove('pubkey')
+          # Disable updater to avoid signing requirement
+          if ($baseConfig.plugins -and $baseConfig.plugins.updater) {
+            $baseConfig.plugins.PSObject.Properties.Remove('updater')
           }
 
           $baseConfig | ConvertTo-Json -Depth 10 | Set-Content src-tauri/tauri.build.conf.json
