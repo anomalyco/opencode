@@ -4,6 +4,7 @@ import { Switch } from "@opencode-ai/ui/switch"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TextField } from "@opencode-ai/ui/text-field"
+import { Tag } from "@opencode-ai/ui/tag"
 import type { IconName } from "@opencode-ai/ui/icons/provider"
 import { type Component, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
@@ -100,8 +101,11 @@ export const SettingsModels: Component = () => {
                         const key = { providerID: item.provider.id, modelID: item.id }
                         return (
                           <div class="flex flex-wrap items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
-                            <div class="min-w-0">
+                            <div class="min-w-0 flex items-center gap-2">
                               <span class="text-14-regular text-text-strong truncate block">{item.name}</span>
+                              <Show when={item.latest}>
+                                <Tag>{language.t("model.tag.latest")}</Tag>
+                              </Show>
                             </div>
                             <div class="flex-shrink-0">
                               <Switch
