@@ -33,7 +33,7 @@ export function SortableTerminalTab(props: {
         <Tabs.Trigger
           value={props.terminal.id}
           closeButton={
-            <div class="flex items-center gap-1">
+            <div class="flex items-center gap-1 ml-3">
               <Show when={isActive() && props.onMinimize}>
                 <IconButton icon="dash" variant="ghost" onClick={handleMinimize} disabled={props.closing} />
               </Show>
