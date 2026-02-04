@@ -44,7 +44,6 @@ export const dict = {
 
   "command.session.new": "جلسة جديدة",
   "command.file.open": "فتح ملف",
-  "command.file.open.description": "البحث في الملفات والأوامر",
   "command.context.addSelection": "إضافة التحديد إلى السياق",
   "command.context.addSelection.description": "إضافة الأسطر المحددة من الملف الحالي",
   "command.terminal.toggle": "تبديل المحطة الطرفية",
@@ -84,7 +83,7 @@ export const dict = {
   "command.session.unshare": "إلغاء مشاركة الجلسة",
   "command.session.unshare.description": "إيقاف مشاركة هذه الجلسة",
 
-  "palette.search.placeholder": "البحث في الملفات والأوامر",
+  "palette.search.placeholder": "البحث في الملفات والأوامر والجلسات",
   "palette.empty": "لا توجد نتائج",
   "palette.group.commands": "الأوامر",
   "palette.group.files": "الملفات",
