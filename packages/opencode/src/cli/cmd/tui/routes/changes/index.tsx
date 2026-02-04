@@ -188,7 +188,7 @@ export function Changes() {
         variant: local.model.variant.current(),
         parts: [
           {
-            id: Identifier.ascending("part"),
+            id: Identifier.ascending("user"),
             type: "text",
             text: feedbackMessage,
           },
