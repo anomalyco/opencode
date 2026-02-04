@@ -28,6 +28,7 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Tabs } from "@opencode-ai/ui/tabs"
+import { Select } from "@opencode-ai/ui/select"
 import { useCodeComponent } from "@opencode-ai/ui/context/code"
 import { LineComment as LineCommentView, LineCommentEditor } from "@opencode-ai/ui/line-comment"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
@@ -54,7 +55,7 @@ import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useNavigate, useParams } from "@solidjs/router"
 import { UserMessage } from "@opencode-ai/sdk/v2"
-import type { FileDiff } from "@opencode-ai/sdk/v2/client"
+import type { FileDiff } from "@opencode-ai/sdk/v2"
 import { useSDK } from "@/context/sdk"
 import { usePrompt } from "@/context/prompt"
 import { useComments, type LineComment } from "@/context/comments"
@@ -104,6 +105,8 @@ const setSessionHandoff = (key: string, patch: Partial<HandoffSession>) => {
 }
 
 interface SessionReviewTabProps {
+  title?: JSX.Element
+  empty?: JSX.Element
   diffs: () => FileDiff[]
   view: () => ReturnType<ReturnType<typeof useLayout>["view"]>
   diffStyle: DiffStyle
@@ -220,6 +223,8 @@ function SessionReviewTab(props: SessionReviewTabProps) {
 
   return (
     <SessionReview
+      title={props.title}
+      empty={props.empty}
       scrollRef={(el) => {
         scroll = el
         props.onScrollRef?.(el)
@@ -709,9 +714,13 @@ export default function Page() {
     messageId: undefined as string | undefined,
     turnStart: 0,
     mobileTab: "session" as "session" | "changes",
+    changes: "session" as "session" | "turn",
     newSessionWorktree: "main",
     promptHeight: 0,
   })
+
+  const turnDiffs = createMemo(() => lastUserMessage()?.summary?.diffs ?? [])
+  const reviewDiffs = createMemo(() => (store.changes === "session" ? diffs() : turnDiffs()))
 
   const renderedUserMessages = createMemo(
     () => {
@@ -894,6 +903,7 @@ export default function Page() {
       () => {
         setStore("messageId", undefined)
         setStore("expanded", {})
+        setStore("changes", "session")
         setUi("autoCreated", false)
       },
       { defer: true },
@@ -1428,17 +1438,64 @@ export default function Page() {
     setFileTreeTab("all")
   }
 
+  const changesOptions = ["session", "turn"] as const
+  const changesOptionsList = [...changesOptions]
+
+  const changesTitle = () => (
+    <Select
+      options={changesOptionsList}
+      current={store.changes}
+      label={(option) =>
+        option === "session" ? language.t("ui.sessionReview.title") : language.t("ui.sessionReview.title.lastTurn")
+      }
+      onSelect={(option) => option && setStore("changes", option)}
+      variant="ghost"
+      size="large"
+      triggerStyle={{ "font-size": "var(--font-size-large)" }}
+    />
+  )
+
+  const emptyTurn = () => (
+    <div class="h-full pb-30 flex flex-col items-center justify-center text-center gap-6">
+      <Mark class="w-14 opacity-10" />
+      <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.noChanges")}</div>
+    </div>
+  )
+
   const reviewPanel = () => (
     <div class="flex flex-col h-full overflow-hidden bg-background-stronger contain-strict">
       <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
         <Switch>
+          <Match when={store.changes === "turn" && !!params.id}>
+            <SessionReviewTab
+              title={changesTitle()}
+              empty={emptyTurn()}
+              diffs={reviewDiffs}
+              view={view}
+              diffStyle={layout.review.diffStyle()}
+              onDiffStyleChange={layout.review.setDiffStyle}
+              onScrollRef={(el) => setTree("reviewScroll", el)}
+              focusedFile={tree.activeDiff}
+              onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+              comments={comments.all()}
+              focusedComment={comments.focus()}
+              onFocusedCommentChange={comments.setFocus}
+              onViewFile={(path) => {
+                showAllFiles()
+                const value = file.tab(path)
+                tabs().open(value)
+                file.load(path)
+              }}
+            />
+          </Match>
           <Match when={hasReview()}>
             <Show
               when={diffsReady()}
               fallback={<div class="px-6 py-4 text-text-weak">{language.t("session.review.loadingChanges")}</div>}
             >
               <SessionReviewTab
-                diffs={diffs}
+                title={changesTitle()}
+                diffs={reviewDiffs}
                 view={view}
                 diffStyle={layout.review.diffStyle()}
                 onDiffStyleChange={layout.review.setDiffStyle}
@@ -2138,6 +2195,31 @@ export default function Page() {
                     fallback={
                       <div class="relative h-full overflow-hidden">
                         <Switch>
+                          <Match when={store.changes === "turn" && !!params.id}>
+                            <SessionReviewTab
+                              title={changesTitle()}
+                              empty={emptyTurn()}
+                              diffs={reviewDiffs}
+                              view={view}
+                              diffStyle="unified"
+                              focusedFile={tree.activeDiff}
+                              onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+                              comments={comments.all()}
+                              focusedComment={comments.focus()}
+                              onFocusedCommentChange={comments.setFocus}
+                              onViewFile={(path) => {
+                                showAllFiles()
+                                const value = file.tab(path)
+                                tabs().open(value)
+                                file.load(path)
+                              }}
+                              classes={{
+                                root: "pb-[calc(var(--prompt-height,8rem)+32px)]",
+                                header: "px-4",
+                                container: "px-4",
+                              }}
+                            />
+                          </Match>
                           <Match when={hasReview()}>
                             <Show
                               when={diffsReady()}
@@ -2148,7 +2230,8 @@ export default function Page() {
                               }
                             >
                               <SessionReviewTab
-                                diffs={diffs}
+                                title={changesTitle()}
+                                diffs={reviewDiffs}
                                 view={view}
                                 diffStyle="unified"
                                 focusedFile={tree.activeDiff}

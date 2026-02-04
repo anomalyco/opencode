@@ -58,6 +58,7 @@ import { usePermission } from "@/context/permission"
 import { Binary } from "@opencode-ai/util/binary"
 import { retry } from "@opencode-ai/util/retry"
 import { playSound, soundSrc } from "@/utils/sound"
+import { createAim } from "@/utils/aim"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { agentColor } from "@/utils/agent"
 
@@ -146,9 +147,20 @@ export default function Layout(props: ParentProps) {
 
   const navLeave = { current: undefined as number | undefined }
 
+  const aim = createAim({
+    enabled: () => !layout.sidebar.opened(),
+    active: () => state.hoverProject,
+    el: () => state.nav,
+    onActivate: (directory) => {
+      globalSync.child(directory)
+      setState("hoverProject", directory)
+      setState("hoverSession", undefined)
+    },
+  })
+
   onCleanup(() => {
-    if (navLeave.current === undefined) return
-    clearTimeout(navLeave.current)
+    if (navLeave.current !== undefined) clearTimeout(navLeave.current)
+    aim.reset()
   })
 
   const sidebarHovering = createMemo(() => !layout.sidebar.opened() && state.hoverProject !== undefined)
@@ -162,7 +174,13 @@ export default function Layout(props: ParentProps) {
 
   createEffect(() => {
     if (!layout.sidebar.opened()) return
+    aim.reset()
     setState("hoverProject", undefined)
+  })
+
+  createEffect(() => {
+    if (state.hoverProject !== undefined) return
+    aim.reset()
   })
 
   createEffect(
@@ -171,6 +189,7 @@ export default function Layout(props: ParentProps) {
       () => {
         if (layout.sidebar.opened()) return
         if (!state.hoverProject) return
+        aim.reset()
         setState("hoverSession", undefined)
         setState("hoverProject", undefined)
       },
@@ -2311,17 +2330,17 @@ export default function Layout(props: ParentProps) {
               !selected() && !active(),
             "bg-surface-base-hover border border-border-weak-base": !selected() && active(),
           }}
-          onMouseEnter={() => {
+          onMouseEnter={(event: MouseEvent) => {
             if (!overlay()) return
-            globalSync.child(props.project.worktree)
-            setState("hoverProject", props.project.worktree)
-            setState("hoverSession", undefined)
+            aim.enter(props.project.worktree, event)
+          }}
+          onMouseLeave={() => {
+            if (!overlay()) return
+            aim.leave(props.project.worktree)
           }}
           onFocus={() => {
             if (!overlay()) return
-            globalSync.child(props.project.worktree)
-            setState("hoverProject", props.project.worktree)
-            setState("hoverSession", undefined)
+            aim.activate(props.project.worktree)
           }}
           onClick={() => navigateToProject(props.project.worktree)}
           onBlur={() => setOpen(false)}
@@ -2806,7 +2825,7 @@ export default function Layout(props: ParentProps) {
 
     return (
       <div class="flex h-full w-full overflow-hidden">
-        <div class="w-16 shrink-0 bg-background-base flex flex-col items-center overflow-hidden">
+        <div class="w-16 shrink-0 bg-background-base flex flex-col items-center overflow-hidden" onMouseMove={aim.move}>
           <div class="flex-1 min-h-0 w-full">
             <DragDropProvider
               onDragStart={handleDragStart}
@@ -2901,6 +2920,7 @@ export default function Layout(props: ParentProps) {
             navLeave.current = undefined
           }}
           onMouseLeave={() => {
+            aim.reset()
             if (!sidebarHovering()) return
 
             if (navLeave.current !== undefined) clearTimeout(navLeave.current)
@@ -2916,7 +2936,7 @@ export default function Layout(props: ParentProps) {
           </div>
           <Show when={!layout.sidebar.opened() ? hoverProjectData() : undefined} keyed>
             {(project) => (
-              <div class="absolute inset-y-0 left-16 z-50 flex">
+              <div class="absolute inset-y-0 left-16 z-50 flex" onMouseEnter={aim.reset}>
                 <SidebarPanel project={project} />
               </div>
             )}
