@@ -26,3 +26,6 @@ target
 opencode-dev
 logs/
 *.bun-build
+
+# Trellis workflow (developer-specific)
+.trellis/
