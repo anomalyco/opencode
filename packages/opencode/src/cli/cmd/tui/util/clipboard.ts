@@ -3,6 +3,7 @@ import type { CliRenderer } from "@opentui/core"
 import { platform, release } from "os"
 import clipboardy from "clipboardy"
 import { lazy } from "../../../../util/lazy.js"
+import { processImage } from "../../../../util/image.js"
 import { tmpdir } from "os"
 import path from "path"
 
@@ -29,7 +30,7 @@ export namespace Clipboard {
           .quiet()
         const file = Bun.file(tmpfile)
         const buffer = await file.arrayBuffer()
-        return { data: Buffer.from(buffer).toString("base64"), mime: "image/png" }
+        return processImage(Buffer.from(buffer), "image/png")
       } catch {
       } finally {
         await $`rm -f "${tmpfile}"`.nothrow().quiet()
@@ -43,7 +44,7 @@ export namespace Clipboard {
       if (base64) {
         const imageBuffer = Buffer.from(base64.trim(), "base64")
         if (imageBuffer.length > 0) {
-          return { data: imageBuffer.toString("base64"), mime: "image/png" }
+          return processImage(imageBuffer, "image/png")
         }
       }
     }
@@ -51,11 +52,11 @@ export namespace Clipboard {
     if (os === "linux") {
       const wayland = await $`wl-paste -t image/png`.nothrow().arrayBuffer()
       if (wayland && wayland.byteLength > 0) {
-        return { data: Buffer.from(wayland).toString("base64"), mime: "image/png" }
+        return processImage(Buffer.from(wayland), "image/png")
       }
       const x11 = await $`xclip -selection clipboard -t image/png -o`.nothrow().arrayBuffer()
       if (x11 && x11.byteLength > 0) {
-        return { data: Buffer.from(x11).toString("base64"), mime: "image/png" }
+        return processImage(Buffer.from(x11), "image/png")
       }
     }
 

@@ -607,7 +607,7 @@ export namespace SessionPrompt {
         sessionID,
         system: [...(await SystemPrompt.environment(model)), ...(await InstructionPrompt.system())],
         messages: [
-          ...MessageV2.toModelMessages(sessionMessages, model),
+          ...(await MessageV2.toModelMessages(sessionMessages, model)),
           ...(isLastStep
             ? [
                 {
@@ -1819,7 +1819,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         },
         ...(hasOnlySubtaskParts
           ? [{ role: "user" as const, content: subtaskParts.map((p) => p.prompt).join("\n") }]
-          : MessageV2.toModelMessages(contextMessages, model)),
+          : await MessageV2.toModelMessages(contextMessages, model)),
       ],
     })
     const text = await result.text.catch((err) => log.error("failed to generate title", { error: err }))

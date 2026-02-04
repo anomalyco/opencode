@@ -104,6 +104,7 @@
     "hono": "catalog:",
     "hono-openapi": "catalog:",
     "ignore": "7.0.5",
+    "jimp": "1.6.0",
     "jsonc-parser": "3.3.1",
     "minimatch": "10.0.3",
     "open": "10.1.2",

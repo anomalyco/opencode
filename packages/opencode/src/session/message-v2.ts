@@ -12,6 +12,16 @@ import { STATUS_CODES } from "http"
 import { iife } from "@/util/iife"
 import { type SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
+import { processImage } from "@/util/image"
+import { appendFileSync } from "fs"
+
+const DEBUG_LOG = "/tmp/opencode-image-debug.log"
+function dbg(msg: string) {
+  const line = `[${new Date().toISOString()}] [msg-v2] ${msg}\n`
+  try {
+    appendFileSync(DEBUG_LOG, line)
+  } catch {}
+}
 
 export namespace MessageV2 {
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
@@ -435,7 +445,8 @@ export namespace MessageV2 {
   })
   export type WithParts = z.infer<typeof WithParts>
 
-  export function toModelMessages(input: WithParts[], model: Provider.Model): ModelMessage[] {
+  export async function toModelMessages(input: WithParts[], model: Provider.Model): Promise<ModelMessage[]> {
+    dbg(`=== toModelMessages called: ${input.length} messages, model=${model.id} ===`)
     const result: UIMessage[] = []
     const toolNames = new Set<string>()
 
@@ -452,6 +463,10 @@ export namespace MessageV2 {
         const attachments = (outputObject.attachments ?? []).filter((attachment) => {
           return attachment.url.startsWith("data:") && attachment.url.includes(",")
         })
+        if (attachments.length > 0)
+          dbg(
+            `toModelOutput: ${attachments.length} attachment(s): ${attachments.map((a) => `${a.mime} urlLen=${a.url.length}`).join(", ")}`,
+          )
 
         return {
           type: "content",
@@ -462,7 +477,9 @@ export namespace MessageV2 {
               mediaType: attachment.mime,
               data: iife(() => {
                 const commaIndex = attachment.url.indexOf(",")
-                return commaIndex === -1 ? attachment.url : attachment.url.slice(commaIndex + 1)
+                const b64 = commaIndex === -1 ? attachment.url : attachment.url.slice(commaIndex + 1)
+                dbg(`  media part: mime=${attachment.mime} base64Len=${b64.length}`)
+                return b64
               }),
             })),
           ],
@@ -489,13 +506,31 @@ export namespace MessageV2 {
               text: part.text,
             })
           // text/plain and directory files are converted into text parts, ignore them
-          if (part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory")
+          if (part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory") {
+            let url = part.url
+            let mime = part.mime
+            dbg(`file part: mime=${mime} filename=${part.filename} urlLen=${url.length}`)
+            if (mime.startsWith("image/") && mime !== "image/svg+xml") {
+              const match = url.match(/^data:([^;]+);base64,(.*)$/)
+              dbg(`  image match: ${match ? `yes, base64Len=${match[2].length}` : "no match on data URL"}`)
+              if (match) {
+                try {
+                  const processed = await processImage(Buffer.from(match[2], "base64"), mime)
+                  url = `data:${processed.mime};base64,${processed.data}`
+                  mime = processed.mime
+                  dbg(`  processed: mime=${mime} newUrlLen=${url.length}`)
+                } catch (e) {
+                  dbg(`  processImage THREW: ${e}`)
+                }
+              }
+            }
             userMessage.parts.push({
               type: "file",
-              url: part.url,
-              mediaType: part.mime,
+              url,
+              mediaType: mime,
               filename: part.filename,
             })
+          }
 
           if (part.type === "compaction") {
             userMessage.parts.push({
@@ -544,7 +579,20 @@ export namespace MessageV2 {
             toolNames.add(part.tool)
             if (part.state.status === "completed") {
               const outputText = part.state.time.compacted ? "[Old tool result content cleared]" : part.state.output
-              const attachments = part.state.time.compacted ? [] : (part.state.attachments ?? [])
+              const raw = part.state.time.compacted ? [] : (part.state.attachments ?? [])
+              const attachments = await Promise.all(
+                raw.map(async (att) => {
+                  if (att.mime.startsWith("image/") && att.mime !== "image/svg+xml") {
+                    const match = att.url.match(/^data:([^;]+);base64,(.*)$/)
+                    if (match) {
+                      dbg(`tool attachment: processing ${att.mime} base64Len=${match[2].length}`)
+                      const processed = await processImage(Buffer.from(match[2], "base64"), att.mime)
+                      return { mime: processed.mime, url: `data:${processed.mime};base64,${processed.data}` }
+                    }
+                  }
+                  return att
+                }),
+              )
               const output =
                 attachments.length > 0
                   ? {

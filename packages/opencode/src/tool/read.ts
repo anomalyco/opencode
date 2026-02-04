@@ -9,6 +9,7 @@ import { Instance } from "../project/instance"
 import { Identifier } from "../id/id"
 import { assertExternalDirectory } from "./external-directory"
 import { InstructionPrompt } from "../session/instruction"
+import { processImage } from "../util/image"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -67,7 +68,10 @@ export const ReadTool = Tool.define("read", {
       file.type.startsWith("image/") && file.type !== "image/svg+xml" && file.type !== "image/vnd.fastbidsheet"
     const isPdf = file.type === "application/pdf"
     if (isImage || isPdf) {
-      const mime = file.type
+      const raw = Buffer.from(await file.bytes())
+      const processed = isImage ? await processImage(raw, file.type) : undefined
+      const mime = processed?.mime ?? file.type
+      const data = processed?.data ?? raw.toString("base64")
       const msg = `${isImage ? "Image" : "PDF"} read successfully`
       return {
         title,
@@ -84,7 +88,7 @@ export const ReadTool = Tool.define("read", {
             messageID: ctx.messageID,
             type: "file",
             mime,
-            url: `data:${mime};base64,${Buffer.from(await file.bytes()).toString("base64")}`,
+            url: `data:${mime};base64,${data}`,
           },
         ],
       }
