@@ -21,7 +21,12 @@ import {
 import type { createSdk } from "./utils"
 
 export async function defocus(page: Page) {
-  await page.mouse.click(5, 5)
+  await page
+    .evaluate(() => {
+      const el = document.activeElement
+      if (el instanceof HTMLElement) el.blur()
+    })
+    .catch(() => undefined)
 }
 
 export async function openPalette(page: Page) {
@@ -68,14 +73,50 @@ export async function toggleSidebar(page: Page) {
 
 export async function openSidebar(page: Page) {
   if (!(await isSidebarClosed(page))) return
+
+  const button = page.getByRole("button", { name: /toggle sidebar/i }).first()
+  const visible = await button
+    .isVisible()
+    .then((x) => x)
+    .catch(() => false)
+
+  if (visible) await button.click()
+  if (!visible) await toggleSidebar(page)
+
+  const main = page.locator("main")
+  const opened = await expect(main)
+    .not.toHaveClass(/xl:border-l/, { timeout: 1500 })
+    .then(() => true)
+    .catch(() => false)
+
+  if (opened) return
+
   await toggleSidebar(page)
-  await expect(page.locator("main")).not.toHaveClass(/xl:border-l/)
+  await expect(main).not.toHaveClass(/xl:border-l/)
 }
 
 export async function closeSidebar(page: Page) {
   if (await isSidebarClosed(page)) return
+
+  const button = page.getByRole("button", { name: /toggle sidebar/i }).first()
+  const visible = await button
+    .isVisible()
+    .then((x) => x)
+    .catch(() => false)
+
+  if (visible) await button.click()
+  if (!visible) await toggleSidebar(page)
+
+  const main = page.locator("main")
+  const closed = await expect(main)
+    .toHaveClass(/xl:border-l/, { timeout: 1500 })
+    .then(() => true)
+    .catch(() => false)
+
+  if (closed) return
+
   await toggleSidebar(page)
-  await expect(page.locator("main")).toHaveClass(/xl:border-l/)
+  await expect(main).toHaveClass(/xl:border-l/)
 }
 
 export async function openSettings(page: Page) {
