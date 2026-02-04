@@ -9,7 +9,7 @@ import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
 import { useRoute } from "../../context/route"
 import { useToast } from "../../ui/toast"
-import { SubagentList, type SubagentGroup } from "../../component/subagent-list"
+import { SubagentList, type SubagentGroup, normalizeStatus } from "../../component/subagent-list"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
@@ -29,49 +29,29 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     subagents: true,
   })
 
-  // Group subagents by type for sidebar display
-  // We store part IDs and messageIDs to look up fresh data from the store
   const subagentGroups = createMemo((): SubagentGroup[] => {
-    const groups = new Map<string, { partId: string; messageId: string; type: string }[]>()
+    const groups = new Map<string, ToolPart[]>()
     for (const message of messages()) {
       for (const part of sync.data.part[message.id] ?? []) {
         if (part.type === "tool" && part.state.input?.subagent_type) {
           const type = part.state.input.subagent_type as string
           if (!groups.has(type)) groups.set(type, [])
-          groups.get(type)!.push({ partId: part.id, messageId: message.id, type })
+          groups.get(type)!.push(part)
         }
       }
     }
-    return Array.from(groups.entries()).map(([name, partRefs]) => ({
+    return Array.from(groups.entries()).map(([name, parts]) => ({
       name,
-      parts: partRefs.map((ref) => {
-        // Look up fresh data from store each time status/sessionId is accessed
-        const getPart = () => {
-          const parts = sync.data.part[ref.messageId] ?? []
-          return parts.find((p) => p.id === ref.partId) as ToolPart | undefined
-        }
-        return {
-          id: ref.partId,
-          status: () => {
-            const part = getPart()
-            return (part?.state.status ?? "pending") as "pending" | "running" | "completed" | "error"
-          },
-          description: (() => {
-            const part = getPart()
-            const input = part?.state.input as Record<string, unknown> | undefined
-            return (input?.description as string) ?? ""
-          })(),
-          sessionId: () => {
-            const part = getPart()
-            if (!part) return undefined
-            const metadata =
-              part.state.status === "completed"
-                ? part.state.metadata
-                : ((part.state as { metadata?: Record<string, unknown> }).metadata ?? {})
-            return (metadata?.sessionId as string) ?? undefined
-          },
-        }
-      }),
+      parts: parts.map((part) => ({
+        id: part.id,
+        status: () => normalizeStatus(part.state.status),
+        description: () => (part.state.input?.description as string) ?? "",
+        sessionId: () => {
+          const state = part.state
+          if (state.status === "pending") return undefined
+          return (state.metadata?.sessionId as string) ?? undefined
+        },
+      })),
     }))
   })
 
@@ -150,11 +130,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
             {/* Subagents Section */}
             <Show when={subagentGroups().length > 0}>
               <box>
-                <box
-                  flexDirection="row"
-                  gap={1}
-                  onMouseDown={() => setExpanded("subagents", !expanded.subagents)}
-                >
+                <box flexDirection="row" gap={1} onMouseDown={() => setExpanded("subagents", !expanded.subagents)}>
                   <text fg={theme.text}>{expanded.subagents ? "▼" : "▶"}</text>
                   <text fg={theme.text}>
                     <b>Subagents</b>
@@ -166,7 +142,12 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 <Show when={expanded.subagents}>
                   <SubagentList
                     groups={subagentGroups()}
-                    theme={{ text: theme.text, textMuted: theme.textMuted, success: theme.success, backgroundHover: theme.backgroundElement }}
+                    theme={{
+                      text: theme.text,
+                      textMuted: theme.textMuted,
+                      success: theme.success,
+                      backgroundHover: theme.backgroundElement,
+                    }}
                     onNavigate={async (sessionId) => {
                       try {
                         await sync.session.sync(sessionId)
