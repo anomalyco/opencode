@@ -57,7 +57,7 @@ export namespace ProviderAuth {
     z.object({
       providerID: z.string(),
       method: z.number(),
-      inputs: z.record(z.string()).optional(),
+      inputs: z.record(z.string(), z.string()).optional(),
     }),
     async (input): Promise<Authorization | undefined> => {
       const auth = await state().then((s) => s.methods[input.providerID])
@@ -123,7 +123,7 @@ export namespace ProviderAuth {
   export const api = fn(
     z.object({
       providerID: z.string(),
-      inputs: z.record(z.string()),
+      inputs: z.record(z.string(), z.string()),
       key: z.string().optional(),
     }),
     async (input) => {
