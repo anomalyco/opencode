@@ -247,7 +247,10 @@ export namespace Config {
     const hasGitIgnore = await Bun.file(gitignore).exists()
     if (!hasGitIgnore) await Bun.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
 
-    await BunProc.run(["add", `@opencode-ai/plugin@${targetVersion}`, "--exact"], {
+    const isDevVersion = targetVersion.includes("-") || targetVersion === "local"
+    const pkgToInstall = `@opencode-ai/plugin@${isDevVersion ? "latest" : targetVersion}`
+
+    await BunProc.run(["add", pkgToInstall, "--exact"], {
       cwd: dir,
     }).catch(() => {})
 

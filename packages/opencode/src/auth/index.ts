@@ -19,7 +19,8 @@ export namespace Auth {
   export const Api = z
     .object({
       type: z.literal("api"),
-      key: z.string(),
+      key: z.string().optional(),
+      data: z.record(z.string()).optional(),
     })
     .meta({ ref: "ApiAuth" })
 

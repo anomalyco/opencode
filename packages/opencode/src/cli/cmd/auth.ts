@@ -164,7 +164,7 @@ export const AuthCommand = cmd({
   describe: "manage credentials",
   builder: (yargs) =>
     yargs.command(AuthLoginCommand).command(AuthLogoutCommand).command(AuthListCommand).demandCommand(),
-  async handler() {},
+  async handler() { },
 })
 
 export const AuthListCommand = cmd({
@@ -216,10 +216,10 @@ export const AuthListCommand = cmd({
 
 export const AuthLoginCommand = cmd({
   command: "login [url]",
-  describe: "log in to a provider",
+  describe: "log in to a provider by URL or provider name",
   builder: (yargs) =>
     yargs.positional("url", {
-      describe: "opencode auth provider",
+      describe: "provider URL or provider name (e.g. opencode/google/openai/other)",
       type: "string",
     }),
   async handler(args) {
@@ -228,7 +228,7 @@ export const AuthLoginCommand = cmd({
       async fn() {
         UI.empty()
         prompts.intro("Add credential")
-        if (args.url) {
+        if (args.url && (args.url.startsWith("http://") || args.url.startsWith("https://"))) {
           const wellknown = await fetch(`${args.url}/.well-known/opencode`).then((x) => x.json() as any)
           prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
           const proc = Bun.spawn({
@@ -251,10 +251,9 @@ export const AuthLoginCommand = cmd({
           prompts.outro("Done")
           return
         }
-        await ModelsDev.refresh().catch(() => {})
 
+        await ModelsDev.refresh().catch(() => { })
         const config = await Config.get()
-
         const disabled = new Set(config.disabled_providers ?? [])
         const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
 
@@ -268,42 +267,52 @@ export const AuthLoginCommand = cmd({
           return filtered
         })
 
-        const priority: Record<string, number> = {
-          opencode: 0,
-          anthropic: 1,
-          "github-copilot": 2,
-          openai: 3,
-          google: 4,
-          openrouter: 5,
-          vercel: 6,
-        }
-        let provider = await prompts.autocomplete({
-          message: "Select provider",
-          maxItems: 8,
-          options: [
-            ...pipe(
-              providers,
-              values(),
-              sortBy(
-                (x) => priority[x.id] ?? 99,
-                (x) => x.name ?? x.id,
+        let provider = args.url
+
+        if (!provider) {
+          const priority: Record<string, number> = {
+            opencode: 0,
+            anthropic: 1,
+            "github-copilot": 2,
+            openai: 3,
+            google: 4,
+            openrouter: 5,
+            vercel: 6,
+          }
+          provider = (await prompts.autocomplete({
+            message: "Select provider",
+            maxItems: 8,
+            options: [
+              ...pipe(
+                providers,
+                values(),
+                sortBy(
+                  (x) => priority[x.id] ?? 99,
+                  (x) => x.name ?? x.id,
+                ),
+                map((x) => ({
+                  label: x.name,
+                  value: x.id,
+                  hint: {
+                    opencode: "recommended",
+                    anthropic: "Claude Max or API key",
+                    openai: "ChatGPT Plus/Pro or API key",
+                  }[x.id],
+                })),
               ),
-              map((x) => ({
-                label: x.name,
-                value: x.id,
-                hint: {
-                  opencode: "recommended",
-                  anthropic: "Claude Max or API key",
-                  openai: "ChatGPT Plus/Pro or API key",
-                }[x.id],
-              })),
-            ),
-            {
-              value: "other",
-              label: "Other",
-            },
-          ],
-        })
+              {
+                value: "other",
+                label: "Other",
+              },
+            ],
+          })) as string
+        } else {
+          // If provider was provided via CLI, try to match it with official providers case-insensitively
+          const match = Object.keys(providers).find((x) => x.toLowerCase() === provider!.toLowerCase())
+          if (match) {
+            provider = match
+          }
+        }
 
         if (prompts.isCancel(provider)) throw new UI.CancelledError()
 
@@ -313,12 +322,15 @@ export const AuthLoginCommand = cmd({
           if (handled) return
         }
 
-        if (provider === "other") {
-          provider = await prompts.text({
-            message: "Enter provider id",
-            validate: (x) => (x && x.match(/^[0-9a-z-]+$/) ? undefined : "a-z, 0-9 and hyphens only"),
-          })
-          if (prompts.isCancel(provider)) throw new UI.CancelledError()
+        if (provider === "other" || !providers[provider]) {
+          if (provider === "other") {
+            provider = (await prompts.text({
+              message: "Enter provider id",
+              validate: (x) => (x && x.match(/^[0-9a-z-]+$/) ? undefined : "a-z, 0-9 and hyphens only"),
+            })) as string
+            if (prompts.isCancel(provider)) throw new UI.CancelledError()
+          }
+
           provider = provider.replace(/^@ai-sdk\//, "")
           if (prompts.isCancel(provider)) throw new UI.CancelledError()
 
@@ -337,10 +349,10 @@ export const AuthLoginCommand = cmd({
         if (provider === "amazon-bedrock") {
           prompts.log.info(
             "Amazon Bedrock authentication priority:\n" +
-              "  1. Bearer token (AWS_BEARER_TOKEN_BEDROCK or /connect)\n" +
-              "  2. AWS credential chain (profile, access keys, IAM roles, EKS IRSA)\n\n" +
-              "Configure via opencode.json options (profile, region, endpoint) or\n" +
-              "AWS environment variables (AWS_PROFILE, AWS_REGION, AWS_ACCESS_KEY_ID, AWS_WEB_IDENTITY_TOKEN_FILE).",
+            "  1. Bearer token (AWS_BEARER_TOKEN_BEDROCK or /connect)\n" +
+            "  2. AWS credential chain (profile, access keys, IAM roles, EKS IRSA)\n\n" +
+            "Configure via opencode.json options (profile, region, endpoint) or\n" +
+            "AWS environment variables (AWS_PROFILE, AWS_REGION, AWS_ACCESS_KEY_ID, AWS_WEB_IDENTITY_TOKEN_FILE).",
           )
         }
 

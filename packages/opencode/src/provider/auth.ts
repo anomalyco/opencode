@@ -22,12 +22,13 @@ export namespace ProviderAuth {
     .object({
       type: z.union([z.literal("oauth"), z.literal("api")]),
       label: z.string(),
+      prompts: z.array(z.any()).optional(),
     })
     .meta({
       ref: "ProviderAuthMethod",
     })
   export type Method = z.infer<typeof Method>
-
+  
   export async function methods() {
     const s = await state().then((x) => x.methods)
     return mapValues(s, (x) =>
@@ -35,6 +36,7 @@ export namespace ProviderAuth {
         (y): Method => ({
           type: y.type,
           label: y.label,
+          prompts: (y as any).prompts,
         }),
       ),
     )
@@ -55,12 +57,13 @@ export namespace ProviderAuth {
     z.object({
       providerID: z.string(),
       method: z.number(),
+      inputs: z.record(z.string()).optional(),
     }),
     async (input): Promise<Authorization | undefined> => {
       const auth = await state().then((s) => s.methods[input.providerID])
       const method = auth.methods[input.method]
       if (method.type === "oauth") {
-        const result = await method.authorize()
+        const result = await method.authorize(input.inputs)
         await state().then((s) => (s.pending[input.providerID] = result))
         return {
           url: result.url,
@@ -120,13 +123,20 @@ export namespace ProviderAuth {
   export const api = fn(
     z.object({
       providerID: z.string(),
-      key: z.string(),
+      inputs: z.record(z.string()),
+      key: z.string().optional(),
     }),
     async (input) => {
-      await Auth.set(input.providerID, {
+      // Build auth info from inputs
+      const authInfo: Auth.Info = {
         type: "api",
-        key: input.key,
-      })
+        data: input.inputs,
+      }
+      // If key is provided (legacy support), add it to data
+      if (input.key) {
+        authInfo.key = input.key
+      }
+      await Auth.set(input.providerID, authInfo)
     },
   )
 

@@ -11,7 +11,7 @@ import { Spinner } from "@opencode-ai/ui/spinner"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { showToast } from "@opencode-ai/ui/toast"
 import { iife } from "@opencode-ai/util/iife"
-import { createMemo, Match, onCleanup, onMount, Switch } from "solid-js"
+import { createMemo, For, Match, onCleanup, onMount, Show, Switch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Link } from "@/components/link"
 import { useLanguage } from "@/context/language"
@@ -234,9 +234,14 @@ export function DialogConnectProvider(props: { provider: string }) {
             </Match>
             <Match when={method()?.type === "api"}>
               {iife(() => {
-                const [formStore, setFormStore] = createStore({
-                  value: "",
-                  error: undefined as string | undefined,
+                const prompts = method()?.prompts
+
+                const [formStore, setFormStore] = createStore<{
+                  values: Record<string, string>
+                  errors: Record<string, string>
+                }>({
+                  values: {},
+                  errors: {},
                 })
 
                 async function handleSubmit(e: SubmitEvent) {
@@ -244,19 +249,47 @@ export function DialogConnectProvider(props: { provider: string }) {
 
                   const form = e.currentTarget as HTMLFormElement
                   const formData = new FormData(form)
-                  const apiKey = formData.get("apiKey") as string
+                  const inputs: Record<string, string> = {}
 
-                  if (!apiKey?.trim()) {
-                    setFormStore("error", language.t("provider.connect.apiKey.required"))
-                    return
+                  if (prompts && prompts.length > 0) {
+                    const newErrors: Record<string, string> = {}
+                    let hasError = false
+
+                    for (const prompt of prompts) {
+                      const value = formData.get(prompt.key) as string
+                      inputs[prompt.key] = value
+
+                      if (prompt.validate) {
+                        const error = prompt.validate(value)
+                        if (error) {
+                          newErrors[prompt.key] = error
+                          hasError = true
+                        }
+                      } else if (!value?.trim()) {
+                        newErrors[prompt.key] = language.t("provider.connect.fieldRequired")
+                        hasError = true
+                      }
+                    }
+
+                    if (hasError) {
+                      setFormStore("errors", newErrors)
+                      return
+                    }
+                  } else {
+                    const apiKey = formData.get("apiKey") as string
+                    if (!apiKey?.trim()) {
+                      setFormStore("errors", { apiKey: language.t("provider.connect.apiKey.required") })
+                      return
+                    }
+                    inputs.apiKey = apiKey
                   }
 
-                  setFormStore("error", undefined)
+                  setFormStore("errors", {})
                   await globalSDK.client.auth.set({
                     providerID: props.provider,
                     auth: {
                       type: "api",
-                      key: apiKey,
+                      data: inputs,
                     },
                   })
                   await complete()
@@ -289,17 +322,71 @@ export function DialogConnectProvider(props: { provider: string }) {
                       </Match>
                     </Switch>
                     <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
-                      <TextField
-                        autofocus
-                        type="text"
-                        label={language.t("provider.connect.apiKey.label", { provider: provider().name })}
-                        placeholder={language.t("provider.connect.apiKey.placeholder")}
-                        name="apiKey"
-                        value={formStore.value}
-                        onChange={setFormStore.bind(null, "value")}
-                        validationState={formStore.error ? "invalid" : undefined}
-                        error={formStore.error}
-                      />
+                      <Switch>
+                        <Match when={prompts && prompts.length > 0}>
+                          <For each={prompts}>
+                            {(prompt) => (
+                              <Show when={
+                                !prompt.condition ||
+                                prompt.condition(formStore.values)
+                              }>
+                                <Switch fallback={
+                                  <TextField
+                                    autofocus={prompts![0] === prompt}
+                                    type="text"
+                                    label={prompt.message}
+                                    placeholder={prompt.placeholder}
+                                    name={prompt.key}
+                                    value={formStore.values[prompt.key] || ""}
+                                    onChange={(value) => setFormStore("values", prompt.key, value)}
+                                    validationState={formStore.errors[prompt.key] ? "invalid" : undefined}
+                                    error={formStore.errors[prompt.key]}
+                                  />
+                                }>
+                                  <Match when={prompt.type === "select"}>
+                                    <div class="flex flex-col gap-4">
+                                      <label class="text-14-regular text-text-base">{prompt.message}</label>
+                                      <select
+                                        name={prompt.key}
+                                        value={formStore.values[prompt.key] || ""}
+                                        onChange={(e) => setFormStore("values", prompt.key, e.currentTarget.value)}
+                                        class="w-full h-10 px-3 rounded-lg bg-input-base border-border-weak-base border text-text-base text-14-regular focus:outline-none focus:ring-2 focus:ring-primary"
+                                      >
+                                        <For each={prompt.options}>
+                                          {(option) => (
+                                            <option value={option.value}>
+                                              {option.label}
+                                              {option.hint && (
+                                                <span class="text-text-weak"> - {option.hint}</span>
+                                              )}
+                                            </option>
+                                          )}
+                                        </For>
+                                      </select>
+                                      {formStore.errors[prompt.key] && (
+                                        <div class="text-14-regular text-text-critical">{formStore.errors[prompt.key]}</div>
+                                      )}
+                                    </div>
+                                  </Match>
+                                </Switch>
+                              </Show>
+                            )}
+                          </For>
+                        </Match>
+                        <Match when={true}>
+                          <TextField
+                            autofocus
+                            type="text"
+                            label={language.t("provider.connect.apiKey.label", { provider: provider().name })}
+                            placeholder={language.t("provider.connect.apiKey.placeholder")}
+                            name="apiKey"
+                            value={formStore.values.apiKey || ""}
+                            onChange={(value) => setFormStore("values", "apiKey", value)}
+                            validationState={formStore.errors.apiKey ? "invalid" : undefined}
+                            error={formStore.errors.apiKey}
+                          />
+                        </Match>
+                      </Switch>
                       <Button class="w-auto" type="submit" size="large" variant="primary">
                         {language.t("common.submit")}
                       </Button>
