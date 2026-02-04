@@ -115,7 +115,7 @@ impl LoadingWindow {
         let window_builder =
             WebviewWindowBuilder::new(app, Self::LABEL, tauri::WebviewUrl::App("/loading".into()))
                 .inner_size(640.0, 480.0)
-                .visible(true);
+                .visible(false);
 
         #[cfg(target_os = "macos")]
         let window_builder = window_builder

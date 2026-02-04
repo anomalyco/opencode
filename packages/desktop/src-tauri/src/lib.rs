@@ -9,7 +9,8 @@ mod windows;
 
 use futures::{
     FutureExt, TryFutureExt,
-    future::{self, Shared},
+    future::{self, Either, Shared},
+    pin_mut,
 };
 #[cfg(windows)]
 use job_object::*;
@@ -18,6 +19,7 @@ use std::{
     env,
     net::TcpListener,
     path::PathBuf,
+    pin::pin,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -27,7 +29,10 @@ use tauri_plugin_decorum::WebviewWindowExt;
 #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_shell::process::CommandChild;
-use tokio::sync::{oneshot, watch};
+use tokio::{
+    sync::{oneshot, watch},
+    time::sleep,
+};
 
 use crate::cli::sync_cli;
 use crate::constants::*;
@@ -229,7 +234,7 @@ async fn initialize(app: AppHandle) {
     let server_ready_rx = server_ready_rx.shared();
     app.manage(ServerState::new(None, server_ready_rx.clone()));
 
-    let is_using_cli = match setup_server_connection(app.clone()).await {
+    let has_spawned_cli = match setup_server_connection(app.clone()).await {
         ServerConnection::CLI {
             spawn_task,
             url,
@@ -268,23 +273,40 @@ async fn initialize(app: AppHandle) {
     let loading_window_complete = event_once_fut::<LoadingWindowComplete>(&app);
     let loading_window = LoadingWindow::create(&app).expect("Failed to create loading window");
 
-    if is_using_cli && option_env!("OPENCODE_SQLITE").is_some() {
-        let mut exists = sqlite_file_exists();
-        if !exists {
-            println!(
-                "sqlite file not found at {}, waiting for it to be generated",
-                opencode_db_path().expect("failed to get db path").display()
-            );
-            let _ = init_tx.send(InitStep::SqliteWaiting);
+    let loading_task = tokio::spawn({
+        let init_tx = init_tx.clone();
+        async move {
+            if has_spawned_cli && option_env!("OPENCODE_SQLITE").is_some() {
+                let mut exists = sqlite_file_exists();
+                if !exists {
+                    println!(
+                        "sqlite file not found at {}, waiting for it to be generated",
+                        opencode_db_path().expect("failed to get db path").display()
+                    );
+                    let _ = init_tx.send(InitStep::SqliteWaiting);
 
-            while !exists {
-                tokio::time::sleep(Duration::from_secs(1)).await;
-                exists = sqlite_file_exists();
+                    while !exists {
+                        sleep(Duration::from_secs(1)).await;
+                        exists = sqlite_file_exists();
+                    }
+                }
             }
+
+            let _ = server_ready_rx.await;
         }
+    })
+    .map_err(|_| ())
+    .shared();
+
+    if tokio::time::timeout(Duration::from_secs(1), loading_task.clone())
+        .await
+        .is_err()
+    {
+        let _ = loading_window.show();
+        sleep(Duration::from_secs(1)).await;
+        let _ = loading_task.await;
     }
 
-    let _ = server_ready_rx.await;
     let _ = init_tx.send(InitStep::Done);
 
     loading_window_complete.await;
