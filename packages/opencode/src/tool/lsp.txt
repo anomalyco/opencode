@@ -11,9 +11,11 @@ Supported operations:
 - incomingCalls: Find all functions/methods that call the function at a position
 - outgoingCalls: Find all functions/methods called by the function at a position
 
-All operations require:
-- filePath: The file to operate on
-- line: The line number (1-based, as shown in editors)
-- character: The character offset (1-based, as shown in editors)
+Parameters:
+- operation: The operation to perform (see list above).
+- filePath: The file to operate on. For workspaceSymbol, any file in the workspace can be used to identify the relevant LSP server.
+- line: (Optional) 1-based line number. Required for position-based operations (definition, references, hover, etc.).
+- character: (Optional) 1-based character offset. Required for position-based operations.
+- query: (Optional) Search string for workspaceSymbol.
 
 Note: LSP servers must be configured for the file type. If no server is available, an error will be returned.

@@ -67,6 +67,7 @@ export namespace Command {
         get template() {
           return PROMPT_INITIALIZE.replace("${path}", Instance.worktree)
         },
+        subtask: true,
         hints: hints(PROMPT_INITIALIZE),
       },
       [Default.REVIEW]: {

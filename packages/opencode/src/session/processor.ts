@@ -15,6 +15,10 @@ import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
+import { ToolDependency } from "./tool-dependency"
+import { ToolResultCache } from "./tool-result-cache"
+import { ToolRegistry } from "@/tool/registry"
+import { type Tool } from "ai"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -22,6 +26,159 @@ export namespace SessionProcessor {
 
   export type Info = Awaited<ReturnType<typeof create>>
   export type Result = Awaited<ReturnType<Info["process"]>>
+
+  interface ToolExecutor {
+    toolId: string
+    toolName: string
+    input: Record<string, any>
+    partId: string
+    callId: string
+    abort: AbortSignal
+  }
+
+  async function executeTool(
+    executor: ToolExecutor,
+    tools: Record<string, Tool>,
+    input: {
+      sessionID: string
+      assistantMessage: MessageV2.Assistant
+      agent: Agent.Info
+    },
+  ): Promise<void> {
+    const tool = tools[executor.toolName]
+    if (!tool) {
+      await Session.updatePart({
+        id: executor.partId,
+        messageID: input.assistantMessage.id,
+        sessionID: input.sessionID,
+        type: "tool",
+        tool: executor.toolName,
+        callID: executor.callId,
+        state: {
+          status: "error",
+          input: executor.input,
+          error: `Tool '${executor.toolName}' not found`,
+          time: {
+            start: Date.now(),
+            end: Date.now(),
+          },
+        },
+      })
+      return
+    }
+
+    try {
+      const executeFn = tool.execute
+      if (!executeFn) {
+        throw new Error(`Tool '${executor.toolName}' has no execute function`)
+      }
+      const result = await executeFn(executor.input, {
+        toolCallId: executor.callId,
+        abortSignal: executor.abort,
+        messages: [],
+      })
+
+      await Session.updatePart({
+        id: executor.partId,
+        messageID: input.assistantMessage.id,
+        sessionID: input.sessionID,
+        type: "tool",
+        tool: executor.toolName,
+        callID: executor.callId,
+        state: {
+          status: "completed",
+          input: executor.input,
+          output: result.output,
+          title: result.title,
+          metadata: result.metadata,
+          attachments: result.attachments,
+          time: {
+            start: Date.now(),
+            end: Date.now(),
+          },
+        },
+      })
+
+      ToolResultCache.set({
+        sessionID: input.sessionID,
+        callID: executor.callId,
+        tool: executor.toolName,
+        input: executor.input,
+        output: result.output,
+        title: result.title,
+        metadata: result.metadata ?? {},
+        attachments: result.attachments,
+      })
+    } catch (error) {
+      await Session.updatePart({
+        id: executor.partId,
+        messageID: input.assistantMessage.id,
+        sessionID: input.sessionID,
+        type: "tool",
+        tool: executor.toolName,
+        callID: executor.callId,
+        state: {
+          status: "error",
+          input: executor.input,
+          error: error instanceof Error ? error.message : String(error),
+          time: {
+            start: Date.now(),
+            end: Date.now(),
+          },
+        },
+      })
+    }
+  }
+
+  async function executeToolsParallel(
+    executors: ToolExecutor[],
+    tools: Record<string, Tool>,
+    input: {
+      sessionID: string
+      assistantMessage: MessageV2.Assistant
+      agent: Agent.Info
+    },
+  ): Promise<void> {
+    if (executors.length === 0) return
+
+    const toolCalls: MessageV2.ToolPart[] = executors.map((e) => ({
+      id: e.partId,
+      sessionID: input.sessionID,
+      messageID: input.assistantMessage.id,
+      type: "tool",
+      callID: e.callId,
+      tool: e.toolName,
+      state: {
+        status: "pending" as const,
+        input: e.input,
+        raw: "",
+      },
+    }))
+
+    const dependencyResult = ToolDependency.analyze(toolCalls)
+
+    log.debug("dependency analysis", {
+      sessionID: input.sessionID,
+      levels: dependencyResult.levels.length,
+      totalCalls: toolCalls.length,
+    })
+
+    for (const level of dependencyResult.levels) {
+      const parallelExecutors = level.calls.map((call) => {
+        const executor = executors.find((e) => e.callId === call.id)!
+        return executeTool(executor, tools, input).catch((error) => {
+          log.error("tool execution failed", {
+            sessionID: input.sessionID,
+            tool: executor.toolName,
+            callId: executor.callId,
+            error,
+          })
+        })
+      })
+
+      await Promise.all(parallelExecutors)
+    }
+  }
 
   export function create(input: {
     assistantMessage: MessageV2.Assistant
@@ -46,6 +203,11 @@ export namespace SessionProcessor {
         log.info("process")
         needsCompaction = false
         const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
+        const config = await Config.get()
+        const parallelEnabled = config.experimental?.parallel_execution !== false
+        const maxParallelTools = config.experimental?.max_parallel_tools ?? 10
+        let pendingExecutors: ToolExecutor[] = []
+        let parallelExecutedCount = 0
         while (true) {
           try {
             let currentText: MessageV2.TextPart | undefined
@@ -129,42 +291,59 @@ export namespace SessionProcessor {
                     const part = await Session.updatePart({
                       ...match,
                       tool: value.toolName,
-                      state: {
-                        status: "running",
-                        input: value.input,
-                        time: {
-                          start: Date.now(),
-                        },
-                      },
+                      state: parallelEnabled
+                        ? {
+                            status: "pending" as const,
+                            input: value.input,
+                            raw: "",
+                          }
+                        : {
+                            status: "running" as const,
+                            input: value.input,
+                            time: { start: Date.now() },
+                          },
                       metadata: value.providerMetadata,
                     })
                     toolcalls[value.toolCallId] = part as MessageV2.ToolPart
 
-                    const parts = await MessageV2.parts(input.assistantMessage.id)
-                    const lastThree = parts.slice(-DOOM_LOOP_THRESHOLD)
-
-                    if (
-                      lastThree.length === DOOM_LOOP_THRESHOLD &&
-                      lastThree.every(
-                        (p) =>
-                          p.type === "tool" &&
-                          p.tool === value.toolName &&
-                          p.state.status !== "pending" &&
-                          JSON.stringify(p.state.input) === JSON.stringify(value.input),
-                      )
-                    ) {
-                      const agent = await Agent.get(input.assistantMessage.agent)
-                      await PermissionNext.ask({
-                        permission: "doom_loop",
-                        patterns: [value.toolName],
-                        sessionID: input.assistantMessage.sessionID,
-                        metadata: {
-                          tool: value.toolName,
-                          input: value.input,
-                        },
-                        always: [value.toolName],
-                        ruleset: agent.permission,
+                    if (parallelEnabled) {
+                      pendingExecutors.push({
+                        toolId: value.toolName,
+                        toolName: value.toolName,
+                        input: value.input,
+                        partId: part.id,
+                        callId: value.toolCallId,
+                        abort: input.abort,
                       })
+                    }
+
+                    if (!parallelEnabled) {
+                      const parts = await MessageV2.parts(input.assistantMessage.id)
+                      const lastThree = parts.slice(-DOOM_LOOP_THRESHOLD)
+
+                      if (
+                        lastThree.length === DOOM_LOOP_THRESHOLD &&
+                        lastThree.every(
+                          (p) =>
+                            p.type === "tool" &&
+                            p.tool === value.toolName &&
+                            p.state.status !== "pending" &&
+                            JSON.stringify(p.state.input) === JSON.stringify(value.input),
+                        )
+                      ) {
+                        const agent = await Agent.get(input.assistantMessage.agent)
+                        await PermissionNext.ask({
+                          permission: "doom_loop",
+                          patterns: [value.toolName],
+                          sessionID: input.assistantMessage.sessionID,
+                          metadata: {
+                            tool: value.toolName,
+                            input: value.input,
+                          },
+                          always: [value.toolName],
+                          ruleset: agent.permission,
+                        })
+                      }
                     }
                   }
                   break
@@ -282,6 +461,15 @@ export namespace SessionProcessor {
                   if (await SessionCompaction.isOverflow({ tokens: usage.tokens, model: input.model })) {
                     needsCompaction = true
                   }
+                  if (parallelEnabled && pendingExecutors.length > 0) {
+                    const tools = streamInput.tools
+                    await executeToolsParallel(pendingExecutors, tools, {
+                      sessionID: input.sessionID,
+                      assistantMessage: input.assistantMessage,
+                      agent: await Agent.get(input.assistantMessage.agent),
+                    })
+                    pendingExecutors = []
+                  }
                   break
 
                 case "text-start":
@@ -334,6 +522,15 @@ export namespace SessionProcessor {
                   break
 
                 case "finish":
+                  if (parallelEnabled && pendingExecutors.length > 0) {
+                    const tools = streamInput.tools
+                    await executeToolsParallel(pendingExecutors, tools, {
+                      sessionID: input.sessionID,
+                      assistantMessage: input.assistantMessage,
+                      agent: await Agent.get(input.assistantMessage.agent),
+                    })
+                    pendingExecutors = []
+                  }
                   break
 
                 default:
@@ -343,6 +540,15 @@ export namespace SessionProcessor {
                   continue
               }
               if (needsCompaction) break
+            }
+            if (parallelEnabled && pendingExecutors.length > 0) {
+              const tools = streamInput.tools
+              await executeToolsParallel(pendingExecutors, tools, {
+                sessionID: input.sessionID,
+                assistantMessage: input.assistantMessage,
+                agent: await Agent.get(input.assistantMessage.agent),
+              })
+              pendingExecutors = []
             }
           } catch (e: any) {
             log.error("process", {

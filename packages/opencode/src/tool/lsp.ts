@@ -23,9 +23,10 @@ export const LspTool = Tool.define("lsp", {
   description: DESCRIPTION,
   parameters: z.object({
     operation: z.enum(operations).describe("The LSP operation to perform"),
-    filePath: z.string().describe("The absolute or relative path to the file"),
-    line: z.number().int().min(1).describe("The line number (1-based, as shown in editors)"),
-    character: z.number().int().min(1).describe("The character offset (1-based, as shown in editors)"),
+    filePath: z.string().describe("The absolute or relative path to the file. Required for most operations."),
+    line: z.number().int().min(1).optional().describe("The line number (1-based). Required for position-based operations."),
+    character: z.number().int().min(1).optional().describe("The character offset (1-based). Required for position-based operations."),
+    query: z.string().optional().describe("The search query for workspaceSymbol operation."),
   }),
   execute: async (args, ctx) => {
     const file = path.isAbsolute(args.filePath) ? args.filePath : path.join(Instance.directory, args.filePath)
@@ -40,12 +41,14 @@ export const LspTool = Tool.define("lsp", {
     const uri = pathToFileURL(file).href
     const position = {
       file,
-      line: args.line - 1,
-      character: args.character - 1,
+      line: (args.line ?? 1) - 1,
+      character: (args.character ?? 1) - 1,
     }
 
     const relPath = path.relative(Instance.worktree, file)
-    const title = `${args.operation} ${relPath}:${args.line}:${args.character}`
+    const title = args.operation === "workspaceSymbol" 
+      ? `workspaceSymbol "${args.query ?? ""}"`
+      : `${args.operation} ${relPath}:${args.line ?? 1}:${args.character ?? 1}`
 
     const exists = await Bun.file(file).exists()
     if (!exists) {
@@ -70,7 +73,7 @@ export const LspTool = Tool.define("lsp", {
         case "documentSymbol":
           return LSP.documentSymbol(uri)
         case "workspaceSymbol":
-          return LSP.workspaceSymbol("")
+          return LSP.workspaceSymbol(args.query ?? "")
         case "goToImplementation":
           return LSP.implementation(position)
         case "prepareCallHierarchy":

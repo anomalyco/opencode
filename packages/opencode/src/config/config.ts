@@ -60,55 +60,51 @@ export namespace Config {
   }
 
   export const state = Instance.state(async () => {
-    const auth = await Auth.all()
+    const [authMap] = await Promise.all([Auth.all()])
 
-    // Config loading order (low -> high precedence): https://opencode.ai/docs/config#precedence-order
-    // 1) Remote .well-known/opencode (org defaults)
-    // 2) Global config (~/.config/opencode/opencode.json{,c})
-    // 3) Custom config (OPENCODE_CONFIG)
-    // 4) Project config (opencode.json{,c})
-    // 5) .opencode directories (.opencode/agents/, .opencode/commands/, .opencode/plugins/, .opencode/opencode.json{,c})
-    // 6) Inline config (OPENCODE_CONFIG_CONTENT)
-    // Managed config directory is enterprise-only and always overrides everything above.
-    let result: Info = {}
-    for (const [key, value] of Object.entries(auth)) {
+    const wellknownPromises: Promise<Info>[] = []
+    for (const [key, value] of Object.entries(authMap)) {
       if (value.type === "wellknown") {
         process.env[value.key] = value.token
         log.debug("fetching remote config", { url: `${key}/.well-known/opencode` })
-        const response = await fetch(`${key}/.well-known/opencode`)
-        if (!response.ok) {
-          throw new Error(`failed to fetch remote config from ${key}: ${response.status}`)
-        }
-        const wellknown = (await response.json()) as any
-        const remoteConfig = wellknown.config ?? {}
-        // Add $schema to prevent load() from trying to write back to a non-existent file
-        if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
-        result = mergeConfigConcatArrays(
-          result,
-          await load(JSON.stringify(remoteConfig), `${key}/.well-known/opencode`),
+        wellknownPromises.push(
+          (async () => {
+            const response = await fetch(`${key}/.well-known/opencode`)
+            if (!response.ok) {
+              throw new Error(`failed to fetch remote config from ${key}: ${response.status}`)
+            }
+            const wellknown = (await response.json()) as any
+            const remoteConfig = wellknown.config ?? {}
+            if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
+            log.debug("loaded remote config from well-known", { url: key })
+            return load(JSON.stringify(remoteConfig), `${key}/.well-known/opencode`)
+          })(),
         )
-        log.debug("loaded remote config from well-known", { url: key })
       }
     }
 
-    // Global user config overrides remote config.
-    result = mergeConfigConcatArrays(result, await global())
+    const [globalResult, customResult, projectResults, inlineResult, wellknownResults] = await Promise.all([
+      global(),
+      Flag.OPENCODE_CONFIG ? loadFile(Flag.OPENCODE_CONFIG) : Promise.resolve({}),
+      !Flag.OPENCODE_DISABLE_PROJECT_CONFIG
+        ? Promise.all(
+            ["opencode.jsonc", "opencode.json"].map(async (file) => {
+              const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
+              return Promise.all(found.map((resolved) => loadFile(resolved)))
+            }),
+          ).then((arr) => arr.flat())
+        : Promise.resolve([]),
+      Flag.OPENCODE_CONFIG_CONTENT ? Promise.resolve(JSON.parse(Flag.OPENCODE_CONFIG_CONTENT)) : Promise.resolve({}),
+      Promise.all(wellknownPromises).then((arr) => arr.reduce((acc, cur) => mergeConfigConcatArrays(acc, cur), {})),
+    ])
 
-    // Custom config path overrides global config.
-    if (Flag.OPENCODE_CONFIG) {
-      result = mergeConfigConcatArrays(result, await loadFile(Flag.OPENCODE_CONFIG))
-      log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
+    let result: Info = wellknownResults
+    result = mergeConfigConcatArrays(result, globalResult)
+    result = mergeConfigConcatArrays(result, customResult)
+    for (const configs of projectResults) {
+      result = mergeConfigConcatArrays(result, configs)
     }
-
-    // Project config overrides global and remote config.
-    if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
-      for (const file of ["opencode.jsonc", "opencode.json"]) {
-        const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
-        for (const resolved of found.toReversed()) {
-          result = mergeConfigConcatArrays(result, await loadFile(resolved))
-        }
-      }
-    }
+    result = mergeConfigConcatArrays(result, inlineResult)
 
     result.agent = result.agent || {}
     result.mode = result.mode || {}
@@ -116,7 +112,6 @@ export namespace Config {
 
     const directories = [
       Global.Path.config,
-      // Only scan project .opencode/ directories when project discovery is enabled
       ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
         ? await Array.fromAsync(
             Filesystem.up({
@@ -126,7 +121,6 @@ export namespace Config {
             }),
           )
         : []),
-      // Always scan ~/.opencode/ (user home directory)
       ...(await Array.fromAsync(
         Filesystem.up({
           targets: [".opencode"],
@@ -142,41 +136,73 @@ export namespace Config {
       log.debug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
     }
 
-    for (const dir of unique(directories)) {
-      if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
-        for (const file of ["opencode.jsonc", "opencode.json"]) {
-          log.debug(`loading config from ${path.join(dir, file)}`)
-          result = mergeConfigConcatArrays(result, await loadFile(path.join(dir, file)))
-          // to satisfy the type checker
-          result.agent ??= {}
-          result.mode ??= {}
-          result.plugin ??= []
+    const dirResults = await Promise.all(
+      unique(directories).map(async (dir) => {
+        const dirResult: {
+          config: Info
+          command: Record<string, Command>
+          agent: Record<string, Agent>
+          mode: Record<string, Agent>
+          plugin: string[]
+        } = {
+          config: {} as Info,
+          command: {},
+          agent: {},
+          mode: {},
+          plugin: [],
         }
-      }
 
-      const exists = existsSync(path.join(dir, "node_modules"))
-      const installing = installDependencies(dir)
-      if (!exists) await installing
+        if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
+          const configFiles = await Promise.all(
+            ["opencode.jsonc", "opencode.json"].map((file) => loadFile(path.join(dir, file)).catch(() => undefined)),
+          )
+          for (const config of configFiles) {
+            if (config) {
+              dirResult.config = mergeConfigConcatArrays(dirResult.config, config)
+            }
+          }
+        }
 
-      result.command = mergeDeep(result.command ?? {}, await loadCommand(dir))
-      result.agent = mergeDeep(result.agent, await loadAgent(dir))
-      result.agent = mergeDeep(result.agent, await loadMode(dir))
-      result.plugin.push(...(await loadPlugin(dir)))
+        const pkgPath = path.join(dir, "node_modules")
+        if (!existsSync(pkgPath)) {
+          installDependencies(dir).catch(() => {})
+        }
+
+        const [commands, agents, modes, plugins] = await Promise.all([
+          loadCommand(dir),
+          loadAgent(dir),
+          loadMode(dir),
+          loadPlugin(dir),
+        ])
+        dirResult.command = commands
+        dirResult.agent = agents
+        dirResult.mode = modes
+        dirResult.plugin = plugins
+
+        return dirResult
+      }),
+    )
+
+    result.agent ??= {}
+    result.mode ??= {}
+    result.plugin ??= []
+
+    for (const dirResult of dirResults) {
+      result = mergeConfigConcatArrays(result, dirResult.config)
+      result.command = mergeDeep(result.command ?? {}, dirResult.command)
+      result.agent = mergeDeep(result.agent ?? {}, dirResult.agent)
+      result.agent = mergeDeep(result.agent ?? {}, dirResult.mode)
+      ;(result.plugin ??= []).push(...dirResult.plugin)
     }
 
-    // Inline config content overrides all non-managed config sources.
-    if (Flag.OPENCODE_CONFIG_CONTENT) {
-      result = mergeConfigConcatArrays(result, JSON.parse(Flag.OPENCODE_CONFIG_CONTENT))
-      log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
-    }
-
-    // Load managed config files last (highest priority) - enterprise admin-controlled
-    // Kept separate from directories array to avoid write operations when installing plugins
-    // which would fail on system directories requiring elevated permissions
-    // This way it only loads config file and not skills/plugins/commands
     if (existsSync(managedConfigDir)) {
-      for (const file of ["opencode.jsonc", "opencode.json"]) {
-        result = mergeConfigConcatArrays(result, await loadFile(path.join(managedConfigDir, file)))
+      const managedConfigs = await Promise.all(
+        ["opencode.jsonc", "opencode.json"].map((file) =>
+          loadFile(path.join(managedConfigDir, file)).catch(() => ({}) as Info),
+        ),
+      )
+      for (const config of managedConfigs) {
+        result = mergeConfigConcatArrays(result, config)
       }
     }
 
@@ -1107,8 +1133,43 @@ export namespace Config {
             .positive()
             .optional()
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
+          parallel_execution: z
+            .boolean()
+            .optional()
+            .describe("Enable parallel tool execution with dependency analysis (default: true)"),
+          max_parallel_tools: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Maximum number of tools to execute in parallel (default: 10)"),
         })
         .optional(),
+      checker: z
+        .object({
+          enabled: z
+            .boolean()
+            .optional()
+            .describe("Enable the checker agent for hallucination detection (default: true)"),
+          model: z
+            .string()
+            .optional()
+            .describe(
+              "Model to use for checker in format provider/model (default: same as small_model or default model)",
+            ),
+          frequency: z
+            .enum(["always", "once_per_session", "never"])
+            .optional()
+            .describe("How often to run hallucination checks"),
+          max_checks: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Maximum number of checker runs per session (default: 10)"),
+        })
+        .optional()
+        .describe("Checker agent configuration for hallucination detection"),
     })
     .strict()
     .meta({

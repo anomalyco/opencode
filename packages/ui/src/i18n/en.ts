@@ -94,7 +94,7 @@ export const dict = {
   "ui.patch.action.created": "Created",
   "ui.patch.action.moved": "Moved",
   "ui.patch.action.patched": "Patched",
-
+  "ui.checker.feedbackTitle": "Checker Agent Feedback",
   "ui.question.subtitle.answered": "{{count}} answered",
   "ui.question.answer.none": "(no answer)",
   "ui.question.review.notAnswered": "(not answered)",

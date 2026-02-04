@@ -147,6 +147,38 @@ export namespace LSP {
     return state()
   }
 
+  /**
+   * Warm up LSP servers by scanning the workspace for common extensions
+   * and starting the matching servers. This ensures that the AI has
+   * code intelligence ready immediately.
+   */
+  export async function warmup() {
+    const s = await state()
+    const glob = new Bun.Glob("**/*")
+    const extensions = new Set<string>()
+
+    // Scan for extensions in the first 1000 files to find relevant languages
+    let count = 0
+    for await (const file of glob.scan({ cwd: Instance.directory, onlyFiles: true })) {
+      extensions.add(path.extname(file))
+      if (++count > 1000) break
+    }
+
+    const tasks: Promise<any>[] = []
+    for (const server of Object.values(s.servers)) {
+      // If a server matches any found extension, or it has no extension restriction
+      const hasExtension = server.extensions.some((ext) => extensions.has(ext))
+      if (hasExtension || server.extensions.length === 0) {
+        // Trigger getClients with a dummy file to start the server for this extension
+        const repExt = server.extensions.find((ext) => extensions.has(ext)) || (server.extensions.length === 0 ? "" : server.extensions[0])
+        if (repExt !== undefined) {
+          tasks.push(getClients(path.join(Instance.directory, `dummy${repExt}`)))
+        }
+      }
+    }
+    await Promise.all(tasks)
+  }
+
   export const Status = z
     .object({
       id: z.string(),

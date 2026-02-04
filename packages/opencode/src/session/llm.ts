@@ -25,6 +25,7 @@ import { Auth } from "@/auth"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
+  const providerCache = new Map<string, { provider: Provider.Info; auth: Awaited<ReturnType<typeof Auth.get>> }>()
 
   export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
 
@@ -56,12 +57,19 @@ export namespace LLM {
       modelID: input.model.id,
       providerID: input.model.providerID,
     })
-    const [language, cfg, provider, auth] = await Promise.all([
-      Provider.getLanguage(input.model),
-      Config.get(),
-      Provider.getProvider(input.model.providerID),
-      Auth.get(input.model.providerID),
-    ])
+
+    const [language, cfg] = await Promise.all([Provider.getLanguage(input.model), Config.get()])
+
+    let cached = providerCache.get(input.model.providerID)
+    if (!cached) {
+      const [provider, auth] = await Promise.all([
+        Provider.getProvider(input.model.providerID),
+        Auth.get(input.model.providerID),
+      ])
+      cached = { provider, auth }
+      providerCache.set(input.model.providerID, cached)
+    }
+    const { provider, auth } = cached
     const isCodex = provider.id === "openai" && auth?.type === "oauth"
 
     const system = []

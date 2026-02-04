@@ -678,8 +678,14 @@ export namespace Provider {
 
   const state = Instance.state(async () => {
     using _ = log.time("state")
-    const config = await Config.get()
-    const modelsDev = await ModelsDev.get()
+    const [config, modelsDevData, envData, authData, pluginsData] = await Promise.all([
+      Config.get(),
+      ModelsDev.get(),
+      Env.all(),
+      Auth.all(),
+      Plugin.list(),
+    ])
+    const modelsDev = modelsDevData
     const database = mapValues(modelsDev, fromModelsDevProvider)
 
     const disabled = new Set(config.disabled_providers ?? [])
@@ -813,10 +819,9 @@ export namespace Provider {
     }
 
     // load env
-    const env = Env.all()
     for (const [providerID, provider] of Object.entries(database)) {
       if (disabled.has(providerID)) continue
-      const apiKey = provider.env.map((item) => env[item]).find(Boolean)
+      const apiKey = provider.env.map((item) => envData[item]).find(Boolean)
       if (!apiKey) continue
       mergeProvider(providerID, {
         source: "env",
@@ -825,7 +830,7 @@ export namespace Provider {
     }
 
     // load apikeys
-    for (const [providerID, provider] of Object.entries(await Auth.all())) {
+    for (const [providerID, provider] of Object.entries(authData)) {
       if (disabled.has(providerID)) continue
       if (provider.type === "api") {
         mergeProvider(providerID, {
@@ -835,7 +840,7 @@ export namespace Provider {
       }
     }
 
-    for (const plugin of await Plugin.list()) {
+    for (const plugin of pluginsData) {
       if (!plugin.auth) continue
       const providerID = plugin.auth.provider
       if (disabled.has(providerID)) continue

@@ -1,10 +1,38 @@
-Please analyze this codebase and create an AGENTS.md file containing:
-1. Build/lint/test commands - especially for running a single test
-2. Code style guidelines including imports, formatting, types, naming conventions, error handling, etc.
+You are a Senior Software Architect. Your goal is to create an AGENTS.md file optimized for "AI-to-AI communication". This file should serve as a high-density semantic index and logical skeleton of the codebase.
 
-The file you create will be given to agentic coding agents (such as yourself) that operate in this repository. Make it about 150 lines long.
-If there are Cursor rules (in .cursor/rules/ or .cursorrules) or Copilot rules (in .github/copilot-instructions.md), make sure to include them.
+### Phase 1: Symbolic & Type Discovery (AI-Native)
+1. **Trace the Type-Graph**: Identify primary Zod schemas and TS interfaces that define the "state" of the system. 
+2. **Identify Logic Hubs**: Locate namespaces/classes managing state transitions (e.g., `Session`, `Processor`).
+3. **Map the Action-Surface**: Identify the tool registry and command dispatchers.
+*LSP Guidance*: If `lsp` tool is available, prioritize `workspaceSymbol` and `documentSymbol` to extract precise symbol locations and types. Avoid raw file reading for structural mapping.
 
-If there's already an AGENTS.md, improve it if it's located in ${path}
+### Phase 2: Structural Extraction (Logic Topology)
+1. **Call Topology**: Trace the execution path of a primary command (e.g., `/init`). Map the exact symbol-to-symbol call sequence.
+*LSP Guidance*: Use `lsp:incomingCalls` or `lsp:prepareCallHierarchy` to confirm cross-module dependencies and driver logic.
+2. **Data Flow Contracts**: Document how data (e.g., `MessageV2.Part`) flows through the system and where it is transformed.
+
+### Phase 3: Generate AGENTS.md (Semantic Index Format)
+The output must prioritize machine-readability and logical density over human visual presentation:
+
+1. **System Essence**: A single-paragraph high-density technical definition.
+2. **Core Symbolic Map**:
+   - Organize by **Namespace/Domain**.
+   - For each: List key **Classes/Functions** with **Symbolic Roles** (e.g., `[Factory]`, `[State Transition]`, `[Event Publisher]`).
+   - Format: `SymbolName [Role] -> Purpose (Reference to Source)`.
+3. **Primary Data Contracts**:
+   - List critical Zod/TS types that define the system's "protocols".
+   - Briefly describe the lifecycle of a core object.
+4. **Core Execution Loops (Structured Pseudo-code)**:
+   - Use high-level structured pseudo-code to describe complex logic like the `Tool Execution Loop` or `Session Persistence Flow`.
+5. **AI Navigation Call-Stack**:
+   - Map entry points to their primary downstream call sequences using symbolic links.
+6. **Architectural Guardrails**:
+   - List "Always/Never" rules for coding within this specific codebase.
+
+### Constraints:
+- **NO Mermaid graphs**. AI should interpret relationships through symbolic maps and call stacks.
+- **NO basic installation/run guides**. Assume the reader (AI) already knows how to run standard commands.
+- **English output only**.
+- **Maximum Semantic Density**: Avoid descriptive prose; use technical terminology and symbol links.
 
 $ARGUMENTS

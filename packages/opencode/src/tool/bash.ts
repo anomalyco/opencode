@@ -5,7 +5,6 @@ import path from "path"
 import DESCRIPTION from "./bash.txt"
 import { Log } from "../util/log"
 import { Instance } from "../project/instance"
-import { lazy } from "@/util/lazy"
 import { Language } from "web-tree-sitter"
 
 import { $ } from "bun"
@@ -29,7 +28,9 @@ const resolveWasm = (asset: string) => {
   return fileURLToPath(url)
 }
 
-const parser = lazy(async () => {
+let parserPromise: Promise<any> | null = null
+
+const createParser = async () => {
   const { Parser } = await import("web-tree-sitter")
   const { default: treeWasm } = await import("web-tree-sitter/tree-sitter.wasm" as string, {
     with: { type: "wasm" },
@@ -48,7 +49,14 @@ const parser = lazy(async () => {
   const p = new Parser()
   p.setLanguage(bashLanguage)
   return p
-})
+}
+
+const getParser = () => {
+  if (!parserPromise) {
+    parserPromise = createParser()
+  }
+  return parserPromise
+}
 
 // TODO: we may wanna rename this tool so it works better on other shells
 export const BashTool = Tool.define("bash", async () => {
@@ -80,7 +88,7 @@ export const BashTool = Tool.define("bash", async () => {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
       const timeout = params.timeout ?? DEFAULT_TIMEOUT
-      const tree = await parser().then((p) => p.parse(params.command))
+      const tree = await getParser().then((p) => p.parse(params.command))
       if (!tree) {
         throw new Error("Failed to parse command")
       }
