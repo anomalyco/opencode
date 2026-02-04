@@ -44,7 +44,13 @@ export const ReadTool = Tool.define("read", {
       const dir = path.dirname(filepath)
       const base = path.basename(filepath)
 
-      const dirEntries = fs.readdirSync(dir)
+      const dirEntries = (() => {
+        try {
+          return fs.readdirSync(dir)
+        } catch {
+          return []
+        }
+      })()
       const suggestions = dirEntries
         .filter(
           (entry) =>

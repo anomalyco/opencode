@@ -3,6 +3,10 @@ import { OAUTH_CALLBACK_PORT, OAUTH_CALLBACK_PATH } from "./oauth-provider"
 
 const log = Log.create({ service: "mcp.oauth-callback" })
 
+function escapeHtml(str: string): string {
+	return str.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char)
+}
+
 const HTML_SUCCESS = `<!DOCTYPE html>
 <html>
 <head>
@@ -39,12 +43,13 @@ const HTML_ERROR = (error: string) => `<!DOCTYPE html>
   <div class="container">
     <h1>Authorization Failed</h1>
     <p>An error occurred during authorization.</p>
-    <div class="error">${error}</div>
+    <div class="error">${escapeHtml(error)}</div>
   </div>
 </body>
 </html>`
 
 interface PendingAuth {
+  mcpName: string
   resolve: (code: string) => void
   reject: (error: Error) => void
   timeout: ReturnType<typeof setTimeout>
@@ -136,7 +141,7 @@ export namespace McpOAuthCallback {
     log.info("oauth callback server started", { port: OAUTH_CALLBACK_PORT })
   }
 
-  export function waitForCallback(oauthState: string): Promise<string> {
+  export function waitForCallback(oauthState: string, mcpName: string): Promise<string> {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         if (pendingAuths.has(oauthState)) {
@@ -145,16 +150,18 @@ export namespace McpOAuthCallback {
         }
       }, CALLBACK_TIMEOUT_MS)
 
-      pendingAuths.set(oauthState, { resolve, reject, timeout })
+      pendingAuths.set(oauthState, { mcpName, resolve, reject, timeout })
     })
   }
 
   export function cancelPending(mcpName: string): void {
-    const pending = pendingAuths.get(mcpName)
-    if (pending) {
-      clearTimeout(pending.timeout)
-      pendingAuths.delete(mcpName)
-      pending.reject(new Error("Authorization cancelled"))
+    for (const [state, pending] of pendingAuths) {
+      if (pending.mcpName === mcpName) {
+        clearTimeout(pending.timeout)
+        pendingAuths.delete(state)
+        pending.reject(new Error("Authorization cancelled"))
+        return
+      }
     }
   }
 
