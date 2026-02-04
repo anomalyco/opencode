@@ -1407,6 +1407,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     for (const item of context) {
       if (item.type !== "file") continue
       addContextFile({ path: item.path, selection: item.selection, comment: item.comment })
+      for (const taggedPath of item.taggedFiles ?? []) {
+        addContextFile({ path: taggedPath })
+      }
     }
 
     const imageAttachmentParts = images.map((attachment) => ({
@@ -1541,6 +1544,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             commentID: item.commentID,
             commentOrigin: item.commentOrigin,
             preview: item.preview,
+            taggedFiles: item.taggedFiles,
           })
         }
         restoreInput()
@@ -1612,6 +1616,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           commentID: item.commentID,
           commentOrigin: item.commentOrigin,
           preview: item.preview,
+          taggedFiles: item.taggedFiles,
         })
       }
       restoreInput()

@@ -85,7 +85,7 @@ interface SessionReviewTabProps {
   diffStyle: DiffStyle
   onDiffStyleChange?: (style: DiffStyle) => void
   onViewFile?: (file: string) => void
-  onLineComment?: (comment: { file: string; selection: SelectedLineRange; comment: string; preview?: string }) => void
+  onLineComment?: (comment: { file: string; selection: SelectedLineRange; comment: string; taggedFiles?: string[]; preview?: string }) => void
   comments?: LineComment[]
   focusedComment?: { file: string; id: string } | null
   onFocusedCommentChange?: (focus: { file: string; id: string } | null) => void
@@ -96,6 +96,8 @@ interface SessionReviewTabProps {
     header?: string
     container?: string
   }
+  onFileSearch?: (query: string) => Promise<string[]>
+  recentFiles?: string[]
 }
 
 function StickyAddButton(props: { children: JSX.Element }) {
@@ -220,6 +222,8 @@ function SessionReviewTab(props: SessionReviewTabProps) {
       comments={props.comments}
       focusedComment={props.focusedComment}
       onFocusedCommentChange={props.onFocusedCommentChange}
+      onFileSearch={props.onFileSearch}
+      recentFiles={props.recentFiles}
     />
   )
 }
@@ -282,6 +286,21 @@ export default function Page() {
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey))
   const view = createMemo(() => layout.view(sessionKey))
+  const recentFiles = createMemo(() => {
+    const all = tabs().all()
+    const active = tabs().active()
+    const order = active ? [active, ...all.filter((x) => x !== active)] : all
+    const seen = new Set<string>()
+    const paths: string[] = []
+    for (const tab of order) {
+      const path = file.pathFromTab(tab)
+      if (!path) continue
+      if (seen.has(path)) continue
+      seen.add(path)
+      paths.push(path)
+    }
+    return paths
+  })
 
   if (import.meta.env.DEV) {
     createEffect(
@@ -648,6 +667,7 @@ export default function Page() {
     file: string
     selection: SelectedLineRange
     comment: string
+    taggedFiles?: string[]
     preview?: string
     origin?: "review" | "file"
   }) => {
@@ -658,6 +678,7 @@ export default function Page() {
       selection: input.selection,
       comment: input.comment,
     })
+    const taggedFiles = input.taggedFiles?.filter((p, i, arr) => p !== input.file && arr.indexOf(p) === i)
     prompt.context.add({
       type: "file",
       path: input.file,
@@ -666,6 +687,7 @@ export default function Page() {
       commentID: saved.id,
       commentOrigin: input.origin,
       preview,
+      taggedFiles: taggedFiles?.length ? taggedFiles : undefined,
     })
   }
 
@@ -1163,6 +1185,8 @@ export default function Page() {
                   tabs().open(value)
                   file.load(path)
                 }}
+                onFileSearch={(query) => file.searchFilesAndDirectories(query)}
+                recentFiles={recentFiles()}
               />
             </Show>
           </Match>
@@ -1817,6 +1841,8 @@ export default function Page() {
                                   header: "px-4",
                                   container: "px-4",
                                 }}
+                                onFileSearch={(query) => file.searchFilesAndDirectories(query)}
+                                recentFiles={recentFiles()}
                               />
                             </Show>
                           </Match>
@@ -2616,17 +2642,20 @@ export default function Page() {
                                       selection={commentLabel(range())}
                                       onInput={(value) => setDraft(value)}
                                       onCancel={() => setCommenting(null)}
-                                      onSubmit={(value) => {
+                                      onSubmit={(value, taggedFiles) => {
                                         const p = path()
                                         if (!p) return
                                         addCommentToContext({
                                           file: p,
                                           selection: range(),
                                           comment: value,
+                                          taggedFiles,
                                           origin: "file",
                                         })
                                         setCommenting(null)
                                       }}
+                                      onFileSearch={(query) => file.searchFilesAndDirectories(query)}
+                                      recentFiles={recentFiles()}
                                       onPopoverFocusOut={(e: FocusEvent) => {
                                         const current = e.currentTarget as HTMLDivElement
                                         const target = e.relatedTarget

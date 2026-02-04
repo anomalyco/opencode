@@ -113,3 +113,77 @@
 [data-component="line-comment"] [data-slot="line-comment-editor-label"] {
   margin-right: auto;
 }
+
+[data-component="line-comment"] [data-slot="line-comment-editor-scroll"] {
+  position: relative;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+[data-component="line-comment"] [data-slot="line-comment-textarea"][contenteditable] {
+  width: 100%;
+  min-height: calc(var(--line-height-large) * 3);
+  padding: 8px;
+  border-radius: var(--radius-md);
+  background: var(--surface-base);
+  border: 1px solid var(--border-base);
+  color: var(--text-strong);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-large);
+  outline: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+[data-component="line-comment"] [data-slot="line-comment-textarea"][contenteditable]:focus {
+  box-shadow: var(--shadow-xs-border-select);
+}
+
+[data-component="line-comment"] [data-slot="line-comment-textarea"] [data-type="file"] {
+  color: var(--syntax-property);
+}
+
+[data-component="line-comment"] [data-slot="line-comment-placeholder"] {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  color: var(--text-weak);
+  pointer-events: none;
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-large);
+}
+
+[data-component="line-comment"] [data-slot="line-comment-file-picker"] {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  margin-bottom: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  background: var(--surface-raised-stronger-non-alpha);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  z-index: 50;
+}
+
+[data-component="line-comment"] [data-slot="line-comment-file-picker"] button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  text-align: left;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: var(--font-size-small);
+  color: var(--text-strong);
+}
+
+[data-component="line-comment"] [data-slot="line-comment-file-picker"] button:hover,
+[data-component="line-comment"] [data-slot="line-comment-file-picker"] button[data-active] {
+  background: var(--surface-base);
+}

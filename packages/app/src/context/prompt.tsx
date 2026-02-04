@@ -46,6 +46,7 @@ export type FileContextItem = {
   commentID?: string
   commentOrigin?: "review" | "file"
   preview?: string
+  taggedFiles?: string[]
 }
 
 export type ContextItem = FileContextItem
