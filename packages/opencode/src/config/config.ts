@@ -33,6 +33,8 @@ import { PackageRegistry } from "@/bun/registry"
 export namespace Config {
   const log = Log.create({ service: "config" })
 
+  const ModelRef = { $ref: "https://models.dev/model-schema.json#/$defs/Model" }
+
   // Managed settings directory for enterprise deployments (highest priority, admin-controlled)
   // These settings override all user and project settings
   function getManagedConfigDir(): string {
@@ -615,7 +617,7 @@ export namespace Config {
     template: z.string(),
     description: z.string().optional(),
     agent: z.string().optional(),
-    model: z.string().optional(),
+    model: z.string().optional().meta(ModelRef),
     subtask: z.boolean().optional(),
   })
   export type Command = z.infer<typeof Command>
@@ -627,7 +629,7 @@ export namespace Config {
 
   export const Agent = z
     .object({
-      model: z.string().optional(),
+      model: z.string().optional().meta(ModelRef),
       variant: z
         .string()
         .optional()
@@ -997,11 +999,16 @@ export namespace Config {
         .array(z.string())
         .optional()
         .describe("When set, ONLY these providers will be enabled. All other providers will be ignored"),
-      model: z.string().describe("Model to use in the format of provider/model, eg anthropic/claude-2").optional(),
+      model: z
+        .string()
+        .describe("Model to use in the format of provider/model, eg anthropic/claude-2")
+        .optional()
+        .meta(ModelRef),
       small_model: z
         .string()
         .describe("Small model to use for tasks like title generation in the format of provider/model")
-        .optional(),
+        .optional()
+        .meta(ModelRef),
       default_agent: z
         .string()
         .optional()
