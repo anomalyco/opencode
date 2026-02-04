@@ -1,7 +1,7 @@
 {
   "name": "OpenCode",
   "short_name": "OpenCode",
-  "description": "AI coding agent built for the terminal. Write, edit, and explore code with Claude.",
+  "description": "The open source AI coding agent",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
