@@ -47,7 +47,9 @@ export namespace ProviderTransform {
     options: Record<string, unknown>,
   ): ModelMessage[] {
     // Anthropic rejects messages with empty content - filter out empty string messages
-    // and remove empty text/reasoning parts from array content
+    // and remove empty text/reasoning parts from array content.
+    // NOTE: Redacted thinking blocks (with providerMetadata) must be PRESERVED even if empty -
+    // the Anthropic API requires all thinking blocks to be replayed exactly as received.
     if (model.api.npm === "@ai-sdk/anthropic") {
       msgs = msgs
         .map((msg) => {
@@ -57,7 +59,11 @@ export namespace ProviderTransform {
           }
           if (!Array.isArray(msg.content)) return msg
           const filtered = msg.content.filter((part) => {
-            if (part.type === "text" || part.type === "reasoning") {
+            if (part.type === "text") return part.text !== ""
+            if (part.type === "reasoning") {
+              // Preserve redacted_thinking blocks (they have providerMetadata but may have empty text)
+              if ((part as any).providerMetadata?.anthropic) return true
+              // Filter out regular empty reasoning blocks
               return part.text !== ""
             }
             return true
@@ -66,6 +72,16 @@ export namespace ProviderTransform {
           return { ...msg, content: filtered }
         })
         .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
+
+      // Reorder content blocks: reasoning blocks must come first for Anthropic
+      msgs = msgs.map((msg) => {
+        if (msg.role === "assistant" && Array.isArray(msg.content)) {
+          const reasoning = msg.content.filter((part) => part.type === "reasoning")
+          const other = msg.content.filter((part) => part.type !== "reasoning")
+          return { ...msg, content: [...reasoning, ...other] }
+        }
+        return msg
+      })
     }
 
     if (model.api.id.includes("claude")) {

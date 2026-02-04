@@ -617,6 +617,10 @@ export namespace MessageV2 {
               })
           }
           if (part.type === "reasoning") {
+            // Preserve ALL reasoning parts including redacted_thinking blocks.
+            // The Anthropic API requires previous assistant messages to be replayed
+            // exactly as received, including redacted_thinking blocks in their
+            // original positions. Filtering them causes signature validation errors.
             assistantMessage.parts.push({
               type: "reasoning",
               text: part.text,
