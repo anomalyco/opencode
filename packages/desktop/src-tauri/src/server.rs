@@ -4,11 +4,11 @@ use tauri::AppHandle;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
 use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_store::StoreExt;
+use tokio::task::JoinHandle;
 
 use crate::{
     cli,
     constants::{DEFAULT_SERVER_URL_KEY, SETTINGS_STORE},
-    get_logs,
 };
 
 #[tauri::command]
@@ -64,33 +64,32 @@ pub async fn get_saved_server_url(app: &tauri::AppHandle) -> Option<String> {
     None
 }
 
-pub async fn spawn_local_server(
+pub fn spawn_local_server(
     app: AppHandle,
     hostname: String,
     port: u32,
     password: String,
-) -> Result<CommandChild, String> {
+) -> (CommandChild, HealthCheck) {
     let child = cli::serve(&app, &hostname, port, &password);
-    let url = format!("http://{hostname}:{port}");
 
-    let timestamp = Instant::now();
-    loop {
-        if timestamp.elapsed() > Duration::from_secs(30) {
-            let _ = child.kill();
-            break Err(format!(
-                "Failed to spawn OpenCode Server. Logs:\n{}",
-                get_logs(app.clone()).await.unwrap()
-            ));
+    let health_check = HealthCheck(tokio::spawn(async move {
+        let url = format!("http://{hostname}:{port}");
+
+        let timestamp = Instant::now();
+        loop {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+
+            if check_health(&url, Some(&password)).await {
+                println!("Server ready after {:?}", timestamp.elapsed());
+                break;
+            }
         }
+    }));
 
-        tokio::time::sleep(Duration::from_millis(10)).await;
-
-        if check_health(&url, Some(&password)).await {
-            println!("Server ready after {:?}", timestamp.elapsed());
-            break Ok(child);
-        }
-    }
+    (child, health_check)
 }
+
+pub struct HealthCheck(pub JoinHandle<()>);
 
 pub async fn check_health(url: &str, password: Option<&str>) -> bool {
     let Ok(url) = reqwest::Url::parse(url) else {
@@ -176,10 +175,10 @@ pub async fn check_health_or_ask_retry(app: &AppHandle, url: &str) -> bool {
         const RETRY: &str = "Retry";
 
         let res = app.dialog()
-		  .message(format!("Could not connect to configured server:\n{}\n\nWould you like to retry or start a local server instead?", url))
-		  .title("Connection Failed")
-		  .buttons(MessageDialogButtons::OkCancelCustom(RETRY.to_string(), "Start Local".to_string()))
-		  .blocking_show_with_result();
+    		  .message(format!("Could not connect to configured server:\n{}\n\nWould you like to retry or start a local server instead?", url))
+    		  .title("Connection Failed")
+    		  .buttons(MessageDialogButtons::OkCancelCustom(RETRY.to_string(), "Start Local".to_string()))
+    		  .blocking_show_with_result();
 
         match res {
             MessageDialogResult::Custom(name) if name == RETRY => {

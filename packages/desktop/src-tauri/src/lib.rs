@@ -9,8 +9,7 @@ mod windows;
 
 use futures::{
     FutureExt, TryFutureExt,
-    future::{self, Either, Shared},
-    pin_mut,
+    future::{self, Shared},
 };
 #[cfg(windows)]
 use job_object::*;
@@ -19,7 +18,6 @@ use std::{
     env,
     net::TcpListener,
     path::PathBuf,
-    pin::pin,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -234,16 +232,31 @@ async fn initialize(app: AppHandle) {
     let server_ready_rx = server_ready_rx.shared();
     app.manage(ServerState::new(None, server_ready_rx.clone()));
 
-    let has_spawned_cli = match setup_server_connection(app.clone()).await {
+    let server_connection = setup_server_connection(app.clone()).await;
+    let cli_health_check = match server_connection {
         ServerConnection::CLI {
-            spawn_task,
+            child,
+            health_check,
             url,
             password,
         } => {
             let app = app.clone();
-            tokio::spawn(
-                spawn_task
-                    .map(|v| v.expect("server spawn task panicked"))
+            Some(|| {
+                tokio::time::timeout(Duration::from_secs(0), health_check.0)
+                    .then({
+                        let app = app.clone();
+                        async move |v| {
+                            let Ok(Ok(_)) = v else {
+                                let _ = child.kill();
+                                return Err(format!(
+                                    "Failed to spawn OpenCode Server. Logs:\n{}",
+                                    get_logs(app.clone()).await.unwrap()
+                                ));
+                            };
+
+                            Ok(child)
+                        }
+                    })
                     .map_ok(move |child| {
                         #[cfg(windows)]
                         {
@@ -255,16 +268,17 @@ async fn initialize(app: AppHandle) {
 
                         ServerReadyData { url, password }
                     })
-                    .map(|res| server_ready_tx.send(res)),
-            );
-            true
+                    .map(move |res| {
+                        let _ = server_ready_tx.send(res);
+                    })
+            })
         }
         ServerConnection::Existing { url } => {
             let _ = server_ready_tx.send(Ok(ServerReadyData {
-                url,
+                url: url.to_string(),
                 password: None,
             }));
-            false
+            None
         }
     };
 
@@ -275,21 +289,26 @@ async fn initialize(app: AppHandle) {
 
     let loading_task = tokio::spawn({
         let init_tx = init_tx.clone();
-        async move {
-            if has_spawned_cli && option_env!("OPENCODE_SQLITE").is_some() {
-                let mut exists = sqlite_file_exists();
-                if !exists {
-                    println!(
-                        "sqlite file not found at {}, waiting for it to be generated",
-                        opencode_db_path().expect("failed to get db path").display()
-                    );
-                    let _ = init_tx.send(InitStep::SqliteWaiting);
 
-                    while !exists {
-                        sleep(Duration::from_secs(1)).await;
-                        exists = sqlite_file_exists();
+        async move {
+            if let Some(cli_health_check) = cli_health_check {
+                if option_env!("OPENCODE_SQLITE").is_some() {
+                    let mut exists = sqlite_file_exists();
+                    if !exists {
+                        println!(
+                            "sqlite file not found at {}, waiting for it to be generated",
+                            opencode_db_path().expect("failed to get db path").display()
+                        );
+                        let _ = init_tx.send(InitStep::SqliteWaiting);
+
+                        while !exists {
+                            sleep(Duration::from_secs(1)).await;
+                            exists = sqlite_file_exists();
+                        }
                     }
                 }
+
+                tokio::spawn(cli_health_check());
             }
 
             let _ = server_ready_rx.await;
@@ -343,7 +362,8 @@ enum ServerConnection {
     CLI {
         url: String,
         password: Option<String>,
-        spawn_task: tokio::task::JoinHandle<Result<CommandChild, String>>,
+        child: CommandChild,
+        health_check: server::HealthCheck,
     },
 }
 
@@ -367,15 +387,14 @@ async fn setup_server_connection(app: AppHandle) -> ServerConnection {
 
     let password = uuid::Uuid::new_v4().to_string();
 
+    let (child, health_check) =
+        server::spawn_local_server(app, hostname.to_string(), local_port, password.clone());
+
     ServerConnection::CLI {
         url: local_url,
-        password: Some(password.clone()),
-        spawn_task: tokio::spawn(server::spawn_local_server(
-            app,
-            hostname.to_string(),
-            local_port,
-            password,
-        )),
+        password: Some(password),
+        child,
+        health_check,
     }
 }
 
