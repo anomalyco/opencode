@@ -27,7 +27,6 @@ import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { InlineInput } from "@opencode-ai/ui/inline-input"
-import { List, type ListRef } from "@opencode-ai/ui/list"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { HoverCard } from "@opencode-ai/ui/hover-card"
 import { MessageNav } from "@opencode-ai/ui/message-nav"
@@ -2706,14 +2705,6 @@ export default function Layout(props: ParentProps) {
   }
 
   const SidebarPanel = (panelProps: { project: LocalProject | undefined; mobile?: boolean }) => {
-    type SearchItem = {
-      id: string
-      title: string
-      directory: string
-      label: string
-      archived?: number
-    }
-
     const projectName = createMemo(() => {
       const project = panelProps.project
       if (!project) return ""
@@ -2728,107 +2719,6 @@ export default function Layout(props: ParentProps) {
       return layout.sidebar.workspaces(project.worktree)()
     })
     const homedir = createMemo(() => globalSync.data.path.home)
-
-    const [search, setSearch] = createStore({
-      value: "",
-    })
-    const searching = createMemo(() => search.value.trim().length > 0)
-    let searchRef: HTMLInputElement | undefined
-    let listRef: ListRef | undefined
-
-    const token = { value: 0 }
-    let inflight: Promise<SearchItem[]> | undefined
-    let all: SearchItem[] | undefined
-
-    const reset = () => {
-      token.value += 1
-      inflight = undefined
-      all = undefined
-      setSearch({ value: "" })
-      listRef = undefined
-    }
-
-    const open = (item: SearchItem | undefined) => {
-      if (!item) return
-
-      const href = `/${base64Encode(item.directory)}/session/${item.id}`
-      if (!layout.sidebar.opened()) {
-        setState("hoverSession", undefined)
-        setState("hoverProject", undefined)
-      }
-      reset()
-      navigate(href)
-      layout.mobileSidebar.hide()
-    }
-
-    const items = (filter: string) => {
-      const query = filter.trim()
-      if (!query) {
-        token.value += 1
-        inflight = undefined
-        all = undefined
-        return [] as SearchItem[]
-      }
-
-      const project = panelProps.project
-      if (!project) return [] as SearchItem[]
-      if (all) return all
-      if (inflight) return inflight
-
-      const current = token.value
-      const dirs = workspaceIds(project)
-      inflight = Promise.all(
-        dirs.map((input) => {
-          const directory = workspaceKey(input)
-          const [workspaceStore] = globalSync.child(directory, { bootstrap: false })
-          const kind =
-            directory === project.worktree ? language.t("workspace.type.local") : language.t("workspace.type.sandbox")
-          const name = workspaceLabel(directory, workspaceStore.vcs?.branch, project.id)
-          const label = `${kind} : ${name}`
-          return globalSDK.client.session
-            .list({ directory, roots: true })
-            .then((x) =>
-              (x.data ?? [])
-                .filter((s) => !!s?.id)
-                .map((s) => ({
-                  id: s.id,
-                  title: s.title ?? language.t("command.session.new"),
-                  directory,
-                  label,
-                  archived: s.time?.archived,
-                })),
-            )
-            .catch(() => [] as SearchItem[])
-        }),
-      )
-        .then((results) => {
-          if (token.value !== current) return [] as SearchItem[]
-
-          const seen = new Set<string>()
-          const next = results.flat().filter((item) => {
-            const key = `${item.directory}:${item.id}`
-            if (seen.has(key)) return false
-            seen.add(key)
-            return true
-          })
-          all = next
-          return next
-        })
-        .catch(() => [] as SearchItem[])
-        .finally(() => {
-          inflight = undefined
-        })
-
-      return inflight
-    }
-
-    createEffect(
-      on(
-        () => panelProps.project?.worktree,
-        () => reset(),
-        { defer: true },
-      ),
-    )
 
     return (
       <div
@@ -2918,105 +2808,7 @@ export default function Layout(props: ParentProps) {
                 </div>
               </div>
 
-              <div class="shrink-0 px-2 pt-2">
-                <div
-                  class="flex items-center gap-2 p-2 rounded-md bg-surface-base shadow-xs-border-base focus-within:shadow-xs-border-select"
-                  onPointerDown={(event) => {
-                    const target = event.target
-                    if (!(target instanceof Element)) return
-                    if (target.closest("input, textarea, [contenteditable='true']")) return
-                    searchRef?.focus()
-                  }}
-                >
-                  <Icon name="magnifying-glass" />
-                  <InlineInput
-                    ref={(el) => {
-                      searchRef = el
-                    }}
-                    class="flex-1 min-w-0 text-14-regular text-text-strong placeholder:text-text-weak"
-                    style={{ "box-shadow": "none" }}
-                    value={search.value}
-                    onInput={(event) => setSearch("value", event.currentTarget.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Escape") {
-                        event.preventDefault()
-                        setSearch("value", "")
-                        queueMicrotask(() => searchRef?.focus())
-                        return
-                      }
-
-                      if (!searching()) return
-
-                      if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Enter") {
-                        const ref = listRef
-                        if (!ref) return
-                        event.stopPropagation()
-                        ref.onKeyDown(event)
-                        return
-                      }
-
-                      if (event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
-                        if (event.key === "n" || event.key === "p") {
-                          const ref = listRef
-                          if (!ref) return
-                          event.stopPropagation()
-                          ref.onKeyDown(event)
-                        }
-                      }
-                    }}
-                    placeholder={language.t("session.header.search.placeholder", { project: projectName() })}
-                    spellcheck={false}
-                    autocorrect="off"
-                    autocomplete="off"
-                    autocapitalize="off"
-                  />
-                  <Show when={search.value}>
-                    <IconButton
-                      icon="circle-x"
-                      variant="ghost"
-                      class="size-5"
-                      aria-label={language.t("common.close")}
-                      onClick={() => {
-                        setSearch("value", "")
-                        queueMicrotask(() => searchRef?.focus())
-                      }}
-                    />
-                  </Show>
-                </div>
-              </div>
-
-              <Show when={searching()}>
-                <List
-                  class="flex-1 min-h-0 pb-2 pt-2 !px-2 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0"
-                  items={items}
-                  filter={search.value}
-                  filterKeys={["title", "label", "id"]}
-                  key={(item) => `${item.directory}:${item.id}`}
-                  onSelect={open}
-                  ref={(ref) => {
-                    listRef = ref
-                  }}
-                >
-                  {(item) => (
-                    <div class="flex flex-col gap-0.5 min-w-0 pr-2 text-left">
-                      <span
-                        class="text-14-medium text-text-strong truncate"
-                        classList={{ "opacity-70": !!item.archived }}
-                      >
-                        {item.title}
-                      </span>
-                      <span
-                        class="text-12-regular text-text-weak truncate"
-                        classList={{ "opacity-70": !!item.archived }}
-                      >
-                        {item.label}
-                      </span>
-                    </div>
-                  )}
-                </List>
-              </Show>
-
-              <div class="flex-1 min-h-0 flex flex-col" classList={{ hidden: searching() }}>
+              <div class="flex-1 min-h-0 flex flex-col">
                 <Show
                   when={workspacesEnabled()}
                   fallback={
@@ -3100,7 +2892,7 @@ export default function Layout(props: ParentProps) {
         <div
           class="shrink-0 px-2 py-3 border-t border-border-weak-base"
           classList={{
-            hidden: searching() || !(providers.all().length > 0 && providers.paid().length === 0),
+            hidden: !(providers.all().length > 0 && providers.paid().length === 0),
           }}
         >
           <div class="rounded-md bg-background-base shadow-xs-border-base">
