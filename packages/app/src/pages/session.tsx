@@ -25,7 +25,7 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { Dialog } from "@opencode-ai/ui/dialog"
-import { TextField } from "@opencode-ai/ui/text-field"
+import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { useCodeComponent } from "@opencode-ai/ui/context/code"
@@ -440,6 +440,15 @@ export default function Page() {
     return sync.session.history.loading(id)
   })
 
+  const [title, setTitle] = createStore({
+    draft: "",
+    editing: false,
+    saving: false,
+    menuOpen: false,
+    pendingRename: false,
+  })
+  let titleRef: HTMLInputElement | undefined
+
   const errorMessage = (err: unknown) => {
     if (err && typeof err === "object" && "data" in err) {
       const data = (err as { data?: { message?: string } }).data
@@ -447,6 +456,60 @@ export default function Page() {
     }
     if (err instanceof Error) return err.message
     return language.t("common.requestFailed")
+  }
+
+  createEffect(
+    on(
+      () => params.id,
+      () => setTitle({ draft: "", editing: false, saving: false, menuOpen: false, pendingRename: false }),
+      { defer: true },
+    ),
+  )
+
+  const openTitleEditor = () => {
+    if (!params.id) return
+    setTitle({ editing: true, draft: info()?.title ?? "" })
+    requestAnimationFrame(() => {
+      titleRef?.focus()
+      titleRef?.select()
+    })
+  }
+
+  const closeTitleEditor = () => {
+    if (title.saving) return
+    setTitle({ editing: false, saving: false })
+  }
+
+  const saveTitleEditor = async () => {
+    const sessionID = params.id
+    if (!sessionID) return
+    if (title.saving) return
+
+    const next = title.draft.trim()
+    if (!next || next === (info()?.title ?? "")) {
+      setTitle({ editing: false, saving: false })
+      return
+    }
+
+    setTitle("saving", true)
+    await sdk.client.session
+      .update({ sessionID, title: next })
+      .then(() => {
+        sync.set(
+          produce((draft) => {
+            const index = draft.session.findIndex((s) => s.id === sessionID)
+            if (index !== -1) draft.session[index].title = next
+          }),
+        )
+        setTitle({ editing: false, saving: false })
+      })
+      .catch((err) => {
+        setTitle("saving", false)
+        showToast({
+          title: language.t("common.requestFailed"),
+          description: errorMessage(err),
+        })
+      })
   }
 
   async function archiveSession(sessionID: string) {
@@ -553,74 +616,6 @@ export default function Page() {
     }
     navigate(`/${params.dir}/session`)
     return true
-  }
-
-  function DialogRenameSession(props: { sessionID: string }) {
-    const [data, setData] = createStore({
-      title: sync.session.get(props.sessionID)?.title ?? "",
-      saving: false,
-    })
-
-    const submit = (event: Event) => {
-      event.preventDefault()
-      if (data.saving) return
-
-      const title = data.title.trim()
-      if (!title) {
-        dialog.close()
-        return
-      }
-
-      const current = sync.session.get(props.sessionID)?.title ?? ""
-      if (title === current) {
-        dialog.close()
-        return
-      }
-
-      setData("saving", true)
-      void sdk.client.session
-        .update({ sessionID: props.sessionID, title })
-        .then(() => {
-          sync.set(
-            produce((draft) => {
-              const index = draft.session.findIndex((s) => s.id === props.sessionID)
-              if (index !== -1) draft.session[index].title = title
-            }),
-          )
-          dialog.close()
-        })
-        .catch((err) => {
-          showToast({
-            title: language.t("common.requestFailed"),
-            description: errorMessage(err),
-          })
-        })
-        .finally(() => {
-          setData("saving", false)
-        })
-    }
-
-    return (
-      <Dialog title={language.t("common.rename")} fit>
-        <form onSubmit={submit} class="flex flex-col gap-4 pl-6 pr-2.5 pb-3">
-          <TextField
-            autofocus
-            type="text"
-            label={language.t("common.rename")}
-            value={data.title}
-            onChange={(value) => setData("title", value)}
-          />
-          <div class="flex justify-end gap-2">
-            <Button type="button" variant="ghost" size="large" disabled={data.saving} onClick={() => dialog.close()}>
-              {language.t("common.cancel")}
-            </Button>
-            <Button type="submit" variant="primary" size="large" disabled={data.saving || !data.title.trim()}>
-              {language.t("common.save")}
-            </Button>
-          </div>
-        </form>
-      </Dialog>
-    )
   }
 
   function DialogDeleteSession(props: { sessionID: string }) {
@@ -2208,7 +2203,7 @@ export default function Page() {
                             }}
                           >
                             <div class="h-10 w-full flex items-center justify-between gap-2">
-                              <div class="flex items-center gap-1 min-w-0">
+                              <div class="flex items-center gap-1 min-w-0 flex-1">
                                 <Show when={info()?.parentID}>
                                   <IconButton
                                     tabIndex={-1}
@@ -2220,14 +2215,50 @@ export default function Page() {
                                     aria-label={language.t("common.goBack")}
                                   />
                                 </Show>
-                                <Show when={info()?.title}>
-                                  <h1 class="text-16-medium text-text-strong truncate min-w-0">{info()?.title}</h1>
+                                <Show when={info()?.title || title.editing}>
+                                  <Show
+                                    when={title.editing}
+                                    fallback={
+                                      <h1
+                                        class="text-16-medium text-text-strong truncate min-w-0"
+                                        onDblClick={openTitleEditor}
+                                      >
+                                        {info()?.title}
+                                      </h1>
+                                    }
+                                  >
+                                    <InlineInput
+                                      ref={(el) => {
+                                        titleRef = el
+                                      }}
+                                      value={title.draft}
+                                      disabled={title.saving}
+                                      class="text-16-medium text-text-strong grow-1 min-w-0"
+                                      onInput={(event) => setTitle("draft", event.currentTarget.value)}
+                                      onKeyDown={(event) => {
+                                        event.stopPropagation()
+                                        if (event.key === "Enter") {
+                                          event.preventDefault()
+                                          void saveTitleEditor()
+                                          return
+                                        }
+                                        if (event.key === "Escape") {
+                                          event.preventDefault()
+                                          closeTitleEditor()
+                                        }
+                                      }}
+                                      onBlur={() => closeTitleEditor()}
+                                    />
+                                  </Show>
                                 </Show>
                               </div>
                               <Show when={params.id}>
                                 {(id) => (
                                   <div class="shrink-0 flex items-center">
-                                    <DropdownMenu>
+                                    <DropdownMenu
+                                      open={title.menuOpen}
+                                      onOpenChange={(open) => setTitle("menuOpen", open)}
+                                    >
                                       <Tooltip value={language.t("common.moreOptions")} placement="top">
                                         <DropdownMenu.Trigger
                                           as={IconButton}
@@ -2238,9 +2269,18 @@ export default function Page() {
                                         />
                                       </Tooltip>
                                       <DropdownMenu.Portal>
-                                        <DropdownMenu.Content>
+                                        <DropdownMenu.Content
+                                          onCloseAutoFocus={(event) => {
+                                            if (!title.pendingRename) return
+                                            event.preventDefault()
+                                            setTitle("pendingRename", false)
+                                            openTitleEditor()
+                                          }}
+                                        >
                                           <DropdownMenu.Item
-                                            onSelect={() => dialog.show(() => <DialogRenameSession sessionID={id()} />)}
+                                            onSelect={() => {
+                                              setTitle({ pendingRename: true, menuOpen: false })
+                                            }}
                                           >
                                             <DropdownMenu.ItemLabel>
                                               {language.t("common.rename")}
