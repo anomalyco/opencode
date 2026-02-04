@@ -21,6 +21,7 @@ runs:
 
     - name: Cache Bun (Windows)
       if: runner.os == 'Windows'
+      id: cache
       uses: actions/cache@v4
       with:
         path: |
@@ -34,9 +35,22 @@ runs:
           bun-${{ runner.os }}-${{ runner.arch }}-
 
     - name: Setup Bun
+      id: setup
       uses: oven-sh/setup-bun@v2
       with:
         bun-version-file: package.json
+
+    - name: Bun cache status (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        echo "actions/cache cache-hit: ${{ steps.cache.outputs.cache-hit }}"
+        echo "setup-bun cache-hit: ${{ steps.setup.outputs.cache-hit }}"
+        echo "setup-bun bun-version: ${{ steps.setup.outputs.bun-version }}"
+        echo "setup-bun bun-path: ${{ steps.setup.outputs.bun-path }}"
+        du -sh ~/.bun 2>/dev/null || true
+        du -sh ~/.bun/install/cache 2>/dev/null || true
+        ls -la ~/.bun/install 2>/dev/null || true
+      shell: bash
 
     - name: Install dependencies
       run: bun install
