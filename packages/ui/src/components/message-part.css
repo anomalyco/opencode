@@ -627,6 +627,31 @@
       font-size: 16px;
       color: var(--text-base);
       line-height: 1.5;
+
+      &[data-collapsible] {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+        padding: 8px 12px;
+        margin: -8px -12px 0 -12px;
+        border-radius: 4px;
+        transition: background-color 0.15s;
+
+        &:hover {
+          background-color: var(--surface-inset-strong);
+        }
+
+        [data-slot="question-text-content"] {
+          flex: 1;
+        }
+
+        [data-slot="collapsible-arrow"] {
+          flex-shrink: 0;
+          margin-left: 8px;
+          transition: transform 0.2s ease;
+        }
+      }
     }
   }
 

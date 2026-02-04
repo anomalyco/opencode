@@ -39,6 +39,7 @@ import { Button } from "./button"
 import { Card } from "./card"
 import { Icon } from "./icon"
 import { Checkbox } from "./checkbox"
+import { Collapsible } from "./collapsible"
 import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
 import { ImagePreview } from "./image-preview"
@@ -404,7 +405,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
         </div>
       </Show>
       <Show when={text()}>
-        <div data-slot="user-message-text" ref={(el) => (textRef = el)} onClick={toggleExpanded}>
+        <div data-slot="user-message-text" ref={(el) => (textRef = el)}>
           <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
           <button
             data-slot="user-message-expand"
@@ -1339,6 +1340,8 @@ function QuestionPrompt(props: { request: QuestionRequest }) {
   const questions = createMemo(() => props.request.questions)
   const single = createMemo(() => questions().length === 1 && questions()[0]?.multiple !== true)
 
+  const [collapsed, setCollapsed] = createSignal(false)
+
   const [store, setStore] = createStore({
     tab: 0,
     answers: [] as QuestionAnswer[],
@@ -1442,143 +1445,152 @@ function QuestionPrompt(props: { request: QuestionRequest }) {
   }
 
   return (
-    <div data-component="question-prompt">
-      <Show when={!single()}>
-        <div data-slot="question-tabs">
-          <For each={questions()}>
-            {(q, index) => {
-              const active = () => index() === store.tab
-              const answered = () => (store.answers[index()]?.length ?? 0) > 0
-              return (
-                <button
-                  data-slot="question-tab"
-                  data-active={active()}
-                  data-answered={answered()}
-                  onClick={() => selectTab(index())}
-                >
-                  {q.header}
-                </button>
-              )
-            }}
-          </For>
-          <button data-slot="question-tab" data-active={confirm()} onClick={() => selectTab(questions().length)}>
-            {i18n.t("ui.common.confirm")}
-          </button>
-        </div>
-      </Show>
-
-      <Show when={!confirm()}>
-        <div data-slot="question-content">
-          <div data-slot="question-text">
-            {question()?.question}
-            {multi() ? " " + i18n.t("ui.question.multiHint") : ""}
-          </div>
-          <div data-slot="question-options">
-            <For each={options()}>
-              {(opt, i) => {
-                const picked = () => store.answers[store.tab]?.includes(opt.label) ?? false
+    <Collapsible open={!collapsed()} onOpenChange={(open) => setCollapsed(!open)}>
+      <div data-component="question-prompt">
+        <Show when={!single()}>
+          <div data-slot="question-tabs">
+            <For each={questions()}>
+              {(q, index) => {
+                const active = () => index() === store.tab
+                const answered = () => (store.answers[index()]?.length ?? 0) > 0
                 return (
-                  <button data-slot="question-option" data-picked={picked()} onClick={() => selectOption(i())}>
-                    <span data-slot="option-label">{opt.label}</span>
-                    <Show when={opt.description}>
-                      <span data-slot="option-description">{opt.description}</span>
-                    </Show>
-                    <Show when={picked()}>
-                      <Icon name="check-small" size="normal" />
-                    </Show>
+                  <button
+                    data-slot="question-tab"
+                    data-active={active()}
+                    data-answered={answered()}
+                    onClick={() => selectTab(index())}
+                  >
+                    {q.header}
                   </button>
                 )
               }}
             </For>
-            <button
-              data-slot="question-option"
-              data-picked={customPicked()}
-              onClick={() => selectOption(options().length)}
-            >
-              <span data-slot="option-label">{i18n.t("ui.messagePart.option.typeOwnAnswer")}</span>
-              <Show when={!store.editing && input()}>
-                <span data-slot="option-description">{input()}</span>
-              </Show>
-              <Show when={customPicked()}>
-                <Icon name="check-small" size="normal" />
-              </Show>
+            <button data-slot="question-tab" data-active={confirm()} onClick={() => selectTab(questions().length)}>
+              {i18n.t("ui.common.confirm")}
             </button>
-            <Show when={store.editing}>
-              <form data-slot="custom-input-form" onSubmit={handleCustomSubmit}>
-                <textarea
-                  ref={(el) => setTimeout(() => el.focus(), 0)}
-                  data-slot="custom-input"
-                  placeholder={i18n.t("ui.question.custom.placeholder")}
-                  value={input()}
-                  rows={3}
-                  onInput={(e) => {
-                    const inputs = [...store.custom]
-                    inputs[store.tab] = e.currentTarget.value
-                    setStore("custom", inputs)
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault()
-                      handleCustomSubmit(e)
-                    }
-                  }}
-                />
-                <div data-slot="button-group">
-                  <Button type="button" variant="ghost" size="normal" onClick={() => setStore("editing", false)}>
-                    {i18n.t("ui.common.cancel")}
-                  </Button>
-                  <Button type="submit" variant="primary" size="normal">
-                    {multi() ? i18n.t("ui.common.add") : i18n.t("ui.common.submit")}
-                  </Button>
-                </div>
-              </form>
-            </Show>
           </div>
-        </div>
-      </Show>
-
-      <Show when={confirm()}>
-        <div data-slot="question-review">
-          <div data-slot="review-title">{i18n.t("ui.messagePart.review.title")}</div>
-          <For each={questions()}>
-            {(q, index) => {
-              const value = () => store.answers[index()]?.join(", ") ?? ""
-              const answered = () => Boolean(value())
-              return (
-                <div data-slot="review-item">
-                  <span data-slot="review-label">{q.question}</span>
-                  <span data-slot="review-value" data-answered={answered()}>
-                    {answered() ? value() : i18n.t("ui.question.review.notAnswered")}
-                  </span>
-                </div>
-              )
-            }}
-          </For>
-        </div>
-      </Show>
-
-      <div data-slot="question-actions">
-        <Button variant="ghost" size="small" onClick={reject}>
-          {i18n.t("ui.common.dismiss")}
-        </Button>
-        <Show when={!single()}>
-          <Show when={confirm()}>
-            <Button variant="primary" size="small" onClick={submit}>
-              {i18n.t("ui.common.submit")}
-            </Button>
-          </Show>
-          <Show when={!confirm() && multi()}>
-            <Button
-              variant="secondary"
-              size="small"
-              onClick={() => selectTab(store.tab + 1)}
-              disabled={(store.answers[store.tab]?.length ?? 0) === 0}
-            >
-              {i18n.t("ui.common.next")}
-            </Button>
-          </Show>
         </Show>
+
+        <Show when={!confirm()}>
+          <div data-slot="question-content">
+            <Collapsible.Trigger>
+              <div data-slot="question-text" data-collapsible>
+                <span data-slot="question-text-content">
+                  {question()?.question}
+                  {multi() ? " " + i18n.t("ui.question.multiHint") : ""}
+                </span>
+                <Collapsible.Arrow />
+              </div>
+            </Collapsible.Trigger>
+            <Collapsible.Content>
+                <div data-slot="question-options">
+                  <For each={options()}>
+                    {(opt, i) => {
+                      const picked = () => store.answers[store.tab]?.includes(opt.label) ?? false
+                      return (
+                        <button data-slot="question-option" data-picked={picked()} onClick={() => selectOption(i())}>
+                          <span data-slot="option-label">{opt.label}</span>
+                          <Show when={opt.description}>
+                            <span data-slot="option-description">{opt.description}</span>
+                          </Show>
+                          <Show when={picked()}>
+                            <Icon name="check-small" size="normal" />
+                          </Show>
+                        </button>
+                      )
+                    }}
+                  </For>
+                  <button
+                    data-slot="question-option"
+                    data-picked={customPicked()}
+                    onClick={() => selectOption(options().length)}
+                  >
+                    <span data-slot="option-label">{i18n.t("ui.messagePart.option.typeOwnAnswer")}</span>
+                    <Show when={!store.editing && input()}>
+                      <span data-slot="option-description">{input()}</span>
+                    </Show>
+                    <Show when={customPicked()}>
+                      <Icon name="check-small" size="normal" />
+                    </Show>
+                  </button>
+                  <Show when={store.editing}>
+                    <form data-slot="custom-input-form" onSubmit={handleCustomSubmit}>
+                      <textarea
+                        ref={(el) => setTimeout(() => el.focus(), 0)}
+                        data-slot="custom-input"
+                        placeholder={i18n.t("ui.question.custom.placeholder")}
+                        value={input()}
+                        rows={3}
+                        onInput={(e) => {
+                          const inputs = [...store.custom]
+                          inputs[store.tab] = e.currentTarget.value
+                          setStore("custom", inputs)
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault()
+                            handleCustomSubmit(e)
+                          }
+                        }}
+                      />
+                      <div data-slot="button-group">
+                        <Button type="button" variant="ghost" size="normal" onClick={() => setStore("editing", false)}>
+                          {i18n.t("ui.common.cancel")}
+                        </Button>
+                        <Button type="submit" variant="primary" size="normal">
+                          {multi() ? i18n.t("ui.common.add") : i18n.t("ui.common.submit")}
+                        </Button>
+                      </div>
+                    </form>
+                  </Show>
+                </div>
+            </Collapsible.Content>
+          </div>
+        </Show>
+
+        <Show when={confirm()}>
+          <div data-slot="question-review">
+            <div data-slot="review-title">{i18n.t("ui.messagePart.review.title")}</div>
+            <For each={questions()}>
+              {(q, index) => {
+                const value = () => store.answers[index()]?.join(", ") ?? ""
+                const answered = () => Boolean(value())
+                return (
+                  <div data-slot="review-item">
+                    <span data-slot="review-label">{q.question}</span>
+                    <span data-slot="review-value" data-answered={answered()}>
+                      {answered() ? value() : i18n.t("ui.question.review.notAnswered")}
+                    </span>
+                  </div>
+                )
+              }}
+            </For>
+          </div>
+        </Show>
+
+        <div data-slot="question-actions">
+          <Button variant="ghost" size="small" onClick={reject}>
+            {i18n.t("ui.common.dismiss")}
+          </Button>
+          <Show when={!single()}>
+            <Show when={confirm()}>
+              <Button variant="primary" size="small" onClick={submit}>
+                {i18n.t("ui.common.submit")}
+              </Button>
+            </Show>
+            <Show when={!confirm() && multi()}>
+              <Button
+                variant="secondary"
+                size="small"
+                onClick={() => selectTab(store.tab + 1)}
+                disabled={(store.answers[store.tab]?.length ?? 0) === 0}
+              >
+                {i18n.t("ui.common.next")}
+              </Button>
+            </Show>
+          </Show>
+        </div>
       </div>
-    </div>
+    </Collapsible>
   )
 }
