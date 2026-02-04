@@ -1,0 +1,213 @@
+name: Build macOS Desktop
+run-name: "Build macOS Desktop App"
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-tags: true
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build CLI for macOS x64
+        run: |
+          cd packages/opencode
+          bun run build
+        env:
+          OPENCODE_VERSION: "1.1.51"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opencode-cli-x64
+          path: packages/opencode/dist
+
+      - name: Build CLI for macOS arm64
+        run: |
+          cd packages/opencode
+          bun run build
+        env:
+          OPENCODE_VERSION: "1.1.51"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opencode-cli-arm64
+          path: packages/opencode/dist
+
+  build-macos-x64:
+    needs: build-cli
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-tags: true
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/desktop/src-tauri
+          shared-key: x86_64-apple-darwin
+
+      - name: Download CLI artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: opencode-cli-x64
+          path: packages/desktop/src-tauri/target/opencode-binaries
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Prepare Desktop
+        run: |
+          cd packages/desktop
+          # Update version
+          jq '.version = "1.1.51"' package.json > package.json.tmp
+          mv package.json.tmp package.json
+
+          # List downloaded files for debugging
+          echo "Downloaded files:"
+          ls -R src-tauri/target/opencode-binaries
+
+          # Copy CLI binary to sidecar folder
+          mkdir -p src-tauri/sidecars
+          cp src-tauri/target/opencode-binaries/opencode-macos-x64/bin/opencode src-tauri/sidecars/opencode-cli-x86_64-apple-darwin
+
+      - name: Build Desktop App
+        run: |
+          cd packages/desktop
+
+          # Build frontend
+          export NODE_ENV=production
+          bun vite build
+
+          # Create a temporary tauri config that skips beforeBuildCommand
+          jq '.build.beforeBuildCommand = ""' src-tauri/tauri.conf.json > src-tauri/tauri.build.conf.json
+
+          # Merge prod config (without updater for fork builds)
+          jq -s '.[0] * (.[1] | del(.plugins.updater) | del(.bundle.createUpdaterArtifacts))' \
+            src-tauri/tauri.build.conf.json \
+            src-tauri/tauri.prod.conf.json > src-tauri/tauri.final.conf.json
+
+          # Build with Tauri
+          bun tauri build --target x86_64-apple-darwin --config ./src-tauri/tauri.final.conf.json --bundles dmg
+
+      - name: Upload macOS x64 DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-desktop-macos-x64
+          path: packages/desktop/src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
+
+      - name: Create Release (if tag exists)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: packages/desktop/src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
+          draft: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-macos-arm64:
+    needs: build-cli
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-tags: true
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/desktop/src-tauri
+          shared-key: aarch64-apple-darwin
+
+      - name: Download CLI artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: opencode-cli-arm64
+          path: packages/desktop/src-tauri/target/opencode-binaries
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Prepare Desktop
+        run: |
+          cd packages/desktop
+          # Update version
+          jq '.version = "1.1.51"' package.json > package.json.tmp
+          mv package.json.tmp package.json
+
+          # List downloaded files for debugging
+          echo "Downloaded files:"
+          ls -R src-tauri/target/opencode-binaries
+
+          # Copy CLI binary to sidecar folder
+          mkdir -p src-tauri/sidecars
+          cp src-tauri/target/opencode-binaries/opencode-macos-arm64/bin/opencode src-tauri/sidecars/opencode-cli-aarch64-apple-darwin
+
+      - name: Build Desktop App
+        run: |
+          cd packages/desktop
+
+          # Build frontend
+          export NODE_ENV=production
+          bun vite build
+
+          # Create a temporary tauri config that skips beforeBuildCommand
+          jq '.build.beforeBuildCommand = ""' src-tauri/tauri.conf.json > src-tauri/tauri.build.conf.json
+
+          # Merge prod config (without updater for fork builds)
+          jq -s '.[0] * (.[1] | del(.plugins.updater) | del(.bundle.createUpdaterArtifacts))' \
+            src-tauri/tauri.build.conf.json \
+            src-tauri/tauri.prod.conf.json > src-tauri/tauri.final.conf.json
+
+          # Build with Tauri
+          bun tauri build --target aarch64-apple-darwin --config ./src-tauri/tauri.final.conf.json --bundles dmg
+
+      - name: Upload macOS arm64 DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-desktop-macos-arm64
+          path: packages/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+
+      - name: Create Release (if tag exists)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: packages/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+          draft: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
