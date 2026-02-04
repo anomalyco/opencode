@@ -93,7 +93,7 @@ jobs:
 
           # Build frontend without typecheck
           $env:NODE_ENV = "production"
-          vite build
+          bun vite build
 
           # Create a temporary tauri config that skips beforeBuildCommand
           $config = Get-Content src-tauri/tauri.prod.conf.json | ConvertFrom-Json
