@@ -48,7 +48,6 @@ export const dict = {
 
   "command.session.new": "新建会话",
   "command.file.open": "打开文件",
-  "command.file.open.description": "搜索文件和命令",
   "command.context.addSelection": "将所选内容添加到上下文",
   "command.context.addSelection.description": "添加当前文件中选中的行",
   "command.terminal.toggle": "切换终端",
@@ -88,7 +87,7 @@ export const dict = {
   "command.session.unshare": "取消分享会话",
   "command.session.unshare.description": "停止分享此会话",
 
-  "palette.search.placeholder": "搜索文件和命令",
+  "palette.search.placeholder": "搜索文件、命令和会话",
   "palette.empty": "未找到结果",
   "palette.group.commands": "命令",
   "palette.group.files": "文件",
