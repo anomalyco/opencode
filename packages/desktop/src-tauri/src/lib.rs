@@ -241,7 +241,7 @@ async fn initialize(app: AppHandle) {
             password,
         } => {
             let app = app.clone();
-            Some(|| {
+            Some(
                 async move {
                     let Ok(Ok(_)) =
                         tokio::time::timeout(Duration::from_secs(30), health_check.0).await
@@ -252,9 +252,7 @@ async fn initialize(app: AppHandle) {
                             get_logs(app.clone()).await.unwrap()
                         ));
                     };
-                    Ok((child, app))
-                }
-                .map_ok(move |(child, app)| {
+
                     #[cfg(windows)]
                     {
                         let job_state = app.state::<JobObjectState>();
@@ -263,12 +261,12 @@ async fn initialize(app: AppHandle) {
 
                     app.state::<ServerState>().set_child(Some(child));
 
-                    ServerReadyData { url, password }
-                })
+                    Ok(ServerReadyData { url, password })
+                }
                 .map(move |res| {
                     let _ = server_ready_tx.send(res);
-                })
-            })
+                }),
+            )
         }
         ServerConnection::Existing { url } => {
             let _ = server_ready_tx.send(Ok(ServerReadyData {
@@ -305,7 +303,7 @@ async fn initialize(app: AppHandle) {
                     }
                 }
 
-                tokio::spawn(cli_health_check());
+                tokio::spawn(cli_health_check);
             }
 
             let _ = server_ready_rx.await;
