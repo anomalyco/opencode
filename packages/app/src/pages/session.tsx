@@ -76,10 +76,31 @@ import { same } from "@/utils/same"
 
 type DiffStyle = "unified" | "split"
 
+type HandoffSession = {
+  prompt: string
+  files: Record<string, SelectedLineRange | null>
+}
+
+const HANDOFF_MAX = 40
+
 const handoff = {
-  prompt: "",
-  terminals: [] as string[],
-  files: {} as Record<string, SelectedLineRange | null>,
+  session: new Map<string, HandoffSession>(),
+  terminal: new Map<string, string[]>(),
+}
+
+const touch = <K, V>(map: Map<K, V>, key: K, value: V) => {
+  map.delete(key)
+  map.set(key, value)
+  while (map.size > HANDOFF_MAX) {
+    const first = map.keys().next().value
+    if (first === undefined) return
+    map.delete(first)
+  }
+}
+
+const setSessionHandoff = (key: string, patch: Partial<HandoffSession>) => {
+  const prev = handoff.session.get(key) ?? { prompt: "", files: {} }
+  touch(handoff.session, key, { ...prev, ...patch })
 }
 
 interface SessionReviewTabProps {
@@ -793,8 +814,10 @@ export default function Page() {
   const hasScrollGesture = () => Date.now() - ui.scrollGesture < scrollGestureWindowMs
 
   createEffect(() => {
-    if (!params.id) return
-    sync.session.sync(params.id)
+    sdk.directory
+    const id = params.id
+    if (!id) return
+    sync.session.sync(id)
   })
 
   createEffect(() => {
@@ -862,10 +885,22 @@ export default function Page() {
 
   createEffect(
     on(
-      () => params.id,
+      sessionKey,
       () => {
         setStore("messageId", undefined)
         setStore("expanded", {})
+        setUi("autoCreated", false)
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => params.dir,
+      (dir) => {
+        if (!dir) return
+        setStore("newSessionWorktree", "main")
       },
       { defer: true },
     ),
@@ -1373,12 +1408,15 @@ export default function Page() {
     activeDiff: undefined as string | undefined,
   })
 
-  const reviewScroll = () => tree.reviewScroll
-  const setReviewScroll = (value: HTMLDivElement | undefined) => setTree("reviewScroll", value)
-  const pendingDiff = () => tree.pendingDiff
-  const setPendingDiff = (value: string | undefined) => setTree("pendingDiff", value)
-  const activeDiff = () => tree.activeDiff
-  const setActiveDiff = (value: string | undefined) => setTree("activeDiff", value)
+  createEffect(
+    on(
+      sessionKey,
+      () => {
+        setTree({ reviewScroll: undefined, pendingDiff: undefined, activeDiff: undefined })
+      },
+      { defer: true },
+    ),
+  )
 
   const showAllFiles = () => {
     if (fileTreeTab() !== "changes") return
@@ -1399,8 +1437,8 @@ export default function Page() {
                 view={view}
                 diffStyle={layout.review.diffStyle()}
                 onDiffStyleChange={layout.review.setDiffStyle}
-                onScrollRef={setReviewScroll}
-                focusedFile={activeDiff()}
+                onScrollRef={(el) => setTree("reviewScroll", el)}
+                focusedFile={tree.activeDiff}
                 onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
                 comments={comments.all()}
                 focusedComment={comments.focus()}
@@ -1450,7 +1488,7 @@ export default function Page() {
   }
 
   const reviewDiffTop = (path: string) => {
-    const root = reviewScroll()
+    const root = tree.reviewScroll
     if (!root) return
 
     const id = reviewDiffId(path)
@@ -1466,7 +1504,7 @@ export default function Page() {
   }
 
   const scrollToReviewDiff = (path: string) => {
-    const root = reviewScroll()
+    const root = tree.reviewScroll
     if (!root) return false
 
     const top = reviewDiffTop(path)
@@ -1480,24 +1518,23 @@ export default function Page() {
   const focusReviewDiff = (path: string) => {
     const current = view().review.open() ?? []
     if (!current.includes(path)) view().review.setOpen([...current, path])
-    setActiveDiff(path)
-    setPendingDiff(path)
+    setTree({ activeDiff: path, pendingDiff: path })
   }
 
   createEffect(() => {
-    const pending = pendingDiff()
+    const pending = tree.pendingDiff
     if (!pending) return
-    if (!reviewScroll()) return
+    if (!tree.reviewScroll) return
     if (!diffsReady()) return
 
     const attempt = (count: number) => {
-      if (pendingDiff() !== pending) return
+      if (tree.pendingDiff !== pending) return
       if (count > 60) {
-        setPendingDiff(undefined)
+        setTree("pendingDiff", undefined)
         return
       }
 
-      const root = reviewScroll()
+      const root = tree.reviewScroll
       if (!root) {
         requestAnimationFrame(() => attempt(count + 1))
         return
@@ -1515,7 +1552,7 @@ export default function Page() {
       }
 
       if (Math.abs(root.scrollTop - top) <= 1) {
-        setPendingDiff(undefined)
+        setTree("pendingDiff", undefined)
         return
       }
 
@@ -1558,13 +1595,17 @@ export default function Page() {
     void sync.session.diff(id)
   })
 
+  let treeDir: string | undefined
   createEffect(() => {
+    const dir = sdk.directory
     if (!isDesktop()) return
     if (!layout.fileTree.opened()) return
     if (sync.status === "loading") return
 
     fileTreeTab()
-    void file.tree.list("")
+    const refresh = treeDir !== dir
+    treeDir = dir
+    void (refresh ? file.tree.refresh("") : file.tree.list(""))
   })
 
   const autoScroll = createAutoScroll({
@@ -1598,6 +1639,18 @@ export default function Page() {
 
   let scrollSpyFrame: number | undefined
   let scrollSpyTarget: HTMLDivElement | undefined
+
+  createEffect(
+    on(
+      sessionKey,
+      () => {
+        if (scrollSpyFrame !== undefined) cancelAnimationFrame(scrollSpyFrame)
+        scrollSpyFrame = undefined
+        scrollSpyTarget = undefined
+      },
+      { defer: true },
+    ),
+  )
 
   const anchor = (id: string) => `message-${id}`
 
@@ -1713,20 +1766,14 @@ export default function Page() {
     window.history.replaceState(null, "", `#${anchor(id)}`)
   }
 
-  createEffect(() => {
-    const sessionID = params.id
-    if (!sessionID) return
-    const raw = sessionStorage.getItem("opencode.pendingMessage")
-    if (!raw) return
-    const parts = raw.split("|")
-    const pendingSessionID = parts[0]
-    const messageID = parts[1]
-    if (!pendingSessionID || !messageID) return
-    if (pendingSessionID !== sessionID) return
-
-    sessionStorage.removeItem("opencode.pendingMessage")
-    setUi("pendingMessage", messageID)
-  })
+  createEffect(
+    on(sessionKey, (key) => {
+      if (!params.id) return
+      const messageID = layout.pendingMessage.consume(key)
+      if (!messageID) return
+      setUi("pendingMessage", messageID)
+    }),
+  )
 
   const scrollToElement = (el: HTMLElement, behavior: ScrollBehavior) => {
     const root = scroller
@@ -1940,7 +1987,7 @@ export default function Page() {
 
   createEffect(() => {
     if (!prompt.ready()) return
-    handoff.prompt = previewPrompt()
+    setSessionHandoff(sessionKey(), { prompt: previewPrompt() })
   })
 
   createEffect(() => {
@@ -1960,20 +2007,22 @@ export default function Page() {
       return language.t("terminal.title")
     }
 
-    handoff.terminals = terminal.all().map(label)
+    touch(handoff.terminal, params.dir!, terminal.all().map(label))
   })
 
   createEffect(() => {
     if (!file.ready()) return
-    handoff.files = Object.fromEntries(
-      tabs()
-        .all()
-        .flatMap((tab) => {
-          const path = file.pathFromTab(tab)
-          if (!path) return []
-          return [[path, file.selectedLines(path) ?? null] as const]
-        }),
-    )
+    setSessionHandoff(sessionKey(), {
+      files: Object.fromEntries(
+        tabs()
+          .all()
+          .flatMap((tab) => {
+            const path = file.pathFromTab(tab)
+            if (!path) return []
+            return [[path, file.selectedLines(path) ?? null] as const]
+          }),
+      ),
+    })
   })
 
   onCleanup(() => {
@@ -2049,7 +2098,7 @@ export default function Page() {
                                 diffs={diffs}
                                 view={view}
                                 diffStyle="unified"
-                                focusedFile={activeDiff()}
+                                focusedFile={tree.activeDiff}
                                 onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
                                 comments={comments.all()}
                                 focusedComment={comments.focus()}
@@ -2483,7 +2532,7 @@ export default function Page() {
                 when={prompt.ready()}
                 fallback={
                   <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none">
-                    {handoff.prompt || language.t("prompt.loading")}
+                    {handoff.session.get(sessionKey())?.prompt || language.t("prompt.loading")}
                   </div>
                 }
               >
@@ -2734,7 +2783,7 @@ export default function Page() {
                             const p = path()
                             if (!p) return null
                             if (file.ready()) return file.selectedLines(p) ?? null
-                            return handoff.files[p] ?? null
+                            return handoff.session.get(sessionKey())?.files[p] ?? null
                           })
 
                           let wrap: HTMLDivElement | undefined
@@ -3228,7 +3277,7 @@ export default function Page() {
                               allowed={diffFiles()}
                               kinds={kinds()}
                               draggable={false}
-                              active={activeDiff()}
+                              active={tree.activeDiff}
                               onFileClick={(node) => focusReviewDiff(node.path)}
                             />
                           </Show>
@@ -3288,7 +3337,7 @@ export default function Page() {
             fallback={
               <div class="flex flex-col h-full pointer-events-none">
                 <div class="h-10 flex items-center gap-2 px-2 border-b border-border-weak-base bg-background-stronger overflow-hidden">
-                  <For each={handoff.terminals}>
+                  <For each={handoff.terminal.get(params.dir!) ?? []}>
                     {(title) => (
                       <div class="px-2 py-1 rounded-md bg-surface-base text-14-regular text-text-weak truncate max-w-40">
                         {title}
