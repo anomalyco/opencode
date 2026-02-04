@@ -8,9 +8,13 @@ import type { WSContext } from "hono/ws"
 import { Instance } from "../project/instance"
 import { lazy } from "@opencode-ai/util/lazy"
 import { Shell } from "@/shell/shell"
+import { Plugin } from "@/plugin"
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
+
+  const BUFFER_LIMIT = 1024 * 1024 * 2
+  const BUFFER_CHUNK = 64 * 1024
 
   const pty = lazy(async () => {
     const { spawn } = await import("bun-pty")
@@ -99,7 +103,20 @@ export namespace Pty {
     }
 
     const cwd = input.cwd || Instance.directory
-    const env = { ...process.env, ...input.env, TERM: "xterm-256color" } as Record<string, string>
+    const shellEnv = await Plugin.trigger("shell.env", { cwd }, { env: {} })
+    const env = {
+      ...process.env,
+      ...input.env,
+      ...shellEnv.env,
+      TERM: "xterm-256color",
+      OPENCODE_TERMINAL: "1",
+    } as Record<string, string>
+
+    if (process.platform === "win32") {
+      env.LC_ALL = "C.UTF-8"
+      env.LC_CTYPE = "C.UTF-8"
+      env.LANG = "C.UTF-8"
+    }
     log.info("creating session", { id, cmd: command, args, cwd })
 
     const spawn = await pty()
@@ -126,20 +143,31 @@ export namespace Pty {
     }
     state().set(id, session)
     ptyProcess.onData((data) => {
-      if (session.subscribers.size === 0) {
-        session.buffer += data
-        return
-      }
+      let open = false
       for (const ws of session.subscribers) {
-        if (ws.readyState === 1) {
-          ws.send(data)
+        if (ws.readyState !== 1) {
+          session.subscribers.delete(ws)
+          continue
         }
+        open = true
+        ws.send(data)
       }
+      if (open) return
+      session.buffer += data
+      if (session.buffer.length <= BUFFER_LIMIT) return
+      session.buffer = session.buffer.slice(-BUFFER_LIMIT)
     })
     ptyProcess.onExit(({ exitCode }) => {
       log.info("session exited", { id, exitCode })
       session.info.status = "exited"
+      for (const ws of session.subscribers) {
+        ws.close()
+      }
+      session.subscribers.clear()
       Bus.publish(Event.Exited, { id, exitCode })
+      for (const ws of session.subscribers) {
+        ws.close()
+      }
       state().delete(id)
     })
     Bus.publish(Event.Created, { info })
@@ -196,8 +224,18 @@ export namespace Pty {
     log.info("client connected to session", { id })
     session.subscribers.add(ws)
     if (session.buffer) {
-      ws.send(session.buffer)
+      const buffer = session.buffer.length <= BUFFER_LIMIT ? session.buffer : session.buffer.slice(-BUFFER_LIMIT)
       session.buffer = ""
+      try {
+        for (let i = 0; i < buffer.length; i += BUFFER_CHUNK) {
+          ws.send(buffer.slice(i, i + BUFFER_CHUNK))
+        }
+      } catch {
+        session.subscribers.delete(ws)
+        session.buffer = buffer
+        ws.close()
+        return
+      }
     }
     return {
       onMessage: (message: string | ArrayBuffer) => {

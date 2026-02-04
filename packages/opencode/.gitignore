@@ -2,3 +2,4 @@ research
 dist
 gen
 app.log
+src/provider/models-snapshot.ts

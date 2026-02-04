@@ -14,13 +14,14 @@ export const github = query(async () => {
       fetch(`${apiBaseUrl}/releases`, { headers }).then((res) => res.json()),
       fetch(`${apiBaseUrl}/contributors?per_page=1`, { headers }),
     ])
+    if (!Array.isArray(releases) || releases.length === 0) {
+      return undefined
+    }
     const [release] = releases
-    const contributorCount = Number.parseInt(
-      contributors.headers
-        .get("Link")!
-        .match(/&page=(\d+)>; rel="last"/)!
-        .at(1)!,
-    )
+    const linkHeader = contributors.headers.get("Link")
+    const contributorCount = linkHeader
+      ? Number.parseInt(linkHeader.match(/&page=(\d+)>; rel="last"/)?.at(1) ?? "0")
+      : 0
     return {
       stars: meta.stargazers_count,
       release: {

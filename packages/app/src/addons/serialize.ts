@@ -157,23 +157,6 @@ function equalFlags(cell1: IBufferCell, cell2: IBufferCell): boolean {
 abstract class BaseSerializeHandler {
   constructor(protected readonly _buffer: IBuffer) {}
 
-  private _isRealContent(codepoint: number): boolean {
-    if (codepoint === 0) return false
-    if (codepoint >= 0xf000) return false
-    return true
-  }
-
-  private _findLastContentColumn(line: IBufferLine): number {
-    let lastContent = -1
-    for (let col = 0; col < line.length; col++) {
-      const cell = line.getCell(col)
-      if (cell && this._isRealContent(cell.getCode())) {
-        lastContent = col
-      }
-    }
-    return lastContent + 1
-  }
-
   public serialize(range: IBufferRange, excludeFinalCursorPosition?: boolean): string {
     let oldCell = this._buffer.getNullCell()
 
@@ -182,14 +165,14 @@ abstract class BaseSerializeHandler {
     const startColumn = range.start.x
     const endColumn = range.end.x
 
-    this._beforeSerialize(endRow - startRow, startRow, endRow)
+    this._beforeSerialize(endRow - startRow + 1, startRow, endRow)
 
     for (let row = startRow; row <= endRow; row++) {
       const line = this._buffer.getLine(row)
       if (line) {
         const startLineColumn = row === range.start.y ? startColumn : 0
-        const maxColumn = row === range.end.y ? endColumn : this._findLastContentColumn(line)
-        const endLineColumn = Math.min(maxColumn, line.length)
+        const endLineColumn = Math.min(endColumn, line.length)
+
         for (let col = startLineColumn; col < endLineColumn; col++) {
           const c = line.getCell(col)
           if (!c) {
@@ -243,6 +226,13 @@ class StringSerializeHandler extends BaseSerializeHandler {
 
   protected _beforeSerialize(rows: number, start: number, _end: number): void {
     this._allRows = new Array<string>(rows)
+    this._allRowSeparators = new Array<string>(rows)
+    this._rowIndex = 0
+
+    this._currentRow = ""
+    this._nullCellCount = 0
+    this._cursorStyle = this._buffer.getNullCell()
+
     this._lastContentCursorRow = start
     this._lastCursorRow = start
     this._firstRow = start
@@ -251,14 +241,19 @@ class StringSerializeHandler extends BaseSerializeHandler {
   protected _rowEnd(row: number, isLastRow: boolean): void {
     let rowSeparator = ""
 
-    if (!isLastRow) {
-      const nextLine = this._buffer.getLine(row + 1)
+    const nextLine = isLastRow ? undefined : this._buffer.getLine(row + 1)
+    const wrapped = !!nextLine?.isWrapped
 
-      if (!nextLine?.isWrapped) {
-        rowSeparator = "\r\n"
-        this._lastCursorRow = row + 1
-        this._lastCursorCol = 0
-      }
+    if (this._nullCellCount > 0 && wrapped) {
+      this._currentRow += " ".repeat(this._nullCellCount)
+    }
+
+    this._nullCellCount = 0
+
+    if (!isLastRow && !wrapped) {
+      rowSeparator = "\r\n"
+      this._lastCursorRow = row + 1
+      this._lastCursorCol = 0
     }
 
     this._allRows[this._rowIndex] = this._currentRow
@@ -388,16 +383,17 @@ class StringSerializeHandler extends BaseSerializeHandler {
     }
 
     const codepoint = cell.getCode()
-    const isGarbage = codepoint >= 0xf000
+    const isInvalidCodepoint = codepoint > 0x10ffff || (codepoint >= 0xd800 && codepoint <= 0xdfff)
+    const isGarbage = isInvalidCodepoint || (codepoint >= 0xf000 && cell.getWidth() === 1)
     const isEmptyCell = codepoint === 0 || cell.getChars() === "" || isGarbage
 
     const sgrSeq = this._diffStyle(cell, this._cursorStyle)
 
-    const styleChanged = isEmptyCell ? !equalBg(this._cursorStyle, cell) : sgrSeq.length > 0
+    const styleChanged = sgrSeq.length > 0
 
     if (styleChanged) {
       if (this._nullCellCount > 0) {
-        this._currentRow += `\u001b[${this._nullCellCount}C`
+        this._currentRow += " ".repeat(this._nullCellCount)
         this._nullCellCount = 0
       }
 
@@ -417,7 +413,7 @@ class StringSerializeHandler extends BaseSerializeHandler {
       this._nullCellCount += cell.getWidth()
     } else {
       if (this._nullCellCount > 0) {
-        this._currentRow += `\u001b[${this._nullCellCount}C`
+        this._currentRow += " ".repeat(this._nullCellCount)
         this._nullCellCount = 0
       }
 
@@ -446,12 +442,24 @@ class StringSerializeHandler extends BaseSerializeHandler {
       }
     }
 
-    if (!excludeFinalCursorPosition) {
-      const absoluteCursorRow = (this._buffer.baseY ?? 0) + this._buffer.cursorY
-      const cursorRow = constrain(absoluteCursorRow - this._firstRow + 1, 1, Number.MAX_SAFE_INTEGER)
-      const cursorCol = this._buffer.cursorX + 1
-      content += `\u001b[${cursorRow};${cursorCol}H`
-    }
+    if (excludeFinalCursorPosition) return content
+
+    const absoluteCursorRow = (this._buffer.baseY ?? 0) + this._buffer.cursorY
+    const cursorRow = constrain(absoluteCursorRow - this._firstRow + 1, 1, Number.MAX_SAFE_INTEGER)
+    const cursorCol = this._buffer.cursorX + 1
+    content += `\u001b[${cursorRow};${cursorCol}H`
+
+    const line = this._buffer.getLine(absoluteCursorRow)
+    const cell = line?.getCell(this._buffer.cursorX)
+    const style = (() => {
+      if (!cell) return this._buffer.getNullCell()
+      if (cell.getWidth() !== 0) return cell
+      if (this._buffer.cursorX > 0) return line?.getCell(this._buffer.cursorX - 1) ?? cell
+      return cell
+    })()
+
+    const sgrSeq = this._diffStyle(style, this._cursorStyle)
+    if (sgrSeq.length) content += `\u001b[${sgrSeq.join(";")}m`
 
     return content
   }

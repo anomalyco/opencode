@@ -1,18 +1,28 @@
 import type { APIEvent } from "@solidjs/start/server"
 import { and, Database, eq, isNull, lt, or, sql } from "@opencode-ai/console-core/drizzle/index.js"
 import { KeyTable } from "@opencode-ai/console-core/schema/key.sql.js"
-import { BillingTable, UsageTable } from "@opencode-ai/console-core/schema/billing.sql.js"
+import { BillingTable, SubscriptionTable, UsageTable } from "@opencode-ai/console-core/schema/billing.sql.js"
 import { centsToMicroCents } from "@opencode-ai/console-core/util/price.js"
+import { getWeekBounds } from "@opencode-ai/console-core/util/date.js"
 import { Identifier } from "@opencode-ai/console-core/identifier.js"
 import { Billing } from "@opencode-ai/console-core/billing.js"
 import { Actor } from "@opencode-ai/console-core/actor.js"
 import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.js"
 import { ZenData } from "@opencode-ai/console-core/model.js"
+import { Black, BlackData } from "@opencode-ai/console-core/black.js"
 import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
 import { ModelTable } from "@opencode-ai/console-core/schema/model.sql.js"
 import { ProviderTable } from "@opencode-ai/console-core/schema/provider.sql.js"
 import { logger } from "./logger"
-import { AuthError, CreditsError, MonthlyLimitError, UserLimitError, ModelError, RateLimitError } from "./error"
+import {
+  AuthError,
+  CreditsError,
+  MonthlyLimitError,
+  SubscriptionError,
+  UserLimitError,
+  ModelError,
+  RateLimitError,
+} from "./error"
 import { createBodyConverter, createStreamPartConverter, createResponseConverter, UsageInfo } from "./provider/provider"
 import { anthropicHelper } from "./provider/anthropic"
 import { googleHelper } from "./provider/google"
@@ -69,14 +79,16 @@ export async function handler(
     const dataDumper = createDataDumper(sessionId, requestId, projectId)
     const trialLimiter = createTrialLimiter(modelInfo.trial, ip, ocClient)
     const isTrial = await trialLimiter?.isTrial()
-    const rateLimiter = createRateLimiter(modelInfo.id, modelInfo.rateLimit, ip)
+    const rateLimiter = createRateLimiter(modelInfo.rateLimit, ip, input.request.headers)
     await rateLimiter?.check()
-    const stickyTracker = createStickyTracker(modelInfo.stickyProvider ?? false, sessionId)
+    const stickyTracker = createStickyTracker(modelInfo.stickyProvider, sessionId)
     const stickyProvider = await stickyTracker?.get()
+    const authInfo = await authenticate(modelInfo)
+    const billingSource = validateBilling(authInfo, modelInfo)
 
     const retriableRequest = async (retry: RetryOptions = { excludeProviders: [], retryCount: 0 }) => {
-      const authInfo = await authenticate(modelInfo)
       const providerInfo = selectProvider(
+        model,
         zenData,
         authInfo,
         modelInfo,
@@ -85,13 +97,12 @@ export async function handler(
         retry,
         stickyProvider,
       )
-      validateBilling(authInfo, modelInfo)
       validateModelSettings(authInfo)
       updateProviderKey(authInfo, providerInfo)
       logger.metric({ provider: providerInfo.id })
 
       const startTimestamp = Date.now()
-      const reqUrl = providerInfo.modifyUrl(providerInfo.api, providerInfo.model, isStream)
+      const reqUrl = providerInfo.modifyUrl(providerInfo.api, isStream)
       const reqBody = JSON.stringify(
         providerInfo.modifyBody({
           ...createBodyConverter(opts.format, providerInfo.format)(body),
@@ -125,7 +136,7 @@ export async function handler(
         // ie. openai 404 error: Item with id 'msg_0ead8b004a3b165d0069436a6b6834819896da85b63b196a3f' not found.
         res.status !== 404 &&
         // ie. cannot change codex model providers mid-session
-        !modelInfo.stickyProvider &&
+        modelInfo.stickyProvider !== "strict" &&
         modelInfo.fallbackProvider &&
         providerInfo.id !== modelInfo.fallbackProvider
       ) {
@@ -135,10 +146,10 @@ export async function handler(
         })
       }
 
-      return { providerInfo, authInfo, reqBody, res, startTimestamp }
+      return { providerInfo, reqBody, res, startTimestamp }
     }
 
-    const { providerInfo, authInfo, reqBody, res, startTimestamp } = await retriableRequest()
+    const { providerInfo, reqBody, res, startTimestamp } = await retriableRequest()
 
     // Store model request
     dataDumper?.provideModel(providerInfo.storeModel)
@@ -172,7 +183,7 @@ export async function handler(
       const tokensInfo = providerInfo.normalizeUsage(json.usage)
       await trialLimiter?.track(tokensInfo)
       await rateLimiter?.track()
-      const costInfo = await trackUsage(authInfo, modelInfo, providerInfo, tokensInfo)
+      const costInfo = await trackUsage(authInfo, modelInfo, providerInfo, billingSource, tokensInfo)
       await reload(authInfo, costInfo)
       return new Response(body, {
         status: resStatus,
@@ -184,17 +195,19 @@ export async function handler(
     // Handle streaming response
     const streamConverter = createStreamPartConverter(providerInfo.format, opts.format)
     const usageParser = providerInfo.createUsageParser()
+    const binaryDecoder = providerInfo.createBinaryStreamDecoder()
     const stream = new ReadableStream({
       start(c) {
         const reader = res.body?.getReader()
         const decoder = new TextDecoder()
         const encoder = new TextEncoder()
+
         let buffer = ""
         let responseLength = 0
 
         function pump(): Promise<void> {
           return (
-            reader?.read().then(async ({ done, value }) => {
+            reader?.read().then(async ({ done, value: rawValue }) => {
               if (done) {
                 logger.metric({
                   response_length: responseLength,
@@ -206,7 +219,7 @@ export async function handler(
                 if (usage) {
                   const tokensInfo = providerInfo.normalizeUsage(usage)
                   await trialLimiter?.track(tokensInfo)
-                  const costInfo = await trackUsage(authInfo, modelInfo, providerInfo, tokensInfo)
+                  const costInfo = await trackUsage(authInfo, modelInfo, providerInfo, billingSource, tokensInfo)
                   await reload(authInfo, costInfo)
                 }
                 c.close()
@@ -220,6 +233,10 @@ export async function handler(
                   "timestamp.first_byte": now,
                 })
               }
+
+              const value = binaryDecoder ? binaryDecoder(rawValue) : rawValue
+              if (!value) return
+
               responseLength += value.length
               buffer += decoder.decode(value, { stream: true })
               dataDumper?.provideStream(buffer)
@@ -279,14 +296,19 @@ export async function handler(
         { status: 401 },
       )
 
-    if (error instanceof RateLimitError)
+    if (error instanceof RateLimitError || error instanceof SubscriptionError) {
+      const headers = new Headers()
+      if (error instanceof SubscriptionError && error.retryAfter) {
+        headers.set("retry-after", String(error.retryAfter))
+      }
       return new Response(
         JSON.stringify({
           type: "error",
           error: { type: error.constructor.name, message: error.message },
         }),
-        { status: 429 },
+        { status: 429, headers },
       )
+    }
 
     return new Response(
       JSON.stringify({
@@ -316,6 +338,7 @@ export async function handler(
   }
 
   function selectProvider(
+    reqModel: string,
     zenData: ZenData,
     authInfo: AuthInfo,
     modelInfo: ModelInfo,
@@ -324,7 +347,7 @@ export async function handler(
     retry: RetryOptions,
     stickyProvider: string | undefined,
   ) {
-    const provider = (() => {
+    const modelProvider = (() => {
       if (authInfo?.provider?.credentials) {
         return modelInfo.providers.find((provider) => provider.id === modelInfo.byokProvider)
       }
@@ -357,18 +380,19 @@ export async function handler(
       return providers[index || 0]
     })()
 
-    if (!provider) throw new ModelError("No provider available")
-    if (!(provider.id in zenData.providers)) throw new ModelError(`Provider ${provider.id} not supported`)
+    if (!modelProvider) throw new ModelError("No provider available")
+    if (!(modelProvider.id in zenData.providers)) throw new ModelError(`Provider ${modelProvider.id} not supported`)
 
     return {
-      ...provider,
-      ...zenData.providers[provider.id],
+      ...modelProvider,
+      ...zenData.providers[modelProvider.id],
       ...(() => {
-        const format = zenData.providers[provider.id].format
-        if (format === "anthropic") return anthropicHelper
-        if (format === "google") return googleHelper
-        if (format === "openai") return openaiHelper
-        return oaCompatHelper
+        const format = zenData.providers[modelProvider.id].format
+        const providerModel = modelProvider.model
+        if (format === "anthropic") return anthropicHelper({ reqModel, providerModel })
+        if (format === "google") return googleHelper({ reqModel, providerModel })
+        if (format === "openai") return openaiHelper({ reqModel, providerModel })
+        return oaCompatHelper({ reqModel, providerModel })
       })(),
     }
   }
@@ -393,12 +417,20 @@ export async function handler(
             timeMonthlyUsageUpdated: BillingTable.timeMonthlyUsageUpdated,
             reloadTrigger: BillingTable.reloadTrigger,
             timeReloadLockedTill: BillingTable.timeReloadLockedTill,
+            subscription: BillingTable.subscription,
           },
           user: {
             id: UserTable.id,
             monthlyLimit: UserTable.monthlyLimit,
             monthlyUsage: UserTable.monthlyUsage,
             timeMonthlyUsageUpdated: UserTable.timeMonthlyUsageUpdated,
+          },
+          subscription: {
+            id: SubscriptionTable.id,
+            rollingUsage: SubscriptionTable.rollingUsage,
+            fixedUsage: SubscriptionTable.fixedUsage,
+            timeRollingUpdated: SubscriptionTable.timeRollingUpdated,
+            timeFixedUpdated: SubscriptionTable.timeFixedUpdated,
           },
           provider: {
             credentials: ProviderTable.credentials,
@@ -419,6 +451,14 @@ export async function handler(
               )
             : sql`false`,
         )
+        .leftJoin(
+          SubscriptionTable,
+          and(
+            eq(SubscriptionTable.workspaceID, KeyTable.workspaceID),
+            eq(SubscriptionTable.userID, KeyTable.userID),
+            isNull(SubscriptionTable.timeDeleted),
+          ),
+        )
         .where(and(eq(KeyTable.key, apiKey), isNull(KeyTable.timeDeleted)))
         .then((rows) => rows[0]),
     )
@@ -427,6 +467,8 @@ export async function handler(
     logger.metric({
       api_key: data.apiKey,
       workspace: data.workspaceID,
+      isSubscription: data.subscription ? true : false,
+      subscription: data.billing.subscription?.plan,
     })
 
     return {
@@ -434,6 +476,7 @@ export async function handler(
       workspaceID: data.workspaceID,
       billing: data.billing,
       user: data.user,
+      subscription: data.subscription,
       provider: data.provider,
       isFree: FREE_WORKSPACES.includes(data.workspaceID),
       isDisabled: !!data.timeDisabled,
@@ -441,11 +484,61 @@ export async function handler(
   }
 
   function validateBilling(authInfo: AuthInfo, modelInfo: ModelInfo) {
-    if (!authInfo) return
-    if (authInfo.provider?.credentials) return
-    if (authInfo.isFree) return
-    if (modelInfo.allowAnonymous) return
+    if (!authInfo) return "anonymous"
+    if (authInfo.provider?.credentials) return "free"
+    if (authInfo.isFree) return "free"
+    if (modelInfo.allowAnonymous) return "free"
 
+    // Validate subscription billing
+    if (authInfo.billing.subscription && authInfo.subscription) {
+      try {
+        const sub = authInfo.subscription
+        const plan = authInfo.billing.subscription.plan
+
+        const formatRetryTime = (seconds: number) => {
+          const days = Math.floor(seconds / 86400)
+          if (days >= 1) return `${days} day${days > 1 ? "s" : ""}`
+          const hours = Math.floor(seconds / 3600)
+          const minutes = Math.ceil((seconds % 3600) / 60)
+          if (hours >= 1) return `${hours}hr ${minutes}min`
+          return `${minutes}min`
+        }
+
+        // Check weekly limit
+        if (sub.fixedUsage && sub.timeFixedUpdated) {
+          const result = Black.analyzeWeeklyUsage({
+            plan,
+            usage: sub.fixedUsage,
+            timeUpdated: sub.timeFixedUpdated,
+          })
+          if (result.status === "rate-limited")
+            throw new SubscriptionError(
+              `Subscription quota exceeded. Retry in ${formatRetryTime(result.resetInSec)}.`,
+              result.resetInSec,
+            )
+        }
+
+        // Check rolling limit
+        if (sub.rollingUsage && sub.timeRollingUpdated) {
+          const result = Black.analyzeRollingUsage({
+            plan,
+            usage: sub.rollingUsage,
+            timeUpdated: sub.timeRollingUpdated,
+          })
+          if (result.status === "rate-limited")
+            throw new SubscriptionError(
+              `Subscription quota exceeded. Retry in ${formatRetryTime(result.resetInSec)}.`,
+              result.resetInSec,
+            )
+        }
+
+        return "subscription"
+      } catch (e) {
+        if (!authInfo.billing.subscription.useBalance) throw e
+      }
+    }
+
+    // Validate pay as you go billing
     const billing = authInfo.billing
     if (!billing.paymentMethodID)
       throw new CreditsError(
@@ -463,29 +556,27 @@ export async function handler(
       billing.monthlyLimit &&
       billing.monthlyUsage &&
       billing.timeMonthlyUsageUpdated &&
-      billing.monthlyUsage >= centsToMicroCents(billing.monthlyLimit * 100)
-    ) {
-      const dateYear = billing.timeMonthlyUsageUpdated.getUTCFullYear()
-      const dateMonth = billing.timeMonthlyUsageUpdated.getUTCMonth()
-      if (currentYear === dateYear && currentMonth === dateMonth)
-        throw new MonthlyLimitError(
-          `Your workspace has reached its monthly spending limit of $${billing.monthlyLimit}. Manage your limits here: https://opencode.ai/workspace/${authInfo.workspaceID}/billing`,
-        )
-    }
+      billing.monthlyUsage >= centsToMicroCents(billing.monthlyLimit * 100) &&
+      currentYear === billing.timeMonthlyUsageUpdated.getUTCFullYear() &&
+      currentMonth === billing.timeMonthlyUsageUpdated.getUTCMonth()
+    )
+      throw new MonthlyLimitError(
+        `Your workspace has reached its monthly spending limit of $${billing.monthlyLimit}. Manage your limits here: https://opencode.ai/workspace/${authInfo.workspaceID}/billing`,
+      )
 
     if (
       authInfo.user.monthlyLimit &&
       authInfo.user.monthlyUsage &&
       authInfo.user.timeMonthlyUsageUpdated &&
-      authInfo.user.monthlyUsage >= centsToMicroCents(authInfo.user.monthlyLimit * 100)
-    ) {
-      const dateYear = authInfo.user.timeMonthlyUsageUpdated.getUTCFullYear()
-      const dateMonth = authInfo.user.timeMonthlyUsageUpdated.getUTCMonth()
-      if (currentYear === dateYear && currentMonth === dateMonth)
-        throw new UserLimitError(
-          `You have reached your monthly spending limit of $${authInfo.user.monthlyLimit}. Manage your limits here: https://opencode.ai/workspace/${authInfo.workspaceID}/members`,
-        )
-    }
+      authInfo.user.monthlyUsage >= centsToMicroCents(authInfo.user.monthlyLimit * 100) &&
+      currentYear === authInfo.user.timeMonthlyUsageUpdated.getUTCFullYear() &&
+      currentMonth === authInfo.user.timeMonthlyUsageUpdated.getUTCMonth()
+    )
+      throw new UserLimitError(
+        `You have reached your monthly spending limit of $${authInfo.user.monthlyLimit}. Manage your limits here: https://opencode.ai/workspace/${authInfo.workspaceID}/members`,
+      )
+
+    return "balance"
   }
 
   function validateModelSettings(authInfo: AuthInfo) {
@@ -502,6 +593,7 @@ export async function handler(
     authInfo: AuthInfo,
     modelInfo: ModelInfo,
     providerInfo: ProviderInfo,
+    billingSource: ReturnType<typeof validateBilling>,
     usageInfo: UsageInfo,
   ) {
     const { inputTokens, outputTokens, reasoningTokens, cacheReadTokens, cacheWrite5mTokens, cacheWrite1hTokens } =
@@ -558,56 +650,99 @@ export async function handler(
       "cost.total": Math.round(totalCostInCent),
     })
 
-    if (!authInfo) return
+    if (billingSource === "anonymous") return
+    authInfo = authInfo!
 
-    const cost = authInfo.isFree || authInfo.provider?.credentials ? 0 : centsToMicroCents(totalCostInCent)
-    await Database.transaction(async (tx) => {
-      await tx.insert(UsageTable).values({
-        workspaceID: authInfo.workspaceID,
-        id: Identifier.create("usage"),
-        model: modelInfo.id,
-        provider: providerInfo.id,
-        inputTokens,
-        outputTokens,
-        reasoningTokens,
-        cacheReadTokens,
-        cacheWrite5mTokens,
-        cacheWrite1hTokens,
-        cost,
-        keyID: authInfo.apiKeyId,
-      })
-      await tx
-        .update(BillingTable)
-        .set({
-          balance: sql`${BillingTable.balance} - ${cost}`,
-          monthlyUsage: sql`
+    const cost = authInfo.provider?.credentials ? 0 : centsToMicroCents(totalCostInCent)
+    await Database.use((db) =>
+      Promise.all([
+        db.insert(UsageTable).values({
+          workspaceID: authInfo.workspaceID,
+          id: Identifier.create("usage"),
+          model: modelInfo.id,
+          provider: providerInfo.id,
+          inputTokens,
+          outputTokens,
+          reasoningTokens,
+          cacheReadTokens,
+          cacheWrite5mTokens,
+          cacheWrite1hTokens,
+          cost,
+          keyID: authInfo.apiKeyId,
+          enrichment: billingSource === "subscription" ? { plan: "sub" } : undefined,
+        }),
+        db
+          .update(KeyTable)
+          .set({ timeUsed: sql`now()` })
+          .where(and(eq(KeyTable.workspaceID, authInfo.workspaceID), eq(KeyTable.id, authInfo.apiKeyId))),
+        ...(billingSource === "subscription"
+          ? (() => {
+              const plan = authInfo.billing.subscription!.plan
+              const black = BlackData.getLimits({ plan })
+              const week = getWeekBounds(new Date())
+              const rollingWindowSeconds = black.rollingWindow * 3600
+              return [
+                db
+                  .update(SubscriptionTable)
+                  .set({
+                    fixedUsage: sql`
+              CASE
+                WHEN ${SubscriptionTable.timeFixedUpdated} >= ${week.start} THEN ${SubscriptionTable.fixedUsage} + ${cost}
+                ELSE ${cost}
+              END
+            `,
+                    timeFixedUpdated: sql`now()`,
+                    rollingUsage: sql`
+              CASE
+                WHEN UNIX_TIMESTAMP(${SubscriptionTable.timeRollingUpdated}) >= UNIX_TIMESTAMP(now()) - ${rollingWindowSeconds} THEN ${SubscriptionTable.rollingUsage} + ${cost}
+                ELSE ${cost}
+              END
+            `,
+                    timeRollingUpdated: sql`
+              CASE
+                WHEN UNIX_TIMESTAMP(${SubscriptionTable.timeRollingUpdated}) >= UNIX_TIMESTAMP(now()) - ${rollingWindowSeconds} THEN ${SubscriptionTable.timeRollingUpdated}
+                ELSE now()
+              END
+            `,
+                  })
+                  .where(
+                    and(
+                      eq(SubscriptionTable.workspaceID, authInfo.workspaceID),
+                      eq(SubscriptionTable.userID, authInfo.user.id),
+                    ),
+                  ),
+              ]
+            })()
+          : [
+              db
+                .update(BillingTable)
+                .set({
+                  balance: authInfo.isFree
+                    ? sql`${BillingTable.balance} - ${0}`
+                    : sql`${BillingTable.balance} - ${cost}`,
+                  monthlyUsage: sql`
               CASE
                 WHEN MONTH(${BillingTable.timeMonthlyUsageUpdated}) = MONTH(now()) AND YEAR(${BillingTable.timeMonthlyUsageUpdated}) = YEAR(now()) THEN ${BillingTable.monthlyUsage} + ${cost}
                 ELSE ${cost}
               END
             `,
-          timeMonthlyUsageUpdated: sql`now()`,
-        })
-        .where(eq(BillingTable.workspaceID, authInfo.workspaceID))
-      await tx
-        .update(UserTable)
-        .set({
-          monthlyUsage: sql`
+                  timeMonthlyUsageUpdated: sql`now()`,
+                })
+                .where(eq(BillingTable.workspaceID, authInfo.workspaceID)),
+              db
+                .update(UserTable)
+                .set({
+                  monthlyUsage: sql`
               CASE
                 WHEN MONTH(${UserTable.timeMonthlyUsageUpdated}) = MONTH(now()) AND YEAR(${UserTable.timeMonthlyUsageUpdated}) = YEAR(now()) THEN ${UserTable.monthlyUsage} + ${cost}
                 ELSE ${cost}
               END
             `,
-          timeMonthlyUsageUpdated: sql`now()`,
-        })
-        .where(and(eq(UserTable.workspaceID, authInfo.workspaceID), eq(UserTable.id, authInfo.user.id)))
-    })
-
-    await Database.use((tx) =>
-      tx
-        .update(KeyTable)
-        .set({ timeUsed: sql`now()` })
-        .where(and(eq(KeyTable.workspaceID, authInfo.workspaceID), eq(KeyTable.id, authInfo.apiKeyId))),
+                  timeMonthlyUsageUpdated: sql`now()`,
+                })
+                .where(and(eq(UserTable.workspaceID, authInfo.workspaceID), eq(UserTable.id, authInfo.user.id))),
+            ]),
+      ]),
     )
 
     return { costInMicroCents: cost }
@@ -617,6 +752,7 @@ export async function handler(
     if (!authInfo) return
     if (authInfo.isFree) return
     if (authInfo.provider?.credentials) return
+    if (authInfo.subscription) return
 
     if (!costInfo) return
 

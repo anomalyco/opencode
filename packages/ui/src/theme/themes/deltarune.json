@@ -1,0 +1,231 @@
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "defs": {
+    "darkWorldBg": "#0B0B3B",
+    "darkWorldDeep": "#050520",
+    "darkWorldPanel": "#151555",
+    "krisBlue": "#6A7BC4",
+    "krisCyan": "#75FBED",
+    "krisIce": "#C7E3F2",
+    "susiePurple": "#5B209D",
+    "susieMagenta": "#A017D0",
+    "susiePink": "#F983D8",
+    "ralseiGreen": "#33A56C",
+    "ralseiTeal": "#40E4D4",
+    "noelleRose": "#DC8998",
+    "noelleRed": "#DC1510",
+    "noelleMint": "#ECFFBB",
+    "noelleCyan": "#77E0FF",
+    "noelleAqua": "#BBFFFC",
+    "gold": "#FBCE3C",
+    "orange": "#F4A731",
+    "hotPink": "#EB0095",
+    "queenPink": "#F983D8",
+    "cyberGreen": "#00FF00",
+    "white": "#FFFFFF",
+    "black": "#000000",
+    "textMuted": "#8888AA"
+  },
+  "theme": {
+    "primary": {
+      "dark": "hotPink",
+      "light": "susieMagenta"
+    },
+    "secondary": {
+      "dark": "krisCyan",
+      "light": "krisBlue"
+    },
+    "accent": {
+      "dark": "ralseiTeal",
+      "light": "ralseiGreen"
+    },
+    "error": {
+      "dark": "noelleRed",
+      "light": "noelleRed"
+    },
+    "warning": {
+      "dark": "gold",
+      "light": "orange"
+    },
+    "success": {
+      "dark": "ralseiTeal",
+      "light": "ralseiGreen"
+    },
+    "info": {
+      "dark": "noelleCyan",
+      "light": "krisBlue"
+    },
+    "text": {
+      "dark": "white",
+      "light": "black"
+    },
+    "textMuted": {
+      "dark": "textMuted",
+      "light": "#555577"
+    },
+    "background": {
+      "dark": "darkWorldBg",
+      "light": "white"
+    },
+    "backgroundPanel": {
+      "dark": "darkWorldDeep",
+      "light": "#F0F0F8"
+    },
+    "backgroundElement": {
+      "dark": "darkWorldPanel",
+      "light": "#E5E5F0"
+    },
+    "border": {
+      "dark": "krisBlue",
+      "light": "susiePurple"
+    },
+    "borderActive": {
+      "dark": "hotPink",
+      "light": "susieMagenta"
+    },
+    "borderSubtle": {
+      "dark": "#3A3A6A",
+      "light": "#AAAACC"
+    },
+    "diffAdded": {
+      "dark": "ralseiTeal",
+      "light": "ralseiGreen"
+    },
+    "diffRemoved": {
+      "dark": "hotPink",
+      "light": "noelleRed"
+    },
+    "diffContext": {
+      "dark": "textMuted",
+      "light": "#666688"
+    },
+    "diffHunkHeader": {
+      "dark": "krisBlue",
+      "light": "susiePurple"
+    },
+    "diffHighlightAdded": {
+      "dark": "ralseiGreen",
+      "light": "ralseiTeal"
+    },
+    "diffHighlightRemoved": {
+      "dark": "noelleRed",
+      "light": "hotPink"
+    },
+    "diffAddedBg": {
+      "dark": "#0A2A2A",
+      "light": "#D4FFEE"
+    },
+    "diffRemovedBg": {
+      "dark": "#2A0A2A",
+      "light": "#FFD4E8"
+    },
+    "diffContextBg": {
+      "dark": "darkWorldDeep",
+      "light": "#F5F5FA"
+    },
+    "diffLineNumber": {
+      "dark": "textMuted",
+      "light": "#666688"
+    },
+    "diffAddedLineNumberBg": {
+      "dark": "#082020",
+      "light": "#E0FFF0"
+    },
+    "diffRemovedLineNumberBg": {
+      "dark": "#200820",
+      "light": "#FFE0F0"
+    },
+    "markdownText": {
+      "dark": "white",
+      "light": "black"
+    },
+    "markdownHeading": {
+      "dark": "gold",
+      "light": "orange"
+    },
+    "markdownLink": {
+      "dark": "krisCyan",
+      "light": "krisBlue"
+    },
+    "markdownLinkText": {
+      "dark": "noelleCyan",
+      "light": "susiePurple"
+    },
+    "markdownCode": {
+      "dark": "ralseiTeal",
+      "light": "ralseiGreen"
+    },
+    "markdownBlockQuote": {
+      "dark": "textMuted",
+      "light": "#666688"
+    },
+    "markdownEmph": {
+      "dark": "susiePink",
+      "light": "susieMagenta"
+    },
+    "markdownStrong": {
+      "dark": "hotPink",
+      "light": "susiePurple"
+    },
+    "markdownHorizontalRule": {
+      "dark": "krisBlue",
+      "light": "susiePurple"
+    },
+    "markdownListItem": {
+      "dark": "gold",
+      "light": "orange"
+    },
+    "markdownListEnumeration": {
+      "dark": "krisCyan",
+      "light": "krisBlue"
+    },
+    "markdownImage": {
+      "dark": "susieMagenta",
+      "light": "susiePurple"
+    },
+    "markdownImageText": {
+      "dark": "susiePink",
+      "light": "susieMagenta"
+    },
+    "markdownCodeBlock": {
+      "dark": "white",
+      "light": "black"
+    },
+    "syntaxComment": {
+      "dark": "textMuted",
+      "light": "#666688"
+    },
+    "syntaxKeyword": {
+      "dark": "hotPink",
+      "light": "susieMagenta"
+    },
+    "syntaxFunction": {
+      "dark": "krisCyan",
+      "light": "krisBlue"
+    },
+    "syntaxVariable": {
+      "dark": "gold",
+      "light": "orange"
+    },
+    "syntaxString": {
+      "dark": "ralseiTeal",
+      "light": "ralseiGreen"
+    },
+    "syntaxNumber": {
+      "dark": "noelleRose",
+      "light": "noelleRed"
+    },
+    "syntaxType": {
+      "dark": "noelleCyan",
+      "light": "krisBlue"
+    },
+    "syntaxOperator": {
+      "dark": "white",
+      "light": "black"
+    },
+    "syntaxPunctuation": {
+      "dark": "krisBlue",
+      "light": "#555577"
+    }
+  }
+}
