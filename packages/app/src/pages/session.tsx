@@ -1670,6 +1670,22 @@ export default function Page() {
     void (refresh ? file.tree.refresh("") : file.tree.list(""))
   })
 
+  createEffect(
+    on(
+      () => params.dir,
+      () => {
+        void file.tree.list("")
+
+        const active = tabs().active()
+        if (!active) return
+        const path = file.pathFromTab(active)
+        if (!path) return
+        void file.load(path, { force: true })
+      },
+      { defer: true },
+    ),
+  )
+
   const autoScroll = createAutoScroll({
     working: () => true,
     overflowAnchor: "dynamic",
