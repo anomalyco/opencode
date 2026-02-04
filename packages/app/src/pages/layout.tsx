@@ -2605,16 +2605,16 @@ export default function Layout(props: ParentProps) {
     })
     const slug = createMemo(() => base64Encode(props.project.worktree))
     const sessions = createMemo(() => {
-      const data = workspace().store
-      return data.session
-        .filter((session) => session.directory === data.path.directory)
+      const store = workspace().store
+      return store.session
+        .filter((session) => session.directory === store.path.directory)
         .filter((session) => !session.parentID && !session.time?.archived)
         .toSorted(sortSessions(Date.now()))
     })
     const children = createMemo(() => {
-      const data = workspace().store
+      const store = workspace().store
       const map = new Map<string, string[]>()
-      for (const session of data.session) {
+      for (const session of store.session) {
         if (!session.parentID) continue
         const existing = map.get(session.parentID)
         if (existing) {
