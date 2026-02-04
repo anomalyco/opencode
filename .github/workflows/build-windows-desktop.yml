@@ -107,12 +107,9 @@ jobs:
           }
           $baseConfig | ConvertTo-Json -Depth 10 | Set-Content src-tauri/tauri.build.conf.json
 
-          # Build with Tauri
+          # Build with Tauri (signing disabled for fork)
           bun tauri build --target x86_64-pc-windows-msvc --config ./src-tauri/tauri.build.conf.json --bundles nsis
         shell: pwsh
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
       - name: Upload Windows Installer
         uses: actions/upload-artifact@v4
