@@ -163,6 +163,7 @@ export const AuthCommand = cmd({
   describe: "manage credentials",
   builder: (yargs) =>
     yargs.command(AuthLoginCommand).command(AuthLogoutCommand).command(AuthListCommand).demandCommand(),
+  // Handler intentionally empty - subcommands handle actual logic
   async handler() {},
 })
 

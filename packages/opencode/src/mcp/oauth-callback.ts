@@ -175,6 +175,7 @@ export namespace McpOAuthCallback {
           error() {
             resolve(false)
           },
+          // Socket event handlers - no-op as we only need the open/error events for port checking
           data() {},
           close() {},
         },

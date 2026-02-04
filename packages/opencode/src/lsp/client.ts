@@ -68,6 +68,7 @@ export namespace LSPClient {
       // Return server initialization options
       return [input.server.initialization ?? {}]
     })
+    // LSP capability registration - no-op handlers as we don't need dynamic capability management
     connection.onRequest("client/registerCapability", async () => {})
     connection.onRequest("client/unregisterCapability", async () => {})
     connection.onRequest("workspace/workspaceFolders", async () => [

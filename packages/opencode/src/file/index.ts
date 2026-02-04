@@ -429,10 +429,16 @@ export namespace File {
     const project = Instance.project
     const full = path.join(Instance.directory, file)
 
-    // TODO: Filesystem.contains is lexical only - symlinks inside the project can escape.
-    // TODO: On Windows, cross-drive paths bypass this check. Consider realpath canonicalization.
+    // Security check: verify path is within project after resolving symlinks
+    // This prevents symlink attacks where a symlink inside project points outside
     if (!Instance.containsPath(full)) {
       throw new Error(`Access denied: path escapes project directory`)
+    }
+    // Additional secure check for existing files - resolves symlinks and checks Windows cross-drive
+    if (await Bun.file(full).exists()) {
+      if (!(await Instance.containsPathSecure(full))) {
+        throw new Error(`Access denied: path escapes project directory via symlink or cross-drive reference`)
+      }
     }
 
     // Fast path: check extension before any filesystem operations
@@ -509,10 +515,15 @@ export namespace File {
     }
     const resolved = dir ? path.join(Instance.directory, dir) : Instance.directory
 
-    // TODO: Filesystem.contains is lexical only - symlinks inside the project can escape.
-    // TODO: On Windows, cross-drive paths bypass this check. Consider realpath canonicalization.
+    // Security check: verify path is within project after resolving symlinks
     if (!Instance.containsPath(resolved)) {
       throw new Error(`Access denied: path escapes project directory`)
+    }
+    // Additional secure check - resolves symlinks and checks Windows cross-drive
+    if (await Filesystem.exists(resolved)) {
+      if (!(await Instance.containsPathSecure(resolved))) {
+        throw new Error(`Access denied: path escapes project directory via symlink or cross-drive reference`)
+      }
     }
 
     const nodes: Node[] = []

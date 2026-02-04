@@ -52,9 +52,10 @@ export const Instance = {
     return context.use().project
   },
   /**
-   * Check if a path is within the project boundary.
+   * Check if a path is within the project boundary (lexical check only).
    * Returns true if path is inside Instance.directory OR Instance.worktree.
    * Paths within the worktree but outside the working directory should not trigger external_directory permission.
+   * Note: Use containsPathSecure for security-critical operations that need symlink resolution.
    */
   containsPath(filepath: string) {
     if (Filesystem.contains(Instance.directory, filepath)) return true
@@ -62,6 +63,23 @@ export const Instance = {
     // Skip worktree check in this case to preserve external_directory permissions.
     if (Instance.worktree === "/") return false
     return Filesystem.contains(Instance.worktree, filepath)
+  },
+  /**
+   * Secure path containment check that resolves symlinks and handles Windows cross-drive paths.
+   * Use this for security-critical file operations (read, list, etc.).
+   * Returns false if the path escapes via symlinks or is on a different Windows drive.
+   */
+  async containsPathSecure(filepath: string): Promise<boolean> {
+    // First do lexical check - if it fails, no need to resolve symlinks
+    if (!Instance.containsPath(filepath)) return false
+
+    // Try secure check with symlink resolution
+    if (await Filesystem.containsSecureAsync(Instance.directory, filepath)) return true
+
+    // Non-git projects set worktree to "/" which would match ANY absolute path.
+    if (Instance.worktree === "/") return false
+
+    return Filesystem.containsSecureAsync(Instance.worktree, filepath)
   },
   state<S>(init: () => S, dispose?: (state: Awaited<S>) => Promise<void>): () => S {
     return State.create(() => Instance.directory, init, dispose)

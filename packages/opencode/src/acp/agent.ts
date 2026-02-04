@@ -457,8 +457,27 @@ export namespace ACP {
       }
     }
 
-    async authenticate(_params: AuthenticateRequest) {
-      throw new Error("Authentication not implemented")
+    async authenticate(params: AuthenticateRequest) {
+      // ACP authentication is handled via terminal-auth capability.
+      // Clients should run `opencode auth login` command in terminal.
+      // The methodId should match the one returned in initialize().
+      log.info("authenticate request received", { methodId: params.methodId })
+
+      if (params.methodId === "opencode-login") {
+        // This auth method requires the user to run `opencode auth login` in terminal.
+        // We cannot programmatically complete this authentication here.
+        // Throw authRequired to signal that authentication must be completed externally.
+        throw RequestError.authRequired(
+          "Please run 'opencode auth login' in your terminal to authenticate. " +
+            "If you're using an IDE with terminal-auth support, use the provided login button.",
+        )
+      }
+
+      // Unknown auth method
+      throw RequestError.authRequired(
+        `Unknown authentication method: ${params.methodId}. ` +
+          "Please use the 'opencode-login' method by running 'opencode auth login' in your terminal.",
+      )
     }
 
     async newSession(params: NewSessionRequest) {
