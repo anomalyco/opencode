@@ -5,19 +5,28 @@ import {
   type AuthenticateRequest,
   type AuthMethod,
   type CancelNotification,
+  type ForkSessionRequest,
+  type ForkSessionResponse,
   type InitializeRequest,
   type InitializeResponse,
+  type ListSessionsRequest,
+  type ListSessionsResponse,
   type LoadSessionRequest,
   type NewSessionRequest,
   type PermissionOption,
   type PlanEntry,
   type PromptRequest,
+  type ResumeSessionRequest,
+  type ResumeSessionResponse,
+  type Role,
+  type SessionInfo,
   type SetSessionModelRequest,
   type SetSessionModeRequest,
   type SetSessionModeResponse,
   type ToolCallContent,
   type ToolKind,
 } from "@agentclientprotocol/sdk"
+
 import { Log } from "../util/log"
 import { ACPSessionManager } from "./session"
 import type { ACPConfig } from "./types"
@@ -31,6 +40,11 @@ import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
 import type { Event, OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
 import { applyPatch } from "diff"
+
+type ModeOption = { id: string; name: string; description?: string }
+type ModelOption = { modelId: string; name: string }
+
+const DEFAULT_VARIANT_VALUE = "default"
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
@@ -354,7 +368,7 @@ export namespace ACP {
 
           if (part.type === "text") {
             const delta = props.delta
-            if (delta && part.synthetic !== true) {
+            if (delta && part.ignored !== true) {
               await this.connection
                 .sessionUpdate({
                   sessionId,
@@ -429,6 +443,11 @@ export namespace ACP {
             embeddedContext: true,
             image: true,
           },
+          sessionCapabilities: {
+            fork: {},
+            list: {},
+            resume: {},
+          },
         },
         authMethods: [authMethod],
         agentInfo: {
@@ -463,7 +482,7 @@ export namespace ACP {
           sessionId,
           models: load.models,
           modes: load.modes,
-          _meta: {},
+          _meta: load._meta,
         }
       } catch (e) {
         const error = MessageV2.fromError(e, {
@@ -512,8 +531,13 @@ export namespace ACP {
         const lastUser = messages?.findLast((m) => m.info.role === "user")?.info
         if (lastUser?.role === "user") {
           result.models.currentModelId = `${lastUser.model.providerID}/${lastUser.model.modelID}`
-          if (result.modes.availableModes.some((m) => m.id === lastUser.agent)) {
+          this.sessionManager.setModel(sessionId, {
+            providerID: lastUser.model.providerID,
+            modelID: lastUser.model.modelID,
+          })
+          if (result.modes?.availableModes.some((m) => m.id === lastUser.agent)) {
             result.modes.currentModeId = lastUser.agent
+            this.sessionManager.setMode(sessionId, lastUser.agent)
           }
         }
 
@@ -523,6 +547,141 @@ export namespace ACP {
         }
 
         return result
+      } catch (e) {
+        const error = MessageV2.fromError(e, {
+          providerID: this.config.defaultModel?.providerID ?? "unknown",
+        })
+        if (LoadAPIKeyError.isInstance(error)) {
+          throw RequestError.authRequired()
+        }
+        throw e
+      }
+    }
+
+    async unstable_listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
+      try {
+        const cursor = params.cursor ? Number(params.cursor) : undefined
+        const limit = 100
+
+        const sessions = await this.sdk.session
+          .list(
+            {
+              directory: params.cwd ?? undefined,
+              roots: true,
+            },
+            { throwOnError: true },
+          )
+          .then((x) => x.data ?? [])
+
+        const sorted = sessions.toSorted((a, b) => b.time.updated - a.time.updated)
+        const filtered = cursor ? sorted.filter((s) => s.time.updated < cursor) : sorted
+        const page = filtered.slice(0, limit)
+
+        const entries: SessionInfo[] = page.map((session) => ({
+          sessionId: session.id,
+          cwd: session.directory,
+          title: session.title,
+          updatedAt: new Date(session.time.updated).toISOString(),
+        }))
+
+        const last = page[page.length - 1]
+        const next = filtered.length > limit && last ? String(last.time.updated) : undefined
+
+        const response: ListSessionsResponse = {
+          sessions: entries,
+        }
+        if (next) response.nextCursor = next
+        return response
+      } catch (e) {
+        const error = MessageV2.fromError(e, {
+          providerID: this.config.defaultModel?.providerID ?? "unknown",
+        })
+        if (LoadAPIKeyError.isInstance(error)) {
+          throw RequestError.authRequired()
+        }
+        throw e
+      }
+    }
+
+    async unstable_forkSession(params: ForkSessionRequest): Promise<ForkSessionResponse> {
+      const directory = params.cwd
+      const mcpServers = params.mcpServers ?? []
+
+      try {
+        const model = await defaultModel(this.config, directory)
+
+        const forked = await this.sdk.session
+          .fork(
+            {
+              sessionID: params.sessionId,
+              directory,
+            },
+            { throwOnError: true },
+          )
+          .then((x) => x.data)
+
+        if (!forked) {
+          throw new Error("Fork session returned no data")
+        }
+
+        const sessionId = forked.id
+        await this.sessionManager.load(sessionId, directory, mcpServers, model)
+
+        log.info("fork_session", { sessionId, mcpServers: mcpServers.length })
+
+        const mode = await this.loadSessionMode({
+          cwd: directory,
+          mcpServers,
+          sessionId,
+        })
+
+        const messages = await this.sdk.session
+          .messages(
+            {
+              sessionID: sessionId,
+              directory,
+            },
+            { throwOnError: true },
+          )
+          .then((x) => x.data)
+          .catch((err) => {
+            log.error("unexpected error when fetching message", { error: err })
+            return undefined
+          })
+
+        for (const msg of messages ?? []) {
+          log.debug("replay message", msg)
+          await this.processMessage(msg)
+        }
+
+        return mode
+      } catch (e) {
+        const error = MessageV2.fromError(e, {
+          providerID: this.config.defaultModel?.providerID ?? "unknown",
+        })
+        if (LoadAPIKeyError.isInstance(error)) {
+          throw RequestError.authRequired()
+        }
+        throw e
+      }
+    }
+
+    async unstable_resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
+      const directory = params.cwd
+      const sessionId = params.sessionId
+      const mcpServers = params.mcpServers ?? []
+
+      try {
+        const model = await defaultModel(this.config, directory)
+        await this.sessionManager.load(sessionId, directory, mcpServers, model)
+
+        log.info("resume_session", { sessionId, mcpServers: mcpServers.length })
+
+        return this.loadSessionMode({
+          cwd: directory,
+          mcpServers,
+          sessionId,
+        })
       } catch (e) {
         const error = MessageV2.fromError(e, {
           providerID: this.config.defaultModel?.providerID ?? "unknown",
@@ -688,6 +847,7 @@ export namespace ACP {
           }
         } else if (part.type === "text") {
           if (part.text) {
+            const audience: Role[] | undefined = part.synthetic ? ["assistant"] : part.ignored ? ["user"] : undefined
             await this.connection
               .sessionUpdate({
                 sessionId,
@@ -696,6 +856,7 @@ export namespace ACP {
                   content: {
                     type: "text",
                     text: part.text,
+                    ...(audience && { annotations: { audience } }),
                   },
                 },
               })
@@ -703,6 +864,83 @@ export namespace ACP {
                 log.error("failed to send text to ACP", { error: err })
               })
           }
+        } else if (part.type === "file") {
+          // Replay file attachments as appropriate ACP content blocks.
+          // OpenCode stores files internally as { type: "file", url, filename, mime }.
+          // We convert these back to ACP blocks based on the URL scheme and MIME type:
+          // - file:// URLs → resource_link
+          // - data: URLs with image/* → image block
+          // - data: URLs with text/* or application/json → resource with text
+          // - data: URLs with other types → resource with blob
+          const url = part.url
+          const filename = part.filename ?? "file"
+          const mime = part.mime || "application/octet-stream"
+          const messageChunk = message.info.role === "user" ? "user_message_chunk" : "agent_message_chunk"
+
+          if (url.startsWith("file://")) {
+            // Local file reference - send as resource_link
+            await this.connection
+              .sessionUpdate({
+                sessionId,
+                update: {
+                  sessionUpdate: messageChunk,
+                  content: { type: "resource_link", uri: url, name: filename, mimeType: mime },
+                },
+              })
+              .catch((err) => {
+                log.error("failed to send resource_link to ACP", { error: err })
+              })
+          } else if (url.startsWith("data:")) {
+            // Embedded content - parse data URL and send as appropriate block type
+            const base64Match = url.match(/^data:([^;]+);base64,(.*)$/)
+            const dataMime = base64Match?.[1]
+            const base64Data = base64Match?.[2] ?? ""
+
+            const effectiveMime = dataMime || mime
+
+            if (effectiveMime.startsWith("image/")) {
+              // Image - send as image block
+              await this.connection
+                .sessionUpdate({
+                  sessionId,
+                  update: {
+                    sessionUpdate: messageChunk,
+                    content: {
+                      type: "image",
+                      mimeType: effectiveMime,
+                      data: base64Data,
+                      uri: `file://${filename}`,
+                    },
+                  },
+                })
+                .catch((err) => {
+                  log.error("failed to send image to ACP", { error: err })
+                })
+            } else {
+              // Non-image: text types get decoded, binary types stay as blob
+              const isText = effectiveMime.startsWith("text/") || effectiveMime === "application/json"
+              const resource = isText
+                ? {
+                    uri: `file://${filename}`,
+                    mimeType: effectiveMime,
+                    text: Buffer.from(base64Data, "base64").toString("utf-8"),
+                  }
+                : { uri: `file://${filename}`, mimeType: effectiveMime, blob: base64Data }
+
+              await this.connection
+                .sessionUpdate({
+                  sessionId,
+                  update: {
+                    sessionUpdate: messageChunk,
+                    content: { type: "resource", resource },
+                  },
+                })
+                .catch((err) => {
+                  log.error("failed to send resource to ACP", { error: err })
+                })
+            }
+          }
+          // URLs that don't match file:// or data: are skipped (unsupported)
         } else if (part.type === "reasoning") {
           if (part.text) {
             await this.connection
@@ -724,27 +962,7 @@ export namespace ACP {
       }
     }
 
-    private async loadSessionMode(params: LoadSessionRequest) {
-      const directory = params.cwd
-      const model = await defaultModel(this.config, directory)
-      const sessionId = params.sessionId
-
-      const providers = await this.sdk.config.providers({ directory }).then((x) => x.data!.providers)
-      const entries = providers.sort((a, b) => {
-        const nameA = a.name.toLowerCase()
-        const nameB = b.name.toLowerCase()
-        if (nameA < nameB) return -1
-        if (nameA > nameB) return 1
-        return 0
-      })
-      const availableModels = entries.flatMap((provider) => {
-        const models = Provider.sort(Object.values(provider.models))
-        return models.map((model) => ({
-          modelId: `${provider.id}/${model.id}`,
-          name: `${provider.name}/${model.name}`,
-        }))
-      })
-
+    private async loadAvailableModes(directory: string): Promise<ModeOption[]> {
       const agents = await this.config.sdk.app
         .agents(
           {
@@ -753,6 +971,56 @@ export namespace ACP {
           { throwOnError: true },
         )
         .then((resp) => resp.data!)
+
+      return agents
+        .filter((agent) => agent.mode !== "subagent" && !agent.hidden)
+        .map((agent) => ({
+          id: agent.name,
+          name: agent.name,
+          description: agent.description,
+        }))
+    }
+
+    private async resolveModeState(
+      directory: string,
+      sessionId: string,
+    ): Promise<{ availableModes: ModeOption[]; currentModeId?: string }> {
+      const availableModes = await this.loadAvailableModes(directory)
+      const currentModeId =
+        this.sessionManager.get(sessionId).modeId ||
+        (await (async () => {
+          if (!availableModes.length) return undefined
+          const defaultAgentName = await AgentModule.defaultAgent()
+          const resolvedModeId =
+            availableModes.find((mode) => mode.name === defaultAgentName)?.id ?? availableModes[0].id
+          this.sessionManager.setMode(sessionId, resolvedModeId)
+          return resolvedModeId
+        })())
+
+      return { availableModes, currentModeId }
+    }
+
+    private async loadSessionMode(params: LoadSessionRequest) {
+      const directory = params.cwd
+      const model = await defaultModel(this.config, directory)
+      const sessionId = params.sessionId
+
+      const providers = await this.sdk.config.providers({ directory }).then((x) => x.data!.providers)
+      const entries = sortProvidersByName(providers)
+      const availableVariants = modelVariantsFromProviders(entries, model)
+      const currentVariant = this.sessionManager.getVariant(sessionId)
+      if (currentVariant && !availableVariants.includes(currentVariant)) {
+        this.sessionManager.setVariant(sessionId, undefined)
+      }
+      const availableModels = buildAvailableModels(entries, { includeVariants: true })
+      const modeState = await this.resolveModeState(directory, sessionId)
+      const currentModeId = modeState.currentModeId
+      const modes = currentModeId
+        ? {
+            availableModes: modeState.availableModes,
+            currentModeId,
+          }
+        : undefined
 
       const commands = await this.config.sdk.command
         .list(
@@ -773,20 +1041,6 @@ export namespace ACP {
           name: "compact",
           description: "compact the session",
         })
-
-      const availableModes = agents
-        .filter((agent) => agent.mode !== "subagent" && !agent.hidden)
-        .map((agent) => ({
-          id: agent.name,
-          name: agent.name,
-          description: agent.description,
-        }))
-
-      const defaultAgentName = await AgentModule.defaultAgent()
-      const currentModeId = availableModes.find((m) => m.name === defaultAgentName)?.id ?? availableModes[0].id
-
-      // Persist the default mode so prompt() uses it immediately
-      this.sessionManager.setMode(sessionId, currentModeId)
 
       const mcpServers: Record<string, Config.Mcp> = {}
       for (const server of params.mcpServers) {
@@ -841,40 +1095,46 @@ export namespace ACP {
       return {
         sessionId,
         models: {
-          currentModelId: `${model.providerID}/${model.modelID}`,
+          currentModelId: formatModelIdWithVariant(model, currentVariant, availableVariants, true),
           availableModels,
         },
-        modes: {
-          availableModes,
-          currentModeId,
-        },
-        _meta: {},
+        modes,
+        _meta: buildVariantMeta({
+          model,
+          variant: this.sessionManager.getVariant(sessionId),
+          availableVariants,
+        }),
       }
     }
 
-    async setSessionModel(params: SetSessionModelRequest) {
+    async unstable_setSessionModel(params: SetSessionModelRequest) {
       const session = this.sessionManager.get(params.sessionId)
+      const providers = await this.sdk.config
+        .providers({ directory: session.cwd }, { throwOnError: true })
+        .then((x) => x.data!.providers)
 
-      const model = Provider.parseModel(params.modelId)
+      const selection = parseModelSelection(params.modelId, providers)
+      this.sessionManager.setModel(session.id, selection.model)
+      this.sessionManager.setVariant(session.id, selection.variant)
 
-      this.sessionManager.setModel(session.id, {
-        providerID: model.providerID,
-        modelID: model.modelID,
-      })
+      const entries = sortProvidersByName(providers)
+      const availableVariants = modelVariantsFromProviders(entries, selection.model)
 
       return {
-        _meta: {},
+        _meta: buildVariantMeta({
+          model: selection.model,
+          variant: selection.variant,
+          availableVariants,
+        }),
       }
     }
 
     async setSessionMode(params: SetSessionModeRequest): Promise<SetSessionModeResponse | void> {
-      this.sessionManager.get(params.sessionId)
-      await this.config.sdk.app
-        .agents({}, { throwOnError: true })
-        .then((x) => x.data)
-        .then((agent) => {
-          if (!agent) throw new Error(`Agent not found: ${params.modeId}`)
-        })
+      const session = this.sessionManager.get(params.sessionId)
+      const availableModes = await this.loadAvailableModes(session.cwd)
+      if (!availableModes.some((mode) => mode.id === params.modeId)) {
+        throw new Error(`Agent not found: ${params.modeId}`)
+      }
       this.sessionManager.setMode(params.sessionId, params.modeId)
     }
 
@@ -891,49 +1151,73 @@ export namespace ACP {
       const agent = session.modeId ?? (await AgentModule.defaultAgent())
 
       const parts: Array<
-        { type: "text"; text: string } | { type: "file"; url: string; filename: string; mime: string }
+        | { type: "text"; text: string; synthetic?: boolean; ignored?: boolean }
+        | { type: "file"; url: string; filename: string; mime: string }
       > = []
       for (const part of params.prompt) {
         switch (part.type) {
           case "text":
+            const audience = part.annotations?.audience
+            const forAssistant = audience?.length === 1 && audience[0] === "assistant"
+            const forUser = audience?.length === 1 && audience[0] === "user"
             parts.push({
               type: "text" as const,
               text: part.text,
+              ...(forAssistant && { synthetic: true }),
+              ...(forUser && { ignored: true }),
             })
             break
-          case "image":
+          case "image": {
+            const parsed = parseUri(part.uri ?? "")
+            const filename = parsed.type === "file" ? parsed.filename : "image"
             if (part.data) {
               parts.push({
                 type: "file",
                 url: `data:${part.mimeType};base64,${part.data}`,
-                filename: "image",
+                filename,
                 mime: part.mimeType,
               })
             } else if (part.uri && part.uri.startsWith("http:")) {
               parts.push({
                 type: "file",
                 url: part.uri,
-                filename: "image",
+                filename,
                 mime: part.mimeType,
               })
             }
             break
+          }
 
           case "resource_link":
             const parsed = parseUri(part.uri)
+            // Use the name from resource_link if available
+            if (part.name && parsed.type === "file") {
+              parsed.filename = part.name
+            }
             parts.push(parsed)
 
             break
 
-          case "resource":
+          case "resource": {
             const resource = part.resource
-            if ("text" in resource) {
+            if ("text" in resource && resource.text) {
               parts.push({
                 type: "text",
                 text: resource.text,
               })
+            } else if ("blob" in resource && resource.blob && resource.mimeType) {
+              // Binary resource (PDFs, etc.): store as file part with data URL
+              const parsed = parseUri(resource.uri ?? "")
+              const filename = parsed.type === "file" ? parsed.filename : "file"
+              parts.push({
+                type: "file",
+                url: `data:${resource.mimeType};base64,${resource.blob}`,
+                filename,
+                mime: resource.mimeType,
+              })
             }
             break
+          }
 
           default:
             break
@@ -967,6 +1251,7 @@ export namespace ACP {
             providerID: model.providerID,
             modelID: model.modelID,
           },
+          variant: this.sessionManager.getVariant(sessionID),
           parts,
           agent,
           directory,
@@ -1177,5 +1462,106 @@ export namespace ACP {
       return undefined
     }
     return result
+  }
+
+  function sortProvidersByName<T extends { name: string }>(providers: T[]): T[] {
+    return [...providers].sort((a, b) => {
+      const nameA = a.name.toLowerCase()
+      const nameB = b.name.toLowerCase()
+      if (nameA < nameB) return -1
+      if (nameA > nameB) return 1
+      return 0
+    })
+  }
+
+  function modelVariantsFromProviders(
+    providers: Array<{ id: string; models: Record<string, { variants?: Record<string, any> }> }>,
+    model: { providerID: string; modelID: string },
+  ): string[] {
+    const provider = providers.find((entry) => entry.id === model.providerID)
+    if (!provider) return []
+    const modelInfo = provider.models[model.modelID]
+    if (!modelInfo?.variants) return []
+    return Object.keys(modelInfo.variants)
+  }
+
+  function buildAvailableModels(
+    providers: Array<{ id: string; name: string; models: Record<string, any> }>,
+    options: { includeVariants?: boolean } = {},
+  ): ModelOption[] {
+    const includeVariants = options.includeVariants ?? false
+    return providers.flatMap((provider) => {
+      const models = Provider.sort(Object.values(provider.models) as any)
+      return models.flatMap((model) => {
+        const base: ModelOption = {
+          modelId: `${provider.id}/${model.id}`,
+          name: `${provider.name}/${model.name}`,
+        }
+        if (!includeVariants || !model.variants) return [base]
+        const variants = Object.keys(model.variants).filter((variant) => variant !== DEFAULT_VARIANT_VALUE)
+        const variantOptions = variants.map((variant) => ({
+          modelId: `${provider.id}/${model.id}/${variant}`,
+          name: `${provider.name}/${model.name} (${variant})`,
+        }))
+        return [base, ...variantOptions]
+      })
+    })
+  }
+
+  function formatModelIdWithVariant(
+    model: { providerID: string; modelID: string },
+    variant: string | undefined,
+    availableVariants: string[],
+    includeVariant: boolean,
+  ) {
+    const base = `${model.providerID}/${model.modelID}`
+    if (!includeVariant || !variant || !availableVariants.includes(variant)) return base
+    return `${base}/${variant}`
+  }
+
+  function buildVariantMeta(input: {
+    model: { providerID: string; modelID: string }
+    variant?: string
+    availableVariants: string[]
+  }) {
+    return {
+      opencode: {
+        modelId: `${input.model.providerID}/${input.model.modelID}`,
+        variant: input.variant ?? null,
+        availableVariants: input.availableVariants,
+      },
+    }
+  }
+
+  function parseModelSelection(
+    modelId: string,
+    providers: Array<{ id: string; models: Record<string, { variants?: Record<string, any> }> }>,
+  ): { model: { providerID: string; modelID: string }; variant?: string } {
+    const parsed = Provider.parseModel(modelId)
+    const provider = providers.find((p) => p.id === parsed.providerID)
+    if (!provider) {
+      return { model: parsed, variant: undefined }
+    }
+
+    // Check if modelID exists directly
+    if (provider.models[parsed.modelID]) {
+      return { model: parsed, variant: undefined }
+    }
+
+    // Try to extract variant from end of modelID (e.g., "claude-sonnet-4/high" -> model: "claude-sonnet-4", variant: "high")
+    const segments = parsed.modelID.split("/")
+    if (segments.length > 1) {
+      const candidateVariant = segments[segments.length - 1]
+      const baseModelId = segments.slice(0, -1).join("/")
+      const baseModelInfo = provider.models[baseModelId]
+      if (baseModelInfo?.variants && candidateVariant in baseModelInfo.variants) {
+        return {
+          model: { providerID: parsed.providerID, modelID: baseModelId },
+          variant: candidateVariant,
+        }
+      }
+    }
+
+    return { model: parsed, variant: undefined }
   }
 }

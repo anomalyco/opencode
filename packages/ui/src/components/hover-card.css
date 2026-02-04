@@ -1,13 +1,17 @@
 [data-slot="hover-card-trigger"] {
-  display: inline-flex;
+  display: flex;
+  width: 100%;
+  min-width: 0;
 }
 
 [data-component="hover-card-content"] {
   z-index: 50;
   min-width: 200px;
   max-width: 320px;
-  border-radius: var(--radius-md);
+  max-height: calc(100vh - 1rem);
+  border-radius: 8px;
   background-color: var(--surface-raised-stronger-non-alpha);
+  pointer-events: auto;
 
   border: 1px solid color-mix(in oklch, var(--border-base) 50%, transparent);
   background-clip: padding-box;
@@ -28,7 +32,9 @@
   }
 
   [data-slot="hover-card-body"] {
-    padding: 12px;
+    padding: 4px;
+    max-height: inherit;
+    overflow: hidden;
   }
 }
 

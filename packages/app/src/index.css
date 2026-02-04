@@ -1,11 +1,1 @@
 @import "@opencode-ai/ui/styles/tailwind";
-
-:root {
-  a {
-    cursor: default;
-  }
-}
-
-*[data-tauri-drag-region] {
-  app-region: drag;
-}
