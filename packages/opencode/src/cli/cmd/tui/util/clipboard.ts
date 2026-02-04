@@ -1,21 +1,28 @@
 import { $ } from "bun"
-import type { CliRenderer } from "@opentui/core"
 import { platform, release } from "os"
 import clipboardy from "clipboardy"
 import { lazy } from "../../../../util/lazy.js"
 import { tmpdir } from "os"
 import path from "path"
 
-const rendererRef = { current: undefined as CliRenderer | undefined }
+/**
+ * Writes text to clipboard via OSC 52 escape sequence.
+ * This allows clipboard operations to work over SSH by having
+ * the terminal emulator handle the clipboard locally.
+ */
+function writeOsc52(text: string): void {
+  if (!process.stdout.isTTY) return
+  const base64 = Buffer.from(text).toString("base64")
+  const osc52 = `\x1b]52;c;${base64}\x07`
+  const passthrough = process.env["TMUX"] || process.env["STY"]
+  const sequence = passthrough ? `\x1bPtmux;\x1b${osc52}\x1b\\` : osc52
+  process.stdout.write(sequence)
+}
 
 export namespace Clipboard {
   export interface Content {
     data: string
     mime: string
-  }
-
-  export function setRenderer(renderer: CliRenderer | undefined): void {
-    rendererRef.current = renderer
   }
 
   export async function read(): Promise<Content | undefined> {
@@ -146,12 +153,7 @@ export namespace Clipboard {
   })
 
   export async function copy(text: string): Promise<void> {
-    const renderer = rendererRef.current
-    if (renderer) {
-      // Try OSC52 but don't early return - always fall back to native method
-      // OSC52 may report success but not actually work in all terminals
-      renderer.copyToClipboardOSC52(text)
-    }
+    writeOsc52(text)
     await getCopyMethod()(text)
   }
 }
