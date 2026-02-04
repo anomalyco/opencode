@@ -1,25 +1,39 @@
 import { useRouteData, useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
+import { useSDK } from "@tui/context/sdk"
+import { useLocal } from "@tui/context/local"
 import { createEffect, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "@tui/context/theme"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { FileList, order } from "./file-list"
-import { commentSlots, getLineAnchor, makeKey, type Comment, type CommentInputState, type CommentSide } from "./comment-box"
+import {
+  commentSlots,
+  getLineAnchor,
+  makeKey,
+  type Comment,
+  type CommentInputState,
+  type CommentSide,
+} from "./comment-box"
 import { SlottableDiff, type DiffLineClickInfo, type SlottableDiffProps } from "./slottable-diff"
 import { Footer } from "./footer"
+import { formatCommentsForAI, hasAnyComments } from "./format-comments"
 import { formatPatch, structuredPatch } from "diff"
 import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
+import { Identifier } from "@/id/id"
 import type { ScrollBoxRenderable } from "@opentui/core"
 import { useKV } from "../../context/kv.tsx"
 import path from "node:path"
 
 const SIDE_BAR_WIDTH = 40
+export type CommentsByFile = Map<string, Map<string, Comment>>
 
 export function Changes() {
   const routeData = useRouteData("changes")
   const route = useRoute()
   const sync = useSync()
+  const sdk = useSDK()
+  const local = useLocal()
   const themeState = useTheme()
   const kv = useKV()
   const dimensions = useTerminalDimensions()
@@ -37,8 +51,9 @@ export function Changes() {
   const selectedFile = createMemo(() => ordered()[store.selected])
   const currentFileKey = createMemo(() => selectedFile()?.file ?? "__none__")
 
-  const [commentsByFile, setCommentsByFile] = createSignal<Map<string, Map<string, Comment>>>(new Map())
+  const [commentsByFile, setCommentsByFile] = createSignal<CommentsByFile>(new Map())
   const currentComments = createMemo(() => commentsByFile().get(currentFileKey()) ?? new Map())
+  const hasComments = createMemo(() => hasAnyComments(commentsByFile()))
   const [wrap] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
 
   const filetype = createMemo(() => {
@@ -67,8 +82,6 @@ export function Changes() {
     if (store.pane === "list") return
     if (info.type === "empty") return
 
-    const lineIndex = info.visualLineIndex
-    const lineType = info.type
     const side = view() === "split" ? info.side : "unified"
     const anchor = getLineAnchor(info)
     const key = makeKey(anchor, side)
@@ -82,24 +95,23 @@ export function Changes() {
 
     // Toggle input for new comment
     const current = store.input
-    if (current && current.line === lineIndex && current.side === side) {
+    if (current && current.line === info.visualLineIndex && current.side === side) {
       setStore("input", null)
       return
     }
 
-    setStore("input", { line: lineIndex, side, lineType, anchor })
+    setStore("input", { line: info.visualLineIndex, side, lineType: info.type, anchor })
     setStore("focused", null)
   }
 
   function handleSubmitComment(line: number, side: CommentSide, text: string) {
-    const input = store.input
-    const lineType = input?.lineType ?? "context"
-    const anchor = input?.anchor ?? `v:${line}`
+    const lineType = store.input?.lineType ?? "context"
+    const anchor = store.input?.anchor ?? `v:${line}`
     const key = makeKey(anchor, side)
 
     const newComment: Comment = {
       id: `${key}-${Date.now()}`,
-      lineIndex: line,
+      line,
       text,
       lineType,
       anchor,
@@ -126,7 +138,6 @@ export function Changes() {
     // Parse key to get line and side
     const parts = key.split("-") as [string, CommentSide]
     const side = parts[1]
-    const line = comment.lineIndex
     const lineType = comment.lineType ?? "context"
 
     // Delete comment and open input
@@ -138,7 +149,7 @@ export function Changes() {
       next.set(fileKey, fileComments)
       return next
     })
-    setStore("input", { line, side, lineType, anchor: comment.anchor })
+    setStore("input", { line: comment.line, side, lineType, anchor: comment.anchor })
     setStore("focused", null)
   }
 
@@ -157,6 +168,40 @@ export function Changes() {
   function handleFocusComment(key: string) {
     setStore("focused", key)
     setStore("input", null)
+  }
+
+  function handleSubmitFeedback() {
+    if (!hasComments()) return
+
+    const selectedModel = local.model.current()
+    if (!selectedModel) return
+
+    const feedbackMessage = formatCommentsForAI(commentsByFile())
+
+    // Send feedback
+    sdk.client.session
+      .prompt({
+        sessionID: routeData.sessionID,
+        messageID: Identifier.ascending("message"),
+        agent: local.agent.current().name,
+        model: selectedModel,
+        variant: local.model.variant.current(),
+        parts: [
+          {
+            id: Identifier.ascending("part"),
+            type: "text",
+            text: feedbackMessage,
+          },
+        ],
+      })
+      .catch((err: Error) => {
+        console.error("Error sending feedback:", err)
+      })
+
+    // Clear all comments
+    setCommentsByFile(new Map())
+
+    route.navigate({ type: "session", sessionID: routeData.sessionID })
   }
 
   const slots = () =>
@@ -194,6 +239,21 @@ export function Changes() {
   }))
 
   useKeyboard((evt) => {
+    // Ctrl+Enter to submit feedback
+    if (evt.ctrl && evt.name === "return" && store.pane === "diff" && !store.input) {
+      evt.preventDefault()
+      handleSubmitFeedback()
+      return
+    }
+
+    // Escape to go back
+    if (evt.name === "escape" && !store.input) {
+      evt.preventDefault()
+      route.navigate({ type: "session", sessionID: routeData.sessionID })
+      return
+    }
+
+    // Tab to switch pane (file-list/diff)
     if (evt.name === "tab") {
       evt.preventDefault()
       const next = store.pane === "list" ? "diff" : "list"
@@ -201,12 +261,6 @@ export function Changes() {
         setStore("input", null)
       }
       setStore("pane", next)
-      return
-    }
-
-    if (evt.name === "escape" && !store.input) {
-      evt.preventDefault()
-      route.navigate({ type: "session", sessionID: routeData.sessionID })
       return
     }
 
@@ -286,7 +340,7 @@ export function Changes() {
           </box>
         )}
       </box>
-      <Footer mode={store.pane} />
+      <Footer mode={store.pane} hasComments={hasComments()} />
     </box>
   )
 }

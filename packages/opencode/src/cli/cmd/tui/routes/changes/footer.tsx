@@ -2,7 +2,7 @@ import { createMemo, Show } from "solid-js"
 import { useTheme } from "@tui/context/theme"
 import { EmptyBorder } from "@tui/component/border"
 
-export function Footer(props: { mode: "list" | "diff" }) {
+export function Footer(props: { mode: "list" | "diff"; hasComments: boolean }) {
   const theme = useTheme()
   const label = createMemo(() => (props.mode === "list" ? "Files" : "Diff"))
   const accent = createMemo(() => (props.mode === "list" ? theme.theme.primary : theme.theme.diffHighlightAdded))
@@ -16,15 +16,17 @@ export function Footer(props: { mode: "list" | "diff" }) {
         vertical: "┃",
       }}
       width="100%"
-      paddingLeft={0}
-      marginLeft={0}
       flexShrink={0}
+      margin={0}
+      padding={0}
     >
       <box
         flexDirection="row"
         justifyContent="space-between"
         alignItems="center"
         width="100%"
+        paddingTop={0}
+        paddingBottom={0}
         paddingLeft={1}
         paddingRight={1}
       >
@@ -37,7 +39,7 @@ export function Footer(props: { mode: "list" | "diff" }) {
             esc <span style={{ fg: theme.theme.textMuted }}>cancel</span>
           </text>
         </box>
-        <Show when={props.mode === "diff"}>
+        <Show when={props.mode === "diff" && props.hasComments}>
           <box flexDirection="row" gap={1} flexShrink={0} alignItems="center">
             <text fg={theme.theme.text}>
               ctrl+enter <span style={{ fg: theme.theme.textMuted }}>submit</span>
