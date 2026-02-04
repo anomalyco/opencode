@@ -106,6 +106,7 @@ const setSessionHandoff = (key: string, patch: Partial<HandoffSession>) => {
 
 interface SessionReviewTabProps {
   title?: JSX.Element
+  empty?: JSX.Element
   diffs: () => FileDiff[]
   view: () => ReturnType<ReturnType<typeof useLayout>["view"]>
   diffStyle: DiffStyle
@@ -223,6 +224,7 @@ function SessionReviewTab(props: SessionReviewTabProps) {
   return (
     <SessionReview
       title={props.title}
+      empty={props.empty}
       scrollRef={(el) => {
         scroll = el
         props.onScrollRef?.(el)
@@ -448,8 +450,6 @@ export default function Page() {
 
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
-  const turnDiffs = createMemo(() => lastUserMessage()?.summary?.diffs ?? [])
-  const reviewDiffs = createMemo(() => (store.changes === "session" ? diffs() : turnDiffs()))
   const reviewCount = createMemo(() => Math.max(info()?.summary?.files ?? 0, diffs().length))
   const hasReview = createMemo(() => reviewCount() > 0)
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
@@ -718,6 +718,9 @@ export default function Page() {
     newSessionWorktree: "main",
     promptHeight: 0,
   })
+
+  const turnDiffs = createMemo(() => lastUserMessage()?.summary?.diffs ?? [])
+  const reviewDiffs = createMemo(() => (store.changes === "session" ? diffs() : turnDiffs()))
 
   const renderedUserMessages = createMemo(
     () => {
@@ -1452,6 +1455,13 @@ export default function Page() {
     />
   )
 
+  const emptyTurn = () => (
+    <div class="h-full pb-30 flex flex-col items-center justify-center text-center gap-6">
+      <Mark class="w-14 opacity-10" />
+      <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.noChanges")}</div>
+    </div>
+  )
+
   const reviewPanel = () => (
     <div class="flex flex-col h-full overflow-hidden bg-background-stronger contain-strict">
       <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
@@ -1459,6 +1469,7 @@ export default function Page() {
           <Match when={store.changes === "turn" && !!params.id}>
             <SessionReviewTab
               title={changesTitle()}
+              empty={emptyTurn()}
               diffs={reviewDiffs}
               view={view}
               diffStyle={layout.review.diffStyle()}
@@ -2187,6 +2198,7 @@ export default function Page() {
                           <Match when={store.changes === "turn" && !!params.id}>
                             <SessionReviewTab
                               title={changesTitle()}
+                              empty={emptyTurn()}
                               diffs={reviewDiffs}
                               view={view}
                               diffStyle="unified"
