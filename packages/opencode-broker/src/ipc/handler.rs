@@ -534,7 +534,7 @@ async fn handle_spawn_pty(
         Ok(p) => p,
         Err(e) => {
             error!(error = %e, "failed to allocate PTY");
-            return Response::failure(&request.id, "failed to allocate PTY");
+            return Response::failure(&request.id, format!("failed to allocate PTY: {}", e));
         }
     };
 
@@ -559,7 +559,7 @@ async fn handle_spawn_pty(
         Ok(c) => c,
         Err(e) => {
             error!(error = %e, "failed to spawn process");
-            return Response::failure(&request.id, "failed to spawn process");
+            return Response::failure(&request.id, format!("failed to spawn process: {}", e));
         }
     };
 
@@ -716,7 +716,7 @@ async fn handle_resize_pty(request: Request, pty_sessions: &SessionManager) -> R
     if result < 0 {
         let err = std::io::Error::last_os_error();
         error!(error = %err, "failed to resize PTY");
-        return Response::failure(&request.id, "failed to resize PTY");
+        return Response::failure(&request.id, format!("failed to resize PTY: {}", err));
     }
 
     // Update stored dimensions
