@@ -14,6 +14,13 @@
     <meta property="og:image" content="/social-share.png" />
     <meta property="twitter:image" content="/social-share.png" />
     <script id="oc-theme-preload-script" src="/oc-theme-preload.js"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js');
+        });
+      }
+    </script>
   </head>
   <body class="antialiased overscroll-none text-12-regular overflow-hidden">
     <noscript>You need to enable JavaScript to run this app.</noscript>
