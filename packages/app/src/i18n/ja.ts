@@ -44,7 +44,6 @@ export const dict = {
 
   "command.session.new": "新しいセッション",
   "command.file.open": "ファイルを開く",
-  "command.file.open.description": "ファイルとコマンドを検索",
   "command.context.addSelection": "選択範囲をコンテキストに追加",
   "command.context.addSelection.description": "現在のファイルから選択した行を追加",
   "command.terminal.toggle": "ターミナルの切り替え",
@@ -84,7 +83,7 @@ export const dict = {
   "command.session.unshare": "セッションの共有を停止",
   "command.session.unshare.description": "このセッションの共有を停止",
 
-  "palette.search.placeholder": "ファイルとコマンドを検索",
+  "palette.search.placeholder": "ファイル、コマンド、セッションを検索",
   "palette.empty": "結果が見つかりません",
   "palette.group.commands": "コマンド",
   "palette.group.files": "ファイル",
