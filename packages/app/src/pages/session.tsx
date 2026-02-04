@@ -1,4 +1,4 @@
-import { For, onCleanup, onMount, Show, Match, Switch, createMemo, createEffect, on } from "solid-js"
+import { For, onCleanup, onMount, Show, Match, Switch, createMemo, createEffect, on, createSignal, untrack } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Dynamic } from "solid-js/web"
@@ -188,6 +188,135 @@ export default function Page() {
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey()))
   const view = createMemo(() => layout.view(sessionKey()))
+  const [terminalPaneVisible, setTerminalPaneVisible] = createSignal(view().terminal.opened())
+  const [terminalPaneClosing, setTerminalPaneClosing] = createSignal(false)
+  const [closingIds, setClosingIds] = createSignal<Set<string>>(new Set())
+  const closeTimers = new Map<string, number>()
+  let terminalPaneTimer: number | undefined
+
+  const removeClosingId = (id: string) => {
+    setClosingIds((prev) => {
+      if (!prev.has(id)) return prev
+      const next = new Set(prev)
+      next.delete(id)
+      return next
+    })
+  }
+
+  const cancelClosing = (id: string) => {
+    const timer = closeTimers.get(id)
+    if (timer !== undefined) {
+      clearTimeout(timer)
+      closeTimers.delete(id)
+    }
+    removeClosingId(id)
+  }
+
+  const scheduleClosing = (id: string) => {
+    if (closeTimers.has(id)) return
+    setClosingIds((prev) => {
+      if (prev.has(id)) return prev
+      const next = new Set(prev)
+      next.add(id)
+      return next
+    })
+    const timer = window.setTimeout(() => {
+      closeTimers.delete(id)
+      removeClosingId(id)
+      const current = terminal.all()
+      if (!current.some((pty) => pty.id === id)) return
+      const wasOnly = current.length === 1
+      terminal.closeLocal(id)
+      if (wasOnly) {
+        view().terminal.close()
+      }
+    }, 1200)
+    closeTimers.set(id, timer)
+  }
+
+  const handleTerminalClose = (id: string) => {
+    cancelClosing(id)
+    const wasOnly = terminal.all().length === 1
+    terminal.close(id)
+    if (wasOnly) {
+      view().terminal.close()
+    }
+  }
+
+  const handleTerminalMinimize = () => {
+    view().terminal.close()
+  }
+
+  createEffect(() => {
+    const opened = view().terminal.opened()
+    if (opened) {
+      if (terminalPaneTimer !== undefined) {
+        clearTimeout(terminalPaneTimer)
+        terminalPaneTimer = undefined
+      }
+      setTerminalPaneVisible(true)
+      setTerminalPaneClosing(false)
+      return
+    }
+    if (!terminalPaneVisible()) return
+    setTerminalPaneClosing(true)
+    if (terminalPaneTimer !== undefined) {
+      clearTimeout(terminalPaneTimer)
+    }
+    terminalPaneTimer = window.setTimeout(() => {
+      setTerminalPaneVisible(false)
+      setTerminalPaneClosing(false)
+      terminalPaneTimer = undefined
+    }, 200)
+  })
+
+  createEffect(
+    on(
+      () => sessionKey(),
+      () => {
+        for (const timer of closeTimers.values()) {
+          clearTimeout(timer)
+        }
+        closeTimers.clear()
+        setClosingIds(new Set())
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => terminal.all(),
+      (all) => {
+        const existing = new Set(all.map((pty) => pty.id))
+        const toCancel: string[] = []
+        for (const id of closeTimers.keys()) {
+          if (!existing.has(id)) {
+            toCancel.push(id)
+          }
+        }
+        for (const id of toCancel) {
+          cancelClosing(id)
+        }
+        for (const pty of all) {
+          if (pty.lastError?.code === "pty_closed") {
+            scheduleClosing(pty.id)
+          }
+        }
+      },
+      { defer: true },
+    ),
+  )
+
+  onCleanup(() => {
+    if (terminalPaneTimer !== undefined) {
+      clearTimeout(terminalPaneTimer)
+    }
+    for (const timer of closeTimers.values()) {
+      clearTimeout(timer)
+    }
+    closeTimers.clear()
+  })
 
   if (import.meta.env.DEV) {
     createEffect(
@@ -395,12 +524,18 @@ export default function Page() {
     sync.session.sync(params.id)
   })
 
-  createEffect(() => {
-    if (!view().terminal.opened()) return
-    if (!terminal.ready()) return
-    if (terminal.all().length !== 0) return
-    terminal.new()
-  })
+  createEffect(
+    on(
+      () => [view().terminal.opened(), terminal.ready(), sessionKey()] as const,
+      ([opened, ready]) => {
+        if (!opened || !ready) return
+        const hasTerminal = untrack(() => terminal.all().length !== 0)
+        if (!hasTerminal) {
+          terminal.new()
+        }
+      },
+    ),
+  )
 
   createEffect(
     on(
@@ -1704,20 +1839,26 @@ export default function Page() {
         </Show>
       </div>
 
-      <Show when={isDesktop() && view().terminal.opened()}>
+      <Show when={isDesktop() && terminalPaneVisible()}>
         <div
-          class="relative w-full flex-col shrink-0 border-t border-border-weak-base"
-          style={{ height: `${layout.terminal.height()}px` }}
+          class="relative w-full flex-col shrink-0 border-t border-border-weak-base transition-[height,opacity] duration-200 ease-out overflow-hidden"
+          classList={{ "pointer-events-none": terminalPaneClosing() }}
+          style={{
+            height: terminalPaneClosing() ? "0px" : `${layout.terminal.height()}px`,
+            opacity: terminalPaneClosing() ? 0 : 1,
+          }}
         >
-          <ResizeHandle
-            direction="vertical"
-            size={layout.terminal.height()}
-            min={100}
-            max={window.innerHeight * 0.6}
-            collapseThreshold={50}
-            onResize={layout.terminal.resize}
-            onCollapse={view().terminal.close}
-          />
+          <Show when={view().terminal.opened()}>
+            <ResizeHandle
+              direction="vertical"
+              size={layout.terminal.height()}
+              min={100}
+              max={window.innerHeight * 0.6}
+              collapseThreshold={50}
+              onResize={layout.terminal.resize}
+              onCollapse={view().terminal.close}
+            />
+          </Show>
           <Show
             when={terminal.ready()}
             fallback={
@@ -1748,7 +1889,16 @@ export default function Page() {
               <Tabs variant="alt" value={terminal.active()} onChange={terminal.open}>
                 <Tabs.List class="h-10">
                   <SortableProvider ids={terminal.all().map((t: LocalPTY) => t.id)}>
-                    <For each={terminal.all()}>{(pty) => <SortableTerminalTab terminal={pty} />}</For>
+                    <For each={terminal.all()}>
+                      {(pty) => (
+                        <SortableTerminalTab
+                          terminal={pty}
+                          closing={closingIds().has(pty.id)}
+                          onClose={handleTerminalClose}
+                          onMinimize={handleTerminalMinimize}
+                        />
+                      )}
+                    </For>
                   </SortableProvider>
                   <div class="h-full flex items-center justify-center">
                     <TooltipKeybind
@@ -1763,19 +1913,26 @@ export default function Page() {
                 <For each={terminal.all()}>
                   {(pty) => (
                     <Tabs.Content value={pty.id}>
-                      <Terminal
-                        pty={pty}
-                        onCleanup={terminal.update}
-                        onConnectError={(error) => {
-                          const details = getConnectErrorDetails(error)
-                          console.error("Failed to connect terminal", {
-                            error: details.message ?? error,
-                            code: details.code ?? "pty_connect_failed",
-                            requestId: details.requestId,
-                          })
-                          terminal.reconnect(pty.id, details)
-                        }}
-                      />
+                      <div class="relative h-full" classList={{ "pointer-events-none": closingIds().has(pty.id) }}>
+                        <Terminal
+                          pty={pty}
+                          onCleanup={terminal.update}
+                          onConnectError={(error) => {
+                            const details = getConnectErrorDetails(error)
+                            console.error("Failed to connect terminal", {
+                              error: details.message ?? error,
+                              code: details.code ?? "pty_connect_failed",
+                              requestId: details.requestId,
+                            })
+                            terminal.reconnect(pty.id, details)
+                          }}
+                        />
+                        <Show when={closingIds().has(pty.id)}>
+                          <div class="absolute inset-0 z-10 flex items-center justify-center bg-surface-raised-stronger-non-alpha/90 text-text-weak text-14-regular">
+                            Closing pane
+                          </div>
+                        </Show>
+                      </div>
                     </Tabs.Content>
                   )}
                 </For>

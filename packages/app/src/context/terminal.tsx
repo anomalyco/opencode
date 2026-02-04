@@ -75,14 +75,16 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
 
   const removeLocal = (id: string) => {
     batch(() => {
+      const current = store.all
+      const index = current.findIndex((item) => item.id === id)
       setStore(
         "all",
-        store.all.filter((x) => x.id !== id),
+        current.filter((x) => x.id !== id),
       )
       if (store.active === id) {
-        const index = store.all.findIndex((f) => f.id === id)
-        const previous = store.all[Math.max(0, index - 1)]
-        setStore("active", previous?.id)
+        const next = index >= 0 ? current[index + 1] : undefined
+        const previous = index > 0 ? current[index - 1] : undefined
+        setStore("active", next?.id ?? previous?.id)
       }
     })
   }
@@ -251,6 +253,9 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
         console.error("Failed to close terminal", e)
       })
     },
+    closeLocal(id: string) {
+      removeLocal(id)
+    },
     move(id: string, to: number) {
       const index = store.all.findIndex((f) => f.id === id)
       if (index === -1) return
@@ -339,6 +344,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       reconnect: (id: string, details?: PtyErrorDetails) => session().reconnect(id, details),
       open: (id: string) => session().open(id),
       close: (id: string) => session().close(id),
+      closeLocal: (id: string) => session().closeLocal(id),
       move: (id: string, to: number) => session().move(id, to),
     }
   },
