@@ -242,7 +242,7 @@ async fn initialize(app: AppHandle) {
         } => {
             let app = app.clone();
             Some(|| {
-                tokio::time::timeout(Duration::from_secs(0), health_check.0)
+                tokio::time::timeout(Duration::from_secs(30), health_check.0)
                     .then({
                         let app = app.clone();
                         async move |v| {
