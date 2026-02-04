@@ -88,7 +88,10 @@ export namespace SessionProcessor {
                 case "reasoning-end":
                   if (value.id in reasoningMap) {
                     const part = reasoningMap[value.id]
-                    part.text = part.text.trimEnd()
+                    // Do NOT trimEnd() thinking text - the signature is computed on the
+                    // exact text including trailing whitespace. Modifying it invalidates
+                    // the signature, causing "Invalid data in redacted_thinking block"
+                    // errors when the thinking is replayed in subsequent API calls.
 
                     part.time = {
                       ...part.time,
