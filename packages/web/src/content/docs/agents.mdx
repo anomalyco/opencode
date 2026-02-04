@@ -576,17 +576,20 @@ Users can always invoke any subagent directly via the `@` autocomplete menu, eve
 
 Customize the agent's visual appearance in the UI with the `color` option. This affects how the agent appears in the interface.
 
+Use a valid hex color (e.g., `#FF5733`) or theme color: `primary`, `secondary`, `accent`, `success`, `warning`, `error`, `info`.
+
 ```json title="opencode.json"
 {
   "agent": {
     "creative": {
       "color": "#ff6b6b"
+    },
+    "code-reviewer": {
+      "color": "accent"
     }
   }
 }
 ```
-
-Must be a valid hex color code like `#FF5733`.
 
 ---
 
