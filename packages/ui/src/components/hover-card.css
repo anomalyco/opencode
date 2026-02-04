@@ -8,6 +8,7 @@
   z-index: 50;
   min-width: 200px;
   max-width: 320px;
+  max-height: calc(100vh - 1rem);
   border-radius: 8px;
   background-color: var(--surface-raised-stronger-non-alpha);
   pointer-events: auto;
@@ -32,6 +33,8 @@
 
   [data-slot="hover-card-body"] {
     padding: 4px;
+    max-height: inherit;
+    overflow: hidden;
   }
 }
 

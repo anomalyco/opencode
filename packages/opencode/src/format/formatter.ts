@@ -340,3 +340,27 @@ export const rustfmt: Info = {
     return Bun.which("rustfmt") !== null
   },
 }
+
+export const pint: Info = {
+  name: "pint",
+  command: ["./vendor/bin/pint", "$FILE"],
+  extensions: [".php"],
+  async enabled() {
+    const items = await Filesystem.findUp("composer.json", Instance.directory, Instance.worktree)
+    for (const item of items) {
+      const json = await Bun.file(item).json()
+      if (json.require?.["laravel/pint"]) return true
+      if (json["require-dev"]?.["laravel/pint"]) return true
+    }
+    return false
+  },
+}
+
+export const ormolu: Info = {
+  name: "ormolu",
+  command: ["ormolu", "-i", "$FILE"],
+  extensions: [".hs"],
+  async enabled() {
+    return Bun.which("ormolu") !== null
+  },
+}

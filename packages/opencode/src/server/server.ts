@@ -54,11 +54,6 @@ export namespace Server {
     return _url ?? new URL("http://localhost:4096")
   }
 
-  export const Event = {
-    Connected: BusEvent.define("server.connected", z.object({})),
-    Disposed: BusEvent.define("global.disposed", z.object({})),
-  }
-
   const app = new Hono()
   export const App: () => Hono = lazy(
     () =>
@@ -127,13 +122,78 @@ export namespace Server {
           }),
         )
         .route("/global", GlobalRoutes())
+        .put(
+          "/auth/:providerID",
+          describeRoute({
+            summary: "Set auth credentials",
+            description: "Set authentication credentials",
+            operationId: "auth.set",
+            responses: {
+              200: {
+                description: "Successfully set authentication credentials",
+                content: {
+                  "application/json": {
+                    schema: resolver(z.boolean()),
+                  },
+                },
+              },
+              ...errors(400),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              providerID: z.string(),
+            }),
+          ),
+          validator("json", Auth.Info),
+          async (c) => {
+            const providerID = c.req.valid("param").providerID
+            const info = c.req.valid("json")
+            await Auth.set(providerID, info)
+            return c.json(true)
+          },
+        )
+        .delete(
+          "/auth/:providerID",
+          describeRoute({
+            summary: "Remove auth credentials",
+            description: "Remove authentication credentials",
+            operationId: "auth.remove",
+            responses: {
+              200: {
+                description: "Successfully removed authentication credentials",
+                content: {
+                  "application/json": {
+                    schema: resolver(z.boolean()),
+                  },
+                },
+              },
+              ...errors(400),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              providerID: z.string(),
+            }),
+          ),
+          async (c) => {
+            const providerID = c.req.valid("param").providerID
+            await Auth.remove(providerID)
+            return c.json(true)
+          },
+        )
         .use(async (c, next) => {
-          let directory = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
-          try {
-            directory = decodeURIComponent(directory)
-          } catch {
-            // fallback to original value
-          }
+          if (c.req.path === "/log") return next()
+          const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
+          const directory = (() => {
+            try {
+              return decodeURIComponent(raw)
+            } catch {
+              return raw
+            }
+          })()
           return Instance.provide({
             directory,
             init: InstanceBootstrap,
@@ -414,38 +474,6 @@ export namespace Server {
             return c.json(await Format.status())
           },
         )
-        .put(
-          "/auth/:providerID",
-          describeRoute({
-            summary: "Set auth credentials",
-            description: "Set authentication credentials",
-            operationId: "auth.set",
-            responses: {
-              200: {
-                description: "Successfully set authentication credentials",
-                content: {
-                  "application/json": {
-                    schema: resolver(z.boolean()),
-                  },
-                },
-              },
-              ...errors(400),
-            },
-          }),
-          validator(
-            "param",
-            z.object({
-              providerID: z.string(),
-            }),
-          ),
-          validator("json", Auth.Info),
-          async (c) => {
-            const providerID = c.req.valid("param").providerID
-            const info = c.req.valid("json")
-            await Auth.set(providerID, info)
-            return c.json(true)
-          },
-        )
         .get(
           "/event",
           describeRoute({
@@ -504,6 +532,7 @@ export namespace Server {
         )
         .all("/*", async (c) => {
           const path = c.req.path
+
           const response = await proxy(`https://app.opencode.ai${path}`, {
             ...c.req,
             headers: {
@@ -513,7 +542,7 @@ export namespace Server {
           })
           response.headers.set(
             "Content-Security-Policy",
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'",
+            "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' data:",
           )
           return response
         }) as unknown as Hono,
@@ -534,7 +563,13 @@ export namespace Server {
     return result
   }
 
-  export function listen(opts: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
+  export function listen(opts: {
+    port: number
+    hostname: string
+    mdns?: boolean
+    mdnsDomain?: string
+    cors?: string[]
+  }) {
     _corsWhitelist = opts.cors ?? []
 
     const args = {
@@ -562,7 +597,7 @@ export namespace Server {
       opts.hostname !== "localhost" &&
       opts.hostname !== "::1"
     if (shouldPublishMDNS) {
-      MDNS.publish(server.port!)
+      MDNS.publish(server.port!, opts.mdnsDomain)
     } else if (opts.mdns) {
       log.warn("mDNS enabled but hostname is loopback; skipping mDNS publish")
     }

@@ -192,7 +192,7 @@ export default function Home() {
               <li>
                 <span>[*]</span>
                 <div>
-                  <strong>Claude Pro</strong> Log in with Anthropic to use your Claude Pro or Max account
+                  <strong>GitHub Copilot</strong> Log in with GitHub to use your Copilot account
                 </div>
               </li>
               <li>

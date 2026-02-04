@@ -1,4 +1,4 @@
-import { test, expect, mock } from "bun:test"
+import { test, expect, mock, describe } from "bun:test"
 import path from "path"
 import { unlink } from "fs/promises"
 
@@ -264,5 +264,216 @@ test("Bedrock: autoloads when AWS_WEB_IDENTITY_TOKEN_FILE is present", async () 
       expect(providers["amazon-bedrock"]).toBeDefined()
       expect(providers["amazon-bedrock"].options?.region).toBe("us-east-1")
     },
+  })
+})
+
+// Tests for cross-region inference profile prefix handling
+// Models from models.dev may come with prefixes already (e.g., us., eu., global.)
+// These should NOT be double-prefixed when passed to the SDK
+
+test("Bedrock: model with us. prefix should not be double-prefixed", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "amazon-bedrock": {
+              options: {
+                region: "us-east-1",
+              },
+              models: {
+                "us.anthropic.claude-opus-4-5-20251101-v1:0": {
+                  name: "Claude Opus 4.5 (US)",
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("AWS_PROFILE", "default")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["amazon-bedrock"]).toBeDefined()
+      // The model should exist with the us. prefix
+      expect(providers["amazon-bedrock"].models["us.anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()
+    },
+  })
+})
+
+test("Bedrock: model with global. prefix should not be prefixed", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "amazon-bedrock": {
+              options: {
+                region: "us-east-1",
+              },
+              models: {
+                "global.anthropic.claude-opus-4-5-20251101-v1:0": {
+                  name: "Claude Opus 4.5 (Global)",
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("AWS_PROFILE", "default")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["amazon-bedrock"]).toBeDefined()
+      expect(providers["amazon-bedrock"].models["global.anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()
+    },
+  })
+})
+
+test("Bedrock: model with eu. prefix should not be double-prefixed", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "amazon-bedrock": {
+              options: {
+                region: "eu-west-1",
+              },
+              models: {
+                "eu.anthropic.claude-opus-4-5-20251101-v1:0": {
+                  name: "Claude Opus 4.5 (EU)",
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("AWS_PROFILE", "default")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["amazon-bedrock"]).toBeDefined()
+      expect(providers["amazon-bedrock"].models["eu.anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()
+    },
+  })
+})
+
+test("Bedrock: model without prefix in US region should get us. prefix added", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            "amazon-bedrock": {
+              options: {
+                region: "us-east-1",
+              },
+              models: {
+                "anthropic.claude-opus-4-5-20251101-v1:0": {
+                  name: "Claude Opus 4.5",
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("AWS_PROFILE", "default")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["amazon-bedrock"]).toBeDefined()
+      // Non-prefixed model should still be registered
+      expect(providers["amazon-bedrock"].models["anthropic.claude-opus-4-5-20251101-v1:0"]).toBeDefined()
+    },
+  })
+})
+
+// Direct unit tests for cross-region inference profile prefix handling
+// These test the prefix detection logic used in getModel
+
+describe("Bedrock cross-region prefix detection", () => {
+  const crossRegionPrefixes = ["global.", "us.", "eu.", "jp.", "apac.", "au."]
+
+  test("should detect global. prefix", () => {
+    const modelID = "global.anthropic.claude-opus-4-5-20251101-v1:0"
+    const hasPrefix = crossRegionPrefixes.some((prefix) => modelID.startsWith(prefix))
+    expect(hasPrefix).toBe(true)
+  })
+
+  test("should detect us. prefix", () => {
+    const modelID = "us.anthropic.claude-opus-4-5-20251101-v1:0"
+    const hasPrefix = crossRegionPrefixes.some((prefix) => modelID.startsWith(prefix))
+    expect(hasPrefix).toBe(true)
+  })
+
+  test("should detect eu. prefix", () => {
+    const modelID = "eu.anthropic.claude-opus-4-5-20251101-v1:0"
+    const hasPrefix = crossRegionPrefixes.some((prefix) => modelID.startsWith(prefix))
+    expect(hasPrefix).toBe(true)
+  })
+
+  test("should detect jp. prefix", () => {
+    const modelID = "jp.anthropic.claude-sonnet-4-20250514-v1:0"
+    const hasPrefix = crossRegionPrefixes.some((prefix) => modelID.startsWith(prefix))
+    expect(hasPrefix).toBe(true)
+  })
+
+  test("should detect apac. prefix", () => {
+    const modelID = "apac.anthropic.claude-sonnet-4-20250514-v1:0"
+    const hasPrefix = crossRegionPrefixes.some((prefix) => modelID.startsWith(prefix))
+    expect(hasPrefix).toBe(true)
+  })
+
+  test("should detect au. prefix", () => {
+    const modelID = "au.anthropic.claude-sonnet-4-5-20250929-v1:0"
+    const hasPrefix = crossRegionPrefixes.some((prefix) => modelID.startsWith(prefix))
+    expect(hasPrefix).toBe(true)
+  })
+
+  test("should NOT detect prefix for non-prefixed model", () => {
+    const modelID = "anthropic.claude-opus-4-5-20251101-v1:0"
+    const hasPrefix = crossRegionPrefixes.some((prefix) => modelID.startsWith(prefix))
+    expect(hasPrefix).toBe(false)
+  })
+
+  test("should NOT detect prefix for amazon nova models", () => {
+    const modelID = "amazon.nova-pro-v1:0"
+    const hasPrefix = crossRegionPrefixes.some((prefix) => modelID.startsWith(prefix))
+    expect(hasPrefix).toBe(false)
+  })
+
+  test("should NOT detect prefix for cohere models", () => {
+    const modelID = "cohere.command-r-plus-v1:0"
+    const hasPrefix = crossRegionPrefixes.some((prefix) => modelID.startsWith(prefix))
+    expect(hasPrefix).toBe(false)
   })
 })

@@ -90,7 +90,7 @@ export const ExperimentalRoutes = lazy(() =>
       "/worktree",
       describeRoute({
         summary: "Create worktree",
-        description: "Create a new git worktree for the current project.",
+        description: "Create a new git worktree for the current project and run any configured startup scripts.",
         operationId: "worktree.create",
         responses: {
           200: {

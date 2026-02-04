@@ -4,11 +4,15 @@ import {
   Message as MessageType,
   Part as PartType,
   type PermissionRequest,
+  type QuestionRequest,
   TextPart,
   ToolPart,
 } from "@opencode-ai/sdk/v2/client"
+import { type FileDiff } from "@opencode-ai/sdk/v2"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
+import { type UiI18nKey, type UiI18nParams, useI18n } from "../context/i18n"
+import { findLast } from "@opencode-ai/util/array"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 
 import { Binary } from "@opencode-ai/util/binary"
@@ -20,38 +24,42 @@ import { Accordion } from "./accordion"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
+import { IconButton } from "./icon-button"
 import { Card } from "./card"
 import { Dynamic } from "solid-js/web"
 import { Button } from "./button"
 import { Spinner } from "./spinner"
+import { Tooltip } from "./tooltip"
 import { createStore } from "solid-js/store"
 import { DateTime, DurationUnit, Interval } from "luxon"
 import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 
-function computeStatusFromPart(part: PartType | undefined): string | undefined {
+type Translator = (key: UiI18nKey, params?: UiI18nParams) => string
+
+function computeStatusFromPart(part: PartType | undefined, t: Translator): string | undefined {
   if (!part) return undefined
 
   if (part.type === "tool") {
     switch (part.tool) {
       case "task":
-        return "Delegating work"
+        return t("ui.sessionTurn.status.delegating")
       case "todowrite":
       case "todoread":
-        return "Planning next steps"
+        return t("ui.sessionTurn.status.planning")
       case "read":
-        return "Gathering context"
+        return t("ui.sessionTurn.status.gatheringContext")
       case "list":
       case "grep":
       case "glob":
-        return "Searching the codebase"
+        return t("ui.sessionTurn.status.searchingCodebase")
       case "webfetch":
-        return "Searching the web"
+        return t("ui.sessionTurn.status.searchingWeb")
       case "edit":
       case "write":
-        return "Making edits"
+        return t("ui.sessionTurn.status.makingEdits")
       case "bash":
-        return "Running commands"
+        return t("ui.sessionTurn.status.runningCommands")
       default:
         return undefined
     }
@@ -59,11 +67,11 @@ function computeStatusFromPart(part: PartType | undefined): string | undefined {
   if (part.type === "reasoning") {
     const text = part.text ?? ""
     const match = text.trimStart().match(/^\*\*(.+?)\*\*/)
-    if (match) return `Thinking · ${match[1].trim()}`
-    return "Thinking"
+    if (match) return t("ui.sessionTurn.status.thinkingWithTopic", { topic: match[1].trim() })
+    return t("ui.sessionTurn.status.thinking")
   }
   if (part.type === "text") {
-    return "Gathering thoughts"
+    return t("ui.sessionTurn.status.gatheringThoughts")
   }
   return undefined
 }
@@ -133,6 +141,7 @@ export function SessionTurn(
     }
   }>,
 ) {
+  const i18n = useI18n()
   const data = useData()
   const diffComponent = useDiffComponent()
 
@@ -142,26 +151,32 @@ export function SessionTurn(
   const emptyAssistant: AssistantMessage[] = []
   const emptyPermissions: PermissionRequest[] = []
   const emptyPermissionParts: { part: ToolPart; message: AssistantMessage }[] = []
+  const emptyQuestions: QuestionRequest[] = []
+  const emptyQuestionParts: { part: ToolPart; message: AssistantMessage }[] = []
+  const emptyDiffs: FileDiff[] = []
   const idle = { type: "idle" as const }
 
   const allMessages = createMemo(() => data.store.message[props.sessionID] ?? emptyMessages)
 
   const messageIndex = createMemo(() => {
-    const messages = allMessages()
+    const messages = allMessages() ?? emptyMessages
     const result = Binary.search(messages, props.messageID, (m) => m.id)
-    if (!result.found) return -1
 
-    const msg = messages[result.index]
-    if (msg.role !== "user") return -1
+    const index = result.found ? result.index : messages.findIndex((m) => m.id === props.messageID)
+    if (index < 0) return -1
 
-    return result.index
+    const msg = messages[index]
+    if (!msg || msg.role !== "user") return -1
+
+    return index
   })
 
   const message = createMemo(() => {
     const index = messageIndex()
     if (index < 0) return undefined
 
-    const msg = allMessages()[index]
+    const messages = allMessages() ?? emptyMessages
+    const msg = messages[index]
     if (!msg || msg.role !== "user") return undefined
 
     return msg
@@ -170,7 +185,7 @@ export function SessionTurn(
   const lastUserMessageID = createMemo(() => {
     if (props.lastUserMessageID) return props.lastUserMessageID
 
-    const messages = allMessages()
+    const messages = allMessages() ?? emptyMessages
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i]
       if (msg?.role === "user") return msg.id
@@ -204,7 +219,7 @@ export function SessionTurn(
       const msg = message()
       if (!msg) return emptyAssistant
 
-      const messages = allMessages()
+      const messages = allMessages() ?? emptyMessages
       const index = messageIndex()
       if (index < 0) return emptyAssistant
 
@@ -258,7 +273,7 @@ export function SessionTurn(
     const next = nextPermission()
     if (!next || !next.tool) return emptyPermissionParts
 
-    const message = assistantMessages().findLast((m) => m.id === next.tool!.messageID)
+    const message = findLast(assistantMessages(), (m) => m.id === next.tool!.messageID)
     if (!message) return emptyPermissionParts
 
     const parts = data.store.part[message.id] ?? emptyParts
@@ -271,8 +286,54 @@ export function SessionTurn(
     return emptyPermissionParts
   })
 
+  const questions = createMemo(() => data.store.question?.[props.sessionID] ?? emptyQuestions)
+  const nextQuestion = createMemo(() => questions()[0])
+
+  const questionParts = createMemo(() => {
+    if (props.stepsExpanded) return emptyQuestionParts
+
+    const next = nextQuestion()
+    if (!next || !next.tool) return emptyQuestionParts
+
+    const message = findLast(assistantMessages(), (m) => m.id === next.tool!.messageID)
+    if (!message) return emptyQuestionParts
+
+    const parts = data.store.part[message.id] ?? emptyParts
+    for (const part of parts) {
+      if (part?.type !== "tool") continue
+      const tool = part as ToolPart
+      if (tool.callID === next.tool?.callID) return [{ part: tool, message }]
+    }
+
+    return emptyQuestionParts
+  })
+
+  const answeredQuestionParts = createMemo(() => {
+    if (props.stepsExpanded) return emptyQuestionParts
+    if (questions().length > 0) return emptyQuestionParts
+
+    const result: { part: ToolPart; message: AssistantMessage }[] = []
+
+    for (const msg of assistantMessages()) {
+      const parts = data.store.part[msg.id] ?? emptyParts
+      for (const part of parts) {
+        if (part?.type !== "tool") continue
+        const tool = part as ToolPart
+        if (tool.tool !== "question") continue
+        // @ts-expect-error metadata may not exist on all tool states
+        const answers = tool.state?.metadata?.answers
+        if (answers && answers.length > 0) {
+          result.push({ part: tool, message: msg })
+        }
+      }
+    }
+
+    return result
+  })
+
   const shellModePart = createMemo(() => {
     const p = parts()
+    if (p.length === 0) return
     if (!p.every((part) => part?.type === "text" && part?.synthetic)) return
 
     const msgs = assistantMessages()
@@ -328,17 +389,19 @@ export function SessionTurn(
         const msgParts = data.store.part[msg.id] ?? emptyParts
         for (let pi = msgParts.length - 1; pi >= 0; pi--) {
           const part = msgParts[pi]
-          if (part) return computeStatusFromPart(part)
+          if (part) return computeStatusFromPart(part, i18n.t)
         }
       }
     }
 
-    return computeStatusFromPart(last)
+    return computeStatusFromPart(last, i18n.t)
   })
 
   const status = createMemo(() => data.store.session_status[props.sessionID] ?? idle)
   const working = createMemo(() => status().type !== "idle" && isLastUserMessage())
   const retry = createMemo(() => {
+    // session_status is session-scoped; only show retry on the active (last) turn
+    if (!isLastUserMessage()) return
     const s = status()
     if (s.type !== "retry") return
     return s
@@ -346,8 +409,19 @@ export function SessionTurn(
 
   const response = createMemo(() => lastTextPart()?.text)
   const responsePartId = createMemo(() => lastTextPart()?.id)
-  const hasDiffs = createMemo(() => (data.store.session_diff?.[props.sessionID]?.length ?? 0) > 0)
+  const messageDiffs = createMemo(() => message()?.summary?.diffs ?? emptyDiffs)
+  const hasDiffs = createMemo(() => messageDiffs().length > 0)
   const hideResponsePart = createMemo(() => !working() && !!responsePartId())
+
+  const [copied, setCopied] = createSignal(false)
+
+  const handleCopy = async () => {
+    const content = response() ?? ""
+    if (!content) return
+    await navigator.clipboard.writeText(content)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   const [rootRef, setRootRef] = createSignal<HTMLDivElement | undefined>()
   const [stickyRef, setStickyRef] = createSignal<HTMLDivElement | undefined>()
@@ -368,17 +442,20 @@ export function SessionTurn(
     const interval = Interval.fromDateTimes(from, to)
     const unit: DurationUnit[] = interval.length("seconds") > 60 ? ["minutes", "seconds"] : ["seconds"]
 
-    return interval.toDuration(unit).normalize().toHuman({
+    const locale = i18n.locale()
+    const human = interval.toDuration(unit).normalize().reconfigure({ locale }).toHuman({
       notation: "compact",
       unitDisplay: "narrow",
       compactDisplay: "short",
       showZeros: false,
     })
+    return locale.startsWith("zh") ? human.replaceAll("、", "") : human
   }
 
   const autoScroll = createAutoScroll({
     working,
     onUserInteracted: props.onUserInteracted,
+    overflowAnchor: "auto",
   })
 
   createResizeObserver(
@@ -437,9 +514,16 @@ export function SessionTurn(
   })
 
   createEffect(() => {
-    const timer = setInterval(() => {
+    const update = () => {
       setStore("duration", duration())
-    }, 1000)
+    }
+
+    update()
+
+    // Only keep ticking while the active (in-progress) turn is running.
+    if (!working()) return
+
+    const timer = setInterval(update, 1000)
     onCleanup(() => clearInterval(timer))
   })
 
@@ -475,6 +559,11 @@ export function SessionTurn(
     }
   })
 
+  onCleanup(() => {
+    if (!statusTimeout) return
+    clearTimeout(statusTimeout)
+  })
+
   return (
     <div data-component="session-turn" class={props.classes?.root} ref={setRootRef}>
       <div
@@ -498,13 +587,13 @@ export function SessionTurn(
                   </Match>
                   <Match when={true}>
                     <Show when={attachmentParts().length > 0}>
-                      <div data-slot="session-turn-attachments">
+                      <div data-slot="session-turn-attachments" aria-live="off">
                         <Message message={msg()} parts={attachmentParts()} />
                       </div>
                     </Show>
                     <div data-slot="session-turn-sticky" ref={setStickyRef}>
                       {/* User Message */}
-                      <div data-slot="session-turn-message-content">
+                      <div data-slot="session-turn-message-content" aria-live="off">
                         <Message message={msg()} parts={stickyParts()} />
                       </div>
 
@@ -517,10 +606,47 @@ export function SessionTurn(
                             variant="ghost"
                             size="small"
                             onClick={props.onStepsExpandedToggle ?? (() => {})}
+                            aria-expanded={props.stepsExpanded}
                           >
-                            <Show when={working()}>
-                              <Spinner />
-                            </Show>
+                            <Switch>
+                              <Match when={working()}>
+                                <Spinner />
+                              </Match>
+                              <Match when={!props.stepsExpanded}>
+                                <svg
+                                  width="10"
+                                  height="10"
+                                  viewBox="0 0 10 10"
+                                  fill="none"
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  data-slot="session-turn-trigger-icon"
+                                >
+                                  <path
+                                    d="M8.125 1.875H1.875L5 8.125L8.125 1.875Z"
+                                    fill="currentColor"
+                                    stroke="currentColor"
+                                    stroke-linejoin="round"
+                                  />
+                                </svg>
+                              </Match>
+                              <Match when={props.stepsExpanded}>
+                                <svg
+                                  width="10"
+                                  height="10"
+                                  viewBox="0 0 10 10"
+                                  fill="none"
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  class="text-icon-base"
+                                >
+                                  <path
+                                    d="M8.125 8.125H1.875L5 1.875L8.125 8.125Z"
+                                    fill="currentColor"
+                                    stroke="currentColor"
+                                    stroke-linejoin="round"
+                                  />
+                                </svg>
+                              </Match>
+                            </Switch>
                             <Switch>
                               <Match when={retry()}>
                                 <span data-slot="session-turn-retry-message">
@@ -531,26 +657,34 @@ export function SessionTurn(
                                   })()}
                                 </span>
                                 <span data-slot="session-turn-retry-seconds">
-                                  · retrying {store.retrySeconds > 0 ? `in ${store.retrySeconds}s ` : ""}
+                                  · {i18n.t("ui.sessionTurn.retry.retrying")}
+                                  {store.retrySeconds > 0
+                                    ? " " + i18n.t("ui.sessionTurn.retry.inSeconds", { seconds: store.retrySeconds })
+                                    : ""}
                                 </span>
                                 <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
                               </Match>
-                              <Match when={working()}>{store.status ?? "Considering next steps"}</Match>
-                              <Match when={props.stepsExpanded}>Hide steps</Match>
-                              <Match when={!props.stepsExpanded}>Show steps</Match>
+                              <Match when={working()}>
+                                <span data-slot="session-turn-status-text">
+                                  {store.status ?? i18n.t("ui.sessionTurn.status.consideringNextSteps")}
+                                </span>
+                              </Match>
+                              <Match when={props.stepsExpanded}>
+                                <span data-slot="session-turn-status-text">{i18n.t("ui.sessionTurn.steps.hide")}</span>
+                              </Match>
+                              <Match when={!props.stepsExpanded}>
+                                <span data-slot="session-turn-status-text">{i18n.t("ui.sessionTurn.steps.show")}</span>
+                              </Match>
                             </Switch>
-                            <span>·</span>
-                            <span>{store.duration}</span>
-                            <Show when={assistantMessages().length > 0}>
-                              <Icon name="chevron-grabber-vertical" size="small" />
-                            </Show>
+                            <span aria-hidden="true">·</span>
+                            <span aria-live="off">{store.duration}</span>
                           </Button>
                         </div>
                       </Show>
                     </div>
                     {/* Response */}
                     <Show when={props.stepsExpanded && assistantMessages().length > 0}>
-                      <div data-slot="session-turn-collapsible-content-inner">
+                      <div data-slot="session-turn-collapsible-content-inner" aria-hidden={working()}>
                         <For each={assistantMessages()}>
                           {(assistantMessage) => (
                             <AssistantMessageItem
@@ -575,17 +709,56 @@ export function SessionTurn(
                         </For>
                       </div>
                     </Show>
+                    <Show when={!props.stepsExpanded && questionParts().length > 0}>
+                      <div data-slot="session-turn-question-parts">
+                        <For each={questionParts()}>
+                          {({ part, message }) => <Part part={part} message={message} />}
+                        </For>
+                      </div>
+                    </Show>
+                    <Show when={!props.stepsExpanded && answeredQuestionParts().length > 0}>
+                      <div data-slot="session-turn-answered-question-parts">
+                        <For each={answeredQuestionParts()}>
+                          {({ part, message }) => <Part part={part} message={message} />}
+                        </For>
+                      </div>
+                    </Show>
                     {/* Response */}
+                    <div class="sr-only" aria-live="polite">
+                      {!working() && response() ? response() : ""}
+                    </div>
                     <Show when={!working() && (response() || hasDiffs())}>
                       <div data-slot="session-turn-summary-section">
                         <div data-slot="session-turn-summary-header">
-                          <h2 data-slot="session-turn-summary-title">Response</h2>
-                          <Markdown
-                            data-slot="session-turn-markdown"
-                            data-diffs={hasDiffs()}
-                            text={response() ?? ""}
-                            cacheKey={responsePartId()}
-                          />
+                          <h2 data-slot="session-turn-summary-title">{i18n.t("ui.sessionTurn.summary.response")}</h2>
+                          <div data-slot="session-turn-response">
+                            <Markdown
+                              data-slot="session-turn-markdown"
+                              data-diffs={hasDiffs()}
+                              text={response() ?? ""}
+                              cacheKey={responsePartId()}
+                            />
+                            <Show when={response()}>
+                              <div data-slot="session-turn-response-copy-wrapper">
+                                <Tooltip
+                                  value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+                                  placement="top"
+                                  gutter={8}
+                                >
+                                  <IconButton
+                                    icon={copied() ? "check" : "copy"}
+                                    variant="secondary"
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      handleCopy()
+                                    }}
+                                    aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+                                  />
+                                </Tooltip>
+                              </div>
+                            </Show>
+                          </div>
                         </div>
                         <Accordion
                           data-slot="session-turn-accordion"
@@ -596,7 +769,7 @@ export function SessionTurn(
                             setStore("diffsOpen", value)
                           }}
                         >
-                          <For each={(data.store.session_diff?.[props.sessionID] ?? []).slice(0, store.diffLimit)}>
+                          <For each={messageDiffs().slice(0, store.diffLimit)}>
                             {(diff) => (
                               <Accordion.Item value={diff.file}>
                                 <StickyAccordionHeader>
@@ -610,7 +783,7 @@ export function SessionTurn(
                                         <div data-slot="session-turn-file-path">
                                           <Show when={diff.file.includes("/")}>
                                             <span data-slot="session-turn-directory">
-                                              {getDirectory(diff.file)}&lrm;
+                                              {`\u202A${getDirectory(diff.file)}\u202C`}
                                             </span>
                                           </Show>
                                           <span data-slot="session-turn-filename">{getFilename(diff.file)}</span>
@@ -642,13 +815,13 @@ export function SessionTurn(
                             )}
                           </For>
                         </Accordion>
-                        <Show when={(data.store.session_diff?.[props.sessionID]?.length ?? 0) > store.diffLimit}>
+                        <Show when={messageDiffs().length > store.diffLimit}>
                           <Button
                             data-slot="session-turn-accordion-more"
                             variant="ghost"
                             size="small"
                             onClick={() => {
-                              const total = data.store.session_diff?.[props.sessionID]?.length ?? 0
+                              const total = messageDiffs().length
                               setStore("diffLimit", (limit) => {
                                 const next = limit + diffBatch
                                 if (next > total) return total
@@ -656,8 +829,9 @@ export function SessionTurn(
                               })
                             }}
                           >
-                            Show more changes (
-                            {(data.store.session_diff?.[props.sessionID]?.length ?? 0) - store.diffLimit})
+                            {i18n.t("ui.sessionTurn.diff.showMore", {
+                              count: messageDiffs().length - store.diffLimit,
+                            })}
                           </Button>
                         </Show>
                       </div>

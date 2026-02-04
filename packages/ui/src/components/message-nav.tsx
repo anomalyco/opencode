@@ -2,6 +2,7 @@ import { UserMessage } from "@opencode-ai/sdk/v2"
 import { ComponentProps, For, Match, Show, splitProps, Switch } from "solid-js"
 import { DiffChanges } from "./diff-changes"
 import { Tooltip } from "@kobalte/core/tooltip"
+import { useI18n } from "../context/i18n"
 
 export function MessageNav(
   props: ComponentProps<"ul"> & {
@@ -12,6 +13,7 @@ export function MessageNav(
     getLabel?: (message: UserMessage) => string | undefined
   },
 ) {
+  const i18n = useI18n()
   const [local, others] = splitProps(props, ["messages", "current", "size", "onMessageSelect", "getLabel"])
 
   const content = () => (
@@ -48,7 +50,10 @@ export function MessageNav(
                       data-slot="message-nav-title-preview"
                       data-active={message.id === local.current?.id || undefined}
                     >
-                      <Show when={local.getLabel?.(message) ?? message.summary?.title} fallback="New message">
+                      <Show
+                        when={local.getLabel?.(message) ?? message.summary?.title}
+                        fallback={i18n.t("ui.messageNav.newMessage")}
+                      >
                         {local.getLabel?.(message) ?? message.summary?.title}
                       </Show>
                     </div>
