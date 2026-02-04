@@ -314,7 +314,8 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
 
     const unsubscribe = sdk.event.listen((e) => {
       const event = e.details
-      const id = event.properties.id
+      if (event.type !== "pty.exited" && event.type !== "pty.deleted") return
+      const id = (event.properties as { id?: string }).id
       if (!id) return
       const existing = session().all().find((pty) => pty.id === id)
       if (!existing) return
