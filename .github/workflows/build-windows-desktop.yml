@@ -99,14 +99,22 @@ jobs:
           $config = Get-Content src-tauri/tauri.prod.conf.json | ConvertFrom-Json
           $baseConfig = Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json
           $baseConfig.build.beforeBuildCommand = ""
-          $baseConfig | ConvertTo-Json -Depth 10 | Set-Content src-tauri/tauri.build.conf.json
+
+          # Remove updater config from prod config BEFORE merging (fork builds don't need auto-update)
+          if ($config.plugins -and $config.plugins.updater) {
+            $config.plugins.PSObject.Properties.Remove('updater')
+          }
+          # Disable createUpdaterArtifacts to prevent updater-related build steps
+          if ($config.bundle -and $config.bundle.createUpdaterArtifacts) {
+            $config.bundle.PSObject.Properties.Remove('createUpdaterArtifacts')
+          }
 
           # Merge prod config
           $config.PSObject.Properties | ForEach-Object {
             $baseConfig | Add-Member -MemberType NoteProperty -Name $_.Name -Value $_.Value -Force
           }
 
-          # Disable updater to avoid signing requirement
+          # Double-check: ensure updater is removed after merge
           if ($baseConfig.plugins -and $baseConfig.plugins.updater) {
             $baseConfig.plugins.PSObject.Properties.Remove('updater')
           }
