@@ -155,10 +155,10 @@ export namespace ModelsDev {
           temperature: true,
           tool_call: info.supports_function_calling || info.supports_tool_choice || false,
           cost: {
-            input: info.input_cost_per_token || 0,
-            output: info.output_cost_per_token || 0,
-            cache_read: info.cache_read_input_token_cost,
-            cache_write: info.cache_creation_input_token_cost,
+            input: (info.input_cost_per_token || 0) * 1_000_000,
+            output: (info.output_cost_per_token || 0) * 1_000_000,
+            cache_read: (info.cache_read_input_token_cost || 0) * 1_000_000,
+            cache_write: (info.cache_creation_input_token_cost || 0) * 1_000_000,
           },
           limit: {
             context: (info.max_input_tokens || 0) + (info.max_output_tokens || 0),
