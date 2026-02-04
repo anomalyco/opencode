@@ -10,9 +10,9 @@
     display: none;
   }
 
-  /* [data-slot="session-review-container"] { */
-  /*   height: 100%; */
-  /* } */
+  [data-slot="session-review-container"] {
+    flex: 1 1 auto;
+  }
 
   [data-slot="session-review-header"] {
     position: sticky;
