@@ -122,7 +122,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-macos-arm64:
-    needs: build-cli
+    needs: [build-cli, build-macos-x64]
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -182,8 +182,22 @@ jobs:
             src-tauri/tauri.build.conf.json \
             src-tauri/tauri.prod.conf.json > src-tauri/tauri.final.conf.json
 
-          # Build with Tauri
-          bun tauri build --target aarch64-apple-darwin --config ./src-tauri/tauri.final.conf.json --bundles dmg
+          # Build with Tauri (with retry on DMG packaging failure)
+          for i in 1 2 3; do
+            echo "Build attempt $i..."
+            if bun tauri build --target aarch64-apple-darwin --config ./src-tauri/tauri.final.conf.json --bundles dmg; then
+              echo "Build succeeded on attempt $i"
+              break
+            else
+              if [ $i -lt 3 ]; then
+                echo "Build failed on attempt $i, retrying in 5 seconds..."
+                sleep 5
+              else
+                echo "Build failed after 3 attempts"
+                exit 1
+              fi
+            fi
+          done
 
       - name: Upload macOS arm64 DMG
         uses: actions/upload-artifact@v4
