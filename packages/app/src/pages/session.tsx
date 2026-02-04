@@ -810,19 +810,53 @@ export default function Page() {
     })
   }
 
-  const updateCommentInContext = (input: {
-    id: string
-    file: string
-    selection: SelectedLineRange
-    comment: string
-    preview?: string
-  }) => {
-    comments.update(input.file, input.id, input.comment)
-    prompt.context.updateComment(input.file, input.id, {
-      comment: input.comment,
-      ...(input.preview ? { preview: input.preview } : {}),
-    })
-  }
+  command.register(() => [
+    {
+      id: "session.new",
+      title: language.t("command.session.new"),
+      category: language.t("command.category.session"),
+      keybind: "mod+shift+s",
+      slash: "new",
+      onSelect: () => navigate(`/${params.dir}/session`),
+    },
+    {
+      id: "file.open",
+      title: language.t("command.file.open"),
+      category: language.t("command.category.file"),
+      keybind: "mod+p",
+      slash: "open",
+      onSelect: () => dialog.show(() => <DialogSelectFile onOpenFile={() => showAllFiles()} />),
+    },
+    {
+      id: "tab.close",
+      title: language.t("command.tab.close"),
+      category: language.t("command.category.file"),
+      keybind: "mod+w",
+      disabled: !tabs().active(),
+      onSelect: () => {
+        const active = tabs().active()
+        if (!active) return
+        tabs().close(active)
+      },
+    },
+    {
+      id: "context.addSelection",
+      title: language.t("command.context.addSelection"),
+      description: language.t("command.context.addSelection.description"),
+      category: language.t("command.category.context"),
+      keybind: "mod+shift+l",
+      disabled: (() => {
+        const active = tabs().active()
+        if (!active) return true
+        const path = file.pathFromTab(active)
+        if (!path) return true
+        return file.selectedLines(path) == null
+      })(),
+      onSelect: () => {
+        const active = tabs().active()
+        if (!active) return
+        const path = file.pathFromTab(active)
+        if (!path) return
 
   const removeCommentFromContext = (input: { id: string; file: string }) => {
     comments.remove(input.file, input.id)
