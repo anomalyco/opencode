@@ -25,6 +25,9 @@ Based on the input provided, determine which type of review to perform:
    - Run: `gh pr view $ARGUMENTS` to get PR context
    - Run: `gh pr diff $ARGUMENTS` to get the diff
 
+5. **Committed** (contains "committed"): Review the committed changes
+   - Run: `git diff HEAD^ HEAD` to get the diff
+
 Use best judgement when processing input.
 
 ---
