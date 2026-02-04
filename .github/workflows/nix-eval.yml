@@ -7,6 +7,13 @@ on:
     branches: [dev]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   nix-eval:
     runs-on: blacksmith-4vcpu-ubuntu-2404
