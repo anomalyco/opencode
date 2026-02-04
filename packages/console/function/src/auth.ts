@@ -137,9 +137,11 @@ export default {
         if (!email) throw new Error("No email found")
         if (!subject) throw new Error("No subject found")
 
-        if (Resource.App.stage !== "production" && !email.endsWith("@anoma.ly")) {
-          throw new Error("Invalid email")
-        }
+        // NOTE: 이메일 도메인 제한 제거 - 모든 이메일 허용
+        // 기존: production 아닌 환경에서 @anoma.ly 이메일만 허용
+        // if (Resource.App.stage !== "production" && !email.endsWith("@anoma.ly")) {
+        //   throw new Error("Invalid email")
+        // }
 
         // Get account
         const accountID = await (async () => {
