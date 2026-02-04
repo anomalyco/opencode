@@ -31,7 +31,15 @@ export const { use: usePromptStash, provider: PromptStashProvider } = createSimp
             return null
           }
         })
-        .filter((line): line is StashEntry => line !== null)
+        .filter((line): line is StashEntry => {
+          return (
+            line !== null &&
+            typeof line === "object" &&
+            typeof line.input === "string" &&
+            Array.isArray(line.parts) &&
+            typeof line.timestamp === "number"
+          )
+        })
         .slice(-MAX_STASH_ENTRIES)
 
       setStore("entries", lines)
