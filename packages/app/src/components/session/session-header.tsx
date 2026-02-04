@@ -47,6 +47,7 @@ export function SessionHeader() {
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const view = createMemo(() => layout.view(sessionKey()))
+  const terminalIcon = createMemo(() => (view().terminal.opened() ? "console-full" : "console"))
 
   const [state, setState] = createStore({
     share: false,
@@ -216,17 +217,17 @@ export function SessionHeader() {
                     <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
                       <Icon
                         size="small"
-                        name={view().terminal.opened() ? "layout-bottom-full" : "layout-bottom"}
+                        name={terminalIcon()}
                         class="group-hover/terminal-toggle:hidden"
                       />
                       <Icon
                         size="small"
-                        name="layout-bottom-partial"
+                        name={terminalIcon()}
                         class="hidden group-hover/terminal-toggle:inline-block"
                       />
                       <Icon
                         size="small"
-                        name={view().terminal.opened() ? "layout-bottom" : "layout-bottom-full"}
+                        name={terminalIcon()}
                         class="hidden group-active/terminal-toggle:inline-block"
                       />
                     </div>
