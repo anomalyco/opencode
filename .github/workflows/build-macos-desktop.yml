@@ -14,9 +14,7 @@ jobs:
   build-cli:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-tags: true
+      - uses: actions/checkout@v4
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -26,7 +24,7 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Build CLI for macOS x64
+      - name: Build CLI
         run: |
           cd packages/opencode
           bun run build
@@ -35,28 +33,14 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: opencode-cli-x64
-          path: packages/opencode/dist
-
-      - name: Build CLI for macOS arm64
-        run: |
-          cd packages/opencode
-          bun run build
-        env:
-          OPENCODE_VERSION: "1.1.51"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: opencode-cli-arm64
+          name: opencode-binaries
           path: packages/opencode/dist
 
   build-macos-x64:
     needs: build-cli
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-tags: true
+      - uses: actions/checkout@v4
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -76,7 +60,7 @@ jobs:
       - name: Download CLI artifacts
         uses: actions/download-artifact@v4
         with:
-          name: opencode-cli-x64
+          name: opencode-binaries
           path: packages/desktop/src-tauri/target/opencode-binaries
 
       - name: Install dependencies
@@ -95,7 +79,7 @@ jobs:
 
           # Copy CLI binary to sidecar folder
           mkdir -p src-tauri/sidecars
-          cp src-tauri/target/opencode-binaries/opencode-macos-x64/bin/opencode src-tauri/sidecars/opencode-cli-x86_64-apple-darwin
+          cp src-tauri/target/opencode-binaries/opencode-darwin-x64/bin/opencode src-tauri/sidecars/opencode-cli-x86_64-apple-darwin
 
       - name: Build Desktop App
         run: |
@@ -135,9 +119,7 @@ jobs:
     needs: build-cli
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-tags: true
+      - uses: actions/checkout@v4
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -157,7 +139,7 @@ jobs:
       - name: Download CLI artifacts
         uses: actions/download-artifact@v4
         with:
-          name: opencode-cli-arm64
+          name: opencode-binaries
           path: packages/desktop/src-tauri/target/opencode-binaries
 
       - name: Install dependencies
@@ -176,7 +158,7 @@ jobs:
 
           # Copy CLI binary to sidecar folder
           mkdir -p src-tauri/sidecars
-          cp src-tauri/target/opencode-binaries/opencode-macos-arm64/bin/opencode src-tauri/sidecars/opencode-cli-aarch64-apple-darwin
+          cp src-tauri/target/opencode-binaries/opencode-darwin-arm64/bin/opencode src-tauri/sidecars/opencode-cli-aarch64-apple-darwin
 
       - name: Build Desktop App
         run: |
