@@ -29,6 +29,7 @@ import { Bus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
 import { Event } from "../server/event"
 import { PackageRegistry } from "@/bun/registry"
+import { proxied } from "@/util/proxied"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -247,13 +248,29 @@ export namespace Config {
     const hasGitIgnore = await Bun.file(gitignore).exists()
     if (!hasGitIgnore) await Bun.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
 
-    await BunProc.run(["add", `@opencode-ai/plugin@${targetVersion}`, "--exact"], {
-      cwd: dir,
-    }).catch(() => {})
+    await BunProc.run(
+      [
+        "add",
+        `@opencode-ai/plugin@${targetVersion}`,
+        "--exact",
+        // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
+        ...(proxied() ? ["--no-cache"] : []),
+      ],
+      {
+        cwd: dir,
+      },
+    ).catch(() => {})
 
     // Install any additional dependencies defined in the package.json
     // This allows local plugins and custom tools to use external packages
-    await BunProc.run(["install"], { cwd: dir }).catch(() => {})
+    await BunProc.run(
+      [
+        "install",
+        // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
+        ...(proxied() ? ["--no-cache"] : []),
+      ],
+      { cwd: dir },
+    ).catch(() => {})
   }
 
   async function needsInstall(dir: string) {
