@@ -4,6 +4,37 @@ export default {
   //       marked with for example `; inherits: ecma` at the top of the file. Just put the dependencies before the actual query.
   //       ALSO: Some queries use breaking changes in the nvim-treesitter repo, that are not compatible with the (web-)tree-sitter parser.
   parsers: [
+    // Use javascript wasm and jsx highlights to parse jsx
+    {
+      filetype: "jsx",
+      wasm: "https://github.com/tree-sitter/tree-sitter-javascript/releases/download/v0.25.0/tree-sitter-javascript.wasm",
+      queries: {
+        highlights: [
+          "https://raw.githubusercontent.com/tree-sitter/tree-sitter-javascript/refs/heads/master/queries/highlights-jsx.scm",
+          "https://raw.githubusercontent.com/tree-sitter/tree-sitter-javascript/refs/heads/master/queries/highlights.scm",
+          "https://raw.githubusercontent.com/tree-sitter/tree-sitter-javascript/refs/heads/master/queries/highlights-params.scm",
+        ],
+      },
+    },
+    // Use typescript tsx wasm and typescript highlights to parse tsx
+    {
+      filetype: "tsx",
+      wasm: "https://github.com/tree-sitter/tree-sitter-typescript/releases/download/v0.23.2/tree-sitter-tsx.wasm",
+      queries: {
+        highlights: [
+          // TODO: Weigh in whether to use opentui typescript highlights, or
+          // nvim-treesitter
+          // "https://raw.githubusercontent.com/anomalyco/opentui/refs/heads/main/packages/core/src/lib/tree-sitter/assets/typescript/highlights.scm",
+          "https://raw.githubusercontent.com/tree-sitter/tree-sitter-javascript/refs/heads/master/queries/highlights-jsx.scm",
+          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/main/runtime/queries/typescript/highlights.scm",
+          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/main/runtime/queries/ecma/highlights.scm",
+          // NOTE: Adding these highlights seems to break the whole
+          // highlighting
+          // "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/main/runtime/queries/jsx/highlights.scm",
+          // "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/main/runtime/queries/tsx/highlights.scm",
+        ],
+      },
+    },
     {
       filetype: "python",
       wasm: "https://github.com/tree-sitter/tree-sitter-python/releases/download/v0.23.6/tree-sitter-python.wasm",
