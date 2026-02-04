@@ -91,14 +91,3 @@ Object.defineProperty(Flag, "MAMMOUTH_CLIENT", {
   enumerable: true,
   configurable: false,
 })
-
-// Dynamic getter for OPENCODE_CLIENT
-// This must be evaluated at access time, not module load time,
-// because some commands override the client at runtime
-Object.defineProperty(Flag, "MAMMOUTH_CLIENT", {
-  get() {
-    return process.env["MAMMOUTH_CLIENT"] ?? "cli"
-  },
-  enumerable: true,
-  configurable: false,
-})
