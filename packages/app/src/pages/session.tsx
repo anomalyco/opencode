@@ -863,25 +863,304 @@ export default function Page() {
     prompt.context.removeComment(input.file, input.id)
   }
 
-  const reviewCommentActions = createMemo(() => ({
-    moreLabel: language.t("common.moreOptions"),
-    editLabel: language.t("common.edit"),
-    deleteLabel: language.t("common.delete"),
-    saveLabel: language.t("common.save"),
-  }))
-
-  const isEditableTarget = (target: EventTarget | null | undefined) => {
-    if (!(target instanceof HTMLElement)) return false
-    return /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(target.tagName) || target.isContentEditable
-  }
-
-  const deepActiveElement = () => {
-    let current: Element | null = document.activeElement
-    while (current instanceof HTMLElement && current.shadowRoot?.activeElement) {
-      current = current.shadowRoot.activeElement
-    }
-    return current instanceof HTMLElement ? current : undefined
-  }
+        addSelectionToContext(path, selectionFromLines(range))
+      },
+    },
+    {
+      id: "terminal.toggle",
+      title: language.t("command.terminal.toggle"),
+      description: "",
+      category: language.t("command.category.view"),
+      keybind: "ctrl+`",
+      slash: "terminal",
+      onSelect: () => view().terminal.toggle(),
+    },
+    {
+      id: "review.toggle",
+      title: language.t("command.review.toggle"),
+      description: "",
+      category: language.t("command.category.view"),
+      keybind: "mod+shift+r",
+      onSelect: () => layout.fileTree.toggle(),
+    },
+    {
+      id: "terminal.new",
+      title: language.t("command.terminal.new"),
+      description: language.t("command.terminal.new.description"),
+      category: language.t("command.category.terminal"),
+      keybind: "ctrl+alt+t",
+      onSelect: () => {
+        if (terminal.all().length > 0) terminal.new()
+        view().terminal.open()
+      },
+    },
+    {
+      id: "steps.toggle",
+      title: language.t("command.steps.toggle"),
+      description: language.t("command.steps.toggle.description"),
+      category: language.t("command.category.view"),
+      keybind: "mod+e",
+      slash: "steps",
+      disabled: !params.id,
+      onSelect: () => {
+        const msg = activeMessage()
+        if (!msg) return
+        setStore("expanded", msg.id, (open: boolean | undefined) => !open)
+      },
+    },
+    {
+      id: "message.previous",
+      title: language.t("command.message.previous"),
+      description: language.t("command.message.previous.description"),
+      category: language.t("command.category.session"),
+      keybind: "mod+arrowup",
+      disabled: !params.id,
+      onSelect: () => navigateMessageByOffset(-1),
+    },
+    {
+      id: "message.next",
+      title: language.t("command.message.next"),
+      description: language.t("command.message.next.description"),
+      category: language.t("command.category.session"),
+      keybind: "mod+arrowdown",
+      disabled: !params.id,
+      onSelect: () => navigateMessageByOffset(1),
+    },
+    {
+      id: "model.choose",
+      title: language.t("command.model.choose"),
+      description: language.t("command.model.choose.description"),
+      category: language.t("command.category.model"),
+      keybind: "mod+'",
+      slash: "model",
+      onSelect: () => dialog.show(() => <DialogSelectModel />),
+    },
+    {
+      id: "mcp.toggle",
+      title: language.t("command.mcp.toggle"),
+      description: language.t("command.mcp.toggle.description"),
+      category: language.t("command.category.mcp"),
+      keybind: "mod+;",
+      slash: "mcp",
+      onSelect: () => dialog.show(() => <DialogSelectMcp />),
+    },
+    {
+      id: "agent.cycle",
+      title: language.t("command.agent.cycle"),
+      description: language.t("command.agent.cycle.description"),
+      category: language.t("command.category.agent"),
+      keybind: "mod+.",
+      slash: "agent",
+      onSelect: () => local.agent.move(1),
+    },
+    {
+      id: "agent.cycle.reverse",
+      title: language.t("command.agent.cycle.reverse"),
+      description: language.t("command.agent.cycle.reverse.description"),
+      category: language.t("command.category.agent"),
+      keybind: "shift+mod+.",
+      onSelect: () => local.agent.move(-1),
+    },
+    {
+      id: "model.variant.cycle",
+      title: language.t("command.model.variant.cycle"),
+      description: language.t("command.model.variant.cycle.description"),
+      category: language.t("command.category.model"),
+      keybind: "shift+mod+d",
+      onSelect: () => {
+        local.model.variant.cycle()
+      },
+    },
+    {
+      id: "permissions.autoaccept",
+      title:
+        params.id && permission.isAutoAccepting(params.id, sdk.directory)
+          ? language.t("command.permissions.autoaccept.disable")
+          : language.t("command.permissions.autoaccept.enable"),
+      category: language.t("command.category.permissions"),
+      keybind: "mod+shift+a",
+      disabled: !params.id || !permission.permissionsEnabled(),
+      onSelect: () => {
+        const sessionID = params.id
+        if (!sessionID) return
+        permission.toggleAutoAccept(sessionID, sdk.directory)
+        showToast({
+          title: permission.isAutoAccepting(sessionID, sdk.directory)
+            ? language.t("toast.permissions.autoaccept.on.title")
+            : language.t("toast.permissions.autoaccept.off.title"),
+          description: permission.isAutoAccepting(sessionID, sdk.directory)
+            ? language.t("toast.permissions.autoaccept.on.description")
+            : language.t("toast.permissions.autoaccept.off.description"),
+        })
+      },
+    },
+    {
+      id: "session.undo",
+      title: language.t("command.session.undo"),
+      description: language.t("command.session.undo.description"),
+      category: language.t("command.category.session"),
+      slash: "undo",
+      disabled: !params.id || visibleUserMessages().length === 0,
+      onSelect: async () => {
+        const sessionID = params.id
+        if (!sessionID) return
+        if (status()?.type !== "idle") {
+          await sdk.client.session.abort({ sessionID }).catch(() => {})
+        }
+        const revert = info()?.revert?.messageID
+        // Find the last user message that's not already reverted
+        const message = findLast(userMessages(), (x) => !revert || x.id < revert)
+        if (!message) return
+        await sdk.client.session.revert({ sessionID, messageID: message.id })
+        // Restore the prompt from the reverted message
+        const parts = sync.data.part[message.id]
+        if (parts) {
+          const restored = extractPromptFromParts(parts, { directory: sdk.directory })
+          prompt.set(restored)
+        }
+        // Navigate to the message before the reverted one (which will be the new last visible message)
+        const priorMessage = findLast(userMessages(), (x) => x.id < message.id)
+        setActiveMessage(priorMessage)
+      },
+    },
+    {
+      id: "session.redo",
+      title: language.t("command.session.redo"),
+      description: language.t("command.session.redo.description"),
+      category: language.t("command.category.session"),
+      slash: "redo",
+      disabled: !params.id || !info()?.revert?.messageID,
+      onSelect: async () => {
+        const sessionID = params.id
+        if (!sessionID) return
+        const revertMessageID = info()?.revert?.messageID
+        if (!revertMessageID) return
+        const nextMessage = userMessages().find((x) => x.id > revertMessageID)
+        if (!nextMessage) {
+          // Full unrevert - restore all messages and navigate to last
+          await sdk.client.session.unrevert({ sessionID })
+          prompt.reset()
+          // Navigate to the last message (the one that was at the revert point)
+          const lastMsg = findLast(userMessages(), (x) => x.id >= revertMessageID)
+          setActiveMessage(lastMsg)
+          return
+        }
+        // Partial redo - move forward to next message
+        await sdk.client.session.revert({ sessionID, messageID: nextMessage.id })
+        // Navigate to the message before the new revert point
+        const priorMsg = findLast(userMessages(), (x) => x.id < nextMessage.id)
+        setActiveMessage(priorMsg)
+      },
+    },
+    {
+      id: "session.compact",
+      title: language.t("command.session.compact"),
+      description: language.t("command.session.compact.description"),
+      category: language.t("command.category.session"),
+      slash: "compact",
+      disabled: !params.id || visibleUserMessages().length === 0,
+      onSelect: async () => {
+        const sessionID = params.id
+        if (!sessionID) return
+        const model = local.model.current()
+        if (!model) {
+          showToast({
+            title: language.t("toast.model.none.title"),
+            description: language.t("toast.model.none.description"),
+          })
+          return
+        }
+        await sdk.client.session.summarize({
+          sessionID,
+          modelID: model.id,
+          providerID: model.provider.id,
+        })
+      },
+    },
+    {
+      id: "session.fork",
+      title: language.t("command.session.fork"),
+      description: language.t("command.session.fork.description"),
+      category: language.t("command.category.session"),
+      slash: "fork",
+      disabled: !params.id || visibleUserMessages().length === 0,
+      onSelect: () => dialog.show(() => <DialogFork />),
+    },
+    {
+      id: "prompt.focus",
+      title: "Focus Input",
+      description: "Focus the prompt input box",
+      category: language.t("command.category.session"),
+      keybind: "mod+/",
+      onSelect: () => inputRef?.focus(),
+    },
+    ...(sync.data.config.share !== "disabled"
+      ? [
+          {
+            id: "session.share",
+            title: language.t("command.session.share"),
+            description: language.t("command.session.share.description"),
+            category: language.t("command.category.session"),
+            slash: "share",
+            disabled: !params.id || !!info()?.share?.url,
+            onSelect: async () => {
+              if (!params.id) return
+              await sdk.client.session
+                .share({ sessionID: params.id })
+                .then((res) => {
+                  navigator.clipboard.writeText(res.data!.share!.url).catch(() =>
+                    showToast({
+                      title: language.t("toast.session.share.copyFailed.title"),
+                      variant: "error",
+                    }),
+                  )
+                })
+                .then(() =>
+                  showToast({
+                    title: language.t("toast.session.share.success.title"),
+                    description: language.t("toast.session.share.success.description"),
+                    variant: "success",
+                  }),
+                )
+                .catch(() =>
+                  showToast({
+                    title: language.t("toast.session.share.failed.title"),
+                    description: language.t("toast.session.share.failed.description"),
+                    variant: "error",
+                  }),
+                )
+            },
+          },
+          {
+            id: "session.unshare",
+            title: language.t("command.session.unshare"),
+            description: language.t("command.session.unshare.description"),
+            category: language.t("command.category.session"),
+            slash: "unshare",
+            disabled: !params.id || !info()?.share?.url,
+            onSelect: async () => {
+              if (!params.id) return
+              await sdk.client.session
+                .unshare({ sessionID: params.id })
+                .then(() =>
+                  showToast({
+                    title: language.t("toast.session.unshare.success.title"),
+                    description: language.t("toast.session.unshare.success.description"),
+                    variant: "success",
+                  }),
+                )
+                .catch(() =>
+                  showToast({
+                    title: language.t("toast.session.unshare.failed.title"),
+                    description: language.t("toast.session.unshare.failed.description"),
+                    variant: "error",
+                  }),
+                )
+            },
+          },
+        ]
+      : []),
+  ])
 
   const handleKeyDown = (event: KeyboardEvent) => {
     const path = event.composedPath()
