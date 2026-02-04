@@ -169,7 +169,6 @@ export function tui(input: {
         gatherStats: false,
         exitOnCtrlC: false,
         useKittyKeyboard: {},
-        // @ts-expect-error - autoFocus is not in CliRendererConfig types but is supported
         autoFocus: false,
         consoleOptions: {
           keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
