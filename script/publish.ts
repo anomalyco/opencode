@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 
+import { fileURLToPath } from "node:url"
+import path from "path"
 import { $ } from "bun"
 import { Script } from "@opencode-ai/script"
 
@@ -46,7 +48,7 @@ for (const file of pkgjsons) {
   await Bun.file(file).write(pkg)
 }
 
-const extensionToml = new URL("../packages/extensions/zed/extension.toml", import.meta.url).pathname
+const extensionToml = path.resolve(fileURLToPath(import.meta.url), "../packages/extensions/zed/extension.toml")
 let toml = await Bun.file(extensionToml).text()
 toml = toml.replace(/^version = "[^"]+"/m, `version = "${Script.version}"`)
 toml = toml.replaceAll(/releases\/download\/v[^/]+\//g, `releases/download/v${Script.version}/`)
@@ -75,5 +77,5 @@ await import(`../packages/sdk/js/script/publish.ts`)
 console.log("\n=== plugin ===\n")
 await import(`../packages/plugin/script/publish.ts`)
 
-const dir = new URL("..", import.meta.url).pathname
+const dir = path.resolve(fileURLToPath(import.meta.url), "..")
 process.chdir(dir)
