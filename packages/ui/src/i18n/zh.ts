@@ -4,6 +4,7 @@ type Keys = keyof typeof en
 
 export const dict = {
   "ui.sessionReview.title": "会话变更",
+  "ui.sessionReview.title.lastTurn": "上一轮变更",
   "ui.sessionReview.diffStyle.unified": "统一",
   "ui.sessionReview.diffStyle.split": "拆分",
   "ui.sessionReview.expandAll": "全部展开",
