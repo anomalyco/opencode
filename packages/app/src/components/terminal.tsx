@@ -185,6 +185,7 @@ export const Terminal = (props: TerminalProps) => {
         fontSize: 14,
         fontFamily: monoFontFamily(settings.appearance.font()),
         allowTransparency: true,
+        convertEol: true,
         theme: terminalColors(),
         scrollback: 10_000,
         ghostty: g,
