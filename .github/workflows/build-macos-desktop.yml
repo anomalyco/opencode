@@ -3,6 +3,11 @@ run-name: "Build macOS Desktop App"
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.1.51-test). Leave empty to skip release creation.'
+        required: false
+        type: string
   push:
     tags:
       - "v*"
@@ -106,10 +111,11 @@ jobs:
           name: opencode-desktop-macos-x64
           path: packages/desktop/src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
 
-      - name: Create Release (if tag exists)
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.version != '')
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: ${{ inputs.version || github.ref_name }}
           files: packages/desktop/src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
           draft: true
         env:
@@ -185,10 +191,11 @@ jobs:
           name: opencode-desktop-macos-arm64
           path: packages/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
 
-      - name: Create Release (if tag exists)
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.version != '')
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: ${{ inputs.version || github.ref_name }}
           files: packages/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
           draft: true
         env:
