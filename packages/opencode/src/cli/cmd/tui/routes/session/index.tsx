@@ -546,6 +546,7 @@ export function Session() {
     {
       title: showThinking() ? "Hide thinking" : "Show thinking",
       value: "session.toggle.thinking",
+      keybind: "thinking_toggle",
       category: "Session",
       slash: {
         name: "thinking",
