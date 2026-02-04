@@ -1312,7 +1312,7 @@ export type KeybindsConfig = {
   /**
    * Toggle thinking blocks visibility
    */
-  thinking_toggle?: string
+  display_thinking?: string
 }
 
 /**
