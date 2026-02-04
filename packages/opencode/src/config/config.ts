@@ -24,7 +24,7 @@ import { LSPServer } from "../lsp/server"
 import { BunProc } from "@/bun"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
-import { existsSync } from "fs"
+import { constants, existsSync } from "fs"
 import { Bus } from "@/bus"
 import { GlobalBus } from "@/bus/global"
 import { Event } from "../server/event"
@@ -273,7 +273,24 @@ export namespace Config {
     ).catch(() => {})
   }
 
+  async function isWritable(dir: string) {
+    try {
+      await fs.access(dir, constants.W_OK)
+      return true
+    } catch {
+      return false
+    }
+  }
+
   async function needsInstall(dir: string) {
+    // Some config dirs may be read-only.
+    // Installing deps there will fail; skip installation in that case.
+    const writable = await isWritable(dir)
+    if (!writable) {
+      log.debug("config dir is not writable, skipping dependency install", { dir })
+      return false
+    }
+
     const nodeModules = path.join(dir, "node_modules")
     if (!existsSync(nodeModules)) return true
 
