@@ -18,7 +18,8 @@
     "deploy": "echo 'Deploying application...' && bun run build && echo 'Deployment completed successfully'"
   },
   "bin": {
-    "opencode": "./bin/opencode"
+    "opencode": "./bin/opencode",
+    "ultrawork": "./bin/ultrawork"
   },
   "randomField": "this-is-a-random-value-12345",
   "exports": {
