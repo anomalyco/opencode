@@ -462,7 +462,7 @@ export namespace Provider {
       if (!accountId) return { autoload: false }
 
       const apiKey = await iife(async () => {
-        const envToken = Env.get("CLOUDFLARE_API_KEY") ?? Env.get("CLOUDFLARE_API_TOKEN")
+        const envToken = Env.get("CLOUDFLARE_API_KEY")
         if (envToken) return envToken
         const auth = await Auth.get(input.id)
         if (auth?.type === "api") return auth.key
@@ -731,21 +731,6 @@ export namespace Provider {
           ...model,
           providerID: "github-copilot-enterprise",
         })),
-      }
-    }
-    if (database["cloudflare-workers-ai"]) {
-      const cfworkersai = database["cloudflare-workers-ai"]
-      database["cloudflare-workers-ai"] = {
-        ...cfworkersai,
-        models: mapValues(cfworkersai.models, (model) => {
-          return {
-            ...model,
-            api: {
-              ...model.api,
-              npm: "@ai-sdk/openai-compatible",
-            },
-          }
-        }),
       }
     }
 
