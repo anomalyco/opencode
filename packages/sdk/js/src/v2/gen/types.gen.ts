@@ -96,6 +96,7 @@ export type FileDiff = {
   after: string
   additions: number
   deletions: number
+  status?: "added" | "deleted" | "modified"
 }
 
 export type UserMessage = {
@@ -1332,6 +1333,10 @@ export type ServerConfig = {
    */
   mdns?: boolean
   /**
+   * Custom domain name for mDNS service (default: opencode.local)
+   */
+  mdnsDomain?: string
+  /**
    * Additional domains to allow for CORS
    */
   cors?: Array<string>
@@ -1371,6 +1376,10 @@ export type PermissionConfig =
 
 export type AgentConfig = {
   model?: string
+  /**
+   * Default model variant for this agent (applies only when using the agent's configured model).
+   */
+  variant?: string
   temperature?: number
   top_p?: number
   prompt?: string
@@ -1394,9 +1403,9 @@ export type AgentConfig = {
     [key: string]: unknown
   }
   /**
-   * Hex color code for the agent (e.g., #FF5733)
+   * Hex color code (e.g., #FF5733) or theme color (e.g., primary)
    */
-  color?: string
+  color?: string | "primary" | "secondary" | "accent" | "success" | "warning" | "error" | "info"
   /**
    * Maximum number of agentic iterations before forcing text-only response
    */
@@ -1421,6 +1430,13 @@ export type AgentConfig = {
         [key: string]: unknown
       }
     | string
+    | "primary"
+    | "secondary"
+    | "accent"
+    | "success"
+    | "warning"
+    | "error"
+    | "info"
     | number
     | PermissionConfig
     | undefined
@@ -1779,26 +1795,6 @@ export type Config = {
     prune?: boolean
   }
   experimental?: {
-    hook?: {
-      file_edited?: {
-        [key: string]: Array<{
-          command: Array<string>
-          environment?: {
-            [key: string]: string
-          }
-        }>
-      }
-      session_completed?: Array<{
-        command: Array<string>
-        environment?: {
-          [key: string]: string
-        }
-      }>
-    }
-    /**
-     * Number of retries for chat completions on failure
-     */
-    chatMaxRetries?: number
     disable_paste_summary?: boolean
     /**
      * Enable the batch tool
@@ -2062,7 +2058,7 @@ export type FileNode = {
 }
 
 export type FileContent = {
-  type: "text"
+  type: "text" | "binary"
   content: string
   diff?: string
   patch?: {
@@ -2136,7 +2132,7 @@ export type Command = {
   description?: string
   agent?: string
   model?: string
-  mcp?: boolean
+  source?: "command" | "mcp" | "skill"
   template: string
   subtask?: boolean
   hints: Array<string>
@@ -2156,6 +2152,7 @@ export type Agent = {
     modelID: string
     providerID: string
   }
+  variant?: string
   prompt?: string
   options: {
     [key: string]: unknown
@@ -4933,6 +4930,7 @@ export type AppSkillsResponses = {
     name: string
     description: string
     location: string
+    content: string
   }>
 }
 

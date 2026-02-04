@@ -51,6 +51,7 @@ fn is_cli_installed() -> bool {
 const INSTALL_SCRIPT: &str = include_str!("../../../../install");
 
 #[tauri::command]
+#[specta::specta]
 pub fn install_cli(app: tauri::AppHandle) -> Result<String, String> {
     if cfg!(not(unix)) {
         return Err("CLI installation is only supported on macOS & Linux".to_string());
