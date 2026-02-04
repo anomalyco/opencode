@@ -259,7 +259,7 @@ export function DialogConnectProvider(props: { provider: string }) {
                       const value = formData.get(prompt.key) as string
                       inputs[prompt.key] = value
 
-                      if (prompt.validate) {
+                      if ("validate" in prompt && prompt.validate) {
                         const error = prompt.validate(value)
                         if (error) {
                           newErrors[prompt.key] = error
@@ -333,7 +333,7 @@ export function DialogConnectProvider(props: { provider: string }) {
                                       autofocus={prompts![0] === prompt}
                                       type="text"
                                       label={prompt.message}
-                                      placeholder={prompt.placeholder}
+                                      placeholder={"placeholder" in prompt ? prompt.placeholder : undefined}
                                       name={prompt.key}
                                       value={formStore.values[prompt.key] || ""}
                                       onChange={(value) => setFormStore("values", prompt.key, value)}
@@ -351,7 +351,7 @@ export function DialogConnectProvider(props: { provider: string }) {
                                         onChange={(e) => setFormStore("values", prompt.key, e.currentTarget.value)}
                                         class="w-full h-10 px-3 rounded-lg bg-input-base border-border-weak-base border text-text-base text-14-regular focus:outline-none focus:ring-2 focus:ring-primary"
                                       >
-                                        <For each={prompt.options}>
+                                        <For each={"options" in prompt ? prompt.options : []}>
                                           {(option) => (
                                             <option value={option.value}>
                                               {option.label}
