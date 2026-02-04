@@ -37,6 +37,25 @@ describe("tool.bash", () => {
       },
     })
   })
+
+  test("injects session id into env", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const testCtx = { ...ctx, sessionID: "session-env-123" }
+        const result = await bash.execute(
+          {
+            command: "echo $OPENCODE_SESSION_ID",
+            description: "Echo session id",
+          },
+          testCtx,
+        )
+        expect(result.metadata.exit).toBe(0)
+        expect(result.metadata.output).toContain("session-env-123")
+      },
+    })
+  })
 })
 
 describe("tool.bash permissions", () => {
