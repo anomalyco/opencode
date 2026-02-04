@@ -57,13 +57,13 @@ export namespace ProviderAuth {
     z.object({
       providerID: z.string(),
       method: z.number(),
-      inputs: z.record(z.string(), z.string()).optional(),
+      inputs: z.record(z.string(), z.any()).optional(),
     }),
     async (input): Promise<Authorization | undefined> => {
       const auth = await state().then((s) => s.methods[input.providerID])
       const method = auth.methods[input.method]
       if (method.type === "oauth") {
-        const result = await method.authorize(input.inputs)
+        const result = await method.authorize(input.inputs as Record<string, string>)
         await state().then((s) => (s.pending[input.providerID] = result))
         return {
           url: result.url,
@@ -123,7 +123,7 @@ export namespace ProviderAuth {
   export const api = fn(
     z.object({
       providerID: z.string(),
-      inputs: z.record(z.string(), z.string()),
+      inputs: z.record(z.string(), z.any()),
       key: z.string().optional(),
     }),
     async (input) => {

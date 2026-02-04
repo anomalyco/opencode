@@ -347,6 +347,7 @@ export function DialogConnectProvider(props: { provider: string }) {
                                       <label class="text-14-regular text-text-base">{prompt.message}</label>
                                       <select
                                         name={prompt.key}
+                                        aria-label={prompt.message}
                                         value={formStore.values[prompt.key] || ""}
                                         onChange={(e) => setFormStore("values", prompt.key, e.currentTarget.value)}
                                         class="w-full h-10 px-3 rounded-lg bg-input-base border-border-weak-base border text-text-base text-14-regular focus:outline-none focus:ring-2 focus:ring-primary"
