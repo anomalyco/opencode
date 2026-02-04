@@ -345,6 +345,67 @@ describe("acp.agent event subscription", () => {
     })
   })
 
+  test("permission.asked events from child sessions (not in sessionManager) are handled", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const permissionReplies: string[] = []
+        const { agent, controller, stop, sdk } = createFakeAgent()
+
+        const childSessionID = "ses_child_123"
+        const childDirectory = "/tmp/child-session-dir"
+
+        // Mock session.get to return child session info
+        sdk.session.get = async (params: any) => {
+          if (params.sessionID === childSessionID) {
+            return {
+              data: {
+                id: childSessionID,
+                directory: childDirectory,
+                time: { created: Date.now() },
+              },
+            }
+          }
+          return { data: undefined }
+        }
+
+        sdk.permission.reply = async (params: any) => {
+          permissionReplies.push(params.requestID)
+          return { data: true }
+        }
+
+        const cwd = "/tmp/opencode-acp-test"
+
+        // Create a parent session (registered in sessionManager)
+        await agent.newSession({ cwd, mcpServers: [] } as any)
+
+        // Push permission.asked from a child session (NOT registered in sessionManager)
+        controller.push({
+          directory: childDirectory,
+          payload: {
+            type: "permission.asked",
+            properties: {
+              id: "perm_child",
+              sessionID: childSessionID,
+              permission: "external_directory",
+              patterns: ["*"],
+              metadata: { path: "/tmp" },
+              always: [],
+            },
+          },
+        } as any)
+
+        await new Promise((r) => setTimeout(r, 20))
+
+        // Permission should be handled even though session is not in sessionManager
+        expect(permissionReplies).toContain("perm_child")
+
+        stop()
+      },
+    })
+  })
+
   test("permission prompt on session A does not block message updates for session B", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({

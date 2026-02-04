@@ -110,13 +110,27 @@ export namespace ACP {
         case "permission.asked": {
           const permission = event.properties
           const session = this.sessionManager.tryGet(permission.sessionID)
-          if (!session) return
+
+          // Child sessions (from Task subagents) aren't in sessionManager, so fetch from SDK
+          let directory = session?.cwd
+          if (!directory) {
+            const info = await this.sdk.session
+              .get({ sessionID: permission.sessionID })
+              .then((x) => x.data)
+              .catch(() => undefined)
+            directory = info?.directory
+          }
+          if (!directory) {
+            log.warn("cannot handle permission for unknown session", {
+              sessionID: permission.sessionID,
+              permissionID: permission.id,
+            })
+            return
+          }
 
           const prev = this.permissionQueues.get(permission.sessionID) ?? Promise.resolve()
           const next = prev
             .then(async () => {
-              const directory = session.cwd
-
               const res = await this.connection
                 .requestPermission({
                   sessionId: permission.sessionID,
@@ -164,7 +178,7 @@ export namespace ACP {
 
                 if (newContent) {
                   this.connection.writeTextFile({
-                    sessionId: session.id,
+                    sessionId: permission.sessionID,
                     path: filepath,
                     content: newContent,
                   })
