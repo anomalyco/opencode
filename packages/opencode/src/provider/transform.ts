@@ -334,9 +334,7 @@ export namespace ProviderTransform {
       id.includes("minimax") ||
       id.includes("glm") ||
       id.includes("mistral") ||
-      id.includes("kimi") ||
-      // TODO: Remove this after models.dev data is fixed to use "kimi-k2.5" instead of "k2p5"
-      id.includes("k2p5")
+      id.includes("kimi")
     )
       return {}
 
@@ -615,6 +613,16 @@ export namespace ProviderTransform {
         type: "enabled",
         clear_thinking: false,
       }
+    }
+
+    // kimi-k2.5 supports enabling thinking capability
+    // https://platform.moonshot.cn/docs/guide/kimi-k2-5-quickstart
+    if (["k2p5", "kimi-k2.5"].includes(input.model.providerID) && input.model.api.npm === "@ai-sdk/openai-compatible") {
+      result["thinking"] = {
+        type: "enabled",
+        budgetTokens: 31999,
+      }
+      result["interleaved"] = { field: "reasoning_content" }
     }
 
     if (input.model.providerID === "openai" || input.providerOptions?.setCacheKey) {
