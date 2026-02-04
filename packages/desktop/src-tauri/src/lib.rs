@@ -1,44 +1,55 @@
 mod cli;
+mod constants;
 #[cfg(windows)]
 mod job_object;
 mod markdown;
+mod server;
 mod window_customizer;
+mod windows;
 
-use cli::{install_cli, sync_cli};
-use futures::FutureExt;
-use futures::future;
+use futures::{
+    FutureExt, TryFutureExt,
+    future::{self, Shared},
+};
 #[cfg(windows)]
 use job_object::*;
 use std::{
     collections::VecDeque,
+    env,
     net::TcpListener,
+    path::PathBuf,
     sync::{Arc, Mutex},
-    time::{Duration, Instant},
+    time::Duration,
 };
-use tauri::{AppHandle, LogicalSize, Manager, RunEvent, State, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, RunEvent, State, ipc::Channel};
 #[cfg(windows)]
 use tauri_plugin_decorum::WebviewWindowExt;
 #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
 use tauri_plugin_deep_link::DeepLinkExt;
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogResult};
-use tauri_plugin_shell::process::{CommandChild, CommandEvent};
-use tauri_plugin_store::StoreExt;
-use tauri_plugin_window_state::{AppHandleExt, StateFlags};
-use tokio::sync::{mpsc, oneshot};
+use tauri_plugin_shell::process::CommandChild;
+use tokio::sync::{oneshot, watch};
 
-use crate::window_customizer::PinchZoomDisablePlugin;
-
-const SETTINGS_STORE: &str = "opencode.settings.dat";
-const DEFAULT_SERVER_URL_KEY: &str = "defaultServerUrl";
-
-fn window_state_flags() -> StateFlags {
-    StateFlags::all() - StateFlags::DECORATIONS
-}
+use crate::cli::sync_cli;
+use crate::constants::*;
+use crate::server::get_saved_server_url;
+use crate::windows::{LoadingWindow, MainWindow};
 
 #[derive(Clone, serde::Serialize, specta::Type)]
 struct ServerReadyData {
     url: String,
     password: Option<String>,
+}
+
+#[derive(Clone, serde::Serialize, specta::Type)]
+#[serde(tag = "phase", rename_all = "snake_case")]
+enum InitStep {
+    ServerWaiting,
+    SqliteWaiting,
+    Done,
+}
+
+struct InitState {
+    current: watch::Receiver<InitStep>,
 }
 
 #[derive(Clone)]
@@ -50,11 +61,11 @@ struct ServerState {
 impl ServerState {
     pub fn new(
         child: Option<CommandChild>,
-        status: oneshot::Receiver<Result<ServerReadyData, String>>,
+        status: Shared<oneshot::Receiver<Result<ServerReadyData, String>>>,
     ) -> Self {
         Self {
             child: Arc::new(Mutex::new(child)),
-            status: status.shared(),
+            status,
         }
     }
 
@@ -65,8 +76,6 @@ impl ServerState {
 
 #[derive(Clone)]
 struct LogState(Arc<Mutex<VecDeque<String>>>);
-
-const MAX_LOG_ENTRIES: usize = 200;
 
 #[tauri::command]
 #[specta::specta]
@@ -104,173 +113,41 @@ async fn get_logs(app: AppHandle) -> Result<String, String> {
 
 #[tauri::command]
 #[specta::specta]
-async fn ensure_server_ready(state: State<'_, ServerState>) -> Result<ServerReadyData, String> {
-    state
+async fn await_initialization(
+    state: State<'_, ServerState>,
+    init_state: State<'_, InitState>,
+    events: Channel<InitStep>,
+) -> Result<ServerReadyData, String> {
+    let mut rx = init_state.current.clone();
+
+    while rx.changed().await.is_ok() {
+        let step = rx.borrow_and_update();
+
+        let _ = events.send((*step).clone());
+    }
+
+    let res = state
         .status
         .clone()
         .await
-        .map_err(|_| "Failed to get server status".to_string())?
-}
+        .map_err(|_| "Failed to get server status".to_string())??;
 
-#[tauri::command]
-#[specta::specta]
-fn get_default_server_url(app: AppHandle) -> Result<Option<String>, String> {
-    let store = app
-        .store(SETTINGS_STORE)
-        .map_err(|e| format!("Failed to open settings store: {}", e))?;
-
-    let value = store.get(DEFAULT_SERVER_URL_KEY);
-    match value {
-        Some(v) => Ok(v.as_str().map(String::from)),
-        None => Ok(None),
-    }
-}
-
-#[tauri::command]
-#[specta::specta]
-async fn set_default_server_url(app: AppHandle, url: Option<String>) -> Result<(), String> {
-    let store = app
-        .store(SETTINGS_STORE)
-        .map_err(|e| format!("Failed to open settings store: {}", e))?;
-
-    match url {
-        Some(u) => {
-            store.set(DEFAULT_SERVER_URL_KEY, serde_json::Value::String(u));
-        }
-        None => {
-            store.delete(DEFAULT_SERVER_URL_KEY);
-        }
-    }
-
-    store
-        .save()
-        .map_err(|e| format!("Failed to save settings: {}", e))?;
-
-    Ok(())
-}
-
-fn get_sidecar_port() -> u32 {
-    option_env!("OPENCODE_PORT")
-        .map(|s| s.to_string())
-        .or_else(|| std::env::var("OPENCODE_PORT").ok())
-        .and_then(|port_str| port_str.parse().ok())
-        .unwrap_or_else(|| {
-            TcpListener::bind("127.0.0.1:0")
-                .expect("Failed to bind to find free port")
-                .local_addr()
-                .expect("Failed to get local address")
-                .port()
-        }) as u32
-}
-
-fn spawn_sidecar(app: &AppHandle, hostname: &str, port: u32, password: &str) -> CommandChild {
-    let log_state = app.state::<LogState>();
-    let log_state_clone = log_state.inner().clone();
-
-    println!("spawning sidecar on port {port}");
-
-    let (mut rx, child) = cli::create_command(
-        app,
-        format!("serve --hostname {hostname} --port {port}").as_str(),
-    )
-    .env("OPENCODE_SERVER_USERNAME", "opencode")
-    .env("OPENCODE_SERVER_PASSWORD", password)
-    .spawn()
-    .expect("Failed to spawn opencode");
-
-    tauri::async_runtime::spawn(async move {
-        while let Some(event) = rx.recv().await {
-            match event {
-                CommandEvent::Stdout(line_bytes) => {
-                    let line = String::from_utf8_lossy(&line_bytes);
-                    print!("{line}");
-
-                    // Store log in shared state
-                    if let Ok(mut logs) = log_state_clone.0.lock() {
-                        logs.push_back(format!("[STDOUT] {}", line));
-                        // Keep only the last MAX_LOG_ENTRIES
-                        while logs.len() > MAX_LOG_ENTRIES {
-                            logs.pop_front();
-                        }
-                    }
-                }
-                CommandEvent::Stderr(line_bytes) => {
-                    let line = String::from_utf8_lossy(&line_bytes);
-                    eprint!("{line}");
-
-                    // Store log in shared state
-                    if let Ok(mut logs) = log_state_clone.0.lock() {
-                        logs.push_back(format!("[STDERR] {}", line));
-                        // Keep only the last MAX_LOG_ENTRIES
-                        while logs.len() > MAX_LOG_ENTRIES {
-                            logs.pop_front();
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-    });
-
-    child
-}
-
-fn url_is_localhost(url: &reqwest::Url) -> bool {
-    url.host_str().is_some_and(|host| {
-        host.eq_ignore_ascii_case("localhost")
-            || host
-                .parse::<std::net::IpAddr>()
-                .is_ok_and(|ip| ip.is_loopback())
-    })
-}
-
-async fn check_server_health(url: &str, password: Option<&str>) -> bool {
-    let Ok(url) = reqwest::Url::parse(url) else {
-        return false;
-    };
-
-    let mut builder = reqwest::Client::builder().timeout(Duration::from_secs(3));
-
-    if url_is_localhost(&url) {
-        // Some environments set proxy variables (HTTP_PROXY/HTTPS_PROXY/ALL_PROXY) without
-        // excluding loopback. reqwest respects these by default, which can prevent the desktop
-        // app from reaching its own local sidecar server.
-        builder = builder.no_proxy();
-    };
-
-    let Ok(client) = builder.build() else {
-        return false;
-    };
-    let Ok(health_url) = url.join("/global/health") else {
-        return false;
-    };
-
-    let mut req = client.get(health_url);
-
-    if let Some(password) = password {
-        req = req.basic_auth("opencode", Some(password));
-    }
-
-    req.send()
-        .await
-        .map(|r| r.status().is_success())
-        .unwrap_or(false)
+    Ok(res)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let updater_enabled = option_env!("TAURI_SIGNING_PRIVATE_KEY").is_some();
-
     let builder = tauri_specta::Builder::<tauri::Wry>::new()
         // Then register them (separated by a comma)
         .commands(tauri_specta::collect_commands![
             kill_sidecar,
-            install_cli,
-            ensure_server_ready,
-            get_default_server_url,
-            set_default_server_url,
+            cli::install_cli,
+            await_initialization,
+            server::get_default_server_url,
+            server::set_default_server_url,
             markdown::parse_markdown_command
         ])
+        .events(tauri_specta::collect_events![LoadingWindowComplete])
         .error_handling(tauri_specta::ErrorHandlingMode::Throw);
 
     #[cfg(debug_assertions)] // <- Only export on non-release builds
@@ -289,7 +166,7 @@ pub fn run() {
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // Focus existing window when another instance is launched
-            if let Some(window) = app.get_webview_window("main") {
+            if let Some(window) = app.get_webview_window(MainWindow::LABEL) {
                 let _ = window.set_focus();
                 let _ = window.unminimize();
             }
@@ -299,6 +176,7 @@ pub fn run() {
         .plugin(
             tauri_plugin_window_state::Builder::new()
                 .with_state_flags(window_state_flags())
+                .with_denylist(&[LoadingWindow::LABEL])
                 .build(),
         )
         .plugin(tauri_plugin_store::Builder::new().build())
@@ -309,122 +187,19 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(PinchZoomDisablePlugin)
+        .plugin(crate::window_customizer::PinchZoomDisablePlugin)
         .plugin(tauri_plugin_decorum::init())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
-            builder.mount_events(app);
-
-            #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
-            app.deep_link().register_all().ok();
-
             let app = app.handle().clone();
 
-            // Initialize log state
-            app.manage(LogState(Arc::new(Mutex::new(VecDeque::new()))));
-
-            #[cfg(windows)]
-            app.manage(JobObjectState::new());
-
-            let primary_monitor = app.primary_monitor().ok().flatten();
-            let size = primary_monitor
-                .map(|m| m.size().to_logical(m.scale_factor()))
-                .unwrap_or(LogicalSize::new(1920, 1080));
-
-            let config = app
-                .config()
-                .app
-                .windows
-                .iter()
-                .find(|w| w.label == "main")
-                .expect("main window config missing");
-
-            let window_builder = WebviewWindowBuilder::from_config(&app, config)
-                .expect("Failed to create window builder from config")
-                .inner_size(size.width as f64, size.height as f64)
-                .initialization_script(format!(
-                    r#"
-                      window.__OPENCODE__ ??= {{}};
-                      window.__OPENCODE__.updaterEnabled = {updater_enabled};
-                    "#
-                ));
-
-            #[cfg(target_os = "macos")]
-            let window_builder = window_builder
-                .title_bar_style(tauri::TitleBarStyle::Overlay)
-                .hidden_title(true);
-
-            #[cfg(windows)]
-            let window_builder = window_builder
-                // Some VPNs set a global/system proxy that WebView2 applies even for loopback
-                // connections, which breaks the app's localhost sidecar server.
-                // Note: when setting additional args, we must re-apply wry's default
-                // `--disable-features=...` flags.
-                .additional_browser_args(
-                    "--proxy-bypass-list=<-loopback> --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection",
-                )
-                .decorations(false);
-
-            let window = window_builder.build().expect("Failed to create window");
-
-            setup_window_state_listener(&app, &window);
-
-            #[cfg(windows)]
-            let _ = window.create_overlay_titlebar();
-
-            let (tx, rx) = oneshot::channel();
-            app.manage(ServerState::new(None, rx));
-
-            {
-                let app = app.clone();
-                tauri::async_runtime::spawn(async move {
-                    let mut custom_url = None;
-
-                    if let Some(url) = get_default_server_url(app.clone()).ok().flatten() {
-                        println!("Using desktop-specific custom URL: {url}");
-                        custom_url = Some(url);
-                    }
-
-                    if custom_url.is_none()
-                        && let Some(cli_config) = cli::get_config(&app).await
-                        && let Some(url) = get_server_url_from_config(&cli_config)
-                    {
-                        println!("Using custom server URL from config: {url}");
-                        custom_url = Some(url);
-                    }
-
-                    let res = match setup_server_connection(&app, custom_url).await {
-                        Ok((child, url)) => {
-                            #[cfg(windows)]
-                            if let Some(child) = &child {
-                                let job_state = app.state::<JobObjectState>();
-                                job_state.assign_pid(child.pid());
-                            }
-
-                            app.state::<ServerState>().set_child(child);
-
-                            Ok(url)
-                        }
-                        Err(e) => Err(e),
-                    };
-
-                    let _ = tx.send(res);
-                });
-            }
-
-            {
-                let app = app.clone();
-                tauri::async_runtime::spawn(async move {
-                    if let Err(e) = sync_cli(app) {
-                        eprintln!("Failed to sync CLI: {e}");
-                    }
-                });
-            }
+            builder.mount_events(&app);
+            tauri::async_runtime::spawn(initialize(app));
 
             Ok(())
         });
 
-    if updater_enabled {
+    if UPDATER_ENABLED {
         builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
     }
 
@@ -440,159 +215,196 @@ pub fn run() {
         });
 }
 
-/// Converts a bind address hostname to a valid URL hostname for connection.
-/// - `0.0.0.0` and `::` are wildcard bind addresses, not valid connect targets
-/// - IPv6 addresses need brackets in URLs (e.g., `::1` -> `[::1]`)
-fn normalize_hostname_for_url(hostname: &str) -> String {
-    // Wildcard bind addresses -> localhost equivalents
-    if hostname == "0.0.0.0" {
-        return "127.0.0.1".to_string();
-    }
-    if hostname == "::" {
-        return "[::1]".to_string();
-    }
+#[derive(tauri_specta::Event, serde::Deserialize, specta::Type)]
+struct LoadingWindowComplete;
 
-    // IPv6 addresses need brackets in URLs
-    if hostname.contains(':') && !hostname.starts_with('[') {
-        return format!("[{}]", hostname);
-    }
+// #[tracing::instrument(skip_all)]
+async fn initialize(app: AppHandle) {
+    let (init_tx, init_rx) = watch::channel(InitStep::ServerWaiting);
 
-    hostname.to_string()
-}
+    setup_app(&app, init_rx);
+    spawn_cli_sync_task(app.clone());
 
-fn get_server_url_from_config(config: &cli::Config) -> Option<String> {
-    let server = config.server.as_ref()?;
-    let port = server.port?;
-    println!("server.port found in OC config: {port}");
-    let hostname = server
-        .hostname
-        .as_ref()
-        .map(|v| normalize_hostname_for_url(v))
-        .unwrap_or_else(|| "127.0.0.1".to_string());
+    let (server_ready_tx, server_ready_rx) = oneshot::channel();
+    let server_ready_rx = server_ready_rx.shared();
+    app.manage(ServerState::new(None, server_ready_rx.clone()));
 
-    Some(format!("http://{}:{}", hostname, port))
-}
+    let is_using_cli = match setup_server_connection(app.clone()).await {
+        ServerConnection::CLI {
+            spawn_task,
+            url,
+            password,
+        } => {
+            let app = app.clone();
+            tokio::spawn(
+                spawn_task
+                    .map(|v| v.expect("server spawn task panicked"))
+                    .map_ok(move |child| {
+                        #[cfg(windows)]
+                        {
+                            let job_state = app.state::<JobObjectState>();
+                            job_state.assign_pid(child.pid());
+                        }
 
-async fn setup_server_connection(
-    app: &AppHandle,
-    custom_url: Option<String>,
-) -> Result<(Option<CommandChild>, ServerReadyData), String> {
-    if let Some(url) = custom_url {
-        loop {
-            if check_server_health(&url, None).await {
-                println!("Connected to custom server: {}", url);
-                return Ok((
-                    None,
-                    ServerReadyData {
-                        url: url.clone(),
-                        password: None,
-                    },
-                ));
-            }
+                        app.state::<ServerState>().set_child(Some(child));
 
-            const RETRY: &str = "Retry";
+                        ServerReadyData { url, password }
+                    })
+                    .map(|res| server_ready_tx.send(res)),
+            );
+            true
+        }
+        ServerConnection::Existing { url } => {
+            let _ = server_ready_tx.send(Ok(ServerReadyData {
+                url,
+                password: None,
+            }));
+            false
+        }
+    };
 
-            let res = app.dialog()
-              .message(format!("Could not connect to configured server:\n{}\n\nWould you like to retry or start a local server instead?", url))
-              .title("Connection Failed")
-              .buttons(MessageDialogButtons::OkCancelCustom(RETRY.to_string(), "Start Local".to_string()))
-              .blocking_show_with_result();
+    let main_window = MainWindow::create(&app).expect("Failed to create main window");
 
-            match res {
-                MessageDialogResult::Custom(name) if name == RETRY => {
-                    continue;
-                }
-                _ => {
-                    break;
-                }
+    let loading_window_complete = event_once_fut::<LoadingWindowComplete>(&app);
+    let loading_window = LoadingWindow::create(&app).expect("Failed to create loading window");
+
+    if is_using_cli && option_env!("OPENCODE_SQLITE").is_some() {
+        let mut exists = sqlite_file_exists();
+        if !exists {
+            println!(
+                "sqlite file not found at {}, waiting for it to be generated",
+                opencode_db_path().expect("failed to get db path").display()
+            );
+            let _ = init_tx.send(InitStep::SqliteWaiting);
+
+            while !exists {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                exists = sqlite_file_exists();
             }
         }
+    }
+
+    let _ = server_ready_rx.await;
+    let _ = init_tx.send(InitStep::Done);
+
+    loading_window_complete.await;
+
+    let _ = loading_window.close();
+    let _ = main_window.show();
+}
+
+fn setup_app(app: &tauri::AppHandle, init_rx: watch::Receiver<InitStep>) {
+    #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
+    app.deep_link().register_all().ok();
+
+    // Initialize log state
+    app.manage(LogState(Arc::new(Mutex::new(VecDeque::new()))));
+
+    #[cfg(windows)]
+    app.manage(JobObjectState::new());
+
+    app.manage(InitState { current: init_rx });
+}
+
+fn spawn_cli_sync_task(app: AppHandle) {
+    tokio::spawn(async move {
+        if let Err(e) = sync_cli(app) {
+            eprintln!("Failed to sync CLI: {e}");
+        }
+    });
+}
+
+enum ServerConnection {
+    Existing {
+        url: String,
+    },
+    CLI {
+        url: String,
+        password: Option<String>,
+        spawn_task: tokio::task::JoinHandle<Result<CommandChild, String>>,
+    },
+}
+
+async fn setup_server_connection(app: AppHandle) -> ServerConnection {
+    let custom_url = get_saved_server_url(&app).await;
+
+    if let Some(url) = custom_url
+        && server::check_health_or_ask_retry(&app, &url).await
+    {
+        println!("Connected to custom server: {}", url);
+        return ServerConnection::Existing { url: url.clone() };
     }
 
     let local_port = get_sidecar_port();
     let hostname = "127.0.0.1";
     let local_url = format!("http://{hostname}:{local_port}");
 
-    if !check_server_health(&local_url, None).await {
-        let password = uuid::Uuid::new_v4().to_string();
+    if server::check_health(&local_url, None).await {
+        return ServerConnection::Existing { url: local_url };
+    }
 
-        match spawn_local_server(app, hostname, local_port, &password).await {
-            Ok(child) => Ok((
-                Some(child),
-                ServerReadyData {
-                    url: local_url,
-                    password: Some(password),
-                },
-            )),
-            Err(err) => Err(err),
-        }
-    } else {
-        Ok((
-            None,
-            ServerReadyData {
-                url: local_url,
-                password: None,
-            },
-        ))
+    let password = uuid::Uuid::new_v4().to_string();
+
+    ServerConnection::CLI {
+        url: local_url,
+        password: Some(password.clone()),
+        spawn_task: tokio::spawn(server::spawn_local_server(
+            app,
+            hostname.to_string(),
+            local_port,
+            password,
+        )),
     }
 }
 
-async fn spawn_local_server(
+fn get_sidecar_port() -> u32 {
+    option_env!("OPENCODE_PORT")
+        .map(|s| s.to_string())
+        .or_else(|| std::env::var("OPENCODE_PORT").ok())
+        .and_then(|port_str| port_str.parse().ok())
+        .unwrap_or_else(|| {
+            TcpListener::bind("127.0.0.1:0")
+                .expect("Failed to bind to find free port")
+                .local_addr()
+                .expect("Failed to get local address")
+                .port()
+        }) as u32
+}
+
+fn sqlite_file_exists() -> bool {
+    let Ok(path) = opencode_db_path() else {
+        return true;
+    };
+
+    path.exists()
+}
+
+fn opencode_db_path() -> Result<PathBuf, &'static str> {
+    let xdg_data_home = env::var_os("XDG_DATA_HOME").filter(|v| !v.is_empty());
+
+    let data_home = match xdg_data_home {
+        Some(v) => PathBuf::from(v),
+        None => {
+            let home = dirs::home_dir().ok_or("cannot determine home directory")?;
+            home.join(".local").join("share")
+        }
+    };
+
+    Ok(data_home.join("opencode").join("opencode.db"))
+}
+
+// Creates a `once` listener for the specified event and returns a future that resolves
+// when the listener is fired.
+// Since the future creation and awaiting can be done separately, it's possible to create the listener
+// synchronously before doing something, then awaiting afterwards.
+fn event_once_fut<T: tauri_specta::Event + serde::de::DeserializeOwned>(
     app: &AppHandle,
-    hostname: &str,
-    port: u32,
-    password: &str,
-) -> Result<CommandChild, String> {
-    let child = spawn_sidecar(app, hostname, port, password);
-    let url = format!("http://{hostname}:{port}");
-
-    let timestamp = Instant::now();
-    loop {
-        if timestamp.elapsed() > Duration::from_secs(30) {
-            let _ = child.kill();
-            break Err(format!(
-                "Failed to spawn OpenCode Server. Logs:\n{}",
-                get_logs(app.clone()).await.unwrap()
-            ));
-        }
-
-        tokio::time::sleep(Duration::from_millis(10)).await;
-
-        if check_server_health(&url, Some(password)).await {
-            println!("Server ready after {:?}", timestamp.elapsed());
-            break Ok(child);
-        }
+) -> impl Future<Output = ()> {
+    let (tx, rx) = oneshot::channel();
+    T::once(app, |_| {
+        let _ = tx.send(());
+    });
+    async {
+        let _ = rx.await;
     }
-}
-
-fn setup_window_state_listener(app: &tauri::AppHandle, window: &tauri::WebviewWindow) {
-    let (tx, mut rx) = mpsc::channel::<()>(1);
-
-    window.on_window_event(move |event| {
-        use tauri::WindowEvent;
-        if !matches!(event, WindowEvent::Moved(_) | WindowEvent::Resized(_)) {
-            return;
-        }
-        let _ = tx.try_send(());
-    });
-
-    tauri::async_runtime::spawn({
-        let app = app.clone();
-
-        async move {
-            let save = || {
-                let handle = app.clone();
-                let app = app.clone();
-                let _ = handle.run_on_main_thread(move || {
-                    let _ = app.save_window_state(window_state_flags());
-                });
-            };
-
-            while rx.recv().await.is_some() {
-                tokio::time::sleep(Duration::from_millis(200)).await;
-
-                save();
-            }
-        }
-    });
 }

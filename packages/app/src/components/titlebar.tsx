@@ -137,13 +137,13 @@ export function Titlebar() {
     <header
       class="h-10 shrink-0 bg-background-base relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-center"
       style={{ "min-height": minHeight() }}
+      onMouseDown={drag}
     >
       <div
         classList={{
           "flex items-center min-w-0": true,
           "pl-2": !mac(),
         }}
-        onMouseDown={drag}
       >
         <Show when={mac()}>
           <div class="h-full shrink-0" style={{ width: `${72 / zoom()}px` }} />
