@@ -29,4 +29,6 @@ opencode-dev
 UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
-tsconfig.tsbuildinfo
+
+# Trellis workflow (developer-specific)
+.trellis/
