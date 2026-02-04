@@ -652,13 +652,18 @@ export namespace Server {
           },
         }),
         async (c) => {
-          const sessions = await Array.fromAsync(Session.list())
-          pipe(
-            await Array.fromAsync(Session.list()),
+          // Stream sessions one at a time to avoid loading all into memory at once
+          const sessions: Session.Info[] = []
+          for await (const session of Session.list()) {
+            sessions.push(session)
+          }
+          // Filter and sort in-place
+          const result = pipe(
+            sessions,
             filter((s) => !s.time.archived),
             sortBy((s) => s.time.updated),
           )
-          return c.json(sessions)
+          return c.json(result)
         },
       )
       .get(

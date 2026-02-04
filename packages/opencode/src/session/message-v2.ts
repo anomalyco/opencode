@@ -541,24 +541,39 @@ export namespace MessageV2 {
     return convertToModelMessages(result.filter((msg) => msg.parts.some((part) => part.type !== "step-start")))
   }
 
+  /**
+   * Stream messages for a session in descending order (newest first).
+   * Uses SQLite for memory-efficient streaming - messages are loaded one at a time.
+   */
   export const stream = fn(Identifier.schema("session"), async function* (sessionID) {
-    const list = await Array.fromAsync(await Storage.list(["message", sessionID]))
-    for (let i = list.length - 1; i >= 0; i--) {
+    // Use SQLite's streaming list for memory efficiency
+    // Messages are already ordered DESC in SQLite
+    for await (const messageId of Storage.SQLite.listMessageIds(sessionID)) {
       yield await get({
         sessionID,
-        messageID: list[i][2],
+        messageID: messageId,
       })
     }
   })
 
+  /**
+   * Get all parts for a message.
+   * Uses SQLite for memory-efficient retrieval.
+   */
   export const parts = fn(Identifier.schema("message"), async (messageID) => {
-    const result = [] as MessageV2.Part[]
-    for (const item of await Storage.list(["part", messageID])) {
-      const read = await Storage.read<MessageV2.Part>(item)
-      result.push(read)
+    // Try to use SQLite's optimized parts list first
+    try {
+      return await Storage.SQLite.listParts<MessageV2.Part>(messageID)
+    } catch {
+      // Fallback to file-based storage
+      const result = [] as MessageV2.Part[]
+      for await (const item of Storage.listStream(["part", messageID])) {
+        const read = await Storage.read<MessageV2.Part>(item)
+        result.push(read)
+      }
+      result.sort((a, b) => (a.id > b.id ? 1 : -1))
+      return result
     }
-    result.sort((a, b) => (a.id > b.id ? 1 : -1))
-    return result
   })
 
   export const get = fn(

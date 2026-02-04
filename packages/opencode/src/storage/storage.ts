@@ -7,9 +7,13 @@ import { Lock } from "../util/lock"
 import { $ } from "bun"
 import { NamedError } from "@opencode-ai/util/error"
 import z from "zod"
+import { SQLiteStorage } from "./sqlite"
 
 export namespace Storage {
   const log = Log.create({ service: "storage" })
+
+  // Re-export SQLite storage for direct access to optimized methods
+  export const SQLite = SQLiteStorage
 
   type Migration = (dir: string) => Promise<void>
 
@@ -138,6 +142,95 @@ export namespace Storage {
         )
       }
     },
+    // Migration 2: Populate SQLite from existing file-based storage
+    // This runs incrementally, indexing sessions/messages for fast queries
+    async (dir) => {
+      log.info("migrating file storage to SQLite index")
+
+      // Migrate sessions
+      const sessionsDir = path.join(dir, "session")
+      if (await fs.exists(sessionsDir)) {
+        for await (const projectDir of new Bun.Glob("*").scan({
+          cwd: sessionsDir,
+          onlyFiles: false,
+        })) {
+          const projectPath = path.join(sessionsDir, projectDir)
+          const stat = await fs.stat(projectPath).catch(() => null)
+          if (!stat?.isDirectory()) continue
+
+          for await (const sessionFile of new Bun.Glob("*.json").scan({
+            cwd: projectPath,
+            absolute: true,
+          })) {
+            try {
+              const session = await Bun.file(sessionFile).json()
+              if (session.id && session.projectID) {
+                await SQLiteStorage.writeSession(session)
+                log.info("migrated session to SQLite", { id: session.id })
+              }
+            } catch (e) {
+              log.error("failed to migrate session", { file: sessionFile, error: e })
+            }
+          }
+        }
+      }
+
+      // Migrate messages
+      const messagesDir = path.join(dir, "message")
+      if (await fs.exists(messagesDir)) {
+        for await (const sessionDir of new Bun.Glob("*").scan({
+          cwd: messagesDir,
+          onlyFiles: false,
+        })) {
+          const sessionPath = path.join(messagesDir, sessionDir)
+          const stat = await fs.stat(sessionPath).catch(() => null)
+          if (!stat?.isDirectory()) continue
+
+          for await (const messageFile of new Bun.Glob("*.json").scan({
+            cwd: sessionPath,
+            absolute: true,
+          })) {
+            try {
+              const message = await Bun.file(messageFile).json()
+              if (message.id && message.sessionID) {
+                await SQLiteStorage.writeMessage(message)
+              }
+            } catch (e) {
+              log.error("failed to migrate message", { file: messageFile, error: e })
+            }
+          }
+        }
+      }
+
+      // Migrate parts
+      const partsDir = path.join(dir, "part")
+      if (await fs.exists(partsDir)) {
+        for await (const messageDir of new Bun.Glob("*").scan({
+          cwd: partsDir,
+          onlyFiles: false,
+        })) {
+          const messagePath = path.join(partsDir, messageDir)
+          const stat = await fs.stat(messagePath).catch(() => null)
+          if (!stat?.isDirectory()) continue
+
+          for await (const partFile of new Bun.Glob("*.json").scan({
+            cwd: messagePath,
+            absolute: true,
+          })) {
+            try {
+              const part = await Bun.file(partFile).json()
+              if (part.id && part.messageID) {
+                await SQLiteStorage.writePart(part)
+              }
+            } catch (e) {
+              log.error("failed to migrate part", { file: partFile, error: e })
+            }
+          }
+        }
+      }
+
+      log.info("SQLite migration complete")
+    },
   ]
 
   const state = lazy(async () => {
@@ -208,6 +301,11 @@ export namespace Storage {
   }
 
   const glob = new Bun.Glob("**/*")
+
+  /**
+   * List keys matching a prefix.
+   * Note: This loads all keys into memory. For large datasets, use listStream instead.
+   */
   export async function list(prefix: string[]) {
     const dir = await state().then((x) => x.dir)
     try {
@@ -222,5 +320,114 @@ export namespace Storage {
     } catch {
       return []
     }
+  }
+
+  /**
+   * Stream keys matching a prefix without loading all into memory.
+   * This is memory-efficient for large datasets.
+   */
+  export async function* listStream(prefix: string[]): AsyncGenerator<string[]> {
+    const dir = await state().then((x) => x.dir)
+    const prefixPath = path.join(dir, ...prefix)
+
+    try {
+      for await (const file of glob.scan({
+        cwd: prefixPath,
+        onlyFiles: true,
+      })) {
+        yield [...prefix, ...file.slice(0, -5).split(path.sep)]
+      }
+    } catch {
+      // Directory doesn't exist, yield nothing
+    }
+  }
+
+  /**
+   * Count items matching a prefix without loading them.
+   * Uses SQLite for optimized counting when available.
+   */
+  export async function count(prefix: string[]): Promise<number> {
+    // Use SQLite for session/message counts when available
+    if (prefix[0] === "session" && prefix.length === 2) {
+      return SQLiteStorage.countSessions(prefix[1])
+    }
+    if (prefix[0] === "message" && prefix.length === 2) {
+      return SQLiteStorage.countMessages(prefix[1])
+    }
+
+    // Fallback to counting files
+    const dir = await state().then((x) => x.dir)
+    let count = 0
+    try {
+      for await (const _ of glob.scan({
+        cwd: path.join(dir, ...prefix),
+        onlyFiles: true,
+      })) {
+        count++
+      }
+    } catch {
+      // Directory doesn't exist
+    }
+    return count
+  }
+
+  /**
+   * Write a session with automatic SQLite indexing.
+   */
+  export async function writeSession<T extends { id: string; projectID: string; time: { created: number; updated: number; archived?: number }; title: string; directory: string; version: string; parentID?: string }>(
+    key: string[],
+    content: T,
+  ) {
+    // Write to file storage
+    await write(key, content)
+    // Index in SQLite for fast queries
+    await SQLiteStorage.writeSession(content)
+  }
+
+  /**
+   * Write a message with automatic SQLite indexing.
+   */
+  export async function writeMessage<T extends { id: string; sessionID: string; role: string; time: { created: number } }>(
+    key: string[],
+    content: T,
+  ) {
+    // Write to file storage
+    await write(key, content)
+    // Index in SQLite for fast queries
+    await SQLiteStorage.writeMessage(content)
+  }
+
+  /**
+   * Write a part with automatic SQLite indexing.
+   */
+  export async function writePart<T extends { id: string; messageID: string; type: string }>(key: string[], content: T) {
+    // Write to file storage
+    await write(key, content)
+    // Index in SQLite for fast queries
+    await SQLiteStorage.writePart(content)
+  }
+
+  /**
+   * Remove a session with automatic SQLite cleanup.
+   */
+  export async function removeSession(key: string[], sessionId: string) {
+    await remove(key)
+    await SQLiteStorage.deleteSession(sessionId)
+  }
+
+  /**
+   * Remove a message with automatic SQLite cleanup.
+   */
+  export async function removeMessage(key: string[], messageId: string) {
+    await remove(key)
+    await SQLiteStorage.deleteMessage(messageId)
+  }
+
+  /**
+   * Remove a part with automatic SQLite cleanup.
+   */
+  export async function removePart(key: string[], partId: string) {
+    await remove(key)
+    await SQLiteStorage.deletePart(partId)
   }
 }

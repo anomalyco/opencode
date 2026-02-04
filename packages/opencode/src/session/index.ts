@@ -188,7 +188,7 @@ export namespace Session {
       },
     }
     log.info("created", result)
-    await Storage.write(["session", Instance.project.id, result.id], result)
+    await Storage.writeSession(["session", Instance.project.id, result.id], result)
     Bus.publish(Event.Created, {
       info: result,
     })
@@ -248,6 +248,8 @@ export namespace Session {
       editor(draft)
       draft.time.updated = Date.now()
     })
+    // Update SQLite index
+    await Storage.SQLite.writeSession(result)
     Bus.publish(Event.Updated, {
       info: result,
     })
@@ -275,18 +277,32 @@ export namespace Session {
     },
   )
 
+  /**
+   * List sessions for the current project.
+   * Uses SQLite for memory-efficient streaming - session data is loaded one at a time.
+   */
   export async function* list() {
     const project = Instance.project
-    for (const item of await Storage.list(["session", project.id])) {
-      yield Storage.read<Info>(item)
+    // Use SQLite's streaming list for memory efficiency
+    for await (const sessionId of Storage.SQLite.listSessionIds(project.id)) {
+      try {
+        // Try SQLite first for faster access
+        yield await Storage.SQLite.readSession<Info>(sessionId)
+      } catch {
+        // Fallback to file storage if not in SQLite yet
+        yield Storage.read<Info>(["session", project.id, sessionId])
+      }
     }
   }
 
+  /**
+   * Get child sessions for a parent session.
+   * Uses streaming to avoid loading all sessions into memory.
+   */
   export const children = fn(Identifier.schema("session"), async (parentID) => {
-    const project = Instance.project
     const result = [] as Session.Info[]
-    for (const item of await Storage.list(["session", project.id])) {
-      const session = await Storage.read<Info>(item)
+    // Stream sessions one at a time instead of loading all into memory
+    for await (const session of list()) {
       if (session.parentID !== parentID) continue
       result.push(session)
     }
@@ -301,13 +317,14 @@ export namespace Session {
         await remove(child.id)
       }
       await unshare(sessionID).catch(() => {})
-      for (const msg of await Storage.list(["message", sessionID])) {
-        for (const part of await Storage.list(["part", msg.at(-1)!])) {
-          await Storage.remove(part)
+      // Use streaming to avoid loading all messages/parts into memory
+      for await (const msgId of Storage.SQLite.listMessageIds(sessionID)) {
+        for await (const partId of Storage.SQLite.listPartIds(msgId)) {
+          await Storage.removePart(["part", msgId, partId], partId)
         }
-        await Storage.remove(msg)
+        await Storage.removeMessage(["message", sessionID, msgId], msgId)
       }
-      await Storage.remove(["session", project.id, sessionID])
+      await Storage.removeSession(["session", project.id, sessionID], sessionID)
       Bus.publish(Event.Deleted, {
         info: session,
       })
@@ -317,7 +334,7 @@ export namespace Session {
   })
 
   export const updateMessage = fn(MessageV2.Info, async (msg) => {
-    await Storage.write(["message", msg.sessionID, msg.id], msg)
+    await Storage.writeMessage(["message", msg.sessionID, msg.id], msg)
     Bus.publish(MessageV2.Event.Updated, {
       info: msg,
     })
@@ -330,7 +347,7 @@ export namespace Session {
       messageID: Identifier.schema("message"),
     }),
     async (input) => {
-      await Storage.remove(["message", input.sessionID, input.messageID])
+      await Storage.removeMessage(["message", input.sessionID, input.messageID], input.messageID)
       Bus.publish(MessageV2.Event.Removed, {
         sessionID: input.sessionID,
         messageID: input.messageID,
@@ -346,7 +363,7 @@ export namespace Session {
       partID: Identifier.schema("part"),
     }),
     async (input) => {
-      await Storage.remove(["part", input.messageID, input.partID])
+      await Storage.removePart(["part", input.messageID, input.partID], input.partID)
       Bus.publish(MessageV2.Event.PartRemoved, {
         sessionID: input.sessionID,
         messageID: input.messageID,
@@ -371,7 +388,7 @@ export namespace Session {
   export const updatePart = fn(UpdatePartInput, async (input) => {
     const part = "delta" in input ? input.part : input
     const delta = "delta" in input ? input.delta : undefined
-    await Storage.write(["part", part.messageID, part.id], part)
+    await Storage.writePart(["part", part.messageID, part.id], part)
     Bus.publish(MessageV2.Event.PartUpdated, {
       part,
       delta,
