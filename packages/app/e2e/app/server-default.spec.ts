@@ -1,5 +1,6 @@
 import { test, expect } from "../fixtures"
 import { serverName, serverUrl } from "../utils"
+import { clickListItem, closeDialog, clickMenuItem } from "../actions"
 
 const DEFAULT_SERVER_URL_KEY = "opencode.settings.dat:defaultServerUrl"
 
@@ -33,31 +34,18 @@ test("can set a default server on web", async ({ page, gotoSession }) => {
   const row = dialog.locator('[data-slot="list-item"]').filter({ hasText: serverName }).first()
   await expect(row).toBeVisible()
 
-  const menu = row.locator('[data-component="icon-button"]').last()
-  await menu.click()
-  await page.getByRole("menuitem", { name: "Set as default" }).click()
+  const menuTrigger = row.locator('[data-slot="dropdown-menu-trigger"]').first()
+  await expect(menuTrigger).toBeVisible()
+  await menuTrigger.click({ force: true })
+
+  const menu = page.locator('[data-component="dropdown-menu-content"]').first()
+  await expect(menu).toBeVisible()
+  await clickMenuItem(menu, /set as default/i)
 
   await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), DEFAULT_SERVER_URL_KEY)).toBe(serverUrl)
   await expect(row.getByText("Default", { exact: true })).toBeVisible()
 
-  await page.keyboard.press("Escape")
-  const closed = await dialog
-    .waitFor({ state: "detached", timeout: 1500 })
-    .then(() => true)
-    .catch(() => false)
-
-  if (!closed) {
-    await page.keyboard.press("Escape")
-    const closedSecond = await dialog
-      .waitFor({ state: "detached", timeout: 1500 })
-      .then(() => true)
-      .catch(() => false)
-
-    if (!closedSecond) {
-      await page.locator('[data-component="dialog-overlay"]').click({ position: { x: 5, y: 5 } })
-      await expect(dialog).toHaveCount(0)
-    }
-  }
+  await closeDialog(page, dialog)
 
   await ensurePopoverOpen()
 

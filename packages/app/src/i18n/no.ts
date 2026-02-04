@@ -31,6 +31,8 @@ export const dict = {
   "command.settings.open": "Åpne innstillinger",
   "command.session.previous": "Forrige sesjon",
   "command.session.next": "Neste sesjon",
+  "command.session.previous.unseen": "Previous unread session",
+  "command.session.next.unseen": "Next unread session",
   "command.session.archive": "Arkiver sesjon",
 
   "command.palette": "Kommandopalett",
@@ -45,7 +47,6 @@ export const dict = {
 
   "command.session.new": "Ny sesjon",
   "command.file.open": "Åpne fil",
-  "command.file.open.description": "Søk i filer og kommandoer",
   "command.context.addSelection": "Legg til markering i kontekst",
   "command.context.addSelection.description": "Legg til valgte linjer fra gjeldende fil",
   "command.terminal.toggle": "Veksle terminal",
@@ -71,6 +72,7 @@ export const dict = {
   "command.model.variant.cycle.description": "Bytt til neste innsatsnivå",
   "command.permissions.autoaccept.enable": "Godta endringer automatisk",
   "command.permissions.autoaccept.disable": "Slutt å godta endringer automatisk",
+  "command.workspace.toggle": "Veksle arbeidsområder",
   "command.session.undo": "Angre",
   "command.session.undo.description": "Angre siste melding",
   "command.session.redo": "Gjør om",
@@ -84,7 +86,7 @@ export const dict = {
   "command.session.unshare": "Slutt å dele sesjon",
   "command.session.unshare.description": "Slutt å dele denne sesjonen",
 
-  "palette.search.placeholder": "Søk i filer og kommandoer",
+  "palette.search.placeholder": "Søk i filer, kommandoer og sesjoner",
   "palette.empty": "Ingen resultater funnet",
   "palette.group.commands": "Kommandoer",
   "palette.group.files": "Filer",
@@ -213,6 +215,8 @@ export const dict = {
   "prompt.popover.emptyCommands": "Ingen matchende kommandoer",
   "prompt.dropzone.label": "Slipp bilder eller PDF-er her",
   "prompt.slash.badge.custom": "egendefinert",
+  "prompt.slash.badge.skill": "skill",
+  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "aktiv",
   "prompt.context.includeActiveFile": "Inkluder aktiv fil",
   "prompt.context.removeActiveFile": "Fjern aktiv fil fra kontekst",
@@ -347,6 +351,11 @@ export const dict = {
   "toast.permissions.autoaccept.off.title": "Sluttet å godta endringer automatisk",
   "toast.permissions.autoaccept.off.description": "Redigerings- og skrivetillatelser vil kreve godkjenning",
 
+  "toast.workspace.enabled.title": "Arbeidsområder aktivert",
+  "toast.workspace.enabled.description": "Flere worktrees vises nå i sidefeltet",
+  "toast.workspace.disabled.title": "Arbeidsområder deaktivert",
+  "toast.workspace.disabled.description": "Kun hoved-worktree vises i sidefeltet",
+
   "toast.model.none.title": "Ingen modell valgt",
   "toast.model.none.description": "Koble til en leverandør for å oppsummere denne sesjonen",
 
@@ -436,6 +445,7 @@ export const dict = {
   "session.review.noChanges": "Ingen endringer",
   "session.files.selectToOpen": "Velg en fil å åpne",
   "session.files.all": "Alle filer",
+  "session.files.binaryContent": "Binær fil (innhold kan ikke vises)",
   "session.messages.renderEarlier": "Vis tidligere meldinger",
   "session.messages.loadingEarlier": "Laster inn tidligere meldinger...",
   "session.messages.loadEarlier": "Last inn tidligere meldinger",
