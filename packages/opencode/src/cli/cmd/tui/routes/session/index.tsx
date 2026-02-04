@@ -1245,11 +1245,19 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   })
 
   const duration = createMemo(() => {
-    if (!final()) return 0
+    const aborted = props.message.error?.name === "MessageAbortedError"
+    if (!final() && !aborted) return 0
     if (!props.message.time.completed) return 0
     const user = messages().find((x) => x.role === "user" && x.id === props.message.parentID)
     if (!user || !user.time) return 0
     return props.message.time.completed - user.time.created
+  })
+
+  const tokensInfo = createMemo(() => {
+    const t = props.message.tokens
+    const input = t.input + t.cache.read + t.cache.write
+    const output = t.output + t.reasoning
+    return { input, output, total: input + output }
   })
 
   return (
@@ -1299,6 +1307,9 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
               </span>{" "}
               <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
               <span style={{ fg: theme.textMuted }}> · {props.message.modelID}</span>
+              <Show when={tokensInfo()}>
+                <span style={{ fg: theme.textMuted }}> · ↑{tokensInfo().input.toLocaleString()} ↓{tokensInfo().output.toLocaleString()} = {tokensInfo().total.toLocaleString()}</span>
+              </Show>
               <Show when={duration()}>
                 <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
               </Show>
