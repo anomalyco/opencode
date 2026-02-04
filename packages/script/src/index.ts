@@ -46,6 +46,20 @@ const VERSION = await (async () => {
   return `${major}.${minor}.${patch + 1}`
 })()
 
+const team = [
+  "actions-user",
+  "opencode",
+  "rekram1-node",
+  "thdxr",
+  "kommander",
+  "jayair",
+  "fwang",
+  "adamdotdevin",
+  "iamdavidhill",
+  "opencode-agent[bot]",
+  "R44VC0RP",
+]
+
 export const Script = {
   get channel() {
     return CHANNEL
@@ -58,6 +72,9 @@ export const Script = {
   },
   get release() {
     return env.OPENCODE_RELEASE
+  },
+  get team() {
+    return team
   },
 }
 console.log(`opencode script`, JSON.stringify(Script, null, 2))

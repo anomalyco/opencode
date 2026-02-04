@@ -255,6 +255,37 @@ test("handles agent configuration", async () => {
   })
 })
 
+test("treats agent variant as model-scoped setting (not provider option)", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        agent: {
+          test_agent: {
+            model: "openai/gpt-5.2",
+            variant: "xhigh",
+            max_tokens: 123,
+          },
+        },
+      })
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      const agent = config.agent?.["test_agent"]
+
+      expect(agent?.variant).toBe("xhigh")
+      expect(agent?.options).toMatchObject({
+        max_tokens: 123,
+      })
+      expect(agent?.options).not.toHaveProperty("variant")
+    },
+  })
+})
+
 test("handles command configuration", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

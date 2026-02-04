@@ -182,6 +182,7 @@ playwright test e2e/example.spec.ts               # Specific E2E test
 **Good:**
 
 ```ts
+// Good
 function foo() {
   if (condition) return 1
   return 2
