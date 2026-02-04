@@ -576,6 +576,15 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
 
     if (isMirror) {
+      // Clear stale localStorage projects immediately so the mirror doesn't
+      // briefly show an outdated sidebar order from a previous browser session.
+      // The correct order will be fetched from /mirror/sidebar below.
+      batch(() => {
+        for (const p of server.projects.list().slice()) {
+          server.projects.close(p.worktree)
+        }
+      })
+
       // Apply remote sidebar state to the local mirror store.
       // Reads server.projects inside batch to avoid reactive loops.
       function applySidebar(projects: Array<{ worktree: string; expanded: boolean }>) {
@@ -595,14 +604,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             if (!project.expanded && current?.expanded) server.projects.collapse(project.worktree)
             globalSync.project.loadSessions(project.worktree)
           }
-          // Reorder: close all, then re-open in correct order
+          // Reorder: close all, then re-open in reverse because open() prepends
           for (const p of server.projects.list().slice()) {
             server.projects.close(p.worktree)
           }
-          for (const project of projects) {
-            if (!project.worktree) continue
-            server.projects.open(project.worktree)
-            if (project.expanded) server.projects.expand(project.worktree)
+          for (let i = projects.length - 1; i >= 0; i--) {
+            if (!projects[i].worktree) continue
+            server.projects.open(projects[i].worktree)
+            if (projects[i].expanded) server.projects.expand(projects[i].worktree)
           }
         })
       }
