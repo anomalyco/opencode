@@ -279,6 +279,10 @@ export default function Page() {
     pendingMessage: undefined as string | undefined,
     scrollGesture: 0,
     autoCreated: false,
+    scroll: {
+      overflow: false,
+      bottom: true,
+    },
   })
 
   createEffect(
@@ -795,6 +799,7 @@ export default function Page() {
   let inputRef!: HTMLDivElement
   let promptDock: HTMLDivElement | undefined
   let scroller: HTMLDivElement | undefined
+  let content: HTMLDivElement | undefined
 
   const scrollGestureWindowMs = 250
 
@@ -1618,10 +1623,40 @@ export default function Page() {
     window.history.replaceState(null, "", window.location.href.replace(/#.*$/, ""))
   }
 
+  let scrollStateFrame: number | undefined
+  let scrollStateTarget: HTMLDivElement | undefined
+
+  const updateScrollState = (el: HTMLDivElement) => {
+    const max = el.scrollHeight - el.clientHeight
+    const overflow = max > 1
+    const bottom = !overflow || el.scrollTop >= max - 2
+
+    if (ui.scroll.overflow === overflow && ui.scroll.bottom === bottom) return
+    setUi("scroll", { overflow, bottom })
+  }
+
+  const scheduleScrollState = (el: HTMLDivElement) => {
+    scrollStateTarget = el
+    if (scrollStateFrame !== undefined) return
+
+    scrollStateFrame = requestAnimationFrame(() => {
+      scrollStateFrame = undefined
+
+      const target = scrollStateTarget
+      scrollStateTarget = undefined
+      if (!target) return
+
+      updateScrollState(target)
+    })
+  }
+
   const resumeScroll = () => {
     setStore("messageId", undefined)
     autoScroll.forceScrollToBottom()
     clearMessageHash()
+
+    const el = scroller
+    if (el) scheduleScrollState(el)
   }
 
   // When the user returns to the bottom, treat the active message as "latest".
@@ -1657,7 +1692,16 @@ export default function Page() {
   const setScrollRef = (el: HTMLDivElement | undefined) => {
     scroller = el
     autoScroll.scrollRef(el)
+    if (el) scheduleScrollState(el)
   }
+
+  createResizeObserver(
+    () => content,
+    () => {
+      const el = scroller
+      if (el) scheduleScrollState(el)
+    },
+  )
 
   const turnInit = 20
   const turnBatch = 20
@@ -1759,6 +1803,8 @@ export default function Page() {
           el.scrollTo({ top: el.scrollHeight, behavior: "auto" })
         })
       }
+
+      if (el) scheduleScrollState(el)
     },
   )
 
@@ -1839,6 +1885,9 @@ export default function Page() {
     const hash = window.location.hash.slice(1)
     if (!hash) {
       autoScroll.forceScrollToBottom()
+
+      const el = scroller
+      if (el) scheduleScrollState(el)
       return
     }
 
@@ -1864,6 +1913,9 @@ export default function Page() {
     }
 
     autoScroll.forceScrollToBottom()
+
+    const el = scroller
+    if (el) scheduleScrollState(el)
   }
 
   const closestMessage = (node: Element | null): HTMLElement | null => {
@@ -2029,6 +2081,7 @@ export default function Page() {
     cancelTurnBackfill()
     document.removeEventListener("keydown", handleKeyDown)
     if (scrollSpyFrame !== undefined) cancelAnimationFrame(scrollSpyFrame)
+    if (scrollStateFrame !== undefined) cancelAnimationFrame(scrollStateFrame)
   })
 
   return (
@@ -2133,8 +2186,9 @@ export default function Page() {
                       <div
                         class="absolute left-1/2 -translate-x-1/2 bottom-[calc(var(--prompt-height,8rem)+32px)] z-[60] pointer-events-none transition-all duration-200 ease-out"
                         classList={{
-                          "opacity-100 translate-y-0 scale-100": autoScroll.userScrolled(),
-                          "opacity-0 translate-y-2 scale-95 pointer-events-none": !autoScroll.userScrolled(),
+                          "opacity-100 translate-y-0 scale-100": ui.scroll.overflow && !ui.scroll.bottom,
+                          "opacity-0 translate-y-2 scale-95 pointer-events-none":
+                            !ui.scroll.overflow || ui.scroll.bottom,
                         }}
                       >
                         <button
@@ -2232,6 +2286,7 @@ export default function Page() {
                           markScrollGesture(e.currentTarget)
                         }}
                         onScroll={(e) => {
+                          scheduleScrollState(e.currentTarget)
                           if (!hasScrollGesture()) return
                           autoScroll.handleScroll()
                           markScrollGesture(e.currentTarget)
@@ -2359,7 +2414,13 @@ export default function Page() {
                         </Show>
 
                         <div
-                          ref={autoScroll.contentRef}
+                          ref={(el) => {
+                            content = el
+                            autoScroll.contentRef(el)
+
+                            const root = scroller
+                            if (root) scheduleScrollState(root)
+                          }}
                           role="log"
                           class="flex flex-col gap-12 items-start justify-start pb-[calc(var(--prompt-height,8rem)+64px)] md:pb-[calc(var(--prompt-height,10rem)+64px)] transition-[margin]"
                           classList={{
