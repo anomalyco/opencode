@@ -5,6 +5,14 @@ export const dict = {
   "ui.sessionReview.expandAll": "توسيع الكل",
   "ui.sessionReview.collapseAll": "طي الكل",
 
+  "ui.sessionReview.change.added": "مضاف",
+  "ui.sessionReview.change.removed": "محذوف",
+  "ui.lineComment.label.prefix": "تعليق على ",
+  "ui.lineComment.label.suffix": "",
+  "ui.lineComment.editorLabel.prefix": "جارٍ التعليق على ",
+  "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.placeholder": "أضف تعليقًا",
+  "ui.lineComment.submit": "تعليق",
   "ui.sessionTurn.steps.show": "إظهار الخطوات",
   "ui.sessionTurn.steps.hide": "إخفاء الخطوات",
   "ui.sessionTurn.summary.response": "استجابة",
@@ -40,11 +48,13 @@ export const dict = {
   "ui.messageNav.newMessage": "رسالة جديدة",
 
   "ui.textField.copyToClipboard": "نسخ إلى الحافظة",
+  "ui.textField.copyLink": "نسخ الرابط",
   "ui.textField.copied": "تم النسخ",
 
   "ui.imagePreview.alt": "معاينة الصورة",
 
   "ui.tool.read": "قراءة",
+  "ui.tool.loaded": "تم التحميل",
   "ui.tool.list": "قائمة",
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",

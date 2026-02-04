@@ -39,6 +39,16 @@ export namespace Session {
     ).test(title)
   }
 
+  function getForkedTitle(title: string): string {
+    const match = title.match(/^(.+) \(fork #(\d+)\)$/)
+    if (match) {
+      const base = match[1]
+      const num = parseInt(match[2], 10)
+      return `${base} (fork #${num + 1})`
+    }
+    return `${title} (fork #1)`
+  }
+
   export const Info = z
     .object({
       id: Identifier.schema("session"),
@@ -151,8 +161,12 @@ export namespace Session {
       messageID: Identifier.schema("message").optional(),
     }),
     async (input) => {
+      const original = await get(input.sessionID)
+      if (!original) throw new Error("session not found")
+      const title = getForkedTitle(original.title)
       const session = await createNext({
         directory: Instance.directory,
+        title,
       })
       const msgs = await messages({ sessionID: input.sessionID })
       const idMap = new Map<string, string>()
@@ -320,7 +334,9 @@ export namespace Session {
   export async function* list() {
     const project = Instance.project
     for (const item of await Storage.list(["session", project.id])) {
-      yield Storage.read<Info>(item)
+      const session = await Storage.read<Info>(item).catch(() => undefined)
+      if (!session) continue
+      yield session
     }
   }
 
@@ -328,7 +344,8 @@ export namespace Session {
     const project = Instance.project
     const result = [] as Session.Info[]
     for (const item of await Storage.list(["session", project.id])) {
-      const session = await Storage.read<Info>(item)
+      const session = await Storage.read<Info>(item).catch(() => undefined)
+      if (!session) continue
       if (session.parentID !== parentID) continue
       result.push(session)
     }
@@ -428,11 +445,18 @@ export namespace Session {
       metadata: z.custom<ProviderMetadata>().optional(),
     }),
     (input) => {
-      const cachedInputTokens = input.usage.cachedInputTokens ?? 0
+      const cacheReadInputTokens = input.usage.cachedInputTokens ?? 0
+      const cacheWriteInputTokens = (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
+        // @ts-expect-error
+        input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
+        // @ts-expect-error
+        input.metadata?.["venice"]?.["usage"]?.["cacheCreationInputTokens"] ??
+        0) as number
+
       const excludesCachedTokens = !!(input.metadata?.["anthropic"] || input.metadata?.["bedrock"])
       const adjustedInputTokens = excludesCachedTokens
         ? (input.usage.inputTokens ?? 0)
-        : (input.usage.inputTokens ?? 0) - cachedInputTokens
+        : (input.usage.inputTokens ?? 0) - cacheReadInputTokens - cacheWriteInputTokens
       const safe = (value: number) => {
         if (!Number.isFinite(value)) return 0
         return value
@@ -443,13 +467,8 @@ export namespace Session {
         output: safe(input.usage.outputTokens ?? 0),
         reasoning: safe(input.usage?.reasoningTokens ?? 0),
         cache: {
-          write: safe(
-            (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
-              // @ts-expect-error
-              input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
-              0) as number,
-          ),
-          read: safe(cachedInputTokens),
+          write: safe(cacheWriteInputTokens),
+          read: safe(cacheReadInputTokens),
         },
       }
 
