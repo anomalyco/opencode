@@ -48,7 +48,6 @@ export const dict = {
 
   "command.session.new": "새 세션",
   "command.file.open": "파일 열기",
-  "command.file.open.description": "파일 및 명령어 검색",
   "command.context.addSelection": "선택 영역을 컨텍스트에 추가",
   "command.context.addSelection.description": "현재 파일에서 선택한 줄을 추가",
   "command.terminal.toggle": "터미널 토글",
@@ -88,7 +87,7 @@ export const dict = {
   "command.session.unshare": "세션 공유 중지",
   "command.session.unshare.description": "이 세션 공유 중지",
 
-  "palette.search.placeholder": "파일 및 명령어 검색",
+  "palette.search.placeholder": "파일, 명령어 및 세션 검색",
   "palette.empty": "결과 없음",
   "palette.group.commands": "명령어",
   "palette.group.files": "파일",
