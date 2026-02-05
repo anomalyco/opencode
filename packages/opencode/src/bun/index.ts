@@ -77,8 +77,13 @@ export namespace BunProc {
     const modExists = await Filesystem.exists(mod)
     const cachedVersion = dependencies[pkg]
 
+    // For git URLs, always reinstall to get latest (no npm registry to check)
+    const isGitUrl = pkg.startsWith("github:") || pkg.startsWith("git+") || pkg.startsWith("git://")
     if (!modExists || !cachedVersion) {
       // continue to install
+    } else if (isGitUrl) {
+      // For git URLs, reinstall to fetch latest commits
+      log.info("Git URL detected, reinstalling to fetch latest", { pkg })
     } else if (version !== "latest" && cachedVersion === version) {
       return mod
     } else if (version === "latest") {
@@ -88,6 +93,8 @@ export namespace BunProc {
     }
 
     // Build command arguments
+    // For git URLs (github:, git+, git://), don't append @version
+    const pkgSpec = version ? `${pkg}@${version}` : pkg
     const args = [
       "add",
       "--force",
@@ -96,7 +103,7 @@ export namespace BunProc {
       ...(proxied() ? ["--no-cache"] : []),
       "--cwd",
       Global.Path.cache,
-      pkg + "@" + version,
+      pkgSpec,
     ]
 
     // Let Bun handle registry resolution:
@@ -122,7 +129,10 @@ export namespace BunProc {
     // Resolve actual version from installed package when using "latest"
     // This ensures subsequent starts use the cached version until explicitly updated
     let resolvedVersion = version
-    if (version === "latest") {
+    if (isGitUrl) {
+      // For git URLs, store a timestamp to track when it was installed
+      resolvedVersion = `git:${Date.now()}`
+    } else if (version === "latest") {
       const installedPkgJson = Bun.file(path.join(mod, "package.json"))
       const installedPkg = await installedPkgJson.json().catch(() => null)
       if (installedPkg?.version) {

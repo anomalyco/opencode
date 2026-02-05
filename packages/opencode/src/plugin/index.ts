@@ -55,9 +55,19 @@ export namespace Plugin {
       if (plugin.includes("opencode-openai-codex-auth") || plugin.includes("opencode-copilot-auth")) continue
       log.info("loading plugin", { path: plugin })
       if (!plugin.startsWith("file://")) {
-        const lastAtIndex = plugin.lastIndexOf("@")
-        const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
-        const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
+        // Check for GitHub/git URLs which don't use @version syntax
+        const isGitUrl = plugin.startsWith("github:") || plugin.startsWith("git+") || plugin.startsWith("git://")
+        let pkg: string
+        let version: string
+        if (isGitUrl) {
+          // For git URLs, pass the full URL as package, no version
+          pkg = plugin
+          version = ""
+        } else {
+          const lastAtIndex = plugin.lastIndexOf("@")
+          pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
+          version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
+        }
         const builtin = BUILTIN.some((x) => x.startsWith(pkg + "@"))
         plugin = await BunProc.install(pkg, version).catch((err) => {
           if (!builtin) throw err
