@@ -19,6 +19,7 @@ import { ToolDependency } from "./tool-dependency"
 import { ToolResultCache } from "./tool-result-cache"
 import { ToolRegistry } from "@/tool/registry"
 import { type Tool } from "ai"
+import { BackgroundTaskHandler, type WorkQueueIntegrationConfig } from "./work-queue/integration"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -138,6 +139,7 @@ export namespace SessionProcessor {
       assistantMessage: MessageV2.Assistant
       agent: Agent.Info
     },
+    maxParallel?: number,
   ): Promise<void> {
     if (executors.length === 0) return
 
@@ -163,10 +165,25 @@ export namespace SessionProcessor {
       totalCalls: toolCalls.length,
     })
 
+    const limit = maxParallel ?? 10
+    const executingTools: Set<string> = new Set()
+
+    async function executeWithLimit(executor: ToolExecutor): Promise<void> {
+      while (executingTools.size >= limit) {
+        await new Promise((resolve) => setTimeout(resolve, 10))
+      }
+      executingTools.add(executor.callId)
+      try {
+        await executeTool(executor, tools, input)
+      } finally {
+        executingTools.delete(executor.callId)
+      }
+    }
+
     for (const level of dependencyResult.levels) {
       const parallelExecutors = level.calls.map((call) => {
         const executor = executors.find((e) => e.callId === call.id)!
-        return executeTool(executor, tools, input).catch((error) => {
+        return executeWithLimit(executor).catch((error) => {
           log.error("tool execution failed", {
             sessionID: input.sessionID,
             tool: executor.toolName,
@@ -191,6 +208,7 @@ export namespace SessionProcessor {
     let blocked = false
     let attempt = 0
     let needsCompaction = false
+    let backgroundHandler: BackgroundTaskHandler | null = null
 
     const result = {
       get message() {
@@ -463,11 +481,16 @@ export namespace SessionProcessor {
                   }
                   if (parallelEnabled && pendingExecutors.length > 0) {
                     const tools = streamInput.tools
-                    await executeToolsParallel(pendingExecutors, tools, {
-                      sessionID: input.sessionID,
-                      assistantMessage: input.assistantMessage,
-                      agent: await Agent.get(input.assistantMessage.agent),
-                    })
+                    await executeToolsParallel(
+                      pendingExecutors,
+                      tools,
+                      {
+                        sessionID: input.sessionID,
+                        assistantMessage: input.assistantMessage,
+                        agent: await Agent.get(input.assistantMessage.agent),
+                      },
+                      maxParallelTools,
+                    )
                     pendingExecutors = []
                   }
                   break
@@ -524,11 +547,16 @@ export namespace SessionProcessor {
                 case "finish":
                   if (parallelEnabled && pendingExecutors.length > 0) {
                     const tools = streamInput.tools
-                    await executeToolsParallel(pendingExecutors, tools, {
-                      sessionID: input.sessionID,
-                      assistantMessage: input.assistantMessage,
-                      agent: await Agent.get(input.assistantMessage.agent),
-                    })
+                    await executeToolsParallel(
+                      pendingExecutors,
+                      tools,
+                      {
+                        sessionID: input.sessionID,
+                        assistantMessage: input.assistantMessage,
+                        agent: await Agent.get(input.assistantMessage.agent),
+                      },
+                      maxParallelTools,
+                    )
                     pendingExecutors = []
                   }
                   break
@@ -543,11 +571,16 @@ export namespace SessionProcessor {
             }
             if (parallelEnabled && pendingExecutors.length > 0) {
               const tools = streamInput.tools
-              await executeToolsParallel(pendingExecutors, tools, {
-                sessionID: input.sessionID,
-                assistantMessage: input.assistantMessage,
-                agent: await Agent.get(input.assistantMessage.agent),
-              })
+              await executeToolsParallel(
+                pendingExecutors,
+                tools,
+                {
+                  sessionID: input.sessionID,
+                  assistantMessage: input.assistantMessage,
+                  agent: await Agent.get(input.assistantMessage.agent),
+                },
+                maxParallelTools,
+              )
               pendingExecutors = []
             }
           } catch (e: any) {
@@ -614,6 +647,24 @@ export namespace SessionProcessor {
           if (input.assistantMessage.error) return "stop"
           return "continue"
         }
+      },
+      async enableBackgroundTasks(config?: WorkQueueIntegrationConfig) {
+        if (backgroundHandler) {
+          await backgroundHandler.stop()
+        }
+        backgroundHandler = new BackgroundTaskHandler(input.sessionID, config)
+        await backgroundHandler.initialize()
+        backgroundHandler.setContext(await Agent.get(input.assistantMessage.agent), input.model)
+        return backgroundHandler
+      },
+      async disableBackgroundTasks() {
+        if (backgroundHandler) {
+          await backgroundHandler.stop()
+          backgroundHandler = null
+        }
+      },
+      getWorkQueue() {
+        return backgroundHandler
       },
     }
     return result

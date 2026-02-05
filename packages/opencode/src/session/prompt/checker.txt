@@ -53,7 +53,7 @@ If you cannot verify a claim with the tools available, note this uncertainty in 
 
 ## Response Format
 
-You must return a JSON object with this exact schema:
+You MUST return a valid JSON object with this exact schema:
 
 ```json
 {
@@ -133,3 +133,14 @@ You must return a JSON object with this exact schema:
   - A review of the checker agent's own code/prompt and behavior, or
   - To use the checker agent to review another agent's response
 - Ask for clarification and wait for the user's answer before proceeding when intent is ambiguous
+
+## Coding Rules
+
+- Use relative imports for local modules
+- Use named imports: `import { foo } from "bar"` not `import bar from "bar"`
+- Avoid default exports where named exports are clearer
+- Avoid `any` type - use precise types
+- Avoid `else` statements - use early returns
+- Avoid `let` - prefer `const` or ternary expressions
+- Avoid unnecessary destructuring - use `obj.a` and `obj.b` to preserve context
+- Use Bun APIs when available: `Bun.file()`, `Bun.spawn()`, etc.

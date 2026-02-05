@@ -18,6 +18,35 @@ export namespace SessionChecker {
   const EVOLUTION_OUTPUT_FILE = "prompt-evolution.md"
   const MAX_PROMPT_LENGTH = 10000
 
+  const PROMPT_EVOLUTION_SYSTEM = `You are a Prompt Evolution Analyzer. Your task is to analyze conversation history and determine if the system prompt should be optimized.
+
+## Analysis Process
+1. Look for user preferences (naming conventions, async patterns, error handling, etc.)
+2. Compare against the current system prompt
+3. Decide if improvements are needed
+
+## Response Format
+Return ONLY a valid JSON object:
+{
+  "shouldEvolve": boolean,
+  "evolutionType": "none" | "minor" | "major" | "complete",
+  "reasoning": "Your analysis",
+  "optimizedPrompt": "Improved prompt (only if shouldEvolve is true)",
+  "changes": ["List of changes"]
+}
+
+## Important
+- Return ONLY JSON, no other text or markdown
+- shouldEvolve must be true or false (boolean)
+- evolutionType must be one of: "none", "minor", "major", "complete"
+- Be concise but specific
+
+## Design Guidelines (for prompt evolution)
+- Support unified prompt schema with mode field for flexibility
+- Ensure backward compatibility - prefer additive changes over breaking modifications
+- Support both primary agent and subagent modes in same prompt
+- Verify TypeScript compiles without errors after changes`
+
   const PROMPT_INJECTION_PATTERNS = [
     /ignore\s+(previous|all|above)/i,
     /system\s+(prompt|instruct)/i,
@@ -252,15 +281,13 @@ export namespace SessionChecker {
     }
 
     const lastAssistantMsg = messages[lastAssistantIndex]
-    const lastUserMsg = messages
-      .slice(0, lastAssistantIndex)
-      .findLast((m) => m.info.role === "user")
+    const lastUserMsg = messages.slice(0, lastAssistantIndex).findLast((m) => m.info.role === "user")
 
     if (!lastUserMsg || !lastAssistantMsg) {
       log.info("could not find user/assistant pair", {
         sessionID: input.sessionID,
         hasAssistant: !!lastAssistantMsg,
-        hasUser: !!lastUserMsg
+        hasUser: !!lastUserMsg,
       })
       return false
     }
@@ -330,8 +357,7 @@ export namespace SessionChecker {
 
       const userSystemOverride = (lastUserMsg.info as any).system
 
-      const analysisPrompt = `
-## Prompt Reflection
+      const analysisPrompt = `## Prompt Reflection
 Agent: ${input.agent}
 
 System Prompt:
@@ -366,7 +392,7 @@ Return JSON with: shouldEvolve, evolutionType ("none"|"minor"|"major"|"complete"
       const { object: result } = await generateObject({
         model: language,
         schema: EvolutionResultSchema,
-        system: agent.prompt,
+        system: PROMPT_EVOLUTION_SYSTEM,
         messages: [{ role: "user", content: analysisPrompt }],
         abortSignal: input.abort,
       })
@@ -388,9 +414,8 @@ Return JSON with: shouldEvolve, evolutionType ("none"|"minor"|"major"|"complete"
           state.lastCheckTime = Date.now()
           const round = state.evolutionHistory.length + 1
 
-          const originalPrompt = input.agentPrompt && input.agentPrompt.trim().length > 0
-            ? input.agentPrompt
-            : input.currentPrompt
+          const originalPrompt =
+            input.agentPrompt && input.agentPrompt.trim().length > 0 ? input.agentPrompt : input.currentPrompt
 
           const entry: EvolutionEntry = {
             timestamp: Date.now(),
