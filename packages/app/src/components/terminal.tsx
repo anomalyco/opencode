@@ -8,7 +8,6 @@ import { LocalPTY } from "@/context/terminal"
 import { resolveThemeVariant, useTheme, withAlpha, type HexColor } from "@opencode-ai/ui/theme"
 import { useLanguage } from "@/context/language"
 import { showToast } from "@opencode-ai/ui/toast"
-import { ptySocketUrl } from "./terminal-url"
 
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
@@ -164,7 +163,8 @@ export const Terminal = (props: TerminalProps) => {
 
       const once = { value: false }
 
-      const url = ptySocketUrl(sdk.url, local.pty.id, sdk.directory, window.location)
+      const url = new URL(sdk.url + `/pty/${local.pty.id}/connect?directory=${encodeURIComponent(sdk.directory)}`)
+      url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
       if (window.__OPENCODE__?.serverPassword) {
         url.username = "opencode"
         url.password = window.__OPENCODE__?.serverPassword
