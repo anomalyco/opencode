@@ -2488,17 +2488,18 @@ export default function Layout(props: ParentProps) {
   }
 
   const LocalWorkspace = (props: { project: LocalProject; mobile?: boolean }): JSX.Element => {
-    const [workspaceStore, setWorkspaceStore] = globalSync.child(props.project.worktree)
+    const store = createMemo(() => globalSync.child(props.project.worktree))
+    const storeData = createMemo(() => store()[0])
     const slug = createMemo(() => base64Encode(props.project.worktree))
     const sessions = createMemo(() =>
-      workspaceStore.session
-        .filter((session) => session.directory === workspaceStore.path.directory)
+      storeData()
+        .session.filter((session) => session.directory === props.project.worktree)
         .filter((session) => !session.parentID && !session.time?.archived)
         .toSorted(sortSessions(Date.now())),
     )
     const children = createMemo(() => {
       const map = new Map<string, string[]>()
-      for (const session of workspaceStore.session) {
+      for (const session of storeData().session) {
         if (!session.parentID) continue
         const existing = map.get(session.parentID)
         if (existing) {
@@ -2509,13 +2510,19 @@ export default function Layout(props: ParentProps) {
       }
       return map
     })
-    const booted = createMemo((prev) => prev || workspaceStore.status === "complete", false)
+    const booted = createMemo((prev) => prev || storeData().status === "complete", false)
     const loading = createMemo(() => !booted() && sessions().length === 0)
-    const hasMore = createMemo(() => workspaceStore.sessionTotal > sessions().length)
+    const hasMore = createMemo(() => storeData().sessionTotal > sessions().length)
     const loadMore = async () => {
-      setWorkspaceStore("limit", (limit) => limit + 5)
+      store()[1]("limit", (limit) => limit + 5)
       await globalSync.project.loadSessions(props.project.worktree)
     }
+
+    createEffect(() => {
+      const project = currentProject()
+      if (!project || project.worktree !== props.project.worktree) return
+      globalSync.child(props.project.worktree, { bootstrap: true })
+    })
 
     return (
       <div
