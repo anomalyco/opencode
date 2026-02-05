@@ -89,7 +89,7 @@ export namespace SessionRetry {
       if (json.type === "error" && json.error?.code?.includes("rate_limit")) {
         return "Rate Limited"
       }
-      return JSON.stringify(json)
+      return undefined
     } catch {
       return undefined
     }
