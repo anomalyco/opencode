@@ -702,14 +702,8 @@ export function SessionTurn(
                     <Show when={!working() && response()}>
                       <div data-slot="session-turn-summary-section">
                         <div data-slot="session-turn-summary-header">
-                          <h2 data-slot="session-turn-summary-title">{i18n.t("ui.sessionTurn.summary.response")}</h2>
-                          <div data-slot="session-turn-response">
-                            <Markdown
-                              data-slot="session-turn-markdown"
-                              data-diffs={hasDiffs()}
-                              text={response() ?? ""}
-                              cacheKey={responsePartId()}
-                            />
+                          <div data-slot="session-turn-summary-title-row">
+                            <h2 data-slot="session-turn-summary-title">{i18n.t("ui.sessionTurn.summary.response")}</h2>
                             <Show when={response()}>
                               <div data-slot="session-turn-response-copy-wrapper">
                                 <Tooltip
@@ -719,6 +713,7 @@ export function SessionTurn(
                                 >
                                   <IconButton
                                     icon={copied() ? "check" : "copy"}
+                                    size="small"
                                     variant="secondary"
                                     onMouseDown={(e) => e.preventDefault()}
                                     onClick={(event) => {
@@ -730,6 +725,14 @@ export function SessionTurn(
                                 </Tooltip>
                               </div>
                             </Show>
+                          </div>
+                          <div data-slot="session-turn-response">
+                            <Markdown
+                              data-slot="session-turn-markdown"
+                              data-diffs={hasDiffs()}
+                              text={response() ?? ""}
+                              cacheKey={responsePartId()}
+                            />
                           </div>
                         </div>
                       </div>
