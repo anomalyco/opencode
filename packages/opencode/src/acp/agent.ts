@@ -1373,6 +1373,9 @@ export namespace ACP {
         return undefined
       })
 
+    // If a model is specified in the config file, use it instead of falling back to defaults
+    if (specified) return specified
+
     const providers = await sdk.config
       .providers({ directory }, { throwOnError: true })
       .then((x) => x.data?.providers ?? [])
@@ -1410,8 +1413,6 @@ export namespace ACP {
         modelID: best.id,
       }
     }
-
-    if (specified) return specified
 
     return { providerID: "opencode", modelID: "big-pickle" }
   }

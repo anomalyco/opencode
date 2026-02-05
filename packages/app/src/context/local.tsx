@@ -175,6 +175,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             if (currentAgent) setEphemeral("model", currentAgent.name, next)
             if (model) models.setVisibility(model, true)
             if (options?.recent && model) models.recent.push(model)
+            // Persist the model selection to config so child processes inherit it
+            if (model && !options?.recent) {
+              sdk.config.set({
+                directory: sdk.directory,
+                config: {
+                  model: `${model.providerID}/${model.modelID}`,
+                },
+              }).catch((error) => {
+                console.error("Failed to persist model selection to config", error)
+              })
+            }
           })
         },
         visible(model: ModelKey) {
