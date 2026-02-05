@@ -2488,17 +2488,22 @@ export default function Layout(props: ParentProps) {
   }
 
   const LocalWorkspace = (props: { project: LocalProject; mobile?: boolean }): JSX.Element => {
-    const [workspaceStore, setWorkspaceStore] = globalSync.child(props.project.worktree)
+    const workspace = createMemo(() => {
+      const [store, setStore] = globalSync.child(props.project.worktree)
+      return { store, setStore }
+    })
     const slug = createMemo(() => base64Encode(props.project.worktree))
-    const sessions = createMemo(() =>
-      workspaceStore.session
-        .filter((session) => session.directory === workspaceStore.path.directory)
+    const sessions = createMemo(() => {
+      const store = workspace().store
+      return store.session
+        .filter((session) => session.directory === store.path.directory)
         .filter((session) => !session.parentID && !session.time?.archived)
-        .toSorted(sortSessions(Date.now())),
-    )
+        .toSorted(sortSessions(Date.now()))
+    })
     const children = createMemo(() => {
+      const store = workspace().store
       const map = new Map<string, string[]>()
-      for (const session of workspaceStore.session) {
+      for (const session of store.session) {
         if (!session.parentID) continue
         const existing = map.get(session.parentID)
         if (existing) {
@@ -2509,11 +2514,11 @@ export default function Layout(props: ParentProps) {
       }
       return map
     })
-    const booted = createMemo((prev) => prev || workspaceStore.status === "complete", false)
+    const booted = createMemo((prev) => prev || workspace().store.status === "complete", false)
     const loading = createMemo(() => !booted() && sessions().length === 0)
-    const hasMore = createMemo(() => workspaceStore.sessionTotal > sessions().length)
+    const hasMore = createMemo(() => workspace().store.sessionTotal > sessions().length)
     const loadMore = async () => {
-      setWorkspaceStore("limit", (limit) => limit + 5)
+      workspace().setStore("limit", (limit) => limit + 5)
       await globalSync.project.loadSessions(props.project.worktree)
     }
 
