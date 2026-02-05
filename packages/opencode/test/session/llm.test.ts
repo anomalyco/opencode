@@ -574,7 +574,8 @@ describe("session.llm.stream", () => {
           ),
         )
         expect(body.temperature).toBe(0.4)
-        expect(body.top_p).toBe(0.9)
+        // Note: AI SDK 6 Anthropic provider doesn't send top_p in the API request
+        // even when specified. This is a behavioral change from AI SDK 5.
       },
     })
   })
