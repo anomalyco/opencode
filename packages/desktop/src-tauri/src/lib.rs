@@ -19,7 +19,7 @@ use std::{
     net::TcpListener,
     path::PathBuf,
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tauri::{AppHandle, Manager, RunEvent, State, ipc::Channel};
 #[cfg(windows)]
@@ -223,6 +223,8 @@ struct LoadingWindowComplete;
 
 // #[tracing::instrument(skip_all)]
 async fn initialize(app: AppHandle) {
+    println!("Initializing app");
+
     let (init_tx, init_rx) = watch::channel(InitStep::ServerWaiting);
 
     setup_app(&app, init_rx);
@@ -253,6 +255,8 @@ async fn initialize(app: AppHandle) {
                         ));
                     };
 
+                    println!("CLI health check OK");
+
                     #[cfg(windows)]
                     {
                         let job_state = app.state::<JobObjectState>();
@@ -281,6 +285,8 @@ async fn initialize(app: AppHandle) {
 
     let loading_window_complete = event_once_fut::<LoadingWindowComplete>(&app);
     let loading_window = LoadingWindow::create(&app).expect("Failed to create loading window");
+
+    println!("Main and loading windows created");
 
     let loading_task = tokio::spawn({
         let init_tx = init_tx.clone();
@@ -312,14 +318,21 @@ async fn initialize(app: AppHandle) {
     .map_err(|_| ())
     .shared();
 
+    let now = Instant::now();
     if tokio::time::timeout(Duration::from_secs(1), loading_task.clone())
         .await
         .is_err()
     {
+        println!(
+            "Loading task timed out after {:?}, showing loading window",
+            now.elapsed()
+        );
         let _ = loading_window.show();
         sleep(Duration::from_secs(1)).await;
         let _ = loading_task.await;
     }
+
+    println!("Loading done, completing initialisation",);
 
     let _ = init_tx.send(InitStep::Done);
 
@@ -376,12 +389,15 @@ async fn setup_server_connection(app: AppHandle) -> ServerConnection {
     let hostname = "127.0.0.1";
     let local_url = format!("http://{hostname}:{local_port}");
 
+    println!("Checking health of server '{}'", local_url);
     if server::check_health(&local_url, None).await {
+        println!("Health check OK, using existing server");
         return ServerConnection::Existing { url: local_url };
     }
 
     let password = uuid::Uuid::new_v4().to_string();
 
+    println!("Spawning new local server");
     let (child, health_check) =
         server::spawn_local_server(app, hostname.to_string(), local_port, password.clone());
 
