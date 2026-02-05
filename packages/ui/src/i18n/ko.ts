@@ -1,5 +1,6 @@
 export const dict = {
   "ui.sessionReview.title": "세션 변경 사항",
+  "ui.sessionReview.title.lastTurn": "마지막 턴 변경 사항",
   "ui.sessionReview.diffStyle.unified": "통합 보기",
   "ui.sessionReview.diffStyle.split": "분할 보기",
   "ui.sessionReview.expandAll": "모두 펼치기",
