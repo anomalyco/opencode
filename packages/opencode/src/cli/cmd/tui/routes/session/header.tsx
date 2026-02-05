@@ -50,8 +50,13 @@ export function Header() {
   const context = createMemo(() => {
     const last = messages().findLast((x) => x.role === "assistant" && x.tokens.output > 0) as AssistantMessage
     if (!last) return
-    const total =
-      last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
+    const total = messages().reduce(
+      (sum, x) =>
+        x.role === "assistant"
+          ? sum + x.tokens.input + x.tokens.output + x.tokens.reasoning + x.tokens.cache.read + x.tokens.cache.write
+          : sum,
+      0,
+    )
     const model = sync.data.provider.find((x) => x.id === last.providerID)?.models[last.modelID]
     let result = total.toLocaleString()
     if (model?.limit.context) {
