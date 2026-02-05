@@ -2055,9 +2055,10 @@ export default function Layout(props: ParentProps) {
     const open = createMemo(() => store.workspaceExpanded[props.directory] ?? local())
     const boot = createMemo(() => open() || active())
     const booted = createMemo((prev) => prev || workspaceStore.status === "complete", false)
-    const loading = createMemo(() => open() && !booted() && sessions().length === 0)
     const hasMore = createMemo(() => workspaceStore.sessionTotal > sessions().length)
     const busy = createMemo(() => isBusy(props.directory))
+    const wasBusy = createMemo((prev) => prev || busy(), false)
+    const loading = createMemo(() => open() && !booted() && sessions().length === 0 && !wasBusy())
     const loadMore = async () => {
       setWorkspaceStore("limit", (limit) => limit + 5)
       await globalSync.project.loadSessions(props.directory)
