@@ -9028,7 +9028,7 @@
         "type": "object",
         "properties": {
           "model": {
-            "$ref": "#/components/schemas/Model"
+            "type": "string"
           },
           "variant": {
             "description": "Default model variant for this agent (applies only when using the agent's configured model).",
@@ -9528,7 +9528,7 @@
                   "type": "string"
                 },
                 "model": {
-                  "$ref": "#/components/schemas/Model"
+                  "type": "string"
                 },
                 "subtask": {
                   "type": "boolean"
@@ -9606,10 +9606,12 @@
             }
           },
           "model": {
-            "$ref": "#/components/schemas/Model"
+            "description": "Model to use in the format of provider/model, eg anthropic/claude-2",
+            "type": "string"
           },
           "small_model": {
-            "$ref": "#/components/schemas/Model"
+            "description": "Small model to use for tasks like title generation in the format of provider/model",
+            "type": "string"
           },
           "default_agent": {
             "description": "Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.",
