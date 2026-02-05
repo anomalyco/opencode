@@ -1,17 +1,17 @@
 import { createOpencodeClient, type Event } from "@opencode-ai/sdk/v2/client"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
-import { createEffect, createMemo, onCleanup } from "solid-js"
+import { createEffect, createMemo, onCleanup, type Accessor } from "solid-js"
 import { useGlobalSDK } from "./global-sdk"
 import { usePlatform } from "./platform"
 
 export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
   name: "SDK",
-  init: (props: { directory: string }) => {
+  init: (props: { directory: Accessor<string> }) => {
     const platform = usePlatform()
     const globalSDK = useGlobalSDK()
 
-    const directory = createMemo(() => props.directory)
+    const directory = createMemo(props.directory)
     const client = createMemo(() =>
       createOpencodeClient({
         baseUrl: globalSDK.url,
