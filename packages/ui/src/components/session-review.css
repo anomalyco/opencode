@@ -192,6 +192,10 @@
     color: var(--text-weak);
   }
 
+  [data-slot="session-review-image-container"][data-removed] [data-slot="session-review-image-placeholder"] {
+    color: var(--text-weak);
+  }
+
   [data-slot="session-review-audio-container"] {
     padding: 12px;
     display: flex;

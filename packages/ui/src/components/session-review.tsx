@@ -332,8 +332,9 @@ export const SessionReview = (props: SessionReviewProps) => {
                 const beforeText = () => (typeof diff.before === "string" ? diff.before : "")
                 const afterText = () => (typeof diff.after === "string" ? diff.after : "")
 
-                const isAdded = () => beforeText().length === 0 && afterText().length > 0
-                const isDeleted = () => afterText().length === 0 && beforeText().length > 0
+                const isAdded = () => diff.status === "added" || (beforeText().length === 0 && afterText().length > 0)
+                const isDeleted = () =>
+                  diff.status === "deleted" || (afterText().length === 0 && beforeText().length > 0)
                 const isImage = () => isImageFile(diff.file)
                 const isAudio = () => isAudioFile(diff.file)
 
@@ -422,6 +423,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                   if (!isImage()) return
                   if (imageSrc()) return
                   if (imageStatus() !== "idle") return
+                  if (isDeleted()) return
 
                   const reader = props.readFile
                   if (!reader) return
@@ -570,10 +572,17 @@ export const SessionReview = (props: SessionReviewProps) => {
                               <img data-slot="session-review-image" src={imageSrc()} alt={diff.file} />
                             </div>
                           </Match>
+                          <Match when={isImage() && isDeleted()}>
+                            <div data-slot="session-review-image-container" data-removed>
+                              <span data-slot="session-review-image-placeholder">
+                                {i18n.t("ui.sessionReview.change.removed")}
+                              </span>
+                            </div>
+                          </Match>
                           <Match when={isImage() && !imageSrc()}>
                             <div data-slot="session-review-image-container">
                               <span data-slot="session-review-image-placeholder">
-                                {imageStatus() === "loading" ? "Loading image..." : "Image"}
+                                {imageStatus() === "loading" ? "Loading..." : "Image"}
                               </span>
                             </div>
                           </Match>
