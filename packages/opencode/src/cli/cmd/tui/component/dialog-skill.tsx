@@ -10,6 +10,7 @@ export type DialogSkillProps = {
 export function DialogSkill(props: DialogSkillProps) {
   const dialog = useDialog()
   const sdk = useSDK()
+  dialog.setSize("large")
 
   const [skills] = createResource(async () => {
     const result = await sdk.client.app.skills()
