@@ -1799,7 +1799,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           type="button"
                           icon="close-small"
                           variant="ghost"
-                          class="ml-auto size-3.5 opacity-0 group-hover:opacity-100 transition-all"
+                          class="ml-auto size-3.5 text-text-weak hover:text-text-strong transition-all"
                           onClick={(e) => {
                             e.stopPropagation()
                             if (item.commentID) comments.remove(item.path, item.commentID)
