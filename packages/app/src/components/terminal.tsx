@@ -1,5 +1,6 @@
 import type { Ghostty, Terminal as Term, FitAddon } from "ghostty-web"
 import { ComponentProps, createEffect, createSignal, onCleanup, onMount, splitProps } from "solid-js"
+import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { monoFontFamily, useSettings } from "@/context/settings"
 import { SerializeAddon } from "@/addons/serialize"
@@ -7,6 +8,7 @@ import { LocalPTY } from "@/context/terminal"
 import { resolveThemeVariant, useTheme, withAlpha, type HexColor } from "@opencode-ai/ui/theme"
 import { useLanguage } from "@/context/language"
 import { showToast } from "@opencode-ai/ui/toast"
+import { ptySocketUrl } from "./terminal-url"
 
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
@@ -52,6 +54,7 @@ const DEFAULT_TERMINAL_COLORS: Record<"light" | "dark", TerminalColors> = {
 }
 
 export const Terminal = (props: TerminalProps) => {
+  const platform = usePlatform()
   const sdk = useSDK()
   const settings = useSettings()
   const theme = useTheme()
@@ -135,6 +138,22 @@ export const Terminal = (props: TerminalProps) => {
     focusTerminal()
   }
 
+  const handleLinkClick = (event: MouseEvent) => {
+    if (!event.shiftKey && !event.ctrlKey && !event.metaKey) return
+    if (event.altKey) return
+    if (event.button !== 0) return
+
+    const t = term
+    if (!t) return
+
+    const link = (t as unknown as { currentHoveredLink?: { text: string } }).currentHoveredLink
+    if (!link?.text) return
+
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    platform.openLink(link.text)
+  }
+
   onMount(() => {
     const run = async () => {
       const loaded = await loadGhostty()
@@ -145,7 +164,7 @@ export const Terminal = (props: TerminalProps) => {
 
       const once = { value: false }
 
-      const url = new URL(sdk.url + `/pty/${local.pty.id}/connect?directory=${encodeURIComponent(sdk.directory)}`)
+      const url = ptySocketUrl(sdk.url, local.pty.id, sdk.directory, window.location)
       if (window.__OPENCODE__?.serverPassword) {
         url.username = "opencode"
         url.password = window.__OPENCODE__?.serverPassword
@@ -166,6 +185,7 @@ export const Terminal = (props: TerminalProps) => {
         fontSize: 14,
         fontFamily: monoFontFamily(settings.appearance.font()),
         allowTransparency: true,
+        convertEol: true,
         theme: terminalColors(),
         scrollback: 10_000,
         ghostty: g,
@@ -238,6 +258,9 @@ export const Terminal = (props: TerminalProps) => {
       t.open(container)
       container.addEventListener("pointerdown", handlePointerDown)
       cleanups.push(() => container.removeEventListener("pointerdown", handlePointerDown))
+
+      container.addEventListener("click", handleLinkClick, { capture: true })
+      cleanups.push(() => container.removeEventListener("click", handleLinkClick, { capture: true }))
 
       handleTextareaFocus = () => {
         t.options.cursorBlink = true
