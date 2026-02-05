@@ -1,7 +1,7 @@
 import { createMemo, createSignal } from "solid-js"
 import { useLocal } from "@tui/context/local"
 import { useSync } from "@tui/context/sync"
-import { map, pipe, flatMap, entries, filter, sortBy, take } from "remeda"
+import { map, pipe, flatMap, entries, filter, sortBy, take, uniqueBy } from "remeda"
 import { DialogSelect, type DialogSelectRef } from "@tui/ui/dialog-select"
 import { useDialog } from "@tui/ui/dialog"
 import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
@@ -169,6 +169,17 @@ export function DialogModel(props: { providerID?: string }) {
             (x) => x.title,
           ),
         ),
+      ),
+      // Dedupe: if both "Model X" and "Model X (latest)" exist, keep "(latest)" version
+      sortBy(
+        (x) => x.title.replace(" (latest)", ""),
+        (x) => !x.title.includes("(latest)"),
+      ),
+      uniqueBy((x) => `${x.category}/${x.title.replace(" (latest)", "")}`),
+      // Re-sort for display
+      sortBy(
+        (x) => x.footer !== "Free",
+        (x) => x.title,
       ),
     )
 
