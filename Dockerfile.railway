@@ -38,4 +38,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT}/global/health || exit 1
 
 # Start the server from packages/opencode
-CMD ["bun", "run", "--cwd", "packages/opencode", "--conditions=browser", "src/index.ts", "serve", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["bun", "run", "--cwd", "packages/opencode", "--conditions=browser", "src/index.ts", "serve", "--hostname", "0.0.0.0", "--port", "8080"]
