@@ -353,14 +353,13 @@ If you don’t specify a model, primary agents use the [model globally configure
 {
   "agent": {
     "plan": {
-      "model": "anthropic/claude-haiku-4-20250514"
+      "model": "opencode/openai/gpt-5.1-codex"
     }
   }
 }
 ```
 
-The model ID in your OpenCode config uses the format `provider/model-id`. For example, if you're using [OpenCode Zen](/docs/zen), you would use `opencode/gpt-5.1-codex` for GPT 5.1 Codex.
-
+The model ID in your OpenCode config uses the format `provider/model-id`. For example, if you're using [OpenCode Zen](/docs/zen) to connect to GPT 5.1 Codex, you would use `opencode/openai/gpt-5.1-codex` for GPT 5.1 Codex, whereas if you are connecting to that same model via OpenAI auth, you would use `openai/openai/gpt-5.1-codex`. 
 ---
 
 ### Tools
