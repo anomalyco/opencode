@@ -361,6 +361,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
           "gpt-5.1-codex-mini",
           "gpt-5.2",
           "gpt-5.2-codex",
+          "gpt-5.3-codex",
           "gpt-5.1-codex",
         ])
         for (const modelId of Object.keys(provider.models)) {
