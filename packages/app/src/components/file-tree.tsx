@@ -241,7 +241,7 @@ export default function FileTree(props: {
               : kind === "del"
                 ? "color: var(--icon-diff-delete-base)"
                 : kind === "mix"
-                  ? "color: var(--icon-diff-modified-base)"
+                  ? "color: var(--icon-warning-active)"
                   : undefined
           return (
             <span
@@ -268,7 +268,7 @@ export default function FileTree(props: {
                 ? "color: var(--icon-diff-add-base)"
                 : kind === "del"
                   ? "color: var(--icon-diff-delete-base)"
-                  : "color: var(--icon-diff-modified-base)"
+                  : "color: var(--icon-warning-active)"
 
             return (
               <span class="shrink-0 w-4 text-center text-12-medium" style={color}>
@@ -283,7 +283,7 @@ export default function FileTree(props: {
                 ? "background-color: var(--icon-diff-add-base)"
                 : kind === "del"
                   ? "background-color: var(--icon-diff-delete-base)"
-                  : "background-color: var(--icon-diff-modified-base)"
+                  : "background-color: var(--icon-warning-active)"
 
             return <div class="shrink-0 size-1.5 mr-1.5 rounded-full" style={color} />
           }

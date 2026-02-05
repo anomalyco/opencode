@@ -36,6 +36,9 @@ export type Platform = {
   /** Set default editor (desktop only) */
   setDefaultEditor?(editor: string | null): Promise<void>
 
+  /** Open a local path in a local app (desktop only) */
+  openPath?(path: string, app?: string): Promise<void>
+
   /** Restart the app  */
   restart(): Promise<void>
 
