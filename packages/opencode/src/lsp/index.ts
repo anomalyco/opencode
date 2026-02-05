@@ -14,6 +14,8 @@ import { Flag } from "@/flag/flag"
 export namespace LSP {
   const log = Log.create({ service: "lsp" })
 
+  const MAX_LSP_CLIENTS = 20
+
   export const Event = {
     Updated: BusEvent.define("lsp.updated", z.object({})),
   }
@@ -215,6 +217,14 @@ export namespace LSP {
       if (existing) {
         handle.process.kill()
         return existing
+      }
+
+      if (s.clients.length >= MAX_LSP_CLIENTS) {
+        const oldest = s.clients.shift()
+        if (oldest) {
+          log.info("evicting_oldest_lsp_client", { serverID: oldest.serverID, root: oldest.root })
+          oldest.shutdown().catch(() => {})
+        }
       }
 
       s.clients.push(client)

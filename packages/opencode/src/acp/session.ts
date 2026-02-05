@@ -5,16 +5,76 @@ import type { OpencodeClient } from "@opencode-ai/sdk/v2"
 
 const log = Log.create({ service: "acp-session-manager" })
 
+/** Session TTL in milliseconds (1 hour) */
+const SESSION_TTL_MS = 60 * 60 * 1000
+/** Cleanup interval in milliseconds (5 minutes) */
+const CLEANUP_INTERVAL_MS = 5 * 60 * 1000
+/** Maximum number of sessions to keep */
+const MAX_SESSIONS = 50
+
+interface SessionEntry {
+  state: ACPSessionState
+  lastAccess: number
+}
+
 export class ACPSessionManager {
-  private sessions = new Map<string, ACPSessionState>()
+  private sessions = new Map<string, SessionEntry>()
+  private cleanupTimer: ReturnType<typeof setInterval> | undefined
   private sdk: OpencodeClient
 
   constructor(sdk: OpencodeClient) {
     this.sdk = sdk
+    this.startCleanupTimer()
+  }
+
+  private startCleanupTimer() {
+    if (this.cleanupTimer) return
+    this.cleanupTimer = setInterval(() => this.cleanup(), CLEANUP_INTERVAL_MS)
+    this.cleanupTimer.unref()
+  }
+
+  private cleanup() {
+    const now = Date.now()
+    const toDelete: string[] = []
+
+    for (const [id, entry] of this.sessions) {
+      if (now - entry.lastAccess > SESSION_TTL_MS) {
+        toDelete.push(id)
+      }
+    }
+
+    if (toDelete.length > 0) {
+      log.info("cleaning_up_stale_sessions", { count: toDelete.length })
+      for (const id of toDelete) {
+        this.sessions.delete(id)
+      }
+    }
+
+    if (this.sessions.size > MAX_SESSIONS) {
+      const sorted = [...this.sessions.entries()].sort((a, b) => a[1].lastAccess - b[1].lastAccess)
+      const excess = sorted.slice(0, this.sessions.size - MAX_SESSIONS)
+      log.info("evicting_excess_sessions", { count: excess.length })
+      for (const [id] of excess) {
+        this.sessions.delete(id)
+      }
+    }
+  }
+
+  dispose() {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer)
+      this.cleanupTimer = undefined
+    }
+    this.sessions.clear()
   }
 
   tryGet(sessionId: string): ACPSessionState | undefined {
-    return this.sessions.get(sessionId)
+    const entry = this.sessions.get(sessionId)
+    if (entry) {
+      entry.lastAccess = Date.now()
+      return entry.state
+    }
+    return undefined
   }
 
   async create(cwd: string, mcpServers: McpServer[], model?: ACPSessionState["model"]): Promise<ACPSessionState> {
@@ -40,7 +100,7 @@ export class ACPSessionManager {
     }
     log.info("creating_session", { state })
 
-    this.sessions.set(sessionId, state)
+    this.sessions.set(sessionId, { state, lastAccess: Date.now() })
     return state
   }
 
@@ -71,17 +131,18 @@ export class ACPSessionManager {
     }
     log.info("loading_session", { state })
 
-    this.sessions.set(sessionId, state)
+    this.sessions.set(sessionId, { state, lastAccess: Date.now() })
     return state
   }
 
   get(sessionId: string): ACPSessionState {
-    const session = this.sessions.get(sessionId)
-    if (!session) {
+    const entry = this.sessions.get(sessionId)
+    if (!entry) {
       log.error("session not found", { sessionId })
       throw RequestError.invalidParams(JSON.stringify({ error: `Session not found: ${sessionId}` }))
     }
-    return session
+    entry.lastAccess = Date.now()
+    return entry.state
   }
 
   getModel(sessionId: string) {
@@ -92,7 +153,6 @@ export class ACPSessionManager {
   setModel(sessionId: string, model: ACPSessionState["model"]) {
     const session = this.get(sessionId)
     session.model = model
-    this.sessions.set(sessionId, session)
     return session
   }
 
@@ -104,14 +164,12 @@ export class ACPSessionManager {
   setVariant(sessionId: string, variant?: string) {
     const session = this.get(sessionId)
     session.variant = variant
-    this.sessions.set(sessionId, session)
     return session
   }
 
   setMode(sessionId: string, modeId: string) {
     const session = this.get(sessionId)
     session.modeId = modeId
-    this.sessions.set(sessionId, session)
     return session
   }
 }

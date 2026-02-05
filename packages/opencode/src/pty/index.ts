@@ -16,6 +16,49 @@ export namespace Pty {
   const BUFFER_LIMIT = 1024 * 1024 * 2
   const BUFFER_CHUNK = 64 * 1024
 
+  class RingBuffer {
+    private chunks: string[] = []
+    private totalSize = 0
+    private readonly maxSize: number
+
+    constructor(maxSize: number) {
+      this.maxSize = maxSize
+    }
+
+    append(data: string) {
+      this.chunks.push(data)
+      this.totalSize += data.length
+      this.trim()
+    }
+
+    private trim() {
+      while (this.totalSize > this.maxSize && this.chunks.length > 1) {
+        const removed = this.chunks.shift()!
+        this.totalSize -= removed.length
+      }
+      if (this.totalSize > this.maxSize && this.chunks.length === 1) {
+        this.chunks[0] = this.chunks[0].slice(-this.maxSize)
+        this.totalSize = this.chunks[0].length
+      }
+    }
+
+    flush(): string {
+      const result = this.chunks.join("")
+      this.chunks = []
+      this.totalSize = 0
+      return result.slice(-this.maxSize)
+    }
+
+    restore(data: string) {
+      this.chunks = [data]
+      this.totalSize = data.length
+    }
+
+    get size() {
+      return this.totalSize
+    }
+  }
+
   const pty = lazy(async () => {
     const { spawn } = await import("bun-pty")
     return spawn
@@ -67,7 +110,7 @@ export namespace Pty {
   interface ActiveSession {
     info: Info
     process: IPty
-    buffer: string
+    buffer: RingBuffer
     subscribers: Set<WSContext>
   }
 
@@ -138,7 +181,7 @@ export namespace Pty {
     const session: ActiveSession = {
       info,
       process: ptyProcess,
-      buffer: "",
+      buffer: new RingBuffer(BUFFER_LIMIT),
       subscribers: new Set(),
     }
     state().set(id, session)
@@ -153,9 +196,7 @@ export namespace Pty {
         ws.send(data)
       }
       if (open) return
-      session.buffer += data
-      if (session.buffer.length <= BUFFER_LIMIT) return
-      session.buffer = session.buffer.slice(-BUFFER_LIMIT)
+      session.buffer.append(data)
     })
     ptyProcess.onExit(({ exitCode }) => {
       log.info("session exited", { id, exitCode })
@@ -223,16 +264,15 @@ export namespace Pty {
     }
     log.info("client connected to session", { id })
     session.subscribers.add(ws)
-    if (session.buffer) {
-      const buffer = session.buffer.length <= BUFFER_LIMIT ? session.buffer : session.buffer.slice(-BUFFER_LIMIT)
-      session.buffer = ""
+    if (session.buffer.size > 0) {
+      const buffer = session.buffer.flush()
       try {
         for (let i = 0; i < buffer.length; i += BUFFER_CHUNK) {
           ws.send(buffer.slice(i, i + BUFFER_CHUNK))
         }
       } catch {
         session.subscribers.delete(ws)
-        session.buffer = buffer
+        session.buffer.restore(buffer)
         ws.close()
         return
       }
