@@ -104,6 +104,7 @@ install() {
     error "Binary not found in archive"
   fi
 
+  rm -f "$INSTALL_DIR/$BINARY_NAME"
   cp "$BINARY_PATH" "$INSTALL_DIR/$BINARY_NAME"
   chmod +x "$INSTALL_DIR/$BINARY_NAME"
 
