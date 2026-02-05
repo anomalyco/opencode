@@ -123,7 +123,7 @@ export const SettingsProviders: Component = () => {
       </div>
 
       <div class="flex flex-col gap-8 max-w-[720px]">
-        <div class="flex flex-col gap-1">
+        <div class="flex flex-col gap-1" data-component="connected-providers-section">
           <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.providers.section.connected")}</h3>
           <div class="bg-surface-raised-base px-4 rounded-lg">
             <Show
@@ -225,9 +225,12 @@ export const SettingsProviders: Component = () => {
               )}
             </For>
 
-            <div class="flex items-center justify-between gap-4 h-16 border-b border-border-weak-base last:border-none">
+            <div
+              class="flex items-center justify-between gap-4 min-h-16 border-b border-border-weak-base last:border-none flex-wrap py-3"
+              data-component="custom-provider-section"
+            >
               <div class="flex flex-col min-w-0">
-                <div class="flex items-center gap-x-3">
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <ProviderIcon id={icon("synthetic")} class="size-5 shrink-0 icon-strong-base" />
                   <span class="text-14-medium text-text-strong">Custom provider</span>
                   <Tag>{language.t("settings.providers.tag.custom")}</Tag>
