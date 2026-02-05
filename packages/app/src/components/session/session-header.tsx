@@ -283,27 +283,57 @@ export function SessionHeader() {
                 <TooltipKeybind title={language.t("command.review.toggle")} keybind={command.keybind("review.toggle")}>
                   <Button
                     variant="ghost"
-                    class="group/file-tree-toggle size-6 p-0"
-                    onClick={() => layout.fileTree.toggle()}
+                    class="group/review-toggle size-6 p-0"
+                    onClick={() => view().reviewPanel.toggle()}
                     aria-label={language.t("command.review.toggle")}
-                    aria-expanded={layout.fileTree.opened()}
+                    aria-expanded={view().reviewPanel.opened()}
                     aria-controls="review-panel"
                   >
                     <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
                       <Icon
                         size="small"
-                        name={layout.fileTree.opened() ? "layout-right-full" : "layout-right"}
-                        class="group-hover/file-tree-toggle:hidden"
+                        name={view().reviewPanel.opened() ? "layout-right-full" : "layout-right"}
+                        class="group-hover/review-toggle:hidden"
                       />
                       <Icon
                         size="small"
                         name="layout-right-partial"
-                        class="hidden group-hover/file-tree-toggle:inline-block"
+                        class="hidden group-hover/review-toggle:inline-block"
                       />
                       <Icon
                         size="small"
-                        name={layout.fileTree.opened() ? "layout-right" : "layout-right-full"}
-                        class="hidden group-active/file-tree-toggle:inline-block"
+                        name={view().reviewPanel.opened() ? "layout-right" : "layout-right-full"}
+                        class="hidden group-active/review-toggle:inline-block"
+                      />
+                    </div>
+                  </Button>
+                </TooltipKeybind>
+              </div>
+              <div class="hidden md:block shrink-0">
+                <TooltipKeybind
+                  title={language.t("command.fileTree.toggle")}
+                  keybind={command.keybind("fileTree.toggle")}
+                >
+                  <Button
+                    variant="ghost"
+                    class="group/file-tree-toggle size-6 p-0"
+                    onClick={() => {
+                      const opening = !layout.fileTree.opened()
+                      if (opening && !view().reviewPanel.opened()) view().reviewPanel.open()
+                      layout.fileTree.toggle()
+                    }}
+                    aria-label={language.t("command.fileTree.toggle")}
+                    aria-expanded={layout.fileTree.opened()}
+                    aria-controls="file-tree-panel"
+                  >
+                    <div class="relative flex items-center justify-center size-4">
+                      <Icon
+                        size="small"
+                        name="bullet-list"
+                        classList={{
+                          "text-icon-strong": layout.fileTree.opened(),
+                          "text-icon-weak": !layout.fileTree.opened(),
+                        }}
                       />
                     </div>
                   </Button>
