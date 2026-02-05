@@ -153,7 +153,7 @@ try {
   })()
   console.log("opencode session", session.id)
   if (shareId) {
-    console.log("Share link:", `${useShareUrl()}/s/${shareId}`)
+    console.log("Share link:", `${useShareUrl()}/${useEnvSharePath()}/${shareId}`)
   }
 
   // Handle 3 cases
@@ -171,7 +171,9 @@ try {
         const summary = await summarize(response)
         await pushToLocalBranch(summary)
       }
-      const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${useShareUrl()}/s/${shareId}`))
+      const hasShared = prData.comments.nodes.some((c) =>
+        c.body.includes(`${useShareUrl()}/${useEnvSharePath()}/${shareId}`),
+      )
       await updateComment(`${response}${footer({ image: !hasShared })}`)
     }
     // Fork PR
@@ -180,12 +182,11 @@ try {
       const dataPrompt = buildPromptDataForPR(prData)
       const response = await chat(`${userPrompt}\n\n${dataPrompt}`, promptFiles)
       if (await branchIsDirty()) {
-        const summary = await summarize(response)
-        await pushToForkBranch(summary, prData)
-      }
-      const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${useShareUrl()}/s/${shareId}`))
-      await updateComment(`${response}${footer({ image: !hasShared })}`)
+      const summary = await summarize(response)
+      await pushToForkBranch(summary, prData)
     }
+    const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${useShareUrl()}/${useEnvSharePath()}/${shareId}`))
+    await updateComment(`${response}${footer({ image: !hasShared })}`)
   }
   // Issue
   else {
@@ -341,6 +342,14 @@ function useEnvGithubToken() {
   return process.env["TOKEN"]
 }
 
+function useEnvShareDomain() {
+  return process.env["OPENCODE_SHARE_DOMAIN"] || "opencode.ai"
+}
+
+function useEnvSharePath() {
+  return process.env["OPENCODE_SHARE_PATH"] || "s"
+}
+
 function isMock() {
   const { mockEvent, mockToken } = useEnvMock()
   return Boolean(mockEvent || mockToken)
@@ -362,7 +371,8 @@ function useIssueId() {
 }
 
 function useShareUrl() {
-  return isMock() ? "https://dev.opencode.ai" : "https://opencode.ai"
+  const domain = useEnvShareDomain()
+  return isMock() ? `https://dev.${domain}` : `https://${domain}`
 }
 
 async function getAccessToken() {
@@ -821,9 +831,9 @@ function footer(opts?: { image?: boolean }) {
     const titleAlt = encodeURIComponent(session.title.substring(0, 50))
     const title64 = Buffer.from(session.title.substring(0, 700), "utf8").toString("base64")
 
-    return `<a href="${useShareUrl()}/s/${shareId}"><img width="200" alt="${titleAlt}" src="https://social-cards.sst.dev/opencode-share/${title64}.png?model=${providerID}/${modelID}&version=${session.version}&id=${shareId}" /></a>\n`
+    return `<a href="${useShareUrl()}/${useEnvSharePath()}/${shareId}"><img width="200" alt="${titleAlt}" src="https://social-cards.sst.dev/opencode-share/${title64}.png?model=${providerID}/${modelID}&version=${session.version}&id=${shareId}" /></a>\n`
   })()
-  const shareUrl = shareId ? `[opencode session](${useShareUrl()}/s/${shareId})&nbsp;&nbsp;|&nbsp;&nbsp;` : ""
+  const shareUrl = shareId ? `[opencode session](${useShareUrl()}/${useEnvSharePath()}/${shareId})&nbsp;&nbsp;|&nbsp;&nbsp;` : ""
   return `\n\n${image}${shareUrl}[github run](${useEnvRunUrl()})`
 }
 
