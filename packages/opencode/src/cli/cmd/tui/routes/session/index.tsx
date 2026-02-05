@@ -1838,13 +1838,16 @@ function Task(props: ToolProps<typeof TaskTool>) {
     )
   })
 
-  const current = createMemo(() => tools().findLast((x) => x.state.status !== "pending"))
+  const executedTools = createMemo(() => tools().filter((x) => x.state.status !== "pending"))
+  const current = createMemo(() => executedTools().findLast((x) => x.state.status !== "pending"))
 
   const isRunning = createMemo(() => props.part.state.status === "running")
 
   return (
     <Switch>
-      <Match when={props.input.description || props.input.subagent_type}>
+      <Match
+        when={(props.input.description || props.input.subagent_type) && (executedTools().length > 0 || isRunning())}
+      >
         <BlockTool
           title={"# " + Locale.titlecase(props.input.subagent_type ?? "unknown") + " Task"}
           onClick={
@@ -1857,7 +1860,7 @@ function Task(props: ToolProps<typeof TaskTool>) {
         >
           <box>
             <text style={{ fg: theme.textMuted }}>
-              {props.input.description} ({tools().length} toolcalls)
+              {props.input.description} ({executedTools().length} toolcalls)
             </text>
             <Show when={current()}>
               {(item) => {

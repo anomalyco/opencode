@@ -783,6 +783,9 @@ export type Session = {
     snapshot?: string
     diff?: string
   }
+  prompts?: {
+    [key: string]: string
+  }
 }
 
 export type EventSessionCreated = {

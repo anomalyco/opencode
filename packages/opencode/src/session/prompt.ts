@@ -12,6 +12,7 @@ import { Provider } from "../provider/provider"
 import { type Tool as AITool, tool, jsonSchema, type ToolCallOptions } from "ai"
 import { SessionCompaction } from "./compaction"
 import { Instance } from "../project/instance"
+import { MCP } from "../mcp"
 import { Bus } from "../bus"
 import { ProviderTransform } from "../provider/transform"
 import { SystemPrompt } from "./system"
@@ -23,7 +24,7 @@ import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { defer } from "../util/defer"
 import { clone } from "remeda"
 import { ToolRegistry } from "../tool/registry"
-import { MCP } from "../mcp"
+import { SessionChecker } from "./checker"
 import { LSP } from "../lsp"
 import { ReadTool } from "../tool/read"
 import { ListTool } from "../tool/ls"
@@ -46,9 +47,7 @@ import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncation"
-import { SessionChecker } from "./checker"
 
-// @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
 
 export namespace SessionPrompt {
@@ -529,7 +528,28 @@ export namespace SessionPrompt {
       }
 
       // normal processing
-      const agent = await Agent.get(lastUser.agent)
+      let agent = await Agent.get(lastUser.agent)
+      
+      // Look for optimized prompt in current session or parent sessions
+      let effectivePrompt: string | undefined
+      let currentSessionID: string | undefined = sessionID
+      while (currentSessionID) {
+        const s = await Session.get(currentSessionID).catch(() => undefined)
+        if (!s) break
+        if (s.prompts?.[lastUser.agent]) {
+          effectivePrompt = s.prompts[lastUser.agent]
+          break
+        }
+        currentSessionID = s.parentID
+      }
+      
+      if (!effectivePrompt) {
+        effectivePrompt = SessionChecker.getEffectivePrompt(sessionID, lastUser.agent)
+      }
+
+      if (effectivePrompt) {
+        agent = { ...agent, prompt: effectivePrompt }
+      }
       const maxSteps = agent.steps ?? Infinity
       const isLastStep = step >= maxSteps
       msgs = await insertReminders({
@@ -613,12 +633,14 @@ export namespace SessionPrompt {
 
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
+      const systemPrompts = [...(await SystemPrompt.environment(model)), ...(await InstructionPrompt.system())]
+
       const result = await processor.process({
         user: lastUser,
         agent,
         abort,
         sessionID,
-        system: [...(await SystemPrompt.environment(model)), ...(await InstructionPrompt.system())],
+        system: systemPrompts,
         messages: [
           ...MessageV2.toModelMessages(sessionMessages, model),
           ...(isLastStep
@@ -636,8 +658,11 @@ export namespace SessionPrompt {
       if (result === "continue" || result === "stop") {
         SessionChecker.check({
           sessionID,
+          agent: lastUser.agent,
           messages: await Session.messages({ sessionID }),
           model,
+          currentPrompt: [...systemPrompts, agent.prompt ?? ""].join("\n\n"),
+          agentPrompt: agent.prompt,
           abort,
         }).catch(() => {})
       }
