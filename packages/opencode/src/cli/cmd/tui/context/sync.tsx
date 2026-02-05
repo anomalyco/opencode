@@ -194,14 +194,23 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
 
         case "session.deleted": {
-          const result = Binary.search(store.session, event.properties.info.id, (s) => s.id)
+          const deletedID = event.properties.info.id
+          const result = Binary.search(store.session, deletedID, (s) => s.id)
           if (result.found) {
+            const messages = store.message[deletedID] ?? []
             setStore(
-              "session",
               produce((draft) => {
-                draft.splice(result.index, 1)
+                draft.session.splice(result.index, 1)
+                messages.forEach((msg) => delete draft.part[msg.id])
+                delete draft.message[deletedID]
+                delete draft.todo[deletedID]
+                delete draft.session_diff[deletedID]
+                delete draft.session_status[deletedID]
+                delete draft.permission[deletedID]
+                delete draft.question[deletedID]
               }),
             )
+            fullSyncedSessions.delete(deletedID)
           }
           break
         }
@@ -268,13 +277,21 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           const messages = store.message[event.properties.sessionID]
           const result = Binary.search(messages, event.properties.messageID, (m) => m.id)
           if (result.found) {
-            setStore(
-              "message",
-              event.properties.sessionID,
-              produce((draft) => {
-                draft.splice(result.index, 1)
-              }),
-            )
+            batch(() => {
+              setStore(
+                "message",
+                event.properties.sessionID,
+                produce((draft) => {
+                  draft.splice(result.index, 1)
+                }),
+              )
+              setStore(
+                "part",
+                produce((draft) => {
+                  delete draft[event.properties.messageID]
+                }),
+              )
+            })
           }
           break
         }
