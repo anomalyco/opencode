@@ -359,6 +359,7 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
   ])
 
   let editorRef!: HTMLDivElement
+  let pickerRef: HTMLDivElement | undefined
   const [resizing, setResizing] = createSignal(false)
   const mirror = { input: false }
   const [showPicker, setShowPicker] = createSignal(false)
@@ -597,6 +598,12 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
     split.onSubmit(trimmed, uniqueFiles.length > 0 ? uniqueFiles : undefined)
   }
 
+  const scrollActiveIntoView = () => {
+    if (!pickerRef) return
+    const element = pickerRef.querySelector("button[data-active]")
+    element?.scrollIntoView({ block: "nearest", behavior: "smooth" })
+  }
+
   const handleKeyDown = (e: KeyboardEvent) => {
     if (showPicker()) {
       if (e.key === "Tab" || e.key === "Enter") {
@@ -609,6 +616,7 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
         e.preventDefault()
         e.stopPropagation()
         filterOnKeyDown(e)
+        requestAnimationFrame(scrollActiveIntoView)
         return
       }
       if (e.key === "Escape") {
@@ -666,6 +674,13 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
     setHasContent(value.trim().length > 0)
   })
 
+  createEffect(() => {
+    const open = showPicker()
+    active()
+    if (!open) return
+    requestAnimationFrame(scrollActiveIntoView)
+  })
+
   const onEditorScrollPointerDown = (e: PointerEvent) => {
     const current = e.currentTarget as HTMLDivElement
     const rect = current.getBoundingClientRect()
@@ -696,7 +711,11 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
       <div data-slot="line-comment-editor">
         <div data-slot="line-comment-editor-main">
           <Show when={showPicker()}>
-            <div data-slot="line-comment-file-picker" onMouseDown={(e) => e.preventDefault()}>
+            <div
+              ref={pickerRef}
+              data-slot="line-comment-file-picker"
+              onMouseDown={(e) => e.preventDefault()}
+            >
               <For each={flat().slice(0, 8)}>
                 {(option) => (
                   <button
