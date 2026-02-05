@@ -756,15 +756,21 @@ export default function Page() {
     ),
   )
 
-  const stopVcs = sdk.event.listen((evt) => {
-    if (evt.details.type !== "file.watcher.updated") return
-    const props =
-      typeof evt.details.properties === "object" && evt.details.properties
-        ? (evt.details.properties as Record<string, unknown>)
-        : undefined
-    const file = typeof props?.file === "string" ? props.file : undefined
-    if (!file || file.startsWith(".git/")) return
-    refreshVcs()
+  createEffect(
+    on(
+      () => params.dir,
+      (dir) => {
+        if (!dir) return
+        setStore("newSessionWorktree", "main")
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(() => {
+    const id = lastUserMessage()?.id
+    if (!id) return
+    setStore("expanded", id, status().type !== "idle")
   })
   onCleanup(stopVcs)
 
