@@ -8883,6 +8883,11 @@
             "description": "Toggle tips on home screen",
             "default": "<leader>h",
             "type": "string"
+          },
+          "display_thinking": {
+            "description": "Toggle thinking blocks visibility",
+            "default": "none",
+            "type": "string"
           }
         },
         "additionalProperties": false
