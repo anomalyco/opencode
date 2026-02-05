@@ -25,7 +25,13 @@ export namespace Project {
       icon: z
         .object({
           url: z.string().optional(),
+          override: z.string().optional(),
           color: z.string().optional(),
+        })
+        .optional(),
+      commands: z
+        .object({
+          start: z.string().optional().describe("Startup script to run when creating a new workspace (worktree)"),
         })
         .optional(),
       time: z.object({
@@ -190,6 +196,7 @@ export namespace Project {
     if (!existing.sandboxes) existing.sandboxes = []
 
     if (Flag.OPENCODE_EXPERIMENTAL_ICON_DISCOVERY) discover(existing)
+
     const result: Info = {
       ...existing,
       worktree,
@@ -213,6 +220,7 @@ export namespace Project {
 
   export async function discover(input: Info) {
     if (input.vcs !== "git") return
+    if (input.icon?.override) return
     if (input.icon?.url) return
     const glob = new Bun.Glob("**/{favicon}.{ico,png,svg,jpg,jpeg,webp}")
     const matches = await Array.fromAsync(
@@ -272,7 +280,11 @@ export namespace Project {
 
   export async function list() {
     const keys = await Storage.list(["project"])
-    return await Promise.all(keys.map((x) => Storage.read<Info>(x)))
+    const projects = await Promise.all(keys.map((x) => Storage.read<Info>(x)))
+    return projects.map((project) => ({
+      ...project,
+      sandboxes: project.sandboxes?.filter((x) => existsSync(x)),
+    }))
   }
 
   export const update = fn(
@@ -280,6 +292,7 @@ export namespace Project {
       projectID: z.string(),
       name: z.string().optional(),
       icon: Info.shape.icon.optional(),
+      commands: Info.shape.commands.optional(),
     }),
     async (input) => {
       const result = await Storage.update<Info>(["project", input.projectID], (draft) => {
@@ -289,8 +302,19 @@ export namespace Project {
             ...draft.icon,
           }
           if (input.icon.url !== undefined) draft.icon.url = input.icon.url
+          if (input.icon.override !== undefined) draft.icon.override = input.icon.override || undefined
           if (input.icon.color !== undefined) draft.icon.color = input.icon.color
         }
+
+        if (input.commands?.start !== undefined) {
+          const start = input.commands.start || undefined
+          draft.commands = {
+            ...(draft.commands ?? {}),
+          }
+          draft.commands.start = start
+          if (!draft.commands.start) draft.commands = undefined
+        }
+
         draft.time.updated = Date.now()
       })
       GlobalBus.emit("event", {
@@ -312,5 +336,36 @@ export namespace Project {
       if (stat?.isDirectory()) valid.push(dir)
     }
     return valid
+  }
+
+  export async function addSandbox(projectID: string, directory: string) {
+    const result = await Storage.update<Info>(["project", projectID], (draft) => {
+      const sandboxes = draft.sandboxes ?? []
+      if (!sandboxes.includes(directory)) sandboxes.push(directory)
+      draft.sandboxes = sandboxes
+      draft.time.updated = Date.now()
+    })
+    GlobalBus.emit("event", {
+      payload: {
+        type: Event.Updated.type,
+        properties: result,
+      },
+    })
+    return result
+  }
+
+  export async function removeSandbox(projectID: string, directory: string) {
+    const result = await Storage.update<Info>(["project", projectID], (draft) => {
+      const sandboxes = draft.sandboxes ?? []
+      draft.sandboxes = sandboxes.filter((sandbox) => sandbox !== directory)
+      draft.time.updated = Date.now()
+    })
+    GlobalBus.emit("event", {
+      payload: {
+        type: Event.Updated.type,
+        properties: result,
+      },
+    })
+    return result
   }
 }

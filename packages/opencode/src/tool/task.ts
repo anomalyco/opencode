@@ -56,6 +56,9 @@ export const TaskTool = Tool.define("task", async (ctx) => {
 
       const agent = await Agent.get(params.subagent_type)
       if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
+
+      const hasTaskPermission = agent.permission.some((rule) => rule.permission === "task")
+
       const session = await iife(async () => {
         if (params.session_id) {
           const found = await Session.get(params.session_id).catch(() => {})
@@ -76,11 +79,15 @@ export const TaskTool = Tool.define("task", async (ctx) => {
               pattern: "*",
               action: "deny",
             },
-            {
-              permission: "task",
-              pattern: "*",
-              action: "deny",
-            },
+            ...(hasTaskPermission
+              ? []
+              : [
+                  {
+                    permission: "task" as const,
+                    pattern: "*" as const,
+                    action: "deny" as const,
+                  },
+                ]),
             ...(config.experimental?.primary_tools?.map((t) => ({
               pattern: "*",
               action: "allow" as const,
@@ -92,10 +99,16 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
 
+      const model = agent.model ?? {
+        modelID: msg.info.modelID,
+        providerID: msg.info.providerID,
+      }
+
       ctx.metadata({
         title: params.description,
         metadata: {
           sessionId: session.id,
+          model,
         },
       })
 
@@ -117,16 +130,11 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         ctx.metadata({
           title: params.description,
           metadata: {
-            summary: Object.values(parts).sort((a, b) => a.id.localeCompare(b.id)),
             sessionId: session.id,
+            model,
           },
         })
       })
-
-      const model = agent.model ?? {
-        modelID: msg.info.modelID,
-        providerID: msg.info.providerID,
-      }
 
       function cancel() {
         SessionPrompt.cancel(session.id)
@@ -146,12 +154,14 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         tools: {
           todowrite: false,
           todoread: false,
-          task: false,
+          ...(hasTaskPermission ? {} : { task: false }),
           ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
         },
         parts: promptParts,
+      }).finally(() => {
+        unsub()
       })
-      unsub()
+
       const messages = await Session.messages({ sessionID: session.id })
       const summary = messages
         .filter((x) => x.info.role === "assistant")
@@ -173,6 +183,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         metadata: {
           summary,
           sessionId: session.id,
+          model,
         },
         output,
       }

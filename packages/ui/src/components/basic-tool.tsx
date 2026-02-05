@@ -25,6 +25,7 @@ export interface BasicToolProps {
   hideDetails?: boolean
   defaultOpen?: boolean
   forceOpen?: boolean
+  locked?: boolean
   onSubtitleClick?: () => void
 }
 
@@ -35,8 +36,13 @@ export function BasicTool(props: BasicToolProps) {
     if (props.forceOpen) setOpen(true)
   })
 
+  const handleOpenChange = (value: boolean) => {
+    if (props.locked && !value) return
+    setOpen(value)
+  }
+
   return (
-    <Collapsible open={open()} onOpenChange={setOpen}>
+    <Collapsible open={open()} onOpenChange={handleOpenChange}>
       <Collapsible.Trigger>
         <div data-component="tool-trigger">
           <div data-slot="basic-tool-tool-trigger-content">
@@ -95,7 +101,7 @@ export function BasicTool(props: BasicToolProps) {
               </Switch>
             </div>
           </div>
-          <Show when={props.children && !props.hideDetails}>
+          <Show when={props.children && !props.hideDetails && !props.locked}>
             <Collapsible.Arrow />
           </Show>
         </div>

@@ -1,5 +1,6 @@
 import { Instance } from "../project/instance"
 import { Log } from "../util/log"
+import { Flag } from "../flag/flag"
 
 export namespace FileTime {
   const log = Log.create({ service: "file.time" })
@@ -52,8 +53,12 @@ export namespace FileTime {
   }
 
   export async function assert(sessionID: string, filepath: string) {
+    if (Flag.OPENCODE_DISABLE_FILETIME_CHECK === true) {
+      return
+    }
+
     const time = get(sessionID, filepath)
-    if (!time) throw new Error(`You must read the file ${filepath} before overwriting it. Use the Read tool first`)
+    if (!time) throw new Error(`You must read file ${filepath} before overwriting it. Use the Read tool first`)
     const stats = await Bun.file(filepath).stat()
     if (stats.mtime.getTime() > time.getTime()) {
       throw new Error(

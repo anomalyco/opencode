@@ -16,7 +16,7 @@ export const UpgradeCommand = {
         alias: "m",
         describe: "installation method to use",
         type: "string",
-        choices: ["curl", "npm", "pnpm", "bun", "brew"],
+        choices: ["curl", "npm", "pnpm", "bun", "brew", "choco", "scoop"],
       })
   },
   handler: async (args: { target?: string; method?: string }) => {
@@ -56,8 +56,14 @@ export const UpgradeCommand = {
     const err = await Installation.upgrade(method, target).catch((err) => err)
     if (err) {
       spinner.stop("Upgrade failed", 1)
-      if (err instanceof Installation.UpgradeFailedError) prompts.log.error(err.data.stderr)
-      else if (err instanceof Error) prompts.log.error(err.message)
+      if (err instanceof Installation.UpgradeFailedError) {
+        // necessary because choco only allows install/upgrade in elevated terminals
+        if (method === "choco" && err.data.stderr.includes("not running from an elevated command shell")) {
+          prompts.log.error("Please run the terminal as Administrator and try again")
+        } else {
+          prompts.log.error(err.data.stderr)
+        }
+      } else if (err instanceof Error) prompts.log.error(err.message)
       prompts.outro("Done")
       return
     }
