@@ -1,1 +1,428 @@
-PLACEHOLDER
+/* =============================================================================
+ * Tool Detail Modal - Container
+ * ============================================================================= */
+
+[data-component="tool-detail-modal"] {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* =============================================================================
+ * File Editor View
+ * ============================================================================= */
+
+[data-component="tool-detail-file"] {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--background-base);
+  border-radius: var(--radius-md);
+
+  [data-slot="file-header"] {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: var(--surface-base);
+    border-bottom: 1px solid var(--border-weak-base);
+    flex-shrink: 0;
+
+    [data-slot="file-path"] {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-base);
+      font-family: var(--font-family-mono);
+      font-feature-settings: var(--font-family-mono--font-feature-settings);
+      font-size: var(--font-size-small);
+      font-weight: var(--font-weight-medium);
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  [data-slot="file-content"] {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+
+    /* Hide scrollbar */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    &::-webkit-scrollbar {
+      display: none;
+    }
+
+    [data-slot="line-numbers"] {
+      display: flex;
+      flex-direction: column;
+      padding: 12px 0;
+      padding-left: 12px;
+      background: var(--surface-base);
+      border-right: 1px solid var(--border-weak-base);
+      flex-shrink: 0;
+      user-select: none;
+
+      [data-slot="line-number"] {
+        font-family: var(--font-family-mono);
+        font-feature-settings: var(--font-family-mono--font-feature-settings);
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--text-weak);
+        text-align: right;
+        padding-right: 12px;
+        min-width: 3ch;
+      }
+    }
+
+    [data-slot="code-content"] {
+      flex: 1;
+      min-width: 0;
+      overflow: auto;
+      padding: 4px 0;
+
+      /* Reset markdown code block margins */
+      [data-component="markdown"] {
+        pre {
+          margin: 0;
+        }
+
+        .shiki {
+          border: none;
+          border-radius: 0;
+          padding: 8px 12px;
+          background: transparent !important;
+        }
+      }
+    }
+  }
+}
+
+/* =============================================================================
+ * Terminal View
+ * ============================================================================= */
+
+[data-component="tool-detail-terminal"] {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--background-stronger);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-weak-base);
+
+  [data-slot="terminal-header"] {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: var(--surface-base);
+    border-bottom: 1px solid var(--border-weak-base);
+    flex-shrink: 0;
+
+    [data-slot="terminal-title"] {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-base);
+      font-family: var(--font-family-sans);
+      font-size: var(--font-size-small);
+      font-weight: var(--font-weight-medium);
+
+      [data-slot="terminal-workdir"] {
+        color: var(--text-weak);
+        font-family: var(--font-family-mono);
+        font-feature-settings: var(--font-family-mono--font-feature-settings);
+        font-size: var(--font-size-small);
+        font-weight: var(--font-weight-regular);
+
+        &::before {
+          content: "in ";
+        }
+      }
+    }
+
+    [data-slot="terminal-actions"] {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+
+      [data-slot="exit-code"] {
+        font-family: var(--font-family-mono);
+        font-feature-settings: var(--font-family-mono--font-feature-settings);
+        font-size: 12px;
+        font-weight: var(--font-weight-medium);
+        padding: 2px 8px;
+        border-radius: var(--radius-sm);
+
+        &[data-status="success"] {
+          background: var(--surface-success);
+          color: var(--text-success);
+        }
+
+        &[data-status="error"] {
+          background: var(--surface-critical);
+          color: var(--text-critical);
+        }
+
+        &[data-status="pending"] {
+          background: var(--surface-base);
+          color: var(--text-weak);
+        }
+      }
+    }
+  }
+
+  [data-slot="terminal-content"] {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 12px 16px;
+    font-family: var(--font-family-mono);
+    font-feature-settings: var(--font-family-mono--font-feature-settings);
+    font-size: 13px;
+    line-height: 1.5;
+
+    /* Hide scrollbar */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    &::-webkit-scrollbar {
+      display: none;
+    }
+
+    [data-slot="terminal-command"] {
+      display: flex;
+      gap: 8px;
+      color: var(--text-strong);
+      margin-bottom: 12px;
+
+      [data-slot="prompt"] {
+        color: var(--text-success);
+        flex-shrink: 0;
+        user-select: none;
+      }
+
+      [data-slot="command-text"] {
+        word-break: break-all;
+      }
+    }
+
+    [data-slot="terminal-output"] {
+      pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        color: var(--text-base);
+        font-family: inherit;
+        font-size: inherit;
+        line-height: inherit;
+      }
+    }
+  }
+}
+
+/* =============================================================================
+ * Browser View
+ * ============================================================================= */
+
+[data-component="tool-detail-browser"] {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--background-base);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-weak-base);
+
+  [data-slot="browser-chrome"] {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background: var(--surface-base);
+    border-bottom: 1px solid var(--border-weak-base);
+    flex-shrink: 0;
+
+    [data-slot="browser-controls"] {
+      display: flex;
+      gap: 6px;
+      flex-shrink: 0;
+
+      [data-slot="traffic-light"] {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+
+        &[data-color="red"] {
+          background: #ff5f57;
+        }
+
+        &[data-color="yellow"] {
+          background: #febc2e;
+        }
+
+        &[data-color="green"] {
+          background: #28c840;
+        }
+      }
+    }
+
+    [data-slot="browser-url-bar"] {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      background: var(--background-base);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-weak-base);
+      min-width: 0;
+
+      [data-slot="icon-svg"] {
+        flex-shrink: 0;
+        color: var(--text-success);
+      }
+
+      [data-slot="url-text"] {
+        font-family: var(--font-family-sans);
+        font-size: var(--font-size-small);
+        color: var(--text-base);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+
+    [data-slot="browser-spacer"] {
+      width: 54px;
+      flex-shrink: 0;
+    }
+  }
+
+  [data-slot="browser-content"] {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--background-weak);
+
+    [data-slot="browser-placeholder"] {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      color: var(--text-weak);
+      font-family: var(--font-family-sans);
+      font-size: var(--font-size-base);
+    }
+
+    [data-slot="browser-loading"],
+    [data-slot="browser-error"] {
+      color: var(--text-weak);
+      font-family: var(--font-family-sans);
+      font-size: var(--font-size-base);
+    }
+
+    [data-slot="browser-error"] {
+      color: var(--text-critical);
+    }
+
+    [data-slot="browser-screenshot"] {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      display: none;
+
+      &[data-loaded="true"] {
+        display: block;
+      }
+    }
+  }
+
+  [data-slot="browser-footer"] {
+    padding: 8px 12px;
+    background: var(--surface-base);
+    border-top: 1px solid var(--border-weak-base);
+    flex-shrink: 0;
+
+    span {
+      font-family: var(--font-family-sans);
+      font-size: var(--font-size-small);
+      color: var(--text-weak);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+}
+
+/* =============================================================================
+ * Generic View
+ * ============================================================================= */
+
+[data-component="tool-detail-generic"] {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+
+  [data-slot="generic-header"] {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--surface-base);
+    border-bottom: 1px solid var(--border-weak-base);
+    flex-shrink: 0;
+    color: var(--text-base);
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-medium);
+  }
+
+  [data-slot="generic-content"] {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 16px;
+
+    /* Hide scrollbar */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+}
+
+/* =============================================================================
+ * Expand Button for BasicTool
+ * ============================================================================= */
+
+[data-slot="tool-expand-button"] {
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+[data-component="tool-trigger"]:hover [data-slot="tool-expand-button"] {
+  opacity: 1;
+}
