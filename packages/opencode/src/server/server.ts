@@ -534,12 +534,13 @@ export namespace Server {
         )
         .all("/*", async (c) => {
           const path = c.req.path
-
-          const response = await proxy(`https://app.opencode.ai${path}`, {
+          // Fork override: default web URL points to personal CloudFront; upstream default was https://app.opencode.ai
+          const target = Flag.OPENCODE_WEB_URL ?? "https://d3ir6x3lfy3u68.cloudfront.net"
+          const response = await proxy(`${target}${path}`, {
             ...c.req,
             headers: {
               ...c.req.raw.headers,
-              host: "app.opencode.ai",
+              host: new URL(target).host,
             },
           })
           response.headers.set(
