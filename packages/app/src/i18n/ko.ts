@@ -324,22 +324,6 @@ export const dict = {
   "context.usage.clickToView": "컨텍스트를 보려면 클릭",
   "context.usage.view": "컨텍스트 사용량 보기",
 
-  "language.en": "English",
-  "language.zh": "简体中文",
-  "language.zht": "繁體中文",
-  "language.ko": "한국어",
-  "language.de": "Deutsch",
-  "language.es": "Español",
-  "language.fr": "Français",
-  "language.da": "Dansk",
-  "language.ja": "日本語",
-  "language.pl": "Polski",
-  "language.ru": "Русский",
-  "language.ar": "العربية",
-  "language.no": "Norsk",
-  "language.br": "Português (Brasil)",
-  "language.th": "ไทย",
-
   "toast.language.title": "언어",
   "toast.language.description": "{{language}}(으)로 전환됨",
 
