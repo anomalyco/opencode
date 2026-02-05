@@ -1,24 +1,52 @@
-import type { Component, JSX } from "solid-js"
+import type { Component, ComponentProps } from "solid-js"
 import { splitProps } from "solid-js"
-import sprite from "./app-icons/sprite.svg"
 import type { IconName } from "./app-icons/types"
 
-export type AppIconProps = JSX.SVGElementTags["svg"] & {
+import androidStudio from "../assets/icons/app/android-studio.svg"
+import antigravity from "../assets/icons/app/antigravity.svg"
+import cursor from "../assets/icons/app/cursor.svg"
+import finder from "../assets/icons/app/finder.svg"
+import ghostty from "../assets/icons/app/ghostty.svg"
+import iterm2 from "../assets/icons/app/iterm2.svg"
+import powershell from "../assets/icons/app/powershell.svg"
+import terminal from "../assets/icons/app/terminal.svg"
+import textmate from "../assets/icons/app/textmate.png"
+import vscode from "../assets/icons/app/vscode.svg"
+import xcode from "../assets/icons/app/xcode.svg"
+import zed from "../assets/icons/app/zed.svg"
+
+const icons = {
+  vscode,
+  cursor,
+  zed,
+  finder,
+  terminal,
+  iterm2,
+  ghostty,
+  xcode,
+  "android-studio": androidStudio,
+  antigravity,
+  textmate,
+  powershell,
+} satisfies Record<IconName, string>
+
+export type AppIconProps = Omit<ComponentProps<"img">, "src"> & {
   id: IconName
 }
 
 export const AppIcon: Component<AppIconProps> = (props) => {
-  const [local, rest] = splitProps(props, ["id", "class", "classList"])
+  const [local, rest] = splitProps(props, ["id", "class", "classList", "alt", "draggable"])
   return (
-    <svg
+    <img
       data-component="app-icon"
       {...rest}
+      src={icons[local.id]}
+      alt={local.alt ?? ""}
+      draggable={local.draggable ?? false}
       classList={{
         ...(local.classList ?? {}),
         [local.class ?? ""]: !!local.class,
       }}
-    >
-      <use href={`${sprite}#${local.id}`} />
-    </svg>
+    />
   )
 }

@@ -58,12 +58,15 @@ export function SessionHeader() {
     "vscode",
     "cursor",
     "zed",
+    "textmate",
+    "antigravity",
     "finder",
     "terminal",
     "iterm2",
     "ghostty",
     "xcode",
     "android-studio",
+    "powershell",
   ] as const
   type OpenApp = (typeof OPEN_APPS)[number]
 
@@ -83,6 +86,8 @@ export function SessionHeader() {
         { id: "vscode", label: "VS Code", icon: "vscode", openWith: "Visual Studio Code" },
         { id: "cursor", label: "Cursor", icon: "cursor", openWith: "Cursor" },
         { id: "zed", label: "Zed", icon: "zed", openWith: "Zed" },
+        { id: "textmate", label: "TextMate", icon: "textmate", openWith: "TextMate" },
+        { id: "antigravity", label: "Antigravity", icon: "antigravity", openWith: "Antigravity" },
         { id: "finder", label: "Finder", icon: "finder" },
         { id: "terminal", label: "Terminal", icon: "terminal", openWith: "Terminal" },
         { id: "iterm2", label: "iTerm2", icon: "iterm2", openWith: "iTerm" },
@@ -98,6 +103,7 @@ export function SessionHeader() {
         { id: "cursor", label: "Cursor", icon: "cursor", openWith: "cursor" },
         { id: "zed", label: "Zed", icon: "zed", openWith: "zed" },
         { id: "finder", label: "File Explorer", icon: "finder" },
+        { id: "powershell", label: "PowerShell", icon: "powershell", openWith: "powershell" },
       ] as const
     }
 
@@ -283,7 +289,7 @@ export function SessionHeader() {
                       onClick={() => openDir(current().id)}
                       aria-label={language.t("session.header.open.ariaLabel", { app: current().label })}
                     >
-                      <AppIcon id={current().icon} class="size-4" />
+                      <AppIcon id={current().icon} class="size-5" />
                       <span class="text-12-regular text-text-strong">
                         {language.t("session.header.open.action", { app: current().label })}
                       </span>
@@ -309,7 +315,7 @@ export function SessionHeader() {
                             >
                               {options().map((o) => (
                                 <DropdownMenu.RadioItem value={o.id} onSelect={() => openDir(o.id)}>
-                                  <AppIcon id={o.icon} class="size-4" />
+                                  <AppIcon id={o.icon} class="size-5" />
                                   <DropdownMenu.ItemLabel>{o.label}</DropdownMenu.ItemLabel>
                                   <DropdownMenu.ItemIndicator>
                                     <Icon name="check-small" size="small" class="text-icon-weak" />

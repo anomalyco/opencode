@@ -10,6 +10,9 @@ export const iconNames = [
   "ghostty",
   "xcode",
   "android-studio",
+  "antigravity",
+  "textmate",
+  "powershell",
 ] as const
 
 export type IconName = (typeof iconNames)[number]
