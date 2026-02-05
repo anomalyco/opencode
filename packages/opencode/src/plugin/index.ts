@@ -6,12 +6,17 @@ import { createOpencodeClient } from "@opencode-ai/sdk"
 import { Server } from "../server/server"
 import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
+import { Flag } from "../flag/flag"
 import { CodexAuthPlugin } from "./codex"
+import { Session } from "../session"
+import { NamedError } from "@opencode-ai/util/error"
 import { CopilotAuthPlugin } from "./copilot"
 import { gitlabAuthPlugin as GitlabAuthPlugin } from "@gitlab/opencode-gitlab-auth"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
+
+  const BUILTIN = ["opencode-anthropic-auth@0.0.13"]
 
   // Built-in plugins that are directly imported (not installed from npm)
   const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, CopilotAuthPlugin, GitlabAuthPlugin]
@@ -41,6 +46,9 @@ export namespace Plugin {
 
     const plugins = [...(config.plugin ?? [])]
     if (plugins.length) await Config.waitForDependencies()
+    if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
+      plugins.push(...BUILTIN)
+    }
 
     for (let plugin of plugins) {
       // ignore old codex plugin since it is supported first party now
@@ -50,7 +58,24 @@ export namespace Plugin {
         const lastAtIndex = plugin.lastIndexOf("@")
         const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
         const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
-        plugin = await BunProc.install(pkg, version)
+        const builtin = BUILTIN.some((x) => x.startsWith(pkg + "@"))
+        plugin = await BunProc.install(pkg, version).catch((err) => {
+          if (!builtin) throw err
+
+          const message = err instanceof Error ? err.message : String(err)
+          log.error("failed to install builtin plugin", {
+            pkg,
+            version,
+            error: message,
+          })
+          Bus.publish(Session.Event.Error, {
+            error: new NamedError.Unknown({
+              message: `Failed to install built-in plugin ${pkg}@${version}: ${message}`,
+            }).toObject(),
+          })
+
+          return ""
+        })
         if (!plugin) continue
       }
       const mod = await import(plugin)
