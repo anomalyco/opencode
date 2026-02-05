@@ -21,6 +21,21 @@ export type Platform = {
   /** Open folder in VSCode (desktop only) */
   openInVscode?(path: string): Promise<void>
 
+  /** Open folder in specified editor (desktop only) */
+  openInEditor?(editor: string, path: string): Promise<void>
+
+  /** Get custom editor path (desktop only) */
+  getCustomEditorPath?(): Promise<string | null>
+
+  /** Set custom editor path (desktop only) */
+  setCustomEditorPath?(path: string | null): Promise<void>
+
+  /** Get default editor (desktop only) */
+  getDefaultEditor?(): Promise<string | null>
+
+  /** Set default editor (desktop only) */
+  setDefaultEditor?(editor: string | null): Promise<void>
+
   /** Restart the app  */
   restart(): Promise<void>
 

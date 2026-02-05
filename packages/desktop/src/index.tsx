@@ -96,6 +96,27 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
     await invoke("open_in_vscode", { path })
   },
 
+  async openInEditor(editor: string, path: string) {
+    const customPath = await commands.getCustomEditorPath()
+    await commands.openInEditor(editor, path, customPath)
+  },
+
+  async getCustomEditorPath() {
+    return await commands.getCustomEditorPath()
+  },
+
+  async setCustomEditorPath(path: string | null) {
+    await commands.setCustomEditorPath(path)
+  },
+
+  async getDefaultEditor() {
+    return await commands.getDefaultEditor()
+  },
+
+  async setDefaultEditor(editor: string | null) {
+    await commands.setDefaultEditor(editor)
+  },
+
   back() {
     window.history.back()
   },

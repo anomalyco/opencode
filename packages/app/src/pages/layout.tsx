@@ -1096,6 +1096,56 @@ export default function Layout(props: ParentProps) {
         },
       },
       {
+        id: "project.openInCursor",
+        title: "Open in Cursor",
+        category: language.t("command.category.project"),
+        disabled: !params.dir || !platform.openInEditor,
+        onSelect: async () => {
+          const directory = params.dir ? decode64(params.dir) : null
+          if (directory && platform.openInEditor) {
+            await platform.openInEditor("cursor", directory)
+          }
+        },
+      },
+      {
+        id: "project.openInSublime",
+        title: "Open in Sublime Text",
+        category: language.t("command.category.project"),
+        disabled: !params.dir || !platform.openInEditor,
+        onSelect: async () => {
+          const directory = params.dir ? decode64(params.dir) : null
+          if (directory && platform.openInEditor) {
+            await platform.openInEditor("sublime", directory)
+          }
+        },
+      },
+      {
+        id: "project.openInZed",
+        title: "Open in Zed",
+        category: language.t("command.category.project"),
+        disabled: !params.dir || !platform.openInEditor,
+        onSelect: async () => {
+          const directory = params.dir ? decode64(params.dir) : null
+          if (directory && platform.openInEditor) {
+            await platform.openInEditor("zed", directory)
+          }
+        },
+      },
+      {
+        id: "project.openInEditor",
+        title: "Open in Editor",
+        category: language.t("command.category.project"),
+        disabled: !params.dir || !platform.openInEditor,
+        onSelect: async () => {
+          const directory = params.dir ? decode64(params.dir) : null
+          if (directory && platform.openInEditor && platform.getDefaultEditor) {
+            const defaultEditor = await platform.getDefaultEditor()
+            const editor = defaultEditor || "vscode"
+            await platform.openInEditor(editor, directory)
+          }
+        },
+      },
+      {
         id: "session.previous",
         title: language.t("command.session.previous"),
         category: language.t("command.category.session"),
@@ -2379,7 +2429,6 @@ export default function Layout(props: ParentProps) {
 
             event.preventDefault()
             globalSync.child(props.project.worktree)
-
             const currentProject = state.hoverProject === props.project.worktree ? undefined : props.project.worktree
             setState("hoverProject", currentProject)
             setState("hoverSession", undefined)
