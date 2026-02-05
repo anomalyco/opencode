@@ -111,7 +111,7 @@ export namespace Config {
         if (!response.ok) {
           throw new Error(`failed to fetch remote config from ${key}: ${response.status}`)
         }
-        const wellknown = (await response.json()) as any
+        const wellknown = (await response.json()) as { config?: Info }
         const remoteConfig = wellknown.config ?? {}
         // Add $schema to prevent load() from trying to write back to a non-existent file
         if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"

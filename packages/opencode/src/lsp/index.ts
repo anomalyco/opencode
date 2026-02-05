@@ -435,7 +435,7 @@ export namespace LSP {
           textDocument: { uri: pathToFileURL(input.file).href },
           position: { line: input.line, character: input.character },
         })
-        .catch(() => [])) as any[]
+        .catch(() => [])) as unknown[]
       if (!items?.length) return []
       return client.connection.sendRequest("callHierarchy/incomingCalls", { item: items[0] }).catch(() => [])
     }).then((result) => result.flat().filter(Boolean))
@@ -448,7 +448,7 @@ export namespace LSP {
           textDocument: { uri: pathToFileURL(input.file).href },
           position: { line: input.line, character: input.character },
         })
-        .catch(() => [])) as any[]
+        .catch(() => [])) as unknown[]
       if (!items?.length) return []
       return client.connection.sendRequest("callHierarchy/outgoingCalls", { item: items[0] }).catch(() => [])
     }).then((result) => result.flat().filter(Boolean))

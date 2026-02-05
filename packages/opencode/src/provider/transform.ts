@@ -142,13 +142,14 @@ export namespace ProviderTransform {
 
           // Include reasoning_content | reasoning_details directly on the message for all assistant messages
           if (reasoningText) {
+            const providerOptions = msg.providerOptions as { openaiCompatible?: Record<string, string> } | undefined
             return {
               ...msg,
               content: filteredContent,
               providerOptions: {
                 ...msg.providerOptions,
                 openaiCompatible: {
-                  ...(msg.providerOptions as any)?.openaiCompatible,
+                  ...providerOptions?.openaiCompatible,
                   [field]: reasoningText,
                 },
               },

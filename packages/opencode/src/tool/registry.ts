@@ -80,7 +80,8 @@ export namespace ToolRegistry {
             directory: Instance.directory,
             worktree: Instance.worktree,
           } as unknown as PluginToolContext
-          const result = await def.execute(args as any, pluginCtx)
+          const typedArgs = args as z.infer<z.ZodObject<typeof def.args>>
+          const result = await def.execute(typedArgs, pluginCtx)
           const out = await Truncate.output(result, {}, initCtx?.agent)
           return {
             title: "",
@@ -124,7 +125,7 @@ export namespace ToolRegistry {
       SkillTool,
       ApplyPatchTool,
       ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
-      ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
+      ...(config.experimental?.batch_tool !== false ? [BatchTool] : []),
       ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool, PlanEnterTool] : []),
       ...custom,
     ]

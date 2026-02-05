@@ -449,11 +449,12 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           setStore(
             produce((draft) => {
               const match = Binary.search(draft.session, sessionID, (s) => s.id)
-              if (match.found) draft.session[match.index] = session.data!
-              if (!match.found) draft.session.splice(match.index, 0, session.data!)
+              if (!session.data) return
+              if (match.found) draft.session[match.index] = session.data
+              if (!match.found) draft.session.splice(match.index, 0, session.data)
               draft.todo[sessionID] = todo.data ?? []
-              draft.message[sessionID] = messages.data!.map((x) => x.info)
-              for (const message of messages.data!) {
+              draft.message[sessionID] = (messages.data ?? []).map((x) => x.info)
+              for (const message of messages.data ?? []) {
                 draft.part[message.info.id] = message.parts
               }
               draft.session_diff[sessionID] = diff.data ?? []

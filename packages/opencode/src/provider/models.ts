@@ -84,7 +84,6 @@ export namespace ModelsDev {
     const file = Bun.file(Flag.OPENCODE_MODELS_PATH ?? filepath)
     const result = await file.json().catch(() => {})
     if (result) return result
-    // @ts-ignore - models-snapshot is generated at build time; may not exist in dev
     const snapshot = await import("./models-snapshot")
       .then((m) => m.snapshot as Record<string, unknown>)
       .catch(() => undefined)

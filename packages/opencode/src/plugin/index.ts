@@ -3,6 +3,7 @@ import { Config } from "../config/config"
 import { Bus } from "../bus"
 import { Log } from "../util/log"
 import { createOpencodeClient } from "@opencode-ai/sdk"
+import type { Config as SDKConfig } from "@opencode-ai/sdk"
 import { Server } from "../server/server"
 import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
@@ -11,6 +12,7 @@ import { CodexAuthPlugin } from "./codex"
 import { Session } from "../session"
 import { NamedError } from "@opencode-ai/util/error"
 import { CopilotAuthPlugin } from "./copilot"
+import { PluginSandbox } from "./sandbox"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -23,8 +25,7 @@ export namespace Plugin {
   const state = Instance.state(async () => {
     const client = createOpencodeClient({
       baseUrl: "http://localhost:4096",
-      // @ts-ignore - fetch type incompatibility
-      fetch: async (...args) => Server.App().fetch(...args),
+      fetch: Server.App().fetch as typeof fetch,
     })
     const config = await Config.get()
     const hooks: Hooks[] = []
@@ -102,13 +103,13 @@ export namespace Plugin {
     Output = Parameters<Required<Hooks>[Name]>[1],
   >(name: Name, input: Input, output: Output): Promise<Output> {
     if (!name) return output
-    for (const hook of await state().then((x) => x.hooks)) {
+    const hooks = await state().then((x) => x.hooks)
+    for (const [index, hook] of hooks.entries()) {
       const fn = hook[name]
       if (!fn) continue
-      // @ts-expect-error if you feel adventurous, please fix the typing, make sure to bump the try-counter if you
-      // give up.
-      // try-counter: 2
-      await fn(input, output)
+      const wrapped = PluginSandbox.wrapHook(`plugin:${index}`, String(name), fn)
+      const safe = wrapped as (input: Input, output: Output) => Promise<void>
+      await safe(input, output)
     }
     return output
   }
@@ -120,14 +121,20 @@ export namespace Plugin {
   export async function init() {
     const hooks = await state().then((x) => x.hooks)
     const config = await Config.get()
-    for (const hook of hooks) {
-      // @ts-expect-error this is because we haven't moved plugin to sdk v2
-      await hook.config?.(config)
+    for (const [index, hook] of hooks.entries()) {
+      if (hook.config) {
+        const wrapped = PluginSandbox.wrapHook(`plugin:${index}`, "config", hook.config)
+        const safe = wrapped as (input: SDKConfig) => Promise<void>
+        await safe(config as SDKConfig)
+      }
     }
     Bus.subscribeAll(async (input) => {
       const hooks = await state().then((x) => x.hooks)
-      for (const hook of hooks) {
-        hook["event"]?.({
+      for (const [index, hook] of hooks.entries()) {
+        const fn = hook["event"]
+        if (!fn) continue
+        const wrapped = PluginSandbox.wrapHook(`plugin:${index}`, "event", fn)
+        await wrapped({
           event: input,
         })
       }

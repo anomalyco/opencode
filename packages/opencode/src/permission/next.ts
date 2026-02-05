@@ -221,9 +221,7 @@ export namespace PermissionNext {
           pending.resolve()
         }
 
-        // TODO: we don't save the permission ruleset to disk yet until there's
-        // UI to manage it
-        // await Storage.write(["permission", Instance.project.id], s.approved)
+        await Storage.write(["permission", Instance.project.id], s.approved)
         return
       }
     },
@@ -231,8 +229,7 @@ export namespace PermissionNext {
 
   export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
     // Normalize path patterns to prevent traversal bypass
-    const normalizedPattern =
-      pattern.includes("/") || pattern.includes("\\") ? path.normalize(pattern) : pattern
+    const normalizedPattern = pattern.includes("/") || pattern.includes("\\") ? path.normalize(pattern) : pattern
 
     // Reject patterns with path traversal
     if (normalizedPattern.includes("..")) {
@@ -242,8 +239,7 @@ export namespace PermissionNext {
     const merged = merge(...rulesets)
     log.info("evaluate", { permission, pattern: normalizedPattern, ruleset: merged })
     const match = merged.findLast(
-      (rule) =>
-        Wildcard.match(permission, rule.permission) && Wildcard.match(normalizedPattern, rule.pattern),
+      (rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(normalizedPattern, rule.pattern),
     )
     return match ?? { action: "ask", permission, pattern: "*" }
   }

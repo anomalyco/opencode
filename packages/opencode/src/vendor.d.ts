@@ -33,3 +33,7 @@ declare module "ai-gateway-provider/providers/unified" {
 
   export { createUnified }
 }
+
+declare module "@parcel/watcher/wrapper" {
+  export function createWrapper(binding: unknown): typeof import("@parcel/watcher")
+}

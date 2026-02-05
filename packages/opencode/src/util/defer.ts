@@ -1,6 +1,6 @@
-export function defer<T extends () => void | Promise<void>>(
-  fn: T,
-): T extends () => Promise<void> ? { [Symbol.asyncDispose]: () => Promise<void> } : { [Symbol.dispose]: () => void } {
+export function defer(fn: () => void): { [Symbol.dispose]: () => void }
+export function defer(fn: () => Promise<void>): { [Symbol.asyncDispose]: () => Promise<void> }
+export function defer(fn: () => void | Promise<void>) {
   return {
     [Symbol.dispose]() {
       fn()
@@ -8,5 +8,5 @@ export function defer<T extends () => void | Promise<void>>(
     [Symbol.asyncDispose]() {
       return Promise.resolve(fn())
     },
-  } as any
+  }
 }

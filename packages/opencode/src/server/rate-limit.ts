@@ -7,13 +7,20 @@ interface RateLimitState {
 
 const store = new Map<string, RateLimitState>()
 
+function ipFromHeader(value: string | undefined): string | undefined {
+  if (!value) return undefined
+  const first = value.split(",")[0]?.trim()
+  return first || undefined
+}
+
 // Clean expired entries periodically
-setInterval(() => {
+const timer = setInterval(() => {
   const now = Date.now()
   for (const [key, state] of store) {
     if (state.resetAt < now) store.delete(key)
   }
 }, 60_000)
+timer.unref()
 
 export function rateLimit(
   opts: {
@@ -27,7 +34,7 @@ export function rateLimit(
   return async (c: Context, next: Next) => {
     const key = keyGenerator
       ? keyGenerator(c)
-      : (c.req.header("x-forwarded-for") ?? c.req.header("x-real-ip") ?? "unknown")
+      : (ipFromHeader(c.req.header("x-forwarded-for")) ?? ipFromHeader(c.req.header("x-real-ip")) ?? "unknown")
 
     const now = Date.now()
     let state = store.get(key)

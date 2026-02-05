@@ -36,9 +36,8 @@ export async function resolveTools(input: {
   )) {
     const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters))
     tools[item.id] = tool({
-      id: item.id as any,
       description: item.description,
-      inputSchema: jsonSchema(schema as any),
+      inputSchema: jsonSchema(schema),
       async execute(args, options) {
         const ctx = context(args, options)
         await Plugin.trigger(

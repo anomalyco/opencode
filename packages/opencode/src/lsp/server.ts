@@ -643,7 +643,9 @@ export namespace LSPServer {
           return
         }
 
-        const release = (await releaseResponse.json()) as any
+        const release = (await releaseResponse.json()) as {
+          assets: Array<{ name: string; browser_download_url: string }>
+        }
 
         const platform = process.platform
         const arch = process.arch
@@ -678,7 +680,7 @@ export namespace LSPServer {
           return
         }
 
-        const asset = release.assets.find((a: any) => a.name === assetName)
+        const asset = release.assets.find((a) => a.name === assetName)
         if (!asset) {
           log.error(`Could not find asset ${assetName} in latest zls release`)
           return

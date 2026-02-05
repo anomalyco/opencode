@@ -45,8 +45,15 @@ export namespace Rpc {
     return {
       call<Method extends keyof T>(method: Method, input: Parameters<T[Method]>[0]): Promise<ReturnType<T[Method]>> {
         const requestId = id++
-        return new Promise((resolve) => {
-          pending.set(requestId, resolve)
+        return new Promise((resolve, reject) => {
+          const timer = setTimeout(() => {
+            pending.delete(requestId)
+            reject(new Error(`RPC call "${String(method)}" timed out after 30s`))
+          }, 30_000)
+          pending.set(requestId, (result) => {
+            clearTimeout(timer)
+            resolve(result)
+          })
           target.postMessage(JSON.stringify({ type: "rpc.request", method, input, id: requestId }))
         })
       },

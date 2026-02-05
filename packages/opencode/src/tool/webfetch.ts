@@ -28,18 +28,22 @@ export const WebFetchTool = Tool.define("webfetch", {
     const parsed = new URL(params.url)
     // Bun's URL parser wraps IPv6 in brackets (e.g. "[::1]"), strip them for matching
     const hostname = parsed.hostname.replace(/^\[|\]$/g, "")
-    if (
-      /^127\./.test(hostname) ||
-      /^10\./.test(hostname) ||
-      /^172\.(1[6-9]|2[0-9]|3[01])\./.test(hostname) ||
-      /^192\.168\./.test(hostname) ||
-      /^169\.254\./.test(hostname) ||
-      /^0\./.test(hostname) ||
-      hostname === "localhost" ||
-      hostname === "::1" ||
-      /^f[cd][0-9a-f]{2}:/i.test(hostname)
-    ) {
+    if (isPrivateHost(hostname)) {
       throw new Error("Cannot fetch from private/internal network addresses")
+    }
+
+    // DNS rebinding defense: resolve hostname and verify the resolved IP is not private
+    try {
+      const { lookup } = await import("dns/promises")
+      const addresses = await lookup(hostname, { all: true }).catch(() => [])
+      for (const addr of addresses) {
+        if (isPrivateHost(addr.address)) {
+          throw new Error("Cannot fetch from private/internal network addresses (DNS resolved to private IP)")
+        }
+      }
+    } catch (e) {
+      if (e instanceof Error && e.message.includes("Cannot fetch")) throw e
+      // DNS resolution failed - proceed with caution (hostname-based check already passed)
     }
 
     await ctx.ask({
@@ -189,6 +193,23 @@ async function extractTextFromHTML(html: string) {
 
   await rewriter.text()
   return text.trim()
+}
+
+function isPrivateHost(hostname: string): boolean {
+  return (
+    /^127\./.test(hostname) ||
+    /^10\./.test(hostname) ||
+    /^172\.(1[6-9]|2[0-9]|3[01])\./.test(hostname) ||
+    /^192\.168\./.test(hostname) ||
+    /^169\.254\./.test(hostname) ||
+    /^0\./.test(hostname) ||
+    hostname === "localhost" ||
+    hostname === "::1" ||
+    hostname === "::" ||
+    /^f[cd][0-9a-f]{2}:/i.test(hostname) ||
+    // IPv4-mapped IPv6 addresses (::ffff:x.x.x.x)
+    /^::ffff:(127\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|169\.254\.|0\.)/i.test(hostname)
+  )
 }
 
 function convertHTMLToMarkdown(html: string): string {

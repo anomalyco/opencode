@@ -96,10 +96,17 @@ export namespace ACP {
         })
         for await (const event of events.stream) {
           if (this.eventAbort.signal.aborted) return
-          const payload = (event as any)?.payload
+          const payload =
+            typeof event === "object" && event && "payload" in event
+              ? (event as { payload?: unknown }).payload
+              : undefined
           if (!payload) continue
           await this.handleEvent(payload as Event).catch((error) => {
-            log.error("failed to handle event", { error, type: payload.type })
+            const type =
+              typeof payload === "object" && payload && "type" in payload
+                ? String((payload as { type?: unknown }).type)
+                : "unknown"
+            log.error("failed to handle event", { error, type })
           })
         }
       }
@@ -1024,7 +1031,7 @@ export namespace ACP {
       const model = await defaultModel(this.config, directory)
       const sessionId = params.sessionId
 
-      const providers = await this.sdk.config.providers({ directory }).then((x) => x.data!.providers)
+      const providers = await this.sdk.config.providers({ directory }).then((x) => x.data?.providers ?? [])
       const entries = sortProvidersByName(providers)
       const availableVariants = modelVariantsFromProviders(entries, model)
       const currentVariant = this.sessionManager.getVariant(sessionId)
@@ -1130,7 +1137,7 @@ export namespace ACP {
       const session = this.sessionManager.get(params.sessionId)
       const providers = await this.sdk.config
         .providers({ directory: session.cwd }, { throwOnError: true })
-        .then((x) => x.data!.providers)
+        .then((x) => x.data?.providers ?? [])
 
       const selection = parseModelSelection(params.modelId, providers)
       this.sessionManager.setModel(session.id, selection.model)
@@ -1280,7 +1287,7 @@ export namespace ACP {
 
       const command = await this.config.sdk.command
         .list({ directory }, { throwOnError: true })
-        .then((x) => x.data!.find((c) => c.name === cmd.name))
+        .then((x) => x.data?.find((c) => c.name === cmd.name))
       if (command) {
         await this.sdk.session.command({
           sessionID,
@@ -1505,12 +1512,12 @@ export namespace ACP {
   }
 
   function buildAvailableModels(
-    providers: Array<{ id: string; name: string; models: Record<string, any> }>,
+    providers: Array<{ id: string; name: string; models: Record<string, Provider.Model> }>,
     options: { includeVariants?: boolean } = {},
   ): ModelOption[] {
     const includeVariants = options.includeVariants ?? false
     return providers.flatMap((provider) => {
-      const models = Provider.sort(Object.values(provider.models) as any)
+      const models = Provider.sort(Object.values(provider.models))
       return models.flatMap((model) => {
         const base: ModelOption = {
           modelId: `${provider.id}/${model.id}`,

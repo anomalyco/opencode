@@ -4,6 +4,7 @@ import fuzzysort from "fuzzysort"
 import { Config } from "../config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
 import { NoSuchModelError, type Provider as SDK } from "ai"
+import type { Auth as SDKAuth } from "@opencode-ai/sdk"
 import { Log } from "../util/log"
 import { BunProc } from "../bun"
 import { Plugin } from "../plugin"
@@ -76,8 +77,7 @@ export namespace Provider {
     "@ai-sdk/perplexity": createPerplexity,
     "@ai-sdk/vercel": createVercel,
     "@gitlab/gitlab-ai-provider": createGitLab,
-    // @ts-ignore (TODO: kill this code so we dont have to maintain it)
-    "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
+    "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible as unknown as (options: any) => SDK,
   }
 
   type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
@@ -872,7 +872,7 @@ export namespace Provider {
 
       // Load for the main provider if auth exists
       if (auth) {
-        const options = await plugin.auth.loader(() => Auth.get(providerID) as any, database[plugin.auth.provider])
+        const options = await plugin.auth.loader(async () => auth as SDKAuth, database[plugin.auth.provider])
         const opts = options ?? {}
         const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
         mergeProvider(providerID, patch)
@@ -885,7 +885,7 @@ export namespace Provider {
           const enterpriseAuth = await Auth.get(enterpriseProviderID)
           if (enterpriseAuth) {
             const enterpriseOptions = await plugin.auth.loader(
-              () => Auth.get(enterpriseProviderID) as any,
+              async () => enterpriseAuth as SDKAuth,
               database[enterpriseProviderID],
             )
             const opts = enterpriseOptions ?? {}
@@ -1036,9 +1036,12 @@ export namespace Provider {
           }
         }
 
-        return fetchFn(input, {
+        const fetchCompat = fetchFn as (
+          input: RequestInfo | URL,
+          init?: RequestInit & { timeout?: false },
+        ) => Promise<Response>
+        return fetchCompat(input, {
           ...opts,
-          // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
           timeout: false,
         })
       }

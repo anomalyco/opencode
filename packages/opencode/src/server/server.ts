@@ -1,3 +1,4 @@
+import path from "path"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Log } from "../util/log"
@@ -213,6 +214,16 @@ export namespace Server {
               return raw
             }
           })()
+          // Security: reject path traversal and absolute paths from external headers
+          const fromHeader = c.req.header("x-opencode-directory") || c.req.query("directory")
+          if (fromHeader) {
+            const normalized = path.resolve(directory)
+            const cwd = process.cwd()
+            const relative = path.relative(cwd, normalized)
+            if (relative.startsWith("..") || path.isAbsolute(relative)) {
+              return c.json({ error: "Directory access denied: must be within working directory" }, 403)
+            }
+          }
           return Instance.provide({
             directory,
             init: InstanceBootstrap,

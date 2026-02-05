@@ -144,6 +144,8 @@ export namespace ShareNext {
           secret: share.secret,
           data: Array.from(queued.data.values()),
         }),
+      }).catch((error) => {
+        log.error("share sync failed", { sessionID, error })
       })
     }, 1000)
     queue.set(sessionID, { timeout, data: dataMap })

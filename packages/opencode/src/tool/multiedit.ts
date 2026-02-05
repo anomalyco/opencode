@@ -40,7 +40,7 @@ export const MultiEditTool = Tool.define("multiedit", {
       metadata: {
         results: results.map((r) => r.metadata),
       },
-      output: results.at(-1)!.output,
+      output: results.length > 0 ? results.at(-1)!.output : "No edits were applied",
     }
   },
 })

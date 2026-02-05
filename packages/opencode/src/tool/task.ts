@@ -11,6 +11,7 @@ import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { PermissionNext } from "@/permission/next"
+import { SessionStatus } from "../session/status"
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
@@ -40,6 +41,16 @@ export const TaskTool = Tool.define("task", async (ctx) => {
     parameters,
     async execute(params: z.infer<typeof parameters>, ctx) {
       const config = await Config.get()
+      const maxSubagents = config.experimental?.max_subagents ?? 3
+
+      if (maxSubagents > 0) {
+        const children = await Session.children(ctx.sessionID)
+        const active = children.filter((child) => SessionStatus.get(child.id).type !== "idle")
+        const isExisting = params.session_id && active.some((child) => child.id === params.session_id)
+        if (!isExisting && active.length >= maxSubagents) {
+          throw new Error(`Too many concurrent subagents (limit: ${maxSubagents})`)
+        }
+      }
 
       // Skip permission check when user explicitly invoked via @ or command subtask
       if (!ctx.extra?.bypassAgentCheck) {

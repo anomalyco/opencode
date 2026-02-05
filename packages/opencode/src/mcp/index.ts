@@ -24,11 +24,67 @@ import { Crypto } from "../util/crypto"
 import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
+import { Scheduler } from "../scheduler"
 import open from "open"
 
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
   const DEFAULT_TIMEOUT = 30_000
+  const RECONNECT_BASE = 30_000
+  const RECONNECT_MAX = 5 * 60_000
+  const ENV_WHITELIST = new Set([
+    "PATH",
+    "HOME",
+    "USER",
+    "SHELL",
+    "TERM",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "EDITOR",
+    "VISUAL",
+    "PAGER",
+    "LESS",
+    "COLORTERM",
+    "FORCE_COLOR",
+    "NO_COLOR",
+    "TERM_PROGRAM",
+    "TMPDIR",
+    "TMP",
+    "TEMP",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_CACHE_HOME",
+    "XDG_RUNTIME_DIR",
+    "NODE_ENV",
+    "BUN_INSTALL",
+    "npm_config_registry",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "NO_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "no_proxy",
+    "GIT_AUTHOR_NAME",
+    "GIT_AUTHOR_EMAIL",
+    "GIT_COMMITTER_NAME",
+    "GIT_COMMITTER_EMAIL",
+    "SSH_AUTH_SOCK",
+    "GPG_TTY",
+  ])
+
+  // Per-name mutex to prevent race conditions on add/connect/disconnect
+  const locks = new Map<string, Promise<unknown>>()
+  async function withLock<T>(name: string, fn: () => Promise<T>): Promise<T> {
+    const prev = locks.get(name) ?? Promise.resolve()
+    const next = prev.then(fn, fn)
+    locks.set(name, next)
+    try {
+      return await next
+    } finally {
+      if (locks.get(name) === next) locks.delete(name)
+    }
+  }
 
   export const Resource = z
     .object({
@@ -153,6 +209,16 @@ export namespace MCP {
   // Store transports for OAuth servers to allow finishing auth
   type TransportWithAuth = StreamableHTTPClientTransport | SSEClientTransport
   const pendingOAuthTransports = new Map<string, TransportWithAuth>()
+  const reconnectState = new Map<string, { attempt: number; nextAt: number }>()
+
+  function getSafeEnv(): Record<string, string> {
+    const safeEnv: Record<string, string> = {}
+    for (const key of ENV_WHITELIST) {
+      const value = process.env[key]
+      if (value) safeEnv[key] = value
+    }
+    return safeEnv
+  }
 
   // Prompt cache types
   type PromptInfo = Awaited<ReturnType<MCPClient["listPrompts"]>>["prompts"][number]
@@ -209,6 +275,7 @@ export namespace MCP {
         ),
       )
       pendingOAuthTransports.clear()
+      await McpOAuthCallback.stop()
     },
   )
 
@@ -258,37 +325,39 @@ export namespace MCP {
   }
 
   export async function add(name: string, mcp: Config.Mcp) {
-    const s = await state()
-    const result = await create(name, mcp)
-    if (!result) {
-      const status = {
-        status: "failed" as const,
-        error: "unknown error",
+    return withLock(name, async () => {
+      const s = await state()
+      const result = await create(name, mcp)
+      if (!result) {
+        const status = {
+          status: "failed" as const,
+          error: "unknown error",
+        }
+        s.status[name] = status
+        return {
+          status,
+        }
       }
-      s.status[name] = status
-      return {
-        status,
+      if (!result.mcpClient) {
+        s.status[name] = result.status
+        return {
+          status: s.status,
+        }
       }
-    }
-    if (!result.mcpClient) {
+      // Close existing client if present to prevent memory leaks
+      const existingClient = s.clients[name]
+      if (existingClient) {
+        await existingClient.close().catch((error) => {
+          log.error("Failed to close existing MCP client", { name, error })
+        })
+      }
+      s.clients[name] = result.mcpClient
       s.status[name] = result.status
+
       return {
         status: s.status,
       }
-    }
-    // Close existing client if present to prevent memory leaks
-    const existingClient = s.clients[name]
-    if (existingClient) {
-      await existingClient.close().catch((error) => {
-        log.error("Failed to close existing MCP client", { name, error })
-      })
-    }
-    s.clients[name] = result.mcpClient
-    s.status[name] = result.status
-
-    return {
-      status: s.status,
-    }
+    })
   }
 
   async function create(key: string, mcp: Config.Mcp) {
@@ -417,7 +486,7 @@ export namespace MCP {
         args,
         cwd,
         env: {
-          ...process.env,
+          ...getSafeEnv(),
           ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
           ...mcp.environment,
         },
@@ -516,54 +585,58 @@ export namespace MCP {
   }
 
   export async function connect(name: string) {
-    const cfg = await Config.get()
-    const config = cfg.mcp ?? {}
-    const mcp = config[name]
-    if (!mcp) {
-      log.error("MCP config not found", { name })
-      return
-    }
+    return withLock(name, async () => {
+      const cfg = await Config.get()
+      const config = cfg.mcp ?? {}
+      const mcp = config[name]
+      if (!mcp) {
+        log.error("MCP config not found", { name })
+        return
+      }
 
-    if (!isMcpConfigured(mcp)) {
-      log.error("Ignoring MCP connect request for config without type", { name })
-      return
-    }
+      if (!isMcpConfigured(mcp)) {
+        log.error("Ignoring MCP connect request for config without type", { name })
+        return
+      }
 
-    const result = await create(name, { ...mcp, enabled: true })
+      const result = await create(name, { ...mcp, enabled: true })
 
-    if (!result) {
+      if (!result) {
+        const s = await state()
+        s.status[name] = {
+          status: "failed",
+          error: "Unknown error during connection",
+        }
+        return
+      }
+
       const s = await state()
-      s.status[name] = {
-        status: "failed",
-        error: "Unknown error during connection",
+      s.status[name] = result.status
+      if (result.mcpClient) {
+        // Close existing client if present to prevent memory leaks
+        const existingClient = s.clients[name]
+        if (existingClient) {
+          await existingClient.close().catch((error) => {
+            log.error("Failed to close existing MCP client", { name, error })
+          })
+        }
+        s.clients[name] = result.mcpClient
       }
-      return
-    }
-
-    const s = await state()
-    s.status[name] = result.status
-    if (result.mcpClient) {
-      // Close existing client if present to prevent memory leaks
-      const existingClient = s.clients[name]
-      if (existingClient) {
-        await existingClient.close().catch((error) => {
-          log.error("Failed to close existing MCP client", { name, error })
-        })
-      }
-      s.clients[name] = result.mcpClient
-    }
+    })
   }
 
   export async function disconnect(name: string) {
-    const s = await state()
-    const client = s.clients[name]
-    if (client) {
-      await client.close().catch((error) => {
-        log.error("Failed to close MCP client", { name, error })
-      })
-      delete s.clients[name]
-    }
-    s.status[name] = { status: "disabled" }
+    return withLock(name, async () => {
+      const s = await state()
+      const client = s.clients[name]
+      if (client) {
+        await client.close().catch((error) => {
+          log.error("Failed to close MCP client", { name, error })
+        })
+        delete s.clients[name]
+      }
+      s.status[name] = { status: "disabled" }
+    })
   }
 
   export async function tools() {
@@ -939,4 +1012,42 @@ export namespace MCP {
     const expired = await McpAuth.isTokenExpired(mcpName)
     return expired ? "expired" : "authenticated"
   }
+
+  Scheduler.register({
+    id: "mcp.reconnect",
+    interval: RECONNECT_BASE,
+    scope: "global",
+    run: async () => {
+      const now = Date.now()
+      const cfg = await Config.get()
+      const config = cfg.mcp ?? {}
+      const s = await state()
+
+      for (const [name, entry] of Object.entries(config)) {
+        if (!isMcpConfigured(entry)) continue
+        if (entry.enabled === false) continue
+
+        const status = s.status[name]
+        if (!status || status.status !== "failed") {
+          reconnectState.delete(name)
+          continue
+        }
+
+        const backoff = reconnectState.get(name)
+        if (backoff && backoff.nextAt > now) continue
+
+        await connect(name)
+
+        const next = s.status[name]
+        if (next?.status === "connected") {
+          reconnectState.delete(name)
+          continue
+        }
+
+        const attempt = (backoff?.attempt ?? 0) + 1
+        const delay = Math.min(RECONNECT_BASE * 2 ** Math.min(attempt, 5), RECONNECT_MAX)
+        reconnectState.set(name, { attempt, nextAt: now + delay })
+      }
+    },
+  })
 }

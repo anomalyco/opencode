@@ -201,7 +201,7 @@ export namespace SessionProcessor {
                       state: {
                         status: "error",
                         input: value.input ?? match.state.input,
-                        error: (value.error as any).toString(),
+                        error: String(value.error),
                         time: {
                           start: match.state.time.start,
                           end: Date.now(),

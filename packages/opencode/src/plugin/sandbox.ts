@@ -44,28 +44,25 @@ export namespace PluginSandbox {
   }
 
   /** Wrap a plugin hook function with timeout and error isolation */
-  export function wrapHook<T extends (...args: any[]) => any>(
-    pluginId: string,
-    hookName: string,
-    fn: T,
-  ): T {
+  export function wrapHook<T extends (...args: any[]) => any>(pluginId: string, hookName: string, fn: T): T {
     return (async (...args: Parameters<T>) => {
       if (isDisabled(pluginId)) {
         log.debug("Skipping disabled plugin hook", { pluginId, hookName })
         return undefined
       }
 
+      let timeout: ReturnType<typeof setTimeout> | undefined
       try {
-        const result = await Promise.race([
-          fn(...args),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error(`Plugin hook timed out after ${HOOK_TIMEOUT}ms`)), HOOK_TIMEOUT),
-          ),
-        ])
+        const timeoutPromise = new Promise((_, reject) => {
+          timeout = setTimeout(() => reject(new Error(`Plugin hook timed out after ${HOOK_TIMEOUT}ms`)), HOOK_TIMEOUT)
+        })
+        const result = await Promise.race([fn(...args), timeoutPromise])
         return result
       } catch (error) {
         recordError(pluginId, error)
         return undefined
+      } finally {
+        if (timeout) clearTimeout(timeout)
       }
     }) as T
   }

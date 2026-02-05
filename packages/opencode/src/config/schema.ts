@@ -48,9 +48,7 @@ export const McpRemote = z
     oauth: z
       .union([McpOAuth, z.literal(false)])
       .optional()
-      .describe(
-        "OAuth authentication configuration for the MCP server. Set to false to disable OAuth auto-detection.",
-      ),
+      .describe("OAuth authentication configuration for the MCP server. Set to false to disable OAuth auto-detection."),
     timeout: z
       .number()
       .int()
@@ -270,11 +268,7 @@ export const Keybinds = z
     messages_line_up: z.string().optional().default("ctrl+alt+y").describe("Scroll messages up by one line"),
     messages_line_down: z.string().optional().default("ctrl+alt+e").describe("Scroll messages down by one line"),
     messages_half_page_up: z.string().optional().default("ctrl+alt+u").describe("Scroll messages up by half page"),
-    messages_half_page_down: z
-      .string()
-      .optional()
-      .default("ctrl+alt+d")
-      .describe("Scroll messages down by half page"),
+    messages_half_page_down: z.string().optional().default("ctrl+alt+d").describe("Scroll messages down by half page"),
     messages_first: z.string().optional().default("ctrl+g,home").describe("Navigate to first message"),
     messages_last: z.string().optional().default("ctrl+alt+g,end").describe("Navigate to last message"),
     messages_next: z.string().optional().default("none").describe("Navigate to next message"),
@@ -317,11 +311,7 @@ export const Keybinds = z
     input_select_down: z.string().optional().default("shift+down").describe("Select down in input"),
     input_line_home: z.string().optional().default("ctrl+a").describe("Move to start of line in input"),
     input_line_end: z.string().optional().default("ctrl+e").describe("Move to end of line in input"),
-    input_select_line_home: z
-      .string()
-      .optional()
-      .default("ctrl+shift+a")
-      .describe("Select to start of line in input"),
+    input_select_line_home: z.string().optional().default("ctrl+shift+a").describe("Select to start of line in input"),
     input_select_line_end: z.string().optional().default("ctrl+shift+e").describe("Select to end of line in input"),
     input_visual_line_home: z.string().optional().default("alt+a").describe("Move to start of visual line in input"),
     input_visual_line_end: z.string().optional().default("alt+e").describe("Move to end of visual line in input"),
@@ -532,10 +522,7 @@ export const Info = z
       .describe(
         "Default agent to use when none is specified. Must be a primary agent. Falls back to 'build' if not set or if the specified agent is invalid.",
       ),
-    username: z
-      .string()
-      .optional()
-      .describe("Custom username to display in conversations instead of system username"),
+    username: z.string().optional().describe("Custom username to display in conversations instead of system username"),
     mode: z
       .object({
         build: Agent.optional(),
@@ -560,10 +547,7 @@ export const Info = z
       .catchall(Agent)
       .optional()
       .describe("Agent configuration, see https://opencode.ai/docs/agents"),
-    provider: z
-      .record(z.string(), Provider)
-      .optional()
-      .describe("Custom provider configurations and model overrides"),
+    provider: z.record(z.string(), Provider).optional().describe("Custom provider configurations and model overrides"),
     mcp: z
       .record(
         z.string(),
@@ -646,7 +630,7 @@ export const Info = z
     experimental: z
       .object({
         disable_paste_summary: z.boolean().optional(),
-        batch_tool: z.boolean().optional().describe("Enable the batch tool"),
+        batch_tool: z.boolean().optional().describe("Enable the batch tool (default: true)"),
         openTelemetry: z
           .boolean()
           .optional()
@@ -662,6 +646,12 @@ export const Info = z
           .positive()
           .optional()
           .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
+        max_subagents: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("Maximum number of concurrent subagents per session (default: 3)"),
       })
       .optional(),
   })

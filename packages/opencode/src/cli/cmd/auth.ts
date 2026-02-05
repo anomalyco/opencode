@@ -229,7 +229,10 @@ export const AuthLoginCommand = cmd({
         UI.empty()
         prompts.intro("Add credential")
         if (args.url) {
-          const wellknown = await fetch(`${args.url}/.well-known/opencode`).then((x) => x.json() as any)
+          const wellknown = (await fetch(`${args.url}/.well-known/opencode`).then((x) => x.json())) as {
+            auth: { command: string[]; env: string }
+            config?: Record<string, unknown>
+          }
           prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
           const proc = Bun.spawn({
             cmd: wellknown.auth.command,

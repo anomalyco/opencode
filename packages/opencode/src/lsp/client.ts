@@ -44,8 +44,8 @@ export namespace LSPClient {
     l.info("starting client")
 
     const connection = createMessageConnection(
-      new StreamMessageReader(input.server.process.stdout as any),
-      new StreamMessageWriter(input.server.process.stdin as any),
+      new StreamMessageReader(input.server.process.stdout as NodeJS.ReadableStream),
+      new StreamMessageWriter(input.server.process.stdin as NodeJS.WritableStream),
     )
 
     const diagnostics = new Map<string, Diagnostic[]>()
@@ -241,7 +241,13 @@ export namespace LSPClient {
         l.info("shutting down")
         connection.end()
         connection.dispose()
-        input.server.process.kill()
+        const proc = input.server.process
+        const exited = new Promise<void>((resolve) => {
+          proc.once("exit", () => resolve())
+          proc.once("close", () => resolve())
+        })
+        proc.kill()
+        await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 2000))])
         l.info("shutdown")
       },
     }
