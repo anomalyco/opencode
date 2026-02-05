@@ -182,11 +182,14 @@ try {
       const dataPrompt = buildPromptDataForPR(prData)
       const response = await chat(`${userPrompt}\n\n${dataPrompt}`, promptFiles)
       if (await branchIsDirty()) {
-      const summary = await summarize(response)
-      await pushToForkBranch(summary, prData)
+        const summary = await summarize(response)
+        await pushToForkBranch(summary, prData)
+      }
+      const hasShared = prData.comments.nodes.some((c) =>
+        c.body.includes(`${useShareUrl()}/${useEnvSharePath()}/${shareId}`),
+      )
+      await updateComment(`${response}${footer({ image: !hasShared })}`)
     }
-    const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${useShareUrl()}/${useEnvSharePath()}/${shareId}`))
-    await updateComment(`${response}${footer({ image: !hasShared })}`)
   }
   // Issue
   else {
@@ -833,7 +836,9 @@ function footer(opts?: { image?: boolean }) {
 
     return `<a href="${useShareUrl()}/${useEnvSharePath()}/${shareId}"><img width="200" alt="${titleAlt}" src="https://social-cards.sst.dev/opencode-share/${title64}.png?model=${providerID}/${modelID}&version=${session.version}&id=${shareId}" /></a>\n`
   })()
-  const shareUrl = shareId ? `[opencode session](${useShareUrl()}/${useEnvSharePath()}/${shareId})&nbsp;&nbsp;|&nbsp;&nbsp;` : ""
+  const shareUrl = shareId
+    ? `[opencode session](${useShareUrl()}/${useEnvSharePath()}/${shareId})&nbsp;&nbsp;|&nbsp;&nbsp;`
+    : ""
   return `\n\n${image}${shareUrl}[github run](${useEnvRunUrl()})`
 }
 
