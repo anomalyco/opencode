@@ -490,7 +490,7 @@ export default function Page() {
 
   createEffect(
     on(
-      () => params.id,
+      sessionKey,
       () => setTitle({ draft: "", editing: false, saving: false, menuOpen: false, pendingRename: false }),
       { defer: true },
     ),
@@ -1672,7 +1672,7 @@ export default function Page() {
 
   createEffect(
     on(
-      () => params.dir,
+      () => sdk.directory,
       () => {
         void file.tree.list("")
 
