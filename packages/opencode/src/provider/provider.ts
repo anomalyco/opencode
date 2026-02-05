@@ -3,7 +3,13 @@ import os from "os"
 import fuzzysort from "fuzzysort"
 import { Config } from "../config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
-import { NoSuchModelError, type Provider as SDK } from "ai"
+import { NoSuchModelError } from "ai"
+
+// SDK type for provider factories - we only use languageModel() so we don't require all Provider methods
+type SDK = {
+  languageModel: (modelId: string) => any
+  [key: string]: any
+}
 import { Log } from "../util/log"
 import { BunProc } from "../bun"
 import { Plugin } from "../plugin"
@@ -24,7 +30,8 @@ import { createVertex } from "@ai-sdk/google-vertex"
 import { createVertexAnthropic } from "@ai-sdk/google-vertex/anthropic"
 import { createOpenAI } from "@ai-sdk/openai"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
-import { createOpenRouter, type LanguageModelV2 } from "@openrouter/ai-sdk-provider"
+import { createOpenRouter } from "@openrouter/ai-sdk-provider"
+import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/copilot"
 import { createXai } from "@ai-sdk/xai"
 import { createMistral } from "@ai-sdk/mistral"
@@ -513,7 +520,8 @@ export namespace Provider {
         autoload: true,
         async getModel(_sdk: any, modelID: string, _options?: Record<string, any>) {
           // Model IDs use Unified API format: provider/model (e.g., "anthropic/claude-sonnet-4-5")
-          return aigateway(unified(modelID))
+          // Cast to any as ai-gateway-provider may return V2 models
+          return aigateway(unified(modelID) as any) as any
         },
         options: {},
       }
@@ -710,7 +718,7 @@ export namespace Provider {
     }
 
     const providers: { [providerID: string]: Info } = {}
-    const languages = new Map<string, LanguageModelV2>()
+    const languages = new Map<string, LanguageModelV3>()
     const modelLoaders: {
       [providerID: string]: CustomModelLoader
     } = {}
@@ -1120,7 +1128,7 @@ export namespace Provider {
     return info
   }
 
-  export async function getLanguage(model: Model): Promise<LanguageModelV2> {
+  export async function getLanguage(model: Model): Promise<LanguageModelV3> {
     const s = await state()
     const key = `${model.providerID}/${model.id}`
     if (s.models.has(key)) return s.models.get(key)!

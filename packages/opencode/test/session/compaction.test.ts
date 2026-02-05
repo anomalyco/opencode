@@ -171,6 +171,8 @@ describe("session.getUsage", () => {
         inputTokens: 1000,
         outputTokens: 500,
         totalTokens: 1500,
+        inputTokenDetails: { noCacheTokens: undefined, cacheReadTokens: undefined, cacheWriteTokens: undefined },
+        outputTokenDetails: { textTokens: undefined, reasoningTokens: undefined },
       },
     })
 
@@ -190,6 +192,8 @@ describe("session.getUsage", () => {
         outputTokens: 500,
         totalTokens: 1500,
         cachedInputTokens: 200,
+        inputTokenDetails: { noCacheTokens: undefined, cacheReadTokens: 200, cacheWriteTokens: undefined },
+        outputTokenDetails: { textTokens: undefined, reasoningTokens: undefined },
       },
     })
 
@@ -205,6 +209,8 @@ describe("session.getUsage", () => {
         inputTokens: 1000,
         outputTokens: 500,
         totalTokens: 1500,
+        inputTokenDetails: { noCacheTokens: undefined, cacheReadTokens: undefined, cacheWriteTokens: undefined },
+        outputTokenDetails: { textTokens: undefined, reasoningTokens: undefined },
       },
       metadata: {
         anthropic: {
@@ -225,6 +231,8 @@ describe("session.getUsage", () => {
         outputTokens: 500,
         totalTokens: 1500,
         cachedInputTokens: 200,
+        inputTokenDetails: { noCacheTokens: undefined, cacheReadTokens: 200, cacheWriteTokens: undefined },
+        outputTokenDetails: { textTokens: undefined, reasoningTokens: undefined },
       },
       metadata: {
         anthropic: {},
@@ -244,6 +252,8 @@ describe("session.getUsage", () => {
         outputTokens: 500,
         totalTokens: 1500,
         reasoningTokens: 100,
+        inputTokenDetails: { noCacheTokens: undefined, cacheReadTokens: undefined, cacheWriteTokens: undefined },
+        outputTokenDetails: { textTokens: undefined, reasoningTokens: 100 },
       },
     })
 
@@ -258,6 +268,8 @@ describe("session.getUsage", () => {
         inputTokens: 0,
         outputTokens: 0,
         totalTokens: 0,
+        inputTokenDetails: { noCacheTokens: undefined, cacheReadTokens: undefined, cacheWriteTokens: undefined },
+        outputTokenDetails: { textTokens: undefined, reasoningTokens: undefined },
       },
     })
 
@@ -285,6 +297,8 @@ describe("session.getUsage", () => {
         inputTokens: 1_000_000,
         outputTokens: 100_000,
         totalTokens: 1_100_000,
+        inputTokenDetails: { noCacheTokens: undefined, cacheReadTokens: undefined, cacheWriteTokens: undefined },
+        outputTokenDetails: { textTokens: undefined, reasoningTokens: undefined },
       },
     })
 
