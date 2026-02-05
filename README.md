@@ -63,8 +63,8 @@ bun run --cwd packages/desktop tauri build
 bun run --cwd packages/desktop build && \
 bun run --cwd packages/desktop tauri build && \
 cp /opt/homebrew/Cellar/opencode/1.1.51/bin/opencode \
-  "packages/desktop/src-tauri/target/release/bundle/macos/OpenCode Dev.app/Contents/MacOS/opencode-cli" && \
-cp -R "packages/desktop/src-tauri/target/release/bundle/macos/OpenCode Dev.app" /Applications/
+  "packages/desktop/src-tauri/target/release/bundle/macos/OpenCode.app/Contents/MacOS/opencode-cli" && \
+cp -R "packages/desktop/src-tauri/target/release/bundle/macos/OpenCode.app" /Applications/
 ```
 
 > **注意**：当前版本需要使用稳定版本 (v1.1.51) 的 `opencode-cli` 替换构建产物，详见 [构建文档](packages/desktop/AGENTS.md)。
