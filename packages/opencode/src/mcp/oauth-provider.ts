@@ -1,12 +1,12 @@
 import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js"
 import type {
-  OAuthClientMetadata,
-  OAuthTokens,
   OAuthClientInformation,
   OAuthClientInformationFull,
+  OAuthClientMetadata,
+  OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js"
-import { McpAuth } from "./auth"
 import { Log } from "../util/log"
+import { McpAuth } from "./auth"
 
 const log = Log.create({ service: "mcp.oauth" })
 
@@ -122,8 +122,14 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 
   async redirectToAuthorization(authorizationUrl: URL): Promise<void> {
-    log.info("redirecting to authorization", { mcpName: this.mcpName, url: authorizationUrl.toString() })
-    await this.callbacks.onRedirect(authorizationUrl)
+    const url = new URL(authorizationUrl.toString())
+
+    if (url.hostname === "login.microsoftonline.com") {
+      url.searchParams.delete("resource")
+    }
+
+    log.info("redirecting to authorization", { mcpName: this.mcpName, url: url.toString() })
+    await this.callbacks.onRedirect(url)
   }
 
   async saveCodeVerifier(codeVerifier: string): Promise<void> {
@@ -151,4 +157,5 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 }
 
-export { OAUTH_CALLBACK_PORT, OAUTH_CALLBACK_PATH }
+export { OAUTH_CALLBACK_PATH, OAUTH_CALLBACK_PORT }
+
