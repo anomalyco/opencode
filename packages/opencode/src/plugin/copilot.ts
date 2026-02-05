@@ -301,17 +301,20 @@ export async function CopilotAuthPlugin(input: PluginInput): Promise<Hooks> {
         },
       ],
     },
-    "chat.headers": async (input, output) => {
-      if (!input.model.providerID.includes("github-copilot")) return
+    "chat.headers": async (incoming, output) => {
+      if (!incoming.model.providerID.includes("github-copilot")) return
 
-      if (input.model.api.npm === "@ai-sdk/anthropic") {
+      if (incoming.model.api.npm === "@ai-sdk/anthropic") {
         output.headers["anthropic-beta"] = "interleaved-thinking-2025-05-14"
       }
 
       const session = await sdk.session
         .get({
           path: {
-            id: input.sessionID,
+            id: incoming.sessionID,
+          },
+          query: {
+            directory: input.directory,
           },
           throwOnError: true,
         })

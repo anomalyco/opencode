@@ -36,6 +36,7 @@ import { BasicTool } from "@opencode-ai/ui/basic-tool"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import { Mark } from "@opencode-ai/ui/logo"
+import { QuestionDock } from "@/components/question-dock"
 
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
@@ -270,14 +271,19 @@ export default function Page() {
   const comments = useComments()
   const permission = usePermission()
 
-  const request = createMemo(() => {
+  const permRequest = createMemo(() => {
     const sessionID = params.id
     if (!sessionID) return
-    const next = sync.data.permission[sessionID]?.[0]
-    if (!next) return
-    if (next.tool) return
-    return next
+    return sync.data.permission[sessionID]?.[0]
   })
+
+  const questionRequest = createMemo(() => {
+    const sessionID = params.id
+    if (!sessionID) return
+    return sync.data.question[sessionID]?.[0]
+  })
+
+  const blocked = createMemo(() => !!permRequest() || !!questionRequest())
 
   const [ui, setUi] = createStore({
     responding: false,
@@ -292,14 +298,14 @@ export default function Page() {
 
   createEffect(
     on(
-      () => request()?.id,
+      () => permRequest()?.id,
       () => setUi("responding", false),
       { defer: true },
     ),
   )
 
   const decide = (response: "once" | "always" | "reject") => {
-    const perm = request()
+    const perm = permRequest()
     if (!perm) return
     if (ui.responding) return
 
@@ -395,7 +401,7 @@ export default function Page() {
   }
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
-  const centered = createMemo(() => isDesktop() && !layout.fileTree.opened())
+  const centered = createMemo(() => isDesktop() && !view().reviewPanel.opened())
 
   function normalizeTab(tab: string) {
     if (!tab.startsWith("file://")) return tab
@@ -1043,7 +1049,18 @@ export default function Page() {
       description: "",
       category: language.t("command.category.view"),
       keybind: "mod+shift+r",
-      onSelect: () => layout.fileTree.toggle(),
+      onSelect: () => view().reviewPanel.toggle(),
+    },
+    {
+      id: "fileTree.toggle",
+      title: language.t("command.fileTree.toggle"),
+      description: "",
+      category: language.t("command.category.view"),
+      onSelect: () => {
+        const opening = !layout.fileTree.opened()
+        if (opening && !view().reviewPanel.opened()) view().reviewPanel.open()
+        layout.fileTree.toggle()
+      },
     },
     {
       id: "terminal.new",
@@ -1340,6 +1357,7 @@ export default function Page() {
     }
 
     if (event.key.length === 1 && event.key !== "Unidentified" && !(event.ctrlKey || event.metaKey)) {
+      if (blocked()) return
       inputRef?.focus()
     }
   }
@@ -1409,10 +1427,11 @@ export default function Page() {
   const openedTabs = createMemo(() =>
     tabs()
       .all()
-      .filter((tab) => tab !== "context"),
+      .filter((tab) => tab !== "context" && tab !== "review"),
   )
 
   const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
+  const reviewTab = createMemo(() => isDesktop() && !layout.fileTree.opened())
 
   const fileTreeTab = () => layout.fileTree.tab()
   const setFileTreeTab = (value: "changes" | "all") => layout.fileTree.setTab(value)
@@ -1627,29 +1646,71 @@ export default function Page() {
   const activeTab = createMemo(() => {
     const active = tabs().active()
     if (active === "context") return "context"
+    if (active === "review" && reviewTab()) return "review"
     if (active && file.pathFromTab(active)) return normalizeTab(active)
 
     const first = openedTabs()[0]
     if (first) return first
     if (contextOpen()) return "context"
+    if (reviewTab() && hasReview()) return "review"
     return "empty"
   })
 
   createEffect(() => {
     if (!layout.ready()) return
     if (tabs().active()) return
-    if (openedTabs().length === 0 && !contextOpen()) return
+    if (openedTabs().length === 0 && !contextOpen() && !(reviewTab() && hasReview())) return
 
     const next = activeTab()
     if (next === "empty") return
     tabs().setActive(next)
   })
 
+  createEffect(
+    on(
+      () => layout.fileTree.opened(),
+      (opened, prev) => {
+        if (prev === undefined) return
+        if (!isDesktop()) return
+
+        if (opened) {
+          const active = tabs().active()
+          const tab = active === "review" || (!active && hasReview()) ? "changes" : "all"
+          layout.fileTree.setTab(tab)
+          return
+        }
+
+        if (fileTreeTab() !== "changes") return
+        tabs().setActive("review")
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(() => {
+    if (!isDesktop()) return
+    if (!layout.fileTree.opened()) return
+    if (fileTreeTab() !== "all") return
+
+    const active = tabs().active()
+    if (active && active !== "review") return
+
+    const first = openedTabs()[0]
+    if (first) {
+      tabs().setActive(first)
+      return
+    }
+
+    if (contextOpen()) tabs().setActive("context")
+  })
+
   createEffect(() => {
     const id = params.id
     if (!id) return
 
-    const wants = isDesktop() ? layout.fileTree.opened() : store.mobileTab === "changes"
+    const wants = isDesktop()
+      ? view().reviewPanel.opened() && (layout.fileTree.opened() || activeTab() === "review")
+      : store.mobileTab === "changes"
     if (!wants) return
     if (sync.data.session_diff[id] !== undefined) return
     if (sync.status === "loading") return
@@ -1661,6 +1722,7 @@ export default function Page() {
   createEffect(() => {
     const dir = sdk.directory
     if (!isDesktop()) return
+    if (!view().reviewPanel.opened()) return
     if (!layout.fileTree.opened()) return
     if (sync.status === "loading") return
 
@@ -2195,10 +2257,10 @@ export default function Page() {
           classList={{
             "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger": true,
             "flex-1 pt-2 md:pt-3": true,
-            "md:flex-none": layout.fileTree.opened(),
+            "md:flex-none": view().reviewPanel.opened(),
           }}
           style={{
-            width: isDesktop() && layout.fileTree.opened() ? `${layout.session.width()}px` : "100%",
+            width: isDesktop() && view().reviewPanel.opened() ? `${layout.session.width()}px` : "100%",
             "--prompt-height": store.promptHeight ? `${store.promptHeight}px` : undefined,
           }}
         >
@@ -2638,7 +2700,31 @@ export default function Page() {
                 "md:max-w-200 3xl:max-w-[1200px] 4xl:max-w-[1600px] 5xl:max-w-[1900px]": centered(),
               }}
             >
-              <Show when={request()} keyed>
+              <Show when={questionRequest()} keyed>
+                {(req) => {
+                  const count = req.questions.length
+                  const subtitle =
+                    count === 0
+                      ? ""
+                      : `${count} ${language.t(count > 1 ? "ui.common.question.other" : "ui.common.question.one")}`
+                  return (
+                    <div data-component="tool-part-wrapper" data-question="true" class="mb-3">
+                      <BasicTool
+                        icon="bubble-5"
+                        locked
+                        defaultOpen
+                        trigger={{
+                          title: language.t("ui.tool.questions"),
+                          subtitle,
+                        }}
+                      />
+                      <QuestionDock request={req} />
+                    </div>
+                  )
+                }}
+              </Show>
+
+              <Show when={permRequest()} keyed>
                 {(perm) => (
                   <div data-component="tool-part-wrapper" data-permission="true" class="mb-3">
                     <BasicTool
@@ -2688,30 +2774,32 @@ export default function Page() {
                 )}
               </Show>
 
-              <Show
-                when={prompt.ready()}
-                fallback={
-                  <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none">
-                    {handoff.session.get(sessionKey())?.prompt || language.t("prompt.loading")}
-                  </div>
-                }
-              >
-                <PromptInput
-                  ref={(el) => {
-                    inputRef = el
-                  }}
-                  newSessionWorktree={newSessionWorktree()}
-                  onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
-                  onSubmit={() => {
-                    comments.clear()
-                    resumeScroll()
-                  }}
-                />
+              <Show when={!blocked()}>
+                <Show
+                  when={prompt.ready()}
+                  fallback={
+                    <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none">
+                      {handoff.session.get(sessionKey())?.prompt || language.t("prompt.loading")}
+                    </div>
+                  }
+                >
+                  <PromptInput
+                    ref={(el) => {
+                      inputRef = el
+                    }}
+                    newSessionWorktree={newSessionWorktree()}
+                    onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
+                    onSubmit={() => {
+                      comments.clear()
+                      resumeScroll()
+                    }}
+                  />
+                </Show>
               </Show>
             </div>
           </div>
 
-          <Show when={isDesktop() && layout.fileTree.opened()}>
+          <Show when={isDesktop() && view().reviewPanel.opened()}>
             <ResizeHandle
               direction="horizontal"
               size={layout.session.width()}
@@ -2723,7 +2811,7 @@ export default function Page() {
         </div>
 
         {/* Desktop side panel - hidden on mobile */}
-        <Show when={isDesktop() && layout.fileTree.opened()}>
+        <Show when={isDesktop() && view().reviewPanel.opened()}>
           <aside
             id="review-panel"
             aria-label={language.t("session.panel.reviewAndFiles")}
@@ -2731,7 +2819,7 @@ export default function Page() {
           >
             <div class="flex-1 min-w-0 h-full">
               <Show
-                when={fileTreeTab() === "changes"}
+                when={layout.fileTree.opened() && fileTreeTab() === "changes"}
                 fallback={
                   <DragDropProvider
                     onDragStart={handleDragStart}
@@ -2799,6 +2887,18 @@ export default function Page() {
                             })
                           }}
                         >
+                          <Show when={reviewTab()}>
+                            <Tabs.Trigger value="review" classes={{ button: "!pl-6" }}>
+                              <div class="flex items-center gap-1.5">
+                                <div>{language.t("session.tab.review")}</div>
+                                <Show when={hasReview()}>
+                                  <div class="text-12-medium text-text-strong h-4 px-2 flex flex-col items-center justify-center rounded-full bg-surface-base">
+                                    {reviewCount()}
+                                  </div>
+                                </Show>
+                              </div>
+                            </Tabs.Trigger>
+                          </Show>
                           <Show when={contextOpen()}>
                             <Tabs.Trigger
                               value="context"
@@ -2846,6 +2946,12 @@ export default function Page() {
                           </StickyAddButton>
                         </Tabs.List>
                       </div>
+
+                      <Show when={reviewTab()}>
+                        <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
+                          <Show when={activeTab() === "review"}>{reviewPanel()}</Show>
+                        </Tabs.Content>
+                      </Show>
 
                       <Tabs.Content value="empty" class="flex flex-col h-full overflow-hidden contain-strict">
                         <Show when={activeTab() === "empty"}>
