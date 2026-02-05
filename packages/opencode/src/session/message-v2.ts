@@ -632,11 +632,17 @@ export namespace MessageV2 {
             result.push({
               id: Identifier.ascending("message"),
               role: "user",
-              parts: media.map((attachment) => ({
-                type: "file",
-                url: attachment.url,
-                mediaType: attachment.mime,
-              })),
+              parts: [
+                {
+                  type: "text" as const,
+                  text: "Attached image(s) from tool result:",
+                },
+                ...media.map((attachment) => ({
+                  type: "file" as const,
+                  url: attachment.url,
+                  mediaType: attachment.mime,
+                })),
+              ],
             })
           }
         }
