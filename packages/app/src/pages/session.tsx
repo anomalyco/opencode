@@ -2239,7 +2239,11 @@ export default function Page() {
                               "sticky top-0 z-30 bg-background-stronger": true,
                               "w-full": true,
                               "px-4 md:px-6": true,
-                              [contentWidthClasses()]: centered(),
+                            }}
+                            style={{
+                              "max-width": centered() ? "var(--session-content-width)" : undefined,
+                              "margin-left": centered() ? "auto" : undefined,
+                              "margin-right": centered() ? "auto" : undefined,
                             }}
                           >
                             <div class="h-10 flex items-center gap-1">
@@ -2267,9 +2271,13 @@ export default function Page() {
                           class="flex flex-col gap-32 items-start justify-start pb-[calc(var(--prompt-height,8rem)+64px)] md:pb-[calc(var(--prompt-height,10rem)+64px)] transition-[margin]"
                           classList={{
                             "w-full": true,
-                            [contentWidthClasses()]: centered(),
                             "mt-0.5": centered(),
                             "mt-0": !centered(),
+                          }}
+                          style={{
+                            "max-width": centered() ? "var(--session-content-width)" : undefined,
+                            "margin-left": centered() ? "auto" : undefined,
+                            "margin-right": centered() ? "auto" : undefined,
                           }}
                         >
                           <Show when={store.turnStart > 0}>
@@ -2320,7 +2328,9 @@ export default function Page() {
                                   data-message-id={message.id}
                                   classList={{
                                     "min-w-0 w-full max-w-full": true,
-                                    [contentWidthClassesNoCenter()]: centered(),
+                                  }}
+                                  style={{
+                                    "max-width": centered() ? "var(--session-content-width)" : undefined,
                                   }}
                                 >
                                   <SessionTurn
@@ -2365,7 +2375,9 @@ export default function Page() {
             <div
               classList={{
                 "w-full px-4 pointer-events-auto": true,
-                [contentWidthClassesNoCenter()]: centered(),
+              }}
+              style={{
+                "max-width": centered() ? "var(--session-content-width)" : undefined,
               }}
             >
               <Show when={request()} keyed>

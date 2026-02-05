@@ -1528,7 +1528,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       <Button
                         as="div"
                         variant="ghost"
-                        class="px-2 min-w-0 max-w-[200px]"
+                        class="px-2 min-w-0 max-w-[320px]"
                         onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}
                       >
                         <Show when={local.model.current()?.provider?.id}>
@@ -1550,7 +1550,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   >
                     <ModelSelectorPopover
                       triggerAs={Button}
-                      triggerProps={{ variant: "ghost", class: "min-w-0 max-w-[200px]" }}
+                      triggerProps={{ variant: "ghost", class: "min-w-0 max-w-[320px]" }}
                     >
                       <Show when={local.model.current()?.provider?.id}>
                         <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
