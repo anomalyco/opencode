@@ -665,18 +665,6 @@ export default function Page() {
     ),
   )
 
-  createEffect(
-    on(
-      () => params.dir,
-      (dir) => {
-        if (!dir) return
-        setStore("newSessionWorktree", "main")
->>>>>>> origin/dev
-      },
-      { defer: true },
-    ),
-  )
-
   createEffect(() => {
     const id = lastUserMessage()?.id
     if (!id) return
