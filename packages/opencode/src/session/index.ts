@@ -86,6 +86,7 @@ export namespace Session {
           diff: z.string().optional(),
         })
         .optional(),
+      prompts: z.record(z.string(), z.string()).optional(),
     })
     .meta({
       ref: "Session",

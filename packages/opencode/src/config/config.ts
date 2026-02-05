@@ -1170,6 +1170,26 @@ export namespace Config {
         })
         .optional()
         .describe("Checker agent configuration for hallucination detection"),
+      evolution: z
+        .object({
+          enabled: z.boolean().optional().describe("Enable prompt evolution system (default: false)"),
+          model: z
+            .string()
+            .optional()
+            .describe("Model to use for evolution agent in format provider/model (default: same as checker model)"),
+          frequency: z
+            .enum(["always", "per_session", "on_failure", "never"])
+            .optional()
+            .describe("When to run prompt evolution checks"),
+          max_evolutions: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe("Maximum number of evolutions per session (default: 5)"),
+        })
+        .optional()
+        .describe("Prompt evolution configuration for automatic prompt optimization"),
     })
     .strict()
     .meta({
