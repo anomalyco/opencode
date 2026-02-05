@@ -70,6 +70,7 @@ export const Terminal = (props: TerminalProps) => {
   let handleTextareaBlur: () => void
   let disposed = false
   const cleanups: VoidFunction[] = []
+  let tail = local.pty.tail ?? ""
 
   const cleanup = () => {
     if (!cleanups.length) return
@@ -256,6 +257,7 @@ export const Terminal = (props: TerminalProps) => {
       serializeAddon = serializer
 
       t.open(container)
+
       container.addEventListener("pointerdown", handlePointerDown)
       cleanups.push(() => container.removeEventListener("pointerdown", handlePointerDown))
 
@@ -276,15 +278,11 @@ export const Terminal = (props: TerminalProps) => {
 
       focusTerminal()
 
+      fit.fit()
+
       if (local.pty.buffer) {
-        if (local.pty.rows && local.pty.cols) {
-          t.resize(local.pty.cols, local.pty.rows)
-        }
         t.write(local.pty.buffer, () => {
-          if (local.pty.scrollY) {
-            t.scrollToLine(local.pty.scrollY)
-          }
-          fitAddon.fit()
+          if (local.pty.scrollY) t.scrollToLine(local.pty.scrollY)
         })
       }
 
@@ -322,6 +320,19 @@ export const Terminal = (props: TerminalProps) => {
       // console.log("Scroll position:", ydisp)
       // })
 
+      const limit = 16_384
+      const seed = tail
+      let sync = !!seed
+
+      const overlap = (data: string) => {
+        if (!seed) return 0
+        const max = Math.min(seed.length, data.length)
+        for (let i = max; i > 0; i--) {
+          if (seed.slice(-i) === data.slice(0, i)) return i
+        }
+        return 0
+      }
+
       const handleOpen = () => {
         local.onConnect?.()
         sdk.client.pty
@@ -338,7 +349,25 @@ export const Terminal = (props: TerminalProps) => {
       cleanups.push(() => socket.removeEventListener("open", handleOpen))
 
       const handleMessage = (event: MessageEvent) => {
-        t.write(event.data)
+        const data = typeof event.data === "string" ? event.data : ""
+        if (!data) return
+
+        const next = (() => {
+          if (!sync) return data
+          const n = overlap(data)
+          if (!n) {
+            sync = false
+            return data
+          }
+          const trimmed = data.slice(n)
+          if (trimmed) sync = false
+          return trimmed
+        })()
+
+        if (!next) return
+
+        t.write(next)
+        tail = next.length >= limit ? next.slice(-limit) : (tail + next).slice(-limit)
       }
       socket.addEventListener("message", handleMessage)
       cleanups.push(() => socket.removeEventListener("message", handleMessage))
@@ -392,6 +421,7 @@ export const Terminal = (props: TerminalProps) => {
       props.onCleanup({
         ...local.pty,
         buffer,
+        tail,
         rows: t.rows,
         cols: t.cols,
         scrollY: t.getViewportY(),
