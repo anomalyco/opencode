@@ -44,11 +44,15 @@ export namespace Plugin {
       hooks.push(init)
     }
 
-    const plugins = [...(config.plugin ?? [])]
-    if (plugins.length) await Config.waitForDependencies()
+    const plugins = []
     if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
       plugins.push(...BUILTIN)
     }
+    if (config.plugin) {
+      plugins.push(...config.plugin)
+    }
+    const wait = Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS ? plugins.length : plugins.length > BUILTIN.length
+    if (wait) await Config.waitForDependencies()
 
     for (let plugin of plugins) {
       // ignore old codex plugin since it is supported first party now
