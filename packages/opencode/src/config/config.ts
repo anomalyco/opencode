@@ -119,7 +119,7 @@ export namespace Config {
 
     const directories = [
       Global.Path.config,
-      // Only scan project .opencode/ directories when project discovery is enabled
+      // Only scan project .mammouth-cli/ directories when project discovery is enabled
       ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
         ? await Array.fromAsync(
             Filesystem.up({
@@ -129,7 +129,7 @@ export namespace Config {
             }),
           )
         : []),
-      // Always scan ~/.opencode/ (user home directory)
+      // Always scan ~/.mammouth-cli/ (user home directory)
       ...(await Array.fromAsync(
         Filesystem.up({
           targets: [".opencode"],

@@ -213,7 +213,7 @@ function normalizePath(input?: string) {
 
 export const RunCommand = cmd({
   command: "run [message..]",
-  describe: "run opencode with a message",
+  describe: "run mammouth with a message",
   builder: (yargs: Argv) => {
     return yargs
       .positional("message", {
@@ -267,7 +267,7 @@ export const RunCommand = cmd({
       })
       .option("attach", {
         type: "string",
-        describe: "attach to a running opencode server (e.g., http://localhost:4096)",
+        describe: "attach to a running mammouth server (e.g., http://localhost:4096)",
       })
       .option("port", {
         type: "number",

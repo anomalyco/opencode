@@ -36,6 +36,7 @@ import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
+import { sleep } from "bun"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -219,14 +220,14 @@ function App() {
     if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
 
     if (route.data.type === "home") {
-      renderer.setTerminalTitle("OpenCode")
+      renderer.setTerminalTitle("Mammouth CLI")
       return
     }
 
     if (route.data.type === "session") {
       const session = sync.session.get(route.data.sessionID)
       if (!session || SessionApi.isDefaultTitle(session.title)) {
-        renderer.setTerminalTitle("OpenCode")
+        renderer.setTerminalTitle("Mammouth CLI")
         return
       }
 
@@ -278,7 +279,11 @@ function App() {
       (isEmpty, wasEmpty) => {
         // only trigger when we transition into an empty-provider state
         if (!isEmpty || wasEmpty) return
-        dialog.replace(() => <DialogProviderList />)
+        // TODO: not using sleep would be better
+        // using sleep so that focus goes to the prompt input first, then dialog opens
+        sleep(5).then(() => {
+          dialog.replace(() => <DialogProviderList />)
+        })
       },
     ),
   )
@@ -486,7 +491,7 @@ function App() {
       title: "Open docs",
       value: "docs.open",
       onSelect: () => {
-        open("https://opencode.ai/docs").catch(() => {})
+        open("https://api.mammouth.ai/").catch(() => {})
         dialog.clear()
       },
       category: "System",
@@ -655,7 +660,7 @@ function App() {
     toast.show({
       variant: "info",
       title: "Update Available",
-      message: `OpenCode v${evt.properties.version} is available. Run 'opencode upgrade' to update manually.`,
+      message: `Mammouth CLI v${evt.properties.version} is available. Run 'mammouth upgrade' to update manually.`,
       duration: 10000,
     })
   })
@@ -713,7 +718,7 @@ function ErrorComponent(props: {
   })
   const [copied, setCopied] = createSignal(false)
 
-  const issueURL = new URL("https://github.com/anomalyco/opencode/issues/new?template=bug-report.yml")
+  const issueURL = new URL("https://github.com/mammouth-ai/opencode/issues/new?template=bug-report.yml")
 
   // Choose safe fallback colors per mode since theme context may not be available
   const isLight = props.mode === "light"
@@ -735,7 +740,7 @@ function ErrorComponent(props: {
     )
   }
 
-  issueURL.searchParams.set("opencode-version", Installation.VERSION)
+  issueURL.searchParams.set("mammouth-version", Installation.VERSION)
 
   const copyIssueURL = () => {
     Clipboard.copy(issueURL.toString()).then(() => {
@@ -745,7 +750,7 @@ function ErrorComponent(props: {
 
   return (
     <box flexDirection="column" gap={1} backgroundColor={colors.bg}>
-      <box flexDirection="row" gap={1} alignItems="center">
+      {/* <box flexDirection="row" gap={1} alignItems="center">
         <text attributes={TextAttributes.BOLD} fg={colors.text}>
           Please report an issue.
         </text>
@@ -755,7 +760,7 @@ function ErrorComponent(props: {
           </text>
         </box>
         {copied() && <text fg={colors.muted}>Successfully copied</text>}
-      </box>
+      </box> */}
       <box flexDirection="row" gap={2} alignItems="center">
         <text fg={colors.text}>A fatal error occurred!</text>
         <box onMouseUp={props.reset} backgroundColor={colors.primary} padding={1}>
