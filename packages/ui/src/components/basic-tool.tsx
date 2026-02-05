@@ -1,6 +1,7 @@
 import { createEffect, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
 import { Collapsible } from "./collapsible"
 import { Icon, IconProps } from "./icon"
+import { IconButton } from "./icon-button"
 
 export type TriggerTitle = {
   title: string
@@ -27,6 +28,7 @@ export interface BasicToolProps {
   forceOpen?: boolean
   locked?: boolean
   onSubtitleClick?: () => void
+  onExpand?: () => void
 }
 
 export function BasicTool(props: BasicToolProps) {
@@ -101,6 +103,19 @@ export function BasicTool(props: BasicToolProps) {
               </Switch>
             </div>
           </div>
+          <Show when={props.onExpand}>
+            <IconButton
+              data-slot="tool-expand-button"
+              icon="expand"
+              size="small"
+              variant="ghost"
+              onClick={(e) => {
+                e.stopPropagation()
+                props.onExpand?.()
+              }}
+              aria-label="Expand"
+            />
+          </Show>
           <Show when={props.children && !props.hideDetails && !props.locked}>
             <Collapsible.Arrow />
           </Show>
