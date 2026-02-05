@@ -1050,7 +1050,6 @@ export default function Page() {
       title: language.t("command.fileTree.toggle"),
       description: "",
       category: language.t("command.category.view"),
-      keybind: "mod+shift+f",
       onSelect: () => {
         const opening = !layout.fileTree.opened()
         if (opening && !view().reviewPanel.opened()) view().reviewPanel.open()
