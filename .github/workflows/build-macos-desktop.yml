@@ -85,6 +85,7 @@ jobs:
           # Copy CLI binary to sidecar folder
           mkdir -p src-tauri/sidecars
           cp src-tauri/target/opencode-binaries/opencode-darwin-x64/bin/opencode src-tauri/sidecars/opencode-cli-x86_64-apple-darwin
+          chmod +x src-tauri/sidecars/opencode-cli-x86_64-apple-darwin
 
       - name: Build Desktop App
         run: |
@@ -165,6 +166,7 @@ jobs:
           # Copy CLI binary to sidecar folder
           mkdir -p src-tauri/sidecars
           cp src-tauri/target/opencode-binaries/opencode-darwin-arm64/bin/opencode src-tauri/sidecars/opencode-cli-aarch64-apple-darwin
+          chmod +x src-tauri/sidecars/opencode-cli-aarch64-apple-darwin
 
       - name: Build Desktop App
         run: |
