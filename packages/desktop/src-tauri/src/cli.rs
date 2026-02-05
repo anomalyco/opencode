@@ -35,11 +35,30 @@ fn get_cli_install_path() -> Option<std::path::PathBuf> {
 
 pub fn get_sidecar_path(app: &tauri::AppHandle) -> std::path::PathBuf {
     // Get binary with symlinks support
-    tauri::process::current_binary(&app.env())
+    let sidecar = tauri::process::current_binary(&app.env())
         .expect("Failed to get current binary")
         .parent()
         .expect("Failed to get parent dir")
-        .join("opencode-cli")
+        .join("opencode-cli");
+
+    // Ensure executable permission on Unix systems
+    // This fixes the issue where copying the app to /Applications loses the +x permission
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(metadata) = std::fs::metadata(&sidecar) {
+            let mut perms = metadata.permissions();
+            // Check if executable bit is missing (mode & 0o111 == 0 means no execute permission)
+            if perms.mode() & 0o111 == 0 {
+                perms.set_mode(0o755);
+                if let Err(e) = std::fs::set_permissions(&sidecar, perms) {
+                    eprintln!("Warning: Failed to set executable permission on sidecar: {}", e);
+                }
+            }
+        }
+    }
+
+    sidecar
 }
 
 fn is_cli_installed() -> bool {
