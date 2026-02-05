@@ -313,13 +313,6 @@ Performs web searches using Exa AI to find relevant information online. Useful f
 
 No API key is required — the tool connects directly to Exa AI's hosted MCP service without authentication.
 
-**Parameters:**
-- `query` (required): The search query string
-- `numResults` (optional): Number of results to return (default: 8)
-- `type` (optional): Search type - `"auto"` (balanced), `"fast"` (quick results), or `"deep"` (comprehensive) (default: "auto")
-- `livecrawl` (optional): Live crawl mode - `"fallback"` (use live if cached unavailable) or `"preferred"` (prioritize live crawling) (default: "fallback")
-- `contextMaxCharacters` (optional): Maximum characters to return for LLM context (default: 10000)
-
 :::tip
 Use `websearch` when you need to find information (discovery), and `webfetch` when you need to retrieve content from a specific URL (retrieval).
 :::
