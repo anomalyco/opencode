@@ -973,11 +973,12 @@ export namespace ACP {
         .then((resp) => resp.data!)
 
       return agents
-        .filter((agent) => agent.mode !== "subagent" && !agent.hidden)
+        .filter((agent) => !agent.hidden)
         .map((agent) => ({
           id: agent.name,
           name: agent.name,
           description: agent.description,
+          mode: agent.mode,
         }))
     }
 
