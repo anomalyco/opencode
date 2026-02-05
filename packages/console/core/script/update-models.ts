@@ -17,10 +17,8 @@ const oldValues = Array.from({ length: PARTS }, (_, i) => {
     ?.split("=")
     .slice(1)
     .join("=")
-  // TODO
-  //if (!value) throw new Error(`ZEN_MODELS${i + 1} not found`)
-  //return value
-  return value ?? ""
+  if (!value) throw new Error(`ZEN_MODELS${i + 1} not found`)
+  return value
 })
 
 // store the prettified json to a temp file
