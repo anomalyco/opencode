@@ -44,6 +44,7 @@ export namespace Plugin {
     }
 
     const plugins = [...(config.plugin ?? [])]
+    if (plugins.length) await Config.waitForDependencies()
     if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
       plugins.push(...BUILTIN)
     }
