@@ -801,7 +801,7 @@ export namespace MCP {
 
     // Register the callback BEFORE opening the browser to avoid race condition
     // when the IdP has an active SSO session and redirects immediately
-    const callbackPromise = McpOAuthCallback.waitForCallback(oauthState)
+    const callbackPromise = McpOAuthCallback.waitForCallback(oauthState, mcpName)
 
     try {
       const subprocess = await open(authorizationUrl)
@@ -812,11 +812,11 @@ export namespace MCP {
       await new Promise<void>((resolve, reject) => {
         // Give the process a moment to fail if it's going to
         const timeout = setTimeout(() => resolve(), 500)
-        subprocess.on("error", (error) => {
+        subprocess.once("error", (error) => {
           clearTimeout(timeout)
           reject(error)
         })
-        subprocess.on("exit", (code) => {
+        subprocess.once("exit", (code) => {
           if (code !== null && code !== 0) {
             clearTimeout(timeout)
             reject(new Error(`Browser open failed with exit code ${code}`))

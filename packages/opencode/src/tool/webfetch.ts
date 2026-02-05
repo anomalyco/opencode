@@ -8,6 +8,60 @@ const MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5MB
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
 const MAX_TIMEOUT = 120 * 1000 // 2 minutes
 
+function isPrivateIP(hostname: string): boolean {
+  // Normalize hostname to lowercase
+  const h = hostname.toLowerCase()
+
+  // Check for localhost variations
+  if (h === 'localhost' || h === '127.0.0.1' || h === '::1' || h === '[::1]') {
+    return true
+  }
+
+  // Check for private IPv4 ranges
+  const ipv4Match = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
+  if (ipv4Match) {
+    const [, a, b] = ipv4Match.map(Number)
+    // 10.0.0.0/8
+    if (a === 10) return true
+    // 172.16.0.0/12
+    if (a === 172 && b >= 16 && b <= 31) return true
+    // 192.168.0.0/16
+    if (a === 192 && b === 168) return true
+    // 169.254.0.0/16 (link-local)
+    if (a === 169 && b === 254) return true
+    // 127.0.0.0/8 (loopback)
+    if (a === 127) return true
+    // 0.0.0.0/8
+    if (a === 0) return true
+  }
+
+  // Check for IPv6 addresses (must be valid IPv6 format, not just strings starting with fc/fd)
+  // IPv6 addresses in URLs are enclosed in brackets: [::1], [fe80::1], etc.
+  const ipv6Match = h.match(/^\[([a-f0-9:]+)\]$/) || h.match(/^([a-f0-9:]+)$/)
+  if (ipv6Match) {
+    const ipv6 = ipv6Match[1]
+    // Check for IPv6 private/local ranges
+    // fe80::/10 - Link-local
+    if (ipv6.startsWith('fe80:') || ipv6.startsWith('fe90:') ||
+        ipv6.startsWith('fea0:') || ipv6.startsWith('feb0:')) return true
+    // fc00::/7 - Unique local addresses (fc00:: to fdff::)
+    if (/^f[cd][0-9a-f]{2}:/.test(ipv6)) return true
+    // ::1 - Loopback
+    if (ipv6 === '::1' || ipv6 === '0:0:0:0:0:0:0:1') return true
+    // :: - Unspecified
+    if (ipv6 === '::' || ipv6 === '0:0:0:0:0:0:0:0') return true
+    // IPv4-mapped IPv6 (::ffff:192.168.x.x)
+    const mappedMatch = ipv6.match(/^::ffff:(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/i)
+    if (mappedMatch) {
+      const [, a, b] = mappedMatch.map(Number)
+      if (a === 10 || a === 127 || (a === 172 && b >= 16 && b <= 31) ||
+          (a === 192 && b === 168) || (a === 169 && b === 254)) return true
+    }
+  }
+
+  return false
+}
+
 export const WebFetchTool = Tool.define("webfetch", {
   description: DESCRIPTION,
   parameters: z.object({
@@ -23,6 +77,23 @@ export const WebFetchTool = Tool.define("webfetch", {
     if (!params.url.startsWith("http://") && !params.url.startsWith("https://")) {
       throw new Error("URL must start with http:// or https://")
     }
+
+    // Check for private/internal IPs to prevent SSRF
+    try {
+      const url = new URL(params.url)
+      if (isPrivateIP(url.hostname)) {
+        throw new Error("Access to private/internal IP addresses is not allowed")
+      }
+    } catch (e) {
+      if (e instanceof Error && e.message.includes("private/internal")) {
+        throw e
+      }
+      throw new Error("Invalid URL format")
+    }
+
+    // Note: DNS rebinding attacks are mitigated by checking the hostname before fetch,
+    // but a determined attacker could still bypass this. For high-security environments,
+    // consider using a DNS-over-HTTPS resolver that pins results or a proxy that validates IPs.
 
     await ctx.ask({
       permission: "webfetch",

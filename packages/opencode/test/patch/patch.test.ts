@@ -136,12 +136,12 @@ PATCH`
   describe("applyPatch", () => {
     test("should add a new file", async () => {
       const patchText = `*** Begin Patch
-*** Add File: ${tempDir}/new-file.txt
+*** Add File: new-file.txt
 +Hello World
 +This is a new file
 *** End Patch`
 
-      const result = await Patch.applyPatch(patchText)
+      const result = await Patch.applyPatch(patchText, tempDir)
       expect(result.added).toHaveLength(1)
       expect(result.modified).toHaveLength(0)
       expect(result.deleted).toHaveLength(0)
@@ -155,10 +155,10 @@ PATCH`
       await fs.writeFile(filePath, "This file will be deleted")
 
       const patchText = `*** Begin Patch
-*** Delete File: ${filePath}
+*** Delete File: to-delete.txt
 *** End Patch`
 
-      const result = await Patch.applyPatch(patchText)
+      const result = await Patch.applyPatch(patchText, tempDir)
       expect(result.deleted).toHaveLength(1)
       expect(result.deleted[0]).toBe(filePath)
 
@@ -174,7 +174,7 @@ PATCH`
       await fs.writeFile(filePath, "line 1\nline 2\nline 3\n")
 
       const patchText = `*** Begin Patch
-*** Update File: ${filePath}
+*** Update File: to-update.txt
 @@
  line 1
 -line 2
@@ -182,7 +182,7 @@ PATCH`
  line 3
 *** End Patch`
 
-      const result = await Patch.applyPatch(patchText)
+      const result = await Patch.applyPatch(patchText, tempDir)
       expect(result.modified).toHaveLength(1)
       expect(result.modified[0]).toBe(filePath)
 
@@ -196,14 +196,14 @@ PATCH`
       await fs.writeFile(oldPath, "old content\n")
 
       const patchText = `*** Begin Patch
-*** Update File: ${oldPath}
-*** Move to: ${newPath}
+*** Update File: old-name.txt
+*** Move to: new-name.txt
 @@
 -old content
 +new content
 *** End Patch`
 
-      const result = await Patch.applyPatch(patchText)
+      const result = await Patch.applyPatch(patchText, tempDir)
       expect(result.modified).toHaveLength(1)
       expect(result.modified[0]).toBe(newPath)
 
@@ -226,16 +226,16 @@ PATCH`
       await fs.writeFile(file2, "content 2")
 
       const patchText = `*** Begin Patch
-*** Add File: ${file3}
+*** Add File: file3.txt
 +new file content
-*** Update File: ${file1}
+*** Update File: file1.txt
 @@
 -content 1
 +updated content 1
-*** Delete File: ${file2}
+*** Delete File: file2.txt
 *** End Patch`
 
-      const result = await Patch.applyPatch(patchText)
+      const result = await Patch.applyPatch(patchText, tempDir)
       expect(result.added).toHaveLength(1)
       expect(result.modified).toHaveLength(1)
       expect(result.deleted).toHaveLength(1)
@@ -245,11 +245,11 @@ PATCH`
       const nestedPath = path.join(tempDir, "deep", "nested", "file.txt")
 
       const patchText = `*** Begin Patch
-*** Add File: ${nestedPath}
+*** Add File: deep/nested/file.txt
 +Deep nested content
 *** End Patch`
 
-      const result = await Patch.applyPatch(patchText)
+      const result = await Patch.applyPatch(patchText, tempDir)
       expect(result.added).toHaveLength(1)
       expect(result.added[0]).toBe(nestedPath)
 
@@ -263,26 +263,22 @@ PATCH`
 
   describe("error handling", () => {
     test("should throw error when updating non-existent file", async () => {
-      const nonExistent = path.join(tempDir, "does-not-exist.txt")
-
       const patchText = `*** Begin Patch
-*** Update File: ${nonExistent}
+*** Update File: does-not-exist.txt
 @@
 -old line
 +new line
 *** End Patch`
 
-      await expect(Patch.applyPatch(patchText)).rejects.toThrow()
+      await expect(Patch.applyPatch(patchText, tempDir)).rejects.toThrow()
     })
 
     test("should throw error when deleting non-existent file", async () => {
-      const nonExistent = path.join(tempDir, "does-not-exist.txt")
-
       const patchText = `*** Begin Patch
-*** Delete File: ${nonExistent}
+*** Delete File: does-not-exist.txt
 *** End Patch`
 
-      await expect(Patch.applyPatch(patchText)).rejects.toThrow()
+      await expect(Patch.applyPatch(patchText, tempDir)).rejects.toThrow()
     })
   })
 
@@ -292,12 +288,12 @@ PATCH`
       await fs.writeFile(emptyFile, "")
 
       const patchText = `*** Begin Patch
-*** Update File: ${emptyFile}
+*** Update File: empty.txt
 @@
 +First line
 *** End Patch`
 
-      const result = await Patch.applyPatch(patchText)
+      const result = await Patch.applyPatch(patchText, tempDir)
       expect(result.modified).toHaveLength(1)
 
       const content = await fs.readFile(emptyFile, "utf-8")
@@ -309,13 +305,13 @@ PATCH`
       await fs.writeFile(filePath, "no newline")
 
       const patchText = `*** Begin Patch
-*** Update File: ${filePath}
+*** Update File: no-newline.txt
 @@
 -no newline
 +has newline now
 *** End Patch`
 
-      const result = await Patch.applyPatch(patchText)
+      const result = await Patch.applyPatch(patchText, tempDir)
       expect(result.modified).toHaveLength(1)
 
       const content = await fs.readFile(filePath, "utf-8")
@@ -327,7 +323,7 @@ PATCH`
       await fs.writeFile(filePath, "line 1\nline 2\nline 3\nline 4\n")
 
       const patchText = `*** Begin Patch
-*** Update File: ${filePath}
+*** Update File: multi-chunk.txt
 @@
  line 1
 -line 2
@@ -338,7 +334,7 @@ PATCH`
 +LINE 4
 *** End Patch`
 
-      const result = await Patch.applyPatch(patchText)
+      const result = await Patch.applyPatch(patchText, tempDir)
       expect(result.modified).toHaveLength(1)
 
       const content = await fs.readFile(filePath, "utf-8")

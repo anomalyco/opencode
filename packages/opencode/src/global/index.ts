@@ -50,6 +50,9 @@ if (version !== CACHE_VERSION) {
         }),
       ),
     )
-  } catch (e) {}
-  await Bun.file(path.join(Global.Path.cache, "version")).write(CACHE_VERSION)
+    await Bun.file(path.join(Global.Path.cache, "version")).write(CACHE_VERSION)
+  } catch (e) {
+    // Log to stderr since Log module may not be initialized yet (circular dependency)
+    console.error("[global] failed to clear cache:", e instanceof Error ? e.message : String(e))
+  }
 }

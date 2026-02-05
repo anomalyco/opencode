@@ -16,6 +16,26 @@ import { Global } from "../global"
 export namespace File {
   const log = Log.create({ service: "file" })
 
+  async function resolveRealPath(filepath: string): Promise<string> {
+    try {
+      return await fs.promises.realpath(filepath)
+    } catch (err) {
+      // If realpath fails (for example, the file doesn't exist yet), resolve the
+      // parent directory with realpath and append the basename. This ensures that
+      // all existing path components are fully resolved (and symlinks detected),
+      // avoiding an insecure lexical-only fallback.
+      const parentDir = path.dirname(filepath)
+      try {
+        const realParent = await fs.promises.realpath(parentDir)
+        return path.join(realParent, path.basename(filepath))
+      } catch {
+        // If the parent directory cannot be resolved safely, propagate the
+        // original error instead of falling back to an unchecked lexical path.
+        throw err
+      }
+    }
+  }
+
   export const Info = z
     .object({
       path: z.string(),
@@ -429,15 +449,14 @@ export namespace File {
     const project = Instance.project
     const full = path.join(Instance.directory, file)
 
-    // TODO: Filesystem.contains is lexical only - symlinks inside the project can escape.
-    // TODO: On Windows, cross-drive paths bypass this check. Consider realpath canonicalization.
-    if (!Instance.containsPath(full)) {
+    const realFull = await resolveRealPath(full)
+    if (!Instance.containsPath(realFull)) {
       throw new Error(`Access denied: path escapes project directory`)
     }
 
     // Fast path: check extension before any filesystem operations
     if (isImageByExtension(file)) {
-      const bunFile = Bun.file(full)
+      const bunFile = Bun.file(realFull)
       if (await bunFile.exists()) {
         const buffer = await bunFile.arrayBuffer().catch(() => new ArrayBuffer(0))
         const content = Buffer.from(buffer).toString("base64")
@@ -451,7 +470,7 @@ export namespace File {
       return { type: "binary", content: "" }
     }
 
-    const bunFile = Bun.file(full)
+    const bunFile = Bun.file(realFull)
 
     if (!(await bunFile.exists())) {
       return { type: "text", content: "" }
@@ -509,20 +528,19 @@ export namespace File {
     }
     const resolved = dir ? path.join(Instance.directory, dir) : Instance.directory
 
-    // TODO: Filesystem.contains is lexical only - symlinks inside the project can escape.
-    // TODO: On Windows, cross-drive paths bypass this check. Consider realpath canonicalization.
-    if (!Instance.containsPath(resolved)) {
+    const realResolved = await resolveRealPath(resolved)
+    if (!Instance.containsPath(realResolved)) {
       throw new Error(`Access denied: path escapes project directory`)
     }
 
     const nodes: Node[] = []
     for (const entry of await fs.promises
-      .readdir(resolved, {
+      .readdir(realResolved, {
         withFileTypes: true,
       })
       .catch(() => [])) {
       if (exclude.includes(entry.name)) continue
-      const fullPath = path.join(resolved, entry.name)
+      const fullPath = path.join(realResolved, entry.name)
       const relativePath = path.relative(Instance.directory, fullPath)
       const type = entry.isDirectory() ? "directory" : "file"
       nodes.push({

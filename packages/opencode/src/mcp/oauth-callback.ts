@@ -48,6 +48,7 @@ interface PendingAuth {
   resolve: (code: string) => void
   reject: (error: Error) => void
   timeout: ReturnType<typeof setTimeout>
+  mcpName: string
 }
 
 export namespace McpOAuthCallback {
@@ -136,7 +137,7 @@ export namespace McpOAuthCallback {
     log.info("oauth callback server started", { port: OAUTH_CALLBACK_PORT })
   }
 
-  export function waitForCallback(oauthState: string): Promise<string> {
+  export function waitForCallback(oauthState: string, mcpName: string): Promise<string> {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         if (pendingAuths.has(oauthState)) {
@@ -145,16 +146,18 @@ export namespace McpOAuthCallback {
         }
       }, CALLBACK_TIMEOUT_MS)
 
-      pendingAuths.set(oauthState, { resolve, reject, timeout })
+      pendingAuths.set(oauthState, { resolve, reject, timeout, mcpName })
     })
   }
 
   export function cancelPending(mcpName: string): void {
-    const pending = pendingAuths.get(mcpName)
-    if (pending) {
-      clearTimeout(pending.timeout)
-      pendingAuths.delete(mcpName)
-      pending.reject(new Error("Authorization cancelled"))
+    for (const [state, pending] of pendingAuths) {
+      if (pending.mcpName === mcpName) {
+        clearTimeout(pending.timeout)
+        pendingAuths.delete(state)
+        pending.reject(new Error("Authorization cancelled"))
+        return
+      }
     }
   }
 
