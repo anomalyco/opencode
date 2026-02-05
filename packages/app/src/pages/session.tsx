@@ -490,7 +490,7 @@ export default function Page() {
 
   createEffect(
     on(
-      () => params.id,
+      sessionKey,
       () => setTitle({ draft: "", editing: false, saving: false, menuOpen: false, pendingRename: false }),
       { defer: true },
     ),
@@ -1649,7 +1649,7 @@ export default function Page() {
     const id = params.id
     if (!id) return
 
-    const wants = isDesktop() ? layout.fileTree.opened() && fileTreeTab() === "changes" : store.mobileTab === "changes"
+    const wants = isDesktop() ? layout.fileTree.opened() : store.mobileTab === "changes"
     if (!wants) return
     if (sync.data.session_diff[id] !== undefined) return
     if (sync.status === "loading") return
@@ -1672,7 +1672,7 @@ export default function Page() {
 
   createEffect(
     on(
-      () => params.dir,
+      () => sdk.directory,
       () => {
         void file.tree.list("")
 
@@ -2630,7 +2630,7 @@ export default function Page() {
           {/* Prompt input */}
           <div
             ref={(el) => (promptDock = el)}
-            class="absolute inset-x-0 bottom-0 pt-12 pb-4 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none"
+            class="absolute inset-x-0 bottom-0 pt-12 pb-4 flex flex-col justify-center items-center z-50 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none"
           >
             <div
               classList={{
