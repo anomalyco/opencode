@@ -286,6 +286,34 @@ Allows the LLM to fetch and read web pages. Useful for looking up documentation 
 
 ---
 
+### websearch
+
+Search the web for information.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "websearch": "allow"
+  }
+}
+```
+
+Performs web searches using Exa AI to find relevant information online. Useful for researching topics, finding current events, or gathering information beyond the training data cutoff.
+
+**Parameters:**
+- `query` (required): The search query string
+- `numResults` (optional): Number of results to return (default: 8)
+- `type` (optional): Search type - `"auto"` (balanced), `"fast"` (quick results), or `"deep"` (comprehensive) (default: "auto")
+- `livecrawl` (optional): Live crawl mode - `"fallback"` (use live if cached unavailable) or `"preferred"` (prioritize live crawling) (default: "fallback")
+- `contextMaxCharacters` (optional): Maximum characters to return for LLM context (default: 10000)
+
+:::tip
+Use `websearch` when you need to find information (discovery), and `webfetch` when you need to retrieve content from a specific URL (retrieval).
+:::
+
+---
+
 ### question
 
 Ask the user questions during execution.
