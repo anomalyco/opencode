@@ -1,0 +1,410 @@
+d61147bea Persist terminal tab order
+1b378ea83 Add spacing between terminal label and controls
+7b9678d25 Fix terminal close and tab controls
+569e7b9be Harden HTTPS detection behind proxies
+0fcdb52b9 Fix PTY event typing
+f68dfe22d Fix PTY exit handling and restore terminal state
+0b208895f Surface broker login failures
+8aec255a2 Document default push branch
+99e23477d Add filled console icon for terminal toggle
+547baefcb Improve home CTAs for empty state
+3010d7e55 Handle initgroups EPERM in pre-exec
+ce0a5f0f2 fix(broker): include actual error details in PTY spawn failures (#1)
+cfe797554 Add OpenRouter free integration and settings UI
+91606e60b Stabilize bash tool tests for shell init noise
+5d429d5b8 Default permissions to allow and update docs
+8a63844a3 feat(ui): auto-hide build info badge
+ecaebed09 fix(server): use server home for ssh keys
+094e170df fix(ui): surface ssh key create errors
+378c2431b chore(roadmap): add phase 25 ssh key generation
+ed7d5c6d7 fix(ui): serve manifest before auth
+f63396573 style(security): tint secure lock icon
+d722d5641 style(2fa): darken qr code panel
+9a4bc5021 fix(2fa): restore setup page scrolling
+ff7b7d8e7 feat(2fa): add disable flow and persist opt-out
+d2d6b8553 fix(dialog): keep directory picker footer visible
+7d5f81ede fix(dialog): avoid nested scroll in directory picker
+ac4e2bbf7 fix(csp): allow wasm instantiation
+d4c1f8297 docs(24-02): complete remote terminal reliability plan
+75ad40b35 fix(24-02): load ghostty wasm from stable URL
+868260e26 fix(24-02): type PTY route context
+ef96e866a test(24-02): cover broker PTY error handling
+b801e2f8e feat(24-02): align PTY session registration lifecycle
+68122d7af feat(24-02): wire broker-backed PTY creation
+e957b2d47 docs(24-01): complete remote terminal reliability plan
+5e1a87257 feat(24-01): surface PTY request ids in UI
+0dee4a2a9 feat(24-01): add PTY request logging
+5829cfd46 docs(broker): add log viewing commands
+e1f60dcf9 plan(phase-24): add remote terminal reliability plans
+5a8c89fbd chore(auth): clean up pending 2FA setup flow
+b842a0633 chore(test): align precommit tests and fixtures
+96bcad95c chore(rules): add TypeScript precommit checks
+908d6851e feat(auth): verify TOTP before 2FA write
+b2cc2ef99 Docs: expand broker README with test user guidance
+023a6185e docs(planning): add phase 23 plans
+1c85457f0 docs(planning): add phase 22 plans
+4ca3222af feat(auth): serve 2fa setup from app build
+89c0724c0 chore(format): apply formatting updates
+b928f4aae docs(planning): add phase 22 placeholder
+23c94295c chore(tsconfig): exclude build artifacts
+d42e593b4 docs(broker): add dev run instructions
+9bb9e3e13 fix(auth): redirect after 2fa setup verification
+0d473a60b fix(auth): make 2fa setup command shell-safe
+2b1a40c85 docs(planning): add phase 20 summaries
+4409cef0a feat(auth): serve 2fa verification from app build
+c4926ef27 docs(broker): add re-enable commands
+cc66cacbb fix(app): align ssh key create payload
+335682af3 chore(rules): add turbo typecheck
+9afe6c94b chore(rules): run generate before rust checks
+108814909 docs(planning): apply markdown formatting updates
+1f01117a0 chore(format): apply formatting updates
+3531c748a docs(planning): capture phase 21 ssh key plan
+6a750a20e docs(21-02): complete ssh key management plan
+b8cac071c feat(21-02): prompt for missing ssh keys in clone
+ee8016dd6 feat(21-02): add settings ssh key dialog
+1cb30cee8 chore(21-02): regenerate sdk for ssh keys
+1527bb9e1 docs(21-01): complete ssh key management plan
+3e3bcd7af feat(21-01): add ssh key routes
+09f91745f feat(21-01): add ssh key storage helpers
+3446a452a docs(broker): add service management README
+0a5eec0d9 fix(broker): exit cleanly when broker already running
+55d8e0db8 fix(broker): add socket bind diagnostics
+5f1c0343d docs(planning): add phase 20 2fa refactor plan
+2c2bdb299 fix(app): center login logo
+783ef3786 docs(planning): capture phase 19 UAT and verification
+a3fbc6520 fix(auth): allow ui assets without session
+0bff4121b feat(auth): serve Solid login entry from ui build
+1ba3e5f0d docs(planning): align phase 19 stack to SolidJS
+276e92a7b docs(planning): capture phase 19 context and research
+df9b40be4 feat(app): show build sha
+29c77178b fix(app): stack footer metadata
+9bae389d8 chore(opencode): add dev web script
+9b3c5a5af feat(app): show build timestamp
+907f5c224 docs: capture todo - Display built-at date
+a0a14b64d docs: capture todo - Support Cloudflare Quick Tunnel
+b23db1210 docs: capture todo - Fix web terminal 500
+c7fb116c1 fix(server): add public health alias
+27f1c2f03 docs: capture todo - Fix site manifest 401
+9b91eb17f fix(server): relax CORS origin check
+e72009124 fix(server): allow local connect-src
+d84fde1d7 chore(build): make UI build flag explicit
+8f8fe94c3 chore(planning): add phase 18 auth route audit
+2d301c7bf chore(deps): normalize qrcode dependencies
+2dafb23e9 chore(debug): record route refresh investigation
+907f071b7 feat(opencode): bundle local web UI and serve it
+2909258d2 chore(app): add fork attribution markers
+203568a60 feat(app): add build-time server url override
+3a4eccc7e fix(csrf): accept header token without cookie
+34db1c9b2 test(16): complete UAT rerun
+1b60abbcc feat(16-08): show detailed repo errors in dialog
+611183266 fix(16-08): stabilize folder picker listing
+e6594156c fix(16-08): surface file list errors
+4613af5ca fix(16-08): show home folders in picker
+e8d99e5c2 fix(16-08): list home directories in picker
+6dab645a4 feat(16-08): add up-navigation to folder picker
+e7bab7e5a fix(16-08): load folder listing from root
+eb8c22d06 feat(16-08): improve repo picker UX and branch listing
+f4039d884 test(16): complete UAT - 2 passed, 3 issues
+56c5eac2a docs(16-08): complete repo download gap plans
+0d4c9ef2e feat(16-08): surface branch load errors
+463e1bf83 feat(16-08): add directory picker for local repos
+17715aa6c fix(16-07): return 4xx for invalid repo records
+e4ee65db8 fix(16-07): validate repo records on load
+0c5606154 docs(planning): add phase 16 gap plans
+93281e989 docs(16): add root causes from diagnosis
+436f5316e test(16): complete UAT rerun - 1 passed, 3 issues
+2e87c6abb docs(16-06): complete repo download gaps plan
+0b92511fd feat(16-06): surface branch load errors in UI
+388433f69 fix(16-06): return branch errors as 400
+9c0718964 chore(16-06): proxy agent and command in dev
+6368bed56 docs(planning): add phase 16 gap plan
+414168566 docs(16): add root causes from UAT rerun
+3ceab1b12 docs(planning): reorder phase 16 plans
+c7df2f3b0 docs(16-05): complete repo manager entry plan
+4771ef792 docs(16-04): complete dev proxy and error visibility plan
+a17f383f0 feat(16-05): hint manage repos for empty state
+aa3ba9d31 feat(16-05): add manage repos entry in new session view
+ed208eb0f fix(16-04): surface repo list and directory errors
+1c16422de fix(16-04): proxy repo and find routes in dev
+0f12649bc docs(16): add root causes from diagnosis
+dac7d3586 test(16): complete UAT - 0 passed, 5 issues
+84e7b6f9d fix(server): refresh CSRF cookie on status
+ec88d2a40 fix(app): guard unexpected list shapes
+19c19fbbb docs(planning): add phase 17
+8694cc2e6 feat: add repo clone workflow and cleanup submodule
+798ccdba1 docs(planning): add phase 16
+189700cee fix(app): guard empty session lists
+6f2b0dfed fix(app): satisfy Bun fetch typing
+d18297a31 fix(app): harden message hydration and CSRF fetch
+50fd5d1a6 feat(opencode): enable auth defaults
+28f602ee0 fix(opencode): disable two-factor authentication requirement
+484fc10ba feat(opencode): require two-factor authentication for enhanced security
+3dc964087 fix(broker): align initgroups gid types
+24d8bd509 chore(broker): note Ubuntu Docker failure
+280a45381 chore(broker): gate test-spawn binary
+bd4d59ab4 fix(broker): skip PTY test when openpty unavailable
+11277fd04 docs: add Docker installation guide for opencode fork
+b80dcc8be milestone: complete Milestone 1 - System Authentication Foundation
+e224684a9 docs(11): complete UAT verification - all 5 tests passed
+ce5888c10 docs(11): complete documentation phase
+249344473 fix(11): orchestrator plan revisions
+59325deb2 docs(11-04): complete documentation index plan
+1fe00b118 docs(11-04): create documentation index and integrate with main README
+b13182c3d docs(11-02): complete PAM configuration plan
+ae9c6cd67 docs(11-03): complete troubleshooting guide plan
+15148c27a docs(11-01): complete reverse proxy documentation plan
+a1702b2d1 docs(11-03): create troubleshooting guide with flowcharts
+b85c27f33 docs(11-02): create comprehensive PAM configuration guide
+31e24eabe docs(11-01): create comprehensive reverse proxy guide
+28a36bddb docs(11): create phase plan
+cc297a9d4 docs(11): research phase domain
+ff83dc2ff docs(11): capture phase context for documentation
+f7ca19369 docs(10): add phases 13-14 to roadmap, update state
+9260c8e76 docs(10): complete UAT for Two-Factor Authentication phase
+17ec109dd fix(10): implement manual rate limiter that only counts failures
+716e49606 fix(10): only count failed login attempts against rate limit
+729114ba5 feat(10): add "Log out all sessions" option to dropdown
+126f1080b fix(10): clarify "Forget this device" menu text
+fb26fc28d fix(10): preserve device trust on regular logout
+699821ff3 fix(10): only count failed OTP attempts against rate limit
+c16900348 fix(10): add /auth/login/2fa to CSRF allowlist
+ea1e34a30 docs: add Phase 13 (Passkeys Investigation) to roadmap
+4522fe9cd feat(10): add PAM configuration detection and auto-fix for 2FA
+a3169ced3 fix(10): improve 2FA error message and add PAM setup instructions
+0ebc9ece5 feat(10): add copy button to 2FA setup command
+4ff149857 docs(10): comprehensive documentation for google_authenticator file format
+8b6fee5eb fix(10): write google_authenticator file directly instead of using CLI
+06e3c62d5 fix(10): clarify 2FA setup instructions refer to server
+f9fe71ea2 feat(10): enforce 2FA setup with twoFactorPending session flag
+81f1b55cd feat(10): add twoFactorRequired config option
+628a67287 feat(10): add safety explanation to 2FA setup page
+cdca64055 feat(10): auto-submit 2FA setup verification on 6 digits
+1e48748bf feat(10): add installation instructions to 2FA setup page
+039fd3090 fix(10): set sessionId in context for all /auth/* routes
+1b410e71e fix(10): add CSRF token to 2FA setup verification form
+7be0b43fb docs(10): complete Two-Factor Authentication phase
+7bfb365a9 chore(10): update lockfile for qrcode dependency
+5515ead4a docs(10-07): complete 2FA setup wizard plan
+3a49e72bf docs(10-08): complete device trust management plan
+9f3aa19b6 feat(10-07): add 2FA setup wizard endpoints and page
+7fd91d5aa feat(10-08): add device trust controls to session indicator
+9a72f62d8 feat(10-08): add device trust status endpoint
+d21d52986 feat(10-07): create TOTP setup module with QR code generation
+1010aa2a8 feat(10-08): add device trust revocation endpoint
+3cfb8e7b5 chore(10-07): add qrcode dependency for TOTP setup
+dacb58236 docs(10-06): complete 2FA Verification Page UI plan
+f08ad1fef feat(10-06): update login page to redirect to 2FA
+6c8f63169 feat(10-06): add GET /auth/2fa route
+f011eb25d feat(10-06): add 2FA page HTML generator
+f29c087dd docs(10-05): complete Auth Routes 2FA Flow plan
+398119b61 feat(10-05): add POST /auth/login/2fa endpoint
+2550e6a1d feat(10-05): add 2FA flow to login endpoint
+cc057c3b9 feat(10-05): add server token secret module
+cff12fd9e docs(10-04): complete BrokerClient 2FA methods plan
+314ba01c0 feat(10-04): implement authenticateOtp method on BrokerClient
+f6fa7d9ce feat(10-04): implement check2fa method on BrokerClient
+41866cdde feat(10-04): add check2fa and authenticateotp to BrokerRequest interface
+2dadec601 docs(10-03): complete token utilities plan
+81f2f7433 docs(10-02): complete broker protocol 2FA extension plan
+8ded4b622 feat(10-03): export token modules from auth index
+062a3b5a3 feat(10-03): add 2FA token module
+2e928dcec feat(10-02): add 2FA protocol types and handler implementation
+ff8071414 feat(10-03): add device trust token module
+fa6cc2389 docs(10-01): complete 2FA config and OTP module plan
+662ef552f feat(10-01): add OTP PAM service files for Linux and macOS
+c32afce44 feat(10-01): add broker OTP module for 2FA detection and validation
+f5a9fb21e feat(10-01): add 2FA configuration options to AuthConfig
+9612e0eb7 docs(10): create phase plan for Two-Factor Authentication
+32c691c61 docs(10): research two-factor authentication phase domain
+ce5082c48 docs(10): capture phase context
+388dad70b docs(09): add UAT results for Connection Security UI phase
+b237944e6 docs(09): complete connection security UI phase
+1e05c1552 docs(09-02): complete HTTP warning banner and integration plan
+fec3369e9 feat(09-02): integrate security components into layout
+6325552e6 feat(09-02): create HttpWarningBanner component
+452b3e9af docs(09-01): complete connection security UI plan
+d2c110d49 feat(09-01): create SecurityBadge component with status detection
+7e1319f9f feat(09-01): add security icons to icon library
+288692a70 docs(09): create phase plan for Connection Security UI
+55b124cdc docs(09): research phase domain
+d64355595 docs(09): capture phase context
+4ccf10fba docs(08): complete UAT for session enhancements phase
+70c4ca681 fix(08-03): call checkExpirationWarning after fetch completes
+de96bb347 fix(08-02): add CSRF token to logout request
+f1f4ef31b fix(08): configure Vite proxy for API requests in development
+7b004cf67 fix(08): support cross-origin login redirect for dev server
+bd2b508b1 fix(08): redirect to login when auth required but not authenticated
+b21c582e1 fix(08): improve API call detection for auth middleware
+17dcc7924 fix(08): return 401 for API calls instead of redirect
+9103e8b00 fix(08): allow /global/health endpoint without auth
+788e2941a fix(08): enable CORS credentials for cookie auth
+80347ea24 fix(08): use window.location for session expired redirect
+c96ba6dc4 fix(08): use signal with onMount for titlebar mount point
+7d44ad46f docs(08): complete Session Enhancements phase
+40dc74b46 docs(08-03): complete session expiration warnings plan
+54e711550 docs(08-04): complete session indicator integration plan
+5ee99cb75 feat(08-03): mount session expired overlay in app
+627d6d2f6 feat(08-03): create session expired overlay component
+7210c3da3 feat(08-03): add expiration warning toast to session context
+f9e1939fc feat(08-04): integrate SessionIndicator into app layout
+70cfac1e4 feat(08-04): add chevron icon to session indicator dropdown
+02b851b16 docs(08-01): complete remember me backend plan
+d88e96b9e docs(08-02): complete session context and username indicator plan
+f0012b284 feat(08-01): wire rememberMe through login flow
+d47ef9ec7 feat(08-02): integrate SessionProvider into app
+d326031a4 feat(08-02): create session indicator component
+e2865ab22 feat(08-01): update setSessionCookie to support persistent cookies
+9cb537151 feat(08-02): create session context with polling
+2751ea879 feat(08-01): add rememberMe to UserSession schema and creation
+923f90c6a docs(08): create phase plan
+8603842be docs(08): research phase domain
+8f3501496 docs(08): capture phase context
+aebb57d3e docs(07): add UAT results for Security Hardening phase
+9bf90a986 fix(07): set Retry-After header correctly in rate limit response
+64039613d fix(07): set sessionId for logout routes to enable CSRF validation
+f954fbf9e docs(07): complete Security Hardening phase
+ce1ad94cd fix(07): type compatibility and test config updates
+2203fb490 docs(07-03): complete HTTPS detection plan
+2633affdc test(07-03): add HTTPS detection and auth route integration tests
+8f66ee862 feat(07-03): add HTTP warning and require_https enforcement to login page
+e56d7b505 feat(07-03): create HTTPS detection utilities
+aafeb3c9a docs(07-02): complete login rate limiting plan
+dd7d15e7f docs(07-01): complete CSRF protection plan
+90ed8275d test(07-02): add rate limiting tests
+cb88ba33c feat(07-02): integrate rate limiting and security logging in login endpoint
+ca2100198 feat(07-02): add rate limiting infrastructure
+9b53d2095 feat(07-01): create CSRF token utilities with HMAC signing
+a4b5bb96f docs(07): add phase plans
+275de34b3 docs(07): create phase plan for security hardening
+1a6767523 docs(07): research security hardening domain
+bff301c10 docs(07): capture phase context
+21c19545a fix(06-01): keep submit button disabled after successful login
+a685e8da9 docs(06): add UAT results for Login UI phase
+8780dd99b fix(06-01): add red glow to invalid form fields
+7165e2f3d docs(06): complete login UI phase
+1f4650cf4 feat(06-01): move polished login page to opencode server
+909889b5d fix(06-01): import UI styles and fix autofocus
+067f78297 fix(06-01): address login page UI issues
+5dc4a6016 feat(06-01): add login page UI with form and styling
+0ce7db8c9 docs(06): create phase plan
+d7e0ce43a docs(06): research login UI domain
+0c1fc02fa docs(06): capture phase context
+02a7bb619 test(05): complete UAT - 8 passed, 0 issues
+a5d321a58 docs(05): complete user process execution phase
+5dcd172a8 style(broker): apply cargo fmt formatting
+cb19a722b fix(test): add missing mocks for auth route tests
+8be66a943 fix(broker): macOS PTY spawn and serde deserialization fixes
+4fa31c229 fix(broker): correct RequestParams enum ordering for serde untagged
+18acb3797 fix(broker): move Ping to end of RequestParams enum
+cee480104 test(04): complete UAT - 7/7 passed
+18cf86df0 fix(auth): session endpoint reads cookie directly
+f1505b2e3 fix(auth): correct redirect loop and add login page
+3cd60eac6 feat(05-10): add home and shell tracking to PtySession
+a7b2a217c test(05-10): create integration test structure for user process execution
+d29d31e75 docs(05-09): complete auth enforcement on PTY routes plan
+6f0ee7cc4 test(05-09): add PTY auth enforcement tests
+b5249f055 feat(05-09): enforce auth on PTY routes
+f12a1f3e2 feat(05-09): add sessionId and auth context to auth middleware
+6ae3d3fce docs(05-08): complete broker PTY I/O plan
+4517014aa feat(05-08): add PtyWrite and PtyRead IPC methods to broker
+0259f5966 feat(05-08): add broker-pty module with TypeScript client I/O methods
+1c02338f3 docs(05-07): complete web server integration plan
+4ac32cd44 feat(05-07): route PTY creation through broker when auth enabled
+30f7abe32 feat(05-07): unregister session from broker on logout
+ec939e739 feat(05-07): register session with broker on login
+f4e91e787 docs(05-06): complete TypeScript BrokerClient extension plan
+cfafa079b feat(05-06): add session registration methods to BrokerClient
+dc2e67009 docs(05-05): complete session registration protocol plan
+a40f7e8c0 test(05-05): add handler tests for session registration
+6ffe5da3d feat(05-05): implement session registration handlers
+b7509d980 feat(05-05): add RegisterSession and UnregisterSession to IPC protocol
+e76915eed docs(05-04): complete PTY handler implementation plan
+534fd161c feat(05-04): implement SpawnPty, KillPty, ResizePty handlers
+29edc96d3 feat(05-04): add session-to-user mapping storage
+eccd005b6 docs(05-03): complete IPC protocol extension plan
+bc606154f test(05-03): add handler tests for PTY methods
+62c207705 feat(05-03): add PTY method types to IPC protocol
+41cdcc976 docs(05-02): complete process spawner plan
+0b013bd5e feat(05-02): implement user process spawning with impersonation
+d384bbc9e feat(05-02): add process module with login environment setup
+cf4daec51 docs(05-01): complete PTY allocation plan
+a1276f425 feat(05-01): add PTY session state tracking
+8ba6917d0 feat(05-01): add PTY allocator module
+71fa97a9e docs(05): create phase plan for User Process Execution
+871e2f569 docs(05): research phase domain
+c018ada43 docs(05): capture phase context
+13a7dca45 test(04): complete UAT - 6 passed, 1 bug fixed
+efe2d4b51 fix(04): load auth config at server startup before Instance context
+81ee34484 docs(04): complete Authentication Flow phase
+ed1ba5208 docs(04-02): complete login endpoint plan
+8a3358d04 test(04-02): add login endpoint tests
+e84202dcc feat(04-02): add login and status endpoints to AuthRoutes
+3ea512aaa docs(04-01): complete user info and session extension plan
+519fa3ae9 test(04-01): add tests for user info lookup and session extension
+92f2ad566 feat(04-01): extend UserSession schema with UNIX fields
+41de7568f feat(04-01): create user info lookup module
+97a1adf66 docs(04): create phase plan
+7e2e68ce7 docs(04): research authentication flow phase
+4b71d6f91 docs(04): capture phase context
+64e303ac2 test(03): complete UAT - 6 passed, 0 issues
+8fa1f7d8a docs(03): complete Auth Broker Core phase
+9d394fb64 docs(03-06): complete CLI integration plan
+968eb6e01 fix(03-06): improve broker binary path resolution
+fef035b3a chore(03-06): add broker build script
+a7a785ea0 feat(03-06): add broker setup and status CLI commands
+02bf7bcbb docs(03-04): complete service files plan
+03a2a4a68 feat(03-04): add PAM service files and platform module
+89a2a4c80 chore(03-04): add launchd plist for macOS
+70d8b99e3 chore(03-04): add systemd service file for opencode-broker
+b9e731006 docs(03-03): complete Unix socket server plan
+c310a7b44 docs(03-05): complete TypeScript broker client plan
+0eba9d000 style(03-03): fix clippy collapsible_if warning
+5c10bc7c2 feat(03-03): create daemon entry point with signal handling
+7374977a6 test(03-05): add broker client unit tests
+2f934263d fix(03-05): handle Bun's sync socket error for missing paths
+64f5f1668 feat(03-03): create request handler with auth flow orchestration
+7018d8178 feat(03-03): create Unix socket server with graceful shutdown
+58bbb72a8 feat(03-05): export BrokerClient from auth module
+7f5ded648 feat(03-05): add TypeScript broker client for auth IPC
+173e15a30 docs(03-02): complete auth components plan
+4c5bacb1c feat(03-02): add username validation following POSIX rules
+46a1a69fd feat(03-02): add per-username rate limiter
+d25cd7abc feat(03-02): add PAM authentication wrapper with thread-per-request model
+e76f87597 docs(03-01): complete auth broker project init plan
+a87ec0de5 style(03-01): apply clippy fixes and add Cargo.lock
+6d1351fbf feat(03-01): create config loading module
+07a44ab21 feat(03-01): create IPC protocol types
+aedbb0558 feat(03-01): initialize Rust auth broker project
+f84dfdb65 docs(03): create phase plan
+f0508d821 docs(03): research phase domain
+603ad562a docs(03): capture phase context
+d3c65f5e1 docs(02): complete Session Infrastructure phase
+8224155ad docs(02-02): complete auth middleware and routes plan
+732d6e02b feat(02-02): integrate auth middleware and routes into server
+ed734238c feat(02-02): create auth routes for logout functionality
+277e20dad feat(02-02): create auth middleware for session validation
+9bd8b0924 docs(02-01): complete UserSession namespace plan
+637894842 test(02-01): add unit tests for UserSession namespace
+326d0f35d feat(02-01): create UserSession namespace with Zod schema and Map storage
+d80730dfd docs(02): create phase plan
+45d30fca9 docs(02): research phase domain
+a613f2102 test(01): complete UAT - 4 passed, 0 issues
+f48ef4089 docs(02): capture phase context
+f1b0b3e05 docs(01): complete Configuration Foundation phase
+14b14035c docs(01-03): complete PAM startup validation plan
+a0dc81d24 feat(01-03): add PAM service file validation at startup
+f6b74b9ee docs(01-02): complete auth schema integration plan
+cffb0077a feat(01-02): add PamServiceNotFoundError formatting
+a049dc62e feat(01-02): integrate auth schema into Config.Info
+b07dcd933 docs(01-01): complete auth schema plan
+a227c9933 feat(01-01): create auth configuration schema
+05434ab54 feat(01-01): add ms package and create duration utility
+853647044 docs(01): create phase plan
+a68662b9c docs(01): research phase domain
+9558766f7 docs(01): capture phase context
+8763e45f7 docs: add project roadmap and requirements traceability
+8735db842 docs: define v1 requirements
+be3c29ad3 docs: complete project research for PAM authentication
+4aa34e419 chore: add project config
+cb15a2934 docs: initialize project
+af7f82ed4 docs: map existing codebase

@@ -1,0 +1,1717 @@
+   1:  bfd2f91d5 <    -:  --------- feat(hook): command execute before hook (#9267)
+   2:  501ef2d98 <    -:  --------- fix: update gitlab-ai-provider to 1.3.2 (#9279)
+   3:  38c641a2f <    -:  --------- fix(tool): treat .fbs files as text instead of images (#9276)
+   4:  c29d44fce <    -:  --------- docs: note untracked files in review
+   5:  19cf9344e <    -:  --------- Update node_modules hashes
+   6:  d841e70d2 <    -:  --------- fix: bad variants for grok models
+   7:  0d8e706fa <    -:  --------- test: fix transfomr test
+   8:  b4d4a1ea7 <    -:  --------- docs: clarify agent tool access and explore vs general distinction (#9300)
+   9:  e81bb8679 <    -:  --------- fix: Windows evaluating text on copy (#9293)
+  10:  bee2f6540 <    -:  --------- zen: fix checkout link for black users
+  11:  d939a3ad5 <    -:  --------- feat(tui): use mouse for permission buttons (#9305)
+  12:  2fc4ab968 <    -:  --------- ci: simplify nix hash updates (#9309)
+  13:  6b481b5fb <    -:  --------- fix(opencode): use streamObject when using openai oauth in agent generation (#9231)
+  14:  fc6c9cbbd <    -:  --------- fix(github-copilot): auto-route GPT-5+ models to Responses API (#5877)
+  15:  e2f1f4d81 <    -:  --------- add scheduler, cleanup module (#9346)
+  16:  260ab60c0 <    -:  --------- fix: track reasoning by output_index for copilot compatibility (#9124)
+  17:  6f847a794 <    -:  --------- chore: generate
+  18:  86df915df <    -:  --------- chore: cleanup provider code to assign copilot sdk earlier in flow
+  19:  91787ceb3 <    -:  --------- fix: nix ci - swapped dash/underscore (#9352)
+  20:  9d1803d00 <    -:  --------- chore: generate
+  21:  4a7809f60 <    -:  --------- add proper variant support to copilot
+  22:  3515b4ff7 <    -:  --------- omit todo tools for openai models
+  23:  4299450d7 <    -:  --------- tweak apply_patch tool description
+  24:  13276aee8 <    -:  --------- fix(desktop): apply getComputedStyle polyfill on all platforms (#9369)
+  25:  08005d755 <    -:  --------- refactor(desktop): tweak share button to prevent layout shift (#9322)
+  26:  06d03dec3 <    -:  --------- ignore: update download stats 2026-01-19
+  27:  f26de6c52 <    -:  --------- feat(app): delete workspace
+  28:  093a3e787 <    -:  --------- feat(app): reset worktree
+  29:  fcfe6d3d2 <    -:  --------- chore: cleanup
+  30:  dca2540ca <    -:  --------- chore: cleanup
+  31:  1a262c4ca <    -:  --------- chore: cleanup
+  32:  295f290ef <    -:  --------- chore: cleanup
+  33:  55739b7aa <    -:  --------- chore: cleanup
+  34:  51804a47e <    -:  --------- chore: cleanup
+  35:  23e9c02a7 <    -:  --------- chore: generate
+  36:  03d7467ea <    -:  --------- test(app): initial e2e test setup
+  37:  19d15ca4d <    -:  --------- test(app): more e2e tests
+  38:  91a708b12 <    -:  --------- test(app): more e2e tests
+  39:  7621c5caf <    -:  --------- Update flake.lock
+  40:  6bc823bd4 <    -:  --------- Update node_modules hash (x86_64-linux)
+  41:  f5eb90514 <    -:  --------- Update node_modules hash (aarch64-darwin)
+  42:  dd19c3d8f <    -:  --------- test(app): e2e utilities
+  43:  f1daf3b43 <    -:  --------- fix(app): tests in ci
+  44:  182c43a78 <    -:  --------- chore: cleanup
+  45:  b90315bc7 <    -:  --------- chore: cleanup
+  46:  2b086f058 <    -:  --------- test(app): more e2e tests
+  47:  e9ede7079 <    -:  --------- chore: cleanup
+  48:  f00f18b92 <    -:  --------- chore: cleanup
+  49:  1ba7c606e <    -:  --------- chore: cleanup
+  50:  3186e7ec7 <    -:  --------- Update node_modules hashes
+  51:  843d76191 <    -:  --------- zen: fix black reset date
+  52:  31864cadb <    -:  --------- docs: update codecompanion.nvim acp doc (#9411)
+  53:  29e206b6c <    -:  --------- docs: Improve Gitlab self-hosted instances documentation (#9391)
+  54:  b1684f3d1 <    -:  --------- fix(config): rename uv formatter from 'uv format' to 'uv' for config consistency (#9409)
+  55:  5b8672463 <    -:  --------- fix: cargo fmt  actually does not support formatting single files
+  56:  4ee540309 <    -:  --------- fix(app): hide settings button
+  57:  72cb7ccc0 <    -:  --------- fix(app): list component jumping when mouse happens to be under the list and keyboard navigating. (#9435)
+  58:  453417ed4 <    -:  --------- chore: generate
+  59:  d5ae8e0be <    -:  --------- fix(opencode): `cargo fmt` is formatting whole workspace instead of edited file (#9436)
+  60:  1f11a8a6e <    -:  --------- feat(app): improved session layout
+  61:  befd0f163 <    -:  --------- feat(app): new session layout
+  62:  7811e01c8 <    -:  --------- fix(app): new layout improvements
+  63:  c720a2163 <    -:  --------- chore: cleanup
+  64:  eb779a7cc <    -:  --------- chore: cleanup
+  65:  c7f0cb3d2 <    -:  --------- fix: remove focus outline from dropdown menu
+  66:  89be504ab <    -:  --------- update: align edit project dialog padding and avatar styles
+  67:  e12b94d91 <    -:  --------- update: adjust edit project icon helper text
+  68:  494e8d5be <    -:  --------- update: tweak edit project icon container
+  69:  9fbf2e72b <    -:  --------- update: constrain edit project dialog width
+  70:  b0794172b <    -:  --------- update: tighten edit project color spacing
+  71:  2dbdd1848 <    -:  --------- add hover overlay with upload/trash icons to project icon in edit dialog
+  72:  b72a00eaa <    -:  --------- fix text field border showing through focus ring
+  73:  dd0906be8 <    -:  --------- tweak: apply patch description
+  74:  fc50b2962 <    -:  --------- fix(app): make terminal sessions scoped to workspace
+  75:  092428633 <    -:  --------- fix(app): layout jumping
+  76:  3fd0043d1 <    -:  --------- chore: handle fields other than reasoning_content in interleaved block
+  77:  c2f9fd5fe <    -:  --------- fix(app): reload instance after workspace reset
+  78:  c47699536 <    -:  --------- fix: Don't unnecessarily wrap lines and introduce an unneeded empty line (resolves #9489) (#9488)
+  79:  889c60d63 <    -:  --------- fix(web): rename favicons to v2 for cache busting (#9492)
+  80:  c3393ecc6 <    -:  --------- fix(app): give feedback when trying to paste a unsupported filetype (#9452)
+  81:  d19e76d96 <    -:  --------- fix: keyboard nav when mouse hovered over list (#9500)
+  82:  091e88c1e <    -:  --------- fix(opencode): sets input mode based on whether mouse vs keyboard is in use to prevent mouse events firing (#9449)
+  83:  88c5a7fe9 <    -:  --------- fix(tui): clarify resume session tip  (#9490)
+  84:  e29120317 <    -:  --------- chore: generate
+  85:  769c97af0 <    -:  --------- chore: rm double conditional
+  86:  ecc51ddb4 <    -:  --------- fix(app): hash nav
+  87:  cac35bc52 <    -:  --------- fix(app): global terminal/review pane toggles
+  88:  a4d182441 <    -:  --------- fix(app): no more favicons
+  89:  3173ba128 <    -:  --------- fix(app): fade under sticky elements
+  90:  69b3b35ea <    -:  --------- chore: generate
+  91:  d605a78a0 <    -:  --------- fix(app): change keybind for cycling thinking effort (#9508)
+  92:  79ae749ed <    -:  --------- fix(app): don't change resize handle on hover
+  93:  673e79f45 <    -:  --------- tweak(batch): up restrictive max batch tool from `10` to `25` (#9275)
+  94:  4e04bee0c <    -:  --------- fix(app): favicon
+  95:  1ee8a9c0b <    -:  --------- release: v1.1.26
+  96:  bec294b78 <    -:  --------- fix(app): remove copy button from summary
+  97:  2542693f7 <    -:  --------- chore: generate
+  98:  aa4b06e16 <    -:  --------- tui: fix message history cleanup to prevent memory leaks
+  99:  bfa986d45 <    -:  --------- feat(app): Add ability to select project directory text to web (#9344)
+ 100:  054ccee78 <    -:  --------- update review session empty state styling
+ 101:  cf284e32a <    -:  --------- update session hover popover styling
+ 102:  a05c33470 <    -:  --------- retain session hover state when popover open and update border radius
+ 103:  ad31b555a <    -:  --------- position session messages popover at top
+ 104:  7f9ffe57f <    -:  --------- update thinking text styling in desktop app
+ 105:  7b336add8 <    -:  --------- update session messages popover gutter to 28px
+ 106:  6ed656a61 <    -:  --------- remove top padding from edit project dialog form
+ 107:  b91b76e9e <    -:  --------- add 8px padding to recent sessions popover
+ 108:  4ddfa86e7 <    -:  --------- fix(app): message list overflow & scrolling (#9530)
+ 109:  088b53765 <    -:  --------- chore: generate
+ 110:  36f5ba52e <    -:  --------- fix(batch): update batch tool definition to outline correct value for max tool calls (#9517)
+ 111:  0d49df46e <    -:  --------- fix: ensure truncation handling applies to mcp servers too
+ 112:  419004992 <    -:  --------- chore: remove duplicate prompt file
+ 113:  68d1755a9 <    -:  --------- fix: add space toggle hint to tool selection prompt (#9535)
+ 114:  8b379329a <    -:  --------- fix(desktop): completely disable pinch to zoom
+ 115:  9706aaf55 <    -:  --------- rm filetime assertions from patch tool
+ 116:  616329ae9 <    -:  --------- chore: generate
+ 117:  5f0372183 <    -:  --------- fix(app): persist quota
+ 118:  353115a89 <    -:  --------- fix(app): user message expand on click
+ 119:  b711ca57f <    -:  --------- fix(app): localStorage quota
+ 120:  347cd8ac6 <    -:  --------- chore: cleanup
+ 121:  5145b72c4 <    -:  --------- chore: cleanup
+ 122:  0596b02f1 <    -:  --------- chore: cleanup
+ 123:  27406cf8e <    -:  --------- chore: generate
+ 124:  23d71e125 <    -:  --------- ignore: update download stats 2026-01-20
+ 125:  04e60f2b3 <    -:  --------- fix(app): no flash of home page on start
+ 126:  e521fee00 <    -:  --------- release: v1.1.27
+ 127:  8bcbfd639 <    -:  --------- wip(app): settings
+ 128:  de3641e8e <    -:  --------- wip(app): settings
+ 129:  df094a10f <    -:  --------- wip(app): settings
+ 130:  924fc9ed8 <    -:  --------- wip(app): settings
+ 131:  dd5b5f548 <    -:  --------- chore: cleanup
+ 132:  340285575 <    -:  --------- chore: cleanup
+ 133:  d77cbf9c4 <    -:  --------- chore: cleanup
+ 134:  47fa49670 <    -:  --------- chore: generate
+ 135:  ac7e674a8 <    -:  --------- fix(app): broken
+ 136:  01b12949e <    -:  --------- fix(app): terminal no longer hangs on exit or ctrl + D and closes the pane (#9506)
+ 137:  c365f0a7c <    -:  --------- feat: add restart and reload menu items on macOS (#9212)
+ 138:  8595dae1a <    -:  --------- fix(app): session loading loop
+ 139:  cd2125eec <    -:  --------- chore: generate
+ 140:  e8b0a65c6 <    -:  --------- feat: Support ACP audience by mapping to ignore and synthetic (#9593)
+ 141:  733226de9 <    -:  --------- chore: generate
+ 142:  8f62d4a5e <    -:  --------- fix(mcp): register OAuth callback before opening browser (#9646)
+ 143:  7f862533d <    -:  --------- fix(app): better pending states for workspace operations
+ 144:  86b2002de <    -:  --------- fix: type error
+ 145:  5f67e6fd1 <    -:  --------- fix(app): don't jump accordion on expand/collapse
+ 146:  8639b0767 <    -:  --------- feat(app): add tooltips to sidebar new session/workspace buttons (#9652)
+ 147:  dfe6ce211 <    -:  --------- chore: generate
+ 148:  5622c53e1 <    -:  --------- tweak: adjust codex prompt to discourage unnecessary question asking and encourage more autonomy
+ 149:  68e41a1ee <    -:  --------- fix: pass arguments to commands without explicit placeholders (#9606)
+ 150:  a3a06ffc4 <    -:  --------- fix(ui): show filename in Edit/Write permission titles (#9662)
+ 151:  b05d88a73 <    -:  --------- docs: clarify that malicious config files are not an attack vector
+ 152:  7170983ef <    -:  --------- fix(app): duplicate session loads
+ 153:  17c4202ea <    -:  --------- fix(opencode): Allow compatible Bun versions in packageManager field (#9597)
+ 154:  17438a2e9 <    -:  --------- Update node_modules hashes
+ 155:  1bc919dc7 <    -:  --------- ignore: add bun/file io skill just for our repo
+ 156:  156ce5436 <    -:  --------- fix(ui): prevent Enter key action during IME composition (#9564)
+ 157:  80481c224 <    -:  --------- fix(app): cleanup pty.exited event listener on unmount (#9671)
+ 158:  281c9d187 <    -:  --------- fix(app): change terminal.new keybind to ctrl+alt+t (#9670)
+ 159:  5521d66bb <    -:  --------- wip(app): ayu colors
+ 160:  0b9b85ea6 <    -:  --------- wip(app): ayu colors
+ 161:  1d6f650f5 <    -:  --------- fix(app): ayu theme colors
+ 162:  1ac0980c8 <    -:  --------- test(app): windows e2e
+ 163:  f73d7e67d <    -:  --------- test(app): windows fixes
+ 164:  1466b43c5 <    -:  --------- test(app): windows fixes
+ 165:  95e9407e6 <    -:  --------- test(app): fix e2e
+ 166:  ff8abd8c2 <    -:  --------- increase session messages popover open delay to 1000ms
+ 167:  a94667e8e <    -:  --------- increase icon letter size to 32px in edit project dialog
+ 168:  74ad6dd4c <    -:  --------- update settings tabs layout and spacing
+ 169:  175313922 <    -:  --------- use active background color for selected settings tab
+ 170:  1a4abe85e <    -:  --------- add sliders icon and use it for General settings tab
+ 171:  83557e9b6 <    -:  --------- add keyboard icon and use it for Shortcuts settings tab
+ 172:  745206ffb <    -:  --------- increase gap between icon and label in settings tabs to 12px
+ 173:  ecae24f42 <    -:  --------- use medium font weight for settings tab labels
+ 174:  0cbbe5af7 <    -:  --------- remove subheader from General settings panel
+ 175:  262aca1bc <    -:  --------- remove border and background from settings panel headers
+ 176:  78bcbda2f <    -:  --------- wrap settings row groups with styled container
+ 177:  f9c951aa8 <    -:  --------- render font options in their respective fonts
+ 178:  0ffc2c2b3 <    -:  --------- increase select dropdown padding to 4px
+ 179:  af8d91117 <    -:  --------- update select item styling: 4px radius, default cursor, 8px 2px padding
+ 180:  09a610764 <    -:  --------- set select dropdown min-width to 180px
+ 181:  f3b0f312b <    -:  --------- adjust select dropdown positioning and padding structure
+ 182:  9ffb7141e <    -:  --------- set select dropdown border-radius to 8px
+ 183:  c57491ba4 <    -:  --------- add triggerStyle prop to Select and use it for font selector
+ 184:  bcb8d970f <    -:  --------- add selector icon and use it for select dropdown trigger
+ 185:  a8113ee0d <    -:  --------- update select trigger and dropdown styling
+ 186:  36bbe809f <    -:  --------- add 4px gutter between select trigger and dropdown
+ 187:  2b9595613 <    -:  --------- add x-large dialog size and use it for settings modal
+ 188:  0d9ce6ad7 <    -:  --------- set settings sidebar width to 200px
+ 189:  19ac6f194 <    -:  --------- set hover background of active sidebar item to surface-raised-base
+ 190:  c2c2bb1fa <    -:  --------- add 4px left padding to sidebar section title
+ 191:  f250a229c <    -:  --------- update select trigger icon styling and spacing
+ 192:  26f66b5f5 <    -:  --------- update: color token
+ 193:  715860f99 <    -:  --------- set default select trigger background to transparent
+ 194:  0c270b474 <    -:  --------- reset select trigger to default state after selection
+ 195:  1092cf403 <    -:  --------- increase gap between label and icon in select trigger to 12px
+ 196:  3eea1d424 <    -:  --------- set select trigger value font weight to regular
+ 197:  73b1bc42f <    -:  --------- increase specificity of select trigger hover/expanded states
+ 198:  39afc055b <    -:  --------- add fade gradient to settings panel headers
+ 199:  7f4277695 <    -:  --------- set 32px spacing between main title and group title
+ 200:  602b6be4d <    -:  --------- update settings panel padding and make content full width
+ 201:  dbc15d481 <    -:  --------- add color scheme preview on hover in appearance dropdown
+ 202:  261b1eca2 <    -:  --------- update keyboard shortcuts panel to match general settings styling
+ 203:  7653e2d4d <    -:  --------- update: add new border and shadow style
+ 204:  7eb724f4e <    -:  --------- fix: dialog shadow
+ 205:  e83c01ad3 <    -:  --------- fix(tui): prevent sidebar height from overflowing. (#9689)
+ 206:  eea70be21 <    -:  --------- chore: follow conventional commit in nix CI (#9672)
+ 207:  c4594c4c1 <    -:  --------- fix(opencode): relax bun version requirement (#9682)
+ 208:  96a974434 <    -:  --------- fix: type error
+ 209:  bf9047ccd <    -:  --------- fix settings sidebar active tab hover to use consistent background
+ 210:  ecd28fd52 <    -:  --------- fix: prompt agent button style
+ 211:  de8769486 <    -:  --------- fix: resolve Select children type conflict with ButtonProps
+ 212:  1f3b2b595 <    -:  --------- fix(app): Edit-project name race condition (#9551)
+ 213:  694695050 <    -:  --------- fix(opencode): preserve tool input from running state for MCP tool results (#9667)
+ 214:  d51089b52 <    -:  --------- docs(web): add KDCO plugins to ecosystem (#7694)
+ 215:  8c5c37768 <    -:  --------- fix: review empty state font size
+ 216:  211147374 <    -:  --------- fix: remove close delay on hover cards to stop overlapping
+ 217:  4350b8fd6 <    -:  --------- fix: show View all sessions button for active project and close hovercard on click
+ 218:  575cc59b3 <    -:  --------- fix: increase sidebar icon size by removing 16px constraint
+ 219:  7be6671e6 <    -:  --------- refactor Select component to use settings variant for settings modal styling
+ 220:  8137e4dd9 <    -:  --------- chore: agents.md
+ 221:  d2fcdef57 <    -:  --------- release: v1.1.28
+ 222:  a0636fcd5 <    -:  --------- fix(app): auto-scroll ux
+ 223:  80dc74a0e <    -:  --------- add keyboard shortcut (mod+,) to open settings dialog
+ 224:  3b46f9012 <    -:  --------- fix: icon size in sidbar
+ 225:  85ef23a09 <    -:  --------- fix(app): don't interfere with scroll when using message nav
+ 226:  5c3e9cfa2 <    -:  --------- chore: generate
+ 227:  0c4ffec85 <    -:  --------- chore: rename toModelMessage -> toModelMessages
+ 228:  021e42c0b <    -:  --------- core: fix issue when switching models (mainly between providers) where past reasoning/metadata would be sent to server and cause 400 errors since they came from another account/provider
+ 229:  7f50b2799 <    -:  --------- docs: add Anthropic subscription warning and update feature list to highlight GitHub Copilot (#9721)
+ 230:  0470717c7 <    -:  --------- feat(app): initial i18n stubbing
+ 231:  92beae141 <    -:  --------- wip(app): i18n
+ 232:  a68e5a1c1 <    -:  --------- wip(app): i18n
+ 233:  7138bd021 <    -:  --------- chore: spec
+ 234:  835fea6bb <    -:  --------- wip(app): i18n prompt input
+ 235:  7a359ff67 <    -:  --------- wip(app): i18n
+ 236:  7e8e4d993 <    -:  --------- wip(app): i18n
+ 237:  be493e8be <    -:  --------- wip(app): i18n
+ 238:  0f2e8ea2b <    -:  --------- wip(app): i18n
+ 239:  9b7d9c817 <    -:  --------- wip(app): i18n
+ 240:  f86c37f57 <    -:  --------- wip(app): i18n
+ 241:  ef36af0e5 <    -:  --------- wip(app): i18n
+ 242:  b13c26916 <    -:  --------- wip(app): i18n
+ 243:  6037e88dd <    -:  --------- wip(app): i18n
+ 244:  233d003b4 <    -:  --------- wip(app): i18n
+ 245:  bb8bf32ab <    -:  --------- chore: generate
+ 246:  20c8624bb <    -:  --------- chore: update nix node_modules hashes
+ 247:  489f2d370 <    -:  --------- fix(ui): remove portal spacer and fix terminal toggle padding (#9728)
+ 248:  a71c40c71 <    -:  --------- fix(app): fix numbered list rendering in web markdown (#9723)
+ 249:  6793b4a6f <    -:  --------- chore: generate
+ 250:  65d9e829e <    -:  --------- feat(desktop): standardize desktop layout icons (#9685)
+ 251:  3723e1b8d <    -:  --------- fix: correct dot prefix display in directory names for RTL text rendering issue #9579 (#9591)
+ 252:  cbe20d22d <    -:  --------- fix: don't update session timestamp for metadata-only changes (resolves #9494) (#9495)
+ 253:  dac73572e <    -:  --------- chore: generate
+ 254:  be9a0bfee <    -:  --------- wip: support
+ 255:  217e4850d <    -:  --------- chore: generate
+ 256:  34d473c0f <    -:  --------- chore: revert "Update flake.lock" (#9725)
+ 257:  b93f33eaa <    -:  --------- fix(tui): responsive layout for narrow screens (#9703)
+ 258:  9dc95c4c6 <    -:  --------- tweak: ensure synthetic user message following subtasks is only added when user manually invoked subtask
+ 259:  74bd52e8a <    -:  --------- fix: ensure apply patch tool emits edited events
+ 260:  2049af4d6 <    -:  --------- chore: generate
+ 261:  c9ea96680 <    -:  --------- feat: add OPENCODE_DISABLE_FILETIME_CHECK flag (#6581)
+ 262:  a18ae2c8b <    -:  --------- feat: add OPENCODE_DISABLE_PROJECT_CONFIG env var (#8093)
+ 263:  96e9c89cc <    -:  --------- chore: generate
+ 264:  0f979bb87 <    -:  --------- chore(opencode): Use Bun.semver instead of node-semver (#9773)
+ 265:  a63996197 <    -:  --------- chore: update nix node_modules hashes
+ 266:  65938baf0 <    -:  --------- core: update session summary after revert to show file changes
+ 267:  d6caaee81 <    -:  --------- fix(desktop): no proxy for connecting to sidecar (#9690)
+ 268:  cf6ad4c40 <    -:  --------- fix: handle special characters in paths and git snapshot reading logic(#9804) (#9807)
+ 269:  79aa931a0 <    -:  --------- chore: generate
+ 270:  8e8fb6a54 <    -:  --------- feat(app): allow users to select directory text on new session (#9760)
+ 271:  2e5fe6d5c <    -:  --------- fix(ui): preserve filename casing in edit/write tool titles (#9752)
+ 272:  996eeb1f6 <    -:  --------- feat(app): add manage models icon to selector (per Figma request) (#9722)
+ 273:  7b8fad620 <    -:  --------- test(app): fix e2e
+ 274:  64c80f1b5 <    -:  --------- fix(app): don't show notification on session if active
+ 275:  e6438aa3f <    -:  --------- feat(app): korean translations
+ 276:  118b4f65d <    -:  --------- feat(app): german translations
+ 277:  09a9556c7 <    -:  --------- feat(app): spanish translations
+ 278:  efff52714 <    -:  --------- feat(app): french translations
+ 279:  4a386906d <    -:  --------- feat(app): japanese translations
+ 280:  8b0353cb2 <    -:  --------- feat(app): danish translations
+ 281:  4b8335160 <    -:  --------- test(app): fix e2e
+ 282:  34e4d077c <    -:  --------- ignore: update download stats 2026-01-21
+ 283:  bb710e9ea <    -:  --------- fix(core): snapshot regression
+ 284:  e237f06c9 <    -:  --------- test(app): fix e2e
+ 285:  ab705bbc3 <    -:  --------- fix(desktop): add workaround for nushell
+ 286:  259b2a3c2 <    -:  --------- fix(app): japanese language support
+ 287:  87d91c29e <    -:  --------- fix(app): terminal improvements - focus, rename, error state, CSP (#9700)
+ 288:  7ed448a7e <    -:  --------- test(app): fix e2e
+ 289:  d00b8df77 <    -:  --------- feat(desktop): properly integrate window controls on windows (#9835)
+ 290:  368cd2af4 <    -:  --------- fix(app): workspaces padding wonkiness (#9772)
+ 291:  19f68382f <    -:  --------- chore: generate
+ 292:  6ac8c85b3 <    -:  --------- feat(app): model tooltip metadata in chooser (per Figma request) (#9707)
+ 293:  f736751a8 <    -:  --------- chore: generate
+ 294:  63da3a338 <    -:  --------- fix(app): breaking out of auto-scroll
+ 295:  4fc7bcf09 <    -:  --------- fix: type error
+ 296:  97e0e79f1 <    -:  --------- wip: black
+ 297:  f7f2d9700 <    -:  --------- test(app): fix e2e
+ 298:  0059fdc1f <    -:  --------- fix(app): add aria-labels to titlebar and sidebar buttons (#9843)
+ 299:  b10f42374 <    -:  --------- chore: generate
+ 300:  9f02ffe02 <    -:  --------- fix(app): new workspace button with all languages (#9848)
+ 301:  fd77d31b4 <    -:  --------- tweak(session title): change prompt to have the response with user language (#9847)
+ 302:  bfbcbc886 <    -:  --------- feat(formatters): add laravel pint as a `.php` formatter (#7312)
+ 303:  b8a0e420f <    -:  --------- feat(app): search on settings shortcuts  (#9850)
+ 304:  178767af7 <    -:  --------- chore: generate
+ 305:  0e1a8a183 <    -:  --------- fix: Claude w/bedrock custom inference profile - caching support (#9838)
+ 306:  ab3d412a8 <    -:  --------- tweak: adjust skill tool description to make it more clear which skills are available
+ 307:  850d50eb6 <    -:  --------- fix(app): missing i18n keys
+ 308:  b746c006c <    -:  --------- feat(app): new sounds
+ 309:  621550ac7 <    -:  --------- fix(app): keybind search height
+ 310:  cd34f5e07 <    -:  --------- feat(app): new sound effects, downmixed to mono
+ 311:  c4c489a5b <    -:  --------- release: v1.1.29
+ 312:  95b17bcf5 <    -:  --------- chore: generate
+ 313:  8df09abb1 <    -:  --------- feat: Make the models.dev domain configurable for offline environments (#9258)
+ 314:  182056981 <    -:  --------- chore(deps): update GitLab packages for better self-hosted instance support (#9856)
+ 315:  d03cac235 <    -:  --------- chore: generate
+ 316:  51126f081 <    -:  --------- chore: update nix node_modules hashes
+ 317:  301e74d95 <    -:  --------- fix: Persist loaded model and mode on ACP session load (#9829)
+ 318:  d9f0287d7 <    -:  --------- tweak: add back todo list tools for openai models
+ 319:  2a370f803 <    -:  --------- feat: implement home directory expansion for permission patterns using `~` and `$HOME` prefixes. (#9813)
+ 320:  c69e3bbde <    -:  --------- fix(app): auto-scroll ux
+ 321:  df2ed9923 <    -:  --------- fix(desktop): Navigation with Big Sessions (#9529)
+ 322:  13405aede <    -:  --------- fix(app): remove terminal button border to align with close button (#9874)
+ 323:  6f7a1c69a <    -:  --------- tweak: adjust textVerbosity and reasoningEffort defaults to better match codex cli
+ 324:  3ba1111ed <    -:  --------- fix(app): terminal issues/regression
+ 325:  b33cec485 <    -:  --------- fix: type error
+ 326:  aa599b4a7 <    -:  --------- fix: when dropping unsupported metadata match on providerID/model.id instead of providerID/model.api.id to prevent regression when using legacy model ids (pre-variant)
+ 327:  416aaff48 <    -:  --------- feat(acp): add session/list and session/fork support (#7976)
+ 328:  7e609cc61 <    -:  --------- chore: update nix node_modules hashes
+ 329:  52535654e <    -:  --------- fix(app): tab should select suggestion
+ 330:  ae8cff22e <    -:  --------- fix(app): renaming non-git projects shouldn't affect other projects
+ 331:  6d656e482 <    -:  --------- fix(app): querySelector errors, more defensive scroll-to-item
+ 332:  fa9133772 <    -:  --------- fix(app): provider connect oauth error handling
+ 333:  1b98f2679 <    -:  --------- fix(web): missing favicons
+ 334:  b7b2eae20 <    -:  --------- fix(web): favicon rename again
+ 335:  0b63cae1a <    -:  --------- fix: update pre-push hook to allow caret version differences (#9876)
+ 336:  bcdec15fb <    -:  --------- fix(web): favicon rename again
+ 337:  09d2fd57f <    -:  --------- release: v1.1.30
+ 338:  5ca28b645 <    -:  --------- feat(app): polish translations (#9884)
+ 339:  17a5f75b5 <    -:  --------- chore: generate
+ 340:  c89f6e7ac <    -:  --------- add chat.headers hook, adjust codex and copilot plugins to use it
+ 341:  383c2787f <    -:  --------- feat(i18n): add Russian language support (#9882)
+ 342:  23daac217 <    -:  --------- feat(i18n): add Traditional Chinese language support & rename 'Chinese' to 'Chinese (Simplified)' (#9887)
+ 343:  936f3ebe9 <    -:  --------- feat(ui): add gruvbox theme (Web/App) (#9855)
+ 344:  a132b2a13 <    -:  --------- Zen: disable autoreload by default
+ 345:  80c808d18 <    -:  --------- zen: show subscription usage in usage history
+ 346:  20b6cc279 <    -:  --------- zen: show subscription usage in graph
+ 347:  19fe3e265 <    -:  --------- mark subagent sessions as agent initiated to ensure they dont count against quota (got the ok from copilot team)
+ 348:  a0d71bf8e <    -:  --------- feat: add daily Discord recaps for issues and PRs (#9904)
+ 349:  877b0412c <    -:  --------- fix(app): use message diffs, not session diffs
+ 350:  59ceca3e5 <    -:  --------- release: v1.1.31
+ 351:  8c230fee6 <    -:  --------- fix: scope PR recap to only PRs from today (#9905)
+ 352:  f7c5b62ba <    -:  --------- chore: generate
+ 353:  6d574549b <    -:  --------- fix: include _noop tool in activeTools for LiteLLM proxy compatibility (#9912)
+ 354:  65e267ed3 <    -:  --------- feat: Add promptCacheKey for Venice provider (#9915)
+ 355:  af1e2887b <    -:  --------- fix(app): open terminal pane when creating new terminal (#9926)
+ 356:  c3415b79f <    -:  --------- fix: correct spelling 'supercedes' to 'supersedes' (#9935)
+ 357:  f1df6f2d1 <    -:  --------- chore: update flake.lock (#9938)
+ 358:  fc0210c2f <    -:  --------- fix(acp): rename setSessionModel to unstable_setSessionModel (#9940)
+ 359:  c2844697f <    -:  --------- fix: ensure images are properly returned as tool results
+ 360:  9fc182baf <    -:  --------- docs: add API server section in CONTRIBUTING.md (#9888)
+ 361:  9afc06715 <    -:  --------- feat(app): always show Toggle-Review button  (#9944)
+ 362:  ba2e35e29 <    -:  --------- feat(i18n): add Arabic language support (#9947)
+ 363:  cf1fc02d2 <    -:  --------- update jump to latest button with circular design and animation
+ 364:  3b92d5c1c <    -:  --------- fix: match terminal toggle button size with sidebar and review toggles
+ 365:  7b0ad8778 <    -:  --------- fix: add 8px left margin to sidebar toggle on desktop
+ 366:  c73777695 <    -:  --------- refactor(desktop): move markdown rendering to rust (#10000)
+ 367:  de07cf26e <    -:  --------- chore: generate
+ 368:  8a043edfd <    -:  --------- chore: update website stats
+ 369:  3435327bc <    -:  --------- fix(app): session screen accessibility improvements (#9907)
+ 370:  d14735ef4 <    -:  --------- chore: generate
+ 371:  fb3d8e83c <    -:  --------- chore: add plans directory to .opencode gitignore (resolves #10005) (#10006)
+ 372:  366da595a <    -:  --------- fix(desktop): change project path tooltip position to bottom (#9497)
+ 373:  d9b948501 <    -:  --------- fix(app): a11y translations
+ 374:  ae2693425 <    -:  --------- fix(app): snap to bottom on prompt
+ 375:  4ca088ed1 <    -:  --------- ignore: update download stats 2026-01-22
+ 376:  fb007d6ba <    -:  --------- feat(app): copy buttons for assistant messages and code blocks
+ 377:  e9c6a4a2d <    -:  --------- chore: generate
+ 378:  8427f40e8 <    -:  --------- feat: Add support for Norwegian translations (#10018)
+ 379:  b59f3e681 <    -:  --------- chore: generate
+ 380:  aa1772900 <    -:  --------- feat(app): add scrollbar styling to session page (#10020)
+ 381:  09997bb6c <    -:  --------- fix(app): auto-scroll
+ 382:  3807523f4 <    -:  --------- fix(app): auto-scroll
+ 383:  8e3b459d7 <    -:  --------- fix(app): hover-card scrolling
+ 384:  4385f0305 <    -:  --------- fix: satisfies
+ 385:  c41c9a366 <    -:  --------- fix: type error
+ 386:  513a8a3d2 <    -:  --------- test(app): smoke tests spec
+ 387:  6f7d71012 <    -:  --------- test(app): settings smoke tests
+ 388:  ec53a7962 <    -:  --------- test(app): slash command smoke tests
+ 389:  710dc4fa9 <    -:  --------- test(app): @ attachment smoke test
+ 390:  c031139b8 <    -:  --------- test(app): model picker smoke test
+ 391:  0a678eeac <    -:  --------- test(app): file viewer smoke test
+ 392:  287511c9b <    -:  --------- test(app): terminal smoke test
+ 393:  16fad51b5 <    -:  --------- feat(app): add workspace startup script to projects
+ 394:  16a8f5a9c <    -:  --------- chore: generate
+ 395:  224b2c37d <    -:  --------- fix(desktop): attempt to improve connection reliability
+ 396:  b776ba6b7 <    -:  --------- fix(desktop): correct NO_PROXY syntax
+ 397:  e85b95308 <    -:  --------- fix(app): clear session hover state on navigation (#10031)
+ 398:  9aa54fd71 <    -:  --------- fix(app): support ctrl-n/p in lists (#10036)
+ 399:  c3f393bcc <    -:  --------- fix(desktop): Expand font stacks to include macOS Nerd Font default names  (#10045)
+ 400:  e4286ae7a <    -:  --------- fix(codex): write refresh tokens to openai auth (#10010) (#10011)
+ 401:  29cebd73e <    -:  --------- feat(mcp log): print mcp stderr to opencode log file (#9982)
+ 402:  2e09d7d83 <    -:  --------- ignore: git ignore the lockfiles for .opencode
+ 403:  3b7c347b2 <    -:  --------- tweak: bash tool, ensure cat will trigger external_directory perm
+ 404:  31f3a508d <    -:  --------- Revert "fix(core): snapshot regression"
+ 405:  a96f3d153 <    -:  --------- Revert "fix: handle special characters in paths and git snapshot reading logic(#9804) (#9807)"
+ 406:  c0d3dd51b <    -:  --------- chore: upload playwright assets on test failure
+ 407:  7b23bf7c1 <    -:  --------- fix(app): don't auto nav to workspace after reset
+ 408:  fc53abe58 <    -:  --------- feat(app): close projects from hover card
+ 409:  de6582b38 <    -:  --------- feat(app): delete sessions
+ 410:  c4971e48c <    -:  --------- chore(app): translations
+ 411:  9c45746bd <    -:  --------- fix(app): new session button
+ 412:  b8526eca6 <    -:  --------- chore: cleanup
+ 413:  bb582416f <    -:  --------- chore: cleanup
+ 414:  a890d51bb <    -:  --------- wip: zen black
+ 415:  e17b87564 <    -:  --------- zen: cancel waitlist
+ 416:  5a4eec5b0 <    -:  --------- chore: generate
+ 417:  93044cc7d <    -:  --------- test(app): fix windows paths
+ 418:  496bbd70f <    -:  --------- feat(app): render images in session review
+ 419:  62115832f <    -:  --------- feat(app): render audio players in session review
+ 420:  9802ceb94 <    -:  --------- chore: cleanup
+ 421:  cda7d3dd7 <    -:  --------- fix: make 'Learn More' link functional in theme settings (#10078)
+ 422:  c96c25a72 <    -:  --------- chore: generate
+ 423:  923e3da97 <    -:  --------- feat(ui): add aura theme (#10056)
+ 424:  32f72f49a <    -:  --------- feat(i18n): add br locale support (#10086)
+ 425:  3c7d5174b <    -:  --------- fix(ui): prevent copy buttons from stealing focus from prompt input (#10084)
+ 426:  46de1ed3b <    -:  --------- fix(app): windows path handling issues
+ 427:  8ebb76647 <    -:  --------- fix(attach): allow remote --dir (#8969)
+ 428:  71ef43f9a <    -:  --------- release: v1.1.32
+ 429:  3eaf6f3ba <    -:  --------- fix(ui): show file path in apply_patch request permission screen (#10079)
+ 430:  dd5a601ed <    -:  --------- chore: generate
+ 431:  fdac21688 <    -:  --------- feat(app): add app version display to settings (#10095)
+ 432:  5f3ab9395 <    -:  --------- wip: zen black
+ 433:  c128579cf <    -:  --------- chore: generate
+ 434:  1b244bf85 <    -:  --------- wip: zen black
+ 435:  510f595e2 <    -:  --------- fix(tui): add weight to fuzzy search to maintain title priority (#10106)
+ 436:  515391e9c <    -:  --------- feat(gitlab): Added support for OpenAI based GitLab Duo models (#10108)
+ 437:  7c80ac072 <    -:  --------- chore: update nix node_modules hashes
+ 438:  bcf7a65e3 <    -:  --------- fix(app): non-git projects should be renameable
+ 439:  31094cd5a <    -:  --------- fix(provider): add thinking presets for Google Vertex Anthropic (#9953)
+ 440:  a8018dcc4 <    -:  --------- fix(app): allow adding projects from root
+ 441:  972cb01d5 <    -:  --------- fix(app): allow adding projects from any depth
+ 442:  07015aae0 <    -:  --------- fix(app): folder suggestions missing last part
+ 443:  2b9b98e9c <    -:  --------- fix(app): project icon color flash on load
+ 444:  14db336e3 <    -:  --------- fix(app): flash of fallback icon for projects
+ 445:  71cd59932 <    -:  --------- fix(app): session shouldn't be keyed
+ 446:  2e53697da <    -:  --------- release: v1.1.33
+ 447:  640d1f1ec <    -:  --------- wip(app): line selection
+ 448:  0ce0cacb2 <    -:  --------- wip(app): line selection
+ 449:  cb481d9ac <    -:  --------- wip(app): line selection
+ 450:  1e1872aad <    -:  --------- wip(app): line selection
+ 451:  99e15caaf <    -:  --------- wip(app): line selection
+ 452:  0eb523631 <    -:  --------- wip(app): line selection
+ 453:  82f718b3c <    -:  --------- wip(app): line selection
+ 454:  d35fabf5d <    -:  --------- chore: cleanup
+ 455:  1780bab1c <    -:  --------- wip(app): line selection
+ 456:  077ebdbfd <    -:  --------- chore: generate
+ 457:  c0dc8ea39 <    -:  --------- wip: zen black
+ 458:  213b823c6 <    -:  --------- chore: generate
+ 459:  47a2b9e8d <    -:  --------- zen: glm 4.7
+ 460:  b29898226 <    -:  --------- fix(desktop): Fixed a reactive feedback loop in the global project cache sync (#10139)
+ 461:  c130dd425 <    -:  --------- release: v1.1.34
+ 462:  e376e1de1 <    -:  --------- fix(app): enable dialog dismiss on model selector (dialog.tsx) (#10203)
+ 463:  d3688b150 <    -:  --------- chore: generate
+ 464:  c72d9a473 <    -:  --------- fix(app): View all sessions flakiness  (#10149)
+ 465:  df7b6792c <    -:  --------- Revert "wip(app): line selection"
+ 466:  82ec84982 <    -:  --------- Reapply "wip(app): line selection"
+ 467:  41ede06b2 <    -:  --------- docs(ecosystem): Add CodeNomad entry to ecosystem documentation (#10222)
+ 468:  3fbda5404 <    -:  --------- chore: generate
+ 469:  c4d223eb9 <    -:  --------- perf(app): faster workspace creation
+ 470:  4afb46f57 <    -:  --------- perf(app): don't remount directory layout
+ 471:  2a2d800ac <    -:  --------- fix: type error
+ 472:  f34b509fe <    -:  --------- chore: generate
+ 473:  b6beda156 <    -:  --------- fix: type error
+ 474:  e5fe50f7d <    -:  --------- fix(app): close delete workspace dialog immediately
+ 475:  d6c5ddd6d <    -:  --------- ignore: update download stats 2026-01-23
+ 476:  65c236c07 <    -:  --------- feat(app): auto-open oauth links for codex and copilot (#10258)
+ 477:  24d942349 <    -:  --------- zen: use balance after rate limited
+ 478:  469fd43c7 <    -:  --------- chore: generate
+ 479:  472695cac <    -:  --------- zen: fix balance not shown
+ 480:  4f1bdf1c5 <    -:  --------- chore: generate
+ 481:  8105f186d <    -:  --------- fix(app): center checkbox indicator in provider selection (#10267)
+ 482:  225b72ca3 <    -:  --------- feat: always center selected item in selection dialogs (resolves #10209) (#10207)
+ 483:  8a216a6ad <    -:  --------- fix(app): normalize path separators for session diff filtering on Windows (#10291)
+ 484:  af5e40539 <    -:  --------- zen: remove grok code model
+ 485:  cf7e10c4e <    -:  --------- fix: add xhigh reasoning effort for GitHub Copilot GPT-5 models (#10092)
+ 486:  4173adf5e <    -:  --------- feat(tasks): Add model info as part of metadata (#10307)
+ 487:  6633f0e6f <    -:  --------- fix: bump gitlab-ai-provider version (#10255)
+ 488:  1d09343f1 <    -:  --------- fix: allow gpt-5.1-codex model in codex auth pluginFixes (#10181)
+ 489:  e2d8310b7 <    -:  --------- chore: generate
+ 490:  e452b3cae <    -:  --------- chore: update nix node_modules hashes
+ 491:  b978ca11d <    -:  --------- fix: retry webfetch with simple UA on 403 (#10328)
+ 492:  ae84e9909 <    -:  --------- fix(app): improve comment popup styling and add new comment icon
+ 493:  2daa3652b <    -:  --------- fix(ui): add button-primary-base variable and use primary variant for Comment button
+ 494:  328bd3fb0 <    -:  --------- fix(app): update context cards styling with 8px padding/gap and 6px border radius
+ 495:  56ece04dd <    -:  --------- fix(app): update prompt input styling - 14px border radius, card hover states, and 8px padding
+ 496:  35a3c9822 <    -:  --------- fix(app): style submitted comment icons to match comment popup style
+ 497:  1bf4caa0c <    -:  --------- fix(app): indent comment text to align with filename in context card
+ 498:  538404005 <    -:  --------- fix(app): truncate comment text and set card max-width to 200px
+ 499:  d3490cfd2 <    -:  --------- feat(ui): add close-small icon and use it for comment card dismiss button
+ 500:  42a1a1202 <    -:  --------- fix(app): add transition-all to comment card hover states
+ 501:  c70e8b588 <    -:  --------- fix(app): keep close icon in top right of comment card
+ 502:  4b64bff11 <    -:  --------- fix(app): add 8px gap before close icon and truncate long filenames
+ 503:  258d207fd <    -:  --------- fix(app): increase comment font size to 12px
+ 504:  3b3ab29d8 <    -:  --------- fix(app): comment card styling - 48px height, 2px gap, truncate filename while keeping line count visible
+ 505:  1476c4ca4 <    -:  --------- fix(app): add shadow-xs-border with hover state to comment card
+ 506:  1df697dec <    -:  --------- fix(app): remove gap between filename and comment in comment card
+ 507:  18ea09868 <    -:  --------- fix(app): truncate filename from start to show end of path
+ 508:  75cccc305 <    -:  --------- feat(app): add middle truncation for filename in comment card
+ 509:  b28020748 <    -:  --------- fix(app): add tooltip with path, 6px spacing before close icon, and reduce filename truncation to 14 chars
+ 510:  c66da1736 <    -:  --------- fix(ui): move filename and line count below comment text in popovers
+ 511:  af6bd9d3b <    -:  --------- fix(ui): style comment popovers - 14px radius, move label below, use text-weak for label, text-strong 14px for comment
+ 512:  0a9f51f87 <    -:  --------- fix(ui): position read-only comment popover below icon with 4px gutter
+ 513:  31f80a45a <    -:  --------- fix(ui): remove border from comment input popover
+ 514:  40ab6ac86 <    -:  --------- fix(ui): use shadow-lg-border-base on read-only comment popovers and align label spacing
+ 515:  58788192f <    -:  --------- fix(ui): close comment input popover on Escape key or click away
+ 516:  c9215e8dc <    -:  --------- fix(ui): style review tab comment button to match file tab - blue background, white comment icon
+ 517:  d4443d79c <    -:  --------- update: border variable
+ 518:  0cc206a1a <    -:  --------- update: border radius on popover card
+ 519:  1533c50ac <    -:  --------- ignore: update download stats 2026-01-24
+ 520:  d5f78a727 <    -:  --------- fix(app): Fix plan mode btn keyboard a11y issues (#10330)
+ 521:  5f7111fe9 <    -:  --------- fix(app): Always close hovercard when view-sessions clicked (#10326)
+ 522:  98b66ff93 <    -:  --------- feat(desktop): add Iosevka as a font choice (resolves #10103) (#10347)
+ 523:  d96877f17 <    -:  --------- fix(app): sticky header top
+ 524:  456469d54 <    -:  --------- fix(app): tool details indentation
+ 525:  04b511e1f <    -:  --------- chore: generate
+ 526:  da8f3e92a <    -:  --------- perf(app): better session stream rendering
+ 527:  962ab3bc8 <    -:  --------- fix(app): reactive loops
+ 528:  09f45320b <    -:  --------- chore: cleanup
+ 529:  91287dd7b <    -:  --------- fix(app): tooltip text in light mode to use inverted neutral scale (#9786)
+ 530:  68e504bdc <    -:  --------- fix(tui): Use selectedForeground for question prompt tab text visibility (resolves #10334) (#10337)
+ 531:  ae77ef337 <    -:  --------- chore: generate
+ 532:  6d8e99438 <    -:  --------- fix(app): line selection fixes
+ 533:  6abe86806 <    -:  --------- fix(app): better error screen when connecting to sidecar
+ 534:  fa510161f <    -:  --------- fix(app): missing translations
+ 535:  7c2e59de6 <    -:  --------- fix(app): new workspace expanded and at the top
+ 536:  d8bbb6df6 <    -:  --------- zen: disable reload when reload fails
+ 537:  b590bda5e <    -:  --------- zen: show reload error
+ 538:  ea8d727e2 <    -:  --------- chore: generate
+ 539:  651124315 <    -:  --------- feat(docs): add a desktop troubleshooting guide (#10397)
+ 540:  077d17d43 <    -:  --------- fix: permission prompt should ignore keyboard events while dialog stack len > 0 (#10338)
+ 541:  88bcd0465 <    -:  --------- tweak: tell the model what model it is in environment section of prompt
+ 542:  ad27427b4 <    -:  --------- use min/maxHeight for question textarea
+ 543:  c5ef6452b <    -:  --------- ignore: update commit.md
+ 544:  d9eebba90 <    -:  --------- chore: generate
+ 545:  e3c1861a3 <    -:  --------- get rid of models.dev macro
+ 546:  f4cf3f497 <    -:  --------- fix(web): construct apply_patch metadata before requesting permission (#10422)
+ 547:  67ea21b55 <    -:  --------- feat(web): implement new server management for web and desktop (#8513)
+ 548:  442a73588 <    -:  --------- chore: generate
+ 549:  087d7da14 <    -:  --------- fix(provider): deep merge providerOptions in applyCaching (#10323)
+ 550:  32e6bcae3 <    -:  --------- core: fix unicode filename handling in snapshot diff by disabling quote escaping
+ 551:  15801a01b <    -:  --------- fix: add state to pause existing audio for demo menus, add support fo… (#10428)
+ 552:  8f0d08fae <    -:  --------- chore: generate
+ 553:  fa1a54ba3 <    -:  --------- fix nix
+ 554:  42b802b68 <    -:  --------- fix(app): line selection ux fixes
+ 555:  d90b4c9eb <    -:  --------- fix(app): line selection ux
+ 556:  1080f37f9 <    -:  --------- fix(app): don't use findLast
+ 557:  ac204ed89 <    -:  --------- fix(ui): add escape/click-away to close read-only comment popovers, 10px radius, remove 'Click to view context' text
+ 558:  9759afad8 <    -:  --------- fix(app): adjust prompt input positioning - 12px from bottom/right, remove session panel bottom padding
+ 559:  f4bcf0062 <    -:  --------- fix(app): adjust prompt container padding to 16px bottom and horizontal
+ 560:  363ff153a <    -:  --------- fix(ui): fix selected line number color in diff view for light/dark mode
+ 561:  0d41f1fc2 <    -:  --------- fix(ui): remove unnecessary !important from diff selection styles
+ 562:  bfb088537 <    -:  --------- fix(util): change filename truncation to end truncation, add truncateMiddle utility
+ 563:  e5d2d984b <    -:  --------- feat(app): change prompt placeholder based on comment count
+ 564:  fda897eac <    -:  --------- fix(app): improve comment popover - remove disabled state, add error styling, fix click-outside detection
+ 565:  e2bffc29f <    -:  --------- fix(ui): change read-only comment popover border-radius to 8px
+ 566:  48236ee0e <    -:  --------- feat(ui): add critical shadow for comment input validation, set editor popover radius to 14px
+ 567:  b3901ac38 <    -:  --------- chore: generate
+ 568:  68bd16df6 <    -:  --------- core: fix models snapshot loading to prevent caching issues
+ 569:  0d9ca0ea3 <    -:  --------- sync
+ 570:  41f2653a3 <    -:  --------- fix(app): prompt submission failing on first message
+ 571:  ff9c18648 <    -:  --------- tests
+ 572:  eaa622e85 <    -:  --------- fix adam
+ 573:  07d7dc083 <    -:  --------- ci: remove unused environment variables from test workflow
+ 574:  27b45d070 <    -:  --------- fix(app): scrolling for unpaid model selector
+ 575:  8f99e9a60 <    -:  --------- fix(opentui): question selection click when terminal unfocused (#9731)
+ 576:  b951187a6 <    -:  --------- fix(app): no select on new session
+ 577:  7ba25c6af <    -:  --------- fix(app): model selector ux
+ 578:  dc1ff0e63 <    -:  --------- fix(app): model select not closing on escape
+ 579:  847a7ca00 <    -:  --------- fix(app): don't show scroll to bottom if no scroll
+ 580:  aeeb05e4a <    -:  --------- feat(app): back button in subagent sessions (#10439)
+ 581:  faf2609bc <    -:  --------- chore: generate
+ 582:  02456376c <    -:  --------- fix(app): enable submit button when comment cards are present
+ 583:  b08935850 <    -:  --------- fix(app): update titlebar spacing and status popover styling
+ 584:  262084d7e <    -:  --------- fix(app): use rounded-sm for explicit 4px border radius
+ 585:  2c620e174 <    -:  --------- fix(app): update status popover styling and positioning
+ 586:  d01df32e3 <    -:  --------- fix(app): update server and MCP item styles in status popover
+ 587:  a98add29d <    -:  --------- feat(app): add truncation tooltip to server items in status popover
+ 588:  02aea77e9 <    -:  --------- feat(app): update manage servers dialog styling and behavior
+ 589:  a5c08bc4f <    -:  --------- fix(app): update add server button and row styling
+ 590:  a169c2987 <    -:  --------- fix(app): allow add server row to grow for error message
+ 591:  8fe42cd5d <    -:  --------- fix(app): remove hover background color from server list items
+ 592:  df4d83957 <    -:  --------- fix(app): position status circle inside input wrapper and fix dialog padding
+ 593:  8845f2b92 <    -:  --------- feat(ui): add onFilter callback to List, discard add server row when searching
+ 594:  c56f6127c <    -:  --------- fix(app): change server item actions div padding from px-4 to pl-4
+ 595:  b824fc551 <    -:  --------- fix(app): update options icon button styling - active state and hover
+ 596:  a878b8d7a <    -:  --------- refactor(app): replace Popover with DropdownMenu for server options
+ 597:  937474aff <    -:  --------- fix(app): add 8px spacing between share button and icon buttons in titlebar
+ 598:  cf7c6417f <    -:  --------- fix(app): update share popover gutter to 6px and radius to match status dropdown
+ 599:  c1af7ddc6 <    -:  --------- fix(app): adjust share popover position 64px to the left
+ 600:  c2ec60821 <    -:  --------- feat(ui): add link icon and use it for copy-to-clipboard buttons
+ 601:  b69521606 <    -:  --------- fix(ui): align list search input width with list items
+ 602:  30111d2b1 <    -:  --------- fix(ui): prevent focus on share popover text field
+ 603:  4a4c1b31a <    -:  --------- fix(ui): update copy button tooltip gutter and label to 'Copy link'
+ 604:  3d956c5f7 <    -:  --------- fix(ui): show 'Copied' tooltip instantly when copy button clicked
+ 605:  fba77a364 <    -:  --------- fix(ui): prevent tooltip fade when forceOpen is true
+ 606:  241087d1d <    -:  --------- fix(app): update status popover empty state text color and centering
+ 607:  43906f56c <    -:  --------- fix(app): remove space between ellipsis and truncated text in comment card tooltip
+ 608:  d97cd5686 <    -:  --------- fix(ui): popover exit ux
+ 609:  10d227b8d <    -:  --------- fix(ui): tab focus state
+ 610:  ae11cad13 <    -:  --------- fix: type error
+ 611:  1269766cb <    -:  --------- chore: generate
+ 612:  2f1be914c <    -:  --------- fix(app): remove terminal connection error overlay
+ 613:  3fdd6ec12 <    -:  --------- fix(app): terminal clone needs remount
+ 614:  e223d1a0e <    -:  --------- fix: type error
+ 615:  6d0fecb98 <    -:  --------- chore: generate
+ 616:  4ded06f05 <    -:  --------- update: theme variables
+ 617:  8714b1a3a <    -:  --------- add active state to comment cards in prompt input
+ 618:  93e948ae1 <    -:  --------- fix(ui): ensure comment popover appears above other comment icons
+ 619:  e1fe86e6d <    -:  --------- chore: generate
+ 620:  8d1a66d04 <    -:  --------- fix(app): unnecessary suspense flash
+ 621:  399fec770 <    -:  --------- fix(app): markdown rendering with morphdom for better dom functions (#10373)
+ 622:  d6efb797b <    -:  --------- chore: update nix node_modules hashes
+ 623:  2f9f588f7 <    -:  --------- fix(app): submit button state
+ 624:  33298e877 <    -:  --------- release: v1.1.35
+ 625:  460513a83 <    -:  --------- chore: generate
+ 626:  7f55a9736 <    -:  --------- chore: bump hey api
+ 627:  a64f8d1b1 <    -:  --------- chore: generate
+ 628:  b1072053b <    -:  --------- chore: update nix node_modules hashes
+ 629:  397ee419d <    -:  --------- tweak: make question valdiation more lax to avoid tool call failures
+ 630:  12473561b <    -:  --------- chore: generate
+ 631:  2917a2fa6 <    -:  --------- test: fix
+ 632:  e2d0d85d9 <    -:  --------- test: fix
+ 633:  0bc4a4332 <    -:  --------- fix(provider): enable thinking for google-vertex-anthropic models (#10442)
+ 634:  a5c058e58 <    -:  --------- ignore: update download stats 2026-01-25
+ 635:  ddc4e8935 <    -:  --------- fix(app): cleanup comment component usage
+ 636:  dcc8d1a63 <    -:  --------- perf(app): performance improvements
+ 637:  e9152b174 <    -:  --------- fix(app): comment line placement in diffs
+ 638:  f7a4cdcd3 <    -:  --------- fix(app): no default model crash
+ 639:  caecc7911 <    -:  --------- fix(app): cursor on resize (#10293)
+ 640:  a900c8924 <    -:  --------- fix(app): mobile horizontal scrolling due to session stat btn (#10487)
+ 641:  d25120680 <    -:  --------- chore: generate
+ 642:  2b07291e1 <    -:  --------- fix(app): scroll to comment on click
+ 643:  4c2d597ae <    -:  --------- fix(app): line selection colors
+ 644:  471fc06f0 <    -:  --------- chore(app): visual cleanup
+ 645:  d75dca29e <    -:  --------- chore: generate
+ 646:  9407a6fd7 <    -:  --------- ignore: rm STYLE_GUIDE, consolidate in AGENTS.md
+ 647:  ebe86e40a <    -:  --------- fix(tui): prevent crash when theme search returns no results (#10565)
+ 648:  e491f5cc1 <    -:  --------- fix(web): add & fix the download button (#10566)
+ 649:  65ac31828 <    -:  --------- fix(app): user message fade
+ 650:  9a89cd91d <    -:  --------- fix(app): line selection styling
+ 651:  b982ab2fb <    -:  --------- chore: generate
+ 652:  056186225 <    -:  --------- release: v1.1.36
+ 653:  e49306b86 <    -:  --------- rm log statement
+ 654:  fc57c074a <    -:  --------- chore: generate
+ 655:  14b00f64a <    -:  --------- fix(app): escape should always close dialogs
+ 656:  d115f33b5 <    -:  --------- fix(app): don't allow workspaces in non-vcs projects
+ 657:  94ce289dd <    -:  --------- fix(app): run start command after reset
+ 658:  407f34fed <    -:  --------- chore: cleanup
+ 659:  835b39659 <    -:  --------- chore: i18n for readme
+ 660:  a84843507 <    -:  --------- chore: readme links
+ 661:  94dd0a8db <    -:  --------- ignore: rm spoof and bump plugin version
+ 662:  045c30acf <    -:  --------- docs: fix permission event name (permission.asked not permission.updated) (#10588)
+ 663:  57532326f <    -:  --------- zen: handle subscription payment failure
+ 664:  f0830a74b <    -:  --------- ignore: update AGENTS.md
+ 665:  3071720ce <    -:  --------- fix(tui): Move animations toggle to global System category (resolves #10495) (#10497)
+ 666:  fbcf13852 <    -:  --------- chore: better i18n links
+ 667:  5369e96ab <    -:  --------- fix(app): line selection colors
+ 668:  578361de6 <    -:  --------- fix: remove broken app.tsx command option
+ 669:  3d23d2df7 <    -:  --------- fix(app): missing translations for status
+ 670:  ab3268896 <    -:  --------- Add highlight tag parsing for changelog with video support
+ 671:  eaad75b17 <    -:  --------- tweak: adjust tui syncing logic to help prevent case where agents would be undefined / missing
+ 672:  cc0085676 <    -:  --------- Add collapsible sections, sticky version header, and style refinements for changelog highlights
+ 673:  a5b72a7d9 <    -:  --------- fix(ui): tab click hit area
+ 674:  03d884797 <    -:  --------- wip(app): provider settings
+ 675:  c323d96de <    -:  --------- wip(app): provider settings
+ 676:  5993a098b <    -:  --------- fix(core): don't override source in custom provider loaders
+ 677:  00d960d08 <    -:  --------- chore: cleanup
+ 678:  a09a8701a <    -:  --------- chore: cleanup
+ 679:  9d35a0bcb <    -:  --------- chore: cleanup
+ 680:  99ae3a771 <    -:  --------- chore: cleanup
+ 681:  8c4bf225f <    -:  --------- fix(web): update spacing on the changelog page
+ 682:  23d85f473 <    -:  --------- docs: add warning about Claude Pro/Max subscription support (#10595)
+ 683:  022265829 <    -:  --------- ignore: update AGENTS.md to state that inference should be used
+ 684:  9a33b1ec8 <    -:  --------- ignore: update download stats 2026-01-26
+ 685:  d03c5f6b3 <    -:  --------- perf(app): performance improvements
+ 686:  c87232d5d <    -:  --------- perf(app): performance improvements
+ 687:  c4f1087e5 <    -:  --------- chore: details
+ 688:  444934a4c <    -:  --------- fix(tui): add visual feedback for diff wrap and conceal toggles (#10655)
+ 689:  6b83b172a <    -:  --------- fix: await SessionRevert.cleanup for shell (#10669)
+ 690:  0edd304f4 <    -:  --------- fix: Make diff wrapping toggle always available in command_list and correct a type error (resolves #10682) (#10683)
+ 691:  0d651eab3 <    -:  --------- feat(app): default servers on web
+ 692:  3296b9037 <    -:  --------- fix(app): handle non-tool call permissions
+ 693:  6c1e18f11 <    -:  --------- fix(app): line selection waits on ready
+ 694:  1934ee13d <    -:  --------- wip(app): model settings
+ 695:  84b12a8fb <    -:  --------- feat(app): model settings
+ 696:  7f75f71f6 <    -:  --------- chore: generate
+ 697:  af3d8c383 <    -:  --------- wip(app): sidebar hover full
+ 698:  ff35db036 <    -:  --------- wip(app): full-height sidebar
+ 699:  7016be073 <    -:  --------- wip(app): full-height sidebar
+ 700:  cd4676171 <    -:  --------- feat(app): better sidebar hover when collapsed
+ 701:  7c34319b1 <    -:  --------- fix(app): query selector with non-latin chars
+ 702:  fcea7e18a <    -:  --------- chore: stale-while-revalidate headers for changelog
+ 703:  805ae19c9 <    -:  --------- chore: generate
+ 704:  b1fbfa7e9 <    -:  --------- feat(opencode): add agent description (#10680)
+ 705:  39a73d489 <    -:  --------- feat: dynamically resolve AGENTS.md files from subdirectories as agent explores them (#10678)
+ 706:  3dce6a660 <    -:  --------- chore: gen changelog page off changelog json
+ 707:  f48784d15 <    -:  --------- upgrade opentui to v0.1.75
+ 708:  32a0dcedc <    -:  --------- chore: update nix node_modules hashes
+ 709:  5856ea4e7 <    -:  --------- fix: move changelog footer outside content div to fix padding (#10712)
+ 710:  7fcdbd155 <    -:  --------- fix(app): Order themes alphabetically (#10698)
+ 711:  984518b1c <    -:  --------- fix(app): restore external link opening in system browser (#10697)
+ 712:  783121c06 <    -:  --------- fix(ui): use focus-visible instead of focus to prevent sticky hover effect on click (#10651)
+ 713:  7e34d27b7 <    -:  --------- fix: add 44px top padding to sticky version header on changelog (#10715)
+ 714:  d9eed4c6c <    -:  --------- feat(app): file tree
+ 715:  ebeed0311 <    -:  --------- wip(app): file tree mode
+ 716:  801eb5d2c <    -:  --------- wip(app): file tree mode
+ 717:  b8e8d8232 <    -:  --------- chore: cleanup
+ 718:  37f1a1a4e <    -:  --------- chore: cleanup
+ 719:  d05ed5ca8 <    -:  --------- chore(app): createStore over signals
+ 720:  ec2ab639b <    -:  --------- fix(enterprise): add message navigation to share page desktop view (#10071)
+ 721:  3fdd08d66 <    -:  --------- chore: fix changelog page
+ 722:  4c9d87962 <    -:  --------- Revert "fix(app): restore external link opening in system browser (#10697)"
+ 723:  7795cae0b <    -:  --------- ignore: tweak ai deps
+ 724:  ac53a372b <    -:  --------- feat: use anthropic compat messages api for anthropic models through copilot
+ 725:  b0f865eae <    -:  --------- chore: debug changelog
+ 726:  837037cd0 <    -:  --------- fix: ensure openai 404 errors are retried (#10590)
+ 727:  18bfc740c <    -:  --------- chore: generate
+ 728:  8b17ac656 <    -:  --------- test(app): e2e test for sidebar nav
+ 729:  de3b654dc <    -:  --------- chore: refactor changelog
+ 730:  319ad2a39 <    -:  --------- fix(app): session load cap
+ 731:  97aec21cb <    -:  --------- chore(app): missing i18n strings
+ 732:  04337f620 <    -:  --------- chore: cleanup
+ 733:  d4e3acf17 <    -:  --------- fix(app): session sync issue
+ 734:  36b832880 <    -:  --------- chore: generate
+ 735:  810bc012b <    -:  --------- fix(ui): update button styles and disconnect button size
+ 736:  e0e97e9d9 <    -:  --------- fix(app): set provider row height to 56px
+ 737:  9346c1ae3 <    -:  --------- fix(app): add hover text for env-connected providers
+ 738:  7c96d704d <    -:  --------- fix(app): use default cursor for env provider text
+ 739:  6f3d41347 <    -:  --------- feat(ui): add providers icon and use in settings
+ 740:  ecd04a118 <    -:  --------- feat(ui): add models icon and use in settings
+ 741:  0a572afd4 <    -:  --------- fix(app): style view all button with interactive color and margin
+ 742:  92229b44f <    -:  --------- feat(ui): add optional transition animations to dialog
+ 743:  7caf59b43 <    -:  --------- fix(ui): prevent double-close and fix dialog replacement
+ 744:  3ac11df66 <    -:  --------- feat(app): add transition to select provider dialog
+ 745:  7962ff38b <    -:  --------- feat(app): add transition to command palette
+ 746:  c551f7e47 <    -:  --------- fix(ui): reduce dialog transition in time to 150ms
+ 747:  0f4a10f4a <    -:  --------- feat(app): add provider descriptions to settings
+ 748:  d9a61cd94 <    -:  --------- feat(app): add Vercel AI Gateway provider description
+ 749:  0dcb850a7 <    -:  --------- fix(ui): scope filetree pill tabs styling
+ 750:  0e08c6c9f <    -:  --------- fix(app): adjust filetree panel padding
+ 751:  f4392e023 <    -:  --------- fix(app): tighten filetree row spacing
+ 752:  9babdb80c <    -:  --------- fix(app): use chevron icons for filetree folders
+ 753:  fca0825b7 <    -:  --------- fix(app): use medium font for filetree items
+ 754:  99cd7f346 <    -:  --------- fix(app): refine filetree row spacing and indent
+ 755:  2be459801 <    -:  --------- fix(app): reduce filetree folder indent
+ 756:  010ed5559 <    -:  --------- fix(app): dim non-deep filetree guide lines
+ 757:  c6febd8dd <    -:  --------- fix(app): fade filetree guide lines on hover
+ 758:  3f9b59c79 <    -:  --------- fix(app): move file tree toggle to right
+ 759:  5a16d99b6 <    -:  --------- fix(app): disable tooltips in filetree tabs
+ 760:  ae815cca3 <    -:  --------- test(app): fix e2e test
+ 761:  c700b928e <    -:  --------- ci: add stale pr job
+ 762:  6a62b4459 <    -:  --------- ci: add dry-run option to stale PR closer workflow
+ 763:  8b5dde553 <    -:  --------- tweak: retry logic to catch certain provider problems
+ 764:  cbe8f265b <    -:  --------- fix(app): disconnect zen provider
+ 765:  d82e94c20 <    -:  --------- fix(app): zen disconnect not working
+ 766:  b21f82f5b <    -:  --------- chore: generate
+ 767:  7b3d5f1d6 <    -:  --------- chore: cleanup
+ 768:  9d1cf9819 <    -:  --------- fix: search clear icon
+ 769:  a77df3c17 <    -:  --------- wip: new release modal
+ 770:  c1e840b9b <    -:  --------- chore: cleanup
+ 771:  8b6484ac1 <    -:  --------- wip: highlights
+ 772:  53ac394c6 <    -:  --------- wip: highlights
+ 773:  ccc7aa49c <    -:  --------- wip: highlights
+ 774:  45b09c146 <    -:  --------- tweak: when using messages api for copilot, attach anthropic beta headers
+ 775:  77f11dfab <    -:  --------- chore: don't flip github draft release automatically
+ 776:  b07d7cdb7 <    -:  --------- fix(app): file tree performance
+ 777:  021d9d105 <    -:  --------- fix(app): reactive file tree
+ 778:  4075f9e1a <    -:  --------- chore: generate
+ 779:  bb178e935 <    -:  --------- chore: cleanup
+ 780:  36577479c <    -:  --------- fix(app): enable file watcher
+ 781:  8371ba5ae <    -:  --------- chore: cleanup
+ 782:  6897bb7d0 <    -:  --------- chore: cleanup
+ 783:  b24fd90fe <    -:  --------- test(app): file tree spec
+ 784:  bf463aee0 <    -:  --------- feat(release): add highlights template to draft releases (#10745)
+ 785:  64a3661a3 <    -:  --------- docs: add Italian README (#10732)
+ 786:  e7c626732 <    -:  --------- chore: generate
+ 787:  7655f51e1 <    -:  --------- fix(app): add connect provier in model selector (#10706)
+ 788:  d9e8b2b65 <    -:  --------- fix(desktop): disable magnification gestures on macOS (#10605)
+ 789:  b59aec6f0 <    -:  --------- feat: add /learn command to extract session learnings to scoped AGENTS.md files (#10717)
+ 790:  6cf2c3e3d <    -:  --------- fix: use Instance.directory instead of process.cwd() in read tool
+ 791:  a8c18dba8 <    -:  --------- fix(core): expose Instance.directory to custom tools
+ 792:  213c0e18a <    -:  --------- fix(app): only show files in select dialog when clicking + tab
+ 793:  dd1624e30 <    -:  --------- desktop: deduplicate tauri configs
+ 794:  ddffb34b9 <    -:  --------- ignore: update download stats 2026-01-27
+ 795:  b6565c606 <    -:  --------- fix(app): auto-scroll button sometimes sticks
+ 796:  c0a5f8534 <    -:  --------- chore(app): missing tooltips
+ 797:  58b9b5460 <    -:  --------- feat(app): forward and back buttons
+ 798:  2180be2f3 <    -:  --------- chore: cleanup
+ 799:  1f9313847 <    -:  --------- feat(core): add worktree to plugin tool context
+ 800:  743e83d9b <    -:  --------- fix(app): agent fallback colors
+ 801:  095328faf <    -:  --------- fix(app): non-fatal error handling
+ 802:  b4e0cdbe8 <    -:  --------- docs(core): plugin tool context updates
+ 803:  3862b1aed <    -:  --------- fix(ui): set filetree tablist height to 48px with centered content
+ 804:  03b9317f4 <    -:  --------- fix(app): center filetree empty state with 32px top margin
+ 805:  ebfa2b57d <    -:  --------- fix(app): update review empty states to 14px and align select file empty state
+ 806:  52387e7f3 <    -:  --------- fix(app): only show left border on plus button when sticky
+ 807:  2d0049f0d <    -:  --------- fix(app): use smaller close icon on tabs to match comment cards
+ 808:  c68261fc0 <    -:  --------- fix(ui): add max-width 280px to tabs with text truncation
+ 809:  ad624f65e <    -:  --------- fix(app): don't show session skeleton after workspace reset
+ 810:  3e420bf8e <    -:  --------- perf(app): don't keep parts in memory
+ 811:  c7e2f1965 <    -:  --------- perf(app): cleanup connect provider timers
+ 812:  27bb82761 <    -:  --------- perf(app): shared terminal ghostty-web instance
+ 813:  19c787449 <    -:  --------- fix(app): select model anchor
+ 814:  c3d8d2b27 <    -:  --------- Revert "fix(app): select model anchor"
+ 815:  3297e5230 <    -:  --------- fix(app): open markdown links in external browser
+ 816:  eac2d4c69 <    -:  --------- fix(app): navigate to tabs when opening file
+ 817:  099ab929d <    -:  --------- chore(app): cleanup tailwind vs pure css
+ 818:  00e79210e <    -:  --------- fix(app): tooltips causing getComputedStyle errors in model select
+ 819:  712d2b7d1 <    -:  --------- fix(app): swallow file search errors
+ 820:  d8e7e915e <    -:  --------- feat(opencode): Handle Venice cache creation tokens (#10735)
+ 821:  dbc8d7edc <    -:  --------- chore: generate
+ 822:  0aa93379b <    -:  --------- chore(docs): Better explanation on how to allow tools in external directories (#10862)
+ 823:  f12f7e771 <    -:  --------- tweak: adjust retry check to be more defensive
+ 824:  8c0081810 <    -:  --------- ci: make tests passing a requirement pre-release
+ 825:  173faca3c <    -:  --------- zen: kimi k2.5 and minimax m2.1
+ 826:  2f5a238b5 <    -:  --------- feat(app): update settings in general settings
+ 827:  06e3c4a4f <    -:  --------- chore(app): translations
+ 828:  b9edd2360 <    -:  --------- test(app): new e2e smoke tests
+ 829:  07d84fe00 <    -:  --------- feat(app): show loaded agents.md files
+ 830:  e2c57735b <    -:  --------- fix(app): session diffs not always loading
+ 831:  7de42ca24 <    -:  --------- feat(app): improved layout
+ 832:  6284565de <    -:  --------- chore: generate
+ 833:  32ce0f4b0 <    -:  --------- tweak: add recommended topP/temp for kimi k2.5
+ 834:  bb63d16fa <    -:  --------- Set temperature for kimi k2.5
+ 835:  2649dcae7 <    -:  --------- Revert "ci: make tests passing a requirement pre-release"
+ 836:  df8b23db9 <    -:  --------- Revert "Set temperature for kimi k2.5"
+ 837:  82068955f <    -:  --------- feat(app): color filetree change dots by diff kind
+ 838:  8ee5376f9 <    -:  --------- feat(app): add filetree tooltips with diff labels
+ 839:  2ca69ac95 <    -:  --------- fix(app): shorten nav tooltips
+ 840:  1fffbc6fb <    -:  --------- fix(app): adjust titlebar left spacing
+ 841:  d15201d11 <    -:  --------- fix(app): delay nav tooltips
+ 842:  18d6c2191 <    -:  --------- fix(app): align filetree change styling
+ 843:  00c772965 <    -:  --------- fix(app): set filetree padding to 6px
+ 844:  f2bf62020 <    -:  --------- fix(app): highlight selected change
+ 845:  892113ab3 <    -:  --------- chore(app): show 5 highlights
+ 846:  d7948c237 <    -:  --------- fix(app): auto-scroll
+ 847:  1ebf63c70 <    -:  --------- fix(app): don't connect to localhost through vpn
+ 848:  842f17d6d <    -:  --------- perf(app): better memory management
+ 849:  acf0df1e9 <    -:  --------- chore: cleanup
+ 850:  51edf6860 <    -:  --------- feat(desktop): i18n for tauri side
+ 851:  e5b18674f <    -:  --------- feat(desktop): tauri locales
+ 852:  1d5ee3e58 <    -:  --------- fix(app): not auto-navigating to last project
+ 853:  95632d893 <    -:  --------- chore: update nix node_modules hashes
+ 854:  b8e726521 <    -:  --------- fix(tui): handle 4-5 codes too in c to copy logic
+ 855:  33d400c56 <    -:  --------- fix(app): spinner color
+ 856:  605e53355 <    -:  --------- fix(app): file tree not always loading
+ 857:  13b2587e9 <    -:  --------- test(app): fix outdated e2e test
+ 858:  5c8580a18 <    -:  --------- test(app): fix outdated e2e test
+ 859:  d17ba84ee <    -:  --------- fix(app): file tree not always loading
+ 860:  df7f9ae3f <    -:  --------- fix(app): terminal corruption
+ 861:  15ffd3cba <    -:  --------- feat(app): add 'connect provider' button to the manage models dialog (#10887)
+ 862:  b4a9e1b19 <    -:  --------- fix(app): auto-scroll
+ 863:  898118baf <    -:  --------- feat: support headless authentication for chatgpt/codex (#10890)
+ 864:  d9741866c <    -:  --------- fix(app): reintroduce review tab
+ 865:  e3be4c9f2 <    -:  --------- release: v1.1.37
+ 866:  7988f5223 <    -:  --------- feat(app): use opentui markdown component behind experimental flag (#10900)
+ 867:  5f2a7c630 <    -:  --------- chore: generate
+ 868:  b73e0240a <    -:  --------- docs: add Daytona OpenCode plugin to ecosystem (#10917)
+ 869:  6da9fb8fb <    -:  --------- chore: generate
+ 870:  aedd76014 <    -:  --------- fix(cli): restore brand integrity of CLI wordmark (#10912)
+ 871:  427cc3e15 <    -:  --------- zen: kimi k2.5
+ 872:  63f5669eb <    -:  --------- fix(opencode): ensure unsub(PartUpdated) is always called in TaskTool (#9992)
+ 873:  9a8da20a9 <    -:  --------- chore: generate
+ 874:  28e5557bf <    -:  --------- ignore: adjust flag
+ 875:  026b3cc88 <    -:  --------- bump plugin version
+ 876:  d76e1448f <    -:  --------- ci
+ 877:  558590712 <    -:  --------- fix: ensure parallel tool calls dont double load AGENTS.md
+ 878:  3bb10773e <    -:  --------- release: v1.1.38
+ 879:  5a0b3ee67 <    -:  --------- fix: ensure copilot plugin properly sets headers for new messages api
+ 880:  f97197bdb <    -:  --------- chore: generate
+ 881:  6eb2bdd66 <    -:  --------- release: v1.1.39
+ 882:  8798a77a7 <    -:  --------- bump: plugins
+ 883:  6650aa6f3 <    -:  --------- ignore: update download stats 2026-01-28
+ 884:  2f35c40bb <    -:  --------- chore(app): global config changes
+ 885:  bdfd8f8b0 <    -:  --------- feat(app): custom provider
+ 886:  8faa2ffcf <    -:  --------- chore: cleanup
+ 887:  65e1186ef <    -:  --------- wip(app): global config
+ 888:  c9bbea426 <    -:  --------- chore: cleanup
+ 889:  acb92fcd3 <    -:  --------- chore: cleanup
+ 890:  bc4968abb <    -:  --------- chore: generate
+ 891:  775d28802 <    -:  --------- feat(i18n): add th locale support (#10809)
+ 892:  4f60ea610 <    -:  --------- chore: generate
+ 893:  57ad1814e <    -:  --------- fix(desktop): enable ctrl+n and ctrl+p for popover navigation (#10777)
+ 894:  26e14ce62 <    -:  --------- fix: add SubtaskPart with metadata reference (#10990)
+ 895:  af3c97f19 <    -:  --------- chore: generate
+ 896:  f607353be <    -:  --------- fix(app): close review pane
+ 897:  8c05eb22b <    -:  --------- fix(markdown): Add streaming prop to markdown element (#11025)
+ 898:  4e41ca74b <    -:  --------- release: v1.1.40
+ 899:  c60464de0 <    -:  --------- fix(script): remove highlights template from release notes (#11052)
+ 900:  7b561be15 <    -:  --------- chore: generate
+ 901:  9424f829e <    -:  --------- fix(ui): allow KaTeX inline math to be followed by punctuation (#11033)
+ 902:  36df0d823 <    -:  --------- fix(app): alignment and padding in dialogs (#10866)
+ 903:  40d5d1430 <    -:  --------- fix(app): fill missing zh keys to avoid English fallback (#10841)
+ 904:  832bbba61 <    -:  --------- chore: generate
+ 905:  33dc70b75 <    -:  --------- fix(opencode): normalize zh punctuation for Chinese UI (#10842)
+ 906:  90a7e3d64 <    -:  --------- fix(ui): improve zh duration display formatting (#10844)
+ 907:  e5b33f8a5 <    -:  --------- fix(opencode): add `AbortSignal` support to `Ripgrep.files()` and `GlobTool` (#10833)
+ 908:  7ad165fbd <    -:  --------- fix(typescript errors): remove duplicate keys causing typescript failures (#11071)
+ 909:  0c8de47f7 <    -:  --------- fix(app): file tabs - auto scroll on open & scroll via mouse wheel (#11070)
+ 910:  4d2696e02 <    -:  --------- tweak: add ctx.abort to grep tool
+ 911:  a9e757b5b <    -:  --------- fix(app): types
+ 912:  8cdb82038 <    -:  --------- docs: update experimental environment variables in CLI docs (#11030)
+ 913:  a7d7f5bb0 <    -:  --------- fix(app): make settings more responsive for mobile and small web/desktop (#10775)
+ 914:  d8fe12aaf <    -:  --------- chore: generate
+ 915:  427ef95f7 <    -:  --------- fix(opencode): allow media-src data: URL for small audio files (#11082)
+ 916:  b937fe945 <    -:  --------- fix(provider): include providerID in SDK cache key (#11020)
+ 917:  870c38a6a <    -:  --------- fix: maxOutputTokens was accidentally hardcoded to undefined  (#10995)
+ 918:  29ea9fcf2 <    -:  --------- fix: ensure variants for copilot models work w/ maxTokens being set
+ 919:  9cfdbbb1a <    -:  --------- release: v1.1.41
+ 920:  b938e1ea9 <    -:  --------- test: fix test
+ 921:  efc9303b2 <    -:  --------- chore: generate
+ 922:  f40bdd1ac <    -:  --------- feat(cli): include cache tokens in stats (#10582)
+ 923:  121016af8 <    -:  --------- ci: adjust team
+ 924:  58ba48637 <    -:  --------- guard destroyed input field in timeout
+ 925:  e84d92da2 <    -:  --------- feat: Sequential numbering for forked session titles (Issue #10105) (#10321)
+ 926:  41ea4694d <    -:  --------- more timeout race guards
+ 927:  0fabdccf1 <    -:  --------- fix: ensure that kimi doesnt have fake variants available
+ 928:  33c5c100f <    -:  --------- fix: frontmatter was adding newlines in some cases causing invalid model ids (#11095)
+ 929:  92eb98286 <    -:  --------- fix: undo change that used anthropic messages endpoint for anthropic models on copilot due to ratelimiting issues, go back to completions endpoint instead
+ 930:  7c0067d59 <    -:  --------- release: v1.1.42
+ 931:  2af326606 <    -:  --------- feat(desktop): Add desktop deep link (#10072)
+ 932:  c946f5f7e <    -:  --------- chore: generate
+ 933:  82717f6e8 <    -:  --------- chore: update nix node_modules hashes
+ 934:  571751c31 <    -:  --------- fix: remove redundant Highlights heading from publish template (#11121)
+ 935:  008ad54cb <    -:  --------- ignore: update download stats 2026-01-29
+ 936:  03ba49af4 <    -:  --------- fix(telemetry): restore userId and sessionId metadata in experimental_telemetry (#8195)
+ 937:  301895c7f <    -:  --------- fix: ensure kimi k2.5 from fireworks ai and kimi for coding providers properly set temperature
+ 938:  d5c59a66c <    -:  --------- ci: added gh workflow that adds 'contributor' label to PRs/Issues (#11118)
+ 939:  aa92ef37f <    -:  --------- tweak: add 'skill' to permissions config section so that ides will show it as autocomplete option (this is already a respected setting)
+ 940:  5a56e8172 <    -:  --------- zen: m2.1 and glm4.7 free models
+ 941:  45ec3105b <    -:  --------- feat: support config skill registration (#9640)
+ 942:  8dedb3f4a <    -:  --------- chore: regen sdk
+ 943:  f996e05b4 <    -:  --------- chore: format code
+ 944:  ae9199e10 <    -:  --------- chore: generate
+ 945:  9ed3b0742 <    -:  --------- ci (#11149)
+ 946:  a9a759523 <    -:  --------- test: skip failing tests (#11184)
+ 947:  cf5cf7b23 <    -:  --------- chore: consolidate and standardize workflow files (#11183)
+ 948:  a92b7923c <    -:  --------- ci: disable nix-desktop workflow (#11188)
+ 949:  33311e995 <    -:  --------- ci: remove push triggers from workflow files (#11186)
+ 950:  cd4075faf <    -:  --------- feat: add beta branch sync workflow for contributor PRs (#11190)
+ 951:  fdd484d2c <    -:  --------- feat: expose acp thinking variants (#9064)
+ 952:  aa1d0f616 <    -:  --------- fix(app): better header item wrapping (#10831)
+ 953:  2125dc11c <    -:  --------- fix: show all provider models when no providers connected (#11198)
+ 954:  6cc739701 <    -:  --------- zen: kimi k2.5 free (#11199)
+ 955:  75166a196 <    -:  --------- fix: use ?? to prevent args being undefined for mcp server in some cases (#11203)
+ 956:  b5ffa997d <    -:  --------- feat(config): add managed settings support for enterprise deployments (#6441)
+ 957:  8ce19f8cc <    -:  --------- chore: update nix node_modules hashes
+ 958:  b35265823 <    -:  --------- ci
+ 959:  4c82ad628 <    -:  --------- ci
+ 960:  4f4694d9e <    -:  --------- ci
+ 961:  a5c01a81f <    -:  --------- ci
+ 962:  bbc7bdb3f <    -:  --------- release: v1.1.43
+ 963:  1f3bf5664 <    -:  --------- ci: upgrade bun cache to stickydisk for faster ci builds
+ 964:  7ed6f690e <    -:  --------- ci
+ 965:  81326377f <    -:  --------- ci: trigger publish workflow automatically after beta builds complete
+ 966:  03803621d <    -:  --------- ci
+ 967:  b43a35b73 <    -:  --------- test(app): test for toggling model variant (#11221)
+ 968:  ad91f9143 <    -:  --------- fix(app): version to latest to avoid errors for new devs (#11201)
+ 969:  f27ee4674 <    -:  --------- ci
+ 970:  553316af2 <    -:  --------- ci
+ 971:  e9e8d97b0 <    -:  --------- ci
+ 972:  95309c214 <    -:  --------- fix(beta): use local git rebase instead of gh pr update-branch
+ 973:  60de810d9 <    -:  --------- fix(app): dialog not closing
+ 974:  a70c66eb3 <    -:  --------- fix(app): free model scroll
+ 975:  d3d6e7e27 <    -:  --------- sync
+ 976:  5f282c268 <    -:  --------- fix(app): free model layout
+ 977:  30969dc33 <    -:  --------- ci: cache apt packages to reduce CI build times on ubuntu
+ 978:  5cfb5fdd0 <    -:  --------- ci: add container build workflow
+ 979:  71d280d57 <    -:  --------- ci: fix container build script
+ 980:  5ea1042ff <    -:  --------- ci
+ 981:  849f48874 <    -:  --------- ci
+ 982:  cd664a189 <    -:  --------- ci
+ 983:  2d3c7a0f2 <    -:  --------- ci
+ 984:  3ac05201c <    -:  --------- ci
+ 985:  3fef49018 <    -:  --------- ci
+ 986:  908350c2e <    -:  --------- ci
+ 987:  1ab4bbc27 <    -:  --------- ci
+ 988:  5d0122b5a <    -:  --------- ci
+ 989:  b28891473 <    -:  --------- ci
+ 990:  b109ab783 <    -:  --------- ci
+ 991:  b5e5d4c92 <    -:  --------- ci
+ 992:  36041c000 <    -:  --------- ci
+ 993:  273e7b837 <    -:  --------- ci
+ 994:  da7f45bd4 <    -:  --------- ci
+ 995:  e666ddb63 <    -:  --------- ci
+ 996:  015eda36c <    -:  --------- ci
+ 997:  66ec37868 <    -:  --------- ci
+ 998:  9e0747c9b <    -:  --------- ci
+ 999:  08f11f4da <    -:  --------- ci
+1000:  5bef8e316 <    -:  --------- ci
+1001:  48d6d72e2 <    -:  --------- ci
+1002:  8f5379401 <    -:  --------- ci
+1003:  1794319a4 <    -:  --------- ci
+1004:  09f4ef899 <    -:  --------- ci
+1005:  d58661d4f <    -:  --------- ci
+1006:  71e0ba271 <    -:  --------- release: v1.1.45
+1007:  11d486707 <    -:  --------- fix: rm ai sdk middleware that was preventing <think> blocks from being sent back as assistant message content (#11270)
+1008:  08fa7f718 <    -:  --------- ci
+1009:  949331650 <    -:  --------- ci
+1010:  698cf6dfc <    -:  --------- ci
+1011:  97a428cf6 <    -:  --------- ci
+1012:  601744eac <    -:  --------- sync
+1013:  a530c1b5b <    -:  --------- ci
+1014:  abb87eac8 <    -:  --------- ci
+1015:  ad5d495b2 <    -:  --------- ci
+1016:  5e823fd20 <    -:  --------- ci
+1017:  4a4fc48ee <    -:  --------- ci
+1018:  0a0b54aa4 <    -:  --------- ci
+1019:  0d53f34c4 <    -:  --------- ci
+1020:  b9e9c8c76 <    -:  --------- ci
+1021:  3f57f4913 <    -:  --------- ci
+1022:  e0b60d9f3 <    -:  --------- ci
+1023:  9cf3e651c <    -:  --------- ci
+1024:  e4d3b961c <    -:  --------- ci
+1025:  7fb22ab68 <    -:  --------- ci
+1026:  9a0132e75 <    -:  --------- ci
+1027:  e80a99e7b <    -:  --------- ci
+1028:  2e005de67 <    -:  --------- ci
+1029:  1aade4b30 <    -:  --------- ci
+1030:  7cb84f13d <    -:  --------- wip: zen (#11343)
+1031:  0b91e9087 <    -:  --------- chore: generate
+1032:  21edc00f1 <    -:  --------- ci: update pr template (#11341)
+1033:  1bbe84ed8 <    -:  --------- ci
+1034:  20619a6a2 <    -:  --------- feat: Transitions, spacing, scroll fade, prompt area update (#11168)
+1035:  fe66ca163 <    -:  --------- chore: generate
+1036:  f48e2e56c <    -:  --------- test(app): change language test (#11295)
+1037:  7d0777a7f <    -:  --------- chore(tui): remove unused experimental keys (#11195)
+1038:  5495fdde9 <    -:  --------- chore: generate
+1039:  e9ef94dc4 <    -:  --------- release: v1.1.46
+1040:  e94ae550e <    -:  --------- commit
+1041:  9259d2bf5 <    -:  --------- fix(github): add owner parameter to app token for org-wide repo access
+1042:  6cd2a6885 <    -:  --------- release: v1.1.47
+1043:  f51bd28ed <    -:  --------- ci: increase ARM runner to 8 vCPUs for faster Tauri builds
+1044:  4a56491e4 <    -:  --------- fix(provider): exclude chat models from textVerbosity setting (#11363)
+1045:  77fa8ddc8 <    -:  --------- refactor(app): refactored tests + added project tests (#11349)
+1046:  2c36cbb87 <    -:  --------- refactor(provider): remove google-vertex-anthropic special case in ge… (#10743)
+1047:  e7ff7143b <    -:  --------- fix: handle redirected_statement treesitter node in bash permissions (#6737)
+1048:  9d3f32065 <    -:  --------- test: add llm.test.ts (#11375)
+1049:  e834a2e6c <    -:  --------- docs: update agents options section to include color and top_p options (#11355)
+1050:  1a6461e8b <    -:  --------- fix: ensure ask question tool isn't included when using acp (#11379)
+1051:  aef0e58ad <    -:  --------- chore(deps): bump ai-sdk packages (#11383)
+1052:  0c32afbc3 <    -:  --------- fix(provider): use snake_case for thinking param with OpenAI-compatible APIs (#10109)
+1053:  252b2c450 <    -:  --------- chore: generate
+1054:  85126556b <    -:  --------- feat: make skills invokable as slash commands in the TUI
+1055:  f1caf8406 <    -:  --------- feat(build): respect OPENCODE_MODELS_URL env var (#11384)
+1056:  3542f3e40 <    -:  --------- Revert "feat: make skills invokable as slash commands in the TUI"
+1057:  d9f18e400 <    -:  --------- feat(opencode): add copilot specific provider to properly handle copilot reasoning tokens (#8900)
+1058:  644f0d4e9 <    -:  --------- chore: generate
+1059:  571f5b31c <    -:  --------- ci: schedule beta workflow hourly to automate sync runs
+1060:  73c4d3644 <    -:  --------- ci: allow manual beta workflow trigger so users can release on demand instead of waiting for hourly schedule
+1061:  d713026a6 <    -:  --------- ci: remove workflow restrictions to allow all PR triggers for broader CI coverage
+1062:  b6bbb9570 <    -:  --------- ci: remove pull-request write permissions from beta workflow
+1063:  95bf01a75 <    -:  --------- fix: ensure the mistral ordering fixes also apply to devstral (#11412)
+1064:  90f39bf67 <    -:  --------- core: prevent parallel test runs from contaminating environment variables
+1065:  507f13a30 <    -:  --------- ci: run tests automatically when code is pushed to dev branch
+1066:  c0e71c426 <    -:  --------- fix: don't --follow by default for grep and other things using ripgrep (#11415)
+1067:  81ac41e08 <    -:  --------- feat: make skills invokable as slash commands in the TUI (#11390)
+1068:  46122d9a0 <    -:  --------- chore: generate
+1069:  d005e70f5 <    -:  --------- core: ensure models configuration is not empty before loading
+1070:  8e5db3083 <    -:  --------- ci: copy models fixture for e2e test consistency
+1071:  6ecd011e5 <    -:  --------- tui: allow specifying custom models file path via OPENCODE_MODELS_PATH
+1072:  6b972329f <    -:  --------- sync
+1073:  65c21f8fe <    -:  --------- chore: generate
+1074:  f834915d3 <    -:  --------- test: fix flaky test (#11427)
+1075:  511c7abac <    -:  --------- test(app): session actions (#11386)
+1076:  a552652fc <    -:  --------- Revert "feat: Transitions, spacing, scroll fade, prompt area update (#11168)" (#11461)
+1077:  597ae57bb <    -:  --------- release: v1.1.48
+1078:  ac254fb44 <    -:  --------- fix(app): session header 'share' button to hug content (#11371)
+1079:  f73f88fb5 <    -:  --------- fix(pty): Add UTF-8 encoding defaults for Windows PTY (#11459)
+1080:  786ae0a58 <    -:  --------- feat(app): add skill slash commands (#11369)
+1081:  53f118c57 <    -:  --------- Revert "feat(app): add skill slash commands" (#11484)
+1082:  feca42b02 <    -:  --------- feat(opencode): add reasoning variants support for SAP AI Core (#8753)
+1083:  35f64b80f <    -:  --------- docs: fix documentation issues (#11435)
+1084:  121d6a72c <    -:  --------- fix(nix): restore native runners for darwin hash computation (#11495)
+1085:  a19ef17bc <    -:  --------- fix(provider): use process.env directly for runtime env mutations (#11482)
+1086:  da7c87480 <    -:  --------- tweak: show actual retry error message instead of generic error msg (#11520)
+1087:  e70d98432 <    -:  --------- tui: enable password authentication for remote session attachment
+1088:  33252a65b <    -:  --------- test(app): general settings, shortcuts, providers and status popover  (#11517)
+1089:  abbf60080 <    -:  --------- chore: generate
+1090:  0961632a9 <    -:  --------- fix(ci): portable hash parsing in nix-hashes workflow (#11533)
+1091:  8b7fe7c09 <    -:  --------- ci: fix nix hash issue (#11530)
+1092:  6a9681024 <    -:  --------- chore: update nix node_modules hashes
+1093:  e5f677dfb <    -:  --------- fix(app): rendering question tool when the step are collapsed (#11539)
+1094:  5b784871f <    -:  --------- feat: add skill dialog for selecting and inserting skills (#11547)
+1095:  d4c90b2df <    -:  --------- fix: issue where you couldn't @ folders/files that started with a "." (#11553)
+1096:  9e45313b0 <    -:  --------- ci: fixed stale pr workflow (#11310)
+1097:  2a56a1d6e <    -:  --------- fix(tui): conditionally render bash tool output (#11558)
+1098:  9b8b9e28e <    -:  --------- feat(tui): add UI for skill tool in session view (#11561)
+1099:  94baf1f72 <    -:  --------- fix(tui): remove extra padding between search and results in dialog-select (#11564)
+1100:  c3faeae9d <    -:  --------- fix: correct pluralization of match count in grep and glob tools (#11565)
+1101:  d1d744749 <    -:  --------- fix: ensure switching anthropic models mid convo on copilot works without errors, fix issue with reasoning opaque not being picked up for gemini models (#11569)
+1102:  3e6710425 <    -:  --------- fix(app): show retry status only on active turn (#11543)
+1103:  2af1ca729 <    -:  --------- docs: improve zh-TW punctuation to match Taiwan usage (#11574) (#11589)
+1104:  dfbe55362 <    -:  --------- docs: add Turkish README translation (#11524)
+1105:  b51005ec4 <    -:  --------- fix(app): use static language names in Thai localization (#11496)
+1106:  23c803707 <    -:  --------- fix(app): binary file handling in file view (#11312)
+1107:  29d02d643 <    -:  --------- chore: generate
+1108:  3577d829c <    -:  --------- fix: allow user plugins to override built-in auth plugins (#11058)
+1109:  2c82e6c6a <    -:  --------- docs: prefer wsl over native windows stuff (#11637)
+1110:  1798af72b <    -:  --------- fix(ecosystem): fix link Daytona  (#11621)
+1111:  cc1d3732b <    -:  --------- fix(tui): remove outer backtick wrapper in session transcript tool formatting (#11566)
+1112:  eace76e52 <    -:  --------- fix: opencode hanging when using client.app.log() during initialization (#11642)
+1113:  16145af48 <    -:  --------- fix: prevent duplicate AGENTS.md injection when reading instruction files (#11581)
+1114:  f15755684 <    -:  --------- fix(opencode): scope agent variant to model (#11410)
+1115:  d29dfe31e <    -:  --------- chore: reduce nix fetching (#11660)
+1116:  e62a15d42 <    -:  --------- chore: generate
+1117:  01cec8478 <    -:  --------- fix(desktop): nix - add missing dep (#11656)
+1118:  ca5e85d6e <    -:  --------- fix: prompt caching for opus on bedrock (#11664)
+1119:  d52ee41b3 <    -:  --------- chore: update nix node_modules hashes
+1120:  f6948d0ff <    -:  --------- fix: variant logic for anthropic models through openai compat endpoint (#11665)
+1121:  ec720145f <    -:  --------- fix: when using codex sub, send the custom agent prompts as a separate developer message (previously sent as user message but api allows for instructions AND developer messages) (#11667)
+1122:  91f2ac3cb <    -:  --------- test(app): workspace tests (#11659)
+1123:  f23d8d343 <    -:  --------- docs (web): Update incorrect Kimi model name in zen.mdx (#11677)
+1124:  b39c1f158 <    -:  --------- zen: add minimax logo (#11682)
+1125:  377bf7ff2 <    -:  --------- feat(ui): Select, dropdown, popover styles & transitions (#11675)
+1126:  e84d441b8 <    -:  --------- chore: generate
+1127:  e445dc074 <    -:  --------- feat(ui): Smooth fading out on scroll, style fixes (#11683)
+1128:  fa75d922e <    -:  --------- chore: generate
+1129:  12b8c4238 <    -:  --------- feat(app): show skill/mcp badges for slash commands
+1130:  cb6ec0a56 <    -:  --------- fix(app): hide badge for builtin slash commands
+1131:  612b656d3 <    -:  --------- fix: adjust resolve parts so that when messages with multiple @ references occur, the tool calls are properly ordered
+1132:  5db089070 <    -:  --------- test: add unit test
+1133:  7417e6eb3 <    -:  --------- fix(plugin): correct exports to point to dist instead of src
+1134:  d35956fd9 <    -:  --------- ci: prevent rate limit errors when fetching team PRs for beta releases
+1135:  c9891fe07 <    -:  --------- ci: collect all failed PR merges and notify Discord
+1136:  2f63152af <    -:  --------- ci: add DISCORD_ISSUES_WEBHOOK_URL secret to beta workflow
+1137:  5dee3328d <    -:  --------- ci: add --discord-webhook / -d CLI option for custom Discord webhook URL
+1138:  e9f8e6aee <    -:  --------- ci: remove parseArgs CLI option and use environment variable directly
+1139:  744fb6aed <    -:  --------- ci: rewrite beta script to use proper Bun shell patterns
+1140:  425abe2fb <    -:  --------- ci: post PR comments when beta merge fails instead of Discord notifications
+1141:  4158d7cda <    -:  --------- ci: add --label beta filter to only process PRs with beta label
+1142:  372dcc033 <    -:  --------- ci: change trigger from scheduled cron to PR labeled events with beta label condition
+1143:  7837bbc63 <    -:  --------- ci: add synchronize event and check for beta label using contains()
+1144:  f390ac251 <    -:  --------- ci: centralize team list in @opencode-ai/script package and use beta label filter
+1145:  7aad2ee9a <    -:  --------- ci: run beta workflow on hourly schedule only
+1146:  d3d783e23 <    -:  --------- ci: allow manual dispatch for beta workflow
+1147:  3ab41d548 <    -:  --------- ci: skip force push when beta branch is unchanged
+1148:  6c9b2c37a <    -:  --------- core: allow starting new sessions after errors by fixing stuck session status
+1149:  83d0e48e3 <    -:  --------- tui: fix task status to show current tool state from message store
+1150:  0f3630d93 <    -:  --------- ci: skip unicode filename test due to inconsistent behavior causing CI failures
+1151:  d1f884033 <    -:  --------- ignore: switch commit model to kimi-k2.5 for improved command execution reliability
+1152:  826664b55 <    -:  --------- ci: restrict nix-hashes workflow to dev branch pushes only
+1153:  8fbba8de7 <    -:  --------- ci: Fix Pulumi version conflict in deploy workflow
+1154:  eade8ee07 <    -:  --------- docs: Restructure AGENTS.md style guide with organized sections and code examples
+1155:  c5dc075a8 <    -:  --------- Revert "fix(plugin): correct exports to point to dist instead of src"
+1156:  a4d31b6f9 <    -:  --------- ci: enable typecheck on push to dev branch to catch type errors immediately after merge
+1157:  8e985e0a7 <    -:  --------- Use opentui OSC52 clipboard (#11718)
+1158:  0dc80df6f <    -:  --------- Add spinner animation for Task tool (#11725)
+1159:  c69474846 <    -:  --------- Simplify directory tree output for prompts (#11731)
+1160:  bd9d7b322 <    -:  --------- fix: session title generation with OpenAI models. (#11678)
+1161:  f02499fa4 <    -:  --------- fix(opencode): give OPENCODE_CONFIG_CONTENT proper priority for setting config based on docs (#11670)
+1162:  cfbe9d329 <    -:  --------- Revert "Use opentui OSC52 clipboard (#11718)"
+1163:  7a9290dc9 <    -:  --------- tui: show exit message banner (#11733)
+1164:  43354eeab <    -:  --------- fix: convert system message content to string for Copilot provider (#11600)
+1165:  4850ecc41 <    -:  --------- zen: rate limit (#11735)
+1166:  76745d059 <    -:  --------- fix(desktop): kill zombie server process on startup timeout (#11602)
+1167:  3982c7d99 <    -:  --------- Use opentui OSC52 clipboard, again (#11744)
+1168:  141fdef58 <    -:  --------- chore: update nix node_modules hashes
+1169:  c02dd067b <    -:  --------- fix(desktop): keep mac titlebar stable under zoom (#11747)
+1170:  04aef44fc <    -:  --------- chore(desktop): integrate tauri-specta (#11740)
+1171:  784a17f7b <    -:  --------- chore: generate
+1172:  e6d8315e2 <    -:  --------- fix(desktop): throttle window state persistence (#11746)
+1173:  1832eeffc <    -:  --------- fix(desktop): remove unnecessary setTimeout
+1174:  9564c1d6b <    -:  --------- desktop: fix rust build + bindings formatting
+1175:  1cabeb00d <    -:  --------- chore: generate
+1176:  52eb8a7a8 <    -:  --------- feat(app): unread session navigation keybinds (#11750)
+1177:  985090ef3 <    -:  --------- fix(ui): adjusts alignment of elements to prevent incomplete scroll (#11649)
+1178:  43bb389e3 <    -:  --------- Fix(app): the Vesper theme's light mode (#9892)
+1179:  26197ec95 <    -:  --------- chore: update website stats
+1180:  52006c2fd <    -:  --------- feat(opencode): ormolu code formatter for haskell (#10274)
+1181:  6b17645f2 <    -:  --------- chore: generate
+1182:  50b5168c1 <    -:  --------- fix(desktop): added inverted svg for steps expanded for nice UX (#10462)
+1183:  37979ea44 <    -:  --------- feat(app): enhance responsive design with additional breakpoints for larger screen layout adjustments (#10459)
+1184:  34c58af79 <    -:  --------- chore: generate
+1185:  3408f1a6a <    -:  --------- feat(app): add tab close keybind (#11780)
+1186:  4369d7963 <    -:  --------- tui: truncate session title in exit banner (#11797)
+1187:  d63ed3bbe <    -:  --------- ci
+1188:  8de9e47a5 <    -:  --------- ci
+1189:  423778c93 <    -:  --------- ci: reduce aarch64 build runner to 4 vcpu to lower infrastructure costs
+1190:  06d63ca54 <    -:  --------- ci: use native ARM runner for faster Linux ARM builds
+1191:  1bd5dc538 <    -:  --------- ci: add ratelimits handling for close-stale-prs.yml (#11578)
+1192:  cf8b033be <    -:  --------- feat(provider): add User-Agent header for GitLab AI Gateway requests (#11818)
+1193:  cf828fff8 <    -:  --------- chore: update nix node_modules hashes
+1194:  965f32ad6 <    -:  --------- fix(tui): respect terminal transparency in system theme (#8467)
+1195:  b9aad20be <    -:  --------- fix(app): open project search (#11783)
+1196:  ea1aba419 <    -:  --------- feat(app): project context menu on right-click
+1197:  30a25e4ed <    -:  --------- fix(app): user messages not rendering consistently
+1198:  f1e0c31b8 <    -:  --------- fix(app): button heights
+1199:  23631a939 <    -:  --------- fix(app): navigate to last project on open
+1200:  3b93e8d95 <    -:  --------- fix(app): added/deleted file status now correctly calculated
+1201:  dfd5f3840 <    -:  --------- fix(app): icon sizes
+1202:  2f76b49df <    -:  --------- Revert "feat(ui): Smooth fading out on scroll, style fixes (#11683)"
+1203:  70cf609ce <    -:  --------- Revert "feat(ui): Select, dropdown, popover styles & transitions (#11675)"
+1204:  0405b425f <    -:  --------- feat(app): file search
+1205:  69f5f657f <    -:  --------- chore: cleanup
+1206:  befb5d54f <    -:  --------- chore: cleanup
+1207:  c002ca03b <    -:  --------- feat(app): search through sessions
+1208:  562c9d76d <    -:  --------- chore: generate
+1209:  824165eb7 <    -:  --------- feat(app): add workspace toggle command to command palette and prompt input (#11810)
+1210:  a9fca05d8 <    -:  --------- feat(server): add --mdns-domain flag to customize mDNS hostname (#11796)
+1211:  a3f191848 <    -:  --------- chore: generate
+1212:  aa6b552c3 <    -:  --------- Revert pr that was mistakenly merged (#11844)
+1213:  531357b40 <    -:  --------- fix(app): sidebar losing projects on collapse
+1214:  aadd2e13d <    -:  --------- fix(app): prompt input overflow issue (#11840)
+1215:  f86f654cd <    -:  --------- chore: rm dead code (#11849)
+1216:  f9aa20913 <    -:  --------- fix: fixes issue where the autocomplete tui dialog flickers while typing (#11641)
+1217:  5e3162b7f <    -:  --------- chore: generate
+1218:  188cc24bf <    -:  --------- chore: cleanup external_dir perm logic (#11845)
+1219:  ba545ba9b <    -:  --------- fix(app): session scroll bar color (#11857)
+1220:  96fbc3094 <    -:  --------- fix(app): drag region for native controls (#11854)
+1221:  acc2bf5db <    -:  --------- release: v1.1.49
+1222:  ca8c23dd7 <    -:  --------- ci: add license to npm (#11883)
+1223:  1275c71a6 <    -:  --------- cli: make run non-interactive (#11814)
+1224:  3adeed8f9 <    -:  --------- fix(provider): strip properties/required from non-object types in Gemini schema (#11888)
+1225:  801e4a8a9 <    -:  --------- wip: zen
+1226:  3f07dffbb <    -:  --------- chore: generate
+1227:  d116c227e <    -:  --------- fix(core): plugins are always reinstalled  (#9675)
+1228:  0d22068c9 <    -:  --------- fix(app):  custom providers overflow (#11252)
+1229:  e709808b3 <    -:  --------- fix(app): move session search to command palette
+1230:  0d557721c <    -:  --------- fix(app): edit project dialog icon on hover (#11921)
+1231:  08671e315 <    -:  --------- fix(app): session tabs to open the previous opened (#11914)
+1232:  a38bae684 <    -:  --------- chore(app): don't forceMount tooltips
+1233:  e88cbefab <    -:  --------- fix(app): terminal serialization bug
+1234:  7508839b7 <    -:  --------- fix(app): terminal serialization bug
+1235:  95d0d476e <    -:  --------- docs: add --mdns-domain flag documentation (#11933)
+1236:  76381f33d <    -:  --------- feat(desktop): Allow empty prompt with review comments (#11953)
+1237:  3741516fe <    -:  --------- fix: handle nested array items for Gemini schema validation (#11952)
+1238:  54e14c1a1 <    -:  --------- fix: exclude k2p5 from reasoning variants (#11918)
+1239:  397532962 <    -:  --------- feat: improve skills, better prompting, fix permission asks after invoking skills, ensure agent knows where scripts/resources are (#11737)
+1240:  857b8a4b5 <    -:  --------- test: add test for new skill improvements (#11969)
+1241:  e33eb1b05 <    -:  --------- chore: cleanup
+1242:  017ad2c7f <    -:  --------- fix(app): spacing
+1243:  416964acd <    -:  --------- chore: gitignore codex
+1244:  60e616ec8 <    -:  --------- feat: Add .slnx to C#/F# LSP root detection (#11928)
+1245:  4f7da2b75 <    -:  --------- fix(app): model selector truncating too soon
+1246:  dcff5b659 <    -:  --------- fix(app): command palette placeholder text
+1247:  b7b734f51 <    -:  --------- fix: ensure mcp tools are sanitized (#11984)
+1248:  39a504773 <    -:  --------- fix: provider headers from config not applied to fetch requests (#11788)
+1249:  185858749 <    -:  --------- chore: generate
+1250:  82dd4b690 <    -:  --------- fix: always fall back to native clipboard after OSC52 (#11994)
+1251:  ee84eb44e <    -:  --------- cli: add --thinking flag to show reasoning blocks in run command (#12013)
+1252:  17e62b050 <    -:  --------- feat: add support for reading skills from .agents/skills directories (#11842)
+1253:  6b5cf936a <    -:  --------- docs: add missing environmental flags to the list (#11146)
+1254:  95211a885 <    -:  --------- feat(tui): allow theme colors in agent customization (#11444)
+1255:  2f12e8ee9 <    -:  --------- chore: generate
+1256:  25bdd77b1 <    -:  --------- fix(opencode): use official ai-gateway-provider package for Cloudflare AI Gateway (#12014)
+1257:  a30696f9b <    -:  --------- feat(plugin): add shell.env hook for manipulating environment in tools and shell (#12012)
+1258:  0a5d5bc52 <    -:  --------- docs: fix logging example for plugin (#11989)
+1259:  d940d1791 <    -:  --------- docs: fix grammar and formatting in README (#11985)
+1260:  137336f37 <    -:  --------- chore: generate
+1261:  992180956 <    -:  --------- chore: update nix node_modules hashes
+1262:  015cd404e <    -:  --------- feat: add Trinity model system prompt support (#12025)
+1263:  a68fedd4a <    -:  --------- chore: adjust way skill dirs are whitelisted (#12026)
+1264:  b5a4671c6 <    -:  --------- Revert "feat: add Trinity model system prompt support" (#12029)
+1265:  acac05f22 <    -:  --------- refactor(e2e): faster tests (#12021)
+1266:  93e060272 <    -:  --------- fix: prevent memory leaks from AbortController closures (#12024)
+1267:  93a07e5a2 <    -:  --------- release: v1.1.50
+1268:  6daa962aa <    -:  --------- fix: prioritize OPENCODE_CONFIG_DIR for AGENTS.md (#11536)
+1269:  b7bd561ea <    -:  --------- ci: use numeric release id instead of gql one
+1270:  7c440ae82 <    -:  --------- chore: add brendonovich as rust codeowner
+1271:  f28261374 <    -:  --------- fix(app): tighten up session padding-top for mobile (#11247)
+1272:  b942e0b4d <    -:  --------- fix: prevent double-prefixing of Bedrock cross-region inference models (#12056)
+1273:  8c1f1f13d <    -:  --------- docs: document the built in agents (#12066)
+1274:  5aaf8f824 <    -:  --------- docs: add agent-compatible paths to skills documentation (#12067)
+1275:  5588453cb <    -:  --------- fix: revert change that caused headers to be double merged if provider was authed in multiple places (#12072)
+1276:  64bafce66 <    -:  --------- restore direct osc52 (#12071)
+1277:  154cbf699 <    -:  --------- release: v1.1.51
+1278:  891875402 <    -:  --------- fix(terminal): support remote server connections and fix GLIBC compatibility (#11906)
+1279:  310de8b1e <    -:  --------- chore: update nix node_modules hashes
+1280:  2e8d8de58 <    -:  --------- fix(desktop): removed compression from rpm bundle to save 15m in CI (#12097)
+1281:  af06175b1 <    -:  --------- chore: generate
+1282:  a219615fe <    -:  --------- fix(app): opened tabs follow created session
+1283:  a2face30f <    -:  --------- wip(app): session options
+1284:  c277ee8cb <    -:  --------- fix(app): move session options to the session page
+1285:  c8622df76 <    -:  --------- fix(app): file tree not staying in sync across projects/sessions
+1286:  a3b281b2f <    -:  --------- ci: remove source-based AUR package from publish script
+1287:  61d3f788b <    -:  --------- fix(app): don't show scroll-to-bottom unecessarily
+1288:  93592702c <    -:  --------- test(app): fix dated e2e tests
+1289:  1721c6efd <    -:  --------- fix(core): session errors when attachment file not found
+1290:  c875a1fc9 <    -:  --------- test(app): fix e2e test action
+1291:  28dc5de6a <    -:  --------- fix(ui): review comments z-index stacking
+1292:  57b8c6290 <    -:  --------- fix(app): terminal hyperlink clicks
+1293:  ecd785485 <    -:  --------- test(app): fix e2e test action
+1294:  ce8712106 <    -:  --------- fix(app): clear comments on prompt submission (#12148)
+1295:  a2c28fc8d <    -:  --------- fix: ensure that plugin installs use --no-cache when using http proxy to prevent random hangs (see bun issue) (#12161)
+1296:  305007aa0 <    -:  --------- fix: cloudflare workers ai provider (#12157)
+1297:  d1686661c <    -:  --------- fix: ensure kimi-for-coding plan has thinking on by default for k2p5 (#12147)
+1298:  9436cb575 <    -:  --------- fix(app): safety triangle for sidebar hover (#12179)
+1299:  222bddc41 <    -:  --------- fix(app): last turn changes rendered in review pane (#12182)
+1300:  912098928 <    -:  --------- fix(app): derive terminal WebSocket URL from browser origin instead o… (#12178)
+1301:  41bc4ec7f <    -:  --------- fix(desktop): Refresh file contents when changing workspaces to not have stale contents (#11728)
+1302:  9679e0c59 <    -:  --------- fix(app): terminal EOL issues
+1303:  0d38e6903 <    -:  --------- fix(core): skip dependency install in read-only config dirs (#12128)
+1304:  2896b8a86 <    -:  --------- fix(app): terminal url
+1305:  31e2feb34 <    -:  --------- fix(tui): add hover states to question tool tabs (#12203)
+1306:  4387f9fb9 <    -:  --------- feat: Allow the function to hide or show thinking blocks to be bound to a key (resolves #12168) (#12171)
+1307:  2614342f9 <    -:  --------- chore: generate
+   -:  --------- >    1:  af7f82ed4 docs: map existing codebase
+   -:  --------- >    2:  cb15a2934 docs: initialize project
+   -:  --------- >    3:  4aa34e419 chore: add project config
+   -:  --------- >    4:  be3c29ad3 docs: complete project research for PAM authentication
+   -:  --------- >    5:  8735db842 docs: define v1 requirements
+   -:  --------- >    6:  8763e45f7 docs: add project roadmap and requirements traceability
+   -:  --------- >    7:  9558766f7 docs(01): capture phase context
+   -:  --------- >    8:  a68662b9c docs(01): research phase domain
+   -:  --------- >    9:  853647044 docs(01): create phase plan
+   -:  --------- >   10:  05434ab54 feat(01-01): add ms package and create duration utility
+   -:  --------- >   11:  a227c9933 feat(01-01): create auth configuration schema
+   -:  --------- >   12:  b07dcd933 docs(01-01): complete auth schema plan
+   -:  --------- >   13:  a049dc62e feat(01-02): integrate auth schema into Config.Info
+   -:  --------- >   14:  cffb0077a feat(01-02): add PamServiceNotFoundError formatting
+   -:  --------- >   15:  f6b74b9ee docs(01-02): complete auth schema integration plan
+   -:  --------- >   16:  a0dc81d24 feat(01-03): add PAM service file validation at startup
+   -:  --------- >   17:  14b14035c docs(01-03): complete PAM startup validation plan
+   -:  --------- >   18:  f1b0b3e05 docs(01): complete Configuration Foundation phase
+   -:  --------- >   19:  f48ef4089 docs(02): capture phase context
+   -:  --------- >   20:  a613f2102 test(01): complete UAT - 4 passed, 0 issues
+   -:  --------- >   21:  45d30fca9 docs(02): research phase domain
+   -:  --------- >   22:  d80730dfd docs(02): create phase plan
+   -:  --------- >   23:  326d0f35d feat(02-01): create UserSession namespace with Zod schema and Map storage
+   -:  --------- >   24:  637894842 test(02-01): add unit tests for UserSession namespace
+   -:  --------- >   25:  9bd8b0924 docs(02-01): complete UserSession namespace plan
+   -:  --------- >   26:  277e20dad feat(02-02): create auth middleware for session validation
+   -:  --------- >   27:  ed734238c feat(02-02): create auth routes for logout functionality
+   -:  --------- >   28:  732d6e02b feat(02-02): integrate auth middleware and routes into server
+   -:  --------- >   29:  8224155ad docs(02-02): complete auth middleware and routes plan
+   -:  --------- >   30:  d3c65f5e1 docs(02): complete Session Infrastructure phase
+   -:  --------- >   31:  603ad562a docs(03): capture phase context
+   -:  --------- >   32:  f0508d821 docs(03): research phase domain
+   -:  --------- >   33:  f84dfdb65 docs(03): create phase plan
+   -:  --------- >   34:  aedbb0558 feat(03-01): initialize Rust auth broker project
+   -:  --------- >   35:  07a44ab21 feat(03-01): create IPC protocol types
+   -:  --------- >   36:  6d1351fbf feat(03-01): create config loading module
+   -:  --------- >   37:  a87ec0de5 style(03-01): apply clippy fixes and add Cargo.lock
+   -:  --------- >   38:  e76f87597 docs(03-01): complete auth broker project init plan
+   -:  --------- >   39:  d25cd7abc feat(03-02): add PAM authentication wrapper with thread-per-request model
+   -:  --------- >   40:  46a1a69fd feat(03-02): add per-username rate limiter
+   -:  --------- >   41:  4c5bacb1c feat(03-02): add username validation following POSIX rules
+   -:  --------- >   42:  173e15a30 docs(03-02): complete auth components plan
+   -:  --------- >   43:  7f5ded648 feat(03-05): add TypeScript broker client for auth IPC
+   -:  --------- >   44:  58bbb72a8 feat(03-05): export BrokerClient from auth module
+   -:  --------- >   45:  7018d8178 feat(03-03): create Unix socket server with graceful shutdown
+   -:  --------- >   46:  64f5f1668 feat(03-03): create request handler with auth flow orchestration
+   -:  --------- >   47:  2f934263d fix(03-05): handle Bun's sync socket error for missing paths
+   -:  --------- >   48:  7374977a6 test(03-05): add broker client unit tests
+   -:  --------- >   49:  5c10bc7c2 feat(03-03): create daemon entry point with signal handling
+   -:  --------- >   50:  0eba9d000 style(03-03): fix clippy collapsible_if warning
+   -:  --------- >   51:  c310a7b44 docs(03-05): complete TypeScript broker client plan
+   -:  --------- >   52:  b9e731006 docs(03-03): complete Unix socket server plan
+   -:  --------- >   53:  70d8b99e3 chore(03-04): add systemd service file for opencode-broker
+   -:  --------- >   54:  89a2a4c80 chore(03-04): add launchd plist for macOS
+   -:  --------- >   55:  03a2a4a68 feat(03-04): add PAM service files and platform module
+   -:  --------- >   56:  02bf7bcbb docs(03-04): complete service files plan
+   -:  --------- >   57:  a7a785ea0 feat(03-06): add broker setup and status CLI commands
+   -:  --------- >   58:  fef035b3a chore(03-06): add broker build script
+   -:  --------- >   59:  968eb6e01 fix(03-06): improve broker binary path resolution
+   -:  --------- >   60:  9d394fb64 docs(03-06): complete CLI integration plan
+   -:  --------- >   61:  8fa1f7d8a docs(03): complete Auth Broker Core phase
+   -:  --------- >   62:  64e303ac2 test(03): complete UAT - 6 passed, 0 issues
+   -:  --------- >   63:  4b71d6f91 docs(04): capture phase context
+   -:  --------- >   64:  7e2e68ce7 docs(04): research authentication flow phase
+   -:  --------- >   65:  97a1adf66 docs(04): create phase plan
+   -:  --------- >   66:  41de7568f feat(04-01): create user info lookup module
+   -:  --------- >   67:  92f2ad566 feat(04-01): extend UserSession schema with UNIX fields
+   -:  --------- >   68:  519fa3ae9 test(04-01): add tests for user info lookup and session extension
+   -:  --------- >   69:  3ea512aaa docs(04-01): complete user info and session extension plan
+   -:  --------- >   70:  e84202dcc feat(04-02): add login and status endpoints to AuthRoutes
+   -:  --------- >   71:  8a3358d04 test(04-02): add login endpoint tests
+   -:  --------- >   72:  ed1ba5208 docs(04-02): complete login endpoint plan
+   -:  --------- >   73:  81ee34484 docs(04): complete Authentication Flow phase
+   -:  --------- >   74:  efe2d4b51 fix(04): load auth config at server startup before Instance context
+   -:  --------- >   75:  13a7dca45 test(04): complete UAT - 6 passed, 1 bug fixed
+   -:  --------- >   76:  c018ada43 docs(05): capture phase context
+   -:  --------- >   77:  871e2f569 docs(05): research phase domain
+   -:  --------- >   78:  71fa97a9e docs(05): create phase plan for User Process Execution
+   -:  --------- >   79:  8ba6917d0 feat(05-01): add PTY allocator module
+   -:  --------- >   80:  a1276f425 feat(05-01): add PTY session state tracking
+   -:  --------- >   81:  cf4daec51 docs(05-01): complete PTY allocation plan
+   -:  --------- >   82:  d384bbc9e feat(05-02): add process module with login environment setup
+   -:  --------- >   83:  0b013bd5e feat(05-02): implement user process spawning with impersonation
+   -:  --------- >   84:  41cdcc976 docs(05-02): complete process spawner plan
+   -:  --------- >   85:  62c207705 feat(05-03): add PTY method types to IPC protocol
+   -:  --------- >   86:  bc606154f test(05-03): add handler tests for PTY methods
+   -:  --------- >   87:  eccd005b6 docs(05-03): complete IPC protocol extension plan
+   -:  --------- >   88:  29edc96d3 feat(05-04): add session-to-user mapping storage
+   -:  --------- >   89:  534fd161c feat(05-04): implement SpawnPty, KillPty, ResizePty handlers
+   -:  --------- >   90:  e76915eed docs(05-04): complete PTY handler implementation plan
+   -:  --------- >   91:  b7509d980 feat(05-05): add RegisterSession and UnregisterSession to IPC protocol
+   -:  --------- >   92:  6ffe5da3d feat(05-05): implement session registration handlers
+   -:  --------- >   93:  a40f7e8c0 test(05-05): add handler tests for session registration
+   -:  --------- >   94:  dc2e67009 docs(05-05): complete session registration protocol plan
+   -:  --------- >   95:  cfafa079b feat(05-06): add session registration methods to BrokerClient
+   -:  --------- >   96:  f4e91e787 docs(05-06): complete TypeScript BrokerClient extension plan
+   -:  --------- >   97:  ec939e739 feat(05-07): register session with broker on login
+   -:  --------- >   98:  30f7abe32 feat(05-07): unregister session from broker on logout
+   -:  --------- >   99:  4ac32cd44 feat(05-07): route PTY creation through broker when auth enabled
+   -:  --------- >  100:  1c02338f3 docs(05-07): complete web server integration plan
+   -:  --------- >  101:  0259f5966 feat(05-08): add broker-pty module with TypeScript client I/O methods
+   -:  --------- >  102:  4517014aa feat(05-08): add PtyWrite and PtyRead IPC methods to broker
+   -:  --------- >  103:  6ae3d3fce docs(05-08): complete broker PTY I/O plan
+   -:  --------- >  104:  f12a1f3e2 feat(05-09): add sessionId and auth context to auth middleware
+   -:  --------- >  105:  b5249f055 feat(05-09): enforce auth on PTY routes
+   -:  --------- >  106:  6f0ee7cc4 test(05-09): add PTY auth enforcement tests
+   -:  --------- >  107:  d29d31e75 docs(05-09): complete auth enforcement on PTY routes plan
+   -:  --------- >  108:  a7b2a217c test(05-10): create integration test structure for user process execution
+   -:  --------- >  109:  3cd60eac6 feat(05-10): add home and shell tracking to PtySession
+   -:  --------- >  110:  f1505b2e3 fix(auth): correct redirect loop and add login page
+   -:  --------- >  111:  18cf86df0 fix(auth): session endpoint reads cookie directly
+   -:  --------- >  112:  cee480104 test(04): complete UAT - 7/7 passed
+   -:  --------- >  113:  18acb3797 fix(broker): move Ping to end of RequestParams enum
+   -:  --------- >  114:  4fa31c229 fix(broker): correct RequestParams enum ordering for serde untagged
+   -:  --------- >  115:  8be66a943 fix(broker): macOS PTY spawn and serde deserialization fixes
+   -:  --------- >  116:  cb19a722b fix(test): add missing mocks for auth route tests
+   -:  --------- >  117:  5dcd172a8 style(broker): apply cargo fmt formatting
+   -:  --------- >  118:  a5d321a58 docs(05): complete user process execution phase
+   -:  --------- >  119:  02a7bb619 test(05): complete UAT - 8 passed, 0 issues
+   -:  --------- >  120:  0c1fc02fa docs(06): capture phase context
+   -:  --------- >  121:  d7e0ce43a docs(06): research login UI domain
+   -:  --------- >  122:  0ce7db8c9 docs(06): create phase plan
+   -:  --------- >  123:  5dc4a6016 feat(06-01): add login page UI with form and styling
+   -:  --------- >  124:  067f78297 fix(06-01): address login page UI issues
+   -:  --------- >  125:  909889b5d fix(06-01): import UI styles and fix autofocus
+   -:  --------- >  126:  1f4650cf4 feat(06-01): move polished login page to opencode server
+   -:  --------- >  127:  7165e2f3d docs(06): complete login UI phase
+   -:  --------- >  128:  8780dd99b fix(06-01): add red glow to invalid form fields
+   -:  --------- >  129:  a685e8da9 docs(06): add UAT results for Login UI phase
+   -:  --------- >  130:  21c19545a fix(06-01): keep submit button disabled after successful login
+   -:  --------- >  131:  bff301c10 docs(07): capture phase context
+   -:  --------- >  132:  1a6767523 docs(07): research security hardening domain
+   -:  --------- >  133:  275de34b3 docs(07): create phase plan for security hardening
+   -:  --------- >  134:  a4b5bb96f docs(07): add phase plans
+   -:  --------- >  135:  9b53d2095 feat(07-01): create CSRF token utilities with HMAC signing
+   -:  --------- >  136:  ca2100198 feat(07-02): add rate limiting infrastructure
+   -:  --------- >  137:  cb88ba33c feat(07-02): integrate rate limiting and security logging in login endpoint
+   -:  --------- >  138:  90ed8275d test(07-02): add rate limiting tests
+   -:  --------- >  139:  dd7d15e7f docs(07-01): complete CSRF protection plan
+   -:  --------- >  140:  aafeb3c9a docs(07-02): complete login rate limiting plan
+   -:  --------- >  141:  e56d7b505 feat(07-03): create HTTPS detection utilities
+   -:  --------- >  142:  8f66ee862 feat(07-03): add HTTP warning and require_https enforcement to login page
+   -:  --------- >  143:  2633affdc test(07-03): add HTTPS detection and auth route integration tests
+   -:  --------- >  144:  2203fb490 docs(07-03): complete HTTPS detection plan
+   -:  --------- >  145:  ce1ad94cd fix(07): type compatibility and test config updates
+   -:  --------- >  146:  f954fbf9e docs(07): complete Security Hardening phase
+   -:  --------- >  147:  64039613d fix(07): set sessionId for logout routes to enable CSRF validation
+   -:  --------- >  148:  9bf90a986 fix(07): set Retry-After header correctly in rate limit response
+   -:  --------- >  149:  aebb57d3e docs(07): add UAT results for Security Hardening phase
+   -:  --------- >  150:  8f3501496 docs(08): capture phase context
+   -:  --------- >  151:  8603842be docs(08): research phase domain
+   -:  --------- >  152:  923f90c6a docs(08): create phase plan
+   -:  --------- >  153:  2751ea879 feat(08-01): add rememberMe to UserSession schema and creation
+   -:  --------- >  154:  9cb537151 feat(08-02): create session context with polling
+   -:  --------- >  155:  e2865ab22 feat(08-01): update setSessionCookie to support persistent cookies
+   -:  --------- >  156:  d326031a4 feat(08-02): create session indicator component
+   -:  --------- >  157:  d47ef9ec7 feat(08-02): integrate SessionProvider into app
+   -:  --------- >  158:  f0012b284 feat(08-01): wire rememberMe through login flow
+   -:  --------- >  159:  d88e96b9e docs(08-02): complete session context and username indicator plan
+   -:  --------- >  160:  02b851b16 docs(08-01): complete remember me backend plan
+   -:  --------- >  161:  70cfac1e4 feat(08-04): add chevron icon to session indicator dropdown
+   -:  --------- >  162:  f9e1939fc feat(08-04): integrate SessionIndicator into app layout
+   -:  --------- >  163:  7210c3da3 feat(08-03): add expiration warning toast to session context
+   -:  --------- >  164:  627d6d2f6 feat(08-03): create session expired overlay component
+   -:  --------- >  165:  5ee99cb75 feat(08-03): mount session expired overlay in app
+   -:  --------- >  166:  54e711550 docs(08-04): complete session indicator integration plan
+   -:  --------- >  167:  40dc74b46 docs(08-03): complete session expiration warnings plan
+   -:  --------- >  168:  7d44ad46f docs(08): complete Session Enhancements phase
+   -:  --------- >  169:  c96ba6dc4 fix(08): use signal with onMount for titlebar mount point
+   -:  --------- >  170:  80347ea24 fix(08): use window.location for session expired redirect
+   -:  --------- >  171:  788e2941a fix(08): enable CORS credentials for cookie auth
+   -:  --------- >  172:  9103e8b00 fix(08): allow /global/health endpoint without auth
+   -:  --------- >  173:  17dcc7924 fix(08): return 401 for API calls instead of redirect
+   -:  --------- >  174:  b21c582e1 fix(08): improve API call detection for auth middleware
+   -:  --------- >  175:  bd2b508b1 fix(08): redirect to login when auth required but not authenticated
+   -:  --------- >  176:  7b004cf67 fix(08): support cross-origin login redirect for dev server
+   -:  --------- >  177:  f1f4ef31b fix(08): configure Vite proxy for API requests in development
+   -:  --------- >  178:  de96bb347 fix(08-02): add CSRF token to logout request
+   -:  --------- >  179:  70c4ca681 fix(08-03): call checkExpirationWarning after fetch completes
+   -:  --------- >  180:  4ccf10fba docs(08): complete UAT for session enhancements phase
+   -:  --------- >  181:  d64355595 docs(09): capture phase context
+   -:  --------- >  182:  55b124cdc docs(09): research phase domain
+   -:  --------- >  183:  288692a70 docs(09): create phase plan for Connection Security UI
+   -:  --------- >  184:  7e1319f9f feat(09-01): add security icons to icon library
+   -:  --------- >  185:  d2c110d49 feat(09-01): create SecurityBadge component with status detection
+   -:  --------- >  186:  452b3e9af docs(09-01): complete connection security UI plan
+   -:  --------- >  187:  6325552e6 feat(09-02): create HttpWarningBanner component
+   -:  --------- >  188:  fec3369e9 feat(09-02): integrate security components into layout
+   -:  --------- >  189:  1e05c1552 docs(09-02): complete HTTP warning banner and integration plan
+   -:  --------- >  190:  b237944e6 docs(09): complete connection security UI phase
+   -:  --------- >  191:  388dad70b docs(09): add UAT results for Connection Security UI phase
+   -:  --------- >  192:  ce5082c48 docs(10): capture phase context
+   -:  --------- >  193:  32c691c61 docs(10): research two-factor authentication phase domain
+   -:  --------- >  194:  9612e0eb7 docs(10): create phase plan for Two-Factor Authentication
+   -:  --------- >  195:  f5a9fb21e feat(10-01): add 2FA configuration options to AuthConfig
+   -:  --------- >  196:  c32afce44 feat(10-01): add broker OTP module for 2FA detection and validation
+   -:  --------- >  197:  662ef552f feat(10-01): add OTP PAM service files for Linux and macOS
+   -:  --------- >  198:  fa6cc2389 docs(10-01): complete 2FA config and OTP module plan
+   -:  --------- >  199:  ff8071414 feat(10-03): add device trust token module
+   -:  --------- >  200:  2e928dcec feat(10-02): add 2FA protocol types and handler implementation
+   -:  --------- >  201:  062a3b5a3 feat(10-03): add 2FA token module
+   -:  --------- >  202:  8ded4b622 feat(10-03): export token modules from auth index
+   -:  --------- >  203:  81f2f7433 docs(10-02): complete broker protocol 2FA extension plan
+   -:  --------- >  204:  2dadec601 docs(10-03): complete token utilities plan
+   -:  --------- >  205:  41866cdde feat(10-04): add check2fa and authenticateotp to BrokerRequest interface
+   -:  --------- >  206:  f6fa7d9ce feat(10-04): implement check2fa method on BrokerClient
+   -:  --------- >  207:  314ba01c0 feat(10-04): implement authenticateOtp method on BrokerClient
+   -:  --------- >  208:  cff12fd9e docs(10-04): complete BrokerClient 2FA methods plan
+   -:  --------- >  209:  cc057c3b9 feat(10-05): add server token secret module
+   -:  --------- >  210:  2550e6a1d feat(10-05): add 2FA flow to login endpoint
+   -:  --------- >  211:  398119b61 feat(10-05): add POST /auth/login/2fa endpoint
+   -:  --------- >  212:  f29c087dd docs(10-05): complete Auth Routes 2FA Flow plan
+   -:  --------- >  213:  f011eb25d feat(10-06): add 2FA page HTML generator
+   -:  --------- >  214:  6c8f63169 feat(10-06): add GET /auth/2fa route
+   -:  --------- >  215:  f08ad1fef feat(10-06): update login page to redirect to 2FA
+   -:  --------- >  216:  dacb58236 docs(10-06): complete 2FA Verification Page UI plan
+   -:  --------- >  217:  3cfb8e7b5 chore(10-07): add qrcode dependency for TOTP setup
+   -:  --------- >  218:  1010aa2a8 feat(10-08): add device trust revocation endpoint
+   -:  --------- >  219:  d21d52986 feat(10-07): create TOTP setup module with QR code generation
+   -:  --------- >  220:  9a72f62d8 feat(10-08): add device trust status endpoint
+   -:  --------- >  221:  7fd91d5aa feat(10-08): add device trust controls to session indicator
+   -:  --------- >  222:  9f3aa19b6 feat(10-07): add 2FA setup wizard endpoints and page
+   -:  --------- >  223:  3a49e72bf docs(10-08): complete device trust management plan
+   -:  --------- >  224:  5515ead4a docs(10-07): complete 2FA setup wizard plan
+   -:  --------- >  225:  7bfb365a9 chore(10): update lockfile for qrcode dependency
+   -:  --------- >  226:  7be0b43fb docs(10): complete Two-Factor Authentication phase
+   -:  --------- >  227:  1b410e71e fix(10): add CSRF token to 2FA setup verification form
+   -:  --------- >  228:  039fd3090 fix(10): set sessionId in context for all /auth/* routes
+   -:  --------- >  229:  1e48748bf feat(10): add installation instructions to 2FA setup page
+   -:  --------- >  230:  cdca64055 feat(10): auto-submit 2FA setup verification on 6 digits
+   -:  --------- >  231:  628a67287 feat(10): add safety explanation to 2FA setup page
+   -:  --------- >  232:  81f1b55cd feat(10): add twoFactorRequired config option
+   -:  --------- >  233:  f9fe71ea2 feat(10): enforce 2FA setup with twoFactorPending session flag
+   -:  --------- >  234:  06e3c62d5 fix(10): clarify 2FA setup instructions refer to server
+   -:  --------- >  235:  8b6fee5eb fix(10): write google_authenticator file directly instead of using CLI
+   -:  --------- >  236:  4ff149857 docs(10): comprehensive documentation for google_authenticator file format
+   -:  --------- >  237:  0ebc9ece5 feat(10): add copy button to 2FA setup command
+   -:  --------- >  238:  a3169ced3 fix(10): improve 2FA error message and add PAM setup instructions
+   -:  --------- >  239:  4522fe9cd feat(10): add PAM configuration detection and auto-fix for 2FA
+   -:  --------- >  240:  ea1e34a30 docs: add Phase 13 (Passkeys Investigation) to roadmap
+   -:  --------- >  241:  c16900348 fix(10): add /auth/login/2fa to CSRF allowlist
+   -:  --------- >  242:  699821ff3 fix(10): only count failed OTP attempts against rate limit
+   -:  --------- >  243:  fb26fc28d fix(10): preserve device trust on regular logout
+   -:  --------- >  244:  126f1080b fix(10): clarify "Forget this device" menu text
+   -:  --------- >  245:  729114ba5 feat(10): add "Log out all sessions" option to dropdown
+   -:  --------- >  246:  716e49606 fix(10): only count failed login attempts against rate limit
+   -:  --------- >  247:  17ec109dd fix(10): implement manual rate limiter that only counts failures
+   -:  --------- >  248:  9260c8e76 docs(10): complete UAT for Two-Factor Authentication phase
+   -:  --------- >  249:  f7ca19369 docs(10): add phases 13-14 to roadmap, update state
+   -:  --------- >  250:  ff83dc2ff docs(11): capture phase context for documentation
+   -:  --------- >  251:  cc297a9d4 docs(11): research phase domain
+   -:  --------- >  252:  28a36bddb docs(11): create phase plan
+   -:  --------- >  253:  31e24eabe docs(11-01): create comprehensive reverse proxy guide
+   -:  --------- >  254:  b85c27f33 docs(11-02): create comprehensive PAM configuration guide
+   -:  --------- >  255:  a1702b2d1 docs(11-03): create troubleshooting guide with flowcharts
+   -:  --------- >  256:  15148c27a docs(11-01): complete reverse proxy documentation plan
+   -:  --------- >  257:  ae9c6cd67 docs(11-03): complete troubleshooting guide plan
+   -:  --------- >  258:  b13182c3d docs(11-02): complete PAM configuration plan
+   -:  --------- >  259:  1fe00b118 docs(11-04): create documentation index and integrate with main README
+   -:  --------- >  260:  59325deb2 docs(11-04): complete documentation index plan
+   -:  --------- >  261:  249344473 fix(11): orchestrator plan revisions
+   -:  --------- >  262:  ce5888c10 docs(11): complete documentation phase
+   -:  --------- >  263:  e224684a9 docs(11): complete UAT verification - all 5 tests passed
+   -:  --------- >  264:  b80dcc8be milestone: complete Milestone 1 - System Authentication Foundation
+   -:  --------- >  265:  11277fd04 docs: add Docker installation guide for opencode fork
+   -:  --------- >  266:  bd4d59ab4 fix(broker): skip PTY test when openpty unavailable
+   -:  --------- >  267:  280a45381 chore(broker): gate test-spawn binary
+   -:  --------- >  268:  24d8bd509 chore(broker): note Ubuntu Docker failure
+   -:  --------- >  269:  3dc964087 fix(broker): align initgroups gid types
+   -:  --------- >  270:  484fc10ba feat(opencode): require two-factor authentication for enhanced security
+   -:  --------- >  271:  28f602ee0 fix(opencode): disable two-factor authentication requirement
+   -:  --------- >  272:  50fd5d1a6 feat(opencode): enable auth defaults
+   -:  --------- >  273:  d18297a31 fix(app): harden message hydration and CSRF fetch
+   -:  --------- >  274:  6f2b0dfed fix(app): satisfy Bun fetch typing
+   -:  --------- >  275:  189700cee fix(app): guard empty session lists
+   -:  --------- >  276:  798ccdba1 docs(planning): add phase 16
+   -:  --------- >  277:  8694cc2e6 feat: add repo clone workflow and cleanup submodule
+   -:  --------- >  278:  19c19fbbb docs(planning): add phase 17
+   -:  --------- >  279:  ec88d2a40 fix(app): guard unexpected list shapes
+   -:  --------- >  280:  84e7b6f9d fix(server): refresh CSRF cookie on status
+   -:  --------- >  281:  dac7d3586 test(16): complete UAT - 0 passed, 5 issues
+   -:  --------- >  282:  0f12649bc docs(16): add root causes from diagnosis
+   -:  --------- >  283:  1c16422de fix(16-04): proxy repo and find routes in dev
+   -:  --------- >  284:  ed208eb0f fix(16-04): surface repo list and directory errors
+   -:  --------- >  285:  aa3ba9d31 feat(16-05): add manage repos entry in new session view
+   -:  --------- >  286:  a17f383f0 feat(16-05): hint manage repos for empty state
+   -:  --------- >  287:  4771ef792 docs(16-04): complete dev proxy and error visibility plan
+   -:  --------- >  288:  c7df2f3b0 docs(16-05): complete repo manager entry plan
+   -:  --------- >  289:  3ceab1b12 docs(planning): reorder phase 16 plans
+   -:  --------- >  290:  414168566 docs(16): add root causes from UAT rerun
+   -:  --------- >  291:  6368bed56 docs(planning): add phase 16 gap plan
+   -:  --------- >  292:  9c0718964 chore(16-06): proxy agent and command in dev
+   -:  --------- >  293:  388433f69 fix(16-06): return branch errors as 400
+   -:  --------- >  294:  0b92511fd feat(16-06): surface branch load errors in UI
+   -:  --------- >  295:  2e87c6abb docs(16-06): complete repo download gaps plan
+   -:  --------- >  296:  436f5316e test(16): complete UAT rerun - 1 passed, 3 issues
+   -:  --------- >  297:  93281e989 docs(16): add root causes from diagnosis
+   -:  --------- >  298:  0c5606154 docs(planning): add phase 16 gap plans
+   -:  --------- >  299:  e4ee65db8 fix(16-07): validate repo records on load
+   -:  --------- >  300:  17715aa6c fix(16-07): return 4xx for invalid repo records
+   -:  --------- >  301:  463e1bf83 feat(16-08): add directory picker for local repos
+   -:  --------- >  302:  0d4c9ef2e feat(16-08): surface branch load errors
+   -:  --------- >  303:  56c5eac2a docs(16-08): complete repo download gap plans
+   -:  --------- >  304:  f4039d884 test(16): complete UAT - 2 passed, 3 issues
+   -:  --------- >  305:  eb8c22d06 feat(16-08): improve repo picker UX and branch listing
+   -:  --------- >  306:  e7bab7e5a fix(16-08): load folder listing from root
+   -:  --------- >  307:  6dab645a4 feat(16-08): add up-navigation to folder picker
+   -:  --------- >  308:  e8d99e5c2 fix(16-08): list home directories in picker
+   -:  --------- >  309:  4613af5ca fix(16-08): show home folders in picker
+   -:  --------- >  310:  e6594156c fix(16-08): surface file list errors
+   -:  --------- >  311:  611183266 fix(16-08): stabilize folder picker listing
+   -:  --------- >  312:  1b60abbcc feat(16-08): show detailed repo errors in dialog
+   -:  --------- >  313:  34db1c9b2 test(16): complete UAT rerun
+   -:  --------- >  314:  3a4eccc7e fix(csrf): accept header token without cookie
+   -:  --------- >  315:  203568a60 feat(app): add build-time server url override
+   -:  --------- >  316:  2909258d2 chore(app): add fork attribution markers
+   -:  --------- >  317:  907f071b7 feat(opencode): bundle local web UI and serve it
+   -:  --------- >  318:  2dafb23e9 chore(debug): record route refresh investigation
+   -:  --------- >  319:  2d301c7bf chore(deps): normalize qrcode dependencies
+   -:  --------- >  320:  8f8fe94c3 chore(planning): add phase 18 auth route audit
+   -:  --------- >  321:  d84fde1d7 chore(build): make UI build flag explicit
+   -:  --------- >  322:  e72009124 fix(server): allow local connect-src
+   -:  --------- >  323:  9b91eb17f fix(server): relax CORS origin check
+   -:  --------- >  324:  27f1c2f03 docs: capture todo - Fix site manifest 401
+   -:  --------- >  325:  c7fb116c1 fix(server): add public health alias
+   -:  --------- >  326:  b23db1210 docs: capture todo - Fix web terminal 500
+   -:  --------- >  327:  a0a14b64d docs: capture todo - Support Cloudflare Quick Tunnel
+   -:  --------- >  328:  907f5c224 docs: capture todo - Display built-at date
+   -:  --------- >  329:  9b3c5a5af feat(app): show build timestamp
+   -:  --------- >  330:  9bae389d8 chore(opencode): add dev web script
+   -:  --------- >  331:  29c77178b fix(app): stack footer metadata
+   -:  --------- >  332:  df9b40be4 feat(app): show build sha
+   -:  --------- >  333:  276e92a7b docs(planning): capture phase 19 context and research
+   -:  --------- >  334:  1ba3e5f0d docs(planning): align phase 19 stack to SolidJS
+   -:  --------- >  335:  0bff4121b feat(auth): serve Solid login entry from ui build
+   -:  --------- >  336:  a3fbc6520 fix(auth): allow ui assets without session
+   -:  --------- >  337:  783ef3786 docs(planning): capture phase 19 UAT and verification
+   -:  --------- >  338:  2c2bdb299 fix(app): center login logo
+   -:  --------- >  339:  5f1c0343d docs(planning): add phase 20 2fa refactor plan
+   -:  --------- >  340:  55d8e0db8 fix(broker): add socket bind diagnostics
+   -:  --------- >  341:  0a5eec0d9 fix(broker): exit cleanly when broker already running
+   -:  --------- >  342:  3446a452a docs(broker): add service management README
+   -:  --------- >  343:  09f91745f feat(21-01): add ssh key storage helpers
+   -:  --------- >  344:  3e3bcd7af feat(21-01): add ssh key routes
+   -:  --------- >  345:  1527bb9e1 docs(21-01): complete ssh key management plan
+   -:  --------- >  346:  1cb30cee8 chore(21-02): regenerate sdk for ssh keys
+   -:  --------- >  347:  ee8016dd6 feat(21-02): add settings ssh key dialog
+   -:  --------- >  348:  b8cac071c feat(21-02): prompt for missing ssh keys in clone
+   -:  --------- >  349:  6a750a20e docs(21-02): complete ssh key management plan
+   -:  --------- >  350:  3531c748a docs(planning): capture phase 21 ssh key plan
+   -:  --------- >  351:  1f01117a0 chore(format): apply formatting updates
+   -:  --------- >  352:  108814909 docs(planning): apply markdown formatting updates
+   -:  --------- >  353:  9afe6c94b chore(rules): run generate before rust checks
+   -:  --------- >  354:  335682af3 chore(rules): add turbo typecheck
+   -:  --------- >  355:  cc66cacbb fix(app): align ssh key create payload
+   -:  --------- >  356:  c4926ef27 docs(broker): add re-enable commands
+   -:  --------- >  357:  4409cef0a feat(auth): serve 2fa verification from app build
+   -:  --------- >  358:  2b1a40c85 docs(planning): add phase 20 summaries
+   -:  --------- >  359:  0d473a60b fix(auth): make 2fa setup command shell-safe
+   -:  --------- >  360:  9bb9e3e13 fix(auth): redirect after 2fa setup verification
+   -:  --------- >  361:  d42e593b4 docs(broker): add dev run instructions
+   -:  --------- >  362:  23c94295c chore(tsconfig): exclude build artifacts
+   -:  --------- >  363:  b928f4aae docs(planning): add phase 22 placeholder
+   -:  --------- >  364:  89c0724c0 chore(format): apply formatting updates
+   -:  --------- >  365:  4ca3222af feat(auth): serve 2fa setup from app build
+   -:  --------- >  366:  1c85457f0 docs(planning): add phase 22 plans
+   -:  --------- >  367:  023a6185e docs(planning): add phase 23 plans
+   -:  --------- >  368:  b2cc2ef99 Docs: expand broker README with test user guidance
+   -:  --------- >  369:  908d6851e feat(auth): verify TOTP before 2FA write
+   -:  --------- >  370:  96bcad95c chore(rules): add TypeScript precommit checks
+   -:  --------- >  371:  b842a0633 chore(test): align precommit tests and fixtures
+   -:  --------- >  372:  5a8c89fbd chore(auth): clean up pending 2FA setup flow
+   -:  --------- >  373:  e1f60dcf9 plan(phase-24): add remote terminal reliability plans
+   -:  --------- >  374:  5829cfd46 docs(broker): add log viewing commands
+   -:  --------- >  375:  0dee4a2a9 feat(24-01): add PTY request logging
+   -:  --------- >  376:  5e1a87257 feat(24-01): surface PTY request ids in UI
+   -:  --------- >  377:  e957b2d47 docs(24-01): complete remote terminal reliability plan
+   -:  --------- >  378:  68122d7af feat(24-02): wire broker-backed PTY creation
+   -:  --------- >  379:  b801e2f8e feat(24-02): align PTY session registration lifecycle
+   -:  --------- >  380:  ef96e866a test(24-02): cover broker PTY error handling
+   -:  --------- >  381:  868260e26 fix(24-02): type PTY route context
+   -:  --------- >  382:  75ad40b35 fix(24-02): load ghostty wasm from stable URL
+   -:  --------- >  383:  d4c1f8297 docs(24-02): complete remote terminal reliability plan
+   -:  --------- >  384:  ac4e2bbf7 fix(csp): allow wasm instantiation
+   -:  --------- >  385:  7d5f81ede fix(dialog): avoid nested scroll in directory picker
+   -:  --------- >  386:  d2d6b8553 fix(dialog): keep directory picker footer visible
+   -:  --------- >  387:  ff7b7d8e7 feat(2fa): add disable flow and persist opt-out
+   -:  --------- >  388:  9a4bc5021 fix(2fa): restore setup page scrolling
+   -:  --------- >  389:  d722d5641 style(2fa): darken qr code panel
+   -:  --------- >  390:  f63396573 style(security): tint secure lock icon
+   -:  --------- >  391:  ed7d5c6d7 fix(ui): serve manifest before auth
+   -:  --------- >  392:  378c2431b chore(roadmap): add phase 25 ssh key generation
+   -:  --------- >  393:  094e170df fix(ui): surface ssh key create errors
+   -:  --------- >  394:  ecaebed09 fix(server): use server home for ssh keys
+   -:  --------- >  395:  8a63844a3 feat(ui): auto-hide build info badge
+   -:  --------- >  396:  5d429d5b8 Default permissions to allow and update docs
+   -:  --------- >  397:  91606e60b Stabilize bash tool tests for shell init noise
+   -:  --------- >  398:  cfe797554 Add OpenRouter free integration and settings UI
+   -:  --------- >  399:  ce0a5f0f2 fix(broker): include actual error details in PTY spawn failures (#1)
+   -:  --------- >  400:  3010d7e55 Handle initgroups EPERM in pre-exec
+   -:  --------- >  401:  547baefcb Improve home CTAs for empty state
+   -:  --------- >  402:  99e23477d Add filled console icon for terminal toggle
+   -:  --------- >  403:  8aec255a2 Document default push branch
+   -:  --------- >  404:  0b208895f Surface broker login failures
+   -:  --------- >  405:  f68dfe22d Fix PTY exit handling and restore terminal state
+   -:  --------- >  406:  0fcdb52b9 Fix PTY event typing
+   -:  --------- >  407:  569e7b9be Harden HTTPS detection behind proxies
+   -:  --------- >  408:  7b9678d25 Fix terminal close and tab controls
+   -:  --------- >  409:  1b378ea83 Add spacing between terminal label and controls
+   -:  --------- >  410:  d61147bea Persist terminal tab order

@@ -1,0 +1,172 @@
+#!/usr/bin/env bun
+
+import { $ } from "bun"
+
+const UPSTREAM_REPO = "anomalyco/opencode"
+const UPSTREAM_BRANCH = "dev"
+const DEV_BRANCH = "dev"
+const PARENT_BRANCH = "parent-dev"
+const REMOTE_UPSTREAM = "upstream"
+const REMOTE_ORIGIN = "origin"
+const SYNC_LABEL = "sync"
+const CONFLICT_LABEL = "sync-conflict"
+
+function utcStamp(date = new Date()): string {
+  const pad = (value: number) => String(value).padStart(2, "0")
+  return [
+    date.getUTCFullYear(),
+    pad(date.getUTCMonth() + 1),
+    pad(date.getUTCDate()),
+    pad(date.getUTCHours()),
+  ].join("")
+}
+
+function utcHuman(date = new Date()): string {
+  const pad = (value: number) => String(value).padStart(2, "0")
+  return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ${pad(date.getUTCHours())}:00 UTC`
+}
+
+async function ensureLabel(name: string, color: string, description: string) {
+  await $`gh label create ${name} --color ${color} --description ${description} --force`.nothrow()
+}
+
+async function branchExists(branch: string): Promise<boolean> {
+  const result = await $`git ls-remote --heads ${REMOTE_ORIGIN} ${branch}`.text()
+  return result.trim().length > 0
+}
+
+async function ensureGhToken() {
+  if (!process.env.GH_TOKEN && !process.env.UPSTREAM_SYNC_TOKEN) {
+    throw new Error("Missing GH_TOKEN or UPSTREAM_SYNC_TOKEN for GitHub CLI auth.")
+  }
+}
+
+async function ensureCleanTree() {
+  const status = await $`git status --porcelain`.text()
+  if (status.trim().length > 0) {
+    throw new Error("Working tree is not clean. Aborting sync.")
+  }
+}
+
+async function ensureUpstreamRemote() {
+  const upstreamUrl = `https://github.com/${UPSTREAM_REPO}.git`
+  const current = await $`git remote get-url ${REMOTE_UPSTREAM}`.nothrow()
+  if (current.exitCode !== 0) {
+    await $`git remote add ${REMOTE_UPSTREAM} ${upstreamUrl}`
+    return
+  }
+  const existing = current.stdout.toString().trim()
+  if (existing !== upstreamUrl) {
+    await $`git remote set-url ${REMOTE_UPSTREAM} ${upstreamUrl}`
+  }
+}
+
+async function handleConflict(params: {
+  branch: string
+  mergeBase: string
+  behind: number
+  ahead: number
+}) {
+  await $`git merge --abort`.nothrow()
+  await ensureLabel(CONFLICT_LABEL, "B60205", "Upstream sync conflicts")
+  const title = `Upstream sync conflict (${utcHuman()})`
+  const body = [
+    "Automated upstream sync failed due to merge conflicts.",
+    "",
+    `Branch: ${params.branch}`,
+    `Merge base: ${params.mergeBase}`,
+    `Upstream commits behind: ${params.behind}`,
+    `Fork commits ahead: ${params.ahead}`,
+    "",
+    "Next steps:",
+    "- Checkout the branch and resolve conflicts.",
+    "- Consult docs/upstream-sync.md for known conflict notes.",
+    "- Push the fix and enable auto-merge once CI is green.",
+  ].join("\n")
+
+  const issue = await $`gh issue create --title ${title} --body ${body} --label ${CONFLICT_LABEL}`.nothrow()
+  if (issue.exitCode !== 0) {
+    console.error("Failed to create conflict issue:", issue.stderr.toString())
+  }
+  throw new Error("Merge conflicts detected. Issue created.")
+}
+
+async function main() {
+  await ensureGhToken()
+  await ensureCleanTree()
+
+  await $`git config user.name "opencode-sync-bot"`
+  await $`git config user.email "opencode-sync-bot@users.noreply.github.com"`
+
+  await ensureUpstreamRemote()
+  await $`git fetch ${REMOTE_UPSTREAM} --tags`
+  await $`git fetch ${REMOTE_ORIGIN} ${DEV_BRANCH}`
+
+  await $`git checkout ${DEV_BRANCH}`
+  await $`git reset --hard ${REMOTE_ORIGIN}/${DEV_BRANCH}`
+
+  await $`git branch -f ${PARENT_BRANCH} ${REMOTE_UPSTREAM}/${UPSTREAM_BRANCH}`
+  await $`git push ${REMOTE_ORIGIN} ${PARENT_BRANCH} --force`
+
+  const mergeBase = (await $`git merge-base ${PARENT_BRANCH} ${DEV_BRANCH}`.text()).trim()
+  const counts = (await $`git rev-list --left-right --count ${PARENT_BRANCH}...${DEV_BRANCH}`.text())
+    .trim()
+    .split(/\s+/)
+    .map((value) => Number(value))
+
+  const behind = counts[0] ?? 0
+  const ahead = counts[1] ?? 0
+
+  if (behind === 0) {
+    console.log("Upstream is already merged. Nothing to sync.")
+    return
+  }
+
+  const baseBranch = `sync/upstream-dev-${utcStamp()}`
+  let branch = baseBranch
+  for (let attempt = 1; attempt <= 10; attempt += 1) {
+    if (!(await branchExists(branch))) break
+    branch = `${baseBranch}-${attempt}`
+  }
+
+  await $`git checkout -b ${branch}`
+  const mergeResult = await $`git merge --no-edit ${PARENT_BRANCH}`.nothrow()
+  if (mergeResult.exitCode !== 0) {
+    await handleConflict({ branch, mergeBase, behind, ahead })
+  }
+
+  await $`git push ${REMOTE_ORIGIN} ${branch}`
+
+  await ensureLabel(SYNC_LABEL, "0366D6", "Automated upstream syncs")
+
+  const title = `Sync upstream dev (${utcHuman()})`
+  const body = [
+    `Automated sync from ${UPSTREAM_REPO}:${UPSTREAM_BRANCH}.`,
+    "",
+    `Merge base: ${mergeBase}`,
+    `Upstream commits behind: ${behind}`,
+    `Fork commits ahead: ${ahead}`,
+    "",
+    "Generated by script/sync-upstream.ts.",
+  ].join("\n")
+
+  const pr = await $`gh pr create --base ${DEV_BRANCH} --head ${branch} --title ${title} --body ${body} --label ${SYNC_LABEL}`.nothrow()
+  if (pr.exitCode !== 0) {
+    console.error("Failed to create PR:", pr.stderr.toString())
+    process.exit(1)
+  }
+
+  const prUrl = pr.stdout.toString().trim()
+  const merge = await $`gh pr merge --auto --merge ${prUrl}`.nothrow()
+  if (merge.exitCode !== 0) {
+    console.error("Failed to enable auto-merge:", merge.stderr.toString())
+    process.exit(1)
+  }
+
+  console.log(`✅ Sync PR created and auto-merge enabled: ${prUrl}`)
+}
+
+main().catch((err) => {
+  console.error("❌ Sync failed:", err.message)
+  process.exit(1)
+})
