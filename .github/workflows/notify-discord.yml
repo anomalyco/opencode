@@ -6,7 +6,7 @@ on:
 
 jobs:
   notify:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     steps:
       - name: Send nicely-formatted embed to Discord
         uses: SethCohen/github-releases-to-discord@v1
