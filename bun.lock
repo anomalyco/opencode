@@ -284,7 +284,7 @@
         "@ai-sdk/provider-utils": "3.0.20",
         "@ai-sdk/togetherai": "1.0.34",
         "@ai-sdk/vercel": "1.0.33",
-        "@ai-sdk/xai": "2.0.56",
+        "@ai-sdk/xai": "2.0.51",
         "@clack/prompts": "1.0.0-alpha.1",
         "@gitlab/gitlab-ai-provider": "3.4.0",
         "@hono/standard-validator": "0.1.5",
@@ -4293,6 +4293,8 @@
     "ai-gateway-provider/@ai-sdk/openai": ["@ai-sdk/openai@2.0.89", "https://registry.npmmirror.com/@ai-sdk/openai/-/openai-2.0.89.tgz", { "dependencies": { "@ai-sdk/provider": "2.0.1", "@ai-sdk/provider-utils": "3.0.20" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-4+qWkBCbL9HPKbgrUO/F2uXZ8GqrYxHa8SWEYIzxEJ9zvWw3ISr3t1/27O1i8MGSym+PzEyHBT48EV4LAwWaEw=="],
 
     "ai-gateway-provider/@ai-sdk/openai-compatible": ["@ai-sdk/openai-compatible@1.0.32", "https://registry.npmmirror.com/@ai-sdk/openai-compatible/-/openai-compatible-1.0.32.tgz", { "dependencies": { "@ai-sdk/provider": "2.0.1", "@ai-sdk/provider-utils": "3.0.20" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-YspqqyJPzHjqWrjt4y/Wgc2aJgCcQj5uIJgZpq2Ar/lH30cEVhgE+keePDbjKpetD9UwNggCj7u6kO3unS23OQ=="],
+
+    "ai-gateway-provider/@ai-sdk/xai": ["@ai-sdk/xai@2.0.56", "https://registry.npmmirror.com/@ai-sdk/xai/-/xai-2.0.56.tgz", { "dependencies": { "@ai-sdk/openai-compatible": "1.0.32", "@ai-sdk/provider": "2.0.1", "@ai-sdk/provider-utils": "3.0.20" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-FGlqwWc3tAYqDHE8r8hQGQLcMiPUwgz90oU2QygUH930OWtCLapFkSu114DgVaIN/qoM1DUX+inv0Ee74Fgp5g=="],
 
     "ansi-align/string-width": ["string-width@4.2.3", "https://registry.npmmirror.com/string-width/-/string-width-4.2.3.tgz", { "dependencies": { "emoji-regex": "^8.0.0", "is-fullwidth-code-point": "^3.0.0", "strip-ansi": "^6.0.1" } }, "sha512-wKyQRQpjJ0sIp62ErSZdGsjMJWsap5oRNihHhu6G7JVO/9jIB6UyevL+tXuOqrng8j/cxKTWyWUwvSTriiZz/g=="],
 

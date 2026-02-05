@@ -21,7 +21,12 @@ import {
 import type { createSdk } from "./utils"
 
 export async function defocus(page: Page) {
-  await page.mouse.click(5, 5)
+  await page
+    .evaluate(() => {
+      const el = document.activeElement
+      if (el instanceof HTMLElement) el.blur()
+    })
+    .catch(() => undefined)
 }
 
 export async function openPalette(page: Page) {
@@ -68,14 +73,50 @@ export async function toggleSidebar(page: Page) {
 
 export async function openSidebar(page: Page) {
   if (!(await isSidebarClosed(page))) return
+
+  const button = page.getByRole("button", { name: /toggle sidebar/i }).first()
+  const visible = await button
+    .isVisible()
+    .then((x) => x)
+    .catch(() => false)
+
+  if (visible) await button.click()
+  if (!visible) await toggleSidebar(page)
+
+  const main = page.locator("main")
+  const opened = await expect(main)
+    .not.toHaveClass(/xl:border-l/, { timeout: 1500 })
+    .then(() => true)
+    .catch(() => false)
+
+  if (opened) return
+
   await toggleSidebar(page)
-  await expect(page.locator("main")).not.toHaveClass(/xl:border-l/)
+  await expect(main).not.toHaveClass(/xl:border-l/)
 }
 
 export async function closeSidebar(page: Page) {
   if (await isSidebarClosed(page)) return
+
+  const button = page.getByRole("button", { name: /toggle sidebar/i }).first()
+  const visible = await button
+    .isVisible()
+    .then((x) => x)
+    .catch(() => false)
+
+  if (visible) await button.click()
+  if (!visible) await toggleSidebar(page)
+
+  const main = page.locator("main")
+  const closed = await expect(main)
+    .toHaveClass(/xl:border-l/, { timeout: 1500 })
+    .then(() => true)
+    .catch(() => false)
+
+  if (closed) return
+
   await toggleSidebar(page)
-  await expect(page.locator("main")).toHaveClass(/xl:border-l/)
+  await expect(main).toHaveClass(/xl:border-l/)
 }
 
 export async function openSettings(page: Page) {
@@ -182,13 +223,30 @@ export async function hoverSessionItem(page: Page, sessionID: string) {
 }
 
 export async function openSessionMoreMenu(page: Page, sessionID: string) {
-  const sessionEl = await hoverSessionItem(page, sessionID)
+  await expect(page).toHaveURL(new RegExp(`/session/${sessionID}(?:[/?#]|$)`))
 
-  const menuTrigger = sessionEl.locator(dropdownMenuTriggerSelector).first()
+  const scroller = page.locator(".session-scroller").first()
+  await expect(scroller).toBeVisible()
+  await expect(scroller.getByRole("heading", { level: 1 }).first()).toBeVisible({ timeout: 30_000 })
+
+  const menu = page
+    .locator(dropdownMenuContentSelector)
+    .filter({ has: page.getByRole("menuitem", { name: /rename/i }) })
+    .filter({ has: page.getByRole("menuitem", { name: /archive/i }) })
+    .filter({ has: page.getByRole("menuitem", { name: /delete/i }) })
+    .first()
+
+  const opened = await menu
+    .isVisible()
+    .then((x) => x)
+    .catch(() => false)
+
+  if (opened) return menu
+
+  const menuTrigger = scroller.getByRole("button", { name: /more options/i }).first()
   await expect(menuTrigger).toBeVisible()
   await menuTrigger.click()
 
-  const menu = page.locator(dropdownMenuContentSelector).first()
   await expect(menu).toBeVisible()
   return menu
 }

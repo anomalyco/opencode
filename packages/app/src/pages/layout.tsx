@@ -59,6 +59,7 @@ import { usePermission } from "@/context/permission"
 import { Binary } from "@opencode-ai/util/binary"
 import { retry } from "@opencode-ai/util/retry"
 import { playSound, soundSrc } from "@/utils/sound"
+import { createAim } from "@/utils/aim"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { agentColor } from "@/utils/agent"
 
@@ -148,9 +149,20 @@ export default function Layout(props: ParentProps) {
 
   const navLeave = { current: undefined as number | undefined }
 
+  const aim = createAim({
+    enabled: () => !layout.sidebar.opened(),
+    active: () => state.hoverProject,
+    el: () => state.nav,
+    onActivate: (directory) => {
+      globalSync.child(directory)
+      setState("hoverProject", directory)
+      setState("hoverSession", undefined)
+    },
+  })
+
   onCleanup(() => {
-    if (navLeave.current === undefined) return
-    clearTimeout(navLeave.current)
+    if (navLeave.current !== undefined) clearTimeout(navLeave.current)
+    aim.reset()
   })
 
   const sidebarHovering = createMemo(() => !layout.sidebar.opened() && state.hoverProject !== undefined)
@@ -164,7 +176,13 @@ export default function Layout(props: ParentProps) {
 
   createEffect(() => {
     if (!layout.sidebar.opened()) return
+    aim.reset()
     setState("hoverProject", undefined)
+  })
+
+  createEffect(() => {
+    if (state.hoverProject !== undefined) return
+    aim.reset()
   })
 
   createEffect(
@@ -173,6 +191,7 @@ export default function Layout(props: ParentProps) {
       () => {
         if (layout.sidebar.opened()) return
         if (!state.hoverProject) return
+        aim.reset()
         setState("hoverSession", undefined)
         setState("hoverProject", undefined)
       },
@@ -1049,7 +1068,12 @@ export default function Layout(props: ParentProps) {
       },
       {
         id: "project.openInFinder",
-        title: platform.os === "macos" ? "Open in Finder" : platform.os === "windows" ? "Open in Explorer" : "Open in File Manager",
+        title:
+          platform.os === "macos"
+            ? "Open in Finder"
+            : platform.os === "windows"
+              ? "Open in Explorer"
+              : "Open in File Manager",
         category: language.t("command.category.project"),
         disabled: !params.dir || !platform.openInFinder,
         onSelect: async () => {
@@ -2348,31 +2372,27 @@ export default function Layout(props: ParentProps) {
             "bg-surface-base-hover border border-border-weak-base": !selected() && active(),
           }}
           onClick={(event: MouseEvent) => {
-            // 如果是在 preview 模式（侧边栏已打开），则导航到项目
             if (preview()) {
               navigateToProject(props.project.worktree)
               return
             }
-            // 在 overlay 模式下，切换 hoverProject 状态来显示/隐藏对话列表
+
             event.preventDefault()
             globalSync.child(props.project.worktree)
-            const currentProject = state.hoverProject === props.project.worktree
-              ? undefined
-              : props.project.worktree
+
+            const currentProject = state.hoverProject === props.project.worktree ? undefined : props.project.worktree
             setState("hoverProject", currentProject)
             setState("hoverSession", undefined)
           }}
           onKeyDown={(event: KeyboardEvent) => {
             if (!overlay()) return
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault()
-              globalSync.child(props.project.worktree)
-              const currentProject = state.hoverProject === props.project.worktree
-                ? undefined
-                : props.project.worktree
-              setState("hoverProject", currentProject)
-              setState("hoverSession", undefined)
-            }
+            if (event.key !== "Enter" && event.key !== " ") return
+            event.preventDefault()
+
+            globalSync.child(props.project.worktree)
+            const currentProject = state.hoverProject === props.project.worktree ? undefined : props.project.worktree
+            setState("hoverProject", currentProject)
+            setState("hoverSession", undefined)
           }}
         >
           <ProjectIcon project={props.project} notify />
@@ -2521,17 +2541,22 @@ export default function Layout(props: ParentProps) {
   }
 
   const LocalWorkspace = (props: { project: LocalProject; mobile?: boolean }): JSX.Element => {
-    const [workspaceStore, setWorkspaceStore] = globalSync.child(props.project.worktree)
+    const workspace = createMemo(() => {
+      const [store, setStore] = globalSync.child(props.project.worktree)
+      return { store, setStore }
+    })
     const slug = createMemo(() => base64Encode(props.project.worktree))
-    const sessions = createMemo(() =>
-      workspaceStore.session
-        .filter((session) => session.directory === workspaceStore.path.directory)
+    const sessions = createMemo(() => {
+      const store = workspace().store
+      return store.session
+        .filter((session) => session.directory === store.path.directory)
         .filter((session) => !session.parentID && !session.time?.archived)
-        .toSorted(sortSessions(Date.now())),
-    )
+        .toSorted(sortSessions(Date.now()))
+    })
     const children = createMemo(() => {
+      const store = workspace().store
       const map = new Map<string, string[]>()
-      for (const session of workspaceStore.session) {
+      for (const session of store.session) {
         if (!session.parentID) continue
         const existing = map.get(session.parentID)
         if (existing) {
@@ -2542,11 +2567,11 @@ export default function Layout(props: ParentProps) {
       }
       return map
     })
-    const booted = createMemo((prev) => prev || workspaceStore.status === "complete", false)
+    const booted = createMemo((prev) => prev || workspace().store.status === "complete", false)
     const loading = createMemo(() => !booted() && sessions().length === 0)
-    const hasMore = createMemo(() => workspaceStore.sessionTotal > sessions().length)
+    const hasMore = createMemo(() => workspace().store.sessionTotal > sessions().length)
     const loadMore = async () => {
-      setWorkspaceStore("limit", (limit) => limit + 5)
+      workspace().setStore("limit", (limit) => limit + 5)
       await globalSync.project.loadSessions(props.project.worktree)
     }
 
@@ -2858,7 +2883,7 @@ export default function Layout(props: ParentProps) {
 
     return (
       <div class="flex h-full w-full overflow-hidden">
-        <div class="w-16 shrink-0 bg-background-base flex flex-col items-center overflow-hidden">
+        <div class="w-16 shrink-0 bg-background-base flex flex-col items-center overflow-hidden" onMouseMove={aim.move}>
           <div class="flex-1 min-h-0 w-full">
             <DragDropProvider
               onDragStart={handleDragStart}
@@ -2953,6 +2978,7 @@ export default function Layout(props: ParentProps) {
             navLeave.current = undefined
           }}
           onMouseLeave={() => {
+            aim.reset()
             if (!sidebarHovering()) return
 
             if (navLeave.current !== undefined) clearTimeout(navLeave.current)
@@ -2968,7 +2994,7 @@ export default function Layout(props: ParentProps) {
           </div>
           <Show when={!layout.sidebar.opened() ? hoverProjectData() : undefined} keyed>
             {(project) => (
-              <div class="absolute inset-y-0 left-16 z-50 flex">
+              <div class="absolute inset-y-0 left-16 z-50 flex" onMouseEnter={aim.reset}>
                 <SidebarPanel project={project} />
               </div>
             )}

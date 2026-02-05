@@ -25,6 +25,7 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Tabs } from "@opencode-ai/ui/tabs"
+import { Select } from "@opencode-ai/ui/select"
 import { useCodeComponent } from "@opencode-ai/ui/context/code"
 import { LineComment as LineCommentView, LineCommentEditor } from "@opencode-ai/ui/line-comment"
 import { SessionTurn } from "@opencode-ai/ui/session-turn"
@@ -52,7 +53,7 @@ import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { useNavigate, useParams } from "@solidjs/router"
 import { UserMessage } from "@opencode-ai/sdk/v2"
-import type { FileDiff } from "@opencode-ai/sdk/v2/client"
+import type { FileDiff } from "@opencode-ai/sdk/v2"
 import { useSDK } from "@/context/sdk"
 import { usePrompt } from "@/context/prompt"
 import { useComments, type LineComment } from "@/context/comments"
@@ -81,6 +82,8 @@ const handoff = {
 }
 
 interface SessionReviewTabProps {
+  title?: JSX.Element
+  empty?: JSX.Element
   diffs: () => FileDiff[]
   view: () => ReturnType<ReturnType<typeof useLayout>["view"]>
   diffStyle: DiffStyle
@@ -197,6 +200,8 @@ function SessionReviewTab(props: SessionReviewTabProps) {
 
   return (
     <SessionReview
+      title={props.title}
+      empty={props.empty}
       scrollRef={(el) => {
         scroll = el
         props.onScrollRef?.(el)
@@ -257,6 +262,10 @@ export default function Page() {
     pendingMessage: undefined as string | undefined,
     scrollGesture: 0,
     autoCreated: false,
+    scroll: {
+      overflow: false,
+      bottom: true,
+    },
   })
 
   createEffect(
@@ -451,9 +460,13 @@ export default function Page() {
     messageId: undefined as string | undefined,
     turnStart: 0,
     mobileTab: "session" as "session" | "changes",
+    changes: "session" as "session" | "turn",
     newSessionWorktree: "main",
     promptHeight: 0,
   })
+
+  const turnDiffs = createMemo(() => lastUserMessage()?.summary?.diffs ?? [])
+  const reviewDiffs = createMemo(() => (store.changes === "session" ? diffs() : turnDiffs()))
 
   const renderedUserMessages = createMemo(
     () => {
@@ -541,6 +554,7 @@ export default function Page() {
   let inputRef!: HTMLDivElement
   let promptDock: HTMLDivElement | undefined
   let scroller: HTMLDivElement | undefined
+  let content: HTMLDivElement | undefined
 
   const scrollGestureWindowMs = 250
 
@@ -633,6 +647,31 @@ export default function Page() {
       () => {
         setStore("messageId", undefined)
         setStore("expanded", {})
+        setStore("changes", "session")
+        setUi("autoCreated", false)
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => params.dir,
+      (dir) => {
+        if (!dir) return
+        setStore("newSessionWorktree", "main")
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => params.dir,
+      (dir) => {
+        if (!dir) return
+        setStore("newSessionWorktree", "main")
+>>>>>>> origin/dev
       },
       { defer: true },
     ),
@@ -1159,17 +1198,64 @@ export default function Page() {
     setFileTreeTab("all")
   }
 
+  const changesOptions = ["session", "turn"] as const
+  const changesOptionsList = [...changesOptions]
+
+  const changesTitle = () => (
+    <Select
+      options={changesOptionsList}
+      current={store.changes}
+      label={(option) =>
+        option === "session" ? language.t("ui.sessionReview.title") : language.t("ui.sessionReview.title.lastTurn")
+      }
+      onSelect={(option) => option && setStore("changes", option)}
+      variant="ghost"
+      size="large"
+      triggerStyle={{ "font-size": "var(--font-size-large)" }}
+    />
+  )
+
+  const emptyTurn = () => (
+    <div class="h-full pb-30 flex flex-col items-center justify-center text-center gap-6">
+      <Mark class="w-14 opacity-10" />
+      <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.noChanges")}</div>
+    </div>
+  )
+
   const reviewPanel = () => (
     <div class="flex flex-col h-full overflow-hidden bg-background-stronger contain-strict">
       <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
         <Switch>
+          <Match when={store.changes === "turn" && !!params.id}>
+            <SessionReviewTab
+              title={changesTitle()}
+              empty={emptyTurn()}
+              diffs={reviewDiffs}
+              view={view}
+              diffStyle={layout.review.diffStyle()}
+              onDiffStyleChange={layout.review.setDiffStyle}
+              onScrollRef={(el) => setTree("reviewScroll", el)}
+              focusedFile={tree.activeDiff}
+              onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+              comments={comments.all()}
+              focusedComment={comments.focus()}
+              onFocusedCommentChange={comments.setFocus}
+              onViewFile={(path) => {
+                showAllFiles()
+                const value = file.tab(path)
+                tabs().open(value)
+                file.load(path)
+              }}
+            />
+          </Match>
           <Match when={hasReview()}>
             <Show
               when={diffsReady()}
               fallback={<div class="px-6 py-4 text-text-weak">{language.t("session.review.loadingChanges")}</div>}
             >
               <SessionReviewTab
-                diffs={diffs}
+                title={changesTitle()}
+                diffs={reviewDiffs}
                 view={view}
                 diffStyle={layout.review.diffStyle()}
                 onDiffStyleChange={layout.review.setDiffStyle}
@@ -1341,6 +1427,22 @@ export default function Page() {
     void file.tree.list("")
   })
 
+  createEffect(
+    on(
+      () => params.dir,
+      () => {
+        void file.tree.list("")
+
+        const active = tabs().active()
+        if (!active) return
+        const path = file.pathFromTab(active)
+        if (!path) return
+        void file.load(path, { force: true })
+      },
+      { defer: true },
+    ),
+  )
+
   const autoScroll = createAutoScroll({
     working: () => true,
     overflowAnchor: "dynamic",
@@ -1351,10 +1453,40 @@ export default function Page() {
     window.history.replaceState(null, "", window.location.href.replace(/#.*$/, ""))
   }
 
+  let scrollStateFrame: number | undefined
+  let scrollStateTarget: HTMLDivElement | undefined
+
+  const updateScrollState = (el: HTMLDivElement) => {
+    const max = el.scrollHeight - el.clientHeight
+    const overflow = max > 1
+    const bottom = !overflow || el.scrollTop >= max - 2
+
+    if (ui.scroll.overflow === overflow && ui.scroll.bottom === bottom) return
+    setUi("scroll", { overflow, bottom })
+  }
+
+  const scheduleScrollState = (el: HTMLDivElement) => {
+    scrollStateTarget = el
+    if (scrollStateFrame !== undefined) return
+
+    scrollStateFrame = requestAnimationFrame(() => {
+      scrollStateFrame = undefined
+
+      const target = scrollStateTarget
+      scrollStateTarget = undefined
+      if (!target) return
+
+      updateScrollState(target)
+    })
+  }
+
   const resumeScroll = () => {
     setStore("messageId", undefined)
     autoScroll.forceScrollToBottom()
     clearMessageHash()
+
+    const el = scroller
+    if (el) scheduleScrollState(el)
   }
 
   // When the user returns to the bottom, treat the active message as "latest".
@@ -1378,7 +1510,16 @@ export default function Page() {
   const setScrollRef = (el: HTMLDivElement | undefined) => {
     scroller = el
     autoScroll.scrollRef(el)
+    if (el) scheduleScrollState(el)
   }
+
+  createResizeObserver(
+    () => content,
+    () => {
+      const el = scroller
+      if (el) scheduleScrollState(el)
+    },
+  )
 
   const turnInit = 20
   const turnBatch = 20
@@ -1480,6 +1621,8 @@ export default function Page() {
           el.scrollTo({ top: el.scrollHeight, behavior: "auto" })
         })
       }
+
+      if (el) scheduleScrollState(el)
     },
   )
 
@@ -1566,6 +1709,9 @@ export default function Page() {
     const hash = window.location.hash.slice(1)
     if (!hash) {
       autoScroll.forceScrollToBottom()
+
+      const el = scroller
+      if (el) scheduleScrollState(el)
       return
     }
 
@@ -1591,6 +1737,9 @@ export default function Page() {
     }
 
     autoScroll.forceScrollToBottom()
+
+    const el = scroller
+    if (el) scheduleScrollState(el)
   }
 
   const closestMessage = (node: Element | null): HTMLElement | null => {
@@ -1754,6 +1903,7 @@ export default function Page() {
     cancelTurnBackfill()
     document.removeEventListener("keydown", handleKeyDown)
     if (scrollSpyFrame !== undefined) cancelAnimationFrame(scrollSpyFrame)
+    if (scrollStateFrame !== undefined) cancelAnimationFrame(scrollStateFrame)
   })
 
   return (
@@ -1810,6 +1960,31 @@ export default function Page() {
                     fallback={
                       <div class="relative h-full overflow-hidden">
                         <Switch>
+                          <Match when={store.changes === "turn" && !!params.id}>
+                            <SessionReviewTab
+                              title={changesTitle()}
+                              empty={emptyTurn()}
+                              diffs={reviewDiffs}
+                              view={view}
+                              diffStyle="unified"
+                              focusedFile={tree.activeDiff}
+                              onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+                              comments={comments.all()}
+                              focusedComment={comments.focus()}
+                              onFocusedCommentChange={comments.setFocus}
+                              onViewFile={(path) => {
+                                showAllFiles()
+                                const value = file.tab(path)
+                                tabs().open(value)
+                                file.load(path)
+                              }}
+                              classes={{
+                                root: "pb-[calc(var(--prompt-height,8rem)+32px)]",
+                                header: "px-4",
+                                container: "px-4",
+                              }}
+                            />
+                          </Match>
                           <Match when={hasReview()}>
                             <Show
                               when={diffsReady()}
@@ -1820,7 +1995,8 @@ export default function Page() {
                               }
                             >
                               <SessionReviewTab
-                                diffs={diffs}
+                                title={changesTitle()}
+                                diffs={reviewDiffs}
                                 view={view}
                                 diffStyle="unified"
                                 focusedFile={activeDiff()}
@@ -1858,8 +2034,9 @@ export default function Page() {
                       <div
                         class="absolute left-1/2 -translate-x-1/2 bottom-[calc(var(--prompt-height,8rem)+32px)] z-[60] pointer-events-none transition-all duration-200 ease-out"
                         classList={{
-                          "opacity-100 translate-y-0 scale-100": autoScroll.userScrolled(),
-                          "opacity-0 translate-y-2 scale-95 pointer-events-none": !autoScroll.userScrolled(),
+                          "opacity-100 translate-y-0 scale-100": ui.scroll.overflow && !ui.scroll.bottom,
+                          "opacity-0 translate-y-2 scale-95 pointer-events-none":
+                            !ui.scroll.overflow || ui.scroll.bottom,
                         }}
                       >
                         <button
@@ -1957,6 +2134,7 @@ export default function Page() {
                           markScrollGesture(e.currentTarget)
                         }}
                         onScroll={(e) => {
+                          scheduleScrollState(e.currentTarget)
                           if (!hasScrollGesture()) return
                           autoScroll.handleScroll()
                           markScrollGesture(e.currentTarget)
@@ -1995,7 +2173,13 @@ export default function Page() {
                         </Show>
 
                         <div
-                          ref={autoScroll.contentRef}
+                          ref={(el) => {
+                            content = el
+                            autoScroll.contentRef(el)
+
+                            const root = scroller
+                            if (root) scheduleScrollState(root)
+                          }}
                           role="log"
                           class="flex flex-col gap-32 items-start justify-start pb-[calc(var(--prompt-height,8rem)+64px)] md:pb-[calc(var(--prompt-height,10rem)+64px)] transition-[margin]"
                           classList={{
@@ -2105,7 +2289,7 @@ export default function Page() {
           {/* Prompt input */}
           <div
             ref={(el) => (promptDock = el)}
-            class="absolute inset-x-0 bottom-0 pt-12 pb-4 flex flex-col justify-center items-center z-50 px-4 md:px-0 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none"
+            class="absolute inset-x-0 bottom-0 pt-12 pb-4 flex flex-col justify-center items-center z-50 bg-gradient-to-t from-background-stronger via-background-stronger to-transparent pointer-events-none"
           >
             <div
               classList={{
@@ -2177,7 +2361,10 @@ export default function Page() {
                   }}
                   newSessionWorktree={newSessionWorktree()}
                   onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
-                  onSubmit={resumeScroll}
+                  onSubmit={() => {
+                    comments.clear()
+                    resumeScroll()
+                  }}
                 />
               </Show>
             </div>
