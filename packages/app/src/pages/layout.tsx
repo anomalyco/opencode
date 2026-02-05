@@ -2569,6 +2569,8 @@ export default function Layout(props: ParentProps) {
 
     if (!created?.directory) return
 
+    setWorkspaceName(created.directory, created.branch, project.id, created.branch)
+
     const local = project.worktree
     const key = workspaceKey(created.directory)
     const root = workspaceKey(local)
