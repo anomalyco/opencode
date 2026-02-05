@@ -453,6 +453,29 @@ export namespace ProviderTransform {
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/anthropic
       case "@ai-sdk/google-vertex/anthropic":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex#anthropic-provider
+        // Opus 4.6 uses adaptive thinking with effort parameter
+        // https://docs.anthropic.com/en/docs/build-with-claude/adaptive-thinking
+        if (id.includes("opus-4-6")) {
+          return {
+            low: {
+              thinking: { type: "adaptive" },
+              effort: "low",
+            },
+            medium: {
+              thinking: { type: "adaptive" },
+              effort: "medium",
+            },
+            high: {
+              thinking: { type: "adaptive" },
+              effort: "high",
+            },
+            max: {
+              thinking: { type: "adaptive" },
+              effort: "max",
+            },
+          }
+        }
+        // Older models use manual thinking with budgetTokens
         return {
           high: {
             thinking: {
