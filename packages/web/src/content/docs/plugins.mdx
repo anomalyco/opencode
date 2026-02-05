@@ -192,6 +192,10 @@ Plugins can subscribe to events as seen below in the Examples section. Here is a
 
 - `todo.updated`
 
+#### Shell Events
+
+- `shell.env`
+
 #### Tool Events
 
 - `tool.execute.after`
@@ -254,6 +258,23 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 ---
 
+### Inject environment variables
+
+Inject environment variables into all shell execution (AI tools and user terminals):
+
+```javascript title=".opencode/plugins/inject-env.js"
+export const InjectEnvPlugin = async () => {
+  return {
+    "shell.env": async (input, output) => {
+      output.env.MY_API_KEY = "secret"
+      output.env.PROJECT_ROOT = input.cwd
+    },
+  }
+}
+```
+
+---
+
 ### Custom tools
 
 Plugins can also add custom tools to opencode:
@@ -296,10 +317,12 @@ Use `client.app.log()` instead of `console.log` for structured logging:
 ```ts title=".opencode/plugins/my-plugin.ts"
 export const MyPlugin = async ({ client }) => {
   await client.app.log({
-    service: "my-plugin",
-    level: "info",
-    message: "Plugin initialized",
-    extra: { foo: "bar" },
+    body: {
+      service: "my-plugin",
+      level: "info",
+      message: "Plugin initialized",
+      extra: { foo: "bar" },
+    },
   })
 }
 ```

@@ -201,10 +201,14 @@ export namespace ModelsDev {
   }
 
   export const Data = lazy(async () => {
-    const file = Bun.file(filepath)
-    const cached = await file.json().catch(() => undefined)
-    if (cached) return cached as Record<string, Provider>
-
+    const file = Bun.file(Flag.OPENCODE_MODELS_PATH ?? filepath)
+    const result = await file.json().catch(() => {})
+    if (result) return result
+    // @ts-ignore
+    const snapshot = await import("./models-snapshot")
+      .then((m) => m.snapshot as Record<string, unknown>)
+      .catch(() => undefined)
+    if (snapshot) return snapshot
     if (Flag.OPENCODE_DISABLE_MODELS_FETCH) {
       return { "mammouth-ai": MAMMOUTH_PROVIDER } as Record<string, Provider>
     }
@@ -215,6 +219,8 @@ export namespace ModelsDev {
       models: Object.fromEntries(models.map((m) => [m.id, m])),
     }
     return { "mammouth-ai": provider } as Record<string, Provider>
+    // const json = await fetch(`${url()}/api.json`).then((x) => x.text())
+    // return JSON.parse(json)
   })
 
   export async function get() {

@@ -31,6 +31,7 @@ import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { HoverCard } from "@opencode-ai/ui/hover-card"
 import { MessageNav } from "@opencode-ai/ui/message-nav"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
+import { ContextMenu } from "@opencode-ai/ui/context-menu"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Spinner } from "@opencode-ai/ui/spinner"
@@ -108,7 +109,7 @@ export default function Layout(props: ParentProps) {
   const command = useCommand()
   const theme = useTheme()
   const language = useLanguage()
-  const initialDir = params.dir
+  const initialDirectory = decode64(params.dir)
   const availableThemeEntries = createMemo(() => Object.entries(theme.themes()))
   const colorSchemeOrder: ColorScheme[] = ["system", "light", "dark"]
   const colorSchemeKey: Record<ColorScheme, "theme.scheme.system" | "theme.scheme.light" | "theme.scheme.dark"> = {
@@ -119,7 +120,7 @@ export default function Layout(props: ParentProps) {
   const colorSchemeLabel = (scheme: ColorScheme) => language.t(colorSchemeKey[scheme])
 
   const [state, setState] = createStore({
-    autoselect: !params.dir,
+    autoselect: !initialDirectory,
     busyWorkspaces: new Set<string>(),
     hoverSession: undefined as string | undefined,
     hoverProject: undefined as string | undefined,
@@ -179,13 +180,21 @@ export default function Layout(props: ParentProps) {
 
   const autoselecting = createMemo(() => {
     if (params.dir) return false
-    if (initialDir) return false
     if (!state.autoselect) return false
     if (!pageReady()) return true
     if (!layoutReady()) return true
     const list = layout.projects.list()
-    if (list.length === 0) return false
-    return true
+    if (list.length > 0) return true
+    return !!server.projects.last()
+  })
+
+  createEffect(() => {
+    if (!state.autoselect) return
+    const dir = params.dir
+    if (!dir) return
+    const directory = decode64(dir)
+    if (!directory) return
+    setState("autoselect", false)
   })
 
   const editorOpen = (id: string) => editor.active === id
@@ -498,7 +507,7 @@ export default function Layout(props: ParentProps) {
       const bUpdated = b.time.updated ?? b.time.created
       const aRecent = aUpdated > oneMinuteAgo
       const bRecent = bUpdated > oneMinuteAgo
-      if (aRecent && bRecent) return a.id.localeCompare(b.id)
+      if (aRecent && bRecent) return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
       if (aRecent && !bRecent) return -1
       if (!aRecent && bRecent) return 1
       return bUpdated - aUpdated
@@ -565,11 +574,18 @@ export default function Layout(props: ParentProps) {
         if (!value.ready) return
         if (!value.layoutReady) return
         if (!state.autoselect) return
-        if (initialDir) return
         if (value.dir) return
-        if (value.list.length === 0) return
 
         const last = server.projects.last()
+
+        if (value.list.length === 0) {
+          if (!last) return
+          setState("autoselect", false)
+          openProject(last, false)
+          navigateToProject(last)
+          return
+        }
+
         const next = value.list.find((project) => project.worktree === last) ?? value.list[0]
         if (!next) return
         setState("autoselect", false)
@@ -738,7 +754,7 @@ export default function Layout(props: ParentProps) {
   }
 
   async function prefetchMessages(directory: string, sessionID: string, token: number) {
-    const [, setStore] = globalSync.child(directory, { bootstrap: false })
+    const [store, setStore] = globalSync.child(directory, { bootstrap: false })
 
     return retry(() => globalSDK.client.session.messages({ directory, sessionID, limit: prefetchChunk }))
       .then((messages) => {
@@ -749,23 +765,49 @@ export default function Layout(props: ParentProps) {
           .map((x) => x.info)
           .filter((m) => !!m?.id)
           .slice()
-          .sort((a, b) => a.id.localeCompare(b.id))
+          .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+
+        const current = store.message[sessionID] ?? []
+        const merged = (() => {
+          if (current.length === 0) return next
+
+          const map = new Map<string, Message>()
+          for (const item of current) {
+            if (!item?.id) continue
+            map.set(item.id, item)
+          }
+          for (const item of next) {
+            map.set(item.id, item)
+          }
+          return [...map.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+        })()
 
         batch(() => {
-          setStore("message", sessionID, reconcile(next, { key: "id" }))
+          setStore("message", sessionID, reconcile(merged, { key: "id" }))
 
           for (const message of items) {
-            setStore(
-              "part",
-              message.info.id,
-              reconcile(
-                message.parts
+            const currentParts = store.part[message.info.id] ?? []
+            const mergedParts = (() => {
+              if (currentParts.length === 0) {
+                return message.parts
                   .filter((p) => !!p?.id)
                   .slice()
-                  .sort((a, b) => a.id.localeCompare(b.id)),
-                { key: "id" },
-              ),
-            )
+                  .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+              }
+
+              const map = new Map<string, (typeof currentParts)[number]>()
+              for (const item of currentParts) {
+                if (!item?.id) continue
+                map.set(item.id, item)
+              }
+              for (const item of message.parts) {
+                if (!item?.id) continue
+                map.set(item.id, item)
+              }
+              return [...map.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+            })()
+
+            setStore("part", message.info.id, reconcile(mergedParts, { key: "id" }))
           }
         })
       })
@@ -884,6 +926,52 @@ export default function Layout(props: ParentProps) {
     }
     navigateToSession(session)
     queueMicrotask(() => scrollToSession(session.id, `${session.directory}:${session.id}`))
+  }
+
+  function navigateSessionByUnseen(offset: number) {
+    const sessions = currentSessions()
+    if (sessions.length === 0) return
+
+    const hasUnseen = sessions.some((session) => notification.session.unseen(session.id).length > 0)
+    if (!hasUnseen) return
+
+    const activeIndex = params.id ? sessions.findIndex((s) => s.id === params.id) : -1
+    const start = activeIndex === -1 ? (offset > 0 ? -1 : 0) : activeIndex
+
+    for (let i = 1; i <= sessions.length; i++) {
+      const index = offset > 0 ? (start + i) % sessions.length : (start - i + sessions.length) % sessions.length
+      const session = sessions[index]
+      if (!session) continue
+      if (notification.session.unseen(session.id).length === 0) continue
+
+      prefetchSession(session, "high")
+
+      const next = sessions[(index + 1) % sessions.length]
+      const prev = sessions[(index - 1 + sessions.length) % sessions.length]
+
+      if (offset > 0) {
+        if (next) prefetchSession(next, "high")
+        if (prev) prefetchSession(prev)
+      }
+
+      if (offset < 0) {
+        if (prev) prefetchSession(prev, "high")
+        if (next) prefetchSession(next)
+      }
+
+      if (import.meta.env.DEV) {
+        navStart({
+          dir: base64Encode(session.directory),
+          from: params.id,
+          to: session.id,
+          trigger: offset > 0 ? "shift+alt+arrowdown" : "shift+alt+arrowup",
+        })
+      }
+
+      navigateToSession(session)
+      queueMicrotask(() => scrollToSession(session.id, `${session.directory}:${session.id}`))
+      return
+    }
   }
 
   async function archiveSession(session: Session) {
@@ -1025,6 +1113,20 @@ export default function Layout(props: ParentProps) {
         onSelect: () => navigateSessionByOffset(1),
       },
       {
+        id: "session.previous.unseen",
+        title: language.t("command.session.previous.unseen"),
+        category: language.t("command.category.session"),
+        keybind: "shift+alt+arrowup",
+        onSelect: () => navigateSessionByUnseen(-1),
+      },
+      {
+        id: "session.next.unseen",
+        title: language.t("command.session.next.unseen"),
+        category: language.t("command.category.session"),
+        keybind: "shift+alt+arrowdown",
+        onSelect: () => navigateSessionByUnseen(1),
+      },
+      {
         id: "session.archive",
         title: language.t("command.session.archive"),
         category: language.t("command.category.session"),
@@ -1033,6 +1135,29 @@ export default function Layout(props: ParentProps) {
         onSelect: () => {
           const session = currentSessions().find((s) => s.id === params.id)
           if (session) archiveSession(session)
+        },
+      },
+      {
+        id: "workspace.toggle",
+        title: language.t("command.workspace.toggle"),
+        description: language.t("command.workspace.toggle.description"),
+        category: language.t("command.category.workspace"),
+        slash: "workspace",
+        disabled: !currentProject() || currentProject()?.vcs !== "git",
+        onSelect: () => {
+          const project = currentProject()
+          if (!project) return
+          if (project.vcs !== "git") return
+          const wasEnabled = layout.sidebar.workspaces(project.worktree)()
+          layout.sidebar.toggleWorkspaces(project.worktree)
+          showToast({
+            title: wasEnabled
+              ? language.t("toast.workspace.disabled.title")
+              : language.t("toast.workspace.enabled.title"),
+            description: wasEnabled
+              ? language.t("toast.workspace.disabled.description")
+              : language.t("toast.workspace.enabled.description"),
+          })
         },
       },
       {
@@ -1135,6 +1260,46 @@ export default function Layout(props: ParentProps) {
     layout.projects.open(directory)
     if (navigate) navigateToProject(directory)
   }
+
+  const deepLinkEvent = "opencode:deep-link"
+
+  const parseDeepLink = (input: string) => {
+    if (!input.startsWith("opencode://")) return
+    const url = new URL(input)
+    if (url.hostname !== "open-project") return
+    const directory = url.searchParams.get("directory")
+    if (!directory) return
+    return directory
+  }
+
+  const handleDeepLinks = (urls: string[]) => {
+    if (!server.isLocal()) return
+    for (const input of urls) {
+      const directory = parseDeepLink(input)
+      if (!directory) continue
+      openProject(directory)
+    }
+  }
+
+  const drainDeepLinks = () => {
+    const pending = window.__OPENCODE__?.deepLinks ?? []
+    if (pending.length === 0) return
+    if (window.__OPENCODE__) window.__OPENCODE__.deepLinks = []
+    handleDeepLinks(pending)
+  }
+
+  onMount(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ urls: string[] }>).detail
+      const urls = detail?.urls ?? []
+      if (urls.length === 0) return
+      handleDeepLinks(urls)
+    }
+
+    drainDeepLinks()
+    window.addEventListener(deepLinkEvent, handler as EventListener)
+    onCleanup(() => window.removeEventListener(deepLinkEvent, handler as EventListener))
+  })
 
   const displayName = (project: LocalProject) => project.name || getFilename(project.worktree)
 
@@ -2074,12 +2239,20 @@ export default function Layout(props: ParentProps) {
       >
         <Collapsible variant="ghost" open={open()} class="shrink-0" onOpenChange={openWrapper}>
           <div class="px-2 py-1">
-            <div class="group/workspace relative">
+            <div
+              class="group/workspace relative"
+              data-component="workspace-item"
+              data-workspace={base64Encode(props.directory)}
+            >
               <div class="flex items-center gap-1">
                 <Show
                   when={workspaceEditActive()}
                   fallback={
-                    <Collapsible.Trigger class="flex items-center justify-between w-full pl-2 pr-16 py-1.5 rounded-md hover:bg-surface-raised-base-hover">
+                    <Collapsible.Trigger
+                      class="flex items-center justify-between w-full pl-2 pr-16 py-1.5 rounded-md hover:bg-surface-raised-base-hover"
+                      data-action="workspace-toggle"
+                      data-workspace={base64Encode(props.directory)}
+                    >
                       {header()}
                     </Collapsible.Trigger>
                   }
@@ -2106,6 +2279,8 @@ export default function Layout(props: ParentProps) {
                         icon="dot-grid"
                         variant="ghost"
                         class="size-6 rounded-md"
+                        data-action="workspace-menu"
+                        data-workspace={base64Encode(props.directory)}
                         aria-label={language.t("common.moreOptions")}
                       />
                     </Tooltip>
@@ -2200,10 +2375,13 @@ export default function Layout(props: ParentProps) {
       () => props.project.vcs === "git" && layout.sidebar.workspaces(props.project.worktree)(),
     )
     const [open, setOpen] = createSignal(false)
+    const [menu, setMenu] = createSignal(false)
 
     const preview = createMemo(() => !props.mobile && layout.sidebar.opened())
     const overlay = createMemo(() => !props.mobile && !layout.sidebar.opened())
-    const active = createMemo(() => (preview() ? open() : overlay() && state.hoverProject === props.project.worktree))
+    const active = createMemo(
+      () => menu() || (preview() ? open() : overlay() && state.hoverProject === props.project.worktree),
+    )
 
     createEffect(() => {
       if (preview()) return
@@ -2241,48 +2419,95 @@ export default function Layout(props: ParentProps) {
     }
 
     const projectName = () => props.project.name || getFilename(props.project.worktree)
-    const trigger = (
-      <button
-        type="button"
-        aria-label={projectName()}
-        classList={{
-          "flex items-center justify-center size-10 p-1 rounded-lg overflow-hidden transition-colors cursor-default": true,
-          "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover": selected(),
-          "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
-            !selected() && !active(),
-          "bg-surface-base-hover border border-border-weak-base": !selected() && active(),
+    const Trigger = () => (
+      <ContextMenu
+        modal={!sidebarHovering()}
+        onOpenChange={(value) => {
+          setMenu(value)
+          if (value) setOpen(false)
         }}
-        onMouseEnter={() => {
-          if (!overlay()) return
-          globalSync.child(props.project.worktree)
-          setState("hoverProject", props.project.worktree)
-          setState("hoverSession", undefined)
-        }}
-        onFocus={() => {
-          if (!overlay()) return
-          globalSync.child(props.project.worktree)
-          setState("hoverProject", props.project.worktree)
-          setState("hoverSession", undefined)
-        }}
-        onClick={() => navigateToProject(props.project.worktree)}
-        onBlur={() => setOpen(false)}
       >
-        <ProjectIcon project={props.project} notify />
-      </button>
+        <ContextMenu.Trigger
+          as="button"
+          type="button"
+          aria-label={projectName()}
+          data-action="project-switch"
+          data-project={base64Encode(props.project.worktree)}
+          classList={{
+            "flex items-center justify-center size-10 p-1 rounded-lg overflow-hidden transition-colors cursor-default": true,
+            "bg-transparent border-2 border-icon-strong-base hover:bg-surface-base-hover": selected(),
+            "bg-transparent border border-transparent hover:bg-surface-base-hover hover:border-border-weak-base":
+              !selected() && !active(),
+            "bg-surface-base-hover border border-border-weak-base": !selected() && active(),
+          }}
+          onMouseEnter={() => {
+            if (!overlay()) return
+            globalSync.child(props.project.worktree)
+            setState("hoverProject", props.project.worktree)
+            setState("hoverSession", undefined)
+          }}
+          onFocus={() => {
+            if (!overlay()) return
+            globalSync.child(props.project.worktree)
+            setState("hoverProject", props.project.worktree)
+            setState("hoverSession", undefined)
+          }}
+          onClick={() => navigateToProject(props.project.worktree)}
+          onBlur={() => setOpen(false)}
+        >
+          <ProjectIcon project={props.project} notify />
+        </ContextMenu.Trigger>
+        <ContextMenu.Portal mount={!props.mobile ? state.nav : undefined}>
+          <ContextMenu.Content>
+            <ContextMenu.Item onSelect={() => dialog.show(() => <DialogEditProject project={props.project} />)}>
+              <ContextMenu.ItemLabel>{language.t("common.edit")}</ContextMenu.ItemLabel>
+            </ContextMenu.Item>
+            <ContextMenu.Item
+              data-action="project-workspaces-toggle"
+              data-project={base64Encode(props.project.worktree)}
+              disabled={props.project.vcs !== "git" && !layout.sidebar.workspaces(props.project.worktree)()}
+              onSelect={() => {
+                const enabled = layout.sidebar.workspaces(props.project.worktree)()
+                if (enabled) {
+                  layout.sidebar.toggleWorkspaces(props.project.worktree)
+                  return
+                }
+                if (props.project.vcs !== "git") return
+                layout.sidebar.toggleWorkspaces(props.project.worktree)
+              }}
+            >
+              <ContextMenu.ItemLabel>
+                {layout.sidebar.workspaces(props.project.worktree)()
+                  ? language.t("sidebar.workspaces.disable")
+                  : language.t("sidebar.workspaces.enable")}
+              </ContextMenu.ItemLabel>
+            </ContextMenu.Item>
+            <ContextMenu.Separator />
+            <ContextMenu.Item
+              data-action="project-close-menu"
+              data-project={base64Encode(props.project.worktree)}
+              onSelect={() => closeProject(props.project.worktree)}
+            >
+              <ContextMenu.ItemLabel>{language.t("common.close")}</ContextMenu.ItemLabel>
+            </ContextMenu.Item>
+          </ContextMenu.Content>
+        </ContextMenu.Portal>
+      </ContextMenu>
     )
 
     return (
       // @ts-ignore
       <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
-        <Show when={preview()} fallback={trigger}>
+        <Show when={preview()} fallback={<Trigger />}>
           <HoverCard
-            open={open()}
+            open={open() && !menu()}
             openDelay={0}
             closeDelay={0}
             placement="right-start"
             gutter={6}
-            trigger={trigger}
+            trigger={<Trigger />}
             onOpenChange={(value) => {
+              if (menu()) return
               setOpen(value)
               if (value) setState("hoverSession", undefined)
             }}
@@ -2295,6 +2520,8 @@ export default function Layout(props: ParentProps) {
                     icon="circle-x"
                     variant="ghost"
                     class="shrink-0"
+                    data-action="project-close-hover"
+                    data-project={base64Encode(props.project.worktree)}
                     aria-label={language.t("common.close")}
                     onClick={(event) => {
                       event.stopPropagation()
@@ -2501,7 +2728,7 @@ export default function Layout(props: ParentProps) {
         }}
         style={{ width: panelProps.mobile ? undefined : `${Math.max(layout.sidebar.width() - 64, 0)}px` }}
       >
-        <Show when={panelProps.project} keyed>
+        <Show when={panelProps.project}>
           {(p) => (
             <>
               <div class="shrink-0 px-2 py-1">
@@ -2510,7 +2737,7 @@ export default function Layout(props: ParentProps) {
                     <InlineEditor
                       id={`project:${projectId()}`}
                       value={projectName}
-                      onSave={(next) => renameProject(p, next)}
+                      onSave={(next) => renameProject(p(), next)}
                       class="text-16-medium text-text-strong truncate"
                       displayClass="text-16-medium text-text-strong truncate"
                       stopPropagation
@@ -2519,7 +2746,7 @@ export default function Layout(props: ParentProps) {
                     <Tooltip
                       placement="bottom"
                       gutter={2}
-                      value={p.worktree}
+                      value={p().worktree}
                       class="shrink-0"
                       contentStyle={{
                         "max-width": "640px",
@@ -2527,7 +2754,7 @@ export default function Layout(props: ParentProps) {
                       }}
                     >
                       <span class="text-12-regular text-text-base truncate select-text">
-                        {p.worktree.replace(homedir(), "~")}
+                        {p().worktree.replace(homedir(), "~")}
                       </span>
                     </Tooltip>
                   </div>
@@ -2537,34 +2764,42 @@ export default function Layout(props: ParentProps) {
                       as={IconButton}
                       icon="dot-grid"
                       variant="ghost"
+                      data-action="project-menu"
+                      data-project={base64Encode(p().worktree)}
                       class="shrink-0 size-6 rounded-md opacity-0 group-hover/project:opacity-100 data-[expanded]:opacity-100 data-[expanded]:bg-surface-base-active"
                       aria-label={language.t("common.moreOptions")}
                     />
                     <DropdownMenu.Portal mount={!panelProps.mobile ? state.nav : undefined}>
                       <DropdownMenu.Content class="mt-1">
-                        <DropdownMenu.Item onSelect={() => dialog.show(() => <DialogEditProject project={p} />)}>
+                        <DropdownMenu.Item onSelect={() => dialog.show(() => <DialogEditProject project={p()} />)}>
                           <DropdownMenu.ItemLabel>{language.t("common.edit")}</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                         <DropdownMenu.Item
-                          disabled={p.vcs !== "git" && !layout.sidebar.workspaces(p.worktree)()}
+                          data-action="project-workspaces-toggle"
+                          data-project={base64Encode(p().worktree)}
+                          disabled={p().vcs !== "git" && !layout.sidebar.workspaces(p().worktree)()}
                           onSelect={() => {
-                            const enabled = layout.sidebar.workspaces(p.worktree)()
+                            const enabled = layout.sidebar.workspaces(p().worktree)()
                             if (enabled) {
-                              layout.sidebar.toggleWorkspaces(p.worktree)
+                              layout.sidebar.toggleWorkspaces(p().worktree)
                               return
                             }
-                            if (p.vcs !== "git") return
-                            layout.sidebar.toggleWorkspaces(p.worktree)
+                            if (p().vcs !== "git") return
+                            layout.sidebar.toggleWorkspaces(p().worktree)
                           }}
                         >
                           <DropdownMenu.ItemLabel>
-                            {layout.sidebar.workspaces(p.worktree)()
+                            {layout.sidebar.workspaces(p().worktree)()
                               ? language.t("sidebar.workspaces.disable")
                               : language.t("sidebar.workspaces.enable")}
                           </DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                         <DropdownMenu.Separator />
-                        <DropdownMenu.Item onSelect={() => closeProject(p.worktree)}>
+                        <DropdownMenu.Item
+                          data-action="project-close-menu"
+                          data-project={base64Encode(p().worktree)}
+                          onSelect={() => closeProject(p().worktree)}
+                        >
                           <DropdownMenu.ItemLabel>{language.t("common.close")}</DropdownMenu.ItemLabel>
                         </DropdownMenu.Item>
                       </DropdownMenu.Content>
@@ -2573,103 +2808,109 @@ export default function Layout(props: ParentProps) {
                 </div>
               </div>
 
-              <Show
-                when={workspacesEnabled()}
-                fallback={
+              <div class="flex-1 min-h-0 flex flex-col">
+                <Show
+                  when={workspacesEnabled()}
+                  fallback={
+                    <>
+                      <div class="shrink-0 py-4 px-3">
+                        <TooltipKeybind
+                          title={language.t("command.session.new")}
+                          keybind={command.keybind("session.new")}
+                          placement="top"
+                        >
+                          <Button
+                            size="large"
+                            icon="plus-small"
+                            class="w-full"
+                            onClick={() => {
+                              if (!layout.sidebar.opened()) {
+                                setState("hoverSession", undefined)
+                                setState("hoverProject", undefined)
+                              }
+                              navigate(`/${base64Encode(p().worktree)}/session`)
+                              layout.mobileSidebar.hide()
+                            }}
+                          >
+                            {language.t("command.session.new")}
+                          </Button>
+                        </TooltipKeybind>
+                      </div>
+                      <div class="flex-1 min-h-0">
+                        <LocalWorkspace project={p()} mobile={panelProps.mobile} />
+                      </div>
+                    </>
+                  }
+                >
                   <>
-                    <div class="py-4 px-3">
+                    <div class="shrink-0 py-4 px-3">
                       <TooltipKeybind
-                        title={language.t("command.session.new")}
-                        keybind={command.keybind("session.new")}
+                        title={language.t("workspace.new")}
+                        keybind={command.keybind("workspace.new")}
                         placement="top"
                       >
-                        <Button
-                          size="large"
-                          icon="plus-small"
-                          class="w-full"
-                          onClick={() => {
-                            if (!layout.sidebar.opened()) {
-                              setState("hoverSession", undefined)
-                              setState("hoverProject", undefined)
-                            }
-                            navigate(`/${base64Encode(p.worktree)}/session`)
-                            layout.mobileSidebar.hide()
-                          }}
-                        >
-                          {language.t("command.session.new")}
+                        <Button size="large" icon="plus-small" class="w-full" onClick={() => createWorkspace(p())}>
+                          {language.t("workspace.new")}
                         </Button>
                       </TooltipKeybind>
                     </div>
-                    <div class="flex-1 min-h-0">
-                      <LocalWorkspace project={p} mobile={panelProps.mobile} />
+                    <div class="relative flex-1 min-h-0">
+                      <DragDropProvider
+                        onDragStart={handleWorkspaceDragStart}
+                        onDragEnd={handleWorkspaceDragEnd}
+                        onDragOver={handleWorkspaceDragOver}
+                        collisionDetector={closestCenter}
+                      >
+                        <DragDropSensors />
+                        <ConstrainDragXAxis />
+                        <div
+                          ref={(el) => {
+                            if (!panelProps.mobile) scrollContainerRef = el
+                          }}
+                          class="size-full flex flex-col py-2 gap-4 overflow-y-auto no-scrollbar [overflow-anchor:none]"
+                        >
+                          <SortableProvider ids={workspaces()}>
+                            <For each={workspaces()}>
+                              {(directory) => (
+                                <SortableWorkspace directory={directory} project={p()} mobile={panelProps.mobile} />
+                              )}
+                            </For>
+                          </SortableProvider>
+                        </div>
+                        <DragOverlay>
+                          <WorkspaceDragOverlay />
+                        </DragOverlay>
+                      </DragDropProvider>
                     </div>
                   </>
-                }
-              >
-                <>
-                  <div class="py-4 px-3">
-                    <TooltipKeybind
-                      title={language.t("workspace.new")}
-                      keybind={command.keybind("workspace.new")}
-                      placement="top"
-                    >
-                      <Button size="large" icon="plus-small" class="w-full" onClick={() => createWorkspace(p)}>
-                        {language.t("workspace.new")}
-                      </Button>
-                    </TooltipKeybind>
-                  </div>
-                  <div class="relative flex-1 min-h-0">
-                    <DragDropProvider
-                      onDragStart={handleWorkspaceDragStart}
-                      onDragEnd={handleWorkspaceDragEnd}
-                      onDragOver={handleWorkspaceDragOver}
-                      collisionDetector={closestCenter}
-                    >
-                      <DragDropSensors />
-                      <ConstrainDragXAxis />
-                      <div
-                        ref={(el) => {
-                          if (!panelProps.mobile) scrollContainerRef = el
-                        }}
-                        class="size-full flex flex-col py-2 gap-4 overflow-y-auto no-scrollbar [overflow-anchor:none]"
-                      >
-                        <SortableProvider ids={workspaces()}>
-                          <For each={workspaces()}>
-                            {(directory) => (
-                              <SortableWorkspace directory={directory} project={p} mobile={panelProps.mobile} />
-                            )}
-                          </For>
-                        </SortableProvider>
-                      </div>
-                      <DragOverlay>
-                        <WorkspaceDragOverlay />
-                      </DragOverlay>
-                    </DragDropProvider>
-                  </div>
-                </>
-              </Show>
+                </Show>
+              </div>
             </>
           )}
         </Show>
-        <Show when={providers.all().length > 0 && providers.paid().length === 0}>
-          <div class="shrink-0 px-2 py-3 border-t border-border-weak-base">
-            <div class="rounded-md bg-background-base shadow-xs-border-base">
-              <div class="p-3 flex flex-col gap-2">
-                <div class="text-12-medium text-text-strong">{language.t("sidebar.gettingStarted.title")}</div>
-                <div class="text-text-base">{language.t("sidebar.gettingStarted.line1")}</div>
-                <div class="text-text-base">{language.t("sidebar.gettingStarted.line2")}</div>
-              </div>
-              <Button
-                class="flex w-full text-left justify-start text-12-medium text-text-strong stroke-[1.5px] rounded-md rounded-t-none shadow-none border-t border-border-weak-base px-3"
-                size="large"
-                icon="plus"
-                onClick={connectProvider}
-              >
-                {language.t("command.provider.connect")}
-              </Button>
+
+        <div
+          class="shrink-0 px-2 py-3 border-t border-border-weak-base"
+          classList={{
+            hidden: !(providers.all().length > 0 && providers.paid().length === 0),
+          }}
+        >
+          <div class="rounded-md bg-background-base shadow-xs-border-base">
+            <div class="p-3 flex flex-col gap-2">
+              <div class="text-12-medium text-text-strong">{language.t("sidebar.gettingStarted.title")}</div>
+              <div class="text-text-base">{language.t("sidebar.gettingStarted.line1")}</div>
+              <div class="text-text-base">{language.t("sidebar.gettingStarted.line2")}</div>
             </div>
+            <Button
+              class="flex w-full text-left justify-start text-12-medium text-text-strong stroke-[1.5px] rounded-md rounded-t-none shadow-none border-t border-border-weak-base px-3"
+              size="large"
+              icon="plus"
+              onClick={connectProvider}
+            >
+              {language.t("command.provider.connect")}
+            </Button>
           </div>
-        </Show>
+        </div>
       </div>
     )
   }
@@ -2774,6 +3015,7 @@ export default function Layout(props: ParentProps) {
       <div class="flex-1 min-h-0 flex">
         <nav
           aria-label={language.t("sidebar.nav.projectsAndSessions")}
+          data-component="sidebar-nav-desktop"
           classList={{
             "hidden xl:block": true,
             "relative shrink-0": true,
@@ -2833,6 +3075,7 @@ export default function Layout(props: ParentProps) {
           />
           <nav
             aria-label={language.t("sidebar.nav.projectsAndSessions")}
+            data-component="sidebar-nav-mobile"
             classList={{
               "@container fixed top-10 bottom-0 left-0 z-50 w-72 bg-background-base transition-transform duration-200 ease-out": true,
               "translate-x-0": layout.mobileSidebar.opened(),

@@ -54,7 +54,6 @@ const ModelList: Component<{
           class="w-full"
           placement="right-start"
           gutter={12}
-          forceMount={false}
           value={
             <ModelTooltip
               model={item}
@@ -187,7 +186,7 @@ export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
       <Kobalte.Portal>
         <Kobalte.Content
           ref={(el) => setStore("content", el)}
-          class="w-72 h-80 flex flex-col rounded-md border border-border-base bg-surface-raised-stronger-non-alpha shadow-md z-50 outline-none overflow-hidden"
+          class="w-72 h-80 flex flex-col p-2 rounded-md border border-border-base bg-surface-raised-stronger-non-alpha shadow-md z-50 outline-none overflow-hidden"
           onEscapeKeyDown={(event) => {
             setStore("dismiss", "escape")
             setStore("open", false)
@@ -214,7 +213,7 @@ export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
             class="p-1"
             action={
               <div class="flex items-center gap-1">
-                <Tooltip placement="top" forceMount={false} value={language.t("command.provider.connect")}>
+                <Tooltip placement="top" value={language.t("command.provider.connect")}>
                   <IconButton
                     icon="plus-small"
                     variant="ghost"
@@ -224,7 +223,7 @@ export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
                     onClick={handleConnectProvider}
                   />
                 </Tooltip>
-                <Tooltip placement="top" forceMount={false} value={language.t("dialog.model.manage")}>
+                <Tooltip placement="top" value={language.t("dialog.model.manage")}>
                   <IconButton
                     icon="sliders"
                     variant="ghost"

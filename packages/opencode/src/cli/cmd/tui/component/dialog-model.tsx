@@ -158,7 +158,7 @@ export function DialogModel(props: { providerID?: string }) {
               (item) => item.providerID === value.providerID && item.modelID === value.modelID,
             )
             if (inFavorites) return false
-            const inRecents = recentList.some(
+            const inRecents = recents.some(
               (item) => item.providerID === value.providerID && item.modelID === value.modelID,
             )
             if (inRecents) return false

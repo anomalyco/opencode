@@ -57,13 +57,14 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
 
   const openContext = () => {
     if (!params.id) return
+    layout.fileTree.open()
     layout.fileTree.setTab("all")
     tabs().open("context")
     tabs().setActive("context")
   }
 
   const circle = () => (
-    <div class="p-1">
+    <div class="flex items-center justify-center">
       <ProgressCircle size={16} strokeWidth={2} percentage={context()?.percentage ?? 0} />
     </div>
   )

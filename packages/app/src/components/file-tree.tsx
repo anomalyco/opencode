@@ -130,9 +130,56 @@ export default function FileTree(props: {
     const nodes = file.tree.children(props.path)
     const current = filter()
     if (!current) return nodes
-    return nodes.filter((node) => {
+
+    const parent = (path: string) => {
+      const idx = path.lastIndexOf("/")
+      if (idx === -1) return ""
+      return path.slice(0, idx)
+    }
+
+    const leaf = (path: string) => {
+      const idx = path.lastIndexOf("/")
+      return idx === -1 ? path : path.slice(idx + 1)
+    }
+
+    const out = nodes.filter((node) => {
       if (node.type === "file") return current.files.has(node.path)
       return current.dirs.has(node.path)
+    })
+
+    const seen = new Set(out.map((node) => node.path))
+
+    for (const dir of current.dirs) {
+      if (parent(dir) !== props.path) continue
+      if (seen.has(dir)) continue
+      out.push({
+        name: leaf(dir),
+        path: dir,
+        absolute: dir,
+        type: "directory",
+        ignored: false,
+      })
+      seen.add(dir)
+    }
+
+    for (const item of current.files) {
+      if (parent(item) !== props.path) continue
+      if (seen.has(item)) continue
+      out.push({
+        name: leaf(item),
+        path: item,
+        absolute: item,
+        type: "file",
+        ignored: false,
+      })
+      seen.add(item)
+    }
+
+    return out.toSorted((a, b) => {
+      if (a.type !== b.type) {
+        return a.type === "directory" ? -1 : 1
+      }
+      return a.name.localeCompare(b.name)
     })
   })
 
@@ -274,7 +321,6 @@ export default function FileTree(props: {
 
             return (
               <Tooltip
-                forceMount={false}
                 openDelay={2000}
                 placement="bottom-start"
                 class="w-full"

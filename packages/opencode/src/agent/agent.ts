@@ -18,6 +18,7 @@ import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
 import path from "path"
 import { Plugin } from "@/plugin"
+import { Skill } from "../skill"
 
 export namespace Agent {
   export const Info = z
@@ -37,6 +38,7 @@ export namespace Agent {
           providerID: z.string(),
         })
         .optional(),
+      variant: z.string().optional(),
       prompt: z.string().optional(),
       options: z.record(z.string(), z.any()),
       steps: z.number().int().positive().optional(),
@@ -49,13 +51,14 @@ export namespace Agent {
   const state = Instance.state(async () => {
     const cfg = await Config.get()
 
+    const skillDirs = await Skill.dirs()
     const defaults = PermissionNext.fromConfig({
       "*": "allow",
       doom_loop: "ask",
       external_directory: {
         "*": "ask",
-        [Truncate.DIR]: "allow",
         [Truncate.GLOB]: "allow",
+        ...Object.fromEntries(skillDirs.map((dir) => [path.join(dir, "*"), "allow"])),
       },
       question: "deny",
       plan_enter: "deny",
@@ -139,7 +142,6 @@ export namespace Agent {
             codesearch: "allow",
             read: "allow",
             external_directory: {
-              [Truncate.DIR]: "allow",
               [Truncate.GLOB]: "allow",
             },
           }),
@@ -214,6 +216,7 @@ export namespace Agent {
           native: false,
         }
       if (value.model) item.model = Provider.parseModel(value.model)
+      item.variant = value.variant ?? item.variant
       item.prompt = value.prompt ?? item.prompt
       item.description = value.description ?? item.description
       item.temperature = value.temperature ?? item.temperature
@@ -227,19 +230,19 @@ export namespace Agent {
       item.permission = PermissionNext.merge(item.permission, PermissionNext.fromConfig(value.permission ?? {}))
     }
 
-    // Ensure Truncate.DIR is allowed unless explicitly configured
+    // Ensure Truncate.GLOB is allowed unless explicitly configured
     for (const name in result) {
       const agent = result[name]
       const explicit = agent.permission.some((r) => {
         if (r.permission !== "external_directory") return false
         if (r.action !== "deny") return false
-        return r.pattern === Truncate.DIR || r.pattern === Truncate.GLOB
+        return r.pattern === Truncate.GLOB
       })
       if (explicit) continue
 
       result[name].permission = PermissionNext.merge(
         result[name].permission,
-        PermissionNext.fromConfig({ external_directory: { [Truncate.DIR]: "allow", [Truncate.GLOB]: "allow" } }),
+        PermissionNext.fromConfig({ external_directory: { [Truncate.GLOB]: "allow" } }),
       )
     }
 
