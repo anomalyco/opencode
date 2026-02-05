@@ -1,0 +1,95 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g., 1.0.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION"
+
+      - name: Build CLI
+        run: |
+          cd packages/opencode
+          bun run ./script/build.ts
+        env:
+          OPENCODE_VERSION: ${{ steps.version.outputs.version }}
+          OPENCODE_CHANNEL: latest
+
+      - name: Package binaries
+        run: |
+          cd packages/opencode/dist
+
+          # Create archives for each platform
+          for dir in mammouth-*/; do
+            name="${dir%/}"
+            if [[ "$name" == *"windows"* ]]; then
+              zip -r "${name}.zip" "$dir"
+            else
+              tar -czvf "${name}.tar.gz" "$dir"
+            fi
+          done
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Mammouth CLI v${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: false
+          files: |
+            packages/opencode/dist/*.tar.gz
+            packages/opencode/dist/*.zip
+          body: |
+            ## Mammouth CLI v${{ steps.version.outputs.version }}
+
+            ### Installation
+
+            **curl (recommended)**
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/mammouth-ai/opencode/main/install.sh | bash
+            ```
+
+            **Manual download**
+            Download the appropriate binary for your platform below.
+
+            | Platform | Architecture | Download |
+            |----------|--------------|----------|
+            | Linux | x64 | `mammouth-linux-x64.tar.gz` |
+            | Linux | arm64 | `mammouth-linux-arm64.tar.gz` |
+            | macOS | x64 | `mammouth-darwin-x64.tar.gz` |
+            | macOS | arm64 (Apple Silicon) | `mammouth-darwin-arm64.tar.gz` |
+            | Windows | x64 | `mammouth-windows-x64.zip` |
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

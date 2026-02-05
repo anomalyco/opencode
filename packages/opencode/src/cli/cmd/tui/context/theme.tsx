@@ -36,6 +36,7 @@ import vercel from "./theme/vercel.json" with { type: "json" }
 import vesper from "./theme/vesper.json" with { type: "json" }
 import zenburn from "./theme/zenburn.json" with { type: "json" }
 import carbonfox from "./theme/carbonfox.json" with { type: "json" }
+import mammouth from "./theme/mammouth.json" with { type: "json" }
 import { useKV } from "./kv"
 import { useRenderer } from "@opentui/solid"
 import { createStore, produce } from "solid-js/store"
@@ -171,6 +172,7 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   vercel,
   zenburn,
   carbonfox,
+  mammouth,
 }
 
 function resolveTheme(theme: ThemeJson, mode: "dark" | "light") {
@@ -284,7 +286,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     const [store, setStore] = createStore({
       themes: DEFAULT_THEMES,
       mode: kv.get("theme_mode", props.mode),
-      active: (sync.data.config.theme ?? kv.get("theme", "opencode")) as string,
+      active: (sync.data.config.theme ?? kv.get("theme", "mammouth")) as string,
       ready: false,
     })
 
@@ -304,7 +306,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
           )
         })
         .catch(() => {
-          setStore("active", "opencode")
+          setStore("active", "mammouth")
         })
         .finally(() => {
           if (store.active !== "system") {
@@ -327,7 +329,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
             if (store.active === "system") {
               setStore(
                 produce((draft) => {
-                  draft.active = "opencode"
+                  draft.active = "mammouth"
                   draft.ready = true
                 }),
               )
@@ -352,7 +354,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     })
 
     const values = createMemo(() => {
-      return resolveTheme(store.themes[store.active] ?? store.themes.opencode, store.mode)
+      return resolveTheme(store.themes[store.active] ?? store.themes.mammouth, store.mode)
     })
 
     const syntax = createMemo(() => generateSyntax(values()))
