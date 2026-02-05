@@ -48,7 +48,6 @@ export const dict = {
 
   "command.session.new": "新增工作階段",
   "command.file.open": "開啟檔案",
-  "command.file.open.description": "搜尋檔案和命令",
   "command.context.addSelection": "將選取內容加入上下文",
   "command.context.addSelection.description": "加入目前檔案中選取的行",
   "command.terminal.toggle": "切換終端機",
@@ -88,7 +87,7 @@ export const dict = {
   "command.session.unshare": "取消分享工作階段",
   "command.session.unshare.description": "停止分享此工作階段",
 
-  "palette.search.placeholder": "搜尋檔案和命令",
+  "palette.search.placeholder": "搜尋檔案、命令和工作階段",
   "palette.empty": "找不到結果",
   "palette.group.commands": "命令",
   "palette.group.files": "檔案",

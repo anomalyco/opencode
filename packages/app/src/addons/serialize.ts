@@ -241,19 +241,19 @@ class StringSerializeHandler extends BaseSerializeHandler {
   protected _rowEnd(row: number, isLastRow: boolean): void {
     let rowSeparator = ""
 
-    if (this._nullCellCount > 0) {
+    const nextLine = isLastRow ? undefined : this._buffer.getLine(row + 1)
+    const wrapped = !!nextLine?.isWrapped
+
+    if (this._nullCellCount > 0 && wrapped) {
       this._currentRow += " ".repeat(this._nullCellCount)
-      this._nullCellCount = 0
     }
 
-    if (!isLastRow) {
-      const nextLine = this._buffer.getLine(row + 1)
+    this._nullCellCount = 0
 
-      if (!nextLine?.isWrapped) {
-        rowSeparator = "\r\n"
-        this._lastCursorRow = row + 1
-        this._lastCursorCol = 0
-      }
+    if (!isLastRow && !wrapped) {
+      rowSeparator = "\r\n"
+      this._lastCursorRow = row + 1
+      this._lastCursorCol = 0
     }
 
     this._allRows[this._rowIndex] = this._currentRow
@@ -389,7 +389,7 @@ class StringSerializeHandler extends BaseSerializeHandler {
 
     const sgrSeq = this._diffStyle(cell, this._cursorStyle)
 
-    const styleChanged = isEmptyCell ? !equalBg(this._cursorStyle, cell) : sgrSeq.length > 0
+    const styleChanged = sgrSeq.length > 0
 
     if (styleChanged) {
       if (this._nullCellCount > 0) {
@@ -442,12 +442,24 @@ class StringSerializeHandler extends BaseSerializeHandler {
       }
     }
 
-    if (!excludeFinalCursorPosition) {
-      const absoluteCursorRow = (this._buffer.baseY ?? 0) + this._buffer.cursorY
-      const cursorRow = constrain(absoluteCursorRow - this._firstRow + 1, 1, Number.MAX_SAFE_INTEGER)
-      const cursorCol = this._buffer.cursorX + 1
-      content += `\u001b[${cursorRow};${cursorCol}H`
-    }
+    if (excludeFinalCursorPosition) return content
+
+    const absoluteCursorRow = (this._buffer.baseY ?? 0) + this._buffer.cursorY
+    const cursorRow = constrain(absoluteCursorRow - this._firstRow + 1, 1, Number.MAX_SAFE_INTEGER)
+    const cursorCol = this._buffer.cursorX + 1
+    content += `\u001b[${cursorRow};${cursorCol}H`
+
+    const line = this._buffer.getLine(absoluteCursorRow)
+    const cell = line?.getCell(this._buffer.cursorX)
+    const style = (() => {
+      if (!cell) return this._buffer.getNullCell()
+      if (cell.getWidth() !== 0) return cell
+      if (this._buffer.cursorX > 0) return line?.getCell(this._buffer.cursorX - 1) ?? cell
+      return cell
+    })()
+
+    const sgrSeq = this._diffStyle(style, this._cursorStyle)
+    if (sgrSeq.length) content += `\u001b[${sgrSeq.join(";")}m`
 
     return content
   }

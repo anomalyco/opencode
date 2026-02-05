@@ -277,6 +277,11 @@ export const RunCommand = cmd({
         type: "string",
         describe: "model variant (provider-specific reasoning effort, e.g., high, max, minimal)",
       })
+      .option("thinking", {
+        type: "boolean",
+        describe: "show thinking blocks",
+        default: false,
+      })
   },
   handler: async (args) => {
     let message = [...args.message, ...(args["--"] || [])]
@@ -455,7 +460,7 @@ export const RunCommand = cmd({
               UI.empty()
             }
 
-            if (part.type === "reasoning" && part.time?.end) {
+            if (part.type === "reasoning" && part.time?.end && args.thinking) {
               if (emit("reasoning", { part })) continue
               const text = part.text.trim()
               if (!text) continue
