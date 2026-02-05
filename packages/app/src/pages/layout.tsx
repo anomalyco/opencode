@@ -109,6 +109,7 @@ export default function Layout(props: ParentProps) {
   const layout = useLayout()
   const layoutReady = createMemo(() => layout.ready())
   const platform = usePlatform()
+  const isMirror = platform.platform === "desktop" && !platform.storage
   const settings = useSettings()
   const server = useServer()
   const notification = useNotification()
