@@ -3,3 +3,12 @@ dist
 gen
 app.log
 src/provider/models-snapshot.ts
+
+# Secrets and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+credentials.json

@@ -1,6 +1,7 @@
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { type IPty } from "bun-pty"
+import { randomBytes } from "crypto"
 import z from "zod"
 import { Identifier } from "../id/id"
 import { Log } from "../util/log"
@@ -15,6 +16,33 @@ export namespace Pty {
 
   const BUFFER_LIMIT = 1024 * 1024 * 2
   const BUFFER_CHUNK = 64 * 1024
+
+  /** One-time tokens for WebSocket authentication, mapped from token -> ptyID */
+  const wsTokens = new Map<string, { ptyID: string; expiresAt: number }>()
+  const TOKEN_EXPIRY_MS = 30_000 // 30 seconds
+
+  /** Maximum concurrent PTY sessions */
+  const MAX_PTY_SESSIONS = 20
+
+  /** Generate a one-time WebSocket authentication token for a PTY session */
+  export function generateWsToken(ptyID: string): string {
+    const token = randomBytes(32).toString("hex")
+    wsTokens.set(token, { ptyID, expiresAt: Date.now() + TOKEN_EXPIRY_MS })
+    // Clean up expired tokens
+    for (const [k, v] of wsTokens) {
+      if (v.expiresAt < Date.now()) wsTokens.delete(k)
+    }
+    return token
+  }
+
+  /** Validate and consume a one-time WebSocket token. Returns the ptyID if valid. */
+  export function consumeWsToken(token: string): string | undefined {
+    const entry = wsTokens.get(token)
+    if (!entry) return undefined
+    wsTokens.delete(token) // One-time use
+    if (entry.expiresAt < Date.now()) return undefined
+    return entry.ptyID
+  }
 
   const pty = lazy(async () => {
     const { spawn } = await import("bun-pty")
@@ -95,6 +123,10 @@ export namespace Pty {
   }
 
   export async function create(input: CreateInput) {
+    const sessions = state()
+    if (sessions.size >= MAX_PTY_SESSIONS) {
+      throw new Error(`Maximum PTY session limit (${MAX_PTY_SESSIONS}) reached`)
+    }
     const id = Identifier.create("pty", false)
     const command = input.command || Shell.preferred()
     const args = input.args || []

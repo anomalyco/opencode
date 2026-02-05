@@ -1,4 +1,5 @@
 import { Log } from "../util/log"
+import { Crypto } from "../util/crypto"
 import { OAUTH_CALLBACK_PORT, OAUTH_CALLBACK_PATH } from "./oauth-provider"
 
 const log = Log.create({ service: "mcp.oauth-callback" })
@@ -23,6 +24,15 @@ const HTML_SUCCESS = `<!DOCTYPE html>
 </body>
 </html>`
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
 const HTML_ERROR = (error: string) => `<!DOCTYPE html>
 <html>
 <head>
@@ -39,7 +49,7 @@ const HTML_ERROR = (error: string) => `<!DOCTYPE html>
   <div class="container">
     <h1>Authorization Failed</h1>
     <p>An error occurred during authorization.</p>
-    <div class="error">${error}</div>
+    <div class="error">${escapeHtml(error)}</div>
   </div>
 </body>
 </html>`
@@ -56,6 +66,16 @@ export namespace McpOAuthCallback {
   const pendingAuths = new Map<string, PendingAuth>()
 
   const CALLBACK_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
+
+  /** Find a pending auth entry using constant-time comparison to prevent timing attacks */
+  function findPendingAuth(state: string): { key: string; entry: PendingAuth } | undefined {
+    for (const [key, entry] of pendingAuths) {
+      if (Crypto.timingSafeCompare(state, key)) {
+        return { key, entry }
+      }
+    }
+    return undefined
+  }
 
   export async function ensureRunning(): Promise<void> {
     if (server) return
@@ -94,11 +114,11 @@ export namespace McpOAuthCallback {
 
         if (error) {
           const errorMsg = errorDescription || error
-          if (pendingAuths.has(state)) {
-            const pending = pendingAuths.get(state)!
-            clearTimeout(pending.timeout)
-            pendingAuths.delete(state)
-            pending.reject(new Error(errorMsg))
+          const found = findPendingAuth(state)
+          if (found) {
+            clearTimeout(found.entry.timeout)
+            pendingAuths.delete(found.key)
+            found.entry.reject(new Error(errorMsg))
           }
           return new Response(HTML_ERROR(errorMsg), {
             headers: { "Content-Type": "text/html" },
@@ -112,8 +132,9 @@ export namespace McpOAuthCallback {
           })
         }
 
-        // Validate state parameter
-        if (!pendingAuths.has(state)) {
+        // Validate state parameter using constant-time comparison
+        const matched = findPendingAuth(state)
+        if (!matched) {
           const errorMsg = "Invalid or expired state parameter - potential CSRF attack"
           log.error("oauth callback with invalid state", { state, pendingStates: Array.from(pendingAuths.keys()) })
           return new Response(HTML_ERROR(errorMsg), {
@@ -122,11 +143,9 @@ export namespace McpOAuthCallback {
           })
         }
 
-        const pending = pendingAuths.get(state)!
-
-        clearTimeout(pending.timeout)
-        pendingAuths.delete(state)
-        pending.resolve(code)
+        clearTimeout(matched.entry.timeout)
+        pendingAuths.delete(matched.key)
+        matched.entry.resolve(code)
 
         return new Response(HTML_SUCCESS, {
           headers: { "Content-Type": "text/html" },

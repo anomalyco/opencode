@@ -1,7 +1,23 @@
+import * as path from "path"
 import { sortBy, pipe } from "remeda"
 
 export namespace Wildcard {
+  /** Normalize a path string to prevent traversal attacks */
+  function normalizePath(str: string): string {
+    const normalized = path.normalize(str)
+    // Reject paths that still contain .. after normalization
+    if (normalized.includes("..")) return ""
+    return normalized
+  }
+
   export function match(str: string, pattern: string) {
+    // Normalize the input string to prevent path traversal bypass
+    const normalizedStr =
+      str.includes("/") || str.includes("\\") ? normalizePath(str) : str
+
+    // If normalization emptied the string (contained ../), reject
+    if (str.length > 0 && normalizedStr.length === 0) return false
+
     let escaped = pattern
       .replace(/[.+^${}()|[\]\\]/g, "\\$&") // escape special regex chars
       .replace(/\*/g, ".*") // * becomes .*
@@ -13,7 +29,7 @@ export namespace Wildcard {
       escaped = escaped.slice(0, -3) + "( .*)?"
     }
 
-    return new RegExp("^" + escaped + "$", "s").test(str)
+    return new RegExp("^" + escaped + "$", "s").test(normalizedStr || str)
   }
 
   export function all(input: string, patterns: Record<string, any>) {

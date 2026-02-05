@@ -1,0 +1,15 @@
+.git
+node_modules
+test
+dist
+gen
+research
+docs
+*.log
+*.md
+.env
+.env.*
+.gitignore
+.dockerignore
+Dockerfile*
+railway.json

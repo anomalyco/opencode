@@ -126,6 +126,30 @@ jobs:
           OPENCODE_CLIENT: "app"
         timeout-minutes: 30
 
+      - name: Run tests with coverage
+        if: matrix.settings.name == 'linux'
+        working-directory: packages/opencode
+        run: bun test --coverage
+        env:
+          CI: true
+          OPENCODE_DISABLE_SHARE: "true"
+          OPENCODE_DISABLE_LSP_DOWNLOAD: "true"
+          OPENCODE_DISABLE_DEFAULT_PLUGINS: "true"
+          OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true"
+          OPENCODE_TEST_HOME: ${{ env.OPENCODE_TEST_HOME }}
+          XDG_DATA_HOME: ${{ env.XDG_DATA_HOME }}
+          XDG_CACHE_HOME: ${{ env.XDG_CACHE_HOME }}
+          XDG_CONFIG_HOME: ${{ env.XDG_CONFIG_HOME }}
+          XDG_STATE_HOME: ${{ env.XDG_STATE_HOME }}
+        continue-on-error: true
+
+      - name: Upload coverage
+        if: matrix.settings.name == 'linux' && always()
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./packages/opencode/coverage/lcov.info
+          fail_ci_if_error: false
+
       - name: Upload Playwright artifacts
         if: failure()
         uses: actions/upload-artifact@v4

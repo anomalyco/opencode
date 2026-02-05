@@ -116,7 +116,7 @@ export const SessionRoutes = lazy(() =>
       ),
       async (c) => {
         const sessionID = c.req.valid("param").sessionID
-        log.info("SEARCH", { url: c.req.url })
+        log.info("session.get", { sessionID })
         const session = await Session.get(sessionID)
         return c.json(session)
       },
@@ -762,7 +762,9 @@ export const SessionRoutes = lazy(() =>
         return stream(c, async () => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
-          SessionPrompt.prompt({ ...body, sessionID })
+          SessionPrompt.prompt({ ...body, sessionID }).catch((e) =>
+            log.error("async prompt failed", { error: e, sessionID }),
+          )
         })
       },
     )

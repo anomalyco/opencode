@@ -691,6 +691,7 @@ export const McpDebugCommand = cmd({
                 scope: oauthConfig?.scope,
               },
               {
+                // No-op: testing OAuth discovery without completing authorization redirect
                 onRedirect: async () => {},
               },
             )

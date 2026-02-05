@@ -95,13 +95,7 @@ function parseToolParams(input?: string) {
     try {
       return JSON.parse(trimmed)
     } catch (jsonError) {
-      try {
-        return new Function(`return (${trimmed})`)()
-      } catch (evalError) {
-        throw new Error(
-          `Failed to parse --params. Use JSON or a JS object literal. JSON error: ${jsonError}. Eval error: ${evalError}.`,
-        )
-      }
+      throw new Error(`Failed to parse --params. Input must be valid JSON. Error: ${jsonError}.`)
     }
   })
 

@@ -16,7 +16,7 @@ RUN bun install --frozen-lockfile
 COPY . .
 
 # Build the application
-RUN bun run build || true
+RUN bun run build
 
 # Production stage
 FROM oven/bun:1.1-alpine AS runner
@@ -26,12 +26,21 @@ WORKDIR /app
 # Install runtime dependencies
 RUN apk add --no-cache ripgrep git
 
+# Create non-root user for security
+RUN addgroup -S opencode && adduser -S opencode -G opencode
+
 # Copy built application
 COPY --from=builder /app .
+
+# Set ownership to non-root user
+RUN chown -R opencode:opencode /app
 
 # Set environment variables
 ENV NODE_ENV=production
 ENV PORT=8080
+
+# Switch to non-root user
+USER opencode
 
 # Expose port
 EXPOSE 8080

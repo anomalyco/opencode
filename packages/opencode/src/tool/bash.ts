@@ -18,8 +18,97 @@ import { BashArity } from "@/permission/arity"
 import { Truncate } from "./truncation"
 import { Plugin } from "@/plugin"
 
+/** Environment variables safe to pass to spawned commands */
+const ENV_WHITELIST = new Set([
+  "PATH",
+  "HOME",
+  "USER",
+  "SHELL",
+  "TERM",
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "EDITOR",
+  "VISUAL",
+  "PAGER",
+  "LESS",
+  "COLORTERM",
+  "FORCE_COLOR",
+  "NO_COLOR",
+  "TERM_PROGRAM",
+  "TMPDIR",
+  "TMP",
+  "TEMP",
+  "XDG_CONFIG_HOME",
+  "XDG_DATA_HOME",
+  "XDG_CACHE_HOME",
+  "XDG_RUNTIME_DIR",
+  "NODE_ENV",
+  "BUN_INSTALL",
+  "npm_config_registry",
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "NO_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "no_proxy",
+  "GIT_AUTHOR_NAME",
+  "GIT_AUTHOR_EMAIL",
+  "GIT_COMMITTER_NAME",
+  "GIT_COMMITTER_EMAIL",
+  "SSH_AUTH_SOCK",
+  "GPG_TTY",
+])
+
+function getSafeEnv(): Record<string, string> {
+  const safeEnv: Record<string, string> = {}
+  for (const key of ENV_WHITELIST) {
+    if (process.env[key]) safeEnv[key] = process.env[key]!
+  }
+  return safeEnv
+}
+
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
+const COMMAND_MAX_LENGTH = 10_000 // 10KB max command length
+
+const DANGEROUS_PATTERNS = [
+  // Command injection via subshell/eval
+  /\$\(.*\)/, // $(command) substitution
+  /`[^`]+`/, // backtick substitution
+  /\beval\s/, // eval command
+  /\bexec\s/, // exec command
+  /\bsource\s/, // source command
+
+  // Pipe to shell execution
+  /\|\s*(ba)?sh\b/, // | bash, | sh
+  /\|\s*zsh\b/, // | zsh
+
+  // Here-doc/here-string injection
+  /<<\s*[\w'"]+/, // heredoc (<<EOF, <<'EOF', <<"EOF")
+
+  // Fork bomb patterns
+  /:\(\)\{.*\}/, // :(){ :|:& };:
+
+  // Destructive commands targeting system
+  /\brm\s+(-[a-zA-Z]*)?[\s]*\/(?!\w)/, // rm -rf / (but allow rm -rf /path/to/something)
+  /\bmkfs\b/, // filesystem format
+  /\bdd\s.*of=\/dev/, // dd to device
+]
+
+function validateCommandSafety(command: string): { safe: boolean; reason?: string } {
+  if (command.length > COMMAND_MAX_LENGTH) {
+    return { safe: false, reason: `Command exceeds maximum length of ${COMMAND_MAX_LENGTH} characters` }
+  }
+
+  for (const pattern of DANGEROUS_PATTERNS) {
+    if (pattern.test(command)) {
+      return { safe: false, reason: `Command contains potentially dangerous pattern: ${pattern.source}` }
+    }
+  }
+
+  return { safe: true }
+}
 
 export const log = Log.create({ service: "bash-tool" })
 
@@ -81,9 +170,32 @@ export const BashTool = Tool.define("bash", async () => {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
       const timeout = params.timeout ?? DEFAULT_TIMEOUT
+
+      // Validate command safety before any parsing or execution
+      const safety = validateCommandSafety(params.command)
+      if (!safety.safe) {
+        return {
+          title: params.description,
+          metadata: {
+            output: `Command blocked: ${safety.reason}`,
+            exit: 1,
+            description: params.description,
+          },
+          output: `Command blocked: ${safety.reason}`,
+        }
+      }
+
       const tree = await parser().then((p) => p.parse(params.command))
-      if (!tree) {
-        throw new Error("Failed to parse command")
+      if (!tree || tree.rootNode.hasError) {
+        return {
+          title: params.description,
+          metadata: {
+            output: "Command blocked: unable to parse command safely. Complex shell syntax is not allowed.",
+            exit: 1,
+            description: params.description,
+          },
+          output: "Command blocked: unable to parse command safely. Complex shell syntax is not allowed.",
+        }
       }
       const directories = new Set<string>()
       if (!Instance.containsPath(cwd)) directories.add(cwd)
@@ -168,7 +280,7 @@ export const BashTool = Tool.define("bash", async () => {
         shell,
         cwd,
         env: {
-          ...process.env,
+          ...getSafeEnv(),
           ...shellEnv.env,
         },
         stdio: ["ignore", "pipe", "pipe"],

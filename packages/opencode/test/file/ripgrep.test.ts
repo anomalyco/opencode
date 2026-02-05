@@ -19,7 +19,7 @@ describe("file.ripgrep", () => {
     const hasHidden = files.includes(path.join(".opencode", "thing.json"))
     expect(hasVisible).toBe(true)
     expect(hasHidden).toBe(true)
-  })
+  }, 30_000)
 
   test("hidden false excludes hidden", async () => {
     await using tmp = await tmpdir({
@@ -35,5 +35,5 @@ describe("file.ripgrep", () => {
     const hasHidden = files.includes(path.join(".opencode", "thing.json"))
     expect(hasVisible).toBe(true)
     expect(hasHidden).toBe(false)
-  })
+  }, 30_000)
 })

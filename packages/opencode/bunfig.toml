@@ -3,3 +3,8 @@ preload = ["@opentui/solid/preload"]
 [test]
 preload = ["./test/preload.ts"]
 timeout = 10000  # 10 seconds (default is 5000ms)
+coverage = true
+coverageReporter = ["text", "lcov"]
+coverageDir = "./coverage"
+coverageThreshold = { lines = 0.50, functions = 0.50, statements = 0.50 }
+coverageSkipTestFiles = true

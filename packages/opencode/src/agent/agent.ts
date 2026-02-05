@@ -324,6 +324,7 @@ export namespace Agent {
           instructions: SystemPrompt.instructions(),
           store: false,
         }),
+        // No-op: errors are caught via fullStream iteration below
         onError: () => {},
       })
       for await (const part of result.fullStream) {

@@ -93,28 +93,49 @@ This implementation follows the ACP specification v1:
 ✅ **Client Capabilities**
 
 - File read/write operations
-- Permission requests
-- Terminal support (stub for future)
+- Permission requests with queued handling
+- Terminal support via `terminal-auth` capability
+
+✅ **Streaming Responses**
+
+- Real-time `session/update` notifications for text, reasoning, and tool calls
+- `agent_message_chunk` and `agent_thought_chunk` streaming
+
+✅ **Tool Call Reporting**
+
+- Full tool lifecycle reporting: `pending` → `in_progress` → `completed`/`failed`
+- Tool call content with diff support for edit operations
+- Todo/plan integration via `todowrite` tool
+
+✅ **Session Modes**
+
+- Mode switching via `setSessionMode`
+- Available modes loaded from agent configuration
+- Default agent resolution
+
+✅ **Authentication**
+
+- `terminal-auth` capability for IDE integration
+- `opencode-login` auth method with `RequestError.authRequired` signaling
+- Graceful fallback for unknown auth methods
+
+✅ **Session Management**
+
+- `session/new` - Create new sessions with model/mode selection
+- `session/load` - Full conversation history replay
+- `session/list` - Paginated session listing with cursor support
+- `session/fork` - Fork existing sessions with history replay
+- `session/resume` - Resume sessions with mode/model state
+
+✅ **Commands**
+
+- Slash command support (e.g., `/compact`)
+- Available commands broadcast via `available_commands_update`
 
 ## Current Limitations
 
-### Not Yet Implemented
-
-1. **Streaming Responses** - Currently returns complete responses instead of streaming via `session/update` notifications
-2. **Tool Call Reporting** - Doesn't report tool execution progress
-3. **Session Modes** - No mode switching support yet
-4. **Authentication** - No actual auth implementation
-5. **Terminal Support** - Placeholder only
-6. **Session Persistence** - `session/load` doesn't restore actual conversation history
-
-### Future Enhancements
-
-- **Real-time Streaming**: Implement `session/update` notifications for progressive responses
-- **Tool Call Visibility**: Report tool executions as they happen
-- **Session Persistence**: Save and restore full conversation history
-- **Mode Support**: Implement different operational modes (ask, code, etc.)
-- **Enhanced Permissions**: More sophisticated permission handling
-- **Terminal Integration**: Full terminal support via opencode's bash tool
+- **Model Variants**: Variant selection works but may need refinement for edge cases
+- **File Attachments**: Only `file://` and `data:` URI schemes supported; other schemes are skipped
 
 ## Testing
 

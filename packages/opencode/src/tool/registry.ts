@@ -41,9 +41,13 @@ export namespace ToolRegistry {
     if (matches.length) await Config.waitForDependencies()
     for (const match of matches) {
       const namespace = path.basename(match, path.extname(match))
-      const mod = await import(match)
-      for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
-        custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
+      try {
+        const mod = await import(match)
+        for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
+          custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
+        }
+      } catch (e) {
+        log.warn("failed to load custom tool", { match, error: e })
       }
     }
 
@@ -64,6 +68,13 @@ export namespace ToolRegistry {
         parameters: z.object(def.args),
         description: def.description,
         execute: async (args, ctx) => {
+          // Plugin tools must go through the permission system
+          await ctx.ask({
+            permission: "plugin",
+            patterns: [id],
+            always: [`plugin:${id}`],
+            metadata: { pluginTool: id },
+          })
           const pluginCtx = {
             ...ctx,
             directory: Instance.directory,

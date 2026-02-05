@@ -117,7 +117,7 @@ export const ReadTool = Tool.define("read", {
     const preview = raw.slice(0, 20).join("\n")
 
     let output = "<file>\n"
-    output += content.join("\n")
+    output += truncateRepetition(sanitizeFileContent(content.join("\n")))
 
     const totalLines = lines.length
     const lastReadLine = offset + raw.length
@@ -208,4 +208,29 @@ async function isBinaryFile(filepath: string, file: Bun.BunFile): Promise<boolea
   }
   // If >30% non-printable characters, consider it binary
   return nonPrintableCount / bytes.length > 0.3
+}
+
+/** Sanitize file content to prevent prompt injection via file contents */
+function sanitizeFileContent(content: string): string {
+  // Escape tags that could be interpreted as system/control directives
+  return content
+    .replace(/<system>/gi, "<\u200Bsystem>")
+    .replace(/<\/system>/gi, "</\u200Bsystem>")
+    .replace(/<instructions>/gi, "<\u200Binstructions>")
+    .replace(/<\/instructions>/gi, "</\u200Binstructions>")
+    .replace(/<system-reminder>/gi, "<\u200Bsystem-reminder>")
+    .replace(/<\/system-reminder>/gi, "</\u200Bsystem-reminder>")
+    .replace(/\[SYSTEM\]/gi, "[\u200BSYSTEM]")
+    .replace(/\[INST\]/gi, "[\u200BINST]")
+    .replace(/\[\/INST\]/gi, "[/\u200BINST]")
+    .replace(/<<SYS>>/gi, "<<\u200BSYS>>")
+    .replace(/<<\/SYS>>/gi, "<</\u200BSYS>>")
+}
+
+/** Detect and truncate excessive character repetition (DoS prevention) */
+function truncateRepetition(text: string, maxRepeats = 100): string {
+  // Replace sequences of the same character repeated more than maxRepeats times
+  return text.replace(new RegExp(`(.)\\1{${maxRepeats},}`, "g"), (match, char) => {
+    return char.repeat(maxRepeats) + `... [${match.length - maxRepeats} chars truncated]`
+  })
 }

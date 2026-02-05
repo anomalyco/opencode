@@ -444,11 +444,10 @@ export namespace Session {
     }),
     (input) => {
       const cacheReadInputTokens = input.usage.cachedInputTokens ?? 0
+      const meta = input.metadata as Record<string, Record<string, unknown>> | undefined
       const cacheWriteInputTokens = (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
-        // @ts-expect-error
-        input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
-        // @ts-expect-error
-        input.metadata?.["venice"]?.["usage"]?.["cacheCreationInputTokens"] ??
+        (meta?.["bedrock"]?.["usage"] as Record<string, unknown>)?.["cacheWriteInputTokens"] ??
+        (meta?.["venice"]?.["usage"] as Record<string, unknown>)?.["cacheCreationInputTokens"] ??
         0) as number
 
       const excludesCachedTokens = !!(input.metadata?.["anthropic"] || input.metadata?.["bedrock"])

@@ -40,8 +40,9 @@ import { QuestionRoutes } from "./routes/question"
 import { PermissionRoutes } from "./routes/permission"
 import { GlobalRoutes } from "./routes/global"
 import { MDNS } from "./mdns"
+import { rateLimit } from "./rate-limit"
 
-// @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
+// Prevent ai-sdk from logging warnings to stdout (see vendor.d.ts for type declaration)
 globalThis.AI_SDK_LOG_WARNINGS = false
 
 export namespace Server {
@@ -77,6 +78,22 @@ export namespace Server {
             status: 500,
           })
         })
+        // Security headers
+        .use(async (c, next) => {
+          await next()
+          c.header("X-Content-Type-Options", "nosniff")
+          c.header("X-Frame-Options", "DENY")
+          c.header("X-XSS-Protection", "0")
+          c.header("Cache-Control", "no-store")
+        })
+        // Body size limit (10MB)
+        .use(async (c, next) => {
+          const length = c.req.header("content-length")
+          if (length && parseInt(length) > 10 * 1024 * 1024) {
+            return c.json({ error: "Request body too large (max 10MB)" }, 413)
+          }
+          await next()
+        })
         .use((c, next) => {
           const password = Flag.OPENCODE_SERVER_PASSWORD
           if (!password) return next()
@@ -100,6 +117,7 @@ export namespace Server {
             timer.stop()
           }
         })
+        .use(rateLimit({ windowMs: 60_000, max: 200 }))
         .use(
           cors({
             origin(input) {
@@ -119,6 +137,7 @@ export namespace Server {
 
               return
             },
+            credentials: false,
           }),
         )
         .route("/global", GlobalRoutes())

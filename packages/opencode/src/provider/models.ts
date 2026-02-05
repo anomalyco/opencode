@@ -6,10 +6,6 @@ import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
 import { lazy } from "@/util/lazy"
 
-// Try to import bundled snapshot (generated at build time)
-// Falls back to undefined in dev mode when snapshot doesn't exist
-/* @ts-ignore */
-
 export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
   const filepath = path.join(Global.Path.cache, "models.json")
@@ -88,14 +84,21 @@ export namespace ModelsDev {
     const file = Bun.file(Flag.OPENCODE_MODELS_PATH ?? filepath)
     const result = await file.json().catch(() => {})
     if (result) return result
-    // @ts-ignore
+    // @ts-ignore - models-snapshot is generated at build time; may not exist in dev
     const snapshot = await import("./models-snapshot")
       .then((m) => m.snapshot as Record<string, unknown>)
       .catch(() => undefined)
     if (snapshot) return snapshot
     if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return {}
-    const json = await fetch(`${url()}/api.json`).then((x) => x.text())
-    return JSON.parse(json)
+    const response = await fetch(`${url()}/api.json`)
+    if (!response.ok) return {}
+    const json = await response.text()
+    try {
+      return JSON.parse(json)
+    } catch {
+      log.error("failed to parse models.dev response", { status: response.status })
+      return {}
+    }
   })
 
   export async function get() {

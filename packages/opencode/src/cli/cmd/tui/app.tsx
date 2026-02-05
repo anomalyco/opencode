@@ -211,7 +211,7 @@ function App() {
   const [terminalTitleEnabled, setTerminalTitleEnabled] = createSignal(kv.get("terminal_title_enabled", true))
 
   createEffect(() => {
-    console.log(JSON.stringify(route.data))
+    // route change tracked internally
   })
 
   // Update terminal window title based on current route and session

@@ -19,6 +19,8 @@ import { withTimeout } from "@/util/timeout"
 import { McpOAuthProvider } from "./oauth-provider"
 import { McpOAuthCallback } from "./oauth-callback"
 import { McpAuth } from "./auth"
+import { McpSanitize } from "./sanitize"
+import { Crypto } from "../util/crypto"
 import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
@@ -129,10 +131,10 @@ export namespace MCP {
     }
 
     return dynamicTool({
-      description: mcpTool.description ?? "",
+      description: McpSanitize.escapeInjectionPatterns(mcpTool.description ?? ""),
       inputSchema: jsonSchema(schema),
       execute: async (args: unknown) => {
-        return client.callTool(
+        const response = await client.callTool(
           {
             name: mcpTool.name,
             arguments: (args || {}) as Record<string, unknown>,
@@ -143,6 +145,7 @@ export namespace MCP {
             timeout,
           },
         )
+        return McpSanitize.sanitizeToolResponse(response)
       },
     })
   }
@@ -234,7 +237,7 @@ export namespace MCP {
 
   async function fetchResourcesForClient(clientName: string, client: Client) {
     const resources = await client.listResources().catch((e) => {
-      log.error("failed to get prompts", { clientName, error: e.message })
+      log.error("failed to get resources", { clientName, error: e.message })
       return undefined
     })
 
@@ -733,6 +736,11 @@ export namespace MCP {
       .join("")
     await McpAuth.updateOAuthState(mcpName, oauthState)
 
+    // Generate and store PKCE code verifier for added security
+    // The SDK will call provider.codeVerifier() and provider.saveCodeVerifier() during the flow
+    const codeVerifier = Crypto.generateCodeVerifier()
+    await McpAuth.updateCodeVerifier(mcpName, codeVerifier)
+
     // Create a new auth provider for this flow
     // OAuth config is optional - if not provided, we'll use auto-discovery
     const oauthConfig = typeof mcpConfig.oauth === "object" ? mcpConfig.oauth : undefined
@@ -833,9 +841,9 @@ export namespace MCP {
     // Wait for callback using the already-registered promise
     const code = await callbackPromise
 
-    // Validate and clear the state
+    // Validate and clear the state using constant-time comparison to prevent timing attacks
     const storedState = await McpAuth.getOAuthState(mcpName)
-    if (storedState !== oauthState) {
+    if (!storedState || !Crypto.timingSafeCompare(storedState, oauthState)) {
       await McpAuth.clearOAuthState(mcpName)
       throw new Error("OAuth state mismatch - potential CSRF attack")
     }

@@ -737,14 +737,12 @@ export namespace Provider {
     function mergeProvider(providerID: string, provider: Partial<Info>) {
       const existing = providers[providerID]
       if (existing) {
-        // @ts-expect-error
-        providers[providerID] = mergeDeep(existing, provider)
+        providers[providerID] = mergeDeep(existing, provider) as Info
         return
       }
       const match = database[providerID]
       if (!match) return
-      // @ts-expect-error
-      providers[providerID] = mergeDeep(match, provider)
+      providers[providerID] = mergeDeep(match, provider) as Info
     }
 
     // extend database from config
@@ -1066,7 +1064,13 @@ export namespace Provider {
 
       const mod = await import(installedPath)
 
-      const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
+      const createKey = Object.keys(mod).find((key) => key.startsWith("create"))
+      if (!createKey)
+        throw new InitError(
+          { providerID: model.providerID },
+          { cause: new Error(`Provider package ${model.api.npm} does not export a create* function`) },
+        )
+      const fn = mod[createKey]
       const loaded = fn({
         name: model.providerID,
         ...options,

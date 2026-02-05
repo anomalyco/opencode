@@ -24,9 +24,13 @@ export namespace McpAuth {
     clientInfo: ClientInfo.optional(),
     codeVerifier: z.string().optional(),
     oauthState: z.string().optional(),
+    oauthStateCreatedAt: z.number().optional(), // Unix timestamp (seconds) when state was generated
     serverUrl: z.string().optional(), // Track the URL these credentials are for
   })
   export type Entry = z.infer<typeof Entry>
+
+  /** Maximum age for OAuth state parameters (10 minutes) */
+  const STATE_MAX_AGE_SECONDS = 10 * 60
 
   const filepath = path.join(Global.Path.data, "mcp-auth.json")
 
@@ -103,18 +107,36 @@ export namespace McpAuth {
   export async function updateOAuthState(mcpName: string, oauthState: string, serverUrl?: string): Promise<void> {
     const entry = (await get(mcpName)) ?? {}
     entry.oauthState = oauthState
+    entry.oauthStateCreatedAt = Math.floor(Date.now() / 1000)
     await set(mcpName, entry, serverUrl)
   }
 
+  /**
+   * Get OAuth state if it exists and has not expired.
+   * Returns undefined if no state exists or if the state has expired.
+   */
   export async function getOAuthState(mcpName: string): Promise<string | undefined> {
     const entry = await get(mcpName)
-    return entry?.oauthState
+    if (!entry?.oauthState) return undefined
+
+    // Validate state has not expired
+    if (entry.oauthStateCreatedAt) {
+      const ageSeconds = Math.floor(Date.now() / 1000) - entry.oauthStateCreatedAt
+      if (ageSeconds > STATE_MAX_AGE_SECONDS) {
+        // State has expired - clear it and return undefined
+        await clearOAuthState(mcpName)
+        return undefined
+      }
+    }
+
+    return entry.oauthState
   }
 
   export async function clearOAuthState(mcpName: string): Promise<void> {
     const entry = await get(mcpName)
     if (entry) {
       delete entry.oauthState
+      delete entry.oauthStateCreatedAt
       await set(mcpName, entry)
     }
   }

@@ -24,6 +24,24 @@ export const WebFetchTool = Tool.define("webfetch", {
       throw new Error("URL must start with http:// or https://")
     }
 
+    // SSRF protection: block requests to private/internal network addresses
+    const parsed = new URL(params.url)
+    // Bun's URL parser wraps IPv6 in brackets (e.g. "[::1]"), strip them for matching
+    const hostname = parsed.hostname.replace(/^\[|\]$/g, "")
+    if (
+      /^127\./.test(hostname) ||
+      /^10\./.test(hostname) ||
+      /^172\.(1[6-9]|2[0-9]|3[01])\./.test(hostname) ||
+      /^192\.168\./.test(hostname) ||
+      /^169\.254\./.test(hostname) ||
+      /^0\./.test(hostname) ||
+      hostname === "localhost" ||
+      hostname === "::1" ||
+      /^f[cd][0-9a-f]{2}:/i.test(hostname)
+    ) {
+      throw new Error("Cannot fetch from private/internal network addresses")
+    }
+
     await ctx.ask({
       permission: "webfetch",
       patterns: [params.url],

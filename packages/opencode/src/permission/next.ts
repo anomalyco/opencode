@@ -8,6 +8,7 @@ import { fn } from "@/util/fn"
 import { Log } from "@/util/log"
 import { Wildcard } from "@/util/wildcard"
 import os from "os"
+import * as path from "path"
 import z from "zod"
 
 export namespace PermissionNext {
@@ -229,10 +230,20 @@ export namespace PermissionNext {
   )
 
   export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
+    // Normalize path patterns to prevent traversal bypass
+    const normalizedPattern =
+      pattern.includes("/") || pattern.includes("\\") ? path.normalize(pattern) : pattern
+
+    // Reject patterns with path traversal
+    if (normalizedPattern.includes("..")) {
+      return { action: "deny", permission, pattern: normalizedPattern }
+    }
+
     const merged = merge(...rulesets)
-    log.info("evaluate", { permission, pattern, ruleset: merged })
+    log.info("evaluate", { permission, pattern: normalizedPattern, ruleset: merged })
     const match = merged.findLast(
-      (rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern),
+      (rule) =>
+        Wildcard.match(permission, rule.permission) && Wildcard.match(normalizedPattern, rule.pattern),
     )
     return match ?? { action: "ask", permission, pattern: "*" }
   }

@@ -1,4 +1,5 @@
 import { Hono } from "hono"
+import { HTTPException } from "hono/http-exception"
 import { describeRoute, validator, resolver } from "hono-openapi"
 import { upgradeWebSocket } from "hono/bun"
 import z from "zod"
@@ -6,6 +7,8 @@ import { Pty } from "@/pty"
 import { Storage } from "../../storage/storage"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+
+const MAX_WS_MESSAGE_SIZE = 65_536 // 64KB
 
 export const PtyRoutes = lazy(() =>
   new Hono()
@@ -130,6 +133,35 @@ export const PtyRoutes = lazy(() =>
         return c.json(true)
       },
     )
+    .post(
+      "/:ptyID/token",
+      describeRoute({
+        summary: "Generate WebSocket auth token",
+        description: "Generate a one-time authentication token for establishing a WebSocket connection to a PTY session.",
+        operationId: "pty.generateToken",
+        responses: {
+          200: {
+            description: "Generated token",
+            content: {
+              "application/json": {
+                schema: resolver(z.object({ token: z.string() })),
+              },
+            },
+          },
+          ...errors(404),
+        },
+      }),
+      validator("param", z.object({ ptyID: z.string() })),
+      async (c) => {
+        const { ptyID } = c.req.valid("param")
+        const session = Pty.get(ptyID)
+        if (!session) {
+          throw new HTTPException(404, { message: "PTY session not found" })
+        }
+        const token = Pty.generateWsToken(ptyID)
+        return c.json({ token })
+      },
+    )
     .get(
       "/:ptyID/connect",
       describeRoute({
@@ -151,14 +183,26 @@ export const PtyRoutes = lazy(() =>
       validator("param", z.object({ ptyID: z.string() })),
       upgradeWebSocket((c) => {
         const id = c.req.param("ptyID")
-        let handler: ReturnType<typeof Pty.connect>
+        // Validate one-time WebSocket authentication token
+        const url = new URL(c.req.url)
+        const token = url.searchParams.get("token")
+        if (!token) {
+          throw new HTTPException(401, { message: "WebSocket authentication token required" })
+        }
+        const validPtyID = Pty.consumeWsToken(token)
+        if (!validPtyID || validPtyID !== id) {
+          throw new HTTPException(401, { message: "Invalid or expired WebSocket token" })
+        }
         if (!Pty.get(id)) throw new Error("Session not found")
+        let handler: ReturnType<typeof Pty.connect>
         return {
           onOpen(_event, ws) {
             handler = Pty.connect(id, ws)
           },
           onMessage(event) {
-            handler?.onMessage(String(event.data))
+            const data = String(event.data)
+            if (data.length > MAX_WS_MESSAGE_SIZE) return
+            handler?.onMessage(data)
           },
           onClose() {
             handler?.onClose()
