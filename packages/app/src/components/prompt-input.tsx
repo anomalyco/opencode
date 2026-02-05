@@ -112,6 +112,7 @@ interface SlashCommand {
   description?: string
   keybind?: string
   type: "builtin" | "custom"
+  source?: "command" | "mcp" | "skill"
 }
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
@@ -517,6 +518,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       title: cmd.name,
       description: cmd.description,
       type: "custom" as const,
+      source: cmd.source,
     }))
 
     return [...custom, ...builtin]
@@ -1130,7 +1132,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const images = imageAttachments().slice()
     const mode = store.mode
 
-    if (text.trim().length === 0 && images.length === 0) {
+    if (text.trim().length === 0 && images.length === 0 && commentCount() === 0) {
       if (working()) abort()
       return
     }
@@ -1218,7 +1220,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           })
           return undefined
         })
-      if (session) navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
+      if (session) {
+        layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)
+        navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
+      }
     }
     if (!session) return
 
@@ -1458,7 +1463,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             draft.part[messageID] = optimisticParts
               .filter((p) => !!p?.id)
               .slice()
-              .sort((a, b) => a.id.localeCompare(b.id))
+              .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
           }),
         )
         return
@@ -1476,7 +1481,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           draft.part[messageID] = optimisticParts
             .filter((p) => !!p?.id)
             .slice()
-            .sort((a, b) => a.id.localeCompare(b.id))
+            .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
         }),
       )
     }
@@ -1701,9 +1706,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         </Show>
                       </div>
                       <div class="flex items-center gap-2 shrink-0">
-                        <Show when={cmd.type === "custom"}>
+                        <Show when={cmd.type === "custom" && cmd.source !== "command"}>
                           <span class="text-11-regular text-text-subtle px-1.5 py-0.5 bg-surface-base rounded">
-                            {language.t("prompt.slash.badge.custom")}
+                            {cmd.source === "skill"
+                              ? language.t("prompt.slash.badge.skill")
+                              : cmd.source === "mcp"
+                                ? language.t("prompt.slash.badge.mcp")
+                                : language.t("prompt.slash.badge.custom")}
                           </span>
                         </Show>
                         <Show when={command.keybind(cmd.id)}>
@@ -1787,7 +1796,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           type="button"
                           icon="close-small"
                           variant="ghost"
-                          class="ml-auto h-5 w-5 opacity-0 group-hover:opacity-100 transition-all"
+                          class="ml-auto size-3.5 opacity-0 group-hover:opacity-100 transition-all"
                           onClick={(e) => {
                             e.stopPropagation()
                             if (item.commentID) comments.remove(item.path, item.commentID)
@@ -1890,8 +1899,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </div>
           </Show>
         </div>
-        <div class="relative p-3 flex items-center justify-between">
-          <div class="flex items-center justify-start gap-0.5">
+        <div class="relative p-3 flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2 min-w-0 flex-1">
             <Switch>
               <Match when={store.mode === "shell"}>
                 <div class="flex items-center gap-2 px-2 h-6">
@@ -1903,6 +1912,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               <Match when={store.mode === "normal"}>
                 <TooltipKeybind
                   placement="top"
+                  gutter={8}
                   title={language.t("command.agent.cycle")}
                   keybind={command.keybind("agent.cycle")}
                 >
@@ -1910,7 +1920,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     options={local.agent.list().map((agent) => agent.name)}
                     current={local.agent.current()?.name ?? ""}
                     onSelect={local.agent.set}
-                    class="capitalize"
+                    class={`capitalize ${local.model.variant.list().length > 0 ? "max-w-[80px]" : "max-w-[120px]"}`}
+                    valueClass="truncate"
                     variant="ghost"
                   />
                 </TooltipKeybind>
@@ -1919,36 +1930,51 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   fallback={
                     <TooltipKeybind
                       placement="top"
+                      gutter={8}
                       title={language.t("command.model.choose")}
                       keybind={command.keybind("model.choose")}
                     >
-                      <Button as="div" variant="ghost" onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}>
+                      <Button
+                        as="div"
+                        variant="ghost"
+                        class="px-2 min-w-0 max-w-[240px]"
+                        onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}
+                      >
                         <Show when={local.model.current()?.provider?.id}>
                           <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
                         </Show>
-                        {local.model.current()?.name ?? language.t("dialog.model.select.title")}
-                        <Icon name="chevron-down" size="small" />
+                        <span class="truncate">
+                          {local.model.current()?.name ?? language.t("dialog.model.select.title")}
+                        </span>
+                        <Icon name="chevron-down" size="small" class="shrink-0" />
                       </Button>
                     </TooltipKeybind>
                   }
                 >
                   <TooltipKeybind
                     placement="top"
+                    gutter={8}
                     title={language.t("command.model.choose")}
                     keybind={command.keybind("model.choose")}
                   >
-                    <ModelSelectorPopover triggerAs={Button} triggerProps={{ variant: "ghost" }}>
+                    <ModelSelectorPopover
+                      triggerAs={Button}
+                      triggerProps={{ variant: "ghost", class: "min-w-0 max-w-[240px]" }}
+                    >
                       <Show when={local.model.current()?.provider?.id}>
                         <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
                       </Show>
-                      {local.model.current()?.name ?? language.t("dialog.model.select.title")}
-                      <Icon name="chevron-down" size="small" />
+                      <span class="truncate">
+                        {local.model.current()?.name ?? language.t("dialog.model.select.title")}
+                      </span>
+                      <Icon name="chevron-down" size="small" class="shrink-0" />
                     </ModelSelectorPopover>
                   </TooltipKeybind>
                 </Show>
                 <Show when={local.model.variant.list().length > 0}>
                   <TooltipKeybind
                     placement="top"
+                    gutter={8}
                     title={language.t("command.model.variant.cycle")}
                     keybind={command.keybind("model.variant.cycle")}
                   >
@@ -1965,6 +1991,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 <Show when={permission.permissionsEnabled() && params.id}>
                   <TooltipKeybind
                     placement="top"
+                    gutter={8}
                     title={language.t("command.permissions.autoaccept.enable")}
                     keybind={command.keybind("permissions.autoaccept")}
                   >
@@ -1994,7 +2021,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               </Match>
             </Switch>
           </div>
-          <div class="flex items-center gap-3 absolute right-3 bottom-3">
+          <div class="flex items-center gap-1 shrink-0">
             <input
               ref={fileInputRef}
               type="file"
@@ -2006,14 +2033,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 e.currentTarget.value = ""
               }}
             />
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1 mr-1">
               <SessionContextUsage />
               <Show when={store.mode === "normal"}>
                 <Tooltip placement="top" value={language.t("prompt.action.attachFile")}>
                   <Button
                     type="button"
                     variant="ghost"
-                    class="size-6"
+                    class="size-6 px-1"
                     onClick={() => fileInputRef.click()}
                     aria-label={language.t("prompt.action.attachFile")}
                   >
@@ -2044,7 +2071,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             >
               <IconButton
                 type="submit"
-                disabled={!prompt.dirty() && !working()}
+                disabled={!prompt.dirty() && !working() && commentCount() === 0}
                 icon={working() ? "stop" : "arrow-up"}
                 variant="primary"
                 class="h-6 w-4.5"

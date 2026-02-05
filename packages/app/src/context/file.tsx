@@ -8,6 +8,7 @@ import { getFilename } from "@opencode-ai/util/path"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 import { useLanguage } from "@/context/language"
+import { decode64 } from "@/utils/base64"
 import { Persist, persisted } from "@/utils/persist"
 
 export type FileSelection = {
@@ -275,9 +276,9 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const params = useParams()
     const language = useLanguage()
 
-    const scope = createMemo(() => sdk.directory)
+    const directory = createMemo(() => decode64(params.dir) ?? sdk.directory)
 
-    const directory = createMemo(() => sync.data.path.directory)
+    const scope = createMemo(() => directory())
 
     function normalize(input: string) {
       const root = directory()
@@ -414,7 +415,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       return entry.value
     }
 
-    const view = createMemo(() => loadView(params.dir!, params.id))
+    const view = createMemo(() => loadView(directory(), params.id))
 
     function ensure(path: string) {
       if (!path) return

@@ -18,8 +18,15 @@ export namespace ZenData {
       }),
     ),
   })
+  const RateLimitSchema = z.object({
+    period: z.enum(["day", "rolling"]),
+    value: z.number().int(),
+    checkHeader: z.string().optional(),
+    fallbackValue: z.number().int().optional(),
+  })
   export type Format = z.infer<typeof FormatSchema>
   export type Trial = z.infer<typeof TrialSchema>
+  export type RateLimit = z.infer<typeof RateLimitSchema>
 
   const ModelCostSchema = z.object({
     input: z.number(),
@@ -37,7 +44,7 @@ export namespace ZenData {
     byokProvider: z.enum(["openai", "anthropic", "google"]).optional(),
     stickyProvider: z.enum(["strict", "prefer"]).optional(),
     trial: TrialSchema.optional(),
-    rateLimit: z.number().optional(),
+    rateLimit: RateLimitSchema.optional(),
     fallbackProvider: z.string().optional(),
     providers: z.array(
       z.object({
