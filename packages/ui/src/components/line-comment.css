@@ -154,9 +154,11 @@
 }
 
 [data-component="line-comment"] [data-slot="line-comment-textarea"][contenteditable] {
+  display: block;
   width: 100%;
-  min-height: 100%;
+  min-height: calc(var(--line-comment-rows, 3) * 1lh + 16px);
   padding: 8px;
+  box-sizing: border-box;
   color: var(--text-strong);
   font-family: var(--font-family-sans);
   font-size: var(--font-size-small);

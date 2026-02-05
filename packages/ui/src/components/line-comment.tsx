@@ -352,12 +352,14 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
     "autofocus",
     "cancelLabel",
     "submitLabel",
+    "onPopoverFocusOut",
     "onFileSearch",
     "recentFiles",
     "agents",
   ])
 
   let editorRef!: HTMLDivElement
+  const [resizing, setResizing] = createSignal(false)
   const mirror = { input: false }
   const [showPicker, setShowPicker] = createSignal(false)
   const [hasContent, setHasContent] = createSignal(false)
@@ -641,6 +643,19 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
   })
 
   createEffect(() => {
+    if (!resizing()) return
+    const stop = () => setResizing(false)
+    window.addEventListener("pointerup", stop, true)
+    window.addEventListener("pointercancel", stop, true)
+    window.addEventListener("blur", stop, true)
+    onCleanup(() => {
+      window.removeEventListener("pointerup", stop, true)
+      window.removeEventListener("pointercancel", stop, true)
+      window.removeEventListener("blur", stop, true)
+    })
+  })
+
+  createEffect(() => {
     const value = split.value
     if (mirror.input) {
       mirror.input = false
@@ -651,8 +666,33 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
     setHasContent(value.trim().length > 0)
   })
 
+  const onEditorScrollPointerDown = (e: PointerEvent) => {
+    const current = e.currentTarget as HTMLDivElement
+    const rect = current.getBoundingClientRect()
+    if (rect.right - e.clientX > 20) return
+    if (rect.bottom - e.clientY > 20) return
+    setResizing(true)
+  }
+
+  const onPopoverFocusOut = (e: FocusEvent & { currentTarget: HTMLDivElement; target: Element }) => {
+    if (resizing()) return
+    const handler = split.onPopoverFocusOut
+    if (!handler) return
+    if (typeof handler === "function") {
+      handler(e)
+      return
+    }
+    handler[0](handler[1], e)
+  }
+
   return (
-    <LineCommentAnchor {...rest} open={true} variant="editor" onClick={() => focus()}>
+    <LineCommentAnchor
+      {...rest}
+      open={true}
+      variant="editor"
+      onClick={() => focus()}
+      onPopoverFocusOut={onPopoverFocusOut}
+    >
       <div data-slot="line-comment-editor">
         <div data-slot="line-comment-editor-main">
           <Show when={showPicker()}>
@@ -698,6 +738,7 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
             style={{
               "--line-comment-rows": `${split.rows ?? 3}`,
             }}
+            onPointerDown={onEditorScrollPointerDown}
           >
             <div
               ref={editorRef}
