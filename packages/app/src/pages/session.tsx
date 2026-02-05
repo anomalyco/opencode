@@ -1519,6 +1519,8 @@ export default function Page() {
                 tabs().open(value)
                 file.load(path)
               }}
+              onFileSearch={(query) => file.searchFilesAndDirectories(query)}
+              recentFiles={recentFiles()}
               agents={mentionAgents()}
             />
           </Match>
@@ -2271,6 +2273,8 @@ export default function Page() {
                                 header: "px-4",
                                 container: "px-4",
                               }}
+                              onFileSearch={(query) => file.searchFilesAndDirectories(query)}
+                              recentFiles={recentFiles()}
                               agents={mentionAgents()}
                             />
                           </Match>

@@ -361,6 +361,7 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
   let editorRef!: HTMLDivElement
   let pickerRef: HTMLDivElement | undefined
   const [resizing, setResizing] = createSignal(false)
+  // Prevent reactive value sync from overwriting direct DOM edits from contenteditable input events.
   const mirror = { input: false }
   const [showPicker, setShowPicker] = createSignal(false)
   const [hasContent, setHasContent] = createSignal(false)
@@ -538,7 +539,7 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
       const el = node as HTMLElement
       if (el.dataset.type === "file") {
         text += el.textContent ?? ""
-        files.push(el.dataset.path!)
+        if (el.dataset.path) files.push(el.dataset.path)
         return
       }
       if (el.tagName === "BR") {
@@ -642,7 +643,17 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
   const handlePaste = (e: ClipboardEvent) => {
     e.preventDefault()
     const text = e.clipboardData?.getData("text/plain") ?? ""
-    document.execCommand("insertText", false, text)
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) return
+    const range = selection.getRangeAt(0)
+    range.deleteContents()
+    const node = document.createTextNode(text)
+    range.insertNode(node)
+    range.setStartAfter(node)
+    range.collapse(true)
+    selection.removeAllRanges()
+    selection.addRange(range)
+    handleInput()
   }
 
   onMount(() => {
@@ -716,7 +727,7 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
               data-slot="line-comment-file-picker"
               onMouseDown={(e) => e.preventDefault()}
             >
-              <For each={flat().slice(0, 8)}>
+              <For each={flat()}>
                 {(option) => (
                   <button
                     type="button"
