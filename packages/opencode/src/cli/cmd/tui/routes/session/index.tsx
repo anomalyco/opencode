@@ -1098,7 +1098,7 @@ export function Session() {
                 sessionID={route.sessionID}
               />
             </box>
-            <Show when={!sidebarVisible()}>
+            <Show when={!sidebarVisible() || !wide()}>
               <Footer />
             </Show>
           </Show>
