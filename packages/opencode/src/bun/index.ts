@@ -7,6 +7,7 @@ import { NamedError } from "@opencode-ai/util/error"
 import { readableStreamToText } from "bun"
 import { Lock } from "../util/lock"
 import { PackageRegistry } from "./registry"
+import { proxied } from "@/util/proxied"
 
 export namespace BunProc {
   const log = Log.create({ service: "bun" })
@@ -86,20 +87,13 @@ export namespace BunProc {
       log.info("Cached version is outdated, proceeding with install", { pkg, cachedVersion })
     }
 
-    const proxied = !!(
-      process.env.HTTP_PROXY ||
-      process.env.HTTPS_PROXY ||
-      process.env.http_proxy ||
-      process.env.https_proxy
-    )
-
     // Build command arguments
     const args = [
       "add",
       "--force",
       "--exact",
       // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
-      ...(proxied ? ["--no-cache"] : []),
+      ...(proxied() ? ["--no-cache"] : []),
       "--cwd",
       Global.Path.cache,
       pkg + "@" + version,
