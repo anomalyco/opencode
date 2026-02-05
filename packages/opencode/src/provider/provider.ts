@@ -617,6 +617,18 @@ export namespace Provider {
   export type Info = z.infer<typeof Info>
 
   function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
+    const limit = iife(() => {
+      if (!provider.id.startsWith("github-copilot")) return model.limit
+      if (model.id !== "gpt-5.2" && model.id !== "gpt-5.2-codex") return model.limit
+
+      // models.dev currently reports incorrect limits for these Copilot models, causing premature compaction.
+      return {
+        ...model.limit,
+        context: 400_000,
+        input: 272_000,
+        output: 128_000,
+      }
+    })
     const m: Model = {
       id: model.id,
       providerID: provider.id,
@@ -649,9 +661,9 @@ export namespace Provider {
           : undefined,
       },
       limit: {
-        context: model.limit.context,
-        input: model.limit.input,
-        output: model.limit.output,
+        context: limit.context,
+        input: limit.input,
+        output: limit.output,
       },
       capabilities: {
         temperature: model.temperature,

@@ -2148,3 +2148,40 @@ test("custom model with variants enabled and disabled", async () => {
     },
   })
 })
+
+test("github-copilot gpt-5.2 and gpt-5.2-codex token limits are overridden", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("GITHUB_TOKEN", "test-token")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const copilot = providers["github-copilot"]
+      expect(copilot).toBeDefined()
+
+      const gpt52 = copilot.models["gpt-5.2"]
+      expect(gpt52).toBeDefined()
+      expect(gpt52.limit.context).toBe(400_000)
+      expect(gpt52.limit.input).toBe(272_000)
+      expect(gpt52.limit.output).toBe(128_000)
+
+      const gpt52codex = copilot.models["gpt-5.2-codex"]
+      expect(gpt52codex).toBeDefined()
+      expect(gpt52codex.limit.context).toBe(400_000)
+      expect(gpt52codex.limit.input).toBe(272_000)
+      expect(gpt52codex.limit.output).toBe(128_000)
+    },
+  })
+})
