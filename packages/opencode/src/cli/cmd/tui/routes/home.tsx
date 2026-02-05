@@ -15,10 +15,9 @@ import { Installation } from "@/installation"
 import { useKV } from "../context/kv"
 import { useCommandDialog } from "../component/dialog-command"
 
-// TODO: what is the best way to do this?
-let once = false
-
 export function Home() {
+  // TODO: what is the best way to do this?
+  let once = false
   const sync = useSync()
   const kv = useKV()
   const { theme } = useTheme()
