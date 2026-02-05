@@ -32,6 +32,8 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { DialogAgent } from "../dialog-agent"
+import { DialogModel } from "../dialog-model"
 
 export type PromptProps = {
   sessionID?: string
@@ -974,18 +976,18 @@ export function Prompt(props: PromptProps) {
               syntaxStyle={syntax()}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
-              <text fg={highlight()}>
+              <text fg={highlight()} onMouseUp={() => { if (store.mode !== "shell") dialog.replace(() => <DialogAgent />) }}>
                 {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
               </text>
               <Show when={store.mode === "normal"}>
                 <box flexDirection="row" gap={1}>
-                  <text flexShrink={0} fg={keybind.leader ? theme.textMuted : theme.text}>
+                  <text flexShrink={0} fg={keybind.leader ? theme.textMuted : theme.text} onMouseUp={() => dialog.replace(() => <DialogModel />)}>
                     {local.model.parsed().model}
                   </text>
-                  <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
+                  <text fg={theme.textMuted} onMouseUp={() => dialog.replace(() => <DialogProviderConnect />)}>{local.model.parsed().provider}</text>
                   <Show when={showVariant()}>
                     <text fg={theme.textMuted}>·</text>
-                    <text>
+                    <text onMouseUp={() => local.model.variant.cycle()}>
                       <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
                     </text>
                   </Show>
