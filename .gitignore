@@ -23,6 +23,44 @@ target
 .scripts
 .direnv/
 
+# Local editor/AI tool folders
+.claude/
+.cursor/
+
+# OpenCode local workspace artifacts
+.opencode/agents/
+.opencode/commands/
+.opencode/lib/
+.opencode/plugin/
+
+# Trellis local state files
+.trellis/.gitignore
+.trellis/.template-hashes.json
+.trellis/.version
+.trellis/worktree.yaml
+.trellis/scripts/**/*.py
+.trellis/scripts/**/__init__.py
+.trellis/scripts/multi_agent/
+.trellis/spec/backend/
+.trellis/scripts/**/__pycache__/
+.trellis/scripts/**/*.pyc
+
+# Local-only README scratch image
+image/README/image.png
+
+# Local screenshots / misc assets (not used by README)
+images/
+
+# Desktop icon backups / generated folders
+packages/desktop/src-tauri/icons/*.backup.*/
+packages/desktop/icons/
+
+# Desktop app icon design exports (track only selected finals)
+packages/desktop/app-icon-*.png
+packages/desktop/app-icon-*.svg
+!packages/desktop/app-icon-dev.svg
+!packages/desktop/app-icon-dev.png
+
 # Local dev files
 opencode-dev
 logs/
