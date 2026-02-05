@@ -501,6 +501,23 @@ export const SettingsGeneral: Component = () => {
           }}
         </Show>*/}
 
+        {/* Command Palette Section */}
+        <div class="flex flex-col gap-1">
+          <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.palette.projects")}</h3>
+
+          <div class="bg-surface-raised-base px-4 rounded-lg">
+            <SettingsRow
+              title={language.t("settings.palette.projects")}
+              description={language.t("settings.palette.projects.description")}
+            >
+              <Switch
+                checked={settings.palette.projects()}
+                onChange={(checked) => settings.palette.setProjects(checked)}
+              />
+            </SettingsRow>
+          </div>
+        </div>
+
         <UpdatesSection />
 
         <Show when={linux()}>

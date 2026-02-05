@@ -96,6 +96,9 @@ export const dict = {
   "palette.empty": "找不到結果",
   "palette.group.commands": "命令",
   "palette.group.files": "檔案",
+  "palette.group.projects": "專案",
+  "settings.palette.projects": "在指令面板中顯示專案",
+  "settings.palette.projects.description": "在 Cmd+P 搜尋結果中包含專案",
 
   "dialog.provider.search.placeholder": "搜尋提供者",
   "dialog.provider.empty": "找不到提供者",

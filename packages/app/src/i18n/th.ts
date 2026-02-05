@@ -92,6 +92,9 @@ export const dict = {
   "palette.empty": "ไม่พบผลลัพธ์",
   "palette.group.commands": "คำสั่ง",
   "palette.group.files": "ไฟล์",
+  "palette.group.projects": "โปรเจกต์",
+  "settings.palette.projects": "แสดงโปรเจกต์ในพาเลทคำสั่ง",
+  "settings.palette.projects.description": "รวมโปรเจกต์ในผลการค้นหา Cmd+P",
 
   "dialog.provider.search.placeholder": "ค้นหาผู้ให้บริการ",
   "dialog.provider.empty": "ไม่พบผู้ให้บริการ",

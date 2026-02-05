@@ -1,3 +1,4 @@
+import { Avatar } from "@opencode-ai/ui/avatar"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
@@ -11,13 +12,15 @@ import { createMemo, createSignal, Match, onCleanup, Show, Switch } from "solid-
 import { formatKeybind, useCommand, type CommandOption } from "@/context/command"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
-import { useLayout } from "@/context/layout"
+import { getAvatarColors, useLayout, type LocalProject } from "@/context/layout"
 import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
+import { useServer } from "@/context/server"
+import { useSettings } from "@/context/settings"
 import { decode64 } from "@/utils/base64"
 import { getRelativeTime } from "@/utils/time"
 
-type EntryType = "command" | "file" | "session"
+type EntryType = "command" | "file" | "project" | "session"
 
 type Entry = {
   id: string
@@ -257,6 +260,8 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
   const command = useCommand()
   const language = useLanguage()
   const layout = useLayout()
+  const server = useServer()
+  const settings = useSettings()
   const file = useFile()
   const dialog = useDialog()
   const params = useParams()
@@ -271,6 +276,19 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
   const [grouped, setGrouped] = createSignal(false)
   const commandEntries = createCommandEntries({ filesOnly, command, language })
   const fileEntries = createFileEntries({ file, tabs, language })
+
+  const projectItem = (project: LocalProject): Entry => ({
+    id: "project:" + project.worktree,
+    type: "project",
+    title: project.name || getFilename(project.worktree),
+    description: project.worktree,
+    category: language.t("palette.group.projects"),
+    path: project.worktree,
+  })
+
+  const projectList = createMemo(() => layout.projects.list())
+  const projectLookup = createMemo(() => new Map(projectList().map((p) => [p.worktree, p])))
+  const projects = createMemo(() => (settings.palette.projects() ? projectList().map(projectItem) : []))
 
   const projectDirectory = createMemo(() => decode64(params.dir) ?? "")
   const project = createMemo(() => {
@@ -332,7 +350,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
     const [files, nextSessions] = await Promise.all([file.searchFiles(query), Promise.resolve(sessions(query))])
     const category = language.t("palette.group.files")
     const entries = files.map((path) => createFileEntry(path, category))
-    return [...commandEntries.list(), ...nextSessions, ...entries]
+    return [...projects(), ...commandEntries.list(), ...nextSessions, ...entries]
   }
 
   const handleMove = (item: Entry | undefined) => {
@@ -360,6 +378,12 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
 
     if (item.type === "command") {
       item.option?.onSelect?.("palette")
+      return
+    }
+
+    if (item.type === "project" && item.path) {
+      server.projects.touch(item.path)
+      navigate(`/${base64Encode(item.path)}`)
       return
     }
 
@@ -425,6 +449,29 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
                   <Keybind class="rounded-[4px]">{formatKeybind(item.keybind ?? "")}</Keybind>
                 </Show>
               </div>
+            </Match>
+            <Match when={item.type === "project"}>
+              {(() => {
+                const project = projectLookup().get(item.path ?? "")
+                const icon = project?.icon as { override?: string; color?: string } | undefined
+                return (
+                  <div class="w-full flex items-center justify-between rounded-md pl-1">
+                    <div class="flex items-center gap-x-3 grow min-w-0">
+                      <Avatar
+                        fallback={item.title}
+                        src={icon?.override}
+                        {...getAvatarColors(icon?.color)}
+                        size="small"
+                        class="shrink-0"
+                      />
+                      <div class="flex items-center gap-1.5 text-14-regular min-w-0">
+                        <span class="text-text-strong whitespace-nowrap">{item.title}</span>
+                        <span class="text-text-weak truncate min-w-0">{item.description}</span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
             </Match>
             <Match when={item.type === "session"}>
               <div class="w-full flex items-center justify-between rounded-md pl-1">

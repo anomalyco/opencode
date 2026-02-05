@@ -95,6 +95,9 @@ export const dict = {
   "palette.empty": "Ingen resultater funnet",
   "palette.group.commands": "Kommandoer",
   "palette.group.files": "Filer",
+  "palette.group.projects": "Prosjekter",
+  "settings.palette.projects": "Vis prosjekter i kommandopaletten",
+  "settings.palette.projects.description": "Inkluder prosjekter i Cmd+P søkeresultater",
 
   "dialog.provider.search.placeholder": "Søk etter leverandører",
   "dialog.provider.empty": "Ingen leverandører funnet",
