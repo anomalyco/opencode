@@ -27,6 +27,7 @@ import { LspTool } from "./lsp"
 import { Truncate } from "./truncation"
 import { PlanExitTool, PlanEnterTool } from "./plan"
 import { ApplyPatchTool } from "./apply_patch"
+import { pathToFileURL } from "url"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -38,12 +39,49 @@ export namespace ToolRegistry {
     const matches = await Config.directories().then((dirs) =>
       dirs.flatMap((dir) => [...glob.scanSync({ cwd: dir, absolute: true, followSymlinks: true, dot: true })]),
     )
-    if (matches.length) await Config.waitForDependencies()
+
+    const load = (filepath: string, cacheKey?: string) => {
+      const url = pathToFileURL(filepath).href
+      return import(cacheKey ? `${url}?opencode=${cacheKey}` : url)
+    }
+
+    const invalid = (id: string, filepath: string, error: unknown): Tool.Info => {
+      const message = error instanceof Error ? error.message : String(error)
+      return Tool.define(id, {
+        description: `Custom tool failed to load: ${id}`,
+        parameters: z.unknown(),
+        execute: async () => ({
+          title: "Tool Load Error",
+          output: `Failed to load custom tool '${id}' from ${filepath}:\n\n${message}`,
+          metadata: {},
+        }),
+      })
+    }
+
     for (const match of matches) {
       const namespace = path.basename(match, path.extname(match))
-      const mod = await import(match)
-      for (const [id, def] of Object.entries<ToolDefinition>(mod)) {
-        custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
+      const mod = await load(match).catch(async (error) => {
+        log.error("Failed to load custom tool module", { match, error })
+        await Config.installDependencies(path.dirname(path.dirname(match))).catch(() => {})
+        return load(match, Date.now().toString()).catch((e) => {
+          log.error("Failed to load custom tool module after installing deps", { match, error: e })
+          return undefined
+        })
+      })
+
+      if (!mod) {
+        custom.push(invalid(namespace, match, "Module failed to load"))
+        continue
+      }
+
+      for (const [id, def] of Object.entries(mod as Record<string, ToolDefinition>)) {
+        const toolID = id === "default" ? namespace : `${namespace}_${id}`
+        try {
+          custom.push(fromPlugin(toolID, def))
+        } catch (error) {
+          log.error("Failed to load custom tool definition", { match, id: toolID, error })
+          custom.push(invalid(toolID, match, error))
+        }
       }
     }
 
