@@ -516,6 +516,167 @@ describe("ProviderTransform.schema - gemini non-object properties removal", () =
   })
 })
 
+describe("ProviderTransform.schema - gemini $ref expansion", () => {
+  const geminiModel = {
+    providerID: "google",
+    api: { id: "gemini-3-pro" },
+  } as any
+
+  test("expands simple $ref with $defs", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        option: { $ref: "#/$defs/QuestionOption" },
+      },
+      $defs: {
+        QuestionOption: {
+          type: "object",
+          properties: {
+            label: { type: "string" },
+            description: { type: "string" },
+          },
+          required: ["label", "description"],
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.$defs).toBeUndefined()
+    expect(result.properties.option.$ref).toBeUndefined()
+    expect(result.properties.option.type).toBe("object")
+    expect(result.properties.option.properties.label.type).toBe("string")
+  })
+
+  test("expands $ref in array items", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        options: {
+          type: "array",
+          items: { $ref: "#/$defs/Option" },
+        },
+      },
+      $defs: {
+        Option: { type: "object", properties: { value: { type: "string" } } },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.options.items.$ref).toBeUndefined()
+    expect(result.properties.options.items.type).toBe("object")
+    expect(result.properties.options.items.properties.value.type).toBe("string")
+  })
+
+  test("expands nested $ref references", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        question: { $ref: "#/$defs/Question" },
+      },
+      $defs: {
+        Question: {
+          type: "object",
+          properties: {
+            options: { type: "array", items: { $ref: "#/$defs/Option" } },
+          },
+        },
+        Option: { type: "object", properties: { label: { type: "string" } } },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.question.properties.options.items.type).toBe("object")
+    expect(result.properties.question.properties.options.items.properties.label.type).toBe("string")
+  })
+
+  test("handles circular $ref by returning simple object", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        node: { $ref: "#/$defs/TreeNode" },
+      },
+      $defs: {
+        TreeNode: {
+          type: "object",
+          properties: {
+            value: { type: "string" },
+            children: { type: "array", items: { $ref: "#/$defs/TreeNode" } },
+          },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.node.type).toBe("object")
+    expect(result.properties.node.properties.value.type).toBe("string")
+    expect(result.properties.node.properties.children.items.type).toBe("object")
+  })
+
+  test("expands definitions (legacy format)", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        item: { $ref: "#/definitions/Item" },
+      },
+      definitions: {
+        Item: { type: "object", properties: { name: { type: "string" } } },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.definitions).toBeUndefined()
+    expect(result.properties.item.$ref).toBeUndefined()
+    expect(result.properties.item.type).toBe("object")
+  })
+
+  test("preserves description when expanding $ref", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        option: {
+          $ref: "#/$defs/Option",
+          description: "Custom description",
+        },
+      },
+      $defs: {
+        Option: { type: "string" },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.option.type).toBe("string")
+    expect(result.properties.option.description).toBe("Custom description")
+  })
+
+  test("does not expand $ref for non-gemini providers", () => {
+    const openaiModel = {
+      providerID: "openai",
+      api: { id: "gpt-4" },
+    } as any
+
+    const schema = {
+      type: "object",
+      properties: {
+        option: { $ref: "#/$defs/Option" },
+      },
+      $defs: {
+        Option: { type: "string" },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(openaiModel, schema) as any
+
+    expect(result.$defs).toBeDefined()
+    expect(result.properties.option.$ref).toBe("#/$defs/Option")
+  })
+})
+
 describe("ProviderTransform.message - DeepSeek reasoning content", () => {
   test("DeepSeek with tool calls includes reasoning_content in providerOptions", () => {
     const msgs = [

@@ -754,6 +754,39 @@ export namespace ProviderTransform {
 
     // Convert integer enums to string enums for Google/Gemini
     if (model.providerID === "google" || model.api.id.includes("gemini")) {
+      // Expand $ref references inline - Gemini rejects $ref alongside other fields
+      const expand = (obj: any, defs: Record<string, any>, seen = new Set<string>()): any => {
+        if (obj === null || typeof obj !== "object") return obj
+        if (Array.isArray(obj)) return obj.map((item) => expand(item, defs, seen))
+
+        if (obj.$ref && typeof obj.$ref === "string") {
+          const match = obj.$ref.match(/^#\/(\$defs|definitions)\/(.+)$/)
+          if (match) {
+            const name = match[2]
+            if (seen.has(name)) return { type: "object" }
+            if (defs[name]) {
+              seen.add(name)
+              const rest = Object.fromEntries(Object.entries(obj).filter(([k]) => k !== "$ref"))
+              const result = expand({ ...defs[name], ...rest }, defs, new Set(seen))
+              seen.delete(name)
+              return result
+            }
+          }
+        }
+
+        const result: any = {}
+        for (const [key, value] of Object.entries(obj)) {
+          if (key === "$defs" || key === "definitions") continue
+          result[key] = expand(value, defs, seen)
+        }
+        return result
+      }
+
+      const defs = (schema as any).$defs || (schema as any).definitions || {}
+      if (Object.keys(defs).length > 0) {
+        schema = expand(schema, defs)
+      }
+
       const sanitizeGemini = (obj: any): any => {
         if (obj === null || typeof obj !== "object") {
           return obj
