@@ -939,6 +939,10 @@ export type KeybindsConfig = {
    */
   input_paste?: string
   /**
+   * Toggle voice input
+   */
+  input_voice?: string
+  /**
    * Submit input
    */
   input_submit?: string
@@ -1207,6 +1211,45 @@ export type Config = {
      * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
      */
     diff_style?: "auto" | "stacked"
+    /**
+     * Voice input settings
+     */
+    voice?: {
+      /**
+       * Recorder command template with {output} placeholder
+       */
+      command?: Array<string>
+      /**
+       * Recorded audio mime type
+       */
+      mime?: string
+    }
+  }
+  /**
+   * Voice transcription settings
+   */
+  voice?: {
+    /**
+     * Whisper transcription settings
+     */
+    whisper?: {
+      /**
+       * Whisper API URL
+       */
+      url?: string
+      /**
+       * Whisper API key
+       */
+      apiKey?: string
+      /**
+       * Whisper model name
+       */
+      model?: string
+      /**
+       * Whisper language code
+       */
+      language?: string
+    }
   }
   /**
    * Command configuration, see https://opencode.ai/docs/commands

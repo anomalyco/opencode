@@ -823,6 +823,7 @@ export namespace Config {
       variant_cycle: z.string().optional().default("ctrl+t").describe("Cycle model variants"),
       input_clear: z.string().optional().default("ctrl+c").describe("Clear input field"),
       input_paste: z.string().optional().default("ctrl+v").describe("Paste from clipboard"),
+      input_voice: z.string().optional().default("<leader>v").describe("Toggle voice input"),
       input_submit: z.string().optional().default("return").describe("Submit input"),
       input_newline: z
         .string()
@@ -929,7 +930,31 @@ export namespace Config {
       .enum(["auto", "stacked"])
       .optional()
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+    voice: z
+      .object({
+        command: z
+          .array(z.string())
+          .optional()
+          .describe("Recorder command template with {output} placeholder"),
+        mime: z.string().optional().describe("Recorded audio mime type"),
+      })
+      .optional()
+      .describe("Voice input settings"),
   })
+
+  export const Voice = z
+    .object({
+      whisper: z
+        .object({
+          url: z.string().optional().describe("Whisper API URL"),
+          apiKey: z.string().optional().describe("Whisper API key"),
+          model: z.string().optional().describe("Whisper model name"),
+          language: z.string().optional().describe("Whisper language code"),
+        })
+        .optional()
+        .describe("Whisper transcription settings"),
+    })
+    .describe("Voice transcription settings")
 
   export const Server = z
     .object({
@@ -1009,6 +1034,7 @@ export namespace Config {
       keybinds: Keybinds.optional().describe("Custom keybind configurations"),
       logLevel: Log.Level.optional().describe("Log level"),
       tui: TUI.optional().describe("TUI specific settings"),
+      voice: Voice.optional().describe("Voice transcription settings"),
       server: Server.optional().describe("Server configuration for opencode serve and web commands"),
       command: z
         .record(z.string(), Command)

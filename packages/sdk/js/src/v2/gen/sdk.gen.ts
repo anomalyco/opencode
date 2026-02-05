@@ -8,6 +8,7 @@ import type {
   AppLogErrors,
   AppLogResponses,
   AppSkillsResponses,
+  AudioTranscribeResponses,
   Auth as Auth3,
   AuthRemoveErrors,
   AuthRemoveResponses,
@@ -2161,6 +2162,27 @@ export class Provider extends HeyApiClient {
   }
 }
 
+export class Audio extends HeyApiClient {
+  /**
+   * Transcribe audio
+   *
+   * Transcribe an audio file with Whisper
+   */
+  public transcribe<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).post<AudioTranscribeResponses, unknown, ThrowOnError>({
+      url: "/voice/transcribe",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Find extends HeyApiClient {
   /**
    * Find text
@@ -3249,6 +3271,11 @@ export class OpencodeClient extends HeyApiClient {
   private _provider?: Provider
   get provider(): Provider {
     return (this._provider ??= new Provider({ client: this.client }))
+  }
+
+  private _audio?: Audio
+  get audio(): Audio {
+    return (this._audio ??= new Audio({ client: this.client }))
   }
 
   private _find?: Find

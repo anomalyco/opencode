@@ -179,6 +179,33 @@ Available options:
 
 ---
 
+### Voice
+
+Configure voice transcription for the Whisper API with the `voice` option.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "voice": {
+    "whisper": {
+      "url": "http://127.0.0.1:5000/v1/audio/transcriptions",
+      "apiKey": "{env:OPENCODE_WHISPER_API_KEY}",
+      "model": "whisper-1",
+      "language": "en"
+    }
+  }
+}
+```
+
+Available options:
+
+- `whisper.url` - Whisper transcription endpoint URL.
+- `whisper.apiKey` - API key for the Whisper service.
+- `whisper.model` - Whisper model name (default: `whisper-1`).
+- `whisper.language` - Optional language hint (e.g. `en`).
+
+---
+
 ### Server
 
 You can configure server settings for the `opencode serve` and `opencode web` commands through the `server` option.

@@ -1138,6 +1138,10 @@ export type KeybindsConfig = {
    */
   input_paste?: string
   /**
+   * Toggle voice input
+   */
+  input_voice?: string
+  /**
    * Submit input
    */
   input_submit?: string
@@ -1640,6 +1644,45 @@ export type Config = {
      * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
      */
     diff_style?: "auto" | "stacked"
+    /**
+     * Voice input settings
+     */
+    voice?: {
+      /**
+       * Recorder command template with {output} placeholder
+       */
+      command?: Array<string>
+      /**
+       * Recorded audio mime type
+       */
+      mime?: string
+    }
+  }
+  /**
+   * Voice transcription settings
+   */
+  voice?: {
+    /**
+     * Whisper transcription settings
+     */
+    whisper?: {
+      /**
+       * Whisper API URL
+       */
+      url?: string
+      /**
+       * Whisper API key
+       */
+      apiKey?: string
+      /**
+       * Whisper model name
+       */
+      model?: string
+      /**
+       * Whisper language code
+       */
+      language?: string
+    }
   }
   server?: ServerConfig
   /**
@@ -4122,6 +4165,26 @@ export type ProviderOauthCallbackResponses = {
 }
 
 export type ProviderOauthCallbackResponse = ProviderOauthCallbackResponses[keyof ProviderOauthCallbackResponses]
+
+export type AudioTranscribeData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/voice/transcribe"
+}
+
+export type AudioTranscribeResponses = {
+  /**
+   * Transcription result
+   */
+  200: {
+    text?: string
+  }
+}
+
+export type AudioTranscribeResponse = AudioTranscribeResponses[keyof AudioTranscribeResponses]
 
 export type FindTextData = {
   body?: never
