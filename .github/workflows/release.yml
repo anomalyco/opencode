@@ -78,7 +78,7 @@ jobs:
 
             **curl (recommended)**
             ```bash
-            curl -fsSL https://raw.githubusercontent.com/mammouth-ai/opencode/main/install.sh | bash
+            curl -fsSL https://raw.githubusercontent.com/mammouth-ai/code/dev/install.sh | bash
             ```
 
             **Manual download**

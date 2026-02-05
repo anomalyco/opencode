@@ -2,9 +2,9 @@
 set -e
 
 # Mammouth CLI Installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/mammouth-ai/opencode/main/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/mammouth-ai/code/dev/install.sh | bash
 
-REPO="mammouth-ai/opencode"
+REPO="mammouth-ai/code"
 BINARY_NAME="mammouth"
 INSTALL_DIR="$HOME/.mammouth/bin"
 

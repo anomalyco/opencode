@@ -132,7 +132,7 @@ export namespace Installation {
     let cmd
     switch (method) {
       case "curl":
-        cmd = $`curl -fsSL https://raw.githubusercontent.com/mammouth-ai/opencode/main/install.sh | bash`.env({
+        cmd = $`curl -fsSL https://raw.githubusercontent.com/mammouth-ai/code/dev/install.sh | bash`.env({
           ...process.env,
           VERSION: target,
         })
@@ -236,7 +236,7 @@ export namespace Installation {
         .then((data: any) => data.version)
     }
 
-    return fetch("https://api.github.com/repos/mammouth-ai/opencode/releases/latest")
+    return fetch("https://api.github.com/repos/mammouth-ai/code/releases/latest")
       .then((res) => {
         if (!res.ok) throw new Error(res.statusText)
         return res.json()
