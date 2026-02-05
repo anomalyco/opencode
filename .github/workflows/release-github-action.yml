@@ -1,0 +1,29 @@
+name: release-github-action
+
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - "github/**"
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - run: git fetch --force --tags
+
+      - name: Release
+        run: |
+          git config --global user.email "opencode@sst.dev"
+          git config --global user.name "opencode"
+          ./github/script/release
