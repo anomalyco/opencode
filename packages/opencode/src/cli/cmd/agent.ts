@@ -27,6 +27,8 @@ const AVAILABLE_TOOLS = [
   "todoread",
 ]
 
+const AGENTS_DIR = "agents"
+
 const AgentCreateCommand = cmd({
   command: "create",
   describe: "create a new agent",
@@ -75,7 +77,7 @@ const AgentCreateCommand = cmd({
         // Determine scope/path
         let targetPath: string
         if (cliPath) {
-          targetPath = path.join(cliPath, "agent")
+          targetPath = path.join(cliPath, AGENTS_DIR)
         } else {
           let scope: "global" | "project" = "global"
           if (project.vcs === "git") {
@@ -99,7 +101,7 @@ const AgentCreateCommand = cmd({
           }
           targetPath = path.join(
             scope === "global" ? Global.Path.config : path.join(Instance.worktree, ".opencode"),
-            "agent",
+            AGENTS_DIR,
           )
         }
 
