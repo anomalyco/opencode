@@ -564,28 +564,44 @@ export const SessionReview = (props: SessionReviewProps) => {
                           scheduleAnchors()
                         }}
                       >
-                        <Dynamic
-                          component={diffComponent}
-                          preloadedDiff={diff.preloaded}
-                          diffStyle={diffStyle()}
-                          onRendered={() => {
-                            props.onDiffRendered?.()
-                            scheduleAnchors()
-                          }}
-                          enableLineSelection={props.onLineComment != null}
-                          onLineSelected={handleLineSelected}
-                          onLineSelectionEnd={handleLineSelectionEnd}
-                          selectedLines={selectedLines()}
-                          commentedLines={commentedLines()}
-                          before={{
-                            name: diff.file!,
-                            contents: typeof diff.before === "string" ? diff.before : "",
-                          }}
-                          after={{
-                            name: diff.file!,
-                            contents: typeof diff.after === "string" ? diff.after : "",
-                          }}
-                        />
+                        <Switch>
+                          <Match when={isImage() && imageSrc()}>
+                            <div data-slot="session-review-image-container">
+                              <img data-slot="session-review-image" src={imageSrc()} alt={diff.file} />
+                            </div>
+                          </Match>
+                          <Match when={isImage() && !imageSrc()}>
+                            <div data-slot="session-review-image-container">
+                              <span data-slot="session-review-image-placeholder">
+                                {imageStatus() === "loading" ? "Loading image..." : "Image"}
+                              </span>
+                            </div>
+                          </Match>
+                          <Match when={!isImage()}>
+                            <Dynamic
+                              component={diffComponent}
+                              preloadedDiff={diff.preloaded}
+                              diffStyle={diffStyle()}
+                              onRendered={() => {
+                                props.onDiffRendered?.()
+                                scheduleAnchors()
+                              }}
+                              enableLineSelection={props.onLineComment != null}
+                              onLineSelected={handleLineSelected}
+                              onLineSelectionEnd={handleLineSelectionEnd}
+                              selectedLines={selectedLines()}
+                              commentedLines={commentedLines()}
+                              before={{
+                                name: diff.file!,
+                                contents: typeof diff.before === "string" ? diff.before : "",
+                              }}
+                              after={{
+                                name: diff.file!,
+                                contents: typeof diff.after === "string" ? diff.after : "",
+                              }}
+                            />
+                          </Match>
+                        </Switch>
 
                         <For each={comments()}>
                           {(comment) => (
