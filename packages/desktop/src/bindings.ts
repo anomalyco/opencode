@@ -10,6 +10,14 @@ export const commands = {
   getDefaultServerUrl: () => __TAURI_INVOKE<string | null>("get_default_server_url"),
   setDefaultServerUrl: (url: string | null) => __TAURI_INVOKE<null>("set_default_server_url", { url }),
   parseMarkdownCommand: (markdown: string) => __TAURI_INVOKE<string>("parse_markdown_command", { markdown }),
+  openInFinder: (path: string) => __TAURI_INVOKE<null>("open_in_finder", { path }),
+  openInVscode: (path: string) => __TAURI_INVOKE<null>("open_in_vscode", { path }),
+  openInEditor: (editor: string, path: string, customPath: string | null) =>
+    __TAURI_INVOKE<null>("open_in_editor", { editor, path, customPath }),
+  getCustomEditorPath: () => __TAURI_INVOKE<string | null>("get_custom_editor_path"),
+  setCustomEditorPath: (path: string | null) => __TAURI_INVOKE<null>("set_custom_editor_path", { path }),
+  getDefaultEditor: () => __TAURI_INVOKE<string | null>("get_default_editor"),
+  setDefaultEditor: (editor: string | null) => __TAURI_INVOKE<null>("set_default_editor", { editor }),
 }
 
 /* Types */

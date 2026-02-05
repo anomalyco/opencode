@@ -1049,7 +1049,12 @@ export default function Layout(props: ParentProps) {
       },
       {
         id: "project.openInFinder",
-        title: platform.os === "macos" ? "Open in Finder" : platform.os === "windows" ? "Open in Explorer" : "Open in File Manager",
+        title:
+          platform.os === "macos"
+            ? "Open in Finder"
+            : platform.os === "windows"
+              ? "Open in Explorer"
+              : "Open in File Manager",
         category: language.t("command.category.project"),
         disabled: !params.dir || !platform.openInFinder,
         onSelect: async () => {
@@ -1068,6 +1073,56 @@ export default function Layout(props: ParentProps) {
           const directory = params.dir ? decode64(params.dir) : null
           if (directory && platform.openInVscode) {
             await platform.openInVscode(directory)
+          }
+        },
+      },
+      {
+        id: "project.openInCursor",
+        title: "Open in Cursor",
+        category: language.t("command.category.project"),
+        disabled: !params.dir || !platform.openInEditor,
+        onSelect: async () => {
+          const directory = params.dir ? decode64(params.dir) : null
+          if (directory && platform.openInEditor) {
+            await platform.openInEditor("cursor", directory)
+          }
+        },
+      },
+      {
+        id: "project.openInSublime",
+        title: "Open in Sublime Text",
+        category: language.t("command.category.project"),
+        disabled: !params.dir || !platform.openInEditor,
+        onSelect: async () => {
+          const directory = params.dir ? decode64(params.dir) : null
+          if (directory && platform.openInEditor) {
+            await platform.openInEditor("sublime", directory)
+          }
+        },
+      },
+      {
+        id: "project.openInZed",
+        title: "Open in Zed",
+        category: language.t("command.category.project"),
+        disabled: !params.dir || !platform.openInEditor,
+        onSelect: async () => {
+          const directory = params.dir ? decode64(params.dir) : null
+          if (directory && platform.openInEditor) {
+            await platform.openInEditor("zed", directory)
+          }
+        },
+      },
+      {
+        id: "project.openInEditor",
+        title: "Open in Editor",
+        category: language.t("command.category.project"),
+        disabled: !params.dir || !platform.openInEditor,
+        onSelect: async () => {
+          const directory = params.dir ? decode64(params.dir) : null
+          if (directory && platform.openInEditor && platform.getDefaultEditor) {
+            const defaultEditor = await platform.getDefaultEditor()
+            const editor = defaultEditor || "vscode"
+            await platform.openInEditor(editor, directory)
           }
         },
       },
@@ -2356,20 +2411,16 @@ export default function Layout(props: ParentProps) {
             // 在 overlay 模式下，切换 hoverProject 状态来显示/隐藏对话列表
             event.preventDefault()
             globalSync.child(props.project.worktree)
-            const currentProject = state.hoverProject === props.project.worktree
-              ? undefined
-              : props.project.worktree
+            const currentProject = state.hoverProject === props.project.worktree ? undefined : props.project.worktree
             setState("hoverProject", currentProject)
             setState("hoverSession", undefined)
           }}
           onKeyDown={(event: KeyboardEvent) => {
             if (!overlay()) return
-            if (event.key === 'Enter' || event.key === ' ') {
+            if (event.key === "Enter" || event.key === " ") {
               event.preventDefault()
               globalSync.child(props.project.worktree)
-              const currentProject = state.hoverProject === props.project.worktree
-                ? undefined
-                : props.project.worktree
+              const currentProject = state.hoverProject === props.project.worktree ? undefined : props.project.worktree
               setState("hoverProject", currentProject)
               setState("hoverSession", undefined)
             }

@@ -30,6 +30,8 @@ use crate::window_customizer::PinchZoomDisablePlugin;
 
 const SETTINGS_STORE: &str = "opencode.settings.dat";
 const DEFAULT_SERVER_URL_KEY: &str = "defaultServerUrl";
+const CUSTOM_EDITOR_PATH_KEY: &str = "customEditorPath";
+const DEFAULT_EDITOR_KEY: &str = "defaultEditor";
 
 fn window_state_flags() -> StateFlags {
     StateFlags::all() - StateFlags::DECORATIONS
@@ -208,6 +210,151 @@ fn open_in_vscode(path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+#[specta::specta]
+fn open_in_editor(editor: String, path: String, custom_path: Option<String>) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(custom) = custom_path {
+            return std::process::Command::new(&custom)
+                .arg(&path)
+                .spawn()
+                .map(|_| ())
+                .map_err(|e| format!("Failed to open with custom editor '{}': {}", custom, e));
+        }
+
+        let app_name = match editor.as_str() {
+            "vscode" => "Visual Studio Code",
+            "cursor" => "Cursor",
+            "sublime" => "Sublime Text",
+            "zed" => "Zed",
+            _ => return Err(format!("Unknown editor: {}", editor)),
+        };
+
+        let result = std::process::Command::new("open")
+            .arg("-a")
+            .arg(app_name)
+            .arg(&path)
+            .spawn();
+
+        if result.is_ok() {
+            return Ok(());
+        }
+
+        let cli_command = match editor.as_str() {
+            "vscode" => "code",
+            "cursor" => "cursor",
+            "sublime" => "subl",
+            "zed" => "zed",
+            _ => return Err(format!("Unknown editor: {}", editor)),
+        };
+
+        std::process::Command::new(cli_command)
+            .arg(&path)
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| format!("Failed to open in {}: {}", editor, e))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        if let Some(custom) = custom_path {
+            return std::process::Command::new(&custom)
+                .arg(&path)
+                .spawn()
+                .map(|_| ())
+                .map_err(|e| format!("Failed to open with custom editor '{}': {}", custom, e));
+        }
+
+        let cli_command = match editor.as_str() {
+            "vscode" => "code",
+            "cursor" => "cursor",
+            "sublime" => "subl",
+            "zed" => "zed",
+            _ => return Err(format!("Unknown editor: {}", editor)),
+        };
+
+        std::process::Command::new(cli_command)
+            .arg(&path)
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| format!("Failed to open in {}: {}", editor, e))
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+fn get_custom_editor_path(app: AppHandle) -> Result<Option<String>, String> {
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("Failed to open settings store: {}", e))?;
+
+    let value = store.get(CUSTOM_EDITOR_PATH_KEY);
+    match value {
+        Some(v) => Ok(v.as_str().map(String::from)),
+        None => Ok(None),
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn set_custom_editor_path(app: AppHandle, path: Option<String>) -> Result<(), String> {
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("Failed to open settings store: {}", e))?;
+
+    match path {
+        Some(p) => {
+            store.set(CUSTOM_EDITOR_PATH_KEY, serde_json::Value::String(p));
+        }
+        None => {
+            store.delete(CUSTOM_EDITOR_PATH_KEY);
+        }
+    }
+
+    store
+        .save()
+        .map_err(|e| format!("Failed to save settings: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+fn get_default_editor(app: AppHandle) -> Result<Option<String>, String> {
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("Failed to open settings store: {}", e))?;
+
+    let value = store.get(DEFAULT_EDITOR_KEY);
+    match value {
+        Some(v) => Ok(v.as_str().map(String::from)),
+        None => Ok(None),
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn set_default_editor(app: AppHandle, editor: Option<String>) -> Result<(), String> {
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("Failed to open settings store: {}", e))?;
+
+    match editor {
+        Some(e) => {
+            store.set(DEFAULT_EDITOR_KEY, serde_json::Value::String(e));
+        }
+        None => {
+            store.delete(DEFAULT_EDITOR_KEY);
+        }
+    }
+
+    store
+        .save()
+        .map_err(|e| format!("Failed to save settings: {}", e))?;
+
+    Ok(())
+}
+
 fn get_sidecar_port() -> u32 {
     option_env!("OPENCODE_PORT")
         .map(|s| s.to_string())
@@ -330,7 +477,12 @@ pub fn run() {
             set_default_server_url,
             markdown::parse_markdown_command,
             open_in_finder,
-            open_in_vscode
+            open_in_vscode,
+            open_in_editor,
+            get_custom_editor_path,
+            set_custom_editor_path,
+            get_default_editor,
+            set_default_editor
         ])
         .error_handling(tauri_specta::ErrorHandlingMode::Throw);
 
