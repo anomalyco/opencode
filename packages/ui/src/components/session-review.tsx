@@ -548,6 +548,11 @@ export const SessionReview = (props: SessionReviewProps) => {
                                   {i18n.t("ui.sessionReview.change.removed")}
                                 </span>
                               </Match>
+                              <Match when={isImage()}>
+                                <span data-slot="session-review-change" data-type="modified">
+                                  {i18n.t("ui.sessionReview.change.modified")}
+                                </span>
+                              </Match>
                               <Match when={true}>
                                 <DiffChanges changes={diff} />
                               </Match>

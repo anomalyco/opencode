@@ -166,6 +166,10 @@
     color: var(--icon-diff-delete-base);
   }
 
+  [data-slot="session-review-change"][data-type="modified"] {
+    color: var(--icon-diff-modified-base);
+  }
+
   [data-slot="session-review-file-container"] {
     padding: 0;
   }
@@ -189,10 +193,6 @@
   [data-slot="session-review-image-placeholder"] {
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
-    color: var(--text-weak);
-  }
-
-  [data-slot="session-review-image-container"][data-removed] [data-slot="session-review-image-placeholder"] {
     color: var(--text-weak);
   }
 
