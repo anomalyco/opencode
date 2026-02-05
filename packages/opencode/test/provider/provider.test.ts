@@ -2173,15 +2173,15 @@ test("github-copilot gpt-5.2 and gpt-5.2-codex token limits are overridden", asy
 
       const gpt52 = copilot.models["gpt-5.2"]
       expect(gpt52).toBeDefined()
-      expect(gpt52.limit.context).toBe(400_000)
-      expect(gpt52.limit.input).toBe(272_000)
-      expect(gpt52.limit.output).toBe(128_000)
+      expect(gpt52.limit.context).toBe(400000)
+      expect(gpt52.limit.input).toBe(272000)
+      expect(gpt52.limit.output).toBe(128000)
 
       const gpt52codex = copilot.models["gpt-5.2-codex"]
       expect(gpt52codex).toBeDefined()
-      expect(gpt52codex.limit.context).toBe(400_000)
-      expect(gpt52codex.limit.input).toBe(272_000)
-      expect(gpt52codex.limit.output).toBe(128_000)
+      expect(gpt52codex.limit.context).toBe(400000)
+      expect(gpt52codex.limit.input).toBe(272000)
+      expect(gpt52codex.limit.output).toBe(128000)
     },
   })
 })

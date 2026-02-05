@@ -624,9 +624,9 @@ export namespace Provider {
       // models.dev currently reports incorrect limits for these Copilot models, causing premature compaction.
       return {
         ...model.limit,
-        context: 400_000,
-        input: 272_000,
-        output: 128_000,
+        context: 400000,
+        input: 272000,
+        output: 128000,
       }
     })
     const m: Model = {
