@@ -225,5 +225,5 @@
 
 [data-component="line-comment"] [data-slot="line-comment-file-picker"] button:hover,
 [data-component="line-comment"] [data-slot="line-comment-file-picker"] button[data-active] {
-  background: var(--surface-base);
+  background: var(--surface-raised-base-hover);
 }
