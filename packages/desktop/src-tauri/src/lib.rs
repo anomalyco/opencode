@@ -281,10 +281,23 @@ pub fn run() {
         )
         .expect("Failed to export typescript bindings");
 
+    // Kill any orphaned processes from previous runs on macOS
+    // This prevents memory accumulation from zombie processes
     #[cfg(all(target_os = "macos", not(debug_assertions)))]
-    let _ = std::process::Command::new("killall")
-        .arg("opencode-cli")
-        .output();
+    {
+        // Kill opencode server processes
+        let _ = std::process::Command::new("pkill")
+            .args(["-f", "OpenWork.app/Contents/MacOS/opencode"])
+            .output();
+        // Kill openwrk daemon processes
+        let _ = std::process::Command::new("pkill")
+            .args(["-f", "OpenWork.app/Contents/MacOS/openwrk"])
+            .output();
+        // Kill openwork-server processes
+        let _ = std::process::Command::new("pkill")
+            .args(["-f", "OpenWork.app/Contents/MacOS/openwork-server"])
+            .output();
+    }
 
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
