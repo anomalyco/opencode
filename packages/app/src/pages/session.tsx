@@ -36,6 +36,7 @@ import { BasicTool } from "@opencode-ai/ui/basic-tool"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import { Mark } from "@opencode-ai/ui/logo"
+import { QuestionDock } from "@/components/question-dock"
 
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
@@ -270,14 +271,19 @@ export default function Page() {
   const comments = useComments()
   const permission = usePermission()
 
-  const request = createMemo(() => {
+  const permRequest = createMemo(() => {
     const sessionID = params.id
     if (!sessionID) return
-    const next = sync.data.permission[sessionID]?.[0]
-    if (!next) return
-    if (next.tool) return
-    return next
+    return sync.data.permission[sessionID]?.[0]
   })
+
+  const questionRequest = createMemo(() => {
+    const sessionID = params.id
+    if (!sessionID) return
+    return sync.data.question[sessionID]?.[0]
+  })
+
+  const blocked = createMemo(() => !!permRequest() || !!questionRequest())
 
   const [ui, setUi] = createStore({
     responding: false,
@@ -292,14 +298,14 @@ export default function Page() {
 
   createEffect(
     on(
-      () => request()?.id,
+      () => permRequest()?.id,
       () => setUi("responding", false),
       { defer: true },
     ),
   )
 
   const decide = (response: "once" | "always" | "reject") => {
-    const perm = request()
+    const perm = permRequest()
     if (!perm) return
     if (ui.responding) return
 
@@ -1351,6 +1357,7 @@ export default function Page() {
     }
 
     if (event.key.length === 1 && event.key !== "Unidentified" && !(event.ctrlKey || event.metaKey)) {
+      if (blocked()) return
       inputRef?.focus()
     }
   }
@@ -2693,7 +2700,31 @@ export default function Page() {
                 "md:max-w-200 3xl:max-w-[1200px] 4xl:max-w-[1600px] 5xl:max-w-[1900px]": centered(),
               }}
             >
-              <Show when={request()} keyed>
+              <Show when={questionRequest()} keyed>
+                {(req) => {
+                  const count = req.questions.length
+                  const subtitle =
+                    count === 0
+                      ? ""
+                      : `${count} ${language.t(count > 1 ? "ui.common.question.other" : "ui.common.question.one")}`
+                  return (
+                    <div data-component="tool-part-wrapper" data-question="true" class="mb-3">
+                      <BasicTool
+                        icon="bubble-5"
+                        locked
+                        defaultOpen
+                        trigger={{
+                          title: language.t("ui.tool.questions"),
+                          subtitle,
+                        }}
+                      />
+                      <QuestionDock request={req} />
+                    </div>
+                  )
+                }}
+              </Show>
+
+              <Show when={permRequest()} keyed>
                 {(perm) => (
                   <div data-component="tool-part-wrapper" data-permission="true" class="mb-3">
                     <BasicTool
@@ -2743,25 +2774,27 @@ export default function Page() {
                 )}
               </Show>
 
-              <Show
-                when={prompt.ready()}
-                fallback={
-                  <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none">
-                    {handoff.session.get(sessionKey())?.prompt || language.t("prompt.loading")}
-                  </div>
-                }
-              >
-                <PromptInput
-                  ref={(el) => {
-                    inputRef = el
-                  }}
-                  newSessionWorktree={newSessionWorktree()}
-                  onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
-                  onSubmit={() => {
-                    comments.clear()
-                    resumeScroll()
-                  }}
-                />
+              <Show when={!blocked()}>
+                <Show
+                  when={prompt.ready()}
+                  fallback={
+                    <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none">
+                      {handoff.session.get(sessionKey())?.prompt || language.t("prompt.loading")}
+                    </div>
+                  }
+                >
+                  <PromptInput
+                    ref={(el) => {
+                      inputRef = el
+                    }}
+                    newSessionWorktree={newSessionWorktree()}
+                    onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
+                    onSubmit={() => {
+                      comments.clear()
+                      resumeScroll()
+                    }}
+                  />
+                </Show>
               </Show>
             </div>
           </div>
