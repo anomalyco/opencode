@@ -11,6 +11,7 @@ playground
 tmp
 dist
 ts-dist
+coverage/
 .turbo
 **/.serena
 .serena/
@@ -26,4 +27,5 @@ target
 # Local dev files
 opencode-dev
 logs/
+*.log
 *.bun-build
