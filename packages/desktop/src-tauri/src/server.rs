@@ -167,6 +167,7 @@ fn get_server_url_from_config(config: &cli::Config) -> Option<String> {
 }
 
 pub async fn check_health_or_ask_retry(app: &AppHandle, url: &str) -> bool {
+    println!("Checking health for {url}");
     loop {
         if check_health(url, None).await {
             return true;

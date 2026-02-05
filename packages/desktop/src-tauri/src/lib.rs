@@ -19,7 +19,7 @@ use std::{
     net::TcpListener,
     path::PathBuf,
     sync::{Arc, Mutex},
-    time::{Duration, Instant},
+    time::Duration,
 };
 use tauri::{AppHandle, Manager, RunEvent, State, ipc::Channel};
 #[cfg(windows)]
@@ -29,7 +29,7 @@ use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_shell::process::CommandChild;
 use tokio::{
     sync::{oneshot, watch},
-    time::sleep,
+    time::{sleep, timeout},
 };
 
 use crate::cli::sync_cli;
@@ -234,53 +234,6 @@ async fn initialize(app: AppHandle) {
     let server_ready_rx = server_ready_rx.shared();
     app.manage(ServerState::new(None, server_ready_rx.clone()));
 
-    let server_connection = setup_server_connection(app.clone()).await;
-    let cli_health_check = match server_connection {
-        ServerConnection::CLI {
-            child,
-            health_check,
-            url,
-            password,
-        } => {
-            let app = app.clone();
-            Some(
-                async move {
-                    let Ok(Ok(_)) =
-                        tokio::time::timeout(Duration::from_secs(30), health_check.0).await
-                    else {
-                        let _ = child.kill();
-                        return Err(format!(
-                            "Failed to spawn OpenCode Server. Logs:\n{}",
-                            get_logs(app.clone()).await.unwrap()
-                        ));
-                    };
-
-                    println!("CLI health check OK");
-
-                    #[cfg(windows)]
-                    {
-                        let job_state = app.state::<JobObjectState>();
-                        job_state.assign_pid(child.pid());
-                    }
-
-                    app.state::<ServerState>().set_child(Some(child));
-
-                    Ok(ServerReadyData { url, password })
-                }
-                .map(move |res| {
-                    let _ = server_ready_tx.send(res);
-                }),
-            )
-        }
-        ServerConnection::Existing { url } => {
-            let _ = server_ready_tx.send(Ok(ServerReadyData {
-                url: url.to_string(),
-                password: None,
-            }));
-            None
-        }
-    };
-
     let main_window = MainWindow::create(&app).expect("Failed to create main window");
 
     let loading_window_complete = event_once_fut::<LoadingWindowComplete>(&app);
@@ -290,21 +243,73 @@ async fn initialize(app: AppHandle) {
 
     let loading_task = tokio::spawn({
         let init_tx = init_tx.clone();
+        let app = app.clone();
 
         async move {
+            let mut sqlite_exists = sqlite_file_exists();
+
+            println!("Setting up server connection");
+            let server_connection = setup_server_connection(app.clone()).await;
+
+            // we delay spawning this future so that the timeout is created lazily
+            let cli_health_check = match server_connection {
+                ServerConnection::CLI {
+                    child,
+                    health_check,
+                    url,
+                    password,
+                } => {
+                    let app = app.clone();
+                    Some(
+                        async move {
+                            let Ok(Ok(_)) = timeout(Duration::from_secs(30), health_check.0).await
+                            else {
+                                let _ = child.kill();
+                                return Err(format!(
+                                    "Failed to spawn OpenCode Server. Logs:\n{}",
+                                    get_logs(app.clone()).await.unwrap()
+                                ));
+                            };
+
+                            println!("CLI health check OK");
+
+                            #[cfg(windows)]
+                            {
+                                let job_state = app.state::<JobObjectState>();
+                                job_state.assign_pid(child.pid());
+                            }
+
+                            app.state::<ServerState>().set_child(Some(child));
+
+                            Ok(ServerReadyData { url, password })
+                        }
+                        .map(move |res| {
+                            let _ = server_ready_tx.send(res);
+                        }),
+                    )
+                }
+                ServerConnection::Existing { url } => {
+                    let _ = server_ready_tx.send(Ok(ServerReadyData {
+                        url: url.to_string(),
+                        password: None,
+                    }));
+                    None
+                }
+            };
+
             if let Some(cli_health_check) = cli_health_check {
                 if option_env!("OPENCODE_SQLITE").is_some() {
-                    let mut exists = sqlite_file_exists();
-                    if !exists {
+                    println!("Does sqlite file exist: {sqlite_exists}");
+                    if !sqlite_exists {
                         println!(
-                            "sqlite file not found at {}, waiting for it to be generated",
+                            "Sqlite file not found at {}, waiting for it to be generated",
                             opencode_db_path().expect("failed to get db path").display()
                         );
                         let _ = init_tx.send(InitStep::SqliteWaiting);
 
-                        while !exists {
+                        while !sqlite_exists {
                             sleep(Duration::from_secs(1)).await;
-                            exists = sqlite_file_exists();
+                            sqlite_exists = sqlite_file_exists();
                         }
                     }
                 }
@@ -318,21 +323,17 @@ async fn initialize(app: AppHandle) {
     .map_err(|_| ())
     .shared();
 
-    let now = Instant::now();
-    if tokio::time::timeout(Duration::from_secs(1), loading_task.clone())
+    if timeout(Duration::from_secs(1), loading_task.clone())
         .await
         .is_err()
     {
-        println!(
-            "Loading task timed out after {:?}, showing loading window",
-            now.elapsed()
-        );
+        println!("Loading task timed out, showing loading window");
         let _ = loading_window.show();
         sleep(Duration::from_secs(1)).await;
         let _ = loading_task.await;
     }
 
-    println!("Loading done, completing initialisation",);
+    println!("Loading done, completing initialisation");
 
     let _ = init_tx.send(InitStep::Done);
 
@@ -377,6 +378,8 @@ enum ServerConnection {
 
 async fn setup_server_connection(app: AppHandle) -> ServerConnection {
     let custom_url = get_saved_server_url(&app).await;
+
+    println!("Attempting server connection to custom url: {custom_url:?}");
 
     if let Some(url) = custom_url
         && server::check_health_or_ask_retry(&app, &url).await
