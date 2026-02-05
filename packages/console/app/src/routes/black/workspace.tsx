@@ -5,13 +5,16 @@ import { github } from "~/lib/github"
 import { createEffect, createMemo, For, onMount } from "solid-js"
 import { config } from "~/config"
 import { createList } from "solid-list"
+import { useLanguage } from "~/context/language"
+import { LanguagePicker } from "~/component/language-picker"
 
 export default function BlackWorkspace() {
   const navigate = useNavigate()
+  const language = useLanguage()
   const githubData = createAsync(() => github())
   const starCount = createMemo(() =>
     githubData()?.stars
-      ? new Intl.NumberFormat("en-US", {
+      ? new Intl.NumberFormat(language.tag(language.locale()), {
           notation: "compact",
           compactDisplay: "short",
         }).format(githubData()!.stars!)
@@ -213,6 +216,7 @@ export default function BlackWorkspace() {
             GitHub <span data-slot="github-stars">[{starCount()}]</span>
           </a>
           <a href="/docs">Docs</a>
+          <LanguagePicker align="right" />
           <span>
             <A href="/legal/privacy-policy">Privacy</A>
           </span>

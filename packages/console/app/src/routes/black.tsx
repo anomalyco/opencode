@@ -3,14 +3,17 @@ import { Title, Meta, Link } from "@solidjs/meta"
 import { createMemo, createSignal } from "solid-js"
 import { github } from "~/lib/github"
 import { config } from "~/config"
+import { useLanguage } from "~/context/language"
+import { LanguagePicker } from "~/component/language-picker"
 import Spotlight, { defaultConfig, type SpotlightAnimationState } from "~/component/spotlight"
 import "./black.css"
 
 export default function BlackLayout(props: RouteSectionProps) {
+  const language = useLanguage()
   const githubData = createAsync(() => github())
   const starCount = createMemo(() =>
     githubData()?.stars
-      ? new Intl.NumberFormat("en-US", {
+      ? new Intl.NumberFormat(language.tag(language.locale()), {
           notation: "compact",
           compactDisplay: "short",
         }).format(githubData()!.stars!)
@@ -269,6 +272,7 @@ export default function BlackLayout(props: RouteSectionProps) {
             GitHub <span data-slot="github-stars">[{starCount()}]</span>
           </a>
           <a href="/docs">Docs</a>
+          <LanguagePicker align="right" />
           <span>
             <A href="/legal/privacy-policy">Privacy</A>
           </span>
