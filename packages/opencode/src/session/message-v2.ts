@@ -447,8 +447,17 @@ export namespace MessageV2 {
     //
     // Only apply this workaround if the model actually supports image input -
     // otherwise there's no point extracting images.
-    const supportsMediaInToolResults = model.api.npm !== "@ai-sdk/openai-compatible" || !model.capabilities.input.image
-    let pendingToolMedia: Array<{ mime: string; url: string }> = []
+    const supportsMediaInToolResults = (() => {
+      if (model.api.npm === "@ai-sdk/anthropic") return true
+      if (model.api.npm === "@ai-sdk/openai") return true
+      if (model.api.npm === "@ai-sdk/amazon-bedrock") return true
+      if (model.api.npm === "@ai-sdk/google-vertex/anthropic") return true
+      if (model.api.npm === "@ai-sdk/google") {
+        const id = model.api.id.toLowerCase()
+        return id.includes("gemini-3") && !id.includes("gemini-2")
+      }
+      return false
+    })()
 
     const toModelOutput = (output: unknown) => {
       if (typeof output === "string") {
@@ -525,6 +534,7 @@ export namespace MessageV2 {
 
       if (msg.info.role === "assistant") {
         const differentModel = `${model.providerID}/${model.id}` !== `${msg.info.providerID}/${msg.info.modelID}`
+        const media: Array<{ mime: string; url: string }> = []
 
         if (
           msg.info.error &&
@@ -564,7 +574,7 @@ export namespace MessageV2 {
               const mediaAttachments = attachments.filter(isMediaAttachment)
               const nonMediaAttachments = attachments.filter((a) => !isMediaAttachment(a))
               if (!supportsMediaInToolResults && mediaAttachments.length > 0) {
-                pendingToolMedia.push(...mediaAttachments)
+                media.push(...mediaAttachments)
               }
               const finalAttachments = supportsMediaInToolResults ? attachments : nonMediaAttachments
 
@@ -618,17 +628,16 @@ export namespace MessageV2 {
           result.push(assistantMessage)
           // Inject pending media as a user message for providers that don't support
           // media (images, PDFs) in tool results
-          if (pendingToolMedia.length > 0) {
+          if (media.length > 0) {
             result.push({
               id: Identifier.ascending("message"),
               role: "user",
-              parts: pendingToolMedia.map((attachment) => ({
+              parts: media.map((attachment) => ({
                 type: "file",
                 url: attachment.url,
                 mediaType: attachment.mime,
               })),
             })
-            pendingToolMedia = []
           }
         }
       }
