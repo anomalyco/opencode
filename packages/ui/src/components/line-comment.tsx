@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js"
+import { createEffect, createSignal, For, onCleanup, onMount, Show, splitProps, type JSX } from "solid-js"
 import { Button } from "./button"
 import { Icon } from "./icon"
 import { FileIcon } from "./file-icon"
@@ -22,12 +22,30 @@ export type LineCommentAnchorProps = {
   children: JSX.Element
 }
 
+const PICKER_GAP = 4
+const PICKER_HEIGHT_FULL = 142
+const PICKER_HEIGHT_COMPACT = 110
+
 export const LineCommentAnchor = (props: LineCommentAnchorProps) => {
   const hidden = () => props.top === undefined
   const variant = () => props.variant ?? "default"
-  const [position, setPosition] = createSignal({ x: 0, y: 0, z: "70" })
+  const [position, setPosition] = createSignal({
+    x: 0,
+    y: 0,
+    z: "70",
+    pickerMaxHeight: `${PICKER_HEIGHT_FULL}px`,
+  })
   let anchorRef!: HTMLDivElement
   let popoverRef: HTMLDivElement | undefined
+  let frame: number | undefined
+
+  const schedule = () => {
+    if (frame !== undefined) return
+    frame = requestAnimationFrame(() => {
+      frame = undefined
+      place()
+    })
+  }
 
   const place = () => {
     if (!props.open) return
@@ -45,38 +63,65 @@ export const LineCommentAnchor = (props: LineCommentAnchorProps) => {
     const desiredTop = below >= popover.height || below >= above ? anchor.bottom + gap : anchor.top - gap - popover.height
     const desiredLeft = anchor.right + 8 - popover.width
     const maxLeft = Math.max(margin, viewportWidth - margin - popover.width)
-    const maxTop = Math.max(margin, viewportHeight - margin - popover.height)
+    let minTop = margin
+    let pickerMaxHeight = `${PICKER_HEIGHT_FULL}px`
+    const picker = popoverRef.querySelector(`[data-slot="line-comment-file-picker"]`)
+    if (picker instanceof HTMLElement) {
+      const fullTop = margin + PICKER_GAP + PICKER_HEIGHT_FULL
+      const compactTop = margin + PICKER_GAP + PICKER_HEIGHT_COMPACT
+      const compact = desiredTop < fullTop
+      minTop = compact ? compactTop : fullTop
+      pickerMaxHeight = compact ? `${PICKER_HEIGHT_COMPACT}px` : `${PICKER_HEIGHT_FULL}px`
+    }
+    const maxTop = Math.max(minTop, viewportHeight - margin - popover.height)
     const clampedLeft = Math.min(Math.max(desiredLeft, margin), maxLeft)
-    const clampedTop = Math.min(Math.max(desiredTop, margin), maxTop)
+    const clampedTop = Math.min(Math.max(desiredTop, minTop), maxTop)
     const z = getComputedStyle(anchorRef).getPropertyValue("--line-comment-popover-z").trim() || "70"
 
     setPosition({
       x: clampedLeft,
       y: clampedTop,
       z,
+      pickerMaxHeight,
     })
   }
+
+  onCleanup(() => {
+    if (frame === undefined) return
+    cancelAnimationFrame(frame)
+    frame = undefined
+  })
 
   createEffect(() => {
     const open = props.open
     props.top
     if (!open) return
-    requestAnimationFrame(place)
+    schedule()
   })
 
   createEffect(() => {
     if (!props.open) return
     if (!anchorRef || !popoverRef) return
-    const observer = new ResizeObserver(() => place())
+    const observer = new ResizeObserver(() => schedule())
+    const mutation = new MutationObserver(() => schedule())
     observer.observe(popoverRef)
     observer.observe(anchorRef)
-    requestAnimationFrame(place)
-    onCleanup(() => observer.disconnect())
+    mutation.observe(popoverRef, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    })
+    schedule()
+    onCleanup(() => {
+      observer.disconnect()
+      mutation.disconnect()
+    })
   })
 
-  onMount(() => {
-    const onResize = () => place()
-    const onScroll = () => place()
+  createEffect(() => {
+    if (!props.open) return
+    const onResize = () => schedule()
+    const onScroll = () => schedule()
     window.addEventListener("resize", onResize)
     window.addEventListener("scroll", onScroll, true)
     onCleanup(() => {
@@ -117,6 +162,7 @@ export const LineCommentAnchor = (props: LineCommentAnchorProps) => {
               "--line-comment-popover-x": `${position().x}px`,
               "--line-comment-popover-y": `${position().y}px`,
               "--line-comment-popover-z": position().z,
+              "--line-comment-picker-max-height": position().pickerMaxHeight,
             }}
           >
             <div
@@ -172,12 +218,37 @@ export type LineCommentEditorProps = Omit<LineCommentAnchorProps, "children" | "
   submitLabel?: string
   onFileSearch?: (query: string) => Promise<string[]>
   recentFiles?: string[]
+  agents?: string[]
 }
 
-type FileOption = {
-  path: string
-  display: string
-  recent?: boolean
+type MentionOption =
+  | {
+      type: "agent"
+      name: string
+      display: string
+    }
+  | {
+      type: "file"
+      path: string
+      display: string
+      recent?: boolean
+    }
+
+type FileOption = Extract<MentionOption, { type: "file" }>
+
+function mentionKey(option: MentionOption | undefined) {
+  if (!option) return ""
+  if (option.type === "agent") return `agent:${option.name}`
+  return `file:${option.path}`
+}
+
+function fileOption(path: string, recent?: boolean): FileOption {
+  return {
+    type: "file",
+    path,
+    display: path,
+    recent,
+  }
 }
 
 function getNodeLength(node: Node): number {
@@ -283,6 +354,7 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
     "submitLabel",
     "onFileSearch",
     "recentFiles",
+    "agents",
   ])
 
   let editorRef!: HTMLDivElement
@@ -290,20 +362,36 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
   const [showPicker, setShowPicker] = createSignal(false)
   const [hasContent, setHasContent] = createSignal(false)
 
-  const { flat, active, onInput: filterOnInput, onKeyDown: filterOnKeyDown } = useFilteredList<FileOption>({
+  const { flat, active, onInput: filterOnInput, onKeyDown: filterOnKeyDown } = useFilteredList<MentionOption>({
     items: async (query) => {
-      const recent = (split.recentFiles ?? []).map((path) => ({ path, display: path, recent: true }))
-      const seen = new Set(recent.map((r) => r.path))
+      const agents = (split.agents ?? []).map((name): MentionOption => ({ type: "agent", name, display: name }))
+      const recent = (split.recentFiles ?? []).map((path): MentionOption => fileOption(path, true))
+      const seen = new Set(recent.filter((item): item is FileOption => item.type === "file").map((item) => item.path))
       const results = (await split.onFileSearch?.(query)) ?? []
-      const files = results.filter((p) => !seen.has(p)).map((path) => ({ path, display: path }))
-      return [...recent, ...files]
+      const files: MentionOption[] = results.filter((path) => !seen.has(path)).map((path) => fileOption(path))
+      return [...agents, ...recent, ...files]
     },
-    key: (x) => x?.path ?? "",
+    key: mentionKey,
     filterKeys: ["display"],
-    groupBy: (x) => (x.recent ? "recent" : "files"),
-    sortGroupsBy: (a, b) => (a.category === "recent" ? -1 : 1),
+    groupBy: (option) => {
+      if (option.type === "agent") return "agent"
+      return option.recent ? "recent" : "files"
+    },
+    sortGroupsBy: (a, b) => {
+      const rank = (value: string) => {
+        if (value === "agent") return 0
+        if (value === "recent") return 1
+        return 2
+      }
+      return rank(a.category) - rank(b.category)
+    },
     onSelect: (option) => {
-      if (option) insertFilePill(option.path)
+      if (!option) return
+      if (option.type === "agent") {
+        insertAgentMention(option.name)
+        return
+      }
+      insertFilePill(option.path)
     },
   })
 
@@ -371,6 +459,34 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
     range.insertNode(gap)
     range.insertNode(pill)
     range.setStartAfter(gap)
+    range.collapse(true)
+    selection.removeAllRanges()
+    selection.addRange(range)
+
+    handleInput()
+    setShowPicker(false)
+  }
+
+  const insertAgentMention = (name: string) => {
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) return
+
+    const cursorPosition = getCursorPosition(editorRef)
+    const rawText = getRawText()
+    const textBeforeCursor = rawText.substring(0, cursorPosition)
+    const atMatch = textBeforeCursor.match(/@(\S*)$/)
+    const range = selection.getRangeAt(0)
+
+    if (atMatch) {
+      const start = atMatch.index ?? cursorPosition - atMatch[0].length
+      setRangeEdge(range, "start", start)
+      setRangeEdge(range, "end", cursorPosition)
+    }
+
+    range.deleteContents()
+    const mention = document.createTextNode(`@${name} `)
+    range.insertNode(mention)
+    range.setStart(mention, mention.textContent?.length ?? 0)
     range.collapse(true)
     selection.removeAllRanges()
     selection.addRange(range)
@@ -448,7 +564,7 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
     const textBeforeCursor = rawText.substring(0, cursorPosition)
     const atMatch = textBeforeCursor.match(/@(\S*)$/)
 
-    if (atMatch && split.onFileSearch) {
+    if (atMatch && (split.onFileSearch || (split.agents?.length ?? 0) > 0)) {
       filterOnInput(atMatch[1])
       setShowPicker(true)
     } else {
@@ -462,8 +578,13 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
     const items = flat()
     if (items.length === 0) return
     const activeKey = active()
-    const item = items.find((entry) => entry.path === activeKey) ?? items[0]
-    if (item) insertFilePill(item.path)
+    const item = items.find((entry) => mentionKey(entry) === activeKey) ?? items[0]
+    if (!item) return
+    if (item.type === "agent") {
+      insertAgentMention(item.name)
+      return
+    }
+    insertFilePill(item.path)
   }
 
   const submit = () => {
@@ -533,48 +654,66 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
   return (
     <LineCommentAnchor {...rest} open={true} variant="editor" onClick={() => focus()}>
       <div data-slot="line-comment-editor">
-        <div
-          data-slot="line-comment-editor-scroll"
-          style={{
-            "--line-comment-rows": `${split.rows ?? 3}`,
-          }}
-        >
-          <div
-            ref={editorRef}
-            contenteditable="true"
-            data-slot="line-comment-textarea"
-            onInput={handleInput}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
-          />
-          <Show when={!hasContent()}>
-            <div data-slot="line-comment-placeholder">
-              {split.placeholder ?? i18n.t("ui.lineComment.placeholder")}
+        <div data-slot="line-comment-editor-main">
+          <Show when={showPicker()}>
+            <div data-slot="line-comment-file-picker" onMouseDown={(e) => e.preventDefault()}>
+              <For each={flat().slice(0, 8)}>
+                {(option) => (
+                  <button
+                    type="button"
+                    data-kind={option.type}
+                    data-active={mentionKey(option) === active() ? "" : undefined}
+                    onClick={() => {
+                      if (option.type === "agent") {
+                        insertAgentMention(option.name)
+                        return
+                      }
+                      insertFilePill(option.path)
+                    }}
+                  >
+                    {option.type === "agent" ? (
+                      <>
+                        <Icon name="brain" size="small" class="text-icon-info-active shrink-0" />
+                        <span class="truncate text-text-strong">@{option.name}</span>
+                      </>
+                    ) : (
+                      <>
+                        <FileIcon node={{ path: option.path, type: "file" }} class="size-4 shrink-0" />
+                        <span class="truncate">
+                          <span class="text-text-weak">{getDirectory(option.path)}</span>
+                          <span>{getFilename(option.path)}</span>
+                        </span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </For>
+              <Show when={flat().length === 0}>
+                <div class="p-2 text-text-weak text-sm">{i18n.t("ui.list.empty")}</div>
+              </Show>
             </div>
           </Show>
-        </div>
-        <Show when={showPicker()}>
-          <div data-slot="line-comment-file-picker" onMouseDown={(e) => e.preventDefault()}>
-            <For each={flat().slice(0, 8)}>
-              {(file) => (
-                <button
-                  type="button"
-                  data-active={file.path === active() ? "" : undefined}
-                  onClick={() => insertFilePill(file.path)}
-                >
-                  <FileIcon node={{ path: file.path, type: "file" }} class="size-4 shrink-0" />
-                  <span class="truncate">
-                    <span class="text-text-weak">{getDirectory(file.path)}</span>
-                    <span>{getFilename(file.path)}</span>
-                  </span>
-                </button>
-              )}
-            </For>
-            <Show when={flat().length === 0}>
-              <div class="p-2 text-text-weak text-sm">{i18n.t("ui.list.empty")}</div>
+          <div
+            data-slot="line-comment-editor-scroll"
+            style={{
+              "--line-comment-rows": `${split.rows ?? 3}`,
+            }}
+          >
+            <div
+              ref={editorRef}
+              contenteditable="true"
+              data-slot="line-comment-textarea"
+              onInput={handleInput}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+            />
+            <Show when={!hasContent()}>
+              <div data-slot="line-comment-placeholder">
+                {split.placeholder ?? i18n.t("ui.lineComment.placeholder")}
+              </div>
             </Show>
           </div>
-        </Show>
+        </div>
         <div data-slot="line-comment-actions">
           <div data-slot="line-comment-editor-label">
             {i18n.t("ui.lineComment.editorLabel.prefix")}

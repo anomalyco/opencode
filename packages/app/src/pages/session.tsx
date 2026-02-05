@@ -125,6 +125,7 @@ interface SessionReviewTabProps {
   }
   onFileSearch?: (query: string) => Promise<string[]>
   recentFiles?: string[]
+  agents?: string[]
 }
 
 function StickyAddButton(props: { children: JSX.Element }) {
@@ -253,6 +254,7 @@ function SessionReviewTab(props: SessionReviewTabProps) {
       onFocusedCommentChange={props.onFocusedCommentChange}
       onFileSearch={props.onFileSearch}
       recentFiles={props.recentFiles}
+      agents={props.agents}
     />
   )
 }
@@ -335,6 +337,15 @@ export default function Page() {
       paths.push(path)
     }
     return paths
+  })
+  const mentionAgents = createMemo(() => {
+    const seen = new Set<string>()
+    return sync.data.agent.flatMap((agent) => {
+      if (agent.hidden || agent.mode === "primary") return []
+      if (seen.has(agent.name)) return []
+      seen.add(agent.name)
+      return [agent.name]
+    })
   })
 
   createEffect(
@@ -1508,6 +1519,7 @@ export default function Page() {
                 tabs().open(value)
                 file.load(path)
               }}
+              agents={mentionAgents()}
             />
           </Match>
           <Match when={hasReview()}>
@@ -1535,6 +1547,7 @@ export default function Page() {
                 }}
                 onFileSearch={(query) => file.searchFilesAndDirectories(query)}
                 recentFiles={recentFiles()}
+                agents={mentionAgents()}
               />
             </Show>
           </Match>
@@ -2258,6 +2271,7 @@ export default function Page() {
                                 header: "px-4",
                                 container: "px-4",
                               }}
+                              agents={mentionAgents()}
                             />
                           </Match>
                           <Match when={hasReview()}>
@@ -2292,6 +2306,7 @@ export default function Page() {
                                 }}
                                 onFileSearch={(query) => file.searchFilesAndDirectories(query)}
                                 recentFiles={recentFiles()}
+                                agents={mentionAgents()}
                               />
                             </Show>
                           </Match>
@@ -3204,6 +3219,7 @@ export default function Page() {
                                       }}
                                       onFileSearch={(query) => file.searchFilesAndDirectories(query)}
                                       recentFiles={recentFiles()}
+                                      agents={mentionAgents()}
                                       onPopoverFocusOut={(e: FocusEvent) => {
                                         const current = e.currentTarget as HTMLDivElement
                                         const target = e.relatedTarget

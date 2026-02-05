@@ -215,7 +215,7 @@
     overflow: hidden;
     z-index: 0;
     --line-comment-z: 5;
-    --line-comment-popover-z: 70;
+    --line-comment-popover-z: 120;
     --line-comment-open-z: 6;
   }
 }

@@ -61,6 +61,7 @@ export interface SessionReviewProps {
   readFile?: (path: string) => Promise<FileContent | undefined>
   onFileSearch?: (query: string) => Promise<string[]>
   recentFiles?: string[]
+  agents?: string[]
 }
 
 const imageExtensions = new Set(["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "ico", "tif", "tiff", "heic"])
@@ -631,6 +632,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                 }}
                                 onFileSearch={props.onFileSearch}
                                 recentFiles={props.recentFiles}
+                                agents={props.agents}
                               />
                             </Show>
                           )}
