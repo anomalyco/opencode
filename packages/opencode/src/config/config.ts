@@ -274,7 +274,7 @@ export namespace Config {
         ...(proxied() ? ["--no-cache"] : []),
       ],
       { cwd: dir },
-    ).catch(() => {})
+    )
   }
 
   async function isWritable(dir: string) {
