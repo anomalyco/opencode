@@ -21,12 +21,19 @@ describe("BunProc.install - command structure", () => {
     expect(content).not.toContain("--registry=")
   })
 
-  test("throws on nonexistent package", async () => {
+  test("throws on nonexistent package without corrupting state", async () => {
     await using tmp = await tmpdir()
     process.env.OPENCODE_TEST_CACHE = tmp.path
     const { BunProc } = await import("../src/bun")
 
-    await expect(BunProc.install("@nonexistent-pkg-xyz/does-not-exist", "1.0.0")).rejects.toThrow()
+    await Bun.write(path.join(tmp.path, "package.json"), JSON.stringify({ dependencies: { zod: "3.23.0" } }))
+
+    await expect(BunProc.install("@nonexistent-pkg-xyz/does-not-exist", "1.0.0", "test")).rejects.toThrow()
+
+    const pkg = await Bun.file(path.join(tmp.path, "package.json")).json()
+    expect(pkg.dependencies?.zod).toBe("3.23.0")
+    expect(pkg.dependencies?.["@nonexistent-pkg-xyz/does-not-exist"]).toBeUndefined()
+    expect(pkg.opencode?.providers?.test).toBeUndefined()
 
     delete process.env.OPENCODE_TEST_CACHE
   })
@@ -50,15 +57,20 @@ describe("BunProc.install - version=latest", () => {
     delete process.env.OPENCODE_TEST_CACHE
   })
 
-  test("skips when not outdated", async () => {
+  test("skips when not outdated and updates provider tracking", async () => {
     await using tmp = await tmpdir()
     process.env.OPENCODE_TEST_CACHE = tmp.path
     const { BunProc } = await import("../src/bun")
 
     await BunProc.install("zod", "latest", "anthropic")
     await BunProc.install("zod", "latest", "anthropic")
+    await BunProc.install("zod", "latest", "openai")
 
     expect(await Bun.file(path.join(tmp.path, "node_modules", "zod", "package.json")).exists()).toBe(true)
+
+    const pkg = await Bun.file(path.join(tmp.path, "package.json")).json()
+    expect(pkg.opencode?.providers?.anthropic).toBe("zod")
+    expect(pkg.opencode?.providers?.openai).toBe("zod")
 
     delete process.env.OPENCODE_TEST_CACHE
   })
@@ -128,16 +140,19 @@ describe("BunProc.install - version=exact", () => {
     delete process.env.OPENCODE_TEST_CACHE
   })
 
-  test("skips when cached matches", async () => {
+  test("skips when cached matches and updates provider tracking", async () => {
     await using tmp = await tmpdir()
     process.env.OPENCODE_TEST_CACHE = tmp.path
     const { BunProc } = await import("../src/bun")
 
     await BunProc.install("zod", "3.23.0", "anthropic")
     await BunProc.install("zod", "3.23.0", "anthropic")
+    await BunProc.install("zod", "3.23.0", "openai")
 
     const pkg = await Bun.file(path.join(tmp.path, "package.json")).json()
     expect(pkg.dependencies?.zod).toBe("3.23.0")
+    expect(pkg.opencode?.providers?.anthropic).toBe("zod")
+    expect(pkg.opencode?.providers?.openai).toBe("zod")
 
     delete process.env.OPENCODE_TEST_CACHE
   })
@@ -182,6 +197,22 @@ describe("BunProc.install - version=exact", () => {
 
     await BunProc.install("zod", "3.23.0", "anthropic")
 
+    const pkg = await Bun.file(path.join(tmp.path, "package.json")).json()
+    expect(pkg.dependencies?.zod).toBe("3.23.0")
+
+    delete process.env.OPENCODE_TEST_CACHE
+  })
+
+  test("reinstalls when cached differs and node_modules missing", async () => {
+    await using tmp = await tmpdir()
+    process.env.OPENCODE_TEST_CACHE = tmp.path
+    const { BunProc } = await import("../src/bun")
+
+    await Bun.write(path.join(tmp.path, "package.json"), JSON.stringify({ dependencies: { zod: "3.22.0" } }))
+
+    await BunProc.install("zod", "3.23.0", "anthropic")
+
+    expect(await Bun.file(path.join(tmp.path, "node_modules", "zod", "package.json")).exists()).toBe(true)
     const pkg = await Bun.file(path.join(tmp.path, "package.json")).json()
     expect(pkg.dependencies?.zod).toBe("3.23.0")
 
@@ -298,10 +329,34 @@ describe("BunProc.install - cleanup (reference counting)", () => {
 })
 
 describe("PackageRegistry.isOutdated", () => {
+  test("returns true when cachedVersion undefined", async () => {
+    const { PackageRegistry } = await import("../src/bun/registry")
+
+    const result = await PackageRegistry.isOutdated("zod", undefined)
+    expect(result).toBe(true)
+  })
+
   test("returns false when registry unavailable", async () => {
     const { PackageRegistry } = await import("../src/bun/registry")
 
     const result = await PackageRegistry.isOutdated("@nonexistent-pkg-xyz/does-not-exist", "1.0.0")
+    expect(result).toBe(false)
+  })
+
+  test("returns true when cached is older", async () => {
+    const { PackageRegistry } = await import("../src/bun/registry")
+
+    const result = await PackageRegistry.isOutdated("zod", "3.20.0")
+    expect(result).toBe(true)
+  })
+
+  test("returns false when cached matches latest", async () => {
+    const { PackageRegistry } = await import("../src/bun/registry")
+
+    const latest = await PackageRegistry.info("zod", "version")
+    expect(latest).toBeTruthy()
+
+    const result = await PackageRegistry.isOutdated("zod", latest!)
     expect(result).toBe(false)
   })
 })
