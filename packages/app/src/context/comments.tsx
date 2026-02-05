@@ -1,4 +1,4 @@
-import { batch, createMemo, createRoot, createSignal, onCleanup } from "solid-js"
+import { batch, createMemo, createRoot, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useParams } from "@solidjs/router"
@@ -37,8 +37,16 @@ function createCommentSession(dir: string, id: string | undefined) {
     }),
   )
 
-  const [focus, setFocus] = createSignal<CommentFocus | null>(null)
-  const [active, setActive] = createSignal<CommentFocus | null>(null)
+  const [state, setState] = createStore({
+    focus: null as CommentFocus | null,
+    active: null as CommentFocus | null,
+  })
+
+  const setFocus = (value: CommentFocus | null | ((value: CommentFocus | null) => CommentFocus | null)) =>
+    setState("focus", value)
+
+  const setActive = (value: CommentFocus | null | ((value: CommentFocus | null) => CommentFocus | null)) =>
+    setState("active", value)
 
   const list = (file: string) => store.comments[file] ?? []
 
@@ -62,6 +70,14 @@ function createCommentSession(dir: string, id: string | undefined) {
     setFocus((current) => (current?.id === id ? null : current))
   }
 
+  const clear = () => {
+    batch(() => {
+      setStore("comments", {})
+      setFocus(null)
+      setActive(null)
+    })
+  }
+
   const all = createMemo(() => {
     const files = Object.keys(store.comments)
     const items = files.flatMap((file) => store.comments[file] ?? [])
@@ -74,10 +90,11 @@ function createCommentSession(dir: string, id: string | undefined) {
     all,
     add,
     remove,
-    focus: createMemo(() => focus()),
+    clear,
+    focus: createMemo(() => state.focus),
     setFocus,
     clearFocus: () => setFocus(null),
-    active: createMemo(() => active()),
+    active: createMemo(() => state.active),
     setActive,
     clearActive: () => setActive(null),
   }
@@ -136,6 +153,7 @@ export const { use: useComments, provider: CommentsProvider } = createSimpleCont
       all: () => session().all(),
       add: (input: Omit<LineComment, "id" | "time">) => session().add(input),
       remove: (file: string, id: string) => session().remove(file, id),
+      clear: () => session().clear(),
       focus: () => session().focus(),
       setFocus: (focus: CommentFocus | null) => session().setFocus(focus),
       clearFocus: () => session().clearFocus(),

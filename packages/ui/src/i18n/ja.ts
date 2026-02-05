@@ -1,10 +1,19 @@
 export const dict = {
   "ui.sessionReview.title": "セッションの変更",
+  "ui.sessionReview.title.lastTurn": "前回ターンの変更",
   "ui.sessionReview.diffStyle.unified": "Unified",
   "ui.sessionReview.diffStyle.split": "Split",
   "ui.sessionReview.expandAll": "すべて展開",
   "ui.sessionReview.collapseAll": "すべて折りたたむ",
 
+  "ui.sessionReview.change.added": "追加",
+  "ui.sessionReview.change.removed": "削除",
+  "ui.lineComment.label.prefix": "",
+  "ui.lineComment.label.suffix": "へのコメント",
+  "ui.lineComment.editorLabel.prefix": "",
+  "ui.lineComment.editorLabel.suffix": "へのコメントを作成中",
+  "ui.lineComment.placeholder": "コメントを追加",
+  "ui.lineComment.submit": "コメント",
   "ui.sessionTurn.steps.show": "ステップを表示",
   "ui.sessionTurn.steps.hide": "ステップを隠す",
   "ui.sessionTurn.summary.response": "応答",
@@ -46,6 +55,7 @@ export const dict = {
   "ui.imagePreview.alt": "画像プレビュー",
 
   "ui.tool.read": "読み込み",
+  "ui.tool.loaded": "読み込み済み",
   "ui.tool.list": "リスト",
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",

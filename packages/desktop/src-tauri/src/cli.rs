@@ -51,6 +51,7 @@ fn is_cli_installed() -> bool {
 const INSTALL_SCRIPT: &str = include_str!("../../../../install");
 
 #[tauri::command]
+#[specta::specta]
 pub fn install_cli(app: tauri::AppHandle) -> Result<String, String> {
     if cfg!(not(unix)) {
         return Err("CLI installation is only supported on macOS & Linux".to_string());
@@ -157,6 +158,7 @@ pub fn create_command(app: &tauri::AppHandle, args: &str) -> Command {
         .unwrap()
         .args(args.split_whitespace())
         .env("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY", "true")
+        .env("OPENCODE_EXPERIMENTAL_FILEWATCHER", "true")
         .env("OPENCODE_CLIENT", "desktop")
         .env("XDG_STATE_HOME", &state_dir);
 
@@ -174,6 +176,7 @@ pub fn create_command(app: &tauri::AppHandle, args: &str) -> Command {
         app.shell()
             .command(&shell)
             .env("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY", "true")
+            .env("OPENCODE_EXPERIMENTAL_FILEWATCHER", "true")
             .env("OPENCODE_CLIENT", "desktop")
             .env("XDG_STATE_HOME", &state_dir)
             .args(["-il", "-c", &cmd])

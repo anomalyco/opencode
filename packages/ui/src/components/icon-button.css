@@ -90,8 +90,8 @@
       /*   color: var(--icon-hover); */
       /* } */
     }
-    &:focus:not(:disabled) {
-      background-color: var(--surface-focus);
+    &:focus-visible:not(:disabled) {
+      background-color: var(--surface-raised-base-hover);
     }
     &:active:not(:disabled) {
       background-color: var(--surface-raised-base-active);
@@ -118,6 +118,11 @@
     font-size: var(--font-size-small);
     line-height: var(--line-height-large);
     gap: calc(var(--spacing) * 0.5);
+  }
+
+  &[data-size="small"] {
+    width: 20px;
+    height: 20px;
   }
 
   &[data-size="large"] {

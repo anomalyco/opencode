@@ -219,6 +219,13 @@ export namespace Worktree {
     return [outputText(result.stderr), outputText(result.stdout)].filter(Boolean).join("\n")
   }
 
+  async function canonical(input: string) {
+    const abs = path.resolve(input)
+    const real = await fs.realpath(abs).catch(() => abs)
+    const normalized = path.normalize(real)
+    return process.platform === "win32" ? normalized.toLowerCase() : normalized
+  }
+
   async function candidate(root: string, base?: string) {
     for (const attempt of Array.from({ length: 26 }, (_, i) => i)) {
       const name = base ? (attempt === 0 ? base : `${base}-${randomName()}`) : randomName()
@@ -242,6 +249,46 @@ export namespace Worktree {
       return $`cmd /c ${cmd}`.nothrow().cwd(directory)
     }
     return $`bash -lc ${cmd}`.nothrow().cwd(directory)
+  }
+
+  type StartKind = "project" | "worktree"
+
+  async function runStartScript(directory: string, cmd: string, kind: StartKind) {
+    const text = cmd.trim()
+    if (!text) return true
+
+    const ran = await runStartCommand(directory, text)
+    if (ran.exitCode === 0) return true
+
+    log.error("worktree start command failed", {
+      kind,
+      directory,
+      message: errorText(ran),
+    })
+    return false
+  }
+
+  async function runStartScripts(directory: string, input: { projectID: string; extra?: string }) {
+    const project = await Storage.read<Project.Info>(["project", input.projectID]).catch(() => undefined)
+    const startup = project?.commands?.start?.trim() ?? ""
+    const ok = await runStartScript(directory, startup, "project")
+    if (!ok) return false
+
+    const extra = input.extra ?? ""
+    await runStartScript(directory, extra, "worktree")
+    return true
+  }
+
+  function queueStartScripts(directory: string, input: { projectID: string; extra?: string }) {
+    setTimeout(() => {
+      const start = async () => {
+        await runStartScripts(directory, input)
+      }
+
+      void start().catch((error) => {
+        log.error("worktree start task failed", { directory, error })
+      })
+    }, 0)
   }
 
   export const create = fn(CreateInput.optional(), async (input) => {
@@ -318,27 +365,7 @@ export namespace Worktree {
           },
         })
 
-        const project = await Storage.read<Project.Info>(["project", projectID]).catch(() => undefined)
-        const startup = project?.commands?.start?.trim() ?? ""
-
-        const run = async (cmd: string, kind: "project" | "worktree") => {
-          const ran = await runStartCommand(info.directory, cmd)
-          if (ran.exitCode === 0) return true
-          log.error("worktree start command failed", {
-            kind,
-            directory: info.directory,
-            message: errorText(ran),
-          })
-          return false
-        }
-
-        if (startup) {
-          const ok = await run(startup, "project")
-          if (!ok) return
-        }
-        if (extra) {
-          await run(extra, "worktree")
-        }
+        await runStartScripts(info.directory, { projectID, extra })
       }
 
       void start().catch((error) => {
@@ -354,7 +381,7 @@ export namespace Worktree {
       throw new NotGitError({ message: "Worktrees are only supported for git projects" })
     }
 
-    const directory = path.resolve(input.directory)
+    const directory = await canonical(input.directory)
     const list = await $`git worktree list --porcelain`.quiet().nothrow().cwd(Instance.worktree)
     if (list.exitCode !== 0) {
       throw new RemoveFailedError({ message: errorText(list) || "Failed to read git worktrees" })
@@ -377,7 +404,13 @@ export namespace Worktree {
       return acc
     }, [])
 
-    const entry = entries.find((item) => item.path && path.resolve(item.path) === directory)
+    const entry = await (async () => {
+      for (const item of entries) {
+        if (!item.path) continue
+        const key = await canonical(item.path)
+        if (key === directory) return item
+      }
+    })()
     if (!entry?.path) {
       throw new RemoveFailedError({ message: "Worktree not found" })
     }
@@ -403,8 +436,9 @@ export namespace Worktree {
       throw new NotGitError({ message: "Worktrees are only supported for git projects" })
     }
 
-    const directory = path.resolve(input.directory)
-    if (directory === path.resolve(Instance.worktree)) {
+    const directory = await canonical(input.directory)
+    const primary = await canonical(Instance.worktree)
+    if (directory === primary) {
       throw new ResetFailedError({ message: "Cannot reset the primary workspace" })
     }
 
@@ -430,7 +464,13 @@ export namespace Worktree {
       return acc
     }, [])
 
-    const entry = entries.find((item) => item.path && path.resolve(item.path) === directory)
+    const entry = await (async () => {
+      for (const item of entries) {
+        if (!item.path) continue
+        const key = await canonical(item.path)
+        if (key === directory) return item
+      }
+    })()
     if (!entry?.path) {
       throw new ResetFailedError({ message: "Worktree not found" })
     }
@@ -517,8 +557,13 @@ export namespace Worktree {
     }
 
     const dirty = outputText(status.stdout)
-    if (!dirty) return true
+    if (dirty) {
+      throw new ResetFailedError({ message: `Worktree reset left local changes:\n${dirty}` })
+    }
 
-    throw new ResetFailedError({ message: `Worktree reset left local changes:\n${dirty}` })
+    const projectID = Instance.project.id
+    queueStartScripts(worktreePath, { projectID })
+
+    return true
   })
 }

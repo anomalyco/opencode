@@ -17,6 +17,8 @@ import { dict as ru } from "@/i18n/ru"
 import { dict as ar } from "@/i18n/ar"
 import { dict as no } from "@/i18n/no"
 import { dict as br } from "@/i18n/br"
+import { dict as th } from "@/i18n/th"
+import { dict as bs } from "@/i18n/bs"
 import { dict as uiEn } from "@opencode-ai/ui/i18n/en"
 import { dict as uiZh } from "@opencode-ai/ui/i18n/zh"
 import { dict as uiZht } from "@opencode-ai/ui/i18n/zht"
@@ -31,13 +33,48 @@ import { dict as uiRu } from "@opencode-ai/ui/i18n/ru"
 import { dict as uiAr } from "@opencode-ai/ui/i18n/ar"
 import { dict as uiNo } from "@opencode-ai/ui/i18n/no"
 import { dict as uiBr } from "@opencode-ai/ui/i18n/br"
+import { dict as uiTh } from "@opencode-ai/ui/i18n/th"
+import { dict as uiBs } from "@opencode-ai/ui/i18n/bs"
 
-export type Locale = "en" | "zh" | "zht" | "ko" | "de" | "es" | "fr" | "da" | "ja" | "pl" | "ru" | "ar" | "no" | "br"
+export type Locale =
+  | "en"
+  | "zh"
+  | "zht"
+  | "ko"
+  | "de"
+  | "es"
+  | "fr"
+  | "da"
+  | "ja"
+  | "pl"
+  | "ru"
+  | "ar"
+  | "no"
+  | "br"
+  | "th"
+  | "bs"
 
 type RawDictionary = typeof en & typeof uiEn
 type Dictionary = i18n.Flatten<RawDictionary>
 
-const LOCALES: readonly Locale[] = ["en", "zh", "zht", "ko", "de", "es", "fr", "da", "ja", "pl", "ru", "ar", "no", "br"]
+const LOCALES: readonly Locale[] = [
+  "en",
+  "zh",
+  "zht",
+  "ko",
+  "de",
+  "es",
+  "fr",
+  "da",
+  "ja",
+  "pl",
+  "ru",
+  "bs",
+  "ar",
+  "no",
+  "br",
+  "th",
+]
 
 function detectLocale(): Locale {
   if (typeof navigator !== "object") return "en"
@@ -65,6 +102,8 @@ function detectLocale(): Locale {
     )
       return "no"
     if (language.toLowerCase().startsWith("pt")) return "br"
+    if (language.toLowerCase().startsWith("th")) return "th"
+    if (language.toLowerCase().startsWith("bs")) return "bs"
   }
 
   return "en"
@@ -94,6 +133,8 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       if (store.locale === "ar") return "ar"
       if (store.locale === "no") return "no"
       if (store.locale === "br") return "br"
+      if (store.locale === "th") return "th"
+      if (store.locale === "bs") return "bs"
       return "en"
     })
 
@@ -118,6 +159,8 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       if (locale() === "ar") return { ...base, ...i18n.flatten({ ...ar, ...uiAr }) }
       if (locale() === "no") return { ...base, ...i18n.flatten({ ...no, ...uiNo }) }
       if (locale() === "br") return { ...base, ...i18n.flatten({ ...br, ...uiBr }) }
+      if (locale() === "th") return { ...base, ...i18n.flatten({ ...th, ...uiTh }) }
+      if (locale() === "bs") return { ...base, ...i18n.flatten({ ...bs, ...uiBs }) }
       return { ...base, ...i18n.flatten({ ...ko, ...uiKo }) }
     })
 
@@ -138,6 +181,8 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       ar: "language.ar",
       no: "language.no",
       br: "language.br",
+      th: "language.th",
+      bs: "language.bs",
     }
 
     const label = (value: Locale) => t(labelKey[value])
