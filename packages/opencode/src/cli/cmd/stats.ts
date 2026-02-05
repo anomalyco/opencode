@@ -27,6 +27,10 @@ interface SessionStats {
       tokens: {
         input: number
         output: number
+        cache: {
+          read: number
+          write: number
+        }
       }
       cost: number
     }
@@ -191,6 +195,10 @@ export async function aggregateSessionStats(days?: number, projectFilter?: strin
           tokens: {
             input: number
             output: number
+            cache: {
+              read: number
+              write: number
+            }
           }
           cost: number
         }
@@ -204,7 +212,7 @@ export async function aggregateSessionStats(days?: number, projectFilter?: strin
           if (!sessionModelUsage[modelKey]) {
             sessionModelUsage[modelKey] = {
               messages: 0,
-              tokens: { input: 0, output: 0 },
+              tokens: { input: 0, output: 0, cache: { read: 0, write: 0 } },
               cost: 0,
             }
           }
@@ -221,6 +229,8 @@ export async function aggregateSessionStats(days?: number, projectFilter?: strin
             sessionModelUsage[modelKey].tokens.input += message.info.tokens.input || 0
             sessionModelUsage[modelKey].tokens.output +=
               (message.info.tokens.output || 0) + (message.info.tokens.reasoning || 0)
+            sessionModelUsage[modelKey].tokens.cache.read += message.info.tokens.cache?.read || 0
+            sessionModelUsage[modelKey].tokens.cache.write += message.info.tokens.cache?.write || 0
           }
         }
 
@@ -235,7 +245,12 @@ export async function aggregateSessionStats(days?: number, projectFilter?: strin
         messageCount: messages.length,
         sessionCost,
         sessionTokens,
-        sessionTotalTokens: sessionTokens.input + sessionTokens.output + sessionTokens.reasoning,
+        sessionTotalTokens:
+          sessionTokens.input +
+          sessionTokens.output +
+          sessionTokens.reasoning +
+          sessionTokens.cache.read +
+          sessionTokens.cache.write,
         sessionToolUsage,
         sessionModelUsage,
         earliestTime: cutoffTime > 0 ? session.time.updated : session.time.created,
@@ -266,13 +281,15 @@ export async function aggregateSessionStats(days?: number, projectFilter?: strin
         if (!stats.modelUsage[model]) {
           stats.modelUsage[model] = {
             messages: 0,
-            tokens: { input: 0, output: 0 },
+            tokens: { input: 0, output: 0, cache: { read: 0, write: 0 } },
             cost: 0,
           }
         }
         stats.modelUsage[model].messages += usage.messages
         stats.modelUsage[model].tokens.input += usage.tokens.input
         stats.modelUsage[model].tokens.output += usage.tokens.output
+        stats.modelUsage[model].tokens.cache.read += usage.tokens.cache.read
+        stats.modelUsage[model].tokens.cache.write += usage.tokens.cache.write
         stats.modelUsage[model].cost += usage.cost
       }
     }
@@ -286,7 +303,12 @@ export async function aggregateSessionStats(days?: number, projectFilter?: strin
   }
   stats.days = effectiveDays
   stats.costPerDay = stats.totalCost / effectiveDays
-  const totalTokens = stats.totalTokens.input + stats.totalTokens.output + stats.totalTokens.reasoning
+  const totalTokens =
+    stats.totalTokens.input +
+    stats.totalTokens.output +
+    stats.totalTokens.reasoning +
+    stats.totalTokens.cache.read +
+    stats.totalTokens.cache.write
   stats.tokensPerSession = filteredSessions.length > 0 ? totalTokens / filteredSessions.length : 0
   sessionTotalTokens.sort((a, b) => a - b)
   const mid = Math.floor(sessionTotalTokens.length / 2)
@@ -353,6 +375,8 @@ export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit
       console.log(renderRow("  Messages", usage.messages.toLocaleString()))
       console.log(renderRow("  Input Tokens", formatNumber(usage.tokens.input)))
       console.log(renderRow("  Output Tokens", formatNumber(usage.tokens.output)))
+      console.log(renderRow("  Cache Read", formatNumber(usage.tokens.cache.read)))
+      console.log(renderRow("  Cache Write", formatNumber(usage.tokens.cache.write)))
       console.log(renderRow("  Cost", `$${usage.cost.toFixed(4)}`))
       console.log("├────────────────────────────────────────────────────────┤")
     }
