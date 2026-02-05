@@ -490,7 +490,7 @@ export default function Page() {
 
   createEffect(
     on(
-      () => params.id,
+      sessionKey,
       () => setTitle({ draft: "", editing: false, saving: false, menuOpen: false, pendingRename: false }),
       { defer: true },
     ),
@@ -1649,7 +1649,7 @@ export default function Page() {
     const id = params.id
     if (!id) return
 
-    const wants = isDesktop() ? layout.fileTree.opened() && fileTreeTab() === "changes" : store.mobileTab === "changes"
+    const wants = isDesktop() ? layout.fileTree.opened() : store.mobileTab === "changes"
     if (!wants) return
     if (sync.data.session_diff[id] !== undefined) return
     if (sync.status === "loading") return
@@ -1672,7 +1672,7 @@ export default function Page() {
 
   createEffect(
     on(
-      () => params.dir,
+      () => sdk.directory,
       () => {
         void file.tree.list("")
 
