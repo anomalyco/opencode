@@ -36,16 +36,16 @@ export namespace SystemPrompt {
         `  Platform: ${process.platform}`,
         `  Today's date: ${new Date().toDateString()}`,
         `</env>`,
-        `<files>`,
+        `<directories>`,
         `  ${
           project.vcs === "git" && false
             ? await Ripgrep.tree({
                 cwd: Instance.directory,
-                limit: 200,
+                limit: 50,
               })
             : ""
         }`,
-        `</files>`,
+        `</directories>`,
       ].join("\n"),
     ]
   }

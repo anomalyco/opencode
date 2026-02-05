@@ -3,20 +3,7 @@
 import { $ } from "bun"
 import { createOpencode } from "@opencode-ai/sdk/v2"
 import { parseArgs } from "util"
-
-export const team = [
-  "actions-user",
-  "opencode",
-  "rekram1-node",
-  "thdxr",
-  "kommander",
-  "jayair",
-  "fwang",
-  "adamdotdevin",
-  "iamdavidhill",
-  "opencode-agent[bot]",
-  "R44VC0RP",
-]
+import { Script } from "@opencode-ai/script"
 
 type Release = {
   tag_name: string
@@ -191,7 +178,7 @@ export async function generateChangelog(commits: Commit[], opencode: Awaited<Ret
   for (let i = 0; i < commits.length; i++) {
     const commit = commits[i]!
     const section = getSection(commit.areas)
-    const attribution = commit.author && !team.includes(commit.author) ? ` (@${commit.author})` : ""
+    const attribution = commit.author && !Script.team.includes(commit.author) ? ` (@${commit.author})` : ""
     const entry = `- ${summaries[i]}${attribution}`
 
     if (!grouped.has(section)) grouped.set(section, [])
@@ -222,7 +209,7 @@ export async function getContributors(from: string, to: string) {
     const title = message.split("\n")[0] ?? ""
     if (title.match(/^(ignore:|test:|chore:|ci:|release:)/i)) continue
 
-    if (login && !team.includes(login)) {
+    if (login && !Script.team.includes(login)) {
       if (!contributors.has(login)) contributors.set(login, new Set())
       contributors.get(login)!.add(title)
     }
