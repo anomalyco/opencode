@@ -4,6 +4,7 @@ import { render } from "solid-js/web"
 import { AppBaseProviders, AppInterface, PlatformProvider, Platform } from "@opencode-ai/app"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link"
+import { openPath as openerOpenPath } from "@tauri-apps/plugin-opener"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { type as ostype } from "@tauri-apps/plugin-os"
 import { check, Update } from "@tauri-apps/plugin-updater"
@@ -29,17 +30,6 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
 }
 
 void initI18n()
-
-// Floating UI can call getComputedStyle with non-elements (e.g., null refs, virtual elements).
-// This happens on all platforms (WebView2 on Windows, WKWebView on macOS), not just Windows.
-const originalGetComputedStyle = window.getComputedStyle
-window.getComputedStyle = ((elt: Element, pseudoElt?: string | null) => {
-  if (!(elt instanceof Element)) {
-    // Fall back to a safe element when a non-element is passed.
-    return originalGetComputedStyle(document.documentElement, pseudoElt ?? undefined)
-  }
-  return originalGetComputedStyle(elt, pseudoElt ?? undefined)
-}) as typeof window.getComputedStyle
 
 let update: Update | null = null
 
@@ -96,6 +86,10 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
 
   openLink(url: string) {
     void shellOpen(url).catch(() => undefined)
+  },
+
+  openPath(path: string, app?: string) {
+    return openerOpenPath(path, app)
   },
 
   back() {
