@@ -2043,4 +2043,126 @@ export namespace LSPServer {
       }
     },
   }
+
+  export const Metals: Info = {
+    id: "metals",
+    extensions: [".scala", ".sbt", ".sc"],
+    root: NearestRoot([
+      "build.sbt",
+      "build.sc",
+      ".scala-build",
+      "project/build.properties",
+    ]),
+    async spawn(root) {
+      let bin = Bun.which("metals", {
+        PATH: process.env["PATH"] + path.delimiter + Global.Path.bin,
+      })
+
+      if (!bin) {
+        const java = Bun.which("java")
+        if (!java) {
+          log.info("Java 11+ is required for Metals LSP")
+          return
+        }
+
+        let cs = Bun.which("cs") || Bun.which("coursier")
+        if (!cs) {
+          cs = path.join(Global.Path.bin, "cs" + (process.platform === "win32" ? ".exe" : ""))
+          if (!(await Bun.file(cs).exists())) {
+            if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+            log.info("downloading coursier")
+
+            const platform = process.platform
+            const arch = process.arch
+
+            let url: string
+            if (platform === "darwin") {
+              url =
+                arch === "arm64"
+                  ? "https://github.com/coursier/coursier/releases/latest/download/cs-aarch64-apple-darwin.gz"
+                  : "https://github.com/coursier/launchers/raw/master/cs-x86_64-apple-darwin.gz"
+            } else if (platform === "linux") {
+              url =
+                arch === "arm64"
+                  ? "https://github.com/coursier/launchers/raw/master/cs-aarch64-pc-linux.gz"
+                  : "https://github.com/coursier/launchers/raw/master/cs-x86_64-pc-linux.gz"
+            } else if (platform === "win32") {
+              url = "https://github.com/coursier/launchers/raw/master/cs-x86_64-pc-win32.zip"
+            } else {
+              log.error(`Platform ${platform} is not supported for coursier auto-download`)
+              return
+            }
+
+            const response = await fetch(url)
+            if (!response.ok) {
+              log.error("Failed to download coursier")
+              return
+            }
+
+            const ext = platform === "win32" ? "zip" : "gz"
+            const tempPath = path.join(Global.Path.bin, `cs.${ext}`)
+            await Bun.file(tempPath).write(response)
+
+            if (ext === "zip") {
+              const ok = await Archive.extractZip(tempPath, Global.Path.bin)
+                .then(() => true)
+                .catch((error) => {
+                  log.error("Failed to extract coursier archive", { error })
+                  return false
+                })
+              if (!ok) return
+            } else {
+              await $`gunzip -f ${tempPath}`.cwd(Global.Path.bin).quiet().nothrow()
+            }
+
+            await fs.rm(tempPath, { force: true }).catch(() => {})
+
+            if (!(await Bun.file(cs).exists())) {
+              log.error("Failed to extract coursier binary")
+              return
+            }
+
+            if (platform !== "win32") {
+              await $`chmod +x ${cs}`.quiet().nothrow()
+            }
+
+            log.info("installed coursier", { bin: cs })
+          }
+        }
+
+        if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+        log.info("installing metals via coursier")
+
+        const installDir = Global.Path.bin
+        const proc = Bun.spawn({
+          cmd: [cs, "install", "metals", "--install-dir", installDir],
+          stdout: "pipe",
+          stderr: "pipe",
+          stdin: "pipe",
+        })
+        const exit = await proc.exited
+        if (exit !== 0) {
+          log.error("Failed to install metals")
+          return
+        }
+
+        bin = path.join(installDir, "metals" + (process.platform === "win32" ? ".bat" : ""))
+        if (!(await Bun.file(bin).exists())) {
+          log.error("Failed to install metals binary")
+          return
+        }
+        log.info("installed metals", { bin })
+      }
+
+      return {
+        process: spawn(bin, {
+          cwd: root,
+        }),
+        initialization: {
+          statusBarProvider: "log-message",
+          isHttpEnabled: true,
+        },
+      }
+    },
+  }
 }
