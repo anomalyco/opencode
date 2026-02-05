@@ -1,5 +1,5 @@
 # Railway 배포용 Dockerfile - Monorepo 빌드
-FROM oven/bun:1.1-alpine AS builder
+FROM oven/bun:1.3-alpine AS builder
 
 WORKDIR /app
 
@@ -16,7 +16,7 @@ COPY sdks ./sdks
 RUN bun install --frozen-lockfile || bun install
 
 # Production stage
-FROM oven/bun:1.1-alpine AS runner
+FROM oven/bun:1.3-alpine AS runner
 
 WORKDIR /app
 
