@@ -69,7 +69,7 @@ function createCopyButton(labels: CopyLabels) {
   button.type = "button"
   button.setAttribute("data-component", "icon-button")
   button.setAttribute("data-variant", "secondary")
-  button.setAttribute("data-size", "normal")
+  button.setAttribute("data-size", "small")
   button.setAttribute("data-slot", "markdown-copy-button")
   button.setAttribute("aria-label", labels.copy)
   button.setAttribute("title", labels.copy)

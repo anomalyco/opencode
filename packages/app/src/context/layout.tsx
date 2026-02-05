@@ -33,6 +33,14 @@ type SessionTabs = {
 type SessionView = {
   scroll: Record<string, SessionScroll>
   reviewOpen?: string[]
+  pendingMessage?: string
+  pendingMessageAt?: number
+}
+
+type TabHandoff = {
+  dir: string
+  id: string
+  at: number
 }
 
 export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
@@ -115,10 +123,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         sessionTabs: {} as Record<string, SessionTabs>,
         sessionView: {} as Record<string, SessionView>,
+        handoff: {
+          tabs: undefined as TabHandoff | undefined,
+        },
       }),
     )
 
     const MAX_SESSION_KEYS = 50
+    const PENDING_MESSAGE_TTL_MS = 2 * 60 * 1000
     const meta = { active: undefined as string | undefined, pruned: false }
     const used = new Map<string, number>()
 
@@ -411,6 +423,16 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     return {
       ready,
+      handoff: {
+        tabs: createMemo(() => store.handoff?.tabs),
+        setTabs(dir: string, id: string) {
+          setStore("handoff", "tabs", { dir, id, at: Date.now() })
+        },
+        clearTabs() {
+          if (!store.handoff?.tabs) return
+          setStore("handoff", "tabs", undefined)
+        },
+      },
       projects: {
         list,
         open(directory: string) {
@@ -536,6 +558,49 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("mobileSidebar", "opened", (x) => !x)
         },
       },
+      pendingMessage: {
+        set(sessionKey: string, messageID: string) {
+          const at = Date.now()
+          touch(sessionKey)
+          const current = store.sessionView[sessionKey]
+          if (!current) {
+            setStore("sessionView", sessionKey, {
+              scroll: {},
+              pendingMessage: messageID,
+              pendingMessageAt: at,
+            })
+            prune(meta.active ?? sessionKey)
+            return
+          }
+
+          setStore(
+            "sessionView",
+            sessionKey,
+            produce((draft) => {
+              draft.pendingMessage = messageID
+              draft.pendingMessageAt = at
+            }),
+          )
+        },
+        consume(sessionKey: string) {
+          const current = store.sessionView[sessionKey]
+          const message = current?.pendingMessage
+          const at = current?.pendingMessageAt
+          if (!message || !at) return
+
+          setStore(
+            "sessionView",
+            sessionKey,
+            produce((draft) => {
+              delete draft.pendingMessage
+              delete draft.pendingMessageAt
+            }),
+          )
+
+          if (Date.now() - at > PENDING_MESSAGE_TTL_MS) return
+          return message
+        },
+      },
       view(sessionKey: string | Accessor<string>) {
         const key = typeof sessionKey === "function" ? sessionKey : () => sessionKey
 
@@ -624,10 +689,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const tabs = createMemo(() => store.sessionTabs[key()] ?? { all: [] })
         return {
           tabs,
-          active: createMemo(() => tabs().active),
+          active: createMemo(() => (tabs().active === "review" ? undefined : tabs().active)),
           all: createMemo(() => tabs().all.filter((tab) => tab !== "review")),
           setActive(tab: string | undefined) {
             const session = key()
+            if (tab === "review") return
             if (!store.sessionTabs[session]) {
               setStore("sessionTabs", session, { all: [], active: tab })
             } else {
@@ -644,17 +710,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             }
           },
           async open(tab: string) {
+            if (tab === "review") return
             const session = key()
             const current = store.sessionTabs[session] ?? { all: [] }
-
-            if (tab === "review") {
-              if (!store.sessionTabs[session]) {
-                setStore("sessionTabs", session, { all: current.all, active: tab })
-                return
-              }
-              setStore("sessionTabs", session, "active", tab)
-              return
-            }
 
             if (tab === "context") {
               const all = [tab, ...current.all.filter((x) => x !== tab)]
@@ -689,12 +747,15 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             if (!current) return
 
             const all = current.all.filter((x) => x !== tab)
+            if (current.active !== tab) {
+              setStore("sessionTabs", session, "all", all)
+              return
+            }
+
+            const index = current.all.findIndex((f) => f === tab)
+            const next = current.all[index - 1] ?? current.all[index + 1] ?? all[0]
             batch(() => {
               setStore("sessionTabs", session, "all", all)
-              if (current.active !== tab) return
-
-              const index = current.all.findIndex((f) => f === tab)
-              const next = all[index - 1] ?? all[0]
               setStore("sessionTabs", session, "active", next)
             })
           },

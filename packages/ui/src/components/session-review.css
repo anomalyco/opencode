@@ -10,9 +10,9 @@
     display: none;
   }
 
-  /* [data-slot="session-review-container"] { */
-  /*   height: 100%; */
-  /* } */
+  [data-slot="session-review-container"] {
+    flex: 1 1 auto;
+  }
 
   [data-slot="session-review-header"] {
     position: sticky;
@@ -44,10 +44,11 @@
 
   [data-component="sticky-accordion-header"] {
     top: 40px;
+  }
 
-    &[data-expanded]::before {
-      top: -40px;
-    }
+  [data-component="sticky-accordion-header"][data-expanded]::before,
+  [data-slot="accordion-item"][data-expanded] [data-component="sticky-accordion-header"]::before {
+    top: -40px;
   }
 
   [data-slot="accordion-trigger"] {
@@ -79,6 +80,7 @@
 
   [data-slot="session-review-accordion-content"] {
     position: relative;
+    z-index: 0;
     overflow: hidden;
   }
 
@@ -211,7 +213,9 @@
   [data-slot="session-review-diff-wrapper"] {
     position: relative;
     overflow: hidden;
+    z-index: 0;
     --line-comment-z: 5;
     --line-comment-popover-z: 30;
+    --line-comment-open-z: 6;
   }
 }
