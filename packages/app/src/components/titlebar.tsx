@@ -82,6 +82,21 @@ export function Titlebar() {
     navigate(to)
   }
 
+  command.register(() => [
+    {
+      id: "common.goBack",
+      title: language.t("common.goBack"),
+      category: language.t("command.category.view"),
+      onSelect: back,
+    },
+    {
+      id: "common.goForward",
+      title: language.t("common.goForward"),
+      category: language.t("command.category.view"),
+      onSelect: forward,
+    },
+  ])
+
   const getWin = () => {
     if (platform.platform !== "desktop") return
 
