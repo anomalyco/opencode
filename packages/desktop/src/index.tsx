@@ -21,7 +21,8 @@ import { UPDATER_ENABLED } from "./updater"
 import { initI18n, t } from "./i18n"
 import pkg from "../package.json"
 import "./styles.css"
-import { commands } from "./bindings"
+import { commands, InitStep } from "./bindings"
+import { Channel } from "@tauri-apps/api/core"
 import { createMenu } from "./menu"
 
 const root = document.getElementById("root")
@@ -307,7 +308,6 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
       .catch(() => undefined)
   },
 
-  // @ts-expect-error
   fetch: (input, init) => {
     const pw = password()
 
@@ -400,7 +400,7 @@ type ServerReadyData = { url: string; password: string | null }
 
 // Gate component that waits for the server to be ready
 function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.Element }) {
-  const [serverData] = createResource(() => commands.ensureServerReady())
+  const [serverData] = createResource(() => commands.awaitInitialization(new Channel<InitStep>() as any))
 
   const errorMessage = () => {
     const error = serverData.error
