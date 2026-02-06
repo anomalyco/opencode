@@ -174,7 +174,7 @@ export namespace SessionPrompt {
       return message
     }
 
-    return loop({sessionID: input.sessionID})
+    return loop({ sessionID: input.sessionID })
   })
 
   export async function resolvePromptParts(template: string): Promise<PromptInput["parts"]> {
@@ -1387,8 +1387,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         cancel(input.sessionID)
       } else {
         // Otherwise, trigger the session loop to process queued items
-        loop({sessionID: input.sessionID, resume_existing: true}).catch((error) => {
-          log.error("session loop failed to resume after shell command", { sessionID: input.sessionID, error  })
+        loop({ sessionID: input.sessionID, resume_existing: true }).catch((error) => {
+          log.error("session loop failed to resume after shell command", { sessionID: input.sessionID, error })
         })
       }
     })
