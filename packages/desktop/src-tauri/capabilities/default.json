@@ -6,6 +6,19 @@
   "permissions": [
     "core:default",
     "opener:default",
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [
+        { "path": "**/*" },
+        { "path": "/**/*" },
+        { "path": "**/.*/*/**" },
+        { "path": "/**/.*/*/**" },
+        { "path": "**/*", "app": true },
+        { "path": "/**/*", "app": true },
+        { "path": "**/.*/*/**", "app": true },
+        { "path": "/**/.*/*/**", "app": true }
+      ]
+    },
     "deep-link:default",
     "core:window:allow-start-dragging",
     "core:window:allow-set-theme",
