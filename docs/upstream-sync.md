@@ -4,7 +4,7 @@
 - Upstream repo/branch: `anomalyco/opencode` `dev`
 - Fork repo/branch: `pRizz/opencode` `dev`
 - Merge base: see `docs/upstream-sync/merge-base.txt`
-- Current divergence: `0` behind / `423` ahead (`git rev-list --left-right --count upstream/dev...origin/dev`)
+- Current divergence: `0` behind / `429` ahead (`git rev-list --left-right --count upstream/dev...origin/dev`)
 - `parent-dev` mirror status: `0 0` (`git rev-list --left-right --count upstream/dev...origin/parent-dev`)
 - Catch-up status: upstream catch-up complete; fork decoupling restored post-catch-up.
 - Post-catch-up snapshot artifact: `docs/upstream-sync/post-catchup-state.txt`
@@ -77,7 +77,7 @@ Post-merge validation order:
 
 ## Repo Settings Checklist
 - Enable auto-merge on the repository.
-- Require `check-standards`, `typecheck`, and `test` checks on `dev`.
+- Require `typecheck` and `test (linux)` checks on `dev`.
 - Allow merge commits.
 - Disable force pushes to `dev`.
 - Require pull requests and up-to-date branches before merge.
