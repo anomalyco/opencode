@@ -501,6 +501,7 @@
 
   [data-slot="session-turn-collapsible-trigger-content"] {
     max-width: 100%;
+    min-width: 0;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -525,6 +526,10 @@
   [data-slot="session-turn-retry-message"] {
     font-weight: 500;
     color: var(--syntax-critical);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   [data-slot="session-turn-retry-seconds"] {
@@ -549,6 +554,9 @@
   .error-card {
     color: var(--text-on-critical-base);
     max-height: 240px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
     overflow-y: auto;
   }
 
