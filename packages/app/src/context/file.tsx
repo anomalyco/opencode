@@ -1,5 +1,5 @@
-import { createEffect, createMemo, createRoot, onCleanup } from "solid-js"
-import { createStore, produce } from "solid-js/store"
+import { batch, createEffect, createMemo, createRoot, onCleanup } from "solid-js"
+import { createStore, produce, reconcile } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import type { FileContent, FileNode } from "@opencode-ai/sdk/v2"
 import { showToast } from "@opencode-ai/ui/toast"
@@ -277,10 +277,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
     const scope = createMemo(() => sdk.directory)
 
-    const directory = createMemo(() => sync.data.path.directory)
-
     function normalize(input: string) {
-      const root = directory()
+      const root = scope()
       const prefix = root.endsWith("/") ? root : root + "/"
 
       let path = unquoteGitPath(stripQueryAndHash(stripFileProtocol(input)))
@@ -371,9 +369,13 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       inflight.clear()
       treeInflight.clear()
       contentLru.clear()
-      setStore("file", {})
-      setTree("node", {})
-      setTree("dir", { "": { expanded: true } })
+
+      batch(() => {
+        setStore("file", reconcile({}))
+        setTree("node", reconcile({}))
+        setTree("dir", reconcile({}))
+        setTree("dir", "", { expanded: true })
+      })
     })
 
     const viewCache = new Map<string, ViewCacheEntry>()
@@ -414,7 +416,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       return entry.value
     }
 
-    const view = createMemo(() => loadView(params.dir!, params.id))
+    const view = createMemo(() => loadView(scope(), params.id))
 
     function ensure(path: string) {
       if (!path) return

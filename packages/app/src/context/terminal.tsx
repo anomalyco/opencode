@@ -13,6 +13,7 @@ export type LocalPTY = {
   cols?: number
   buffer?: string
   scrollY?: number
+  tail?: string
 }
 
 const WORKSPACE_KEY = "__workspace__"
