@@ -1,33 +1,13 @@
-import { afterEach, beforeAll, describe, expect, mock, test } from "bun:test"
-
-let evictContentLru: (keep: Set<string> | undefined, evict: (path: string) => void) => void
-let getFileContentBytesTotal: () => number
-let getFileContentEntryCount: () => number
-let removeFileContentBytes: (path: string) => void
-let resetFileContentLru: () => void
-let setFileContentBytes: (path: string, bytes: number) => void
-let touchFileContent: (path: string, bytes?: number) => void
-
-beforeAll(async () => {
-  mock.module("@solidjs/router", () => ({
-    useParams: () => ({}),
-  }))
-  mock.module("@opencode-ai/ui/context", () => ({
-    createSimpleContext: () => ({
-      use: () => undefined,
-      provider: () => undefined,
-    }),
-  }))
-
-  const mod = await import("./file")
-  evictContentLru = mod.evictContentLru
-  getFileContentBytesTotal = mod.getFileContentBytesTotal
-  getFileContentEntryCount = mod.getFileContentEntryCount
-  removeFileContentBytes = mod.removeFileContentBytes
-  resetFileContentLru = mod.resetFileContentLru
-  setFileContentBytes = mod.setFileContentBytes
-  touchFileContent = mod.touchFileContent
-})
+import { afterEach, describe, expect, test } from "bun:test"
+import {
+  evictContentLru,
+  getFileContentBytesTotal,
+  getFileContentEntryCount,
+  removeFileContentBytes,
+  resetFileContentLru,
+  setFileContentBytes,
+  touchFileContent,
+} from "./file/content-cache"
 
 describe("file content eviction accounting", () => {
   afterEach(() => {

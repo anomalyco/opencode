@@ -20,6 +20,7 @@ use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
     time::Duration,
+    process::Command,
 };
 use tauri::{AppHandle, Manager, RunEvent, State, ipc::Channel};
 #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
@@ -142,6 +143,62 @@ async fn await_initialization(
         .map_err(|_| "Failed to get server status".to_string())?
 }
 
+#[tauri::command]
+#[specta::specta]
+fn check_app_exists(app_name: &str) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        check_windows_app(app_name)
+    }
+    
+    #[cfg(target_os = "macos")]
+    {
+        check_macos_app(app_name)
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        check_linux_app(app_name)
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn check_windows_app(app_name: &str) -> bool {
+    // Check if command exists in PATH, including .exe
+    return true;
+}
+
+#[cfg(target_os = "macos")]
+fn check_macos_app(app_name: &str) -> bool {
+    // Check common installation locations
+    let mut app_locations = vec![
+        format!("/Applications/{}.app", app_name),
+        format!("/System/Applications/{}.app", app_name),
+    ];
+
+    if let Ok(home) = std::env::var("HOME") {
+        app_locations.push(format!("{}/Applications/{}.app", home, app_name));
+    }
+    
+    for location in app_locations {
+        if std::path::Path::new(&location).exists() {
+            return true;
+        }
+    }
+    
+    // Also check if command exists in PATH
+    Command::new("which")
+        .arg(app_name)
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
+#[cfg(target_os = "linux")]
+fn check_linux_app(app_name: &str) -> bool {
+    return true;
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri_specta::Builder::<tauri::Wry>::new()
@@ -152,7 +209,8 @@ pub fn run() {
             await_initialization,
             server::get_default_server_url,
             server::set_default_server_url,
-            markdown::parse_markdown_command
+            markdown::parse_markdown_command,
+            check_app_exists
         ])
         .events(tauri_specta::collect_events![LoadingWindowComplete])
         .error_handling(tauri_specta::ErrorHandlingMode::Throw);

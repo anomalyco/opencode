@@ -3,10 +3,12 @@ import { Title } from "@solidjs/meta"
 import { createMemo, createSignal, For, Match, onMount, Show, Switch } from "solid-js"
 import { PlanIcon, plans } from "./common"
 import { useI18n } from "~/context/i18n"
+import { useLanguage } from "~/context/language"
 
 export default function Black() {
   const [params] = useSearchParams()
   const i18n = useI18n()
+  const language = useLanguage()
   const [selected, setSelected] = createSignal<string | null>((params.plan as string) || null)
   const [mounted, setMounted] = createSignal(false)
   const selectedPlan = createMemo(() => plans.find((p) => p.id === selected()))
@@ -104,7 +106,7 @@ export default function Black() {
         </Switch>
         <p data-slot="fine-print" style={{ "view-transition-name": "fine-print" }}>
           {i18n.t("black.finePrint.beforeTerms")} ·{" "}
-          <A href="/legal/terms-of-service">{i18n.t("black.finePrint.terms")}</A>
+          <A href={language.route("/legal/terms-of-service")}>{i18n.t("black.finePrint.terms")}</A>
         </p>
       </section>
     </>

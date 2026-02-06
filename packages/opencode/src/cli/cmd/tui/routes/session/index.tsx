@@ -1099,6 +1099,9 @@ export function Session() {
                 sessionID={route.sessionID}
               />
             </box>
+            <Show when={!sidebarVisible() || !wide()}>
+              <Footer />
+            </Show>
           </Show>
           <Toast />
         </box>

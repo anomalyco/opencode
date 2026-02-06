@@ -1,12 +1,12 @@
 import "./index.css"
-import { Title, Meta, Link } from "@solidjs/meta"
+import { Title, Meta } from "@solidjs/meta"
 import { createSignal, Show } from "solid-js"
-import { config } from "~/config"
 import { Header } from "~/component/header"
 import { Footer } from "~/component/footer"
 import { Legal } from "~/component/legal"
 import { Faq } from "~/component/faq"
 import { useI18n } from "~/context/i18n"
+import { LocaleLinks } from "~/component/locale-links"
 
 export default function Enterprise() {
   const i18n = useI18n()
@@ -57,7 +57,7 @@ export default function Enterprise() {
   return (
     <main data-page="enterprise">
       <Title>{i18n.t("enterprise.title")}</Title>
-      <Link rel="canonical" href={`${config.baseUrl}/enterprise`} />
+      <LocaleLinks path="/enterprise" />
       <Meta name="description" content={i18n.t("enterprise.meta.description")} />
       <div data-component="container">
         <Header />
