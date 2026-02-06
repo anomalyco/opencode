@@ -186,6 +186,38 @@ export const SessionRoutes = lazy(() =>
       },
     )
     .post(
+      "/:sessionID/todo",
+      describeRoute({
+        summary: "Update session todos",
+        description: "Update the todo list for a specific session. This triggers a todo.updated event that refreshes the TUI sidebar.",
+        operationId: "session.todo.update",
+        responses: {
+          200: {
+            description: "Todos updated successfully",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: z.string().meta({ description: "Session ID" }),
+        }),
+      ),
+      validator("json", z.object({ todos: z.array(Todo.Info) })),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const { todos } = c.req.valid("json")
+        await Todo.update({ sessionID, todos })
+        return c.json(true)
+      },
+    )
+    .post(
       "/",
       describeRoute({
         summary: "Create session",
