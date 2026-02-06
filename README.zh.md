@@ -34,6 +34,22 @@
   <a href="README.tr.md">Türkçe</a>
 </p>
 
+---
+
+> [!IMPORTANT]
+> 本项目是原 [OpenCode](https://github.com/anomalyco/opencode) 的 **fork** 版本。
+> 它包含针对 AI Agent 核心的多项性能增强和架构改进。
+
+### 主要更新与增强
+
+- **🚀 工具并行执行**: 引入了精细的资源锁管理器，支持共享/排他锁。多个只读操作（如 `read`、`grep`）现在可以并行运行，显著缩短了 Agent 的等待时间。
+- **🔗 依赖感知调度**: 增加了对工具依赖关系的智能分析，优化了执行流程并确保了数据一致性。
+- **⚡ 异步性能优化**: 重构了核心处理循环，并为重型组件（如 Tree-Sitter 解析器）引入了异步延迟加载，实现了更快的启动和更流畅的运行。
+- **🏗️ 工作队列与后台任务**: 增强了内部工作队列系统，使后台任务管理更加健壮。
+- **🧠 AI 原生逻辑流**: 优化了 Agent 的决策逻辑，使其更高效且更适合处理复杂的多步编码任务。
+
+---
+
 [![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
 
 ---

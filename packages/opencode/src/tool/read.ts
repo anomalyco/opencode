@@ -13,6 +13,12 @@ const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
 const MAX_BYTES = 50 * 1024
 
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
 export const ReadTool = Tool.define("read", {
   description: DESCRIPTION,
   parameters: z.object({
@@ -61,7 +67,9 @@ export const ReadTool = Tool.define("read", {
 
     const instructions = await InstructionPrompt.resolve(ctx.messages, filepath, ctx.messageID)
 
-    // Exclude SVG (XML-based) and vnd.fastbidsheet (.fbs extension, commonly FlatBuffers schema files)
+    const stat = await file.stat()
+    const fileSize = stat.size
+
     const isImage =
       file.type.startsWith("image/") && file.type !== "image/svg+xml" && file.type !== "image/vnd.fastbidsheet"
     const isPdf = file.type === "application/pdf"
@@ -74,6 +82,8 @@ export const ReadTool = Tool.define("read", {
         metadata: {
           preview: msg,
           truncated: false,
+          size: fileSize,
+          sizeHuman: formatSize(fileSize),
           ...(instructions.length > 0 && { loaded: instructions.map((i) => i.filepath) }),
         },
         attachments: [
@@ -86,11 +96,8 @@ export const ReadTool = Tool.define("read", {
       }
     }
 
-    const isBinary = await isBinaryFile(filepath, file)
+    const isBinary = await isBinaryFile(filepath, fileSize, file)
     if (isBinary) throw new Error(`Cannot read binary file: ${filepath}`)
-
-    const stat = await file.stat()
-    const fileSize = stat.size
 
     const limit = params.limit ?? DEFAULT_READ_LIMIT
     const offset = params.offset || 0
@@ -172,12 +179,6 @@ export const ReadTool = Tool.define("read", {
     })
     const preview = raw.slice(0, 20).join("\n")
 
-    const formatSize = (bytes: number) => {
-      if (bytes < 1024) return `${bytes} B`
-      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-    }
-
     let output = `<file path="${title}" size="${formatSize(fileSize)}">\n`
     output += content.join("\n")
 
@@ -208,13 +209,15 @@ export const ReadTool = Tool.define("read", {
       metadata: {
         preview,
         truncated,
+        size: fileSize,
+        sizeHuman: formatSize(fileSize),
         ...(instructions.length > 0 && { loaded: instructions.map((i) => i.filepath) }),
       },
     }
   },
 })
 
-async function isBinaryFile(filepath: string, file: Bun.BunFile): Promise<boolean> {
+async function isBinaryFile(filepath: string, fileSize: number, file: Bun.BunFile): Promise<boolean> {
   const ext = path.extname(filepath).toLowerCase()
   // binary check for common non-text extensions
   switch (ext) {
@@ -251,8 +254,6 @@ async function isBinaryFile(filepath: string, file: Bun.BunFile): Promise<boolea
       break
   }
 
-  const stat = await file.stat()
-  const fileSize = stat.size
   if (fileSize === 0) return false
 
   const bufferSize = Math.min(4096, fileSize)

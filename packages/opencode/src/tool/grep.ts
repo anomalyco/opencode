@@ -58,7 +58,7 @@ export const GrepTool = Tool.define("grep", {
     if (exitCode === 1 || (exitCode === 2 && !outputText.trim())) {
       return {
         title: params.pattern,
-        metadata: { matches: 0, truncated: false },
+        metadata: { matches: 0, displayed: 0, truncated: false },
         output: "No files found matching the pattern.",
       }
     }
@@ -113,12 +113,12 @@ export const GrepTool = Tool.define("grep", {
     if (finalMatches.length === 0) {
       return {
         title: params.pattern,
-        metadata: { matches: 0, truncated: false },
+        metadata: { matches: 0, displayed: 0, truncated: false },
         output: "No files found matching the pattern.",
       }
     }
 
-    const outputLines: string[] = []
+    const outputLines: string[] = [`Found ${finalMatches.length} matches`]
     const searchIsBase = searchPath === Instance.worktree
 
     let currentFile = ""

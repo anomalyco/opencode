@@ -1754,6 +1754,10 @@ function Read(props: ToolProps<typeof ReadTool>) {
     <>
       <InlineTool icon="→" pending="Reading file..." complete={props.input.filePath} part={props.part}>
         Read {normalizePath(props.input.filePath!)} {input(props.input, ["filePath"])}
+        <Show when={props.metadata.sizeHuman}>
+          {" "}
+          ({props.metadata.sizeHuman})
+        </Show>
       </InlineTool>
       <For each={loaded()}>
         {(filepath) => (
