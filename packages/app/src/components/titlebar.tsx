@@ -83,7 +83,14 @@ export function Titlebar() {
 
     const tauri = (
       window as unknown as {
-        __TAURI__?: { window?: { getCurrentWindow?: () => { startDragging?: () => Promise<void> } } }
+        __TAURI__?: {
+          window?: {
+            getCurrentWindow?: () => {
+              startDragging?: () => Promise<void>
+              toggleMaximize?: () => Promise<void>
+            }
+          }
+        }
       }
     ).__TAURI__
     if (!tauri?.window?.getCurrentWindow) return
@@ -129,10 +136,23 @@ export function Titlebar() {
     void win.startDragging().catch(() => undefined)
   }
 
+  const maximize = (e: MouseEvent) => {
+    if (platform.platform !== "desktop") return
+    if (interactive(e.target)) return
+    if (e.target instanceof Element && e.target.closest("[data-tauri-decorum-tb]")) return
+
+    const win = getWin()
+    if (!win?.toggleMaximize) return
+
+    e.preventDefault()
+    void win.toggleMaximize().catch(() => undefined)
+  }
+
   return (
     <header
       class="h-10 shrink-0 bg-background-base relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-center"
       style={{ "min-height": minHeight() }}
+      onDblClick={maximize}
     >
       <div
         classList={{
