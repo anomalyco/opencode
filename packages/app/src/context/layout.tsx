@@ -1,5 +1,5 @@
 import { createStore, produce } from "solid-js/store"
-import { batch, createEffect, createMemo, on, onCleanup, onMount, type Accessor } from "solid-js"
+import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSync } from "./global-sync"
 import { useGlobalSDK } from "./global-sdk"
@@ -33,11 +33,56 @@ type SessionTabs = {
 type SessionView = {
   scroll: Record<string, SessionScroll>
   reviewOpen?: string[]
+  pendingMessage?: string
+  pendingMessageAt?: number
+}
+
+type TabHandoff = {
+  dir: string
+  id: string
+  at: number
 }
 
 export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
 
 export type ReviewDiffStyle = "unified" | "split"
+
+export function ensureSessionKey(key: string, touch: (key: string) => void, seed: (key: string) => void) {
+  touch(key)
+  seed(key)
+  return key
+}
+
+export function createSessionKeyReader(sessionKey: string | Accessor<string>, ensure: (key: string) => void) {
+  const key = typeof sessionKey === "function" ? sessionKey : () => sessionKey
+  return () => {
+    const value = key()
+    ensure(value)
+    return value
+  }
+}
+
+export function pruneSessionKeys(input: {
+  keep?: string
+  max: number
+  used: Map<string, number>
+  view: string[]
+  tabs: string[]
+}) {
+  if (!input.keep) return []
+
+  const keys = new Set<string>([...input.view, ...input.tabs])
+  if (keys.size <= input.max) return []
+
+  const score = (key: string) => {
+    if (key === input.keep) return Number.MAX_SAFE_INTEGER
+    return input.used.get(key) ?? 0
+  }
+
+  return Array.from(keys)
+    .sort((a, b) => score(b) - score(a))
+    .slice(input.max)
+}
 
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
   name: "Layout",
@@ -63,6 +108,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         }
       })()
 
+      const review = value.review
       const fileTree = value.fileTree
       const migratedFileTree = (() => {
         if (!isRecord(fileTree)) return fileTree
@@ -77,10 +123,22 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         }
       })()
 
-      if (migratedSidebar === sidebar && migratedFileTree === fileTree) return value
+      const migratedReview = (() => {
+        if (!isRecord(review)) return review
+        if (typeof review.panelOpened === "boolean") return review
+
+        const opened = isRecord(fileTree) && typeof fileTree.opened === "boolean" ? fileTree.opened : true
+        return {
+          ...review,
+          panelOpened: opened,
+        }
+      })()
+
+      if (migratedSidebar === sidebar && migratedReview === review && migratedFileTree === fileTree) return value
       return {
         ...value,
         sidebar: migratedSidebar,
+        review: migratedReview,
         fileTree: migratedFileTree,
       }
     }
@@ -101,6 +159,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         review: {
           diffStyle: "split" as ReviewDiffStyle,
+          panelOpened: true,
         },
         fileTree: {
           opened: true,
@@ -115,10 +174,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         },
         sessionTabs: {} as Record<string, SessionTabs>,
         sessionView: {} as Record<string, SessionView>,
+        handoff: {
+          tabs: undefined as TabHandoff | undefined,
+        },
       }),
     )
 
     const MAX_SESSION_KEYS = 50
+    const PENDING_MESSAGE_TTL_MS = 2 * 60 * 1000
     const meta = { active: undefined as string | undefined, pruned: false }
     const used = new Map<string, number>()
 
@@ -146,20 +209,13 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     }
 
     function prune(keep?: string) {
-      if (!keep) return
-
-      const keys = new Set<string>()
-      for (const key of Object.keys(store.sessionView)) keys.add(key)
-      for (const key of Object.keys(store.sessionTabs)) keys.add(key)
-      if (keys.size <= MAX_SESSION_KEYS) return
-
-      const score = (key: string) => {
-        if (key === keep) return Number.MAX_SAFE_INTEGER
-        return used.get(key) ?? 0
-      }
-
-      const ordered = Array.from(keys).sort((a, b) => score(b) - score(a))
-      const drop = ordered.slice(MAX_SESSION_KEYS)
+      const drop = pruneSessionKeys({
+        keep,
+        max: MAX_SESSION_KEYS,
+        used,
+        view: Object.keys(store.sessionView),
+        tabs: Object.keys(store.sessionTabs),
+      })
       if (drop.length === 0) return
 
       setStore(
@@ -206,6 +262,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         prune(keep)
       },
     })
+
+    const ensureKey = (key: string) => ensureSessionKey(key, touch, (sessionKey) => scroll.seed(sessionKey))
 
     createEffect(() => {
       if (!ready()) return
@@ -411,6 +469,16 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     return {
       ready,
+      handoff: {
+        tabs: createMemo(() => store.handoff?.tabs),
+        setTabs(dir: string, id: string) {
+          setStore("handoff", "tabs", { dir, id, at: Date.now() })
+        },
+        clearTabs() {
+          if (!store.handoff?.tabs) return
+          setStore("handoff", "tabs", undefined)
+        },
+      },
       projects: {
         list,
         open(directory: string) {
@@ -468,7 +536,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         diffStyle: createMemo(() => store.review?.diffStyle ?? "split"),
         setDiffStyle(diffStyle: ReviewDiffStyle) {
           if (!store.review) {
-            setStore("review", { diffStyle })
+            setStore("review", { diffStyle, panelOpened: true })
             return
           }
           setStore("review", "diffStyle", diffStyle)
@@ -536,25 +604,54 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("mobileSidebar", "opened", (x) => !x)
         },
       },
+      pendingMessage: {
+        set(sessionKey: string, messageID: string) {
+          const at = Date.now()
+          touch(sessionKey)
+          const current = store.sessionView[sessionKey]
+          if (!current) {
+            setStore("sessionView", sessionKey, {
+              scroll: {},
+              pendingMessage: messageID,
+              pendingMessageAt: at,
+            })
+            prune(meta.active ?? sessionKey)
+            return
+          }
+
+          setStore(
+            "sessionView",
+            sessionKey,
+            produce((draft) => {
+              draft.pendingMessage = messageID
+              draft.pendingMessageAt = at
+            }),
+          )
+        },
+        consume(sessionKey: string) {
+          const current = store.sessionView[sessionKey]
+          const message = current?.pendingMessage
+          const at = current?.pendingMessageAt
+          if (!message || !at) return
+
+          setStore(
+            "sessionView",
+            sessionKey,
+            produce((draft) => {
+              delete draft.pendingMessage
+              delete draft.pendingMessageAt
+            }),
+          )
+
+          if (Date.now() - at > PENDING_MESSAGE_TTL_MS) return
+          return message
+        },
+      },
       view(sessionKey: string | Accessor<string>) {
-        const key = typeof sessionKey === "function" ? sessionKey : () => sessionKey
-
-        touch(key())
-        scroll.seed(key())
-
-        createEffect(
-          on(
-            key,
-            (value) => {
-              touch(value)
-              scroll.seed(value)
-            },
-            { defer: true },
-          ),
-        )
-
+        const key = createSessionKeyReader(sessionKey, ensureKey)
         const s = createMemo(() => store.sessionView[key()] ?? { scroll: {} })
         const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
+        const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? true)
 
         function setTerminalOpened(next: boolean) {
           const current = store.terminal
@@ -566,6 +663,18 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           const value = current.opened ?? false
           if (value === next) return
           setStore("terminal", "opened", next)
+        }
+
+        function setReviewPanelOpened(next: boolean) {
+          const current = store.review
+          if (!current) {
+            setStore("review", { diffStyle: "split" as ReviewDiffStyle, panelOpened: next })
+            return
+          }
+
+          const value = current.panelOpened ?? true
+          if (value === next) return
+          setStore("review", "panelOpened", next)
         }
 
         return {
@@ -585,6 +694,18 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             },
             toggle() {
               setTerminalOpened(!terminalOpened())
+            },
+          },
+          reviewPanel: {
+            opened: reviewPanelOpened,
+            open() {
+              setReviewPanelOpened(true)
+            },
+            close() {
+              setReviewPanelOpened(false)
+            },
+            toggle() {
+              setReviewPanelOpened(!reviewPanelOpened())
             },
           },
           review: {
@@ -607,28 +728,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         }
       },
       tabs(sessionKey: string | Accessor<string>) {
-        const key = typeof sessionKey === "function" ? sessionKey : () => sessionKey
-
-        touch(key())
-
-        createEffect(
-          on(
-            key,
-            (value) => {
-              touch(value)
-            },
-            { defer: true },
-          ),
-        )
-
+        const key = createSessionKeyReader(sessionKey, ensureKey)
         const tabs = createMemo(() => store.sessionTabs[key()] ?? { all: [] })
         return {
           tabs,
-          active: createMemo(() => (tabs().active === "review" ? undefined : tabs().active)),
+          active: createMemo(() => tabs().active),
           all: createMemo(() => tabs().all.filter((tab) => tab !== "review")),
           setActive(tab: string | undefined) {
             const session = key()
-            if (tab === "review") return
             if (!store.sessionTabs[session]) {
               setStore("sessionTabs", session, { all: [], active: tab })
             } else {
@@ -645,9 +752,17 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             }
           },
           async open(tab: string) {
-            if (tab === "review") return
             const session = key()
             const current = store.sessionTabs[session] ?? { all: [] }
+
+            if (tab === "review") {
+              if (!store.sessionTabs[session]) {
+                setStore("sessionTabs", session, { all: current.all.filter((x) => x !== "review"), active: tab })
+                return
+              }
+              setStore("sessionTabs", session, "active", tab)
+              return
+            }
 
             if (tab === "context") {
               const all = [tab, ...current.all.filter((x) => x !== tab)]
@@ -680,6 +795,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             const session = key()
             const current = store.sessionTabs[session]
             if (!current) return
+
+            if (tab === "review") {
+              if (current.active !== tab) return
+              setStore("sessionTabs", session, "active", current.all[0])
+              return
+            }
 
             const all = current.all.filter((x) => x !== tab)
             if (current.active !== tab) {
