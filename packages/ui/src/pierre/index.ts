@@ -13,7 +13,7 @@ export type DiffProps<T = {}> = FileDiffOptions<T> & {
 }
 
 const unsafeCSS = `
-[data-diffs] {
+[data-diff] {
   --diffs-bg: light-dark(var(--diffs-light-bg), var(--diffs-dark-bg));
   --diffs-bg-buffer: var(--diffs-bg-buffer-override, light-dark( color-mix(in lab, var(--diffs-bg) 92%, var(--diffs-mixer)), color-mix(in lab, var(--diffs-bg) 92%, var(--diffs-mixer))));
   --diffs-bg-hover: var(--diffs-bg-hover-override, light-dark( color-mix(in lab, var(--diffs-bg) 97%, var(--diffs-mixer)), color-mix(in lab, var(--diffs-bg) 91%, var(--diffs-mixer))));
@@ -44,7 +44,7 @@ const unsafeCSS = `
   --diffs-bg-selection-text: rgb(from var(--surface-warning-strong) r g b / 0.2);
 }
 
-:host([data-color-scheme='dark']) [data-diffs] {
+:host([data-color-scheme='dark']) [data-diff] {
   --diffs-selection-number-fg: #fdfbfb;
   --diffs-bg-selection: var(--diffs-bg-selection-override, rgb(from var(--solaris-dark-6) r g b / 0.65));
   --diffs-bg-selection-number: var(
@@ -53,7 +53,7 @@ const unsafeCSS = `
   );
 }
 
-[data-diffs] ::selection {
+[data-diff] ::selection {
   background-color: var(--diffs-bg-selection-text);
 }
 
@@ -65,46 +65,46 @@ const unsafeCSS = `
   background-color: rgb(from var(--surface-warning-strong) r g b / 0.55);
 }
 
-[data-diffs] [data-line][data-comment-selected]:not([data-selected-line]) {
+[data-diff] [data-line][data-comment-selected]:not([data-selected-line]) {
   box-shadow: inset 0 0 0 9999px var(--diffs-bg-selection);
 }
 
-[data-diffs] [data-column-number][data-comment-selected]:not([data-selected-line]) {
+[data-diff] [data-column-number][data-comment-selected]:not([data-selected-line]) {
   box-shadow: inset 0 0 0 9999px var(--diffs-bg-selection-number);
   color: var(--diffs-selection-number-fg);
 }
 
-[data-diffs] [data-line-annotation][data-comment-selected]:not([data-selected-line]) [data-annotation-content] {
+[data-diff] [data-line-annotation][data-comment-selected]:not([data-selected-line]) [data-annotation-content] {
   box-shadow: inset 0 0 0 9999px var(--diffs-bg-selection);
 }
 
-[data-diffs] [data-line][data-selected-line] {
+[data-diff] [data-line][data-selected-line] {
   background-color: var(--diffs-bg-selection);
   box-shadow: inset 2px 0 0 var(--diffs-selection-border);
 }
 
-[data-diffs] [data-column-number][data-selected-line] {
+[data-diff] [data-column-number][data-selected-line] {
   background-color: var(--diffs-bg-selection-number);
   color: var(--diffs-selection-number-fg);
 }
 
-[data-diffs] [data-column-number][data-line-type='context'][data-selected-line],
-[data-diffs] [data-column-number][data-line-type='context-expanded'][data-selected-line],
-[data-diffs] [data-column-number][data-line-type='change-addition'][data-selected-line],
-[data-diffs] [data-column-number][data-line-type='change-deletion'][data-selected-line] {
+[data-diff] [data-column-number][data-line-type='context'][data-selected-line],
+[data-diff] [data-column-number][data-line-type='context-expanded'][data-selected-line],
+[data-diff] [data-column-number][data-line-type='change-addition'][data-selected-line],
+[data-diff] [data-column-number][data-line-type='change-deletion'][data-selected-line] {
   color: var(--diffs-selection-number-fg);
 }
 
 /* The deletion word-diff emphasis is stronger than additions; soften it while selected so the selection highlight reads consistently. */
-[data-diffs] [data-line][data-line-type='change-deletion'][data-selected-line] {
+[data-diff] [data-line][data-line-type='change-deletion'][data-selected-line] {
   --diffs-bg-deletion-emphasis: light-dark(
     rgb(from var(--diffs-deletion-base) r g b / 0.07),
     rgb(from var(--diffs-deletion-base) r g b / 0.1)
   );
 }
 
-[data-diffs-header],
-[data-diffs] {
+[data-diff-header],
+[data-diff] {
   [data-separator-wrapper] {
     margin: 0 !important;
     border-radius: 0 !important;

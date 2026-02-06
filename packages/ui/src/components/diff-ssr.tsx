@@ -70,10 +70,10 @@ export function Diff<T>(props: SSRDiffProps<T>) {
     const root = getRoot()
     if (!root) return
 
-    const diffs = root.querySelector("[data-diffs]")
+    const diffs = root.querySelector("[data-diff]")
     if (!(diffs instanceof HTMLElement)) return
 
-    const split = diffs.dataset.type === "split"
+    const split = diffs.dataset.diffType === "split"
 
     const start = rowIndex(root, split, range.start, range.side)
     const end = rowIndex(root, split, range.end, range.endSide ?? range.side)
@@ -132,10 +132,10 @@ export function Diff<T>(props: SSRDiffProps<T>) {
       node.removeAttribute("data-comment-selected")
     }
 
-    const diffs = root.querySelector("[data-diffs]")
+    const diffs = root.querySelector("[data-diff]")
     if (!(diffs instanceof HTMLElement)) return
 
-    const split = diffs.dataset.type === "split"
+    const split = diffs.dataset.diffType === "split"
 
     const rows = Array.from(diffs.querySelectorAll("[data-line-index]")).filter(
       (node): node is HTMLElement => node instanceof HTMLElement,
