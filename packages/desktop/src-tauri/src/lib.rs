@@ -585,7 +585,7 @@ fn setup_window_state_listener(app: &tauri::AppHandle, window: &tauri::WebviewWi
             };
 
             while rx.recv().await.is_some() {
-                tokio::time::sleep(Duration::from_millis(50)).await;
+                tokio::time::sleep(Duration::from_millis(200)).await;
 
                 save();
             }
