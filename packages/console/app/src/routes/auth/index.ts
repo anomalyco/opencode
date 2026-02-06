@@ -1,12 +1,16 @@
 import { redirect } from "@solidjs/router"
 import type { APIEvent } from "@solidjs/start/server"
 import { getLastSeenWorkspaceID } from "../workspace/common"
+import { localeFromRequest, route } from "~/lib/language"
 
 export async function GET(input: APIEvent) {
+  const locale = localeFromRequest(input.request)
   try {
     const workspaceID = await getLastSeenWorkspaceID()
-    return redirect(`/workspace/${workspaceID}`)
+    return redirect(route(locale, `/workspace/${workspaceID}`))
   } catch {
-    return redirect("/auth/authorize")
+    const cont = route(locale, "/auth")
+    if (cont === "/auth") return redirect("/auth/authorize")
+    return redirect(`/auth/authorize?continue=${encodeURIComponent(cont)}`)
   }
 }
