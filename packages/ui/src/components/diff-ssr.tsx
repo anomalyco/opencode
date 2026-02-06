@@ -137,10 +137,14 @@ export function Diff<T>(props: SSRDiffProps<T>) {
 
     const split = diffs.dataset.type === "split"
 
-    const code = Array.from(diffs.querySelectorAll("[data-code]")).filter(
+    const rows = Array.from(diffs.querySelectorAll("[data-line-index]")).filter(
       (node): node is HTMLElement => node instanceof HTMLElement,
     )
-    if (code.length === 0) return
+    if (rows.length === 0) return
+
+    const annotations = Array.from(diffs.querySelectorAll("[data-line-annotation]")).filter(
+      (node): node is HTMLElement => node instanceof HTMLElement,
+    )
 
     const lineIndex = (element: HTMLElement) => {
       const raw = element.dataset.lineIndex
@@ -183,19 +187,18 @@ export function Diff<T>(props: SSRDiffProps<T>) {
       const first = Math.min(start, end)
       const last = Math.max(start, end)
 
-      for (const block of code) {
-        for (const element of Array.from(block.children)) {
-          if (!(element instanceof HTMLElement)) continue
-          const idx = lineIndex(element)
-          if (idx === undefined) continue
-          if (idx > last) break
-          if (idx < first) continue
-          element.setAttribute("data-comment-selected", "")
-          const next = element.nextSibling
-          if (next instanceof HTMLElement && next.hasAttribute("data-line-annotation")) {
-            next.setAttribute("data-comment-selected", "")
-          }
-        }
+      for (const row of rows) {
+        const idx = lineIndex(row)
+        if (idx === undefined) continue
+        if (idx < first || idx > last) continue
+        row.setAttribute("data-comment-selected", "")
+      }
+
+      for (const annotation of annotations) {
+        const idx = parseInt(annotation.dataset.lineAnnotation?.split(",")[1] ?? "", 10)
+        if (Number.isNaN(idx)) continue
+        if (idx < first || idx > last) continue
+        annotation.setAttribute("data-comment-selected", "")
       }
     }
   }

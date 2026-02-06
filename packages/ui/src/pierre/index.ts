@@ -65,34 +65,38 @@ const unsafeCSS = `
   background-color: rgb(from var(--surface-warning-strong) r g b / 0.55);
 }
 
-[data-diffs] [data-comment-selected]:not([data-selected-line]) [data-column-content] {
+[data-diffs] [data-line][data-comment-selected]:not([data-selected-line]) {
   box-shadow: inset 0 0 0 9999px var(--diffs-bg-selection);
 }
 
-[data-diffs] [data-comment-selected]:not([data-selected-line]) [data-column-number] {
+[data-diffs] [data-column-number][data-comment-selected]:not([data-selected-line]) {
   box-shadow: inset 0 0 0 9999px var(--diffs-bg-selection-number);
   color: var(--diffs-selection-number-fg);
 }
 
-[data-diffs] [data-selected-line] {
+[data-diffs] [data-line-annotation][data-comment-selected]:not([data-selected-line]) [data-annotation-content] {
+  box-shadow: inset 0 0 0 9999px var(--diffs-bg-selection);
+}
+
+[data-diffs] [data-line][data-selected-line] {
   background-color: var(--diffs-bg-selection);
   box-shadow: inset 2px 0 0 var(--diffs-selection-border);
 }
 
-[data-diffs] [data-selected-line] [data-column-number] {
+[data-diffs] [data-column-number][data-selected-line] {
   background-color: var(--diffs-bg-selection-number);
   color: var(--diffs-selection-number-fg);
 }
 
-[data-diffs] [data-line-type='context'][data-selected-line] [data-column-number],
-[data-diffs] [data-line-type='context-expanded'][data-selected-line] [data-column-number],
-[data-diffs] [data-line-type='change-addition'][data-selected-line] [data-column-number],
-[data-diffs] [data-line-type='change-deletion'][data-selected-line] [data-column-number] {
+[data-diffs] [data-column-number][data-line-type='context'][data-selected-line],
+[data-diffs] [data-column-number][data-line-type='context-expanded'][data-selected-line],
+[data-diffs] [data-column-number][data-line-type='change-addition'][data-selected-line],
+[data-diffs] [data-column-number][data-line-type='change-deletion'][data-selected-line] {
   color: var(--diffs-selection-number-fg);
 }
 
 /* The deletion word-diff emphasis is stronger than additions; soften it while selected so the selection highlight reads consistently. */
-[data-diffs] [data-line-type='change-deletion'][data-selected-line] {
+[data-diffs] [data-line][data-line-type='change-deletion'][data-selected-line] {
   --diffs-bg-deletion-emphasis: light-dark(
     rgb(from var(--diffs-deletion-base) r g b / 0.07),
     rgb(from var(--diffs-deletion-base) r g b / 0.1)
@@ -146,6 +150,7 @@ export function createDefaultOptions<T>(style: FileDiffOptions<T>["diffStyle"]) 
     overflow: "wrap",
     diffStyle: style ?? "unified",
     diffIndicators: "bars",
+    lineHoverHighlight: "both",
     disableBackground: false,
     expansionLineCount: 20,
     lineDiffType: style === "split" ? "word-alt" : "none",
@@ -153,21 +158,6 @@ export function createDefaultOptions<T>(style: FileDiffOptions<T>["diffStyle"]) 
     maxLineLengthForHighlighting: 1000,
     disableFileHeader: true,
     unsafeCSS,
-    // hunkSeparators(hunkData: HunkData) {
-    //   const fragment = document.createDocumentFragment()
-    //   const numCol = document.createElement("div")
-    //   numCol.innerHTML = `<svg data-slot="diff-hunk-separator-line-number-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8.97978 14.0204L8.62623 13.6668L9.33334 12.9597L9.68689 13.3133L9.33333 13.6668L8.97978 14.0204ZM12 16.3335L12.3535 16.6871L12 17.0406L11.6464 16.687L12 16.3335ZM14.3131 13.3133L14.6667 12.9597L15.3738 13.6668L15.0202 14.0204L14.6667 13.6668L14.3131 13.3133ZM12.5 16.0002V16.5002H11.5V16.0002H12H12.5ZM9.33333 13.6668L9.68689 13.3133L12.3535 15.9799L12 16.3335L11.6464 16.687L8.97978 14.0204L9.33333 13.6668ZM12 16.3335L11.6464 15.9799L14.3131 13.3133L14.6667 13.6668L15.0202 14.0204L12.3535 16.6871L12 16.3335ZM6.5 8.00016V7.50016H8.5V8.00016V8.50016H6.5V8.00016ZM9.5 8.00016V7.50016H11.5V8.00016V8.50016H9.5V8.00016ZM12.5 8.00016V7.50016H14.5V8.00016V8.50016H12.5V8.00016ZM15.5 8.00016V7.50016H17.5V8.00016V8.50016H15.5V8.00016ZM12 10.5002H12.5V16.0002H12H11.5V10.5002H12Z" fill="currentColor"/></svg> `
-    //   numCol.dataset["slot"] = "diff-hunk-separator-line-number"
-    //   fragment.appendChild(numCol)
-    //   const contentCol = document.createElement("div")
-    //   contentCol.dataset["slot"] = "diff-hunk-separator-content"
-    //   const span = document.createElement("span")
-    //   span.dataset["slot"] = "diff-hunk-separator-content-span"
-    //   span.textContent = `${hunkData.lines} unmodified lines`
-    //   contentCol.appendChild(span)
-    //   fragment.appendChild(contentCol)
-    //   return fragment
-    // },
   } as const
 }
 
