@@ -297,11 +297,14 @@ export const dict = {
   "workspace.home.billing.enable": "Faturalandırmayı etkinleştir",
   "workspace.home.billing.currentBalance": "Mevcut bakiye",
   "workspace.newUser.feature.tested.title": "Test Edilmiş ve Doğrulanmış Modeller",
-  "workspace.newUser.feature.tested.body": "En iyi performansı sağlamak için modelleri özellikle kodlama aracılarına yönelik olarak karşılaştırdık ve test ettik.",
+  "workspace.newUser.feature.tested.body":
+    "En iyi performansı sağlamak için modelleri özellikle kodlama aracılarına yönelik olarak karşılaştırdık ve test ettik.",
   "workspace.newUser.feature.quality.title": "En Yüksek Kalite",
-  "workspace.newUser.feature.quality.body": "Optimum performans için yapılandırılmış modellere erişin; sürüm düşürme veya daha ucuz sağlayıcılara yönlendirme yok.",
+  "workspace.newUser.feature.quality.body":
+    "Optimum performans için yapılandırılmış modellere erişin; sürüm düşürme veya daha ucuz sağlayıcılara yönlendirme yok.",
   "workspace.newUser.feature.lockin.title": "Kilitlenme Yok",
-  "workspace.newUser.feature.lockin.body": "Zen'i herhangi bir kodlama aracısıyla kullanın ve istediğiniz zaman opencode ile diğer sağlayıcıları kullanmaya devam edin.",
+  "workspace.newUser.feature.lockin.body":
+    "Zen'i herhangi bir kodlama aracısıyla kullanın ve istediğiniz zaman opencode ile diğer sağlayıcıları kullanmaya devam edin.",
   "workspace.newUser.copyApiKey": "API anahtarını kopyala",
   "workspace.newUser.copyKey": "Anahtarı Kopyala",
   "workspace.newUser.copied": "Kopyalandı!",
@@ -463,5 +466,6 @@ export const dict = {
   "workspace.black.waitlist.enroll": "Kayıt ol",
   "workspace.black.waitlist.enrolling": "Kaydediliyor...",
   "workspace.black.waitlist.enrolled": "Kayıtlı",
-  "workspace.black.waitlist.enrollNote": "Kayıt Ol'a tıkladığınızda aboneliğiniz hemen başlar ve kartınızdan çekim yapılır.",
+  "workspace.black.waitlist.enrollNote":
+    "Kayıt Ol'a tıkladığınızda aboneliğiniz hemen başlar ve kartınızdan çekim yapılır.",
 } satisfies Dict

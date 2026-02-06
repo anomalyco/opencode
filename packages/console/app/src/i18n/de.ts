@@ -298,11 +298,14 @@ export const dict = {
   "workspace.home.billing.enable": "Abrechnung aktivieren",
   "workspace.home.billing.currentBalance": "Aktueller Kontostand",
   "workspace.newUser.feature.tested.title": "Getestete und verifizierte Modelle",
-  "workspace.newUser.feature.tested.body": "Wir haben Modelle speziell für Codierungsagenten einem Benchmarking unterzogen und getestet, um die beste Leistung sicherzustellen.",
+  "workspace.newUser.feature.tested.body":
+    "Wir haben Modelle speziell für Codierungsagenten einem Benchmarking unterzogen und getestet, um die beste Leistung sicherzustellen.",
   "workspace.newUser.feature.quality.title": "Höchste Qualität",
-  "workspace.newUser.feature.quality.body": "Für optimale Performance konfigurierte Zugangsmodelle – keine Downgrades oder Weiterleitung zu günstigeren Anbietern.",
+  "workspace.newUser.feature.quality.body":
+    "Für optimale Performance konfigurierte Zugangsmodelle – keine Downgrades oder Weiterleitung zu günstigeren Anbietern.",
   "workspace.newUser.feature.lockin.title": "Kein Lock-in",
-  "workspace.newUser.feature.lockin.body": "Verwenden Sie Zen mit einem beliebigen Codierungsagenten und nutzen Sie weiterhin andere Anbieter mit opencode, wann immer Sie möchten.",
+  "workspace.newUser.feature.lockin.body":
+    "Verwenden Sie Zen mit einem beliebigen Codierungsagenten und nutzen Sie weiterhin andere Anbieter mit opencode, wann immer Sie möchten.",
   "workspace.newUser.copyApiKey": "Kopieren Sie den Schlüssel API",
   "workspace.newUser.copyKey": "Schlüssel kopieren",
   "workspace.newUser.copied": "Kopiert!",
@@ -313,7 +316,8 @@ export const dict = {
   "workspace.newUser.step.models.before": "Starten Sie opencode und führen Sie es aus",
   "workspace.newUser.step.models.after": "um ein Modell auszuwählen",
   "workspace.models.title": "Modelle",
-  "workspace.models.subtitle.beforeLink": "Verwalten Sie, auf welche Modelle Arbeitsbereichsmitglieder zugreifen können.",
+  "workspace.models.subtitle.beforeLink":
+    "Verwalten Sie, auf welche Modelle Arbeitsbereichsmitglieder zugreifen können.",
   "workspace.models.table.model": "Modell",
   "workspace.models.table.enabled": "Ermöglicht",
   "workspace.providers.title": "Bringen Sie Ihren eigenen Schlüssel mit",
@@ -413,7 +417,8 @@ export const dict = {
   "workspace.reload.title": "Automatisches Neuladen",
   "workspace.reload.disabled.before": "Automatisches Nachladen ist",
   "workspace.reload.disabled.state": "deaktiviert",
-  "workspace.reload.disabled.after": "Aktivieren Sie diese Option, um das Guthaben automatisch neu zu laden, wenn das Guthaben niedrig ist.",
+  "workspace.reload.disabled.after":
+    "Aktivieren Sie diese Option, um das Guthaben automatisch neu zu laden, wenn das Guthaben niedrig ist.",
   "workspace.reload.enabled.before": "Automatisches Nachladen ist",
   "workspace.reload.enabled.state": "ermöglicht",
   "workspace.reload.enabled.middle": "Wir laden nach",
@@ -454,15 +459,19 @@ export const dict = {
   "workspace.black.subscription.rollingUsage": "5-stündige Nutzung",
   "workspace.black.subscription.weeklyUsage": "Wöchentliche Nutzung",
   "workspace.black.subscription.resetsIn": "Wird zurückgesetzt",
-  "workspace.black.subscription.useBalance": "Nutzen Sie Ihr verfügbares Guthaben, nachdem Sie die Nutzungslimits erreicht haben",
+  "workspace.black.subscription.useBalance":
+    "Nutzen Sie Ihr verfügbares Guthaben, nachdem Sie die Nutzungslimits erreicht haben",
   "workspace.black.waitlist.title": "Warteliste",
-  "workspace.black.waitlist.joined": "Sie stehen auf der Warteliste für den Black-Plan im Wert von ${{plan}} pro Monat OpenCode.",
-  "workspace.black.waitlist.ready": "Wir sind bereit, Sie für den Black-Plan im Wert von ${{plan}} pro Monat OpenCode anzumelden.",
+  "workspace.black.waitlist.joined":
+    "Sie stehen auf der Warteliste für den Black-Plan im Wert von ${{plan}} pro Monat OpenCode.",
+  "workspace.black.waitlist.ready":
+    "Wir sind bereit, Sie für den Black-Plan im Wert von ${{plan}} pro Monat OpenCode anzumelden.",
   "workspace.black.waitlist.leave": "Warteliste verlassen",
   "workspace.black.waitlist.leaving": "Verlassen...",
   "workspace.black.waitlist.left": "Links",
   "workspace.black.waitlist.enroll": "Einschreiben",
   "workspace.black.waitlist.enrolling": "Anmeldung...",
   "workspace.black.waitlist.enrolled": "Eingeschrieben",
-  "workspace.black.waitlist.enrollNote": "Wenn Sie auf „Anmelden“ klicken, beginnt Ihr Abonnement sofort und Ihre Karte wird belastet.",
+  "workspace.black.waitlist.enrollNote":
+    "Wenn Sie auf „Anmelden“ klicken, beginnt Ihr Abonnement sofort und Ihre Karte wird belastet.",
 } satisfies Dict

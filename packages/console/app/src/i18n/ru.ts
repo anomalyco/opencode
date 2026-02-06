@@ -369,11 +369,14 @@ export const dict = {
   "workspace.home.billing.enable": "Включить биллинг",
   "workspace.home.billing.currentBalance": "Текущий баланс",
   "workspace.newUser.feature.tested.title": "Протестированные и проверенные модели",
-  "workspace.newUser.feature.tested.body": "Мы протестировали модели специально для агентов кодирования, чтобы обеспечить максимальную производительность.",
+  "workspace.newUser.feature.tested.body":
+    "Мы протестировали модели специально для агентов кодирования, чтобы обеспечить максимальную производительность.",
   "workspace.newUser.feature.quality.title": "Высочайшее качество",
-  "workspace.newUser.feature.quality.body": "Модели доступа, настроенные для оптимальной производительности — без перехода на более раннюю версию или перенаправления к более дешевым поставщикам.",
+  "workspace.newUser.feature.quality.body":
+    "Модели доступа, настроенные для оптимальной производительности — без перехода на более раннюю версию или перенаправления к более дешевым поставщикам.",
   "workspace.newUser.feature.lockin.title": "Нет блокировки",
-  "workspace.newUser.feature.lockin.body": "Используйте Zen с любым агентом кодирования и продолжайте использовать других поставщиков с opencode, когда захотите.",
+  "workspace.newUser.feature.lockin.body":
+    "Используйте Zen с любым агентом кодирования и продолжайте использовать других поставщиков с opencode, когда захотите.",
   "workspace.newUser.copyApiKey": "Скопируйте ключ API",
   "workspace.newUser.copyKey": "Копировать ключ",
   "workspace.newUser.copied": "Скопировано!",
@@ -528,12 +531,14 @@ export const dict = {
   "workspace.black.subscription.useBalance": "Используйте доступный баланс после достижения лимитов использования.",
   "workspace.black.waitlist.title": "Список ожидания",
   "workspace.black.waitlist.joined": "Вы находитесь в списке ожидания плана OpenCode Black за ${{plan}} в месяц.",
-  "workspace.black.waitlist.ready": "Мы готовы зарегистрировать вас в плане OpenCode Black стоимостью ${{plan}} в месяц.",
+  "workspace.black.waitlist.ready":
+    "Мы готовы зарегистрировать вас в плане OpenCode Black стоимостью ${{plan}} в месяц.",
   "workspace.black.waitlist.leave": "Покинуть список ожидания",
   "workspace.black.waitlist.leaving": "Уход...",
   "workspace.black.waitlist.left": "Левый",
   "workspace.black.waitlist.enroll": "Зарегистрироваться",
   "workspace.black.waitlist.enrolling": "Регистрация...",
   "workspace.black.waitlist.enrolled": "Зачислен",
-  "workspace.black.waitlist.enrollNote": "Когда вы нажмете «Зарегистрироваться», ваша подписка начнется немедленно, и с вашей карты будет снята оплата.",
+  "workspace.black.waitlist.enrollNote":
+    "Когда вы нажмете «Зарегистрироваться», ваша подписка начнется немедленно, и с вашей карты будет снята оплата.",
 } satisfies Dict

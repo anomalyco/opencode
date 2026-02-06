@@ -307,7 +307,8 @@ export const dict = {
   "workspace.newUser.feature.quality.title": "最高品质",
   "workspace.newUser.feature.quality.body": "访问模型配置为最佳性能 - 无需降级或路由到更便宜的提供商。",
   "workspace.newUser.feature.lockin.title": "无锁定",
-  "workspace.newUser.feature.lockin.body": "将 Zen 与任何编码代理结合使用，并在需要时继续将其他提供程序与 opencode 结合使用。",
+  "workspace.newUser.feature.lockin.body":
+    "将 Zen 与任何编码代理结合使用，并在需要时继续将其他提供程序与 opencode 结合使用。",
   "workspace.newUser.copyApiKey": "复制 API 密钥",
   "workspace.newUser.copyKey": "复制钥匙",
   "workspace.newUser.copied": "复制了！",

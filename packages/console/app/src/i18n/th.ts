@@ -371,11 +371,14 @@ export const dict = {
   "workspace.home.billing.enable": "เปิดใช้งานการเรียกเก็บเงิน",
   "workspace.home.billing.currentBalance": "ยอดคงเหลือปัจจุบัน",
   "workspace.newUser.feature.tested.title": "รุ่นที่ผ่านการทดสอบและตรวจสอบแล้ว",
-  "workspace.newUser.feature.tested.body": "เราได้เปรียบเทียบและทดสอบโมเดลสำหรับเอเจนต์การเขียนโค้ดโดยเฉพาะเพื่อให้มั่นใจถึงประสิทธิภาพที่ดีที่สุด",
+  "workspace.newUser.feature.tested.body":
+    "เราได้เปรียบเทียบและทดสอบโมเดลสำหรับเอเจนต์การเขียนโค้ดโดยเฉพาะเพื่อให้มั่นใจถึงประสิทธิภาพที่ดีที่สุด",
   "workspace.newUser.feature.quality.title": "คุณภาพสูงสุด",
-  "workspace.newUser.feature.quality.body": "โมเดลการเข้าถึงที่กำหนดค่าไว้เพื่อประสิทธิภาพสูงสุด - ไม่ต้องดาวน์เกรดหรือกำหนดเส้นทางไปยังผู้ให้บริการที่ถูกกว่า",
+  "workspace.newUser.feature.quality.body":
+    "โมเดลการเข้าถึงที่กำหนดค่าไว้เพื่อประสิทธิภาพสูงสุด - ไม่ต้องดาวน์เกรดหรือกำหนดเส้นทางไปยังผู้ให้บริการที่ถูกกว่า",
   "workspace.newUser.feature.lockin.title": "ไม่มีการล็อคอิน",
-  "workspace.newUser.feature.lockin.body": "ใช้ Zen กับตัวแทนการเขียนโค้ด และใช้ผู้ให้บริการรายอื่นต่อไปด้วย opencode ทุกครั้งที่คุณต้องการ",
+  "workspace.newUser.feature.lockin.body":
+    "ใช้ Zen กับตัวแทนการเขียนโค้ด และใช้ผู้ให้บริการรายอื่นต่อไปด้วย opencode ทุกครั้งที่คุณต้องการ",
   "workspace.newUser.copyApiKey": "คัดลอกคีย์ API",
   "workspace.newUser.copyKey": "คัดลอกคีย์",
   "workspace.newUser.copied": "คัดลอก!",
@@ -537,5 +540,6 @@ export const dict = {
   "workspace.black.waitlist.enroll": "ลงทะเบียน",
   "workspace.black.waitlist.enrolling": "กำลังลงทะเบียน...",
   "workspace.black.waitlist.enrolled": "ลงทะเบียนแล้ว",
-  "workspace.black.waitlist.enrollNote": "เมื่อคุณคลิกลงทะเบียน การสมัครของคุณจะเริ่มต้นทันทีและบัตรของคุณจะถูกเรียกเก็บเงิน",
+  "workspace.black.waitlist.enrollNote":
+    "เมื่อคุณคลิกลงทะเบียน การสมัครของคุณจะเริ่มต้นทันทีและบัตรของคุณจะถูกเรียกเก็บเงิน",
 } satisfies Dict

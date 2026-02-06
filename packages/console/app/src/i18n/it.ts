@@ -294,11 +294,14 @@ export const dict = {
   "workspace.home.billing.enable": "Abilita fatturazione",
   "workspace.home.billing.currentBalance": "Saldo attuale",
   "workspace.newUser.feature.tested.title": "Modelli testati e verificati",
-  "workspace.newUser.feature.tested.body": "Abbiamo confrontato e testato modelli specifici per gli agenti di codifica per garantire le migliori prestazioni.",
+  "workspace.newUser.feature.tested.body":
+    "Abbiamo confrontato e testato modelli specifici per gli agenti di codifica per garantire le migliori prestazioni.",
   "workspace.newUser.feature.quality.title": "Massima qualità",
-  "workspace.newUser.feature.quality.body": "Modelli di accesso configurati per prestazioni ottimali: senza downgrade o instradamento verso fornitori più economici.",
+  "workspace.newUser.feature.quality.body":
+    "Modelli di accesso configurati per prestazioni ottimali: senza downgrade o instradamento verso fornitori più economici.",
   "workspace.newUser.feature.lockin.title": "Nessun blocco",
-  "workspace.newUser.feature.lockin.body": "Utilizza Zen con qualsiasi agente di codifica e continua a utilizzare altri provider con opencode ogni volta che vuoi.",
+  "workspace.newUser.feature.lockin.body":
+    "Utilizza Zen con qualsiasi agente di codifica e continua a utilizzare altri provider con opencode ogni volta che vuoi.",
   "workspace.newUser.copyApiKey": "Copia la chiave API",
   "workspace.newUser.copyKey": "Copia chiave",
   "workspace.newUser.copied": "Copiato!",
@@ -460,5 +463,6 @@ export const dict = {
   "workspace.black.waitlist.enroll": "Iscriversi",
   "workspace.black.waitlist.enrolling": "Iscrizione...",
   "workspace.black.waitlist.enrolled": "Iscritto",
-  "workspace.black.waitlist.enrollNote": "Quando fai clic su Iscriviti, l'abbonamento inizia immediatamente e l'importo verrà addebitato sulla tua carta.",
+  "workspace.black.waitlist.enrollNote":
+    "Quando fai clic su Iscriviti, l'abbonamento inizia immediatamente e l'importo verrà addebitato sulla tua carta.",
 } satisfies Dict

@@ -363,9 +363,11 @@ export const dict = {
   "workspace.newUser.feature.tested.title": "نماذج تم اختبارها والتحقق منها",
   "workspace.newUser.feature.tested.body": "لقد قمنا بقياس واختبار النماذج خصيصًا لوكلاء الترميز لضمان أفضل أداء.",
   "workspace.newUser.feature.quality.title": "أعلى جودة",
-  "workspace.newUser.feature.quality.body": "الوصول إلى النماذج التي تم تكوينها لتحقيق الأداء الأمثل - لا يوجد تخفيضات أو توجيه إلى موفري الخدمة الأرخص.",
+  "workspace.newUser.feature.quality.body":
+    "الوصول إلى النماذج التي تم تكوينها لتحقيق الأداء الأمثل - لا يوجد تخفيضات أو توجيه إلى موفري الخدمة الأرخص.",
   "workspace.newUser.feature.lockin.title": "لا يوجد قفل",
-  "workspace.newUser.feature.lockin.body": "استخدم Zen مع أي وكيل ترميز، واستمر في استخدام موفري الخدمات الآخرين مع opencode وقتما تشاء.",
+  "workspace.newUser.feature.lockin.body":
+    "استخدم Zen مع أي وكيل ترميز، واستمر في استخدام موفري الخدمات الآخرين مع opencode وقتما تشاء.",
   "workspace.newUser.copyApiKey": "انسخ مفتاح API",
   "workspace.newUser.copyKey": "نسخ المفتاح",
   "workspace.newUser.copied": "منسوخ!",
@@ -527,5 +529,5 @@ export const dict = {
   "workspace.black.waitlist.enroll": "تسجل",
   "workspace.black.waitlist.enrolling": "جارٍ التسجيل...",
   "workspace.black.waitlist.enrolled": "مسجل",
-  "workspace.black.waitlist.enrollNote": "عند النقر فوق \"تسجيل\"، يبدأ اشتراكك على الفور وسيتم خصم الرسوم من بطاقتك.",
+  "workspace.black.waitlist.enrollNote": 'عند النقر فوق "تسجيل"، يبدأ اشتراكك على الفور وسيتم خصم الرسوم من بطاقتك.',
 } satisfies Dict
