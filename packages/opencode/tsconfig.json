@@ -12,5 +12,6 @@
       "@/*": ["./src/*"],
       "@tui/*": ["./src/cli/cmd/tui/*"]
     }
-  }
+  },
+  "exclude": ["test/**/*"]
 }

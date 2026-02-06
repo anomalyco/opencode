@@ -1,0 +1,153 @@
+R100	.github/workflows/sync-upstream.yml	.github/workflows/fork-sync-upstream.yml
+M	AGENTS.md
+A	FORK.md
+M	README.md
+M	bun.lock
+A	docs/upstream-sync/fork-feature-audit.md
+M	package.json
+M	packages/app/package.json
+M	packages/app/src/2fa-setup/setup.tsx
+M	packages/app/src/2fa/verify.tsx
+M	packages/app/src/addons/serialize.ts
+M	packages/app/src/app.tsx
+M	packages/app/src/components/2fa/manage-2fa-dialog.tsx
+M	packages/app/src/components/http-warning-banner.tsx
+M	packages/app/src/components/repo/clone-dialog.tsx
+M	packages/app/src/components/security-badge.tsx
+M	packages/app/src/components/session-expired-overlay.tsx
+M	packages/app/src/components/session-indicator.tsx
+M	packages/app/src/components/session/session-sortable-terminal-tab.tsx
+M	packages/app/src/components/terminal.tsx
+M	packages/app/src/context/session.tsx
+M	packages/app/src/entry.tsx
+M	packages/app/src/hooks/use-clone-progress.ts
+M	packages/app/src/index.css
+M	packages/app/src/login/login.tsx
+M	packages/app/src/pages/error.tsx
+M	packages/app/src/pages/session.tsx
+A	packages/fork-auth/package.json
+A	packages/fork-auth/src/auth/broker-client.ts
+A	packages/fork-auth/src/auth/device-trust.ts
+A	packages/fork-auth/src/auth/totp-setup.ts
+A	packages/fork-auth/src/auth/two-factor-preference.ts
+A	packages/fork-auth/src/auth/two-factor-token.ts
+A	packages/fork-auth/src/auth/user-info.ts
+A	packages/fork-auth/src/config.ts
+A	packages/fork-auth/src/index.ts
+A	packages/fork-auth/src/middleware/auth.ts
+A	packages/fork-auth/src/middleware/csrf.ts
+A	packages/fork-auth/src/routes/auth.ts
+A	packages/fork-auth/src/routes/repo.ts
+A	packages/fork-auth/src/routes/ssh-keys.ts
+A	packages/fork-auth/src/security/csrf.ts
+A	packages/fork-auth/src/security/https-detection.ts
+A	packages/fork-auth/src/security/rate-limit.ts
+A	packages/fork-auth/src/security/token-secret.ts
+A	packages/fork-auth/src/server-auth.ts
+A	packages/fork-auth/tsconfig.json
+A	packages/fork-cli/package.json
+A	packages/fork-cli/src/auth-broker.ts
+A	packages/fork-cli/src/error.ts
+A	packages/fork-cli/src/index.ts
+A	packages/fork-cli/src/logo.ts
+A	packages/fork-cli/src/run.ts
+A	packages/fork-cli/src/web.ts
+A	packages/fork-cli/tsconfig.json
+A	packages/fork-config/package.json
+A	packages/fork-config/src/index.ts
+A	packages/fork-config/tsconfig.json
+A	packages/fork-provider/package.json
+A	packages/fork-provider/src/config.ts
+A	packages/fork-provider/src/index.ts
+A	packages/fork-provider/src/openrouter.ts
+A	packages/fork-provider/src/types.ts
+A	packages/fork-provider/tsconfig.json
+A	packages/fork-security/package.json
+A	packages/fork-security/src/index.ts
+A	packages/fork-security/tsconfig.json
+A	packages/fork-terminal/package.json
+A	packages/fork-terminal/src/broker-pty-manager.ts
+A	packages/fork-terminal/src/broker-pty.ts
+A	packages/fork-terminal/src/index.ts
+A	packages/fork-terminal/src/pty-auth-hook.ts
+A	packages/fork-terminal/src/serialize-addon.ts
+A	packages/fork-terminal/src/server-pty.ts
+A	packages/fork-terminal/src/server.ts
+A	packages/fork-terminal/src/sortable-terminal-tab.tsx
+A	packages/fork-terminal/src/terminal-types.ts
+A	packages/fork-terminal/src/terminal.tsx
+A	packages/fork-terminal/src/types.d.ts
+A	packages/fork-terminal/tsconfig.json
+R098	packages/opencode/test/agent/agent.test.ts	packages/fork-tests/agent/agent.test.ts
+R094	packages/opencode/test/auth/broker-client.test.ts	packages/fork-tests/auth/broker-client.test.ts
+R097	packages/opencode/test/auth/user-info.test.ts	packages/fork-tests/auth/user-info.test.ts
+R095	packages/opencode/test/fixture/fixture.ts	packages/fork-tests/fixture/fixture.ts
+R099	packages/opencode/test/integration/user-process.test.ts	packages/fork-tests/integration/user-process.test.ts
+A	packages/fork-tests/package.json
+R099	packages/opencode/test/provider/provider.test.ts	packages/fork-tests/provider/provider.test.ts
+R097	packages/opencode/test/server/middleware/csrf.test.ts	packages/fork-tests/server/middleware/csrf.test.ts
+R099	packages/opencode/test/server/routes/auth.test.ts	packages/fork-tests/server/routes/auth.test.ts
+R098	packages/opencode/test/server/routes/pty-auth.test.ts	packages/fork-tests/server/routes/pty-auth.test.ts
+R095	packages/opencode/test/server/routes/pty-broker.test.ts	packages/fork-tests/server/routes/pty-broker.test.ts
+R098	packages/opencode/test/server/security/csrf.test.ts	packages/fork-tests/server/security/csrf.test.ts
+R099	packages/opencode/test/server/security/https-detection.test.ts	packages/fork-tests/server/security/https-detection.test.ts
+R098	packages/opencode/test/server/security/rate-limit.test.ts	packages/fork-tests/server/security/rate-limit.test.ts
+R077	packages/opencode/test/server/session-list.test.ts	packages/fork-tests/server/session-list.test.ts
+R087	packages/opencode/test/server/session-select.test.ts	packages/fork-tests/server/session-select.test.ts
+R098	packages/opencode/test/session/user-session.test.ts	packages/fork-tests/session/user-session.test.ts
+R100	packages/opencode/test/tool/__snapshots__/tool.test.ts.snap	packages/fork-tests/tool/__snapshots__/tool.test.ts.snap
+R097	packages/opencode/test/tool/bash.test.ts	packages/fork-tests/tool/bash.test.ts
+R100	packages/opencode/test/tool/fixtures/large-image.png	packages/fork-tests/tool/fixtures/large-image.png
+R100	packages/opencode/test/tool/fixtures/models-api.json	packages/fork-tests/tool/fixtures/models-api.json
+R097	packages/opencode/test/tool/read.test.ts	packages/fork-tests/tool/read.test.ts
+A	packages/fork-tests/tsconfig.json
+A	packages/fork-ui/package.json
+A	packages/fork-ui/src/auth-error.ts
+A	packages/fork-ui/src/auth-gate.tsx
+A	packages/fork-ui/src/csrf-fetch.ts
+A	packages/fork-ui/src/http-warning-banner.tsx
+A	packages/fork-ui/src/index.ts
+A	packages/fork-ui/src/login.tsx
+A	packages/fork-ui/src/manage-2fa-dialog.tsx
+A	packages/fork-ui/src/security-badge-style.ts
+A	packages/fork-ui/src/security-badge.tsx
+A	packages/fork-ui/src/session-expiration-warning.ts
+A	packages/fork-ui/src/session-expired-overlay.tsx
+A	packages/fork-ui/src/session-indicator.tsx
+A	packages/fork-ui/src/two-factor-setup.tsx
+A	packages/fork-ui/src/two-factor.tsx
+A	packages/fork-ui/src/use-clone-progress.ts
+A	packages/fork-ui/tsconfig.json
+M	packages/opencode/package.json
+M	packages/opencode/src/auth/broker-client.ts
+M	packages/opencode/src/auth/device-trust.ts
+M	packages/opencode/src/auth/totp-setup.ts
+M	packages/opencode/src/auth/two-factor-preference.ts
+M	packages/opencode/src/auth/two-factor-token.ts
+M	packages/opencode/src/auth/user-info.ts
+M	packages/opencode/src/cli/cmd/auth.ts
+M	packages/opencode/src/cli/cmd/run.ts
+M	packages/opencode/src/cli/cmd/web.ts
+M	packages/opencode/src/cli/error.ts
+A	packages/opencode/src/cli/logo.ts
+M	packages/opencode/src/cli/network.ts
+M	packages/opencode/src/cli/ui.ts
+M	packages/opencode/src/config/auth.ts
+M	packages/opencode/src/config/config.ts
+M	packages/opencode/src/config/server-auth.ts
+M	packages/opencode/src/index.ts
+M	packages/opencode/src/provider/provider.ts
+M	packages/opencode/src/pty/broker-pty.ts
+M	packages/opencode/src/pty/index.ts
+M	packages/opencode/src/server/middleware/auth.ts
+M	packages/opencode/src/server/middleware/csrf.ts
+M	packages/opencode/src/server/routes/auth.ts
+M	packages/opencode/src/server/routes/pty.ts
+M	packages/opencode/src/server/routes/repo.ts
+M	packages/opencode/src/server/routes/ssh-keys.ts
+M	packages/opencode/src/server/security/csrf.ts
+M	packages/opencode/src/server/security/https-detection.ts
+M	packages/opencode/src/server/security/rate-limit.ts
+M	packages/opencode/src/server/security/token-secret.ts
+M	packages/opencode/src/server/server.ts
+M	packages/opencode/tsconfig.json

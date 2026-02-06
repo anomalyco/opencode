@@ -87,7 +87,7 @@ export function CloneDialog(props: CloneDialogProps) {
 
   const { startClone, startCloneWithCredentials, cancel } = useCloneProgress({
     onProgress: setCloneProgress,
-    onComplete: (repo, message) => {
+    onComplete: (repo: Repo, message: string) => {
       setIsCloning(false)
       setCloneProgress(null)
       setCredentialMode(null)
@@ -99,7 +99,7 @@ export function CloneDialog(props: CloneDialogProps) {
       showToast({ title: "Repository cloned", description: message })
       dialog.close()
     },
-    onError: (message, helpSteps, authType, canRetry) => {
+    onError: (message: string, helpSteps?: string[], authType?: CloneAuthType, canRetry?: boolean) => {
       setIsCloning(false)
       setCloneProgress(null)
       setMaybeErrorInfo({ message, helpSteps, authType, canRetry })

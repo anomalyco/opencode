@@ -1,0 +1,41 @@
+678f46a14 Add fork hook packages and audit
+1e7faa584 Move auth stack into fork-auth package
+bd99149c7 Move login UI into fork-ui
+5fa3402e0 Move session auth UI into fork-ui
+062e49a98 Move session expired overlay into fork-ui
+ee601dc4b Move security badge UI into fork-ui
+b3f8ff39c Move session expiration warning into fork-ui
+3657bf519 Move auth gate into fork-ui
+a6a4eecdd Move CSRF fetch wrapper into fork-ui
+e68558cf2 Move auth error messaging into fork-ui
+0cc571b78 Move clone progress hook into fork-ui
+732b3dd99 Move security badge CSS into fork-ui
+e67f93dda Move terminal UI into fork-terminal
+e46da0008 Move broker PTY logic into fork-terminal
+77fcb463c Move PTY auth create hook into fork-terminal
+769755eb9 Move PTY auth guards into fork-terminal
+62775a6d7 Move PTY error mapping into fork-terminal hooks
+6a6910e71 Move PTY connect handling into fork-terminal hooks
+6557f5cfc Move PTY not-found handling into fork-terminal hook
+3511962d0 Move PTY no-auth create handling into fork-terminal hook
+8c91ffced Move PTY update/remove handling into fork-terminal hooks
+890a4eb52 Move PTY get handling into fork-terminal hook
+db8340051 Move broker PTY state management into fork-terminal
+166dacd8f Move broker PTY create flow into fork-terminal
+5f0bc3686 Move auth broker CLI into fork-cli
+3705becbf Decouple web CLI UI bundle into fork-cli
+0299e4b46 Decouple CLI run flow and branding into fork-cli
+ac0ec8adc Move server auth config and repo/ssh routes into fork-auth
+d1da22e21 Update fork feature audit
+344079ab7 Decouple OpenRouter provider logic into fork-provider
+a2375af42 Decouple TUI auth header injection into fork-cli
+34f6b79b1 Decouple auth/workspace/uiUrl config schema into fork packages
+ac5817542 Clarify provider fork deltas in audit
+41f86ec68 Mark assets/i18n as upstream-only
+d711867cd Move fork README notes into FORK.md
+31726fb53 Move fork tests into fork-tests
+8e5489691 Rename fork sync workflow
+5a20fd2ee Mark planning/specs ownership in audit
+f29a99568 Re-audit fork feature inventory coverage
+fd2734763 Restore upstream TUI worker auth header logic
+01f7c87ac Fix typecheck regressions and web dev UI path resolution

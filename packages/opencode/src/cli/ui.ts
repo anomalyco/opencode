@@ -2,6 +2,7 @@ import z from "zod"
 import { EOL } from "os"
 import { NamedError } from "@opencode-ai/util/error"
 import { logo as glyphs } from "./logo"
+import { getForkCliLogo } from "@opencode-ai/fork-cli/logo"
 
 export namespace UI {
   export const CancelledError = NamedError.create("UICancelledError", z.void())
@@ -41,6 +42,9 @@ export namespace UI {
   }
 
   export function logo(pad?: string) {
+    const forkLogo = getForkCliLogo(pad)
+    if (forkLogo) return forkLogo
+
     const result: string[] = []
     const reset = "\x1b[0m"
     const left = {

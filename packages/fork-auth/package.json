@@ -1,0 +1,27 @@
+{
+  "name": "@opencode-ai/fork-auth",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "hono": "catalog:",
+    "hono-openapi": "catalog:",
+    "hono-rate-limiter": "0.5.3",
+    "jose": "6.1.3",
+    "jsonc-parser": "3.3.1",
+    "qrcode": "1.5.4",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/qrcode": "1.5.6"
+  }
+}

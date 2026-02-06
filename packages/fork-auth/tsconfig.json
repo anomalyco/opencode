@@ -1,0 +1,16 @@
+{
+  "include": ["src/index.ts", "src/config.ts", "src/server-auth.ts"],
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "allowJs": true,
+    "noEmit": true,
+    "strict": true,
+    "isolatedModules": true
+  },
+  "exclude": ["src/routes/**/*", "src/middleware/**/*", "src/security/**/*", "src/auth/**/*"]
+}

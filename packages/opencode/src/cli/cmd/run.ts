@@ -25,6 +25,12 @@ import { SkillTool } from "../../tool/skill"
 import { BashTool } from "../../tool/bash"
 import { TodoWriteTool } from "../../tool/todo"
 import { Locale } from "../../util/locale"
+import {
+  createForkRunState,
+  handleForkRunEvent,
+  resolveForkRunSessionCreateInput,
+  validateForkRunCommand,
+} from "@opencode-ai/fork-cli/run"
 
 type ToolProps<T extends Tool.Info> = {
   input: Tool.InferParameters<T>
@@ -324,6 +330,8 @@ export const RunCommand = cmd({
       process.exit(1)
     }
 
+    const forkState = createForkRunState()
+
     const rules: PermissionNext.Ruleset = [
       {
         permission: "question",
@@ -348,14 +356,21 @@ export const RunCommand = cmd({
       return message.slice(0, 50) + (message.length > 50 ? "..." : "")
     }
 
-    async function session(sdk: OpencodeClient) {
+    async function session(sdk: OpencodeClient, mode: "attach" | "local") {
       if (args.continue) {
         const result = await sdk.session.list()
         return result.data?.find((s) => !s.parentID)?.id
       }
       if (args.session) return args.session
       const name = title()
-      const result = await sdk.session.create({ title: name, permission: rules })
+      const forkInput = resolveForkRunSessionCreateInput({
+        mode,
+        args,
+        message,
+        title: name,
+        rules,
+      })
+      const result = await sdk.session.create(forkInput ?? { title: name, permission: rules })
       return result.data?.id
     }
 
@@ -374,7 +389,7 @@ export const RunCommand = cmd({
       }
     }
 
-    async function execute(sdk: OpencodeClient) {
+    async function execute(sdk: OpencodeClient, mode: "attach" | "local") {
       function tool(part: ToolPart) {
         if (part.tool === "bash") return bash(props<typeof BashTool>(part))
         if (part.tool === "glob") return glob(props<typeof GlobTool>(part))
@@ -407,6 +422,10 @@ export const RunCommand = cmd({
         const toggles = new Map<string, boolean>()
 
         for await (const event of events.stream) {
+          const forkResult = await handleForkRunEvent(event, { args, sessionID, sdk, state: forkState })
+          if (forkResult?.stop) break
+          if (forkResult?.handled) continue
+
           if (
             event.type === "message.updated" &&
             event.properties.info.role === "assistant" &&
@@ -534,14 +553,14 @@ export const RunCommand = cmd({
         return args.agent
       })()
 
-      const sessionID = await session(sdk)
+      const sessionID = await session(sdk, mode)
       if (!sessionID) {
         UI.error("Session not found")
         process.exit(1)
       }
       await share(sdk, sessionID)
 
-      loop().catch((e) => {
+      const loopPromise = loop().catch((e) => {
         console.error(e)
         process.exit(1)
       })
@@ -565,11 +584,16 @@ export const RunCommand = cmd({
           parts: [...files, { type: "text", text: message }],
         })
       }
+
+      if (forkState.awaitLoop) {
+        await loopPromise
+        if (forkState.error) process.exit(1)
+      }
     }
 
     if (args.attach) {
       const sdk = createOpencodeClient({ baseUrl: args.attach })
-      return await execute(sdk)
+      return await execute(sdk, "attach")
     }
 
     await bootstrap(process.cwd(), async () => {
@@ -578,7 +602,16 @@ export const RunCommand = cmd({
         return Server.App().fetch(request)
       }) as typeof globalThis.fetch
       const sdk = createOpencodeClient({ baseUrl: "http://opencode.internal", fetch: fetchFn })
-      await execute(sdk)
+
+      if (args.command) {
+        const forkCommandError = await validateForkRunCommand(args.command)
+        if (forkCommandError) {
+          UI.error(forkCommandError)
+          process.exit(1)
+        }
+      }
+
+      await execute(sdk, "local")
     })
   },
 })
