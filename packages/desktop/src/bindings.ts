@@ -4,16 +4,17 @@ import { invoke as __TAURI_INVOKE } from "@tauri-apps/api/core"
 
 /** Commands */
 export const commands = {
-  killSidecar: () => __TAURI_INVOKE<void>("kill_sidecar"),
-  installCli: () => __TAURI_INVOKE<string>("install_cli"),
-  ensureServerReady: () => __TAURI_INVOKE<ServerReadyData>("ensure_server_ready"),
-  getDefaultServerUrl: () => __TAURI_INVOKE<string | null>("get_default_server_url"),
-  setDefaultServerUrl: (url: string | null) => __TAURI_INVOKE<null>("set_default_server_url", { url }),
-  parseMarkdownCommand: (markdown: string) => __TAURI_INVOKE<string>("parse_markdown_command", { markdown }),
-}
+	killSidecar: () => __TAURI_INVOKE<void>("kill_sidecar"),
+	installCli: () => __TAURI_INVOKE<string>("install_cli"),
+	ensureServerReady: () => __TAURI_INVOKE<ServerReadyData>("ensure_server_ready"),
+	getDefaultServerUrl: () => __TAURI_INVOKE<string | null>("get_default_server_url"),
+	setDefaultServerUrl: (url: string | null) => __TAURI_INVOKE<null>("set_default_server_url", { url }),
+	parseMarkdownCommand: (markdown: string) => __TAURI_INVOKE<string>("parse_markdown_command", { markdown }),
+};
 
 /* Types */
 export type ServerReadyData = {
-  url: string
-  password: string | null
-}
+		url: string,
+		password: string | null,
+	};
+
