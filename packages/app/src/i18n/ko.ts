@@ -32,8 +32,8 @@ export const dict = {
   "command.settings.open": "설정 열기",
   "command.session.previous": "이전 세션",
   "command.session.next": "다음 세션",
-  "command.session.previous.unseen": "Previous unread session",
-  "command.session.next.unseen": "Next unread session",
+  "command.session.previous.unseen": "이전 읽지 않은 세션",
+  "command.session.next.unseen": "다음 읽지 않은 세션",
   "command.session.archive": "세션 보관",
 
   "command.palette": "명령 팔레트",
