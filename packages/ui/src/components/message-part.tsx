@@ -1010,14 +1010,19 @@ ToolRegistry.register({
                 <div ref={autoScroll.contentRef} data-component="task-tools">
                   <For each={childToolParts()}>
                     {(item) => {
-                      const info = getToolInfo(item.tool, item.state.input)
-                      const subtitle = item.state.status === "completed" ? item.state.title : undefined
+                      const info = createMemo(() => getToolInfo(item.tool, item.state.input))
+                      const subtitle = createMemo(() => {
+                        if (info().subtitle) return info().subtitle
+                        if (item.state.status === "completed" || item.state.status === "running") {
+                          return item.state.title
+                        }
+                      })
                       return (
                         <div data-slot="task-tool-item">
-                          <Icon name={info.icon} size="small" />
-                          <span data-slot="task-tool-title">{info.title}</span>
-                          <Show when={subtitle}>
-                            <span data-slot="task-tool-subtitle">{subtitle}</span>
+                          <Icon name={info().icon} size="small" />
+                          <span data-slot="task-tool-title">{info().title}</span>
+                          <Show when={subtitle()}>
+                            <span data-slot="task-tool-subtitle">{subtitle()}</span>
                           </Show>
                         </div>
                       )
