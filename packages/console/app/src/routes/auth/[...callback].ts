@@ -2,7 +2,7 @@ import { redirect } from "@solidjs/router"
 import type { APIEvent } from "@solidjs/start/server"
 import { AuthClient } from "~/context/auth"
 import { useAuthSession } from "~/context/auth"
-import { fromPathname, localeFromRequest, route } from "~/lib/language"
+import { localeFromRequest, route } from "~/lib/language"
 
 export async function GET(input: APIEvent) {
   const url = new URL(input.request.url)
@@ -31,7 +31,6 @@ export async function GET(input: APIEvent) {
       }
     })
     const next = url.pathname === "/auth/callback" ? "/auth" : url.pathname.replace("/auth/callback", "")
-    if (fromPathname(next)) return redirect(next)
     return redirect(route(locale, next))
   } catch (e: any) {
     return new Response(
