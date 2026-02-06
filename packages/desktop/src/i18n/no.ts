@@ -25,8 +25,4 @@ export const dict = {
     "CLI installert til {{path}}\n\nStart terminalen på nytt for å bruke 'opencode'-kommandoen.",
   "desktop.cli.failed.title": "Installasjon mislyktes",
   "desktop.cli.failed.message": "Kunne ikke installere CLI: {{error}}",
-
-  "desktop.error.serverStartFailed.title": "OpenCode kunne ikke starte",
-  "desktop.error.serverStartFailed.description":
-    "Den lokale OpenCode-serveren kunne ikke startes. Start appen på nytt, eller sjekk nettverksinnstillingene dine (VPN/proxy) og prøv igjen.",
 }

@@ -124,16 +124,16 @@ export function DialogCustomProvider(props: Props) {
     const key = apiKey && !env ? apiKey : undefined
 
     const idError = !providerID
-      ? "Provider ID is required"
+      ? language.t("provider.custom.error.providerID.required")
       : !PROVIDER_ID.test(providerID)
-        ? "Use lowercase letters, numbers, hyphens, or underscores"
+        ? language.t("provider.custom.error.providerID.format")
         : undefined
 
-    const nameError = !name ? "Display name is required" : undefined
+    const nameError = !name ? language.t("provider.custom.error.name.required") : undefined
     const urlError = !baseURL
-      ? "Base URL is required"
+      ? language.t("provider.custom.error.baseURL.required")
       : !/^https?:\/\//.test(baseURL)
-        ? "Must start with http:// or https://"
+        ? language.t("provider.custom.error.baseURL.format")
         : undefined
 
     const disabled = (globalSync.data.config.disabled_providers ?? []).includes(providerID)
@@ -141,21 +141,21 @@ export function DialogCustomProvider(props: Props) {
     const existsError = idError
       ? undefined
       : existingProvider && !disabled
-        ? "That provider ID already exists"
+        ? language.t("provider.custom.error.providerID.exists")
         : undefined
 
     const seenModels = new Set<string>()
     const modelErrors = form.models.map((m) => {
       const id = m.id.trim()
       const modelIdError = !id
-        ? "Required"
+        ? language.t("provider.custom.error.required")
         : seenModels.has(id)
-          ? "Duplicate"
+          ? language.t("provider.custom.error.duplicate")
           : (() => {
               seenModels.add(id)
               return undefined
             })()
-      const modelNameError = !m.name.trim() ? "Required" : undefined
+      const modelNameError = !m.name.trim() ? language.t("provider.custom.error.required") : undefined
       return { id: modelIdError, name: modelNameError }
     })
     const modelsValid = modelErrors.every((m) => !m.id && !m.name)
@@ -168,14 +168,14 @@ export function DialogCustomProvider(props: Props) {
 
       if (!key && !value) return {}
       const keyError = !key
-        ? "Required"
+        ? language.t("provider.custom.error.required")
         : seenHeaders.has(key.toLowerCase())
-          ? "Duplicate"
+          ? language.t("provider.custom.error.duplicate")
           : (() => {
               seenHeaders.add(key.toLowerCase())
               return undefined
             })()
-      const valueError = !value ? "Required" : undefined
+      const valueError = !value ? language.t("provider.custom.error.required") : undefined
       return { key: keyError, value: valueError }
     })
     const headersValid = headerErrors.every((h) => !h.key && !h.value)
@@ -278,64 +278,64 @@ export function DialogCustomProvider(props: Props) {
       <div class="flex flex-col gap-6 px-2.5 pb-3 overflow-y-auto max-h-[60vh]">
         <div class="px-2.5 flex gap-4 items-center">
           <ProviderIcon id="synthetic" class="size-5 shrink-0 icon-strong-base" />
-          <div class="text-16-medium text-text-strong">Custom provider</div>
+          <div class="text-16-medium text-text-strong">{language.t("provider.custom.title")}</div>
         </div>
 
         <form onSubmit={save} class="px-2.5 pb-6 flex flex-col gap-6">
           <p class="text-14-regular text-text-base">
-            Configure an OpenAI-compatible provider. See the{" "}
+            {language.t("provider.custom.description.prefix")}
             <Link href="https://opencode.ai/docs/providers/#custom-provider" tabIndex={-1}>
-              provider config docs
+              {language.t("provider.custom.description.link")}
             </Link>
-            .
+            {language.t("provider.custom.description.suffix")}
           </p>
 
           <div class="flex flex-col gap-4">
             <TextField
               autofocus
-              label="Provider ID"
-              placeholder="myprovider"
-              description="Lowercase letters, numbers, hyphens, or underscores"
+              label={language.t("provider.custom.field.providerID.label")}
+              placeholder={language.t("provider.custom.field.providerID.placeholder")}
+              description={language.t("provider.custom.field.providerID.description")}
               value={form.providerID}
               onChange={setForm.bind(null, "providerID")}
               validationState={errors.providerID ? "invalid" : undefined}
               error={errors.providerID}
             />
             <TextField
-              label="Display name"
-              placeholder="My AI Provider"
+              label={language.t("provider.custom.field.name.label")}
+              placeholder={language.t("provider.custom.field.name.placeholder")}
               value={form.name}
               onChange={setForm.bind(null, "name")}
               validationState={errors.name ? "invalid" : undefined}
               error={errors.name}
             />
             <TextField
-              label="Base URL"
-              placeholder="https://api.myprovider.com/v1"
+              label={language.t("provider.custom.field.baseURL.label")}
+              placeholder={language.t("provider.custom.field.baseURL.placeholder")}
               value={form.baseURL}
               onChange={setForm.bind(null, "baseURL")}
               validationState={errors.baseURL ? "invalid" : undefined}
               error={errors.baseURL}
             />
             <TextField
-              label="API key"
-              placeholder="API key"
-              description="Optional. Leave empty if you manage auth via headers."
+              label={language.t("provider.custom.field.apiKey.label")}
+              placeholder={language.t("provider.custom.field.apiKey.placeholder")}
+              description={language.t("provider.custom.field.apiKey.description")}
               value={form.apiKey}
               onChange={setForm.bind(null, "apiKey")}
             />
           </div>
 
           <div class="flex flex-col gap-3">
-            <label class="text-12-medium text-text-weak">Models</label>
+            <label class="text-12-medium text-text-weak">{language.t("provider.custom.models.label")}</label>
             <For each={form.models}>
               {(m, i) => (
                 <div class="flex gap-2 items-start">
                   <div class="flex-1">
                     <TextField
-                      label="ID"
+                      label={language.t("provider.custom.models.id.label")}
                       hideLabel
-                      placeholder="model-id"
+                      placeholder={language.t("provider.custom.models.id.placeholder")}
                       value={m.id}
                       onChange={(v) => setForm("models", i(), "id", v)}
                       validationState={errors.models[i()]?.id ? "invalid" : undefined}
@@ -344,9 +344,9 @@ export function DialogCustomProvider(props: Props) {
                   </div>
                   <div class="flex-1">
                     <TextField
-                      label="Name"
+                      label={language.t("provider.custom.models.name.label")}
                       hideLabel
-                      placeholder="Display Name"
+                      placeholder={language.t("provider.custom.models.name.placeholder")}
                       value={m.name}
                       onChange={(v) => setForm("models", i(), "name", v)}
                       validationState={errors.models[i()]?.name ? "invalid" : undefined}
@@ -360,26 +360,26 @@ export function DialogCustomProvider(props: Props) {
                     class="mt-1.5"
                     onClick={() => removeModel(i())}
                     disabled={form.models.length <= 1}
-                    aria-label="Remove model"
+                    aria-label={language.t("provider.custom.models.remove")}
                   />
                 </div>
               )}
             </For>
             <Button type="button" size="small" variant="ghost" icon="plus-small" onClick={addModel} class="self-start">
-              Add model
+              {language.t("provider.custom.models.add")}
             </Button>
           </div>
 
           <div class="flex flex-col gap-3">
-            <label class="text-12-medium text-text-weak">Headers (optional)</label>
+            <label class="text-12-medium text-text-weak">{language.t("provider.custom.headers.label")}</label>
             <For each={form.headers}>
               {(h, i) => (
                 <div class="flex gap-2 items-start">
                   <div class="flex-1">
                     <TextField
-                      label="Header"
+                      label={language.t("provider.custom.headers.key.label")}
                       hideLabel
-                      placeholder="Header-Name"
+                      placeholder={language.t("provider.custom.headers.key.placeholder")}
                       value={h.key}
                       onChange={(v) => setForm("headers", i(), "key", v)}
                       validationState={errors.headers[i()]?.key ? "invalid" : undefined}
@@ -388,9 +388,9 @@ export function DialogCustomProvider(props: Props) {
                   </div>
                   <div class="flex-1">
                     <TextField
-                      label="Value"
+                      label={language.t("provider.custom.headers.value.label")}
                       hideLabel
-                      placeholder="value"
+                      placeholder={language.t("provider.custom.headers.value.placeholder")}
                       value={h.value}
                       onChange={(v) => setForm("headers", i(), "value", v)}
                       validationState={errors.headers[i()]?.value ? "invalid" : undefined}
@@ -404,18 +404,18 @@ export function DialogCustomProvider(props: Props) {
                     class="mt-1.5"
                     onClick={() => removeHeader(i())}
                     disabled={form.headers.length <= 1}
-                    aria-label="Remove header"
+                    aria-label={language.t("provider.custom.headers.remove")}
                   />
                 </div>
               )}
             </For>
             <Button type="button" size="small" variant="ghost" icon="plus-small" onClick={addHeader} class="self-start">
-              Add header
+              {language.t("provider.custom.headers.add")}
             </Button>
           </div>
 
           <Button class="w-auto self-start" type="submit" size="large" variant="primary" disabled={form.saving}>
-            {form.saving ? "Saving..." : language.t("common.submit")}
+            {form.saving ? language.t("common.saving") : language.t("common.submit")}
           </Button>
         </form>
       </div>

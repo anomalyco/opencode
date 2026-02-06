@@ -3,14 +3,19 @@ import { Title, Meta, Link } from "@solidjs/meta"
 import { createMemo, createSignal } from "solid-js"
 import { github } from "~/lib/github"
 import { config } from "~/config"
+import { useLanguage } from "~/context/language"
+import { LanguagePicker } from "~/component/language-picker"
+import { useI18n } from "~/context/i18n"
 import Spotlight, { defaultConfig, type SpotlightAnimationState } from "~/component/spotlight"
 import "./black.css"
 
 export default function BlackLayout(props: RouteSectionProps) {
+  const language = useLanguage()
+  const i18n = useI18n()
   const githubData = createAsync(() => github())
   const starCount = createMemo(() =>
     githubData()?.stars
-      ? new Intl.NumberFormat("en-US", {
+      ? new Intl.NumberFormat(language.tag(language.locale()), {
           notation: "compact",
           compactDisplay: "short",
         }).format(githubData()!.stars!)
@@ -63,26 +68,17 @@ export default function BlackLayout(props: RouteSectionProps) {
 
   return (
     <div data-page="black">
-      <Title>OpenCode Black | Access all the world's best coding models</Title>
-      <Meta
-        name="description"
-        content="Get access to Claude, GPT, Gemini and more with OpenCode Black subscription plans."
-      />
+      <Title>{i18n.t("black.meta.title")}</Title>
+      <Meta name="description" content={i18n.t("black.meta.description")} />
       <Link rel="canonical" href={`${config.baseUrl}/black`} />
       <Meta property="og:type" content="website" />
       <Meta property="og:url" content={`${config.baseUrl}/black`} />
-      <Meta property="og:title" content="OpenCode Black | Access all the world's best coding models" />
-      <Meta
-        property="og:description"
-        content="Get access to Claude, GPT, Gemini and more with OpenCode Black subscription plans."
-      />
+      <Meta property="og:title" content={i18n.t("black.meta.title")} />
+      <Meta property="og:description" content={i18n.t("black.meta.description")} />
       <Meta property="og:image" content="/social-share-black.png" />
       <Meta name="twitter:card" content="summary_large_image" />
-      <Meta name="twitter:title" content="OpenCode Black | Access all the world's best coding models" />
-      <Meta
-        name="twitter:description"
-        content="Get access to Claude, GPT, Gemini and more with OpenCode Black subscription plans."
-      />
+      <Meta name="twitter:title" content={i18n.t("black.meta.title")} />
+      <Meta name="twitter:description" content={i18n.t("black.meta.description")} />
       <Meta name="twitter:image" content="/social-share-black.png" />
 
       <Spotlight config={spotlightConfig} class="header-spotlight" onAnimationFrame={handleAnimationFrame} />
@@ -156,8 +152,8 @@ export default function BlackLayout(props: RouteSectionProps) {
       </header>
       <main data-component="content">
         <div data-slot="hero">
-          <h1>Access all the world's best coding models</h1>
-          <p>Including Claude, GPT, Gemini and more</p>
+          <h1>{i18n.t("black.hero.title")}</h1>
+          <p>{i18n.t("black.hero.subtitle")}</p>
         </div>
         <div data-slot="hero-black" style={svgLightingStyle()}>
           <svg width="591" height="90" viewBox="0 0 591 90" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -266,14 +262,15 @@ export default function BlackLayout(props: RouteSectionProps) {
             ©{new Date().getFullYear()} <a href="https://anoma.ly">Anomaly</a>
           </span>
           <a href={config.github.repoUrl} target="_blank">
-            GitHub <span data-slot="github-stars">[{starCount()}]</span>
+            {i18n.t("nav.github")} <span data-slot="github-stars">[{starCount()}]</span>
           </a>
-          <a href="/docs">Docs</a>
+          <a href="/docs">{i18n.t("nav.docs")}</a>
+          <LanguagePicker align="right" />
           <span>
-            <A href="/legal/privacy-policy">Privacy</A>
+            <A href="/legal/privacy-policy">{i18n.t("legal.privacy")}</A>
           </span>
           <span>
-            <A href="/legal/terms-of-service">Terms</A>
+            <A href="/legal/terms-of-service">{i18n.t("legal.terms")}</A>
           </span>
         </div>
         <span data-slot="anomaly-alt">

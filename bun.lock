@@ -188,6 +188,7 @@
         "@opencode-ai/ui": "workspace:*",
         "@solid-primitives/i18n": "2.2.1",
         "@solid-primitives/storage": "catalog:",
+        "@solidjs/meta": "catalog:",
         "@tauri-apps/api": "^2",
         "@tauri-apps/plugin-deep-link": "~2",
         "@tauri-apps/plugin-dialog": "~2",
