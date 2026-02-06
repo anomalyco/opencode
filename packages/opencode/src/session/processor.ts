@@ -14,6 +14,7 @@ import { LLM } from "./llm"
 import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
+import { Question } from "@/question"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -175,7 +176,7 @@ export namespace SessionProcessor {
                       ...match,
                       state: {
                         status: "completed",
-                        input: value.input,
+                        input: value.input ?? match.state.input,
                         output: value.output.output,
                         metadata: value.output.metadata,
                         title: value.output.title,
@@ -199,7 +200,7 @@ export namespace SessionProcessor {
                       ...match,
                       state: {
                         status: "error",
-                        input: value.input,
+                        input: value.input ?? match.state.input,
                         error: (value.error as any).toString(),
                         time: {
                           start: match.state.time.start,
@@ -208,7 +209,10 @@ export namespace SessionProcessor {
                       },
                     })
 
-                    if (value.error instanceof PermissionNext.RejectedError) {
+                    if (
+                      value.error instanceof PermissionNext.RejectedError ||
+                      value.error instanceof Question.RejectedError
+                    ) {
                       blocked = shouldBreak
                     }
                     delete toolcalls[value.toolCallId]
@@ -356,6 +360,7 @@ export namespace SessionProcessor {
               sessionID: input.assistantMessage.sessionID,
               error: input.assistantMessage.error,
             })
+            SessionStatus.set(input.sessionID, { type: "idle" })
           }
           if (snapshot) {
             const patch = await Snapshot.patch(snapshot)

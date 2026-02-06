@@ -5,12 +5,14 @@ import { Tool } from "./tool"
 import { LSP } from "../lsp"
 import { FileTime } from "../file/time"
 import DESCRIPTION from "./read.txt"
-import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Identifier } from "../id/id"
+import { assertExternalDirectory } from "./external-directory"
+import { InstructionPrompt } from "../session/instruction"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
+const MAX_BYTES = 50 * 1024
 
 export const ReadTool = Tool.define("read", {
   description: DESCRIPTION,
@@ -22,22 +24,13 @@ export const ReadTool = Tool.define("read", {
   async execute(params, ctx) {
     let filepath = params.filePath
     if (!path.isAbsolute(filepath)) {
-      filepath = path.join(process.cwd(), filepath)
+      filepath = path.resolve(Instance.directory, filepath)
     }
     const title = path.relative(Instance.worktree, filepath)
 
-    if (!ctx.extra?.["bypassCwdCheck"] && !Filesystem.contains(Instance.directory, filepath)) {
-      const parentDir = path.dirname(filepath)
-      await ctx.ask({
-        permission: "external_directory",
-        patterns: [parentDir],
-        always: [parentDir + "/*"],
-        metadata: {
-          filepath,
-          parentDir,
-        },
-      })
-    }
+    await assertExternalDirectory(ctx, filepath, {
+      bypass: Boolean(ctx.extra?.["bypassCwdCheck"]),
+    })
 
     await ctx.ask({
       permission: "read",
@@ -67,7 +60,11 @@ export const ReadTool = Tool.define("read", {
       throw new Error(`File not found: ${filepath}`)
     }
 
-    const isImage = file.type.startsWith("image/") && file.type !== "image/svg+xml"
+    const instructions = await InstructionPrompt.resolve(ctx.messages, filepath, ctx.messageID)
+
+    // Exclude SVG (XML-based) and vnd.fastbidsheet (.fbs extension, commonly FlatBuffers schema files)
+    const isImage =
+      file.type.startsWith("image/") && file.type !== "image/svg+xml" && file.type !== "image/vnd.fastbidsheet"
     const isPdf = file.type === "application/pdf"
     if (isImage || isPdf) {
       const mime = file.type
@@ -77,6 +74,8 @@ export const ReadTool = Tool.define("read", {
         output: msg,
         metadata: {
           preview: msg,
+          truncated: false,
+          ...(instructions.length > 0 && { loaded: instructions.map((i) => i.filepath) }),
         },
         attachments: [
           {
@@ -97,9 +96,21 @@ export const ReadTool = Tool.define("read", {
     const limit = params.limit ?? DEFAULT_READ_LIMIT
     const offset = params.offset || 0
     const lines = await file.text().then((text) => text.split("\n"))
-    const raw = lines.slice(offset, offset + limit).map((line) => {
-      return line.length > MAX_LINE_LENGTH ? line.substring(0, MAX_LINE_LENGTH) + "..." : line
-    })
+
+    const raw: string[] = []
+    let bytes = 0
+    let truncatedByBytes = false
+    for (let i = offset; i < Math.min(lines.length, offset + limit); i++) {
+      const line = lines[i].length > MAX_LINE_LENGTH ? lines[i].substring(0, MAX_LINE_LENGTH) + "..." : lines[i]
+      const size = Buffer.byteLength(line, "utf-8") + (raw.length > 0 ? 1 : 0)
+      if (bytes + size > MAX_BYTES) {
+        truncatedByBytes = true
+        break
+      }
+      raw.push(line)
+      bytes += size
+    }
+
     const content = raw.map((line, index) => {
       return `${(index + offset + 1).toString().padStart(5, "0")}| ${line}`
     })
@@ -109,10 +120,13 @@ export const ReadTool = Tool.define("read", {
     output += content.join("\n")
 
     const totalLines = lines.length
-    const lastReadLine = offset + content.length
+    const lastReadLine = offset + raw.length
     const hasMoreLines = totalLines > lastReadLine
+    const truncated = hasMoreLines || truncatedByBytes
 
-    if (hasMoreLines) {
+    if (truncatedByBytes) {
+      output += `\n\n(Output truncated at ${MAX_BYTES} bytes. Use 'offset' parameter to read beyond line ${lastReadLine})`
+    } else if (hasMoreLines) {
       output += `\n\n(File has more lines. Use 'offset' parameter to read beyond line ${lastReadLine})`
     } else {
       output += `\n\n(End of file - total ${totalLines} lines)`
@@ -123,11 +137,17 @@ export const ReadTool = Tool.define("read", {
     LSP.touchFile(filepath, false)
     FileTime.read(ctx.sessionID, filepath)
 
+    if (instructions.length > 0) {
+      output += `\n\n<system-reminder>\n${instructions.map((i) => i.content).join("\n\n")}\n</system-reminder>`
+    }
+
     return {
       title,
       output,
       metadata: {
         preview,
+        truncated,
+        ...(instructions.length > 0 && { loaded: instructions.map((i) => i.filepath) }),
       },
     }
   },

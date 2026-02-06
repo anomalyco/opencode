@@ -18,7 +18,8 @@ import { Legal } from "~/component/legal"
 import { Footer } from "~/component/footer"
 import { Header } from "~/component/header"
 import { getLastSeenWorkspaceID } from "../workspace/common"
-import { IconGemini, IconZai } from "~/component/icon"
+import { IconGemini, IconMiniMax, IconZai } from "~/component/icon"
+import { useI18n } from "~/context/i18n"
 
 const checkLoggedIn = query(async () => {
   "use server"
@@ -28,10 +29,11 @@ const checkLoggedIn = query(async () => {
 
 export default function Home() {
   const loggedin = createAsync(() => checkLoggedIn())
+  const i18n = useI18n()
   return (
     <main data-page="zen">
       {/*<HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />*/}
-      <Title>OpenCode Zen | A curated set of reliable optimized models for coding agents</Title>
+      <Title>{i18n.t("zen.title")}</Title>
       <Link rel="canonical" href={`${config.baseUrl}/zen`} />
       <Meta property="og:image" content="/social-share-zen.png" />
       <Meta name="twitter:image" content="/social-share-zen.png" />
@@ -43,14 +45,10 @@ export default function Home() {
         <div data-component="content">
           <section data-component="hero">
             <div data-slot="hero-copy">
-              <img data-slot="zen logo light" src={zenLogoLight} alt="zen logo light" />
-              <img data-slot="zen logo dark" src={zenLogoDark} alt="zen logo dark" />
-              <h1>Reliable optimized models for coding agents</h1>
-              <p>
-                Zen gives you access to a curated set of AI models that OpenCode has tested and benchmarked specifically
-                for coding agents. No need to worry about inconsistent performance and quality, use validated models
-                that work.
-              </p>
+              <img data-slot="zen logo light" src={zenLogoLight} alt="" />
+              <img data-slot="zen logo dark" src={zenLogoDark} alt="" />
+              <h1>{i18n.t("zen.hero.title")}</h1>
+              <p>{i18n.t("zen.hero.body")}</p>
               <div data-slot="model-logos">
                 <div>
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -98,14 +96,7 @@ export default function Home() {
                   </svg>
                 </div>
                 <div>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path
-                      fill-rule="evenodd"
-                      clip-rule="evenodd"
-                      d="M12.6043 1.34016C12.9973 2.03016 13.3883 2.72215 13.7783 3.41514C13.7941 3.44286 13.8169 3.46589 13.8445 3.48187C13.8721 3.49786 13.9034 3.50624 13.9353 3.50614H19.4873C19.6612 3.50614 19.8092 3.61614 19.9332 3.83314L21.3872 6.40311C21.5772 6.74011 21.6272 6.88111 21.4112 7.24011C21.1512 7.6701 20.8982 8.1041 20.6512 8.54009L20.2842 9.19809C20.1782 9.39409 20.0612 9.47809 20.2442 9.71008L22.8962 14.347C23.0682 14.648 23.0072 14.841 22.8532 15.117C22.4162 15.902 21.9712 16.681 21.5182 17.457C21.3592 17.729 21.1662 17.832 20.8382 17.827C20.0612 17.811 19.2863 17.817 18.5113 17.843C18.4946 17.8439 18.4785 17.8489 18.4644 17.8576C18.4502 17.8664 18.4385 17.8785 18.4303 17.893C17.5361 19.4773 16.6344 21.0573 15.7253 22.633C15.5563 22.926 15.3453 22.996 15.0003 22.997C14.0033 23 12.9983 23.001 11.9833 22.999C11.8889 22.9987 11.7961 22.9735 11.7145 22.9259C11.6328 22.8783 11.5652 22.8101 11.5184 22.728L10.1834 20.405C10.1756 20.3898 10.1637 20.3771 10.149 20.3684C10.1343 20.3598 10.1174 20.3554 10.1004 20.356H4.98244C4.69744 20.386 4.42944 20.355 4.17745 20.264L2.57447 17.494C2.52706 17.412 2.50193 17.319 2.50158 17.2243C2.50123 17.1296 2.52567 17.0364 2.57247 16.954L3.77945 14.834C3.79665 14.8041 3.80569 14.7701 3.80569 14.7355C3.80569 14.701 3.79665 14.667 3.77945 14.637C3.15073 13.5485 2.52573 12.4579 1.90448 11.3651L1.11449 9.97008C0.954488 9.66008 0.941489 9.47409 1.20949 9.00509C1.67448 8.1921 2.13647 7.38011 2.59647 6.56911C2.72847 6.33512 2.90046 6.23512 3.18046 6.23412C4.04344 6.23048 4.90644 6.23015 5.76943 6.23312C5.79123 6.23295 5.81259 6.22704 5.83138 6.21597C5.85016 6.20491 5.8657 6.1891 5.87643 6.17012L8.68239 1.27516C8.72491 1.2007 8.78631 1.13875 8.86039 1.09556C8.93448 1.05238 9.01863 1.02948 9.10439 1.02917C9.62838 1.02817 10.1574 1.02917 10.6874 1.02317L11.7044 1.00017C12.0453 0.997165 12.4283 1.03217 12.6043 1.34016ZM9.17238 1.74316C9.16185 1.74315 9.15149 1.74592 9.14236 1.75119C9.13323 1.75645 9.12565 1.76403 9.12038 1.77316L6.25442 6.78811C6.24066 6.81174 6.22097 6.83137 6.19729 6.84505C6.17361 6.85873 6.14677 6.86599 6.11942 6.86611H3.25346C3.19746 6.86611 3.18346 6.89111 3.21246 6.94011L9.02239 17.096C9.04739 17.138 9.03539 17.158 8.98839 17.159L6.19342 17.174C6.15256 17.1727 6.11214 17.1828 6.07678 17.2033C6.04141 17.2238 6.01253 17.2539 5.99342 17.29L4.67344 19.6C4.62944 19.678 4.65244 19.718 4.74144 19.718L10.4574 19.726C10.5034 19.726 10.5374 19.746 10.5614 19.787L11.9643 22.241C12.0103 22.322 12.0563 22.323 12.1033 22.241L17.1093 13.481L17.8923 12.0991C17.897 12.0905 17.904 12.0834 17.9125 12.0785C17.9209 12.0735 17.9305 12.0709 17.9403 12.0709C17.9501 12.0709 17.9597 12.0735 17.9681 12.0785C17.9765 12.0834 17.9835 12.0905 17.9883 12.0991L19.4123 14.629C19.4229 14.648 19.4385 14.6637 19.4573 14.6746C19.4761 14.6855 19.4975 14.6912 19.5193 14.691L22.2822 14.671C22.2893 14.6711 22.2963 14.6693 22.3024 14.6658C22.3086 14.6623 22.3137 14.6572 22.3172 14.651C22.3206 14.6449 22.3224 14.638 22.3224 14.631C22.3224 14.624 22.3206 14.6172 22.3172 14.611L19.4173 9.52508C19.4068 9.50809 19.4013 9.48853 19.4013 9.46859C19.4013 9.44864 19.4068 9.42908 19.4173 9.41209L19.7102 8.90509L20.8302 6.92811C20.8542 6.88711 20.8422 6.86611 20.7952 6.86611H9.20038C9.14138 6.86611 9.12738 6.84011 9.15738 6.78911L10.5914 4.28413C10.6021 4.26706 10.6078 4.24731 10.6078 4.22714C10.6078 4.20697 10.6021 4.18721 10.5914 4.17014L9.22538 1.77416C9.22016 1.7647 9.21248 1.75682 9.20315 1.75137C9.19382 1.74591 9.18319 1.74307 9.17238 1.74316ZM15.4623 9.76308C15.5083 9.76308 15.5203 9.78308 15.4963 9.82308L14.6643 11.2881L12.0513 15.873C12.0464 15.8819 12.0392 15.8894 12.0304 15.8945C12.0216 15.8996 12.0115 15.9022 12.0013 15.902C11.9912 15.902 11.9813 15.8993 11.9725 15.8942C11.9637 15.8891 11.9564 15.8818 11.9513 15.873L8.49839 9.84108C8.47839 9.80708 8.48839 9.78908 8.52639 9.78708L8.74239 9.77508L15.4643 9.76308H15.4623Z"
-                      fill="currentColor"
-                    />
-                  </svg>
+                  <IconMiniMax width="24" height="24" />
                 </div>
                 <div>
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -118,9 +109,19 @@ export default function Home() {
                 <div>
                   <IconZai width="24" height="24" />
                 </div>
+                <div>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path
+                      fill-rule="evenodd"
+                      clip-rule="evenodd"
+                      d="M12.6043 1.34016C12.9973 2.03016 13.3883 2.72215 13.7783 3.41514C13.7941 3.44286 13.8169 3.46589 13.8445 3.48187C13.8721 3.49786 13.9034 3.50624 13.9353 3.50614H19.4873C19.6612 3.50614 19.8092 3.61614 19.9332 3.83314L21.3872 6.40311C21.5772 6.74011 21.6272 6.88111 21.4112 7.24011C21.1512 7.6701 20.8982 8.1041 20.6512 8.54009L20.2842 9.19809C20.1782 9.39409 20.0612 9.47809 20.2442 9.71008L22.8962 14.347C23.0682 14.648 23.0072 14.841 22.8532 15.117C22.4162 15.902 21.9712 16.681 21.5182 17.457C21.3592 17.729 21.1662 17.832 20.8382 17.827C20.0612 17.811 19.2863 17.817 18.5113 17.843C18.4946 17.8439 18.4785 17.8489 18.4644 17.8576C18.4502 17.8664 18.4385 17.8785 18.4303 17.893C17.5361 19.4773 16.6344 21.0573 15.7253 22.633C15.5563 22.926 15.3453 22.996 15.0003 22.997C14.0033 23 12.9983 23.001 11.9833 22.999C11.8889 22.9987 11.7961 22.9735 11.7145 22.9259C11.6328 22.8783 11.5652 22.8101 11.5184 22.728L10.1834 20.405C10.1756 20.3898 10.1637 20.3771 10.149 20.3684C10.1343 20.3598 10.1174 20.3554 10.1004 20.356H4.98244C4.69744 20.386 4.42944 20.355 4.17745 20.264L2.57447 17.494C2.52706 17.412 2.50193 17.319 2.50158 17.2243C2.50123 17.1296 2.52567 17.0364 2.57247 16.954L3.77945 14.834C3.79665 14.8041 3.80569 14.7701 3.80569 14.7355C3.80569 14.701 3.79665 14.667 3.77945 14.637C3.15073 13.5485 2.52573 12.4579 1.90448 11.3651L1.11449 9.97008C0.954488 9.66008 0.941489 9.47409 1.20949 9.00509C1.67448 8.1921 2.13647 7.38011 2.59647 6.56911C2.72847 6.33512 2.90046 6.23512 3.18046 6.23412C4.04344 6.23048 4.90644 6.23015 5.76943 6.23312C5.79123 6.23295 5.81259 6.22704 5.83138 6.21597C5.85016 6.20491 5.8657 6.1891 5.87643 6.17012L8.68239 1.27516C8.72491 1.2007 8.78631 1.13875 8.86039 1.09556C8.93448 1.05238 9.01863 1.02948 9.10439 1.02917C9.62838 1.02817 10.1574 1.02917 10.6874 1.02317L11.7044 1.00017C12.0453 0.997165 12.4283 1.03217 12.6043 1.34016ZM9.17238 1.74316C9.16185 1.74315 9.15149 1.74592 9.14236 1.75119C9.13323 1.75645 9.12565 1.76403 9.12038 1.77316L6.25442 6.78811C6.24066 6.81174 6.22097 6.83137 6.19729 6.84505C6.17361 6.85873 6.14677 6.86599 6.11942 6.86611H3.25346C3.19746 6.86611 3.18346 6.89111 3.21246 6.94011L9.02239 17.096C9.04739 17.138 9.03539 17.158 8.98839 17.159L6.19342 17.174C6.15256 17.1727 6.11214 17.1828 6.07678 17.2033C6.04141 17.2238 6.01253 17.2539 5.99342 17.29L4.67344 19.6C4.62944 19.678 4.65244 19.718 4.74144 19.718L10.4574 19.726C10.5034 19.726 10.5374 19.746 10.5614 19.787L11.9643 22.241C12.0103 22.322 12.0563 22.323 12.1033 22.241L17.1093 13.481L17.8923 12.0991C17.897 12.0905 17.904 12.0834 17.9125 12.0785C17.9209 12.0735 17.9305 12.0709 17.9403 12.0709C17.9501 12.0709 17.9597 12.0735 17.9681 12.0785C17.9765 12.0834 17.9835 12.0905 17.9883 12.0991L19.4123 14.629C19.4229 14.648 19.4385 14.6637 19.4573 14.6746C19.4761 14.6855 19.4975 14.6912 19.5193 14.691L22.2822 14.671C22.2893 14.6711 22.2963 14.6693 22.3024 14.6658C22.3086 14.6623 22.3137 14.6572 22.3172 14.651C22.3206 14.6449 22.3224 14.638 22.3224 14.631C22.3224 14.624 22.3206 14.6172 22.3172 14.611L19.4173 9.52508C19.4068 9.50809 19.4013 9.48853 19.4013 9.46859C19.4013 9.44864 19.4068 9.42908 19.4173 9.41209L19.7102 8.90509L20.8302 6.92811C20.8542 6.88711 20.8422 6.86611 20.7952 6.86611H9.20038C9.14138 6.86611 9.12738 6.84011 9.15738 6.78911L10.5914 4.28413C10.6021 4.26706 10.6078 4.24731 10.6078 4.22714C10.6078 4.20697 10.6021 4.18721 10.5914 4.17014L9.22538 1.77416C9.22016 1.7647 9.21248 1.75682 9.20315 1.75137C9.19382 1.74591 9.18319 1.74307 9.17238 1.74316ZM15.4623 9.76308C15.5083 9.76308 15.5203 9.78308 15.4963 9.82308L14.6643 11.2881L12.0513 15.873C12.0464 15.8819 12.0392 15.8894 12.0304 15.8945C12.0216 15.8996 12.0115 15.9022 12.0013 15.902C11.9912 15.902 11.9813 15.8993 11.9725 15.8942C11.9637 15.8891 11.9564 15.8818 11.9513 15.873L8.49839 9.84108C8.47839 9.80708 8.48839 9.78908 8.52639 9.78708L8.74239 9.77508L15.4643 9.76308H15.4623Z"
+                      fill="currentColor"
+                    />
+                  </svg>
+                </div>
               </div>
               <a href="/auth">
-                <span>Get started with Zen </span>
+                <span>{i18n.t("zen.cta.start")}</span>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path
                     d="M6.5 12L17 12M13 16.5L17.5 12L13 7.5"
@@ -133,66 +134,63 @@ export default function Home() {
             </div>
             <div data-slot="pricing-copy">
               <p>
-                <strong>Add $20 Pay as you go balance</strong> <span>(+$1.23 card processing fee)</span>
+                <strong>{i18n.t("zen.pricing.title")}</strong> <span>{i18n.t("zen.pricing.fee")}</span>
               </p>
-              <p>Use with any agent. Set monthly spend limits. Cancel any time.</p>
+              <p>{i18n.t("zen.pricing.body")}</p>
             </div>
           </section>
 
           <section data-component="comparison">
             <video src={compareVideo} autoplay playsinline loop muted preload="auto" poster={compareVideoPoster}>
-              Your browser does not support the video tag.
+              {i18n.t("common.videoUnsupported")}
             </video>
           </section>
 
           <section data-component="problem">
             <div data-slot="section-title">
-              <h3>What problem is Zen solving?</h3>
-              <p>
-                There are so many models available, but only a few work well with coding agents. Most providers
-                configure them differently with varying results.
-              </p>
+              <h3>{i18n.t("zen.problem.title")}</h3>
+              <p>{i18n.t("zen.problem.body")}</p>
             </div>
-            <p>We're fixing this for everyone, not just OpenCode users.</p>
+            <p>{i18n.t("zen.problem.subtitle")}</p>
             <ul>
               <li>
-                <span>[*]</span> Testing select models and consulting their teams
+                <span>[*]</span> {i18n.t("zen.problem.item1")}
               </li>
               <li>
-                <span>[*]</span> Working with providers to ensure they’re delivered properly
+                <span>[*]</span> {i18n.t("zen.problem.item2")}
               </li>
               <li>
-                <span>[*]</span> Benchmarking all model-provider combinations we recommend
+                <span>[*]</span> {i18n.t("zen.problem.item3")}
               </li>
             </ul>
           </section>
 
           <section data-component="how">
             <div data-slot="section-title">
-              <h3>How Zen works</h3>
-              <p>While we suggest you use Zen with OpenCode, you can use Zen with any agent.</p>
+              <h3>{i18n.t("zen.how.title")}</h3>
+              <p>{i18n.t("zen.how.body")}</p>
             </div>
             <ul>
               <li>
                 <span>[1]</span>
                 <div>
-                  <strong>Sign up and add $20 balance</strong> - follow the{" "}
-                  <a href="/docs/zen/#how-it-works" title="setup instructions">
-                    setup instructions
+                  <strong>{i18n.t("zen.how.step1.title")}</strong> - {i18n.t("zen.how.step1.beforeLink")}{" "}
+                  <a href="/docs/zen/#how-it-works" title={i18n.t("zen.how.step1.link")}>
+                    {i18n.t("zen.how.step1.link")}
                   </a>
                 </div>
               </li>
               <li>
                 <span>[2]</span>
                 <div>
-                  <strong>Use Zen with transparent pricing</strong> - <a href="/docs/zen/#pricing">pay per request</a>{" "}
-                  with zero markups
+                  <strong>{i18n.t("zen.how.step2.title")}</strong> -{" "}
+                  <a href="/docs/zen/#pricing">{i18n.t("zen.how.step2.link")}</a> {i18n.t("zen.how.step2.afterLink")}
                 </div>
               </li>
               <li>
                 <span>[3]</span>
                 <div>
-                  <strong>Auto-top up</strong> - when your balance reaches $5 we’ll automatically add $20
+                  <strong>{i18n.t("zen.how.step3.title")}</strong> - {i18n.t("zen.how.step3.body")}
                 </div>
               </li>
             </ul>
@@ -200,12 +198,12 @@ export default function Home() {
 
           <section data-component="privacy">
             <div data-slot="privacy-title">
-              <h3>Your privacy is important to us</h3>
+              <h3>{i18n.t("zen.privacy.title")}</h3>
               <div>
                 <span>[*]</span>
                 <p>
-                  All Zen models are hosted in the US. Providers follow a zero-retention policy and do not use your data
-                  for model training, with the <a href="/docs/zen/#privacy">following exceptions</a>.
+                  {i18n.t("zen.privacy.beforeExceptions")}{" "}
+                  <a href="/docs/zen/#privacy">{i18n.t("zen.privacy.exceptionsLink")}</a>.
                 </p>
               </div>
             </div>
@@ -221,7 +219,8 @@ export default function Home() {
                   <span>ex-CEO, Terminal Products</span>
                 </div>
                 <div data-slot="quote">
-                  <span>@OpenCode</span> Zen has been life changing, it's truly a no-brainer.
+                  <span>@OpenCode</span>
+                  {" Zen has been life changing, it's truly a no-brainer."}
                 </div>
               </div>
             </a>
@@ -234,7 +233,9 @@ export default function Home() {
                   <span>ex-Founder, SEED, PM, Melt, Pop, Dapt, Cadmus, and ViewPoint</span>
                 </div>
                 <div data-slot="quote">
-                  4 out of 5 people on our team love using <span>@OpenCode</span> Zen.
+                  {"4 out of 5 people on our team love using "}
+                  <span>@OpenCode</span>
+                  {" Zen."}
                 </div>
               </div>
             </a>
@@ -247,7 +248,9 @@ export default function Home() {
                   <span>ex-Hero, AWS</span>
                 </div>
                 <div data-slot="quote">
-                  I can't recommend <span>@OpenCode</span> Zen enough. Seriously, it’s really good.
+                  {"I can't recommend "}
+                  <span>@OpenCode</span>
+                  {" Zen enough. Seriously, it's really good."}
                 </div>
               </div>
             </a>
@@ -260,7 +263,9 @@ export default function Home() {
                   <span>ex-Head of Design, Laravel</span>
                 </div>
                 <div data-slot="quote">
-                  With <span>@OpenCode</span> Zen I know all the models are tested and perfect for coding agents.
+                  {"With "}
+                  <span>@OpenCode</span>
+                  {" Zen I know all the models are tested and perfect for coding agents."}
                 </div>
               </div>
             </a>
@@ -279,54 +284,40 @@ export default function Home() {
 
           <section data-component="faq">
             <div data-slot="section-title">
-              <h3>FAQ</h3>
+              <h3>{i18n.t("common.faq")}</h3>
             </div>
             <ul>
               <li>
-                <Faq question="What is OpenCode Zen?">
-                  Zen is a curated set of AI models tested and benchmarked for coding agents created by the team behind
-                  OpenCode.
+                <Faq question={i18n.t("zen.faq.q1")}>{i18n.t("zen.faq.a1")}</Faq>
+              </li>
+              <li>
+                <Faq question={i18n.t("zen.faq.q2")}>{i18n.t("zen.faq.a2")}</Faq>
+              </li>
+              <li>
+                <Faq question={i18n.t("zen.faq.q3")}>{i18n.t("zen.faq.a3")}</Faq>
+              </li>
+              <li>
+                <Faq question={i18n.t("zen.faq.q4")}>
+                  {i18n.t("zen.faq.a4.p1.beforePricing")}{" "}
+                  <a href="/docs/zen/#pricing">{i18n.t("zen.faq.a4.p1.pricingLink")}</a>{" "}
+                  {i18n.t("zen.faq.a4.p1.afterPricing")} {i18n.t("zen.faq.a4.p2.beforeAccount")}{" "}
+                  <a href="/auth">{i18n.t("zen.faq.a4.p2.accountLink")}</a>. {i18n.t("zen.faq.a4.p3")}
                 </Faq>
               </li>
               <li>
-                <Faq question="What makes Zen more accurate?">
-                  Zen only provides models that have been specifically tested and benchmarked for coding agents. You
-                  wouldn’t use a butter knife to cut steak, don’t use poor models for coding.
+                <Faq question={i18n.t("zen.faq.q5")}>
+                  {i18n.t("zen.faq.a5.beforeExceptions")}{" "}
+                  <a href="/docs/zen/#privacy">{i18n.t("zen.faq.a5.exceptionsLink")}</a>.
                 </Faq>
               </li>
               <li>
-                <Faq question="Is Zen cheaper?">
-                  Zen is not for profit. Zen passes through the costs from the model providers to you. The higher Zen’s
-                  usage the more OpenCode can negotiate better rates and pass those to you.
-                </Faq>
+                <Faq question={i18n.t("zen.faq.q6")}>{i18n.t("zen.faq.a6")}</Faq>
               </li>
               <li>
-                <Faq question="How much does Zen cost?">
-                  Zen <a href="/docs/zen/#pricing">charges per request</a> with zero markups, so you pay exactly what
-                  the model provider charges. Your total cost depends on usage, and you can set monthly spend limits in
-                  your <a href="/auth">account</a>. To cover costs, OpenCode adds only a small payment processing fee of
-                  $1.23 per $20 balance top-up.
-                </Faq>
+                <Faq question={i18n.t("zen.faq.q7")}>{i18n.t("zen.faq.a7")}</Faq>
               </li>
               <li>
-                <Faq question="What about data and privacy?">
-                  All Zen models are hosted in the US. Providers follow a zero-retention policy and do not use your data
-                  for model training, with the <a href="/docs/zen/#privacy">following exceptions</a>.
-                </Faq>
-              </li>
-              <li>
-                <Faq question="Can I set spend limits?">Yes, you can set monthly spending limits in your account.</Faq>
-              </li>
-              <li>
-                <Faq question="Can I cancel?">
-                  Yes, you can disable billing at any time and use your remaining balance.
-                </Faq>
-              </li>
-              <li>
-                <Faq question="Can I use Zen with other coding agents?">
-                  While Zen works great with OpenCode, you can use Zen with any agent. Follow the setup instructions in
-                  your preferred coding agent.
-                </Faq>
+                <Faq question={i18n.t("zen.faq.q8")}>{i18n.t("zen.faq.a8")}</Faq>
               </li>
             </ul>
           </section>

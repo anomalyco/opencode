@@ -15,8 +15,10 @@ import { Flag } from "@/flag/flag.ts"
 import { Shell } from "@/shell/shell"
 
 import { BashArity } from "@/permission/arity"
+import { Truncate } from "./truncation"
+import { Plugin } from "@/plugin"
 
-const MAX_OUTPUT_LENGTH = Flag.OPENCODE_EXPERIMENTAL_BASH_MAX_OUTPUT_LENGTH || 30_000
+const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
 
 export const log = Log.create({ service: "bash-tool" })
@@ -55,7 +57,9 @@ export const BashTool = Tool.define("bash", async () => {
   log.info("bash tool using shell", { shell })
 
   return {
-    description: DESCRIPTION.replaceAll("${directory}", Instance.directory),
+    description: DESCRIPTION.replaceAll("${directory}", Instance.directory)
+      .replaceAll("${maxLines}", String(Truncate.MAX_LINES))
+      .replaceAll("${maxBytes}", String(Truncate.MAX_BYTES)),
     parameters: z.object({
       command: z.string().describe("The command to execute"),
       timeout: z.number().describe("Optional timeout in milliseconds").optional(),
@@ -82,12 +86,16 @@ export const BashTool = Tool.define("bash", async () => {
         throw new Error("Failed to parse command")
       }
       const directories = new Set<string>()
-      if (!Filesystem.contains(Instance.directory, cwd)) directories.add(cwd)
+      if (!Instance.containsPath(cwd)) directories.add(cwd)
       const patterns = new Set<string>()
       const always = new Set<string>()
 
       for (const node of tree.rootNode.descendantsOfType("command")) {
         if (!node) continue
+
+        // Get full command text including redirects if present
+        let commandText = node.parent?.type === "redirected_statement" ? node.parent.text : node.text
+
         const command = []
         for (let i = 0; i < node.childCount; i++) {
           const child = node.child(i)
@@ -105,7 +113,7 @@ export const BashTool = Tool.define("bash", async () => {
         }
 
         // not an exhaustive list, but covers most common cases
-        if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown"].includes(command[0])) {
+        if (["cd", "rm", "cp", "mv", "mkdir", "touch", "chmod", "chown", "cat"].includes(command[0])) {
           for (const arg of command.slice(1)) {
             if (arg.startsWith("-") || (command[0] === "chmod" && arg.startsWith("+"))) continue
             const resolved = await $`realpath ${arg}`
@@ -121,23 +129,27 @@ export const BashTool = Tool.define("bash", async () => {
                 process.platform === "win32" && resolved.match(/^\/[a-z]\//)
                   ? resolved.replace(/^\/([a-z])\//, (_, drive) => `${drive.toUpperCase()}:\\`).replace(/\//g, "\\")
                   : resolved
-              if (!Filesystem.contains(Instance.directory, normalized)) directories.add(normalized)
+              if (!Instance.containsPath(normalized)) {
+                const dir = (await Filesystem.isDir(normalized)) ? normalized : path.dirname(normalized)
+                directories.add(dir)
+              }
             }
           }
         }
 
         // cd covered by above check
         if (command.length && command[0] !== "cd") {
-          patterns.add(command.join(" "))
-          always.add(BashArity.prefix(command).join(" ") + "*")
+          patterns.add(commandText)
+          always.add(BashArity.prefix(command).join(" ") + " *")
         }
       }
 
       if (directories.size > 0) {
+        const globs = Array.from(directories).map((dir) => path.join(dir, "*"))
         await ctx.ask({
           permission: "external_directory",
-          patterns: Array.from(directories),
-          always: Array.from(directories).map((x) => path.dirname(x) + "*"),
+          patterns: globs,
+          always: globs,
           metadata: {},
         })
       }
@@ -151,11 +163,13 @@ export const BashTool = Tool.define("bash", async () => {
         })
       }
 
+      const shellEnv = await Plugin.trigger("shell.env", { cwd }, { env: {} })
       const proc = spawn(params.command, {
         shell,
         cwd,
         env: {
           ...process.env,
+          ...shellEnv.env,
         },
         stdio: ["ignore", "pipe", "pipe"],
         detached: process.platform !== "win32",
@@ -172,15 +186,14 @@ export const BashTool = Tool.define("bash", async () => {
       })
 
       const append = (chunk: Buffer) => {
-        if (output.length <= MAX_OUTPUT_LENGTH) {
-          output += chunk.toString()
-          ctx.metadata({
-            metadata: {
-              output,
-              description: params.description,
-            },
-          })
-        }
+        output += chunk.toString()
+        ctx.metadata({
+          metadata: {
+            // truncate the metadata to avoid GIANT blobs of data (has nothing to do w/ what agent can access)
+            output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
+            description: params.description,
+          },
+        })
       }
 
       proc.stdout?.on("data", append)
@@ -228,12 +241,7 @@ export const BashTool = Tool.define("bash", async () => {
         })
       })
 
-      let resultMetadata: String[] = ["<bash_metadata>"]
-
-      if (output.length > MAX_OUTPUT_LENGTH) {
-        output = output.slice(0, MAX_OUTPUT_LENGTH)
-        resultMetadata.push(`bash tool truncated output as it exceeded ${MAX_OUTPUT_LENGTH} char limit`)
-      }
+      const resultMetadata: string[] = []
 
       if (timedOut) {
         resultMetadata.push(`bash tool terminated command after exceeding timeout ${timeout} ms`)
@@ -243,15 +251,14 @@ export const BashTool = Tool.define("bash", async () => {
         resultMetadata.push("User aborted the command")
       }
 
-      if (resultMetadata.length > 1) {
-        resultMetadata.push("</bash_metadata>")
-        output += "\n\n" + resultMetadata.join("\n")
+      if (resultMetadata.length > 0) {
+        output += "\n\n<bash_metadata>\n" + resultMetadata.join("\n") + "\n</bash_metadata>"
       }
 
       return {
         title: params.description,
         metadata: {
-          output,
+          output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
           exit: proc.exitCode,
           description: params.description,
         },

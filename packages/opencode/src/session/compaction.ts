@@ -34,7 +34,7 @@ export namespace SessionCompaction {
     if (context === 0) return false
     const count = input.tokens.input + input.tokens.cache.read + input.tokens.output
     const output = Math.min(input.model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) || SessionPrompt.OUTPUT_TOKEN_MAX
-    const usable = context - output
+    const usable = input.model.limit.input || context - output
     return count > usable
   }
 
@@ -149,7 +149,7 @@ export namespace SessionCompaction {
       tools: {},
       system: [],
       messages: [
-        ...MessageV2.toModelMessage(input.messages),
+        ...MessageV2.toModelMessages(input.messages, model),
         {
           role: "user",
           content: [

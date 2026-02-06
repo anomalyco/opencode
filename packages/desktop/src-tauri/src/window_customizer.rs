@@ -1,4 +1,4 @@
-use tauri::{plugin::Plugin, Manager, Runtime, Window};
+use tauri::{Manager, Runtime, Window, plugin::Plugin};
 
 pub struct PinchZoomDisablePlugin;
 
@@ -21,13 +21,25 @@ impl<R: Runtime> Plugin<R> for PinchZoomDisablePlugin {
         let _ = webview_window.with_webview(|_webview| {
             #[cfg(target_os = "linux")]
             unsafe {
-                use gtk::glib::ObjectExt;
                 use gtk::GestureZoom;
+                use gtk::glib::ObjectExt;
                 use webkit2gtk::glib::gobject_ffi;
 
                 if let Some(data) = _webview.inner().data::<GestureZoom>("wk-view-zoom-gesture") {
                     gobject_ffi::g_signal_handlers_destroy(data.as_ptr().cast());
                 }
+            }
+
+            #[cfg(target_os = "macos")]
+            unsafe {
+                use objc2::rc::Retained;
+                use objc2_web_kit::WKWebView;
+
+                // Get the WKWebView pointer and disable magnification gestures
+                // This prevents Cmd+Ctrl+scroll and pinch-to-zoom from changing the zoom level
+                let wk_webview: Retained<WKWebView> =
+                    Retained::retain(_webview.inner().cast()).unwrap();
+                wk_webview.setAllowsMagnification(false);
             }
         });
     }
