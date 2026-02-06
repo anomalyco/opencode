@@ -71,13 +71,14 @@
     "prettier": "3.6.2",
     "semver": "^7.6.0",
     "sst": "3.17.23",
-    "turbo": "2.5.6"
+    "turbo": "2.8.3"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.933.0",
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
+    "typecheck": "0.1.2",
     "typescript": "catalog:"
   },
   "repository": {
