@@ -57,4 +57,31 @@ describe("session.prompt agent variant", () => {
       },
     })
   })
+
+  test("explicit variant input takes effect without agent variant config", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+      config: {},
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+
+        // Simulates what task.ts does: passing parent's variant as explicit input
+        const msg = await SessionPrompt.prompt({
+          sessionID: session.id,
+          agent: "general",
+          variant: "high",
+          noReply: true,
+          parts: [{ type: "text", text: "hello" }],
+        })
+        if (msg.info.role !== "user") throw new Error("expected user message")
+        expect(msg.info.variant).toBe("high")
+
+        await Session.remove(session.id)
+      },
+    })
+  })
 })
