@@ -39,6 +39,22 @@ export namespace Tool {
         attachments?: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[]
       }>
       formatValidationError?(error: z.ZodError): string
+      
+      /**
+       * Returns the estimated resource keys this tool will access.
+       * Used for concurrency control and resource locking.
+       */
+      getResourceKeys?(args: z.infer<Parameters>): Set<string>
+      
+      /**
+       * Returns the dependency IDs this tool has on other tool calls.
+       */
+      getDependencies?(args: z.infer<Parameters>): string[]
+      
+      /**
+       * Returns the timeout in milliseconds for this tool.
+       */
+      getTimeout?(args: z.infer<Parameters>): number
     }>
   }
 

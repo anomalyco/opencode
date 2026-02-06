@@ -266,5 +266,14 @@ export const BashTool = Tool.define("bash", async () => {
         output,
       }
     },
+    getTimeout(params) {
+      return params.timeout ?? DEFAULT_TIMEOUT
+    },
+    getResourceKeys(params) {
+      const keys = new Set<string>()
+      const cwd = params.workdir || Instance.directory
+      keys.add(cwd)
+      return keys
+    },
   }
 })

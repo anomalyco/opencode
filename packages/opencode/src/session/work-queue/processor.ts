@@ -41,6 +41,16 @@ export interface TaskInput {
   priority?: number
 }
 
+/**
+ * WorkQueue 会话处理器
+ * 
+ * 职责：
+ * 1. 提供任务提交、取消等公共 API
+ * 2. 依赖 EventLoop 进行并发调度
+ * 
+ * 线程模型：
+ * @VertxThreadSafety
+ */
 export class WorkQueueSessionProcessor {
   private sessionID: string
   private eventLoop: EventLoop
@@ -50,23 +60,26 @@ export class WorkQueueSessionProcessor {
   private isRunning = false
   private taskCallbacks: Map<string, { resolve: (r: TaskResult) => void; reject: (e: Error) => void }> = new Map()
 
+  /**
+   * 构造函数
+   * @param sessionID 会话ID
+   * @param config 配置项
+   */
   constructor(sessionID: string, config?: WorkQueueProcessorConfig) {
     this.sessionID = sessionID
     this.board = new TaskSummaryBoard()
-    this.eventLoop = new EventLoop(sessionID)
+    this.eventLoop = new EventLoop(sessionID, this.board)
     this.config = { ...DEFAULT_CONFIG, ...config }
     this.abortController = new AbortController()
     this.setupCallbacks()
   }
 
   private setupCallbacks(): void {
-    const board = this.eventLoop.getBoard()
-
-    board.on("task:completed", (event) => {
+    this.board.on("task:completed", (event) => {
       if (!event.taskID) return
       const callback = this.taskCallbacks.get(event.taskID)
       if (callback) {
-        const task = board.get(event.taskID)
+        const task = this.board.get(event.taskID)
         callback.resolve({
           taskID: event.taskID,
           type: task?.type ?? "unknown",
@@ -78,7 +91,7 @@ export class WorkQueueSessionProcessor {
       }
     })
 
-    board.on("task:error", (event) => {
+    this.board.on("task:error", (event) => {
       if (!event.taskID) return
       const callback = this.taskCallbacks.get(event.taskID)
       if (callback) {
@@ -88,6 +101,9 @@ export class WorkQueueSessionProcessor {
     })
   }
 
+  /**
+   * 启动处理器
+   */
   async start(): Promise<void> {
     if (this.isRunning) return
     this.isRunning = true
@@ -95,14 +111,28 @@ export class WorkQueueSessionProcessor {
     await this.eventLoop.start()
   }
 
+  /**
+   * 停止处理器并清理资源
+   */
   async stop(): Promise<void> {
     if (!this.isRunning) return
     log.info("WorkQueueSessionProcessor stopping", { sessionID: this.sessionID })
     this.isRunning = false
     this.abortController.abort()
     this.eventLoop.stop()
+
+    // 清理所有回调，防止内存泄漏 (Bug 5)
+    for (const [taskID, callback] of this.taskCallbacks) {
+      callback.reject(new Error("Processor stopped"))
+      this.taskCallbacks.delete(taskID)
+    }
   }
 
+  /**
+   * 提交通用任务
+   * @param input 任务输入
+   * @returns 任务结果
+   */
   async submitTask(input: TaskInput): Promise<TaskResult> {
     const task = this.board.create({
       type: input.type,
@@ -160,7 +190,7 @@ export class WorkQueueSessionProcessor {
   }
 
   isActive(): boolean {
-    return this.isRunning && this.board.stats().running > 0
+    return this.isRunning
   }
 }
 

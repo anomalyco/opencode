@@ -1,4 +1,5 @@
 import { Plugin } from "../plugin"
+import { Global } from "../global"
 import { Share } from "../share/share"
 import { Format } from "../format"
 import { LSP } from "../lsp"
@@ -16,6 +17,7 @@ import { Truncate } from "../tool/truncation"
 
 export async function InstanceBootstrap() {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
+  await Global.init()
   await Plugin.init()
   Share.init()
   ShareNext.init()

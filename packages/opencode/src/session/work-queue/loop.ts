@@ -11,10 +11,20 @@ const log = Log.create({ service: "work-queue.loop" })
 const TICK_IDLE_TIMEOUT = 50
 const TICK_BUSY_TIMEOUT = 5
 
+/**
+ * 任务事件循环
+ * 
+ * 职责：
+ * 1. 管理任务队列和执行状态
+ * 2. 调度任务执行并处理事件
+ * 
+ * 线程模型：
+ * @VertxThreadSafety 异步非阻塞事件循环
+ */
 export class EventLoop {
   private board: TaskSummaryBoard
   private decision: AgentDecisionCenter
-  private runningTasks: Map<string, { startTime: number; priority: number }> = new Map()
+  private runningTasks: Map<string, { startTime: number; lastHeartbeat: number; priority: number }> = new Map()
   private taskAbortControllers: Map<string, AbortController> = new Map()
   private maxConcurrency = 2
   private eventQueue: AsyncQueue<TaskEvent> = new AsyncQueue()
@@ -23,8 +33,13 @@ export class EventLoop {
   private isRunning = false
   private wakeUpResolver: (() => void) | null = null
 
-  constructor(sessionID: string) {
-    this.board = new TaskSummaryBoard()
+  /**
+   * 构造函数
+   * @param sessionID 会话ID
+   * @param board 可选的任务板
+   */
+  constructor(sessionID: string, board?: TaskSummaryBoard) {
+    this.board = board ?? new TaskSummaryBoard()
     this.decision = new AgentDecisionCenter()
     this.abortController = new AbortController()
     this.setupEventListeners()
@@ -72,6 +87,9 @@ export class EventLoop {
     this.wakeUp()
   }
 
+  /**
+   * 启动事件循环
+   */
   async start(): Promise<void> {
     if (this.isRunning) return
     this.isRunning = true
@@ -89,6 +107,9 @@ export class EventLoop {
     log.info("EventLoop stopped")
   }
 
+  /**
+   * 停止事件循环
+   */
   stop(): void {
     this.isRunning = false
     this.abortController.abort()
@@ -115,15 +136,6 @@ export class EventLoop {
     const canSchedule = this.canSchedule()
 
     if (canSchedule) {
-      const nextTask = this.getNextTask()
-      if (nextTask) {
-        const action = this.decision.decideNext(this.board)
-        if (action.type === "start_next" || action.type === "continue") {
-          await this.executeAction(action)
-          return
-        }
-      }
-
       const action = this.decision.decideNext(this.board)
       if (action.type !== "idle" && action.type !== "wait") {
         await this.executeAction(action)
@@ -190,6 +202,7 @@ export class EventLoop {
       this.taskAbortControllers.delete(taskID)
     }
     this.runningTasks.delete(taskID)
+    this.pendingQueue.delete(taskID)
     this.board.pause(taskID, checkpoint)
   }
 
@@ -235,7 +248,9 @@ export class EventLoop {
     if (this.runningTasks.size >= this.maxConcurrency) return false
     if (this.runningTasks.size === 0) return true
     const oldestTask = Array.from(this.runningTasks.values()).reduce((a, b) => (a.startTime < b.startTime ? a : b))
-    return Date.now() - oldestTask.startTime > TICK_BUSY_TIMEOUT * 3
+    // 使用 lastHeartbeat 来判断是否繁忙，而不是 startTime
+    const mostRecentHeartbeat = Array.from(this.runningTasks.values()).reduce((a, b) => (a.lastHeartbeat > b.lastHeartbeat ? a : b))
+    return Date.now() - mostRecentHeartbeat.lastHeartbeat > TICK_BUSY_TIMEOUT * 3
   }
 
   private startTask(taskID: string): void {
@@ -248,7 +263,8 @@ export class EventLoop {
     this.board.start(taskID)
     log.info("Task started", { taskID, type: task.type, priority: task.priority })
 
-    this.runningTasks.set(taskID, { startTime: Date.now(), priority: task.priority })
+    const now = Date.now()
+    this.runningTasks.set(taskID, { startTime: now, lastHeartbeat: now, priority: task.priority })
     this.pendingQueue.delete(taskID)
     void this.runTask(task, controller)
   }
@@ -272,7 +288,7 @@ export class EventLoop {
       onHeartbeat: () => {
         const taskInfo = this.runningTasks.get(task.id)
         if (taskInfo) {
-          taskInfo.startTime = Date.now()
+          taskInfo.lastHeartbeat = Date.now()
         }
       },
     }

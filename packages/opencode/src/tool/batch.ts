@@ -1,6 +1,7 @@
 import z from "zod"
 import { Tool } from "./tool"
 import DESCRIPTION from "./batch.txt"
+import { MessageV2 } from "../session/message-v2"
 
 const DISALLOWED = new Set(["batch"])
 const FILTERED_FROM_SUGGESTIONS = new Set(["invalid", "patch", ...DISALLOWED])
@@ -40,9 +41,31 @@ export const BatchTool = Tool.define("batch", async () => {
       const availableTools = await ToolRegistry.tools({ modelID: "", providerID: "" })
       const toolMap = new Map(availableTools.map((t) => [t.id, t]))
 
-      const executeCall = async (call: (typeof toolCalls)[0]) => {
+      // Bug 7: Dependency analysis for BatchTool
+      const { ToolDependency } = await import("../session/tool-dependency")
+      const { MessageV2 } = await import("../session/message-v2")
+
+      const fakeToolParts: MessageV2.ToolPart[] = toolCalls.map((call, index) => ({
+        id: `batch-${index}`,
+        sessionID: ctx.sessionID,
+        messageID: ctx.messageID,
+        type: "tool",
+        callID: `batch-${index}`,
+        tool: call.tool,
+        state: {
+          status: "pending",
+          input: call.parameters,
+          raw: "",
+        },
+      }))
+
+      const dependencyResult = ToolDependency.analyze(fakeToolParts)
+
+      const results: Array<{ success: boolean; tool: string; result?: any; error?: any }> = []
+      const resultsMap = new Map<string, any>()
+
+      const executeCall = async (call: (typeof toolCalls)[0], partID: string) => {
         const callStartTime = Date.now()
-        const partID = Identifier.ascending("part")
 
         try {
           if (DISALLOWED.has(call.tool)) {
@@ -76,8 +99,15 @@ export const BatchTool = Tool.define("batch", async () => {
             },
           })
 
-          const result = await tool.execute(validatedParams, { ...ctx, callID: partID })
-          const attachments = result.attachments?.map((attachment) => ({
+          // Bug 8: Add timeout handling
+          const timeout = 60_000 // 60s default timeout for batch sub-tools
+          const resultPromise = tool.execute(validatedParams, { ...ctx, callID: partID })
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`Tool '${call.tool}' timed out after ${timeout}ms`)), timeout),
+          )
+
+          const result = (await Promise.race([resultPromise, timeoutPromise])) as any
+          const attachments = result.attachments?.map((attachment: any) => ({
             ...attachment,
             id: Identifier.ascending("part"),
             messageID: ctx.messageID,
@@ -105,6 +135,7 @@ export const BatchTool = Tool.define("batch", async () => {
             },
           })
 
+          resultsMap.set(partID, result)
           return { success: true as const, tool: call.tool, result }
         } catch (error) {
           await Session.updatePart({
@@ -129,7 +160,16 @@ export const BatchTool = Tool.define("batch", async () => {
         }
       }
 
-      const results = await Promise.all(toolCalls.map((call) => executeCall(call)))
+      // Execute level by level
+      for (const level of dependencyResult.levels) {
+        const levelPromises = level.calls.map((callPart) => {
+          const index = parseInt(callPart.id.split("-")[1]!)
+          const call = toolCalls[index]!
+          return executeCall(call, callPart.id)
+        })
+        const levelResults = await Promise.all(levelPromises)
+        results.push(...levelResults)
+      }
 
       // Add discarded calls as errors
       const now = Date.now()
@@ -176,6 +216,39 @@ export const BatchTool = Tool.define("batch", async () => {
           details: results.map((r) => ({ tool: r.tool, success: r.success })),
         },
       }
+    },
+    getTimeout(params) {
+      // Batch tool itself has no strict timeout, but sub-tools do.
+      // We return 0 to indicate no timeout for the batch manager.
+      return 0
+    },
+    getResourceKeys(params) {
+      const keys = new Set<string>()
+      // Batch tool accesses resources of all its sub-tools
+      const registry = require("./registry")
+      const ToolRegistry = registry.ToolRegistry || registry
+      for (const call of params.tool_calls) {
+        const tool = ToolRegistry.getToolSync?.(call.tool)
+        if (tool?.getResourceKeys) {
+          const subKeys = tool.getResourceKeys(call.parameters)
+          for (const k of subKeys) keys.add(k)
+        }
+      }
+      return keys
+    },
+    getDependencies(params) {
+      // Batch tool might depend on other tools if sub-tools do.
+      const deps: string[] = []
+      const registry = require("./registry")
+      const ToolRegistry = registry.ToolRegistry || registry
+      for (const call of params.tool_calls) {
+        const tool = ToolRegistry.getToolSync?.(call.tool)
+        if (tool?.getDependencies) {
+          const subDeps = tool.getDependencies(call.parameters)
+          deps.push(...subDeps)
+        }
+      }
+      return deps
     },
   }
 })

@@ -75,7 +75,7 @@ export namespace ToolDependency {
 
   function getToolDependencies(
     call: PendingCall,
-    allCalls: PendingCall[],
+    allCallsMap: Map<string, PendingCall>,
     executedResults: Map<string, any>,
   ): Set<string> {
     const dependencies = new Set<string>()
@@ -86,7 +86,7 @@ export namespace ToolDependency {
         if (typeof targetPath !== "string") break
 
         for (const [id, result] of executedResults) {
-          const prevCall = allCalls.find((c) => c.id === id)
+          const prevCall = allCallsMap.get(id)
           if (!prevCall) continue
 
           if (prevCall.tool === "read" && prevCall.input.path === targetPath) {
@@ -104,7 +104,7 @@ export namespace ToolDependency {
         if (typeof targetPath !== "string") break
 
         for (const [id, result] of executedResults) {
-          const prevCall = allCalls.find((c) => c.id === id)
+          const prevCall = allCallsMap.get(id)
           if (!prevCall) continue
 
           if (prevCall.tool === "read" && prevCall.input.path === targetPath) {
@@ -119,7 +119,7 @@ export namespace ToolDependency {
         if (typeof command !== "string") break
 
         for (const [id, result] of executedResults) {
-          const prevCall = allCalls.find((c) => c.id === id)
+          const prevCall = allCallsMap.get(id)
           if (!prevCall) continue
 
           if (prevCall.tool === "read") {
@@ -140,7 +140,7 @@ export namespace ToolDependency {
         if (typeof targetPath !== "string") break
 
         for (const [id, result] of executedResults) {
-          const prevCall = allCalls.find((c) => c.id === id)
+          const prevCall = allCallsMap.get(id)
           if (!prevCall) continue
 
           if (prevCall.tool === "read" && prevCall.input.path === targetPath) {
@@ -155,7 +155,7 @@ export namespace ToolDependency {
         if (typeof targetPath !== "string" || targetPath.includes("*")) break
 
         for (const [id, result] of executedResults) {
-          const prevCall = allCalls.find((c) => c.id === id)
+          const prevCall = allCallsMap.get(id)
           if (!prevCall) continue
 
           if (prevCall.tool === "read" && prevCall.input.path === targetPath) {
@@ -206,9 +206,10 @@ export namespace ToolDependency {
 
     const dependencies = new Map<string, Set<string>>()
     const dependents = new Map<string, Set<string>>()
+    const pendingCallsMap = new Map(pendingCalls.map((c) => [c.id, c]))
 
     for (const call of pendingCalls) {
-      const deps = getToolDependencies(call, pendingCalls, executedResults)
+      const deps = getToolDependencies(call, pendingCallsMap, executedResults)
       dependencies.set(call.id, deps)
 
       for (const depId of deps) {

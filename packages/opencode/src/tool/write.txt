@@ -1,8 +1,22 @@
 Writes a file to the local filesystem.
 
 Usage:
-- This tool will overwrite the existing file if there is one at the provided path.
-- If this is an existing file, you MUST use the Read tool first to read the file's contents. This tool will fail if you did not read the file first.
-- ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.
-- NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
-- Only use emojis if the user explicitly requests it. Avoid writing emojis to files unless asked.
+- This tool will overwrite the existing file if one exists at the provided path.
+- If editing an existing file, you MUST use the Read tool first. This tool will fail if you did not read the file first.
+- For modifying parts of an existing file, use the Edit tool instead. Only use Write when creating entirely new files or doing complete rewrites.
+- NEVER proactively create documentation files (*.md) or README files. Only create them when explicitly requested by the User.
+- Only use emojis if the user explicitly requests it. Avoid adding emojis to files unless asked.
+
+Behavior:
+- Writes are guaranteed to be atomic: content is first written to a temporary file in the same directory and then renamed to the target path. This prevents file corruption if the process is interrupted.
+- Concurrency control: The tool uses a file-level lock to ensure that multiple write operations to the same file are serialized.
+- If the file was modified externally since you read it, the write will fail with an error asking you to re-read first. This prevents overwriting changes made by others.
+- Large files are written directly; for files over 10MB, consider if partial writes would be more appropriate.
+
+Error Handling:
+- If the write operation fails (e.g., permission denied, disk full), an error will be returned and the original file will remain untouched.
+- If a conflict is detected (file changed since last read), you must re-read the file to sync the state before attempting to write again.
+
+Common mistakes to avoid:
+- Using Write to make small changes to existing files (use Edit instead).
+- Writing binary files or very large files (>50MB) without chunking.
