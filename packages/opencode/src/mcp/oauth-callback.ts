@@ -1,5 +1,5 @@
 import { Log } from "../util/log"
-import { OAUTH_CALLBACK_PORT, OAUTH_CALLBACK_PATH } from "./oauth-provider"
+import { OAUTH_CALLBACK_PATH, OAUTH_CALLBACK_PORT } from "./oauth-provider"
 
 const log = Log.create({ service: "mcp.oauth-callback" })
 
@@ -161,7 +161,7 @@ export namespace McpOAuthCallback {
   export async function isPortInUse(): Promise<boolean> {
     return new Promise((resolve) => {
       Bun.connect({
-        hostname: "127.0.0.1",
+        hostname: "localhost",
         port: OAUTH_CALLBACK_PORT,
         socket: {
           open(socket) {
