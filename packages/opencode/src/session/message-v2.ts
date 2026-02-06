@@ -387,6 +387,7 @@ export namespace MessageV2 {
         write: z.number(),
       }),
     }),
+    variant: z.string().optional(),
     finish: z.string().optional(),
   }).meta({
     ref: "AssistantMessage",
