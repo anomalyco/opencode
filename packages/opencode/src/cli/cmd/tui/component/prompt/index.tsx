@@ -349,6 +349,7 @@ export function Prompt(props: PromptProps) {
       return store.prompt
     },
     focus() {
+      if (input.isDestroyed) return
       input.focus()
     },
     blur() {
@@ -375,7 +376,7 @@ export function Prompt(props: PromptProps) {
   }
 
   createEffect(() => {
-    if (props.visible !== false) input?.focus()
+    if (props.visible !== false && input && !input.isDestroyed) input.focus()
     if (props.visible === false) input?.blur()
   })
 
