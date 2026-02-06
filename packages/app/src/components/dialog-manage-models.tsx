@@ -2,17 +2,22 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Button } from "@opencode-ai/ui/button"
-import type { Component } from "solid-js"
+import { createMemo, type Component } from "solid-js"
 import { useLocal } from "@/context/local"
 import { popularProviders } from "@/hooks/use-providers"
 import { useLanguage } from "@/context/language"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectProvider } from "./dialog-select-provider"
+import { allModelsVisible } from "./dialog-manage-models-state"
 
 export const DialogManageModels: Component = () => {
   const local = useLocal()
   const language = useLanguage()
   const dialog = useDialog()
+
+  const all = createMemo(() => {
+    return allModelsVisible(local.model.list(), local.model.visible)
+  })
 
   const handleConnectProvider = () => {
     dialog.show(() => <DialogSelectProvider />)
@@ -21,7 +26,20 @@ export const DialogManageModels: Component = () => {
   return (
     <Dialog
       title={language.t("dialog.model.manage")}
-      description={language.t("dialog.model.manage.description")}
+      description={
+        <div class="w-full flex items-center justify-between gap-x-3">
+          <span class="flex-1">{language.t("dialog.model.manage.description")}</span>
+          <div class="flex items-center gap-x-2">
+            <span class="text-11-medium text-text-dimmed">{language.t("dialog.model.manage.all")}</span>
+            <Switch
+              checked={all()}
+              onChange={(checked) => {
+                local.model.setVisibilityAll(checked)
+              }}
+            />
+          </div>
+        </div>
+      }
       action={
         <Button class="h-7 -my-1 text-14-medium" icon="plus-small" tabIndex={-1} onClick={handleConnectProvider}>
           {language.t("command.provider.connect")}

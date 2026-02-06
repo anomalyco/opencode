@@ -103,6 +103,23 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       update(model, state ? "show" : "hide")
     }
 
+    const setVisibilityAll = (models: ModelKey[], state: boolean) => {
+      if (models.length === 0) return
+      const next: Visibility = state ? "show" : "hide"
+      const key = (item: ModelKey) => `${item.providerID}:${item.modelID}`
+      const map = new Map(models.map((item) => [key(item), item]))
+      const user = store.user.map((item) => {
+        const model = map.get(key(item))
+        if (!model) return item
+        map.delete(key(item))
+        if (item.visibility === next) return item
+        return { ...item, visibility: next }
+      })
+      const add = Array.from(map.values()).map((item) => ({ ...item, visibility: next }))
+      if (add.length === 0 && user.every((item, index) => item === store.user[index])) return
+      setStore("user", [...user, ...add])
+    }
+
     const push = (model: ModelKey) => {
       const uniq = uniqueBy([model, ...store.recent], (x) => x.providerID + x.modelID)
       if (uniq.length > 5) uniq.pop()
@@ -127,6 +144,7 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       find,
       visible,
       setVisibility,
+      setVisibilityAll,
       recent: {
         list: createMemo(() => store.recent),
         push,
