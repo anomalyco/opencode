@@ -76,6 +76,7 @@ export const iconNames = [
   "alibaba-cn",
   "aihubmix",
   "abacus",
+  "generic",
 ] as const
 
 export type IconName = (typeof iconNames)[number]
