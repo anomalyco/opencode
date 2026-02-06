@@ -15,7 +15,7 @@ use std::{
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
-use tauri::{AppHandle, LogicalSize, Manager, RunEvent, State, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, RunEvent, State, WebviewWindowBuilder};
 #[cfg(windows)]
 use tauri_plugin_decorum::WebviewWindowExt;
 #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
@@ -32,7 +32,7 @@ const SETTINGS_STORE: &str = "opencode.settings.dat";
 const DEFAULT_SERVER_URL_KEY: &str = "defaultServerUrl";
 
 fn window_state_flags() -> StateFlags {
-    StateFlags::all() - StateFlags::DECORATIONS
+    StateFlags::all() - StateFlags::DECORATIONS - StateFlags::VISIBLE
 }
 
 #[derive(Clone, serde::Serialize, specta::Type)]
@@ -326,11 +326,6 @@ pub fn run() {
             #[cfg(windows)]
             app.manage(JobObjectState::new());
 
-            let primary_monitor = app.primary_monitor().ok().flatten();
-            let size = primary_monitor
-                .map(|m| m.size().to_logical(m.scale_factor()))
-                .unwrap_or(LogicalSize::new(1920, 1080));
-
             let config = app
                 .config()
                 .app
@@ -341,7 +336,7 @@ pub fn run() {
 
             let window_builder = WebviewWindowBuilder::from_config(&app, config)
                 .expect("Failed to create window builder from config")
-                .inner_size(size.width as f64, size.height as f64)
+                .maximized(true)
                 .initialization_script(format!(
                     r#"
                       window.__OPENCODE__ ??= {{}};
@@ -584,6 +579,7 @@ fn setup_window_state_listener(app: &tauri::AppHandle, window: &tauri::WebviewWi
                 let handle = app.clone();
                 let app = app.clone();
                 let _ = handle.run_on_main_thread(move || {
+                    println!("saving window state");
                     let _ = app.save_window_state(window_state_flags());
                 });
             };
