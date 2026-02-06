@@ -16,7 +16,12 @@ const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
   prompt: z.string().describe("The task for the agent to perform"),
   subagent_type: z.string().describe("The type of specialized agent to use for this task"),
-  session_id: z.string().describe("Existing Task session to continue").optional(),
+  task_id: z
+    .string()
+    .describe(
+      "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
+    )
+    .optional(),
   command: z.string().describe("The command that triggered this task").optional(),
 })
 
@@ -56,9 +61,12 @@ export const TaskTool = Tool.define("task", async (ctx) => {
 
       const agent = await Agent.get(params.subagent_type)
       if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
+
+      const hasTaskPermission = agent.permission.some((rule) => rule.permission === "task")
+
       const session = await iife(async () => {
-        if (params.session_id) {
-          const found = await Session.get(params.session_id).catch(() => {})
+        if (params.task_id) {
+          const found = await Session.get(params.task_id).catch(() => {})
           if (found) return found
         }
 
@@ -76,11 +84,15 @@ export const TaskTool = Tool.define("task", async (ctx) => {
               pattern: "*",
               action: "deny",
             },
-            {
-              permission: "task",
-              pattern: "*",
-              action: "deny",
-            },
+            ...(hasTaskPermission
+              ? []
+              : [
+                  {
+                    permission: "task" as const,
+                    pattern: "*" as const,
+                    action: "deny" as const,
+                  },
+                ]),
             ...(config.experimental?.primary_tools?.map((t) => ({
               pattern: "*",
               action: "allow" as const,
@@ -92,10 +104,16 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const msg = await MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID })
       if (msg.info.role !== "assistant") throw new Error("Not an assistant message")
 
+      const model = agent.model ?? {
+        modelID: msg.info.modelID,
+        providerID: msg.info.providerID,
+      }
+
       ctx.metadata({
         title: params.description,
         metadata: {
           sessionId: session.id,
+          model,
         },
       })
 
@@ -117,16 +135,11 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         ctx.metadata({
           title: params.description,
           metadata: {
-            summary: Object.values(parts).sort((a, b) => a.id.localeCompare(b.id)),
             sessionId: session.id,
+            model,
           },
         })
       })
-
-      const model = agent.model ?? {
-        modelID: msg.info.modelID,
-        providerID: msg.info.providerID,
-      }
 
       function cancel() {
         SessionPrompt.cancel(session.id)
@@ -146,12 +159,14 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         tools: {
           todowrite: false,
           todoread: false,
-          task: false,
+          ...(hasTaskPermission ? {} : { task: false }),
           ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
         },
         parts: promptParts,
+      }).finally(() => {
+        unsub()
       })
-      unsub()
+
       const messages = await Session.messages({ sessionID: session.id })
       const summary = messages
         .filter((x) => x.info.role === "assistant")
@@ -166,13 +181,20 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         }))
       const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
 
-      const output = text + "\n\n" + ["<task_metadata>", `session_id: ${session.id}`, "</task_metadata>"].join("\n")
+      const output = [
+        `task_id: ${session.id} (for resuming to continue this task if needed)`,
+        "",
+        "<task_result>",
+        text,
+        "</task_result>",
+      ].join("\n")
 
       return {
         title: params.description,
         metadata: {
           summary,
           sessionId: session.id,
+          model,
         },
         output,
       }

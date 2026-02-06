@@ -33,11 +33,12 @@ export type UsageInfo = {
   cacheWrite1hTokens?: number
 }
 
-export type ProviderHelper = {
+export type ProviderHelper = (input: { reqModel: string; providerModel: string }) => {
   format: ZenData.Format
-  modifyUrl: (providerApi: string, model?: string, isStream?: boolean) => string
+  modifyUrl: (providerApi: string, isStream?: boolean) => string
   modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => void
   modifyBody: (body: Record<string, any>) => Record<string, any>
+  createBinaryStreamDecoder: () => ((chunk: Uint8Array) => Uint8Array | undefined) | undefined
   streamSeparator: string
   createUsageParser: () => {
     parse: (chunk: string) => void

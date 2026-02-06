@@ -10,9 +10,9 @@
     display: none;
   }
 
-  /* [data-slot="session-review-container"] { */
-  /*   height: 100%; */
-  /* } */
+  [data-slot="session-review-container"] {
+    flex: 1 1 auto;
+  }
 
   [data-slot="session-review-header"] {
     position: sticky;
@@ -44,14 +44,22 @@
 
   [data-component="sticky-accordion-header"] {
     top: 40px;
+  }
 
-    &[data-expanded]::before {
-      top: -40px;
-    }
+  [data-component="sticky-accordion-header"][data-expanded]::before,
+  [data-slot="accordion-item"][data-expanded] [data-component="sticky-accordion-header"]::before {
+    top: -40px;
   }
 
   [data-slot="accordion-trigger"] {
     background-color: var(--background-stronger) !important;
+  }
+
+  [data-slot="session-review-accordion-item"][data-selected] {
+    [data-slot="session-review-accordion-content"] {
+      box-shadow: var(--shadow-xs-border-select);
+      border-radius: var(--radius-lg);
+    }
   }
 
   [data-slot="accordion-item"] {
@@ -68,6 +76,12 @@
   [data-slot="accordion-content"] {
     -webkit-user-select: text;
     user-select: text;
+  }
+
+  [data-slot="session-review-accordion-content"] {
+    position: relative;
+    z-index: 0;
+    overflow: hidden;
   }
 
   [data-slot="session-review-trigger-content"] {
@@ -136,5 +150,72 @@
     gap: 16px;
     align-items: center;
     justify-content: flex-end;
+  }
+
+  [data-slot="session-review-change"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-medium);
+  }
+
+  [data-slot="session-review-change"][data-type="added"] {
+    color: var(--icon-diff-add-base);
+  }
+
+  [data-slot="session-review-change"][data-type="removed"] {
+    color: var(--icon-diff-delete-base);
+  }
+
+  [data-slot="session-review-file-container"] {
+    padding: 0;
+  }
+
+  [data-slot="session-review-image-container"] {
+    padding: 12px;
+    display: flex;
+    justify-content: center;
+    background: var(--background-stronger);
+  }
+
+  [data-slot="session-review-image"] {
+    max-width: 100%;
+    max-height: 60vh;
+    object-fit: contain;
+    border-radius: 8px;
+    border: 1px solid var(--border-weak-base);
+    background: var(--background-base);
+  }
+
+  [data-slot="session-review-image-placeholder"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    color: var(--text-weak);
+  }
+
+  [data-slot="session-review-audio-container"] {
+    padding: 12px;
+    display: flex;
+    justify-content: center;
+    background: var(--background-stronger);
+  }
+
+  [data-slot="session-review-audio"] {
+    width: 100%;
+    max-width: 560px;
+  }
+
+  [data-slot="session-review-audio-placeholder"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    color: var(--text-weak);
+  }
+
+  [data-slot="session-review-diff-wrapper"] {
+    position: relative;
+    overflow: hidden;
+    z-index: 0;
+    --line-comment-z: 5;
+    --line-comment-popover-z: 30;
+    --line-comment-open-z: 6;
   }
 }

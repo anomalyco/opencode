@@ -21,7 +21,6 @@ import { ExportCommand } from "./cli/cmd/export"
 import { ImportCommand } from "./cli/cmd/import"
 import { AttachCommand } from "./cli/cmd/tui/attach"
 import { TuiThreadCommand } from "./cli/cmd/tui/thread"
-import { TuiSpawnCommand } from "./cli/cmd/tui/spawn"
 import { AcpCommand } from "./cli/cmd/acp"
 import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
@@ -81,7 +80,6 @@ const cli = yargs(hideBin(process.argv))
   .command(AcpCommand)
   .command(McpCommand)
   .command(TuiThreadCommand)
-  .command(TuiSpawnCommand)
   .command(AttachCommand)
   .command(RunCommand)
   .command(GenerateCommand)
@@ -99,14 +97,16 @@ const cli = yargs(hideBin(process.argv))
   .command(GithubCommand)
   .command(PrCommand)
   .command(SessionCommand)
-  .fail((msg) => {
+  .fail((msg, err) => {
     if (
       msg?.startsWith("Unknown argument") ||
       msg?.startsWith("Not enough non-option arguments") ||
       msg?.startsWith("Invalid values:")
     ) {
+      if (err) throw err
       cli.showHelp("log")
     }
+    if (err) throw err
     process.exit(1)
   })
   .strict()
@@ -147,7 +147,7 @@ try {
   if (formatted) UI.error(formatted)
   if (formatted === undefined) {
     UI.error("Unexpected error, check log file at " + Log.file() + " for more details" + EOL)
-    console.error(e)
+    console.error(e instanceof Error ? e.message : String(e))
   }
   process.exitCode = 1
 } finally {
