@@ -29,6 +29,7 @@ type GlobalStore = {
   provider_auth: ProviderAuthResponse
   config: Config
   reload: undefined | "pending" | "complete"
+  mirrorSidebar: Array<{ worktree: string; expanded: boolean }> | undefined
 }
 
 export async function bootstrapGlobal(input: {
