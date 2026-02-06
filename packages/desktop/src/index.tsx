@@ -340,6 +340,10 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
   parseMarkdown: (markdown: string) => commands.parseMarkdownCommand(markdown),
 
   webviewZoom,
+
+  checkAppExists: async (appName: string) => {
+    return commands.checkAppExists(appName)
+  },
 })
 
 let menuTrigger = null as null | ((id: string) => void)
