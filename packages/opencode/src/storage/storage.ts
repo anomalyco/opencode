@@ -192,6 +192,7 @@ export namespace Storage {
     const dir = await state().then((x) => x.dir)
     const target = path.join(dir, ...key) + ".json"
     return withErrorHandling(async () => {
+      await fs.mkdir(path.dirname(target), { recursive: true })
       using _ = await Lock.write(target)
       await Bun.write(target, JSON.stringify(content, null, 2))
     })

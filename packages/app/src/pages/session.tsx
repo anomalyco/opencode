@@ -983,6 +983,12 @@ export default function Page() {
       onSelect: () => navigate(`/${params.dir}/session`),
     },
     {
+      id: "automations.open",
+      title: language.t("command.automations.open"),
+      category: language.t("command.category.settings"),
+      onSelect: () => navigate("/automations"),
+    },
+    {
       id: "file.open",
       title: language.t("command.file.open"),
       description: language.t("palette.search.placeholder"),

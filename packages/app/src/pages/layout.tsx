@@ -1055,6 +1055,12 @@ export default function Layout(props: ParentProps) {
         onSelect: () => openSettings(),
       },
       {
+        id: "automations.open",
+        title: language.t("command.automations.open"),
+        category: language.t("command.category.settings"),
+        onSelect: () => openAutomations(),
+      },
+      {
         id: "session.previous",
         title: language.t("command.session.previous"),
         category: language.t("command.category.session"),
@@ -1188,6 +1194,10 @@ export default function Layout(props: ParentProps) {
 
   function openSettings() {
     dialog.show(() => <DialogSettings />)
+  }
+
+  function openAutomations() {
+    navigate("/automations")
   }
 
   function navigateToProject(directory: string | undefined) {
@@ -1775,6 +1785,15 @@ export default function Layout(props: ParentProps) {
     const hoverAllowed = createMemo(() => !props.mobile && sidebarExpanded())
     const hoverEnabled = createMemo(() => (props.popover ?? true) && hoverAllowed())
     const isActive = createMemo(() => props.session.id === params.id)
+    const automationPrefix = createMemo(() => (props.session.automation ? language.t("session.automation.prefix") : ""))
+    const sessionLabel = createMemo(() => {
+      if (!props.session.automation) return props.session.title
+      return `${automationPrefix()} ${props.session.title}`
+    })
+    const [menu, setMenu] = createStore({
+      open: false,
+      pendingRename: false,
+    })
 
     const hoverPrefetch = { current: undefined as ReturnType<typeof setTimeout> | undefined }
     const cancelHoverPrefetch = () => {
@@ -1833,9 +1852,19 @@ export default function Layout(props: ParentProps) {
               </Match>
             </Switch>
           </div>
+          <Show when={props.session.automation}>
+            <span class="text-14-regular text-text-strong shrink-0">{automationPrefix()}</span>
+          </Show>
           <span class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate">
             {props.session.title}
           </span>
+          <Show when={props.session.automation}>
+            <Tooltip value={language.t("session.automation.badge")} placement="top" gutter={6}>
+              <div class="shrink-0 flex items-center justify-center self-center text-icon-info-active animate-pulse">
+                <Icon name="sparkles" size="small" />
+              </div>
+            </Tooltip>
+          </Show>
           <Show when={props.session.summary}>
             {(summary) => (
               <div class="group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
@@ -1856,7 +1885,7 @@ export default function Layout(props: ParentProps) {
         <Show
           when={hoverEnabled()}
           fallback={
-            <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.session.title} gutter={10}>
+            <Tooltip placement={props.mobile ? "bottom" : "right"} value={sessionLabel()} gutter={10}>
               {item}
             </Tooltip>
           }
@@ -2875,6 +2904,19 @@ export default function Layout(props: ParentProps) {
             </DragDropProvider>
           </div>
           <div class="shrink-0 w-full pt-3 pb-3 flex flex-col items-center gap-2">
+            <TooltipKeybind
+              placement={sidebarProps.mobile ? "bottom" : "right"}
+              title={language.t("sidebar.automations")}
+              keybind={command.keybind("automations.open")}
+            >
+              <IconButton
+                icon="automate"
+                variant="ghost"
+                size="large"
+                onClick={openAutomations}
+                aria-label={language.t("sidebar.automations")}
+              />
+            </TooltipKeybind>
             <TooltipKeybind
               placement={sidebarProps.mobile ? "bottom" : "right"}
               title={language.t("sidebar.settings")}

@@ -6,6 +6,7 @@ import {
   type Config,
   type Path,
   type Project,
+  type Automation,
   type FileDiff,
   type Todo,
   type SessionStatus,
@@ -177,6 +178,7 @@ function createGlobalSync() {
     error?: InitError
     path: Path
     project: Project[]
+    automation: Automation[]
     provider: ProviderListResponse
     provider_auth: ProviderAuthResponse
     config: Config
@@ -185,6 +187,7 @@ function createGlobalSync() {
     ready: false,
     path: { state: "", config: "", worktree: "", directory: "", home: "" },
     project: projectCache.value,
+    automation: [],
     provider: { all: [], connected: [], default: {} },
     provider_auth: {},
     config: {},
@@ -650,6 +653,44 @@ function createGlobalSync() {
           refresh()
           return
         }
+        case "automation.created":
+        case "automation.updated": {
+          const result = Binary.search(globalStore.automation, event.properties.id, (s) => s.id)
+          if (result.found) {
+            setGlobalStore("automation", result.index, reconcile(event.properties))
+            return
+          }
+          setGlobalStore(
+            "automation",
+            produce((draft) => {
+              draft.splice(result.index, 0, event.properties)
+            }),
+          )
+          break
+        }
+        case "automation.deleted": {
+          const result = Binary.search(globalStore.automation, event.properties.id, (s) => s.id)
+          if (!result.found) break
+          setGlobalStore(
+            "automation",
+            produce((draft) => {
+              draft.splice(result.index, 1)
+            }),
+          )
+          break
+        }
+        case "automation.run": {
+          const result = Binary.search(globalStore.automation, event.properties.automationID, (s) => s.id)
+          if (!result.found) break
+          setGlobalStore("automation", result.index, "lastRun", event.properties.time)
+          if (event.properties.status !== "success") break
+          if (!event.properties.sessionID) break
+          setGlobalStore("automation", result.index, "lastSession", {
+            id: event.properties.sessionID,
+            directory: event.properties.directory,
+          })
+          break
+        }
         case "project.updated": {
           const result = Binary.search(globalStore.project, event.properties.id, (s) => s.id)
           if (result.found) {
@@ -990,6 +1031,14 @@ function createGlobalSync() {
             .slice()
             .sort((a, b) => cmp(a.id, b.id))
           setGlobalStore("project", projects)
+        }),
+      ),
+      retry(() =>
+        globalSDK.client.automation.list().then((x) => {
+          setGlobalStore(
+            "automation",
+            (x.data ?? []).slice().sort((a, b) => cmp(a.id, b.id)),
+          )
         }),
       ),
       retry(() =>

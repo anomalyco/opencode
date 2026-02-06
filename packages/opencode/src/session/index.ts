@@ -86,6 +86,12 @@ export namespace Session {
           diff: z.string().optional(),
         })
         .optional(),
+      automation: z
+        .object({
+          id: Identifier.schema("automation"),
+          name: z.string().optional(),
+        })
+        .optional(),
     })
     .meta({
       ref: "Session",
@@ -143,6 +149,7 @@ export namespace Session {
         parentID: Identifier.schema("session").optional(),
         title: z.string().optional(),
         permission: Info.shape.permission,
+        automation: Info.shape.automation,
       })
       .optional(),
     async (input) => {
@@ -151,6 +158,7 @@ export namespace Session {
         directory: Instance.directory,
         title: input?.title,
         permission: input?.permission,
+        automation: input?.automation,
       })
     },
   )
@@ -209,6 +217,7 @@ export namespace Session {
     parentID?: string
     directory: string
     permission?: PermissionNext.Ruleset
+    automation?: Info["automation"]
   }) {
     const result: Info = {
       id: Identifier.descending("session", input.id),
@@ -219,6 +228,7 @@ export namespace Session {
       parentID: input.parentID,
       title: input.title ?? createDefaultTitle(!!input.parentID),
       permission: input.permission,
+      automation: input.automation,
       time: {
         created: Date.now(),
         updated: Date.now(),

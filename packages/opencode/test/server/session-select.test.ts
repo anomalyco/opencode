@@ -8,6 +8,14 @@ import { Server } from "../../src/server/server"
 const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
 
+function auth(): Record<string, string> {
+  const password = process.env.OPENCODE_SERVER_PASSWORD
+  if (!password) return {}
+  const username = process.env.OPENCODE_SERVER_USERNAME ?? "opencode"
+  const value = Buffer.from(`${username}:${password}`).toString("base64")
+  return { Authorization: `Basic ${value}` }
+}
+
 describe("tui.selectSession endpoint", () => {
   test("should return 200 when called with valid session", async () => {
     await Instance.provide({
@@ -20,7 +28,7 @@ describe("tui.selectSession endpoint", () => {
         const app = Server.App()
         const response = await app.request("/tui/select-session", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...auth() },
           body: JSON.stringify({ sessionID: session.id }),
         })
 
@@ -45,7 +53,7 @@ describe("tui.selectSession endpoint", () => {
         const app = Server.App()
         const response = await app.request("/tui/select-session", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...auth() },
           body: JSON.stringify({ sessionID: nonExistentSessionID }),
         })
 
@@ -66,7 +74,7 @@ describe("tui.selectSession endpoint", () => {
         const app = Server.App()
         const response = await app.request("/tui/select-session", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...auth() },
           body: JSON.stringify({ sessionID: invalidSessionID }),
         })
 

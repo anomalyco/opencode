@@ -1,5 +1,5 @@
 import { Select as Kobalte } from "@kobalte/core/select"
-import { createMemo, onCleanup, splitProps, type ComponentProps, type JSX } from "solid-js"
+import { Show, createMemo, onCleanup, splitProps, type ComponentProps, type JSX } from "solid-js"
 import { pipe, groupBy, entries, map } from "remeda"
 import { Button, ButtonProps } from "./button"
 import { Icon } from "./icon"
@@ -19,6 +19,7 @@ export type SelectProps<T> = Omit<ComponentProps<typeof Kobalte<T>>, "value" | "
   children?: (item: T | undefined) => JSX.Element
   triggerStyle?: JSX.CSSProperties
   triggerVariant?: "settings"
+  portal?: boolean
 }
 
 export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">) {
@@ -38,6 +39,7 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
     "children",
     "triggerStyle",
     "triggerVariant",
+    "portal",
   ])
 
   const state = {
@@ -154,18 +156,34 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
           <Icon name={local.triggerVariant === "settings" ? "selector" : "chevron-down"} size="small" />
         </Kobalte.Icon>
       </Kobalte.Trigger>
-      <Kobalte.Portal>
-        <Kobalte.Content
-          classList={{
-            ...(local.classList ?? {}),
-            [local.class ?? ""]: !!local.class,
-          }}
-          data-component="select-content"
-          data-trigger-style={local.triggerVariant}
-        >
-          <Kobalte.Listbox data-slot="select-select-content-list" />
-        </Kobalte.Content>
-      </Kobalte.Portal>
+      <Show
+        when={local.portal ?? true}
+        fallback={
+          <Kobalte.Content
+            classList={{
+              ...(local.classList ?? {}),
+              [local.class ?? ""]: !!local.class,
+            }}
+            data-component="select-content"
+            data-trigger-style={local.triggerVariant}
+          >
+            <Kobalte.Listbox data-slot="select-select-content-list" />
+          </Kobalte.Content>
+        }
+      >
+        <Kobalte.Portal>
+          <Kobalte.Content
+            classList={{
+              ...(local.classList ?? {}),
+              [local.class ?? ""]: !!local.class,
+            }}
+            data-component="select-content"
+            data-trigger-style={local.triggerVariant}
+          >
+            <Kobalte.Listbox data-slot="select-select-content-list" />
+          </Kobalte.Content>
+        </Kobalte.Portal>
+      </Show>
     </Kobalte>
   )
 }

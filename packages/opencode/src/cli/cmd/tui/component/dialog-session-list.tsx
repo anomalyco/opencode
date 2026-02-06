@@ -2,7 +2,7 @@ import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
-import { createMemo, createSignal, createResource, onMount, Show } from "solid-js"
+import { createMemo, createSignal, createResource, onMount } from "solid-js"
 import { Locale } from "@/util/locale"
 import { useKeybind } from "../context/keybind"
 import { useTheme } from "../context/theme"
@@ -48,13 +48,14 @@ export function DialogSessionList() {
         const isDeleting = toDelete() === x.id
         const status = sync.data.session_status?.[x.id]
         const isWorking = status?.type === "busy"
+        const gutter = x.automation ? <text fg={theme.info}>A</text> : undefined
         return {
           title: isDeleting ? `Press ${keybind.print("session_delete")} again to confirm` : x.title,
           bg: isDeleting ? theme.error : undefined,
           value: x.id,
           category,
           footer: Locale.time(x.time.updated),
-          gutter: isWorking ? <Spinner /> : undefined,
+          gutter: isWorking ? <Spinner /> : gutter,
         }
       })
   })
@@ -85,6 +86,7 @@ export function DialogSessionList() {
           keybind: keybind.all.session_delete?.[0],
           title: "delete",
           onTrigger: async (option) => {
+            if (!option) return
             if (toDelete() === option.value) {
               sdk.client.session.delete({
                 sessionID: option.value,
@@ -99,6 +101,7 @@ export function DialogSessionList() {
           keybind: keybind.all.session_rename?.[0],
           title: "rename",
           onTrigger: async (option) => {
+            if (!option) return
             dialog.replace(() => <DialogSessionRename session={option.value} />)
           },
         },

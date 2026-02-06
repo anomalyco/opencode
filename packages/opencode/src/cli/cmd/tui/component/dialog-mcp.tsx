@@ -49,7 +49,8 @@ export function DialogMcp() {
     {
       keybind: Keybind.parse("space")[0],
       title: "toggle",
-      onTrigger: async (option: DialogSelectOption<string>) => {
+      onTrigger: async (option?: DialogSelectOption<string>) => {
+        if (!option) return
         // Prevent toggling while an operation is already in progress
         if (loading() !== null) return
 

@@ -34,6 +34,7 @@ import { Suspense } from "solid-js"
 
 const Home = lazy(() => import("@/pages/home"))
 const Session = lazy(() => import("@/pages/session"))
+const Automations = lazy(() => import("@/pages/automations"))
 const Loading = () => <div class="size-full" />
 
 function UiI18nBridge(props: ParentProps) {
@@ -134,6 +135,14 @@ export function AppInterface(props: { defaultUrl?: string }) {
                 component={() => (
                   <Suspense fallback={<Loading />}>
                     <Home />
+                  </Suspense>
+                )}
+              />
+              <Route
+                path="/automations"
+                component={() => (
+                  <Suspense fallback={<Loading />}>
+                    <Automations />
                   </Suspense>
                 )}
               />
