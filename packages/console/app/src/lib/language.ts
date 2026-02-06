@@ -90,6 +90,7 @@ export function strip(pathname: string) {
 
 export function route(locale: Locale, pathname: string) {
   const next = strip(pathname)
+  if (next.startsWith("/docs")) return next
   if (locale === "en") return next
   if (next === "/") return `/${locale}`
   return `/${locale}${next}`
