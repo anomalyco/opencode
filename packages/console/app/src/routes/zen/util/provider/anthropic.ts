@@ -16,11 +16,17 @@ type Usage = {
   }
 }
 
+const CONTEXT_1M_BETA = "context-1m-2025-08-07"
+
+export function supports1MContext(model: string): boolean {
+  const prefixes = ["claude-opus-4-6", "claude-sonnet-4-5", "claude-sonnet-4"]
+  return prefixes.some((prefix) => model.startsWith(prefix))
+}
+
 export const anthropicHelper: ProviderHelper = ({ reqModel, providerModel }) => {
   const isBedrockModelArn = providerModel.startsWith("arn:aws:bedrock:")
   const isBedrockModelID = providerModel.startsWith("global.anthropic.")
   const isBedrock = isBedrockModelArn || isBedrockModelID
-  const isSonnet = reqModel.includes("sonnet")
   return {
     format: "anthropic",
     modifyUrl: (providerApi: string, isStream?: boolean) =>
@@ -33,8 +39,8 @@ export const anthropicHelper: ProviderHelper = ({ reqModel, providerModel }) => 
       } else {
         headers.set("x-api-key", apiKey)
         headers.set("anthropic-version", headers.get("anthropic-version") ?? "2023-06-01")
-        if (body.model.startsWith("claude-sonnet-")) {
-          headers.set("anthropic-beta", "context-1m-2025-08-07")
+        if (supports1MContext(body.model)) {
+          headers.set("anthropic-beta", CONTEXT_1M_BETA)
         }
       }
     },
@@ -43,7 +49,7 @@ export const anthropicHelper: ProviderHelper = ({ reqModel, providerModel }) => 
       ...(isBedrock
         ? {
             anthropic_version: "bedrock-2023-05-31",
-            anthropic_beta: isSonnet ? "context-1m-2025-08-07" : undefined,
+            anthropic_beta: supports1MContext(reqModel) ? CONTEXT_1M_BETA : undefined,
             model: undefined,
             stream: undefined,
           }
