@@ -1,3 +1,5 @@
+// TODO: this file is a fuckfest, will cleanup better soon
+
 import type { APICallError, ModelMessage } from "ai"
 import { mergeDeep, unique } from "remeda"
 import type { JSONSchema7 } from "@ai-sdk/provider"
@@ -360,8 +362,51 @@ export namespace ProviderTransform {
         if (!model.id.includes("gpt") && !model.id.includes("gemini-3")) return {}
         return Object.fromEntries(OPENAI_EFFORTS.map((effort) => [effort, { reasoning: { effort } }]))
 
-      // TODO: YOU CANNOT SET max_tokens if this is set!!!
       case "@ai-sdk/gateway":
+        if (model.id.includes("anthropic")) {
+          return {
+            high: {
+              reasoningConfig: {
+                type: "enabled",
+                budgetTokens: 16000,
+              },
+            },
+            max: {
+              reasoningConfig: {
+                type: "enabled",
+                budgetTokens: 31999,
+              },
+            },
+          }
+        }
+        if (model.id.includes("google")) {
+          if (id.includes("2.5")) {
+            return {
+              high: {
+                thinkingConfig: {
+                  includeThoughts: true,
+                  thinkingBudget: 16000,
+                },
+              },
+              max: {
+                thinkingConfig: {
+                  includeThoughts: true,
+                  thinkingBudget: 24576,
+                },
+              },
+            }
+          }
+          return Object.fromEntries(
+            ["low", "high"].map((effort) => [
+              effort,
+              {
+                includeThoughts: true,
+                thinkingLevel: effort,
+              },
+            ]),
+          )
+        }
+
         return Object.fromEntries(OPENAI_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
 
       case "@ai-sdk/github-copilot":
@@ -704,8 +749,24 @@ export namespace ProviderTransform {
   }
 
   export function providerOptions(model: Provider.Model, options: { [x: string]: any }) {
-    const key = sdkKey(model.api.npm) ?? model.providerID
-    return { [key]: options }
+    if (model.api.npm !== "@ai-sdk/gateway") {
+      const key = sdkKey(model.api.npm) ?? model.providerID
+      return { [key]: options }
+    }
+
+    const key = model.api.id.includes("/") ? model.api.id.split("/")[0] : (sdkKey(model.api.npm) ?? model.providerID)
+
+    const rest = { ...options }
+    const gate = rest.gateway
+    delete rest.gateway
+    if (Object.keys(rest).length === 0) {
+      return { gateway: gate }
+    }
+
+    return {
+      gateway: gate,
+      [key]: rest,
+    }
   }
 
   export function maxOutputTokens(
