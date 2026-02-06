@@ -26,13 +26,13 @@ export function Footer() {
         </a>
       </div>
       <div data-slot="cell">
-        <a href="/docs">{i18n.t("footer.docs")}</a>
+        <a href={language.route("/docs")}>{i18n.t("footer.docs")}</a>
       </div>
       <div data-slot="cell">
-        <a href="/changelog">{i18n.t("footer.changelog")}</a>
+        <a href={language.route("/changelog")}>{i18n.t("footer.changelog")}</a>
       </div>
       <div data-slot="cell">
-        <a href="/discord">{i18n.t("footer.discord")}</a>
+        <a href={language.route("/discord")}>{i18n.t("footer.discord")}</a>
       </div>
       <div data-slot="cell">
         <a href={config.social.twitter}>{i18n.t("footer.x")}</a>
