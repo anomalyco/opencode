@@ -3,12 +3,16 @@ function truthy(key: string) {
   return value === "true" || value === "1"
 }
 
+function env(key: string, fallback?: string) {
+  return process.env[key] ?? (fallback ? process.env[fallback] : undefined)
+}
+
 export namespace Flag {
   export const OPENCODE_AUTO_SHARE = truthy("MAMMOUTH_AUTO_SHARE")
   export const OPENCODE_GIT_BASH_PATH = process.env["MAMMOUTH_GIT_BASH_PATH"]
-  export const OPENCODE_CONFIG = process.env["MAMMOUTH_CONFIG"]
+  export const OPENCODE_CONFIG = env("MAMMOUTH_CONFIG", "OPENCODE_CONFIG")
   export declare const OPENCODE_CONFIG_DIR: string | undefined
-  export const OPENCODE_CONFIG_CONTENT = process.env["MAMMOUTH_CONFIG_CONTENT"]
+  export const OPENCODE_CONFIG_CONTENT = env("MAMMOUTH_CONFIG_CONTENT", "OPENCODE_CONFIG_CONTENT")
   export const OPENCODE_DISABLE_AUTOUPDATE = truthy("MAMMOUTH_DISABLE_AUTOUPDATE")
   export const OPENCODE_DISABLE_PRUNE = truthy("MAMMOUTH_DISABLE_PRUNE")
   export const OPENCODE_DISABLE_TERMINAL_TITLE = truthy("MAMMOUTH_DISABLE_TERMINAL_TITLE")
@@ -48,8 +52,8 @@ export namespace Flag {
   export const OPENCODE_DISABLE_FILETIME_CHECK = truthy("MAMMOUTH_DISABLE_FILETIME_CHECK")
   export const OPENCODE_EXPERIMENTAL_PLAN_MODE = OPENCODE_EXPERIMENTAL || truthy("MAMMOUTH_EXPERIMENTAL_PLAN_MODE")
   export const OPENCODE_EXPERIMENTAL_MARKDOWN = truthy("MAMMOUTH_EXPERIMENTAL_MARKDOWN")
-  export const OPENCODE_MODELS_URL = process.env["MAMMOUTH_MODELS_URL"]
-  export const OPENCODE_MODELS_PATH = process.env["MAMMOUTH_MODELS_PATH"]
+  export const OPENCODE_MODELS_URL = env("MAMMOUTH_MODELS_URL", "OPENCODE_MODELS_URL")
+  export const OPENCODE_MODELS_PATH = env("MAMMOUTH_MODELS_PATH", "OPENCODE_MODELS_PATH")
 
   function number(key: string) {
     const value = process.env[key]
@@ -62,9 +66,9 @@ export namespace Flag {
 // Dynamic getter for OPENCODE_DISABLE_PROJECT_CONFIG
 // This must be evaluated at access time, not module load time,
 // because external tooling may set this env var at runtime
-Object.defineProperty(Flag, "MAMMOUTH_DISABLE_PROJECT_CONFIG", {
+Object.defineProperty(Flag, "OPENCODE_DISABLE_PROJECT_CONFIG", {
   get() {
-    return truthy("MAMMOUTH_DISABLE_PROJECT_CONFIG")
+    return truthy("MAMMOUTH_DISABLE_PROJECT_CONFIG") || truthy("OPENCODE_DISABLE_PROJECT_CONFIG")
   },
   enumerable: true,
   configurable: false,
@@ -73,9 +77,9 @@ Object.defineProperty(Flag, "MAMMOUTH_DISABLE_PROJECT_CONFIG", {
 // Dynamic getter for OPENCODE_CONFIG_DIR
 // This must be evaluated at access time, not module load time,
 // because external tooling may set this env var at runtime
-Object.defineProperty(Flag, "MAMMOUTH_CONFIG_DIR", {
+Object.defineProperty(Flag, "OPENCODE_CONFIG_DIR", {
   get() {
-    return process.env["MAMMOUTH_CONFIG_DIR"]
+    return env("MAMMOUTH_CONFIG_DIR", "OPENCODE_CONFIG_DIR")
   },
   enumerable: true,
   configurable: false,
@@ -84,9 +88,9 @@ Object.defineProperty(Flag, "MAMMOUTH_CONFIG_DIR", {
 // Dynamic getter for OPENCODE_CLIENT
 // This must be evaluated at access time, not module load time,
 // because some commands override the client at runtime
-Object.defineProperty(Flag, "MAMMOUTH_CLIENT", {
+Object.defineProperty(Flag, "OPENCODE_CLIENT", {
   get() {
-    return process.env["MAMMOUTH_CLIENT"] ?? "cli"
+    return env("MAMMOUTH_CLIENT", "OPENCODE_CLIENT") ?? "cli"
   },
   enumerable: true,
   configurable: false,

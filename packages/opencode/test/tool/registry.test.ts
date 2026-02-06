@@ -1,9 +1,25 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test, mock } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
+
+mock.module("@/bun", () => ({
+  BunProc: {
+    run: async () => {},
+    install: async () => "",
+    which: () => process.execPath,
+    InstallFailedError: class extends Error {},
+  },
+}))
+
+mock.module("cowsay", () => ({
+  say: ({ text }: { text: string }) => `cowsay: ${text}`,
+}))
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
-import { ToolRegistry } from "../../src/tool/registry"
+
+async function registry() {
+  return await import("../../src/tool/registry").then((mod) => mod.ToolRegistry)
+}
 
 describe("tool.registry", () => {
   test("loads tools from .opencode/tool (singular)", async () => {
@@ -34,7 +50,7 @@ describe("tool.registry", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const ids = await ToolRegistry.ids()
+        const ids = await registry().then((tool) => tool.ids())
         expect(ids).toContain("hello")
       },
     })
@@ -68,7 +84,7 @@ describe("tool.registry", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const ids = await ToolRegistry.ids()
+        const ids = await registry().then((tool) => tool.ids())
         expect(ids).toContain("hello")
       },
     })
@@ -114,7 +130,7 @@ describe("tool.registry", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const ids = await ToolRegistry.ids()
+        const ids = await registry().then((tool) => tool.ids())
         expect(ids).toContain("cowsay")
       },
     })

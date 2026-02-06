@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test"
 
+const enabled = process.env.OPENCODE_RUN_PLAYWRIGHT === "1"
 const port = Number(process.env.PLAYWRIGHT_PORT ?? 3000)
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${port}`
 const serverHost = process.env.PLAYWRIGHT_SERVER_HOST ?? "localhost"
@@ -9,6 +10,7 @@ const reuse = !process.env.CI
 
 export default defineConfig({
   testDir: "./e2e",
+  testIgnore: enabled ? [] : ["**/*"],
   outputDir: "./e2e/test-results",
   timeout: 60_000,
   expect: {

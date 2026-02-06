@@ -259,6 +259,8 @@ export namespace Config {
     const hasGitIgnore = await Bun.file(gitignore).exists()
     if (!hasGitIgnore) await Bun.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
 
+    if (process.env.OPENCODE_TEST_HOME) return
+
     await BunProc.run(
       [
         "add",
