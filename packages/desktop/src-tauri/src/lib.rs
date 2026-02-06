@@ -32,7 +32,7 @@ const SETTINGS_STORE: &str = "opencode.settings.dat";
 const DEFAULT_SERVER_URL_KEY: &str = "defaultServerUrl";
 
 fn window_state_flags() -> StateFlags {
-    StateFlags::all() - StateFlags::DECORATIONS
+    StateFlags::all() - StateFlags::DECORATIONS - StateFlags::VISIBLE
 }
 
 #[derive(Clone, serde::Serialize, specta::Type)]
@@ -584,12 +584,13 @@ fn setup_window_state_listener(app: &tauri::AppHandle, window: &tauri::WebviewWi
                 let handle = app.clone();
                 let app = app.clone();
                 let _ = handle.run_on_main_thread(move || {
+                    println!("saving window state");
                     let _ = app.save_window_state(window_state_flags());
                 });
             };
 
             while rx.recv().await.is_some() {
-                tokio::time::sleep(Duration::from_millis(200)).await;
+                tokio::time::sleep(Duration::from_millis(50)).await;
 
                 save();
             }
