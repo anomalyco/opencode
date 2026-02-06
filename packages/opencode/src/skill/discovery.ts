@@ -2,6 +2,7 @@ import path from "path"
 import { mkdir } from "fs/promises"
 import { Log } from "../util/log"
 import { Global } from "../global"
+import { proxyFetch } from "../util/fetch"
 
 export namespace Discovery {
   const log = Log.create({ service: "skill-discovery" })
@@ -20,7 +21,7 @@ export namespace Discovery {
 
   async function get(url: string, dest: string): Promise<boolean> {
     if (await Bun.file(dest).exists()) return true
-    return fetch(url)
+    return proxyFetch(url)
       .then(async (response) => {
         if (!response.ok) {
           log.error("failed to download", { url, status: response.status })
@@ -43,7 +44,7 @@ export namespace Discovery {
     const host = base.slice(0, -1)
 
     log.info("fetching index", { url: index })
-    const data = await fetch(index)
+    const data = await proxyFetch(index)
       .then(async (response) => {
         if (!response.ok) {
           log.error("failed to fetch index", { url: index, status: response.status })
