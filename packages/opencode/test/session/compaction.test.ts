@@ -222,16 +222,16 @@ describe("session.getUsage", () => {
     expect(result.tokens.cache.write).toBe(300)
   })
 
-  test("does not subtract cached tokens for anthropic provider", () => {
+  test("uses noCacheTokens for anthropic provider in SDK v6", () => {
     const model = createModel({ context: 100_000, output: 32_000 })
     const result = Session.getUsage({
       model,
       usage: {
-        inputTokens: 1000,
+        inputTokens: 1200,
         outputTokens: 500,
-        totalTokens: 1500,
+        totalTokens: 1700,
         cachedInputTokens: 200,
-        inputTokenDetails: { noCacheTokens: undefined, cacheReadTokens: 200, cacheWriteTokens: undefined },
+        inputTokenDetails: { noCacheTokens: 1000, cacheReadTokens: 200, cacheWriteTokens: undefined },
         outputTokenDetails: { textTokens: undefined, reasoningTokens: undefined },
       },
       metadata: {
