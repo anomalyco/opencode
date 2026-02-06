@@ -55,10 +55,14 @@ wc -l docs/upstream-sync/upstream-first-parent.txt > docs/upstream-sync/upstream
     - fails only if `origin/parent-dev` has commits not in `upstream/dev` (unsafe drift)
     - allows upstream-ahead stale state and lets sync refresh `parent-dev` via force update
   - Updates `parent-dev` to match `upstream/dev` (force push).
+  - Runs linux e2e gate before PR creation:
+    - installs Playwright dependencies
+    - runs `bun run test:e2e:local -- --workers=2` in `packages/app`
   - Opens a sync PR when upstream is ahead.
   - Creates/uses labels in the fork repository (`sync`, `sync-conflict`) via CLI.
   - Enables auto-merge once checks pass.
   - On conflict, opens an issue (prefers `sync-conflict` label) with merge details.
+  - On e2e gate failure, opens an issue (prefers `sync-e2e-failure` label) with log excerpts.
 
 Manual dispatch and monitoring:
 ```bash

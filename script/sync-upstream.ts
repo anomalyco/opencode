@@ -10,6 +10,7 @@ const REMOTE_UPSTREAM = "upstream"
 const REMOTE_ORIGIN = "origin"
 const SYNC_LABEL = "sync"
 const CONFLICT_LABEL = "sync-conflict"
+const SYNC_E2E_FAILURE_LABEL = "sync-e2e-failure"
 
 function utcStamp(date = new Date()): string {
   const pad = (value: number) => String(value).padStart(2, "0")
@@ -47,6 +48,48 @@ async function ensureLabel(repo: string, name: string, color: string, descriptio
   const stderr = result.stderr.toString().trim()
   console.warn(`Unable to ensure label "${name}" on ${repo}: ${stderr || "unknown error"}`)
   return false
+}
+
+function tailLog(text: string, limit = 12_000): string {
+  if (text.length <= limit) return text
+  return `...[truncated, showing last ${limit} chars]\n${text.slice(-limit)}`
+}
+
+function githubRunUrl(repo: string): string | undefined {
+  const runId = process.env.GITHUB_RUN_ID
+  const serverUrl = process.env.GITHUB_SERVER_URL ?? "https://github.com"
+  if (!runId) return undefined
+  return `${serverUrl}/${repo}/actions/runs/${runId}`
+}
+
+async function createIssueWithOptionalLabel(params: {
+  repo: string
+  title: string
+  body: string
+  label: string
+}) {
+  const hasLabel = await ensureLabel(
+    params.repo,
+    params.label,
+    params.label === CONFLICT_LABEL ? "B60205" : "D93F0B",
+    params.label === CONFLICT_LABEL ? "Upstream sync conflicts" : "Upstream sync e2e failures",
+  )
+
+  let issue = hasLabel
+    ? await $`gh issue create --repo ${params.repo} --title ${params.title} --body ${params.body} --label ${params.label}`.nothrow()
+    : await $`gh issue create --repo ${params.repo} --title ${params.title} --body ${params.body}`.nothrow()
+
+  if (issue.exitCode !== 0 && hasLabel) {
+    const stderr = issue.stderr.toString().trim()
+    console.warn(`Failed to create labeled issue, retrying without label: ${stderr || "unknown error"}`)
+    issue = await $`gh issue create --repo ${params.repo} --title ${params.title} --body ${params.body}`.nothrow()
+  }
+
+  if (issue.exitCode !== 0) {
+    console.error("Failed to create issue:", issue.stderr.toString().trim())
+    return false
+  }
+  return true
 }
 
 async function branchExists(branch: string): Promise<boolean> {
@@ -88,7 +131,6 @@ async function handleConflict(params: {
   ahead: number
 }) {
   await $`git merge --abort`.nothrow()
-  const hasConflictLabel = await ensureLabel(params.repo, CONFLICT_LABEL, "B60205", "Upstream sync conflicts")
   const title = `Upstream sync conflict (${utcHuman()})`
   const body = [
     "Automated upstream sync failed due to merge conflicts.",
@@ -104,22 +146,96 @@ async function handleConflict(params: {
     "- Push the fix and enable auto-merge once CI is green.",
   ].join("\n")
 
-  let issue = hasConflictLabel
-    ? await $`gh issue create --repo ${params.repo} --title ${title} --body ${body} --label ${CONFLICT_LABEL}`.nothrow()
-    : await $`gh issue create --repo ${params.repo} --title ${title} --body ${body}`.nothrow()
-
-  if (issue.exitCode !== 0 && hasConflictLabel) {
-    const stderr = issue.stderr.toString().trim()
-    console.warn(`Failed to create labeled conflict issue, retrying without label: ${stderr || "unknown error"}`)
-    issue = await $`gh issue create --repo ${params.repo} --title ${title} --body ${body}`.nothrow()
-  }
-
-  if (issue.exitCode !== 0) {
-    console.error("Failed to create conflict issue:", issue.stderr.toString().trim())
+  const created = await createIssueWithOptionalLabel({
+    repo: params.repo,
+    title,
+    body,
+    label: CONFLICT_LABEL,
+  })
+  if (!created) {
     throw new Error("Merge conflicts detected. Failed to create conflict issue.")
   }
 
   throw new Error("Merge conflicts detected. Conflict issue created.")
+}
+
+async function runLinuxE2EGate(params: {
+  repo: string
+  branch: string
+  mergeBase: string
+  behind: number
+  ahead: number
+}) {
+  console.log("Running linux e2e gate before opening sync PR...")
+
+  const install = await $`bunx playwright install --with-deps`.cwd("packages/app").nothrow()
+  if (install.exitCode !== 0) {
+    const log = `${install.stdout.toString()}\n${install.stderr.toString()}`
+    const title = `Upstream sync e2e setup failed (${utcHuman()})`
+    const body = [
+      "Automated upstream sync failed before PR creation.",
+      "",
+      `Branch: ${params.branch}`,
+      `Merge base: ${params.mergeBase}`,
+      `Upstream commits behind: ${params.behind}`,
+      `Fork commits ahead: ${params.ahead}`,
+      "",
+      "Stage: Playwright install",
+      "Command: `bunx playwright install --with-deps` (cwd: `packages/app`)",
+      githubRunUrl(params.repo) ? `Run: ${githubRunUrl(params.repo)}` : "",
+      "",
+      "Log excerpt:",
+      "```text",
+      tailLog(log),
+      "```",
+    ]
+      .filter(Boolean)
+      .join("\n")
+
+    await createIssueWithOptionalLabel({
+      repo: params.repo,
+      title,
+      body,
+      label: SYNC_E2E_FAILURE_LABEL,
+    })
+    throw new Error("Linux e2e gate failed during Playwright setup.")
+  }
+
+  const test = await $`bun run test:e2e:local -- --workers=2`.cwd("packages/app").nothrow()
+  if (test.exitCode === 0) {
+    console.log("Linux e2e gate passed.")
+    return
+  }
+
+  const log = `${test.stdout.toString()}\n${test.stderr.toString()}`
+  const title = `Upstream sync e2e failed (${utcHuman()})`
+  const body = [
+    "Automated upstream sync failed before PR creation due to linux e2e test failures.",
+    "",
+    `Branch: ${params.branch}`,
+    `Merge base: ${params.mergeBase}`,
+    `Upstream commits behind: ${params.behind}`,
+    `Fork commits ahead: ${params.ahead}`,
+    "",
+    "Stage: Linux e2e gate",
+    "Command: `bun run test:e2e:local -- --workers=2` (cwd: `packages/app`)",
+    githubRunUrl(params.repo) ? `Run: ${githubRunUrl(params.repo)}` : "",
+    "",
+    "Log excerpt:",
+    "```text",
+    tailLog(log),
+    "```",
+  ]
+    .filter(Boolean)
+    .join("\n")
+
+  await createIssueWithOptionalLabel({
+    repo: params.repo,
+    title,
+    body,
+    label: SYNC_E2E_FAILURE_LABEL,
+  })
+  throw new Error("Linux e2e gate failed. Issue created.")
 }
 
 async function main() {
@@ -166,6 +282,8 @@ async function main() {
   if (mergeResult.exitCode !== 0) {
     await handleConflict({ repo, branch, mergeBase, behind, ahead })
   }
+
+  await runLinuxE2EGate({ repo, branch, mergeBase, behind, ahead })
 
   await $`git push ${REMOTE_ORIGIN} ${branch}`
 
