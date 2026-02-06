@@ -1757,19 +1757,6 @@ export type Config = {
       subtask?: boolean
     }
   }
-  /**
-   * Additional skill folder paths
-   */
-  skills?: {
-    /**
-     * Additional paths to skill folders
-     */
-    paths?: Array<string>
-    /**
-     * URLs to fetch skills from (e.g., https://example.com/.well-known/skills/)
-     */
-    urls?: Array<string>
-  }
   watcher?: {
     ignore?: Array<string>
   }
@@ -1886,13 +1873,17 @@ export type Config = {
    */
   instructions?: Array<string>
   /**
-   * Skill discovery configuration
+   * Additional skill folder paths
    */
   skills?: {
     /**
-     * Additional directories to scan for skills
+     * Additional paths to skill folders
      */
     paths?: Array<string>
+    /**
+     * URLs to fetch skills from (e.g., https://example.com/.well-known/skills/)
+     */
+    urls?: Array<string>
   }
   layout?: LayoutConfig
   permission?: PermissionConfig
