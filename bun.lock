@@ -497,6 +497,9 @@
     "web-tree-sitter",
     "tree-sitter-bash",
   ],
+  "patchedDependencies": {
+    "@standard-community/standard-openapi@0.2.9": "patches/@standard-community%2Fstandard-openapi@0.2.9.patch",
+  },
   "overrides": {
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
