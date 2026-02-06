@@ -4,7 +4,7 @@
 - Upstream repo/branch: `anomalyco/opencode` `dev`
 - Fork repo/branch: `pRizz/opencode` `dev`
 - Merge base: see `docs/upstream-sync/merge-base.txt`
-- Current divergence: `0` behind / `429` ahead (`git rev-list --left-right --count upstream/dev...origin/dev`)
+- Current divergence: `0` behind / `431` ahead (`git rev-list --left-right --count upstream/dev...origin/dev`)
 - `parent-dev` mirror status: `0 0` (`git rev-list --left-right --count upstream/dev...origin/parent-dev`)
 - Catch-up status: upstream catch-up complete; fork decoupling restored post-catch-up.
 - Post-catch-up snapshot artifact: `docs/upstream-sync/post-catchup-state.txt`
@@ -74,6 +74,20 @@ Post-merge validation order:
 1. `./packages/sdk/js/script/build.ts`
 2. `bun turbo typecheck`
 3. Smoke in `packages/opencode`: `bun run dev:web` then `bun dev`
+
+## Steady-State Verification Cadence
+- Daily quick check:
+  - `gh run list --workflow sync-upstream.yml --repo pRizz/opencode --limit 5`
+  - confirm recent `sync-upstream` runs are green.
+- Daily divergence check:
+  - `git fetch origin dev && git fetch upstream dev`
+  - `git rev-list --left-right --count upstream/dev...origin/dev`
+  - `git rev-list --left-right --count upstream/dev...origin/parent-dev`
+- Weekly manual drill:
+  - `gh workflow run sync-upstream.yml --ref dev --repo pRizz/opencode`
+  - confirm logs include:
+    - `parent-dev mirror verified: upstream/dev...origin/parent-dev = 0 0`
+    - `Upstream is already merged. Nothing to sync.` (when no-op)
 
 ## Repo Settings Checklist
 - Enable auto-merge on the repository.
