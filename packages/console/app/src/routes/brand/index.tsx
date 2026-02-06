@@ -1,10 +1,10 @@
 import "./index.css"
-import { Title, Meta, Link } from "@solidjs/meta"
+import { Title, Meta } from "@solidjs/meta"
 import { Header } from "~/component/header"
-import { config } from "~/config"
 import { Footer } from "~/component/footer"
 import { Legal } from "~/component/legal"
 import { useI18n } from "~/context/i18n"
+import { LocaleLinks } from "~/component/locale-links"
 import previewLogoLight from "../../asset/brand/preview-opencode-logo-light.png"
 import previewLogoDark from "../../asset/brand/preview-opencode-logo-dark.png"
 import previewWordmarkLight from "../../asset/brand/preview-opencode-wordmark-light.png"
@@ -56,7 +56,7 @@ export default function Brand() {
   return (
     <main data-page="enterprise">
       <Title>{i18n.t("brand.title")}</Title>
-      <Link rel="canonical" href={`${config.baseUrl}/brand`} />
+      <LocaleLinks path="/brand" />
       <Meta name="description" content={i18n.t("brand.meta.description")} />
       <div data-component="container">
         <Header />
