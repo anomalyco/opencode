@@ -24,7 +24,7 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.UPSTREAM_SYNC_TOKEN || github.token }}
 
-      - name: Verify parent-dev mirror
+      - name: Verify parent-dev mirror health
         run: ./script/verify-upstream-mirror.sh
 
       - name: Setup Bun

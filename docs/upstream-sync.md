@@ -51,7 +51,9 @@ wc -l docs/upstream-sync/upstream-first-parent.txt > docs/upstream-sync/upstream
 - Mirror verification script: `script/verify-upstream-mirror.sh`
 - Token behavior: uses `UPSTREAM_SYNC_TOKEN` when configured, otherwise falls back to `${{ github.token }}`.
 - Workflow behavior:
-  - Verifies `upstream/dev...origin/parent-dev` is `0 0` before running sync.
+  - Verifies mirror health before running sync:
+    - fails only if `origin/parent-dev` has commits not in `upstream/dev` (unsafe drift)
+    - allows upstream-ahead stale state and lets sync refresh `parent-dev` via force update
   - Updates `parent-dev` to match `upstream/dev` (force push).
   - Opens a sync PR when upstream is ahead.
   - Enables auto-merge once checks pass.
