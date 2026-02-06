@@ -22,17 +22,43 @@ export interface TaskGraphResult {
   maxLevel: number
 }
 
+/**
+ * 任务图
+ * 
+ * 职责：
+ * 1. 构建任务依赖图
+ * 2. 计算任务层级（分层执行）
+ * 
+ * 线程模型：
+ * @VertxThreadSafety
+ */
 export class TaskGraph {
   private nodes: Map<string, TaskNode> = new Map()
   private allTasks: MessageV2.SubtaskPart[] = []
 
+  /**
+   * 构造函数
+   * @param tasks 任务列表
+   */
   constructor(tasks: MessageV2.SubtaskPart[]) {
     this.allTasks = tasks
     this.buildGraph()
   }
 
+  /**
+   * 获取任务ID
+   * @param task 任务部分
+   * @returns 唯一ID
+   */
   private getTaskId(task: MessageV2.SubtaskPart): string {
-    return `${task.agent}:${task.prompt.substring(0, 50)}`
+    // 使用 agent, description 和 prompt 的组合来确保唯一性 (Bug 9)
+    const content = `${task.agent}:${task.description || ""}:${task.prompt}`
+    let hash = 0
+    for (let i = 0; i < content.length; i++) {
+      hash = (hash << 5) - hash + content.charCodeAt(i)
+      hash |= 0 // Convert to 32bit integer
+    }
+    return `${task.agent}:${hash.toString(36)}:${task.prompt.substring(0, 30)}`
   }
 
   private buildGraph(): void {
@@ -243,8 +269,15 @@ interface SchedulerNode {
   reject: (error: any) => void
   isRunning: boolean
   isCompleted: boolean
+  isFailed: boolean // 新增: 标记任务是否失败 (Bug 7)
 }
 
+  /**
+   * 执行任务层级
+   * @param levels 任务层级列表
+   * @param executeSubtask 执行子任务的回调
+   * @param maxParallel 最大并行数
+   */
 export async function executeTaskLevels(
   levels: TaskLevel[],
   executeSubtask: (task: MessageV2.SubtaskPart) => Promise<void>,
@@ -270,21 +303,31 @@ export async function executeTaskLevels(
         reject: () => {},
         isRunning: false,
         isCompleted: false,
+        isFailed: false,
       })
     }
   }
 
-  async function tryStartTask(nodeId: string): Promise<void> {
+  // 修改: 去掉 async, 确保在循环检查时不产生 yield (Bug 4)
+  function tryStartTask(nodeId: string): void {
     const node = nodes.get(nodeId)
-    if (!node || node.isRunning || node.isCompleted) return
+    if (!node || node.isRunning || node.isCompleted || node.isFailed) return
 
     const deps = Array.from(node.dependencies)
     const canStart = deps.every((depId) => {
       const depNode = nodes.get(depId)
-      return depNode?.isCompleted
+      return depNode?.isCompleted // 只有成功完成的任务才算依赖达成
     })
 
-    if (!canStart) return
+    if (!canStart) {
+      // 检查是否有依赖失败了
+      const hasFailedDep = deps.some((depId) => nodes.get(depId)?.isFailed)
+      if (hasFailedDep) {
+        node.isFailed = true
+        node.reject(new Error(`Dependency failed for task: ${node.id}`))
+      }
+      return
+    }
 
     if (runningCount >= limit) return
 
@@ -292,34 +335,31 @@ export async function executeTaskLevels(
     running.add(nodeId)
     runningCount++
 
-    const depPromises = deps.map((depId) => nodes.get(depId)?.promise).filter(Boolean) as Promise<void>[]
-
-    const executePromise = (async () => {
+    // 真正的异步执行逻辑
+    void (async () => {
       try {
-        if (depPromises.length > 0) {
-          await Promise.all(depPromises)
-        }
-        await executeSubtask(node.task).catch((error) => {
-          log.error("Subtask execution failed", {
-            agent: node.task.agent,
-            description: node.task.description,
-            error,
-          })
-        })
-      } finally {
+        await executeSubtask(node.task)
         node.isCompleted = true
+        node.resolve()
+      } catch (error) {
+        log.error("Subtask execution failed", {
+          agent: node.task.agent,
+          description: node.task.description,
+          error,
+        })
+        node.isFailed = true
+        node.reject(error)
+      } finally {
+        node.isRunning = false
         running.delete(nodeId)
         runningCount--
-        node.resolve()
       }
     })()
-
-    node.promise = executePromise
   }
 
-  async function tryStartAll(): Promise<void> {
+  function tryStartAll(): void {
     for (const [nodeId] of nodes) {
-      await tryStartTask(nodeId)
+      tryStartTask(nodeId)
     }
   }
 

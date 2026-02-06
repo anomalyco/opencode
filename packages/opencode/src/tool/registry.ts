@@ -32,6 +32,7 @@ export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
 
   const initializedCache = new Map<string, Awaited<ReturnType<Tool.Info["init"]>>>()
+  let toolsCache: { agentKey: string; tools: any[] } | null = null
 
   export const state = Instance.state(async () => {
     const custom = [] as Tool.Info[]
@@ -135,11 +136,17 @@ export namespace ToolRegistry {
     },
     agent?: Agent.Info,
   ) {
-    const tools = await all()
-    const agentKey = agent?.name ?? "default"
+    const agentKey = agent ? agent.name : "default"
+    const modelKey = `${model.providerID}:${model.modelID}`
+    const fullKey = `${agentKey}:${modelKey}`
 
+    if (toolsCache && toolsCache.agentKey === fullKey) {
+      return toolsCache.tools
+    }
+
+    const allTools = await all()
     const result = await Promise.all(
-      tools
+      allTools
         .filter((t) => {
           if (t.id === "codesearch" || t.id === "websearch") {
             return model.providerID === "opencode" || Flag.OPENCODE_ENABLE_EXA
@@ -168,6 +175,17 @@ export namespace ToolRegistry {
           }
         }),
     )
+
+    toolsCache = { agentKey: fullKey, tools: result }
     return result
+  }
+
+  /**
+   * Returns a tool from the cache synchronously.
+   * This is used by SessionProcessor to access tool-specific logic (e.g. timeout, dependencies).
+   */
+  export function getToolSync(id: string): any | null {
+    if (!toolsCache) return null
+    return toolsCache.tools.find((t) => t.id === id) || null
   }
 }

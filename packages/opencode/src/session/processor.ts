@@ -35,6 +35,17 @@ export namespace SessionProcessor {
     partId: string
     callId: string
     abort: AbortSignal
+    
+    // Refactoring 1: Unified interface
+    execute(ctx: { 
+      sessionID: string; 
+      assistantMessage: MessageV2.Assistant; 
+      agent: Agent.Info;
+      tools: Record<string, Tool>;
+    }): Promise<ToolExecutionResult>
+    getTimeout(): number
+    getResourceKeys(): Set<string>
+    getDependencies(): string[]
   }
 
   interface ToolExecutionResult {
@@ -43,6 +54,175 @@ export namespace SessionProcessor {
   }
 
   type ResourceLockMode = "shared" | "exclusive"
+
+  /**
+   * ToolScheduler handles the execution of multiple tools with dependency management,
+   * concurrency control, and resource locking.
+   * 
+   * @VertxThreadSafety
+   */
+  class ToolScheduler {
+    private pending = new Set<string>()
+    private running = new Set<string>()
+    private completed = new Set<string>()
+    private results = new Map<string, ToolExecutionResult>()
+
+    constructor(
+      private executors: ToolExecutor[],
+      private tools: Record<string, Tool>,
+      private input: {
+        sessionID: string
+        assistantMessage: MessageV2.Assistant
+        agent: Agent.Info
+      },
+      private options: {
+        limiter: { run<T>(fn: () => Promise<T>): Promise<T> }
+        resourceLockManager: { acquire(keys: Set<string>, mode: ResourceLockMode): Promise<() => void> }
+        onToolExecuted?: (result: ToolExecutionResult, executor: ToolExecutor) => void
+      },
+    ) {
+      for (const e of executors) {
+        this.pending.add(e.callId)
+      }
+    }
+
+    /**
+     * Executes all scheduled tools.
+     * 
+     * @returns {Promise<void>}
+     * @throws {Error} If execution fails
+     */
+    async execute(): Promise<void> {
+      const toolCalls: MessageV2.ToolPart[] = this.executors.map((e) => ({
+        id: e.partId,
+        sessionID: this.input.sessionID,
+        messageID: this.input.assistantMessage.id,
+        type: "tool",
+        callID: e.callId,
+        tool: e.toolName,
+        state: {
+          status: "pending" as const,
+          input: e.input,
+          raw: "",
+        },
+      }))
+
+      // Use Refactoring 4: Optimized dependency analysis
+      const dependencies = new Map<string, Set<string>>()
+      for (const e of this.executors) {
+        dependencies.set(e.callId, new Set(e.getDependencies()))
+      }
+
+      // Check for circular dependencies
+      const checkCycle = (id: string, visited = new Set<string>(), stack = new Set<string>()): boolean => {
+        visited.add(id)
+        stack.add(id)
+        const deps = dependencies.get(id)
+        if (deps) {
+          for (const d of deps) {
+            if (!visited.has(d)) {
+              if (checkCycle(d, visited, stack)) return true
+            } else if (stack.has(d)) {
+              return true
+            }
+          }
+        }
+        stack.delete(id)
+        return false
+      }
+
+      for (const e of this.executors) {
+        if (checkCycle(e.callId)) {
+          log.error("Circular dependency detected in tool calls", { callId: e.callId })
+          // Break the cycle by clearing dependencies for this executor
+          dependencies.set(e.callId, new Set())
+        }
+      }
+
+      const scheduleNext = async () => {
+        const ready = this.executors.filter((e) => {
+          if (!this.pending.has(e.callId)) return false
+          const deps = dependencies.get(e.callId)
+          if (!deps) return true
+          return Array.from(deps).every((d) => this.completed.has(d))
+        })
+
+        if (ready.length === 0 && this.running.size === 0 && this.pending.size > 0) {
+          log.error("Deadlock detected in tool dependencies", {
+            pending: Array.from(this.pending),
+            completed: Array.from(this.completed),
+          })
+          return
+        }
+
+        const promises = ready.map(async (executor) => {
+          this.pending.delete(executor.callId)
+          this.running.add(executor.callId)
+
+          try {
+            await this.options.limiter.run(async () => {
+              const keys = executor.getResourceKeys()
+              const mode = toolLockMode(executor.toolName)
+              const release = await this.options.resourceLockManager.acquire(keys, mode)
+              try {
+                // Bug 8: Apply timeout from executor
+                const timeout = executor.getTimeout()
+                const resultPromise = executor.execute({
+                  ...this.input,
+                  tools: this.tools,
+                })
+
+                let result: ToolExecutionResult
+                if (timeout > 0) {
+                  const timeoutPromise = new Promise<ToolExecutionResult>((_, reject) =>
+                    setTimeout(() => reject(new Error(`Tool ${executor.toolName} timed out after ${timeout}ms`)), timeout),
+                  )
+                  result = await Promise.race([resultPromise, timeoutPromise])
+                } else {
+                  result = await resultPromise
+                }
+
+                this.results.set(executor.callId, result)
+                this.options.onToolExecuted?.(result, executor)
+              } finally {
+                release()
+              }
+            })
+          } catch (error) {
+            log.error("tool execution failed", {
+              sessionID: this.input.sessionID,
+              tool: executor.toolName,
+              callId: executor.callId,
+              error,
+            })
+            // Bug 9: Mark as error instead of silent failure
+            await Session.updatePart({
+              id: executor.partId,
+              messageID: this.input.assistantMessage.id,
+              sessionID: this.input.sessionID,
+              type: "tool",
+              tool: executor.toolName,
+              callID: executor.callId,
+              state: {
+                status: "error",
+                input: executor.input,
+                error: error instanceof Error ? error.message : String(error),
+                time: { start: Date.now(), end: Date.now() },
+              },
+            })
+          } finally {
+            this.running.delete(executor.callId)
+            this.completed.add(executor.callId)
+            await scheduleNext()
+          }
+        })
+
+        await Promise.all(promises)
+      }
+
+      await scheduleNext()
+    }
+  }
 
   function toolLockMode(toolName: string): ResourceLockMode {
     if (toolName === "read" || toolName === "grep") return "shared"
@@ -140,12 +320,40 @@ export namespace SessionProcessor {
     }
 
     const acquire = async (keys: Set<string>, mode: ResourceLockMode): Promise<() => void> => {
-      const sorted = Array.from(keys).sort()
+      const sortedKeys = Array.from(keys).sort()
+
+      // To avoid deadlock, we must acquire all keys or none.
+      // But since we sort them, we can acquire them one by one IF we don't allow
+      // other acquisitions to jump in between and create a cycle.
+      // However, a simpler way to avoid deadlock with sorting is to ensure that
+      // if we can't get a key, we don't hold the ones we already got?
+      // No, sorting IS enough if all keys are acquired in the same order.
+      // The cycle A->B, B->C, C->A is impossible if everyone must acquire in order A, B, C.
+      // Tool 1: A, B. Gets A, waits for B.
+      // Tool 2: B, C. Gets B, waits for C.
+      // Tool 3: A, C. Waits for A.
+      // Tool 1 will eventually get B when T2 finishes.
+      // Wait, T2 is waiting for C. Who has C?
+      // If T4 has C and is waiting for... nothing? Then T4 finishes, T2 gets C, finishes, T1 gets B, finishes, T3 gets A.
+      // The only way to deadlock is a cycle. A cycle requires at least one person to acquire in a different order.
+      // e.g. T1: A then B, T2: B then A.
+      // With sorting, T2 becomes A then B. No cycle.
+
+      // So the current implementation is actually deadlock-free IF the only way locks are acquired is through this `acquire` method.
+      // The real issue might be the Limiter interaction.
+
       const releases: Array<() => void> = []
-      for (const key of sorted) {
-        const release = await acquireKey(key, mode)
-        releases.push(release)
+      try {
+        for (const key of sortedKeys) {
+          const release = await acquireKey(key, mode)
+          releases.push(release)
+        }
+      } catch (e) {
+        // Cleanup if something goes wrong
+        for (const r of releases) r()
+        throw e
       }
+
       return () => {
         for (let i = releases.length - 1; i >= 0; i--) {
           releases[i]!()
@@ -270,80 +478,87 @@ export namespace SessionProcessor {
   ): Promise<void> {
     if (executors.length === 0) return
 
-    const toolCalls: MessageV2.ToolPart[] = executors.map((e) => ({
-      id: e.partId,
-      sessionID: input.sessionID,
-      messageID: input.assistantMessage.id,
-      type: "tool",
-      callID: e.callId,
-      tool: e.toolName,
-      state: {
-        status: "pending" as const,
-        input: e.input,
-        raw: "",
-      },
-    }))
-
-    const dependencyResult = ToolDependency.analyze(toolCalls)
-
-    log.debug("dependency analysis", {
-      sessionID: input.sessionID,
-      levels: dependencyResult.levels.length,
-      totalCalls: toolCalls.length,
-    })
-
     const limit = Math.max(1, maxParallel ?? 10)
     const limiter = shared?.limiter ?? (() => {
       let active = 0
       const queue: Array<() => void> = []
-      async function run<T>(fn: () => Promise<T>): Promise<T> {
-        while (active >= limit) {
-          await new Promise<void>((resolve) => queue.push(resolve))
+      const notify = () => {
+        while (active < limit && queue.length > 0) {
+          const next = queue.shift()
+          if (next) {
+            active++
+            next()
+          }
         }
-        active++
+      }
+      async function run<T>(fn: () => Promise<T>): Promise<T> {
+        if (active >= limit) {
+          await new Promise<void>((resolve) => queue.push(resolve))
+        } else {
+          active++
+        }
         try {
           return await fn()
         } finally {
           active--
-          const next = queue.shift()
-          if (next) next()
+          notify()
         }
       }
-      return { run }
+      return { run, notify }
     })()
+
     const resourceLockManager = shared?.resourceLockManager ?? createResourceLockManager()
-    const getKeys = (executor: ToolExecutor) => {
-      const call = toolCalls.find((c) => c.callID === executor.callId)
-      if (!call) return new Set<string>([`tool:${executor.toolName}`])
-      return ToolDependency.resourceKeys(call)
-    }
 
-    for (const level of dependencyResult.levels) {
-      const parallelExecutors = level.calls.map((call) => {
-        const executor = executors.find((e) => e.callId === call.id)!
-        return limiter
-          .run(async () => {
-            const keys = getKeys(executor)
-            const mode = toolLockMode(executor.toolName)
-            const release = await resourceLockManager.acquire(keys, mode)
-            try {
-              const result = await executeTool(executor, tools, input)
-              shared?.onToolExecuted?.(result, executor)
-            } finally {
-              release()
-            }
-          })
-          .catch((error) => {
-            log.error("tool execution failed", {
-              sessionID: input.sessionID,
-              tool: executor.toolName,
-              callId: executor.callId,
-              error,
-            })
-          })
-      })
+    const scheduler = new ToolScheduler(executors, tools, input, {
+      limiter,
+      resourceLockManager,
+      onToolExecuted: shared?.onToolExecuted,
+    })
 
-      await Promise.all(parallelExecutors)
+    await scheduler.execute()
+  }
+
+  function createToolExecutor(
+    toolName: string,
+    input: Record<string, any>,
+    partId: string,
+    callId: string,
+    abort: AbortSignal,
+    toolPart: MessageV2.ToolPart,
+  ): ToolExecutor {
+    return {
+      toolId: toolName,
+      toolName,
+      input,
+      partId,
+      callId,
+      abort,
+      async execute(ctx) {
+        return executeTool(this, ctx.tools, ctx)
+      },
+      getTimeout() {
+        const tool = ToolRegistry.getToolSync?.(this.toolName)
+        if (tool?.getTimeout) {
+          return tool.getTimeout(this.input)
+        }
+        // Bug 8: Default timeout 60s, can be overridden by specific tools if needed
+        return 60_000
+      },
+      getResourceKeys() {
+        const tool = ToolRegistry.getToolSync?.(this.toolName)
+        if (tool?.getResourceKeys) {
+          return tool.getResourceKeys(this.input)
+        }
+        return ToolDependency.resourceKeys(toolPart)
+      },
+      getDependencies() {
+        const tool = ToolRegistry.getToolSync?.(this.toolName)
+        if (tool?.getDependencies) {
+          return tool.getDependencies(this.input)
+        }
+        const result = ToolDependency.analyze([toolPart])
+        return Array.from(result.dependencies.get(this.callId) ?? [])
+      },
     }
   }
 
@@ -386,20 +601,29 @@ export namespace SessionProcessor {
         const limiter = (() => {
           let active = 0
           const queue: Array<() => void> = []
-          async function run<T>(fn: () => Promise<T>): Promise<T> {
-            while (active >= concurrencyRef.value) {
-              await new Promise<void>((resolve) => queue.push(resolve))
+          const notify = () => {
+            while (active < concurrencyRef.value && queue.length > 0) {
+              const next = queue.shift()
+              if (next) {
+                active++
+                next()
+              }
             }
-            active++
+          }
+          async function run<T>(fn: () => Promise<T>): Promise<T> {
+            if (active >= concurrencyRef.value) {
+              await new Promise<void>((resolve) => queue.push(resolve))
+            } else {
+              active++
+            }
             try {
               return await fn()
             } finally {
               active--
-              const next = queue.shift()
-              if (next) next()
+              notify()
             }
           }
-          return { run }
+          return { run, notify }
         })()
         const onToolExecuted = (r: ToolExecutionResult) => {
           toolSampleCount++
@@ -415,7 +639,12 @@ export namespace SessionProcessor {
           if (errRate >= 0.25) next = Math.max(1, Math.floor(prev * 0.7))
           else if (avg >= 2_500) next = Math.max(1, prev - 1)
           else if (avg <= 600) next = Math.min(maxParallelTools, prev + 1)
-          concurrencyRef.value = next
+          
+          if (next !== prev) {
+            concurrencyRef.value = next
+            limiter.notify() // Notify waiting tasks if concurrency increased
+          }
+          
           toolSampleCount = 0
           toolErrorCount = 0
           toolDurationSum = 0
@@ -431,17 +660,43 @@ export namespace SessionProcessor {
           const executors = pendingExecutors
           pendingExecutors = []
           const tools = streamInput.tools
-          flushPromise = executeToolsParallel(
-            executors,
-            tools,
-            {
-              sessionID: input.sessionID,
-              assistantMessage: input.assistantMessage,
-              agent: agentInfo,
-            },
-            maxParallelTools,
-            { resourceLockManager, limiter, onToolExecuted },
-          ).finally(() => {
+          
+          const doFlush = async () => {
+            try {
+              await executeToolsParallel(
+                executors,
+                tools,
+                {
+                  sessionID: input.sessionID,
+                  assistantMessage: input.assistantMessage,
+                  agent: agentInfo,
+                },
+                maxParallelTools,
+                { resourceLockManager, limiter, onToolExecuted },
+              )
+            } catch (error) {
+              log.error("flush failed", { error })
+              // Bug 9: Mark all tasks in this batch as failed if the flush itself fails
+              for (const e of executors) {
+                await Session.updatePart({
+                  id: e.partId,
+                  messageID: input.assistantMessage.id,
+                  sessionID: input.sessionID,
+                  type: "tool",
+                  tool: e.toolName,
+                  callID: e.callId,
+                  state: {
+                    status: "error",
+                    input: e.input,
+                    error: `Flush failed: ${error instanceof Error ? error.message : String(error)}`,
+                    time: { start: Date.now(), end: Date.now() },
+                  },
+                })
+              }
+            }
+          }
+
+          flushPromise = doFlush().finally(() => {
             flushPromise = null
           })
         }
@@ -628,14 +883,16 @@ export namespace SessionProcessor {
                     toolcalls[value.toolCallId] = part as MessageV2.ToolPart
 
                     if (parallelEnabled) {
-                      pendingExecutors.push({
-                        toolId: value.toolName,
-                        toolName: value.toolName,
-                        input: value.input,
-                        partId: part.id,
-                        callId: value.toolCallId,
-                        abort: input.abort,
-                      })
+                      pendingExecutors.push(
+                        createToolExecutor(
+                          value.toolName,
+                          value.input,
+                          part.id,
+                          value.toolCallId,
+                          input.abort,
+                          part as MessageV2.ToolPart,
+                        ),
+                      )
                       if (pendingExecutors.length >= Math.min(2, maxParallelTools)) {
                         scheduleFlush()
                       }
@@ -673,7 +930,7 @@ export namespace SessionProcessor {
                 }
                 case "tool-result": {
                   const match = toolcalls[value.toolCallId]
-                  if (match && match.state.status === "running") {
+                  if (match && (match.state.status === "running" || match.state.status === "pending")) {
                     const attachments = value.output.attachments?.map(
                       (attachment: Omit<MessageV2.FilePart, "id" | "messageID" | "sessionID">) => ({
                         ...attachment,
@@ -691,7 +948,7 @@ export namespace SessionProcessor {
                         metadata: value.output.metadata,
                         title: value.output.title,
                         time: {
-                          start: match.state.time.start,
+                          start: (match.state as any).time?.start ?? Date.now(),
                           end: Date.now(),
                         },
                         attachments,
@@ -705,7 +962,7 @@ export namespace SessionProcessor {
 
                 case "tool-error": {
                   const match = toolcalls[value.toolCallId]
-                  if (match && match.state.status === "running") {
+                  if (match && (match.state.status === "running" || match.state.status === "pending")) {
                     await Session.updatePart({
                       ...match,
                       state: {
@@ -713,7 +970,7 @@ export namespace SessionProcessor {
                         input: value.input ?? match.state.input,
                         error: (value.error as any).toString(),
                         time: {
-                          start: match.state.time.start,
+                          start: (match.state as any).time?.start ?? Date.now(),
                           end: Date.now(),
                         },
                       },

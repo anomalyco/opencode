@@ -23,7 +23,22 @@ export interface RelevanceResult {
   reason: string
 }
 
+/**
+ * 代理决策中心
+ * 
+ * 职责：
+ * 1. 根据任务板状态决定下一步动作
+ * 2. 处理任务完成、错误和用户输入
+ * 
+ * 线程模型：
+ * @VertxThreadSafety 默认在单线程事件循环中运行
+ */
 export class AgentDecisionCenter {
+  /**
+   * 决定下一个动作
+   * @param board 任务汇总板
+   * @returns 返回建议的动作
+   */
   decideNext(board: TaskSummaryBoard): AgentAction {
     const current = board.getCurrentTask()
 
@@ -38,13 +53,13 @@ export class AgentDecisionCenter {
     const blocked = board.getByStatus("blocked")
 
     if (pending.length > 0) {
-      const nextTask = pending.sort((a, b) => b.priority - a.priority)[0]
+      const nextTask = [...pending].sort((a, b) => b.priority - a.priority)[0]
       return { type: "start_next", taskID: nextTask.id }
     }
 
     const unblocked = blocked.filter((t) => t.blockedBy.length === 0)
     if (unblocked.length > 0) {
-      const nextTask = unblocked.sort((a, b) => b.priority - a.priority)[0]
+      const nextTask = [...unblocked].sort((a, b) => b.priority - a.priority)[0]
       return { type: "unblock", taskIDs: [nextTask.id] }
     }
 
