@@ -677,12 +677,12 @@ export namespace Server {
     port: number
     hostname: string
     mdns?: boolean
+    mdnsDomain?: string
     cors?: string[]
     uiDir?: string
   }) {
     // Load auth config at server startup (before any requests)
     await ServerAuth.load()
-
     _corsWhitelist = opts.cors ?? []
     _uiDir = opts.uiDir ? path.resolve(opts.uiDir) : undefined
     setUiDir(_uiDir)
@@ -712,7 +712,7 @@ export namespace Server {
       opts.hostname !== "localhost" &&
       opts.hostname !== "::1"
     if (shouldPublishMDNS) {
-      MDNS.publish(server.port!)
+      MDNS.publish(server.port!, opts.mdnsDomain)
     } else if (opts.mdns) {
       log.warn("mDNS enabled but hostname is loopback; skipping mDNS publish")
     }

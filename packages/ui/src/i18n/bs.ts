@@ -1,0 +1,108 @@
+import { dict as en } from "./en"
+
+type Keys = keyof typeof en
+
+export const dict = {
+  "ui.sessionReview.title": "Promjene sesije",
+  "ui.sessionReview.title.lastTurn": "Promjene u posljednjem potezu",
+  "ui.sessionReview.diffStyle.unified": "Ujedinjeno",
+  "ui.sessionReview.diffStyle.split": "Podijeljeno",
+  "ui.sessionReview.expandAll": "Proširi sve",
+  "ui.sessionReview.collapseAll": "Sažmi sve",
+  "ui.sessionReview.change.added": "Dodano",
+  "ui.sessionReview.change.removed": "Uklonjeno",
+
+  "ui.lineComment.label.prefix": "Komentar na ",
+  "ui.lineComment.label.suffix": "",
+  "ui.lineComment.editorLabel.prefix": "Komentarišeš ",
+  "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.placeholder": "Dodaj komentar",
+  "ui.lineComment.submit": "Komentariši",
+
+  "ui.sessionTurn.steps.show": "Prikaži korake",
+  "ui.sessionTurn.steps.hide": "Sakrij korake",
+  "ui.sessionTurn.summary.response": "Odgovor",
+  "ui.sessionTurn.diff.showMore": "Prikaži još izmjena ({{count}})",
+
+  "ui.sessionTurn.retry.retrying": "ponovni pokušaj",
+  "ui.sessionTurn.retry.inSeconds": "za {{seconds}}s",
+
+  "ui.sessionTurn.status.delegating": "Delegiranje posla",
+  "ui.sessionTurn.status.planning": "Planiranje sljedećih koraka",
+  "ui.sessionTurn.status.gatheringContext": "Prikupljanje konteksta",
+  "ui.sessionTurn.status.searchingCodebase": "Pretraživanje baze koda",
+  "ui.sessionTurn.status.searchingWeb": "Pretraživanje weba",
+  "ui.sessionTurn.status.makingEdits": "Pravljenje izmjena",
+  "ui.sessionTurn.status.runningCommands": "Pokretanje komandi",
+  "ui.sessionTurn.status.thinking": "Razmišljanje",
+  "ui.sessionTurn.status.thinkingWithTopic": "Razmišljanje - {{topic}}",
+  "ui.sessionTurn.status.gatheringThoughts": "Sređivanje misli",
+  "ui.sessionTurn.status.consideringNextSteps": "Razmatranje sljedećih koraka",
+
+  "ui.messagePart.diagnostic.error": "Greška",
+  "ui.messagePart.title.edit": "Uredi",
+  "ui.messagePart.title.write": "Napiši",
+  "ui.messagePart.option.typeOwnAnswer": "Unesi svoj odgovor",
+  "ui.messagePart.review.title": "Pregledaj svoje odgovore",
+
+  "ui.list.loading": "Učitavanje",
+  "ui.list.empty": "Nema rezultata",
+  "ui.list.clearFilter": "Očisti filter",
+  "ui.list.emptyWithFilter.prefix": "Nema rezultata za",
+  "ui.list.emptyWithFilter.suffix": "",
+
+  "ui.messageNav.newMessage": "Nova poruka",
+
+  "ui.textField.copyToClipboard": "Kopiraj u međuspremnik",
+  "ui.textField.copyLink": "Kopiraj link",
+  "ui.textField.copied": "Kopirano",
+
+  "ui.imagePreview.alt": "Pregled slike",
+
+  "ui.tool.read": "Čitanje",
+  "ui.tool.loaded": "Učitano",
+  "ui.tool.list": "Listanje",
+  "ui.tool.glob": "Glob",
+  "ui.tool.grep": "Grep",
+  "ui.tool.webfetch": "Web preuzimanje",
+  "ui.tool.shell": "Shell",
+  "ui.tool.patch": "Patch",
+  "ui.tool.todos": "Lista zadataka",
+  "ui.tool.todos.read": "Čitanje liste zadataka",
+  "ui.tool.questions": "Pitanja",
+  "ui.tool.agent": "{{type}} agent",
+
+  "ui.common.file.one": "datoteka",
+  "ui.common.file.other": "datoteke",
+  "ui.common.question.one": "pitanje",
+  "ui.common.question.other": "pitanja",
+
+  "ui.common.add": "Dodaj",
+  "ui.common.cancel": "Otkaži",
+  "ui.common.confirm": "Potvrdi",
+  "ui.common.dismiss": "Odbaci",
+  "ui.common.close": "Zatvori",
+  "ui.common.next": "Dalje",
+  "ui.common.submit": "Pošalji",
+
+  "ui.permission.deny": "Zabrani",
+  "ui.permission.allowAlways": "Uvijek dozvoli",
+  "ui.permission.allowOnce": "Dozvoli jednom",
+
+  "ui.message.expand": "Proširi poruku",
+  "ui.message.collapse": "Sažmi poruku",
+  "ui.message.copy": "Kopiraj",
+  "ui.message.copied": "Kopirano!",
+  "ui.message.attachment.alt": "prilog",
+
+  "ui.patch.action.deleted": "Obrisano",
+  "ui.patch.action.created": "Kreirano",
+  "ui.patch.action.moved": "Premješteno",
+  "ui.patch.action.patched": "Primijenjeno",
+
+  "ui.question.subtitle.answered": "{{count}} odgovoreno",
+  "ui.question.answer.none": "(nema odgovora)",
+  "ui.question.review.notAnswered": "(nije odgovoreno)",
+  "ui.question.multiHint": "(odaberi sve što važi)",
+  "ui.question.custom.placeholder": "Unesi svoj odgovor...",
+} satisfies Partial<Record<Keys, string>>
