@@ -40,7 +40,8 @@ export function DialogAutomationHistory(props: { automation: Automation }) {
       const status = run.status === "success" ? "Success" : "Failed"
       const gutter = run.status === "success" ? <text fg={theme.success}>S</text> : <text fg={theme.error}>F</text>
       const footer = run.sessionID ? `Session: ${run.sessionID}` : "Session: -"
-      const description = `${getFilename(run.directory)} - ${status}`
+      const project = getFilename(run.directory)
+      const description = `${project} - ${status}`
       return {
         title: Locale.todayTimeOrDateTime(run.time),
         description,

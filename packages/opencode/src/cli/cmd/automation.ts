@@ -401,10 +401,12 @@ export const AutomationImportCommand = cmd({
 
 function scheduleLabel(info: Automation.Info) {
   if (!info.schedule) return "Manual"
+
   const lines = info.schedule
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
+
   if (!info.enabled) {
     const schedule = lines[0] ?? info.schedule
     return `Disabled - ${schedule}`
@@ -415,18 +417,21 @@ function scheduleLabel(info: Automation.Info) {
 
 function runLabel(value?: number) {
   if (!value) return "Never"
+
   return Locale.todayTimeOrDateTime(value)
 }
 
 function resolveAutomationDir(input: { dir?: string; project?: boolean }) {
   if (input.dir) return path.resolve(input.dir)
   if (!input.project) return
+
   const root = Instance.worktree && Instance.worktree !== "/" ? Instance.worktree : Instance.directory
   return path.join(root, ".opencode", "automations")
 }
 
 async function writeExportFile(dir: string, filename: string, items: Automation.Info[]) {
   if (items.length === 0) return
+
   const filepath = path.join(dir, filename)
   await mkdir(dir, { recursive: true })
   await Bun.write(filepath, JSON.stringify(AutomationTransfer.serialize(items), null, 2))
@@ -444,6 +449,7 @@ async function readImportsFromFile(filepath: string) {
     process.stdout.write(`File not found: ${filepath}` + EOL)
     return
   }
+
   const data = await file
     .text()
     .then((text) => JSON.parse(text))
@@ -496,16 +502,14 @@ async function readImportsFromDir(dir: string) {
 }
 
 function formatAutomationTable(items: Automation.Info[]): string {
-  const rows = items.map((item) => {
-    return {
-      id: item.id,
-      name: item.name,
-      projects: String(item.projects.length),
-      schedule: scheduleLabel(item),
-      next: runLabel(item.nextRun),
-      last: runLabel(item.lastRun),
-    }
-  })
+  const rows = items.map((item) => ({
+    id: item.id,
+    name: item.name,
+    projects: String(item.projects.length),
+    schedule: scheduleLabel(item),
+    next: runLabel(item.nextRun),
+    last: runLabel(item.lastRun),
+  }))
 
   const maxId = Math.max("Automation ID".length, ...rows.map((row) => row.id.length))
   const maxName = Math.min(32, Math.max("Name".length, ...rows.map((row) => row.name.length)))
@@ -548,14 +552,12 @@ function formatAutomationJSON(items: Automation.Info[]): string {
 }
 
 function formatRunTable(items: Automation.Run[]): string {
-  const rows = items.map((item) => {
-    return {
-      time: Locale.todayTimeOrDateTime(item.time),
-      project: getFilename(item.directory),
-      status: item.status,
-      session: item.sessionID ?? "-",
-    }
-  })
+  const rows = items.map((item) => ({
+    time: Locale.todayTimeOrDateTime(item.time),
+    project: getFilename(item.directory),
+    status: item.status,
+    session: item.sessionID ?? "-",
+  }))
 
   const maxTime = Math.max("Time".length, ...rows.map((row) => row.time.length))
   const maxProject = Math.max("Project".length, ...rows.map((row) => row.project.length))
@@ -601,6 +603,7 @@ function hasUpdate(input: {
   if (input.projects !== undefined) return true
   if (input.schedule !== undefined) return true
   if (input.enabled !== undefined) return true
+
   return false
 }
 

@@ -27,10 +27,12 @@ function projectLabel(project: Project) {
 
 function scheduleLabel(automation: Automation) {
   if (!automation.schedule) return "Manual"
+
   const lines = automation.schedule
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
+
   if (!automation.enabled) {
     const schedule = lines[0] ?? automation.schedule
     return `Disabled - ${schedule}`
@@ -41,6 +43,7 @@ function scheduleLabel(automation: Automation) {
 
 function formatRun(value?: number) {
   if (!value) return "Never"
+
   return Locale.todayTimeOrDateTime(value)
 }
 
@@ -63,6 +66,7 @@ export function DialogAutomationList() {
   const projectRoot = () => {
     if (sync.data.path.worktree && sync.data.path.worktree !== "/") return sync.data.path.worktree
     if (sync.data.path.directory) return sync.data.path.directory
+
     return process.cwd()
   }
   const projectAutomationDir = () => path.join(projectRoot(), ".opencode", "automations")
@@ -78,6 +82,7 @@ export function DialogAutomationList() {
       toast.show({ message: "No automations to export", variant: "error" })
       return
     }
+
     const dir = projectAutomationDir()
     await mkdir(dir, { recursive: true })
     const output = JSON.stringify(AutomationTransfer.serialize(items), null, 2)
@@ -162,7 +167,9 @@ export function DialogAutomationList() {
       .toSorted((a, b) => b.time.updated - a.time.updated)
       .map((automation) => {
         const projectCount = automation.projects.length
-        const summary = `${Locale.pluralize(projectCount, "{} project", "{} projects")} - ${scheduleLabel(automation)}`
+        const projects = Locale.pluralize(projectCount, "{} project", "{} projects")
+        const schedule = scheduleLabel(automation)
+        const summary = `${projects} - ${schedule}`
         const footer = `Next: ${formatRun(automation.nextRun)} | Last: ${formatRun(automation.lastRun)}`
         return {
           title: automation.name || "Untitled",
@@ -245,6 +252,7 @@ export function DialogAutomationList() {
     const name = await promptName()
     if (name === null) return returnToList()
     if (!name.trim()) return returnToList()
+
     const prompt = await promptPrompt()
     if (prompt === null) return returnToList()
     if (!prompt.trim()) return returnToList()
@@ -257,19 +265,21 @@ export function DialogAutomationList() {
     const scheduleInput = await promptSchedule()
     if (scheduleInput === null) return returnToList()
     const schedule = scheduleInput.trim()
+    const savedSchedule = schedule ? schedule : null
 
     let enabled = false
     if (schedule) {
       const enabledInput = await promptEnabled("y")
       if (enabledInput === null) return returnToList()
-      enabled = !enabledInput.trim() || enabledInput.trim().toLowerCase().startsWith("y")
+      const normalized = enabledInput.trim().toLowerCase()
+      enabled = normalized.length === 0 || normalized.startsWith("y")
     }
 
     await sdk.client.automation.create({
       name: name.trim(),
       prompt: prompt.trim(),
       projects: projectValues,
-      schedule: schedule ? schedule : null,
+      schedule: savedSchedule,
       enabled,
     })
     await refreshAutomations()
@@ -285,13 +295,13 @@ export function DialogAutomationList() {
     const projectsDefault = automation.projects.join(", ")
     const projectsData = await promptProjects(projectsDefault)
     if (!projectsData) return returnToList()
-    const projectValues = projectsData.input.trim()
-      ? resolveProjects(projectsData.input, projectsData.projects)
-      : automation.projects
+    const projectsInput = projectsData.input.trim()
+    const projectValues = projectsInput ? resolveProjects(projectsInput, projectsData.projects) : automation.projects
 
     const scheduleInput = await promptSchedule(automation.schedule ?? "")
     if (scheduleInput === null) return returnToList()
     const schedule = scheduleInput.trim()
+    const savedSchedule = schedule ? schedule : null
 
     let enabled = false
     if (schedule) {
@@ -305,7 +315,7 @@ export function DialogAutomationList() {
       name: name.trim() || automation.name,
       prompt: prompt.trim() || automation.prompt,
       projects: projectValues.length ? projectValues : automation.projects,
-      schedule: schedule ? schedule : null,
+      schedule: savedSchedule,
       enabled,
     })
     await refreshAutomations()

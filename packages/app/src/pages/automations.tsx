@@ -38,12 +38,15 @@ export default function AutomationsPage() {
 
   const formatTime = (value?: number) => {
     if (!value) return language.t("automations.time.never")
-    return DateTime.fromMillis(value).toRelative() ?? DateTime.fromMillis(value).toLocaleString(DateTime.DATETIME_SHORT)
+
+    const time = DateTime.fromMillis(value)
+    return time.toRelative() ?? time.toLocaleString(DateTime.DATETIME_SHORT)
   }
 
   const projectLabel = (directory: string) => {
     const project = globalSync.data.project.find((item) => item.worktree === directory)
     if (project?.name) return project.name
+
     return getFilename(directory)
   }
 
@@ -52,18 +55,22 @@ export default function AutomationsPage() {
     navigate(`/${base64Encode(session.directory)}/session/${session.id}`)
   }
 
-  const projectList = (automation: Automation) =>
-    (automation.projects ?? [])
+  const projectList = (automation: Automation) => {
+    const projects = automation.projects ?? []
+    const names = projects
       .filter((directory) => directory && directory !== "/")
       .map((directory) => projectLabel(directory))
-      .join(", ")
+    return names.join(", ")
+  }
 
   const scheduleLabel = (automation: Automation) => {
     if (!automation.schedule) return language.t("automations.schedule.manual")
+
     const lines = automation.schedule
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter(Boolean)
+
     if (!automation.enabled) {
       const schedule = lines[0] ?? automation.schedule
       return language.t("automations.schedule.disabled", { schedule })
@@ -72,8 +79,13 @@ export default function AutomationsPage() {
     return lines[0] ?? automation.schedule
   }
 
-  const openCreate = () => dialog.show(() => <DialogAutomation />)
-  const openEdit = (automation: Automation) => dialog.show(() => <DialogAutomation automation={automation} />)
+  const openCreate = () => {
+    dialog.show(() => <DialogAutomation />)
+  }
+
+  const openEdit = (automation: Automation) => {
+    dialog.show(() => <DialogAutomation automation={automation} />)
+  }
 
   const runAutomation = async (automation: Automation) => {
     const result = await globalSDK.client.automation.run({ automationID: automation.id }).catch(() => undefined)
@@ -81,8 +93,10 @@ export default function AutomationsPage() {
       showToast({ title: language.t("common.requestFailed") })
       return
     }
+
     const index = (globalSync.data.automation ?? []).findIndex((item) => item.id === result.data?.id)
     if (index >= 0) globalSync.set("automation", index, result.data)
+
     showToast({ title: language.t("automations.run.started") })
   }
 
@@ -99,6 +113,7 @@ export default function AutomationsPage() {
       showToast({ title: language.t("automations.export.empty") })
       return
     }
+
     const payload = AutomationTransfer.serialize(
       items.map((item) => ({
         name: item.name,
@@ -179,7 +194,7 @@ export default function AutomationsPage() {
     showToast({ title: language.t("automations.import.success", { count: success }) })
   }
 
-  const openClearHistory = () =>
+  const openClearHistory = () => {
     dialog.show(() => (
       <DialogConfirm
         title={language.t("automations.history.clear.title")}
@@ -189,6 +204,7 @@ export default function AutomationsPage() {
         onConfirm={clearHistory}
       />
     ))
+  }
 
   function DialogAutomationHistory(props: { automation: Automation }) {
     const [state, setState] = createStore({
@@ -218,7 +234,9 @@ export default function AutomationsPage() {
 
     const formatRunTime = (value?: number) => {
       if (!value || !Number.isFinite(value)) return language.t("automations.time.unknown")
-      return DateTime.fromMillis(value).toLocaleString(DateTime.DATETIME_SHORT)
+
+      const time = DateTime.fromMillis(value)
+      return time.toLocaleString(DateTime.DATETIME_SHORT)
     }
 
     return (
@@ -291,9 +309,13 @@ export default function AutomationsPage() {
     )
   }
 
-  const openDelete = (automation: Automation) =>
+  const openDelete = (automation: Automation) => {
     dialog.show(() => <DialogAutomationDelete automation={automation} onDelete={deleteAutomation} />)
-  const openHistory = (automation: Automation) => dialog.show(() => <DialogAutomationHistory automation={automation} />)
+  }
+
+  const openHistory = (automation: Automation) => {
+    dialog.show(() => <DialogAutomationHistory automation={automation} />)
+  }
 
   return (
     <div class="flex flex-col w-full h-full overflow-y-auto bg-background-stronger px-4 pb-10 sm:px-6 sm:pb-10">

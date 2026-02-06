@@ -424,21 +424,16 @@ export function PromptEditor(props: {
       const atMatch = textBeforeCursor.match(/@(\S*)$/)
       const slashMatch = rawText.match(/^\/(\S*)$/)
 
-      if (templateResult) {
-        templateOnInput(templateResult[1])
-        setStore("popover", "template")
-      }
-      if (!templateResult && atMatch) {
-        atOnInput(atMatch[1])
-        setStore("popover", "at")
-      }
-      if (!templateResult && !atMatch && slashMatch) {
-        slashOnInput(slashMatch[1])
-        setStore("popover", "slash")
-      }
-      if (!templateResult && !atMatch && !slashMatch) {
-        setStore("popover", null)
-      }
+      let popover: "template" | "at" | "slash" | null = null
+      if (templateResult) popover = "template"
+      if (!templateResult && atMatch) popover = "at"
+      if (!templateResult && !atMatch && slashMatch) popover = "slash"
+
+      if (popover === "template" && templateResult) templateOnInput(templateResult[1])
+      if (popover === "at" && atMatch) atOnInput(atMatch[1])
+      if (popover === "slash" && slashMatch) slashOnInput(slashMatch[1])
+
+      setStore("popover", popover)
     }
 
     mirror.input = true
@@ -456,13 +451,16 @@ export function PromptEditor(props: {
     if (handled) return
     if (event.defaultPrevented) return
 
-    if (event.key === "Enter" && event.shiftKey) {
+    const isEnter = event.key === "Enter"
+    const isShiftEnter = isEnter && event.shiftKey
+    if (isShiftEnter) {
       addPart({ type: "text", content: "\n", start: 0, end: 0 })
       event.preventDefault()
       return
     }
 
-    if (event.key === "Enter" && (event.isComposing || composing() || event.keyCode === 229)) {
+    const isComposing = event.isComposing || composing() || event.keyCode === 229
+    if (isEnter && isComposing) {
       return
     }
 
@@ -474,29 +472,31 @@ export function PromptEditor(props: {
       return
     }
 
-    if (store.popover) {
-      if (event.key === "Tab") {
-        selectPopoverActive()
-        event.preventDefault()
-        return
-      }
-      const nav = event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter"
-      const ctrlNav = ctrl && (event.key === "n" || event.key === "p")
-      if (nav || ctrlNav) {
-        if (store.popover === "at") {
-          atOnKeyDown(event)
-          event.preventDefault()
-          return
-        }
-        if (store.popover === "slash") {
-          slashOnKeyDown(event)
-        }
-        if (store.popover === "template") {
-          templateOnKeyDown(event)
-        }
-        event.preventDefault()
-      }
+    const popover = store.popover
+    if (!popover) return
+
+    if (event.key === "Tab") {
+      selectPopoverActive()
+      event.preventDefault()
+      return
     }
+
+    const nav = event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter"
+    const ctrlNav = ctrl && (event.key === "n" || event.key === "p")
+    if (!nav && !ctrlNav) return
+
+    if (popover === "at") {
+      atOnKeyDown(event)
+      event.preventDefault()
+      return
+    }
+    if (popover === "slash") {
+      slashOnKeyDown(event)
+    }
+    if (popover === "template") {
+      templateOnKeyDown(event)
+    }
+    event.preventDefault()
   }
 
   const handlePaste = async (event: ClipboardEvent) => {
@@ -600,12 +600,14 @@ export function PromptEditor(props: {
     const rawText = promptText(currentPrompt)
     const textBeforeCursor = rawText.substring(0, cursorPosition)
     const match = templateMatch(textBeforeCursor)
-    const replace = match
-      ? {
-          start: match.index ?? cursorPosition - match[0].length,
-          end: cursorPosition,
-        }
-      : undefined
+
+    let replace: { start: number; end: number } | undefined
+    if (match) {
+      const start = match.index ?? cursorPosition - match[0].length
+      const end = cursorPosition
+      replace = { start, end }
+    }
+
     insertText(option.value, replace)
     handleInput()
   }
@@ -657,6 +659,7 @@ export function PromptEditor(props: {
       const range = selection.getRangeAt(0)
       const fragment = createTextFragment(part.content)
       const last = fragment.lastChild
+
       range.deleteContents()
       range.insertNode(fragment)
       if (last) {
@@ -673,6 +676,7 @@ export function PromptEditor(props: {
           range.setStartAfter(last)
         }
       }
+
       range.collapse(true)
       selection.removeAllRanges()
       selection.addRange(range)

@@ -191,6 +191,7 @@ export namespace Automation {
     const keys = await Storage.list(["automation"])
     const rootKeys = keys.filter((key) => key.length === 2)
     const items = await Promise.all(rootKeys.map((key) => Storage.read<Info>(key).catch(() => undefined)))
+
     return items.filter((item): item is Info => !!item).sort((a, b) => (b.time.updated ?? 0) - (a.time.updated ?? 0))
   }
 
@@ -288,13 +289,17 @@ export namespace Automation {
   async function tick() {
     const now = Date.now()
     const automations = await list()
+
     const due = automations.filter((info) => {
       if (!shouldSchedule(info)) return false
+
       const next = info.nextRun ?? nextRun(info.schedule, now)
       if (!next) return false
+
       return next <= now
     })
     if (due.length === 0) return
+
     await Promise.allSettled(due.map((info) => execute(info)))
   }
 
@@ -315,7 +320,8 @@ export namespace Automation {
         return updated
       }
 
-      const targets = [...new Set(info.projects.map((item) => item.trim()).filter(Boolean))]
+      const projects = info.projects.map((item) => item.trim()).filter(Boolean)
+      const targets = [...new Set(projects)]
       const runs = await Promise.all(
         targets.map((directory) => {
           let sessionID: string | undefined
@@ -378,6 +384,7 @@ export namespace Automation {
         error: result.status === "failed" ? result.error : undefined,
         time: started,
       }))
+
       await Promise.all(entries.map((entry) => Storage.write(["automation", info.id, "run", entry.id], entry)))
       for (const entry of entries) {
         GlobalBus.emit("event", {
@@ -411,6 +418,7 @@ export namespace Automation {
   function shouldSchedule(info: Info) {
     if (!info.enabled) return false
     if (!info.schedule) return false
+
     return true
   }
 
@@ -418,7 +426,9 @@ export namespace Automation {
     const project = Instance.project
     const name = project.name?.trim() || getFilename(project.worktree)
     const date = new Date(now).toLocaleDateString()
-    let result = value.replace(/{{\s*date\s*}}/gi, date).replace(/{{\s*project\.name\s*}}/gi, name)
+
+    let result = value.replace(/{{\s*date\s*}}/gi, date)
+    result = result.replace(/{{\s*project\.name\s*}}/gi, name)
 
     if (!/{{\s*session\./i.test(result)) return result
 
@@ -435,9 +445,10 @@ export namespace Automation {
     result = result.replace(/{{\s*session\.query\s*:\s*([^}]+)\s*}}/gi, (_, query: string) => {
       const term = query.trim().toLowerCase()
       if (!term) return ""
-      const matches = sessions.filter((session) => session.title.toLowerCase().includes(term)).slice(0, 3)
-      if (matches.length === 0) return "No matching sessions"
-      return matches.map((session) => `- ${session.title} (${session.id})`).join("\n")
+      const matches = sessions.filter((session) => session.title.toLowerCase().includes(term))
+      const limited = matches.slice(0, 3)
+      if (limited.length === 0) return "No matching sessions"
+      return limited.map((session) => `- ${session.title} (${session.id})`).join("\n")
     })
 
     return result
@@ -448,22 +459,26 @@ export namespace Automation {
     if (value === null) return null
     const trimmed = value.trim()
     if (!trimmed) return null
+
     return trimmed
   }
 
   function previewSchedule(schedule: string, now: number): Preview {
     const result = parseNexts(schedule, now)
     if (result.error) return { valid: false, error: result.error }
+
     return { valid: true, nextRun: Math.min(...result.nexts) }
   }
 
   function nextRun(schedule: string | null, now: number) {
     if (!schedule) return
+
     const result = parseNexts(schedule, now)
     if (result.error) {
       log.warn("invalid schedule", { schedule, error: result.error })
       return
     }
+
     return Math.min(...result.nexts)
   }
 
@@ -478,7 +493,8 @@ export namespace Automation {
     const error = parsed.find((result) => result.error)?.error
     if (error) return { nexts: [], error }
 
-    const nexts = parsed.map((result) => result.next).filter((value): value is number => typeof value === "number")
+    const values = parsed.map((result) => result.next)
+    const nexts = values.filter((value): value is number => typeof value === "number")
     if (nexts.length === 0) return { nexts: [], error: "No future runs found" }
 
     return { nexts }
@@ -492,6 +508,7 @@ export namespace Automation {
       if (next instanceof Date) return { next: next.getTime() }
       if (typeof next.toDate === "function") return { next: next.toDate().getTime() }
       if (typeof next.getTime === "function") return { next: next.getTime() }
+
       return { next: undefined }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Invalid schedule"

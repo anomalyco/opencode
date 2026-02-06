@@ -14,16 +14,24 @@ interface TimeRowProps {
 
 export const AutomationTimeRow: Component<TimeRowProps> = (props) => {
   const parts = createMemo(() => props.value.split(":"))
-  const hour = () => (parts()[0] ?? "00").padStart(2, "0")
-  const minute = () => (parts()[1] ?? "00").padStart(2, "0")
+  const hour = () => {
+    const value = parts()[0] ?? "00"
+    return value.padStart(2, "0")
+  }
+  const minute = () => {
+    const value = parts()[1] ?? "00"
+    return value.padStart(2, "0")
+  }
 
   const setHour = (value?: string) => {
     if (!value) return
+
     props.onChange(`${value}:${minute()}`)
   }
 
   const setMinute = (value?: string) => {
     if (!value) return
+
     props.onChange(`${hour()}:${value}`)
   }
 

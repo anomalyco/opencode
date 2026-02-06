@@ -8,13 +8,15 @@ export function DialogAutomationDelete(props: {
 }) {
   const language = useLanguage()
 
+  const handleDelete = () => props.onDelete(props.automation)
+
   return (
     <DialogConfirm
       title={language.t("automations.delete.title")}
       message={language.t("automations.delete.confirm", { name: props.automation.name })}
       confirmLabel={language.t("automations.delete.button")}
       cancelLabel={language.t("common.cancel")}
-      onConfirm={() => props.onDelete(props.automation)}
+      onConfirm={handleDelete}
     />
   )
 }

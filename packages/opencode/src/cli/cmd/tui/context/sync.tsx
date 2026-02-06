@@ -332,6 +332,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             setStore("automation", result.index, reconcile(event.properties))
             break
           }
+
           setStore(
             "automation",
             produce((draft) => {
@@ -343,6 +344,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         case "automation.deleted": {
           const result = Binary.search(store.automation, event.properties.id, (s) => s.id)
           if (!result.found) break
+
           setStore(
             "automation",
             produce((draft) => {
@@ -422,7 +424,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               setStore("session_status", reconcile(x.data!))
             }),
             sdk.client.automation.list().then((x) => {
-              setStore("automation", reconcile((x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id))))
+              const list = (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id))
+              setStore("automation", reconcile(list))
             }),
             sdk.client.provider.auth().then((x) => setStore("provider_auth", reconcile(x.data ?? {}))),
             sdk.client.vcs.get().then((x) => setStore("vcs", reconcile(x.data))),

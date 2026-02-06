@@ -33,6 +33,7 @@ function sortDays(input: string[]) {
 
 function parseDays(value: string) {
   if (value === "*") return dayOrder
+
   const parts = value
     .split(",")
     .map((part) => part.trim())
@@ -40,14 +41,22 @@ function parseDays(value: string) {
   if (parts.length === 0) return
   if (parts.includes("*")) return dayOrder
 
-  const values = parts.flatMap((part) => {
-    if (/^[0-6]$/.test(part)) return [part]
-    if (!/^[0-6]-[0-6]$/.test(part)) return []
+  const values: string[] = []
+  for (const part of parts) {
+    if (/^[0-6]$/.test(part)) {
+      values.push(part)
+      continue
+    }
+
+    if (!/^[0-6]-[0-6]$/.test(part)) continue
+
     const start = Number(part[0])
     const end = Number(part[2])
-    if (start > end) return []
-    return Array.from({ length: end - start + 1 }, (_, i) => String(start + i))
-  })
+    if (start > end) continue
+
+    const items = Array.from({ length: end - start + 1 }, (_, i) => String(start + i))
+    values.push(...items)
+  }
 
   if (values.length === 0) return
   if (values.some((item) => !/^[0-6]$/.test(item))) return
@@ -57,16 +66,20 @@ function parseDays(value: string) {
 
 function parseTime(hour: string, minute: string) {
   if (!/^\d+$/.test(hour) || !/^\d+$/.test(minute)) return
+
   const h = Number(hour)
   const m = Number(minute)
+
   if (!Number.isFinite(h) || !Number.isFinite(m)) return
   if (h < 0 || h > 23) return
   if (m < 0 || m > 59) return
+
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`
 }
 
 function promptParts(value: string) {
   if (!value) return DEFAULT_PROMPT
+
   const parts: Prompt = []
   const regex = /@\S+/g
   let cursor = 0
@@ -87,7 +100,9 @@ function promptParts(value: string) {
     const mention = match[0]
     const start = match.index ?? cursor
     const previous = start > 0 ? value[start - 1] : ""
-    if (start > 0 && !/\s/.test(previous)) continue
+    const separated = start === 0 || /\s/.test(previous)
+    if (!separated) continue
+
     pushText(value.slice(cursor, start))
 
     const path = mention.slice(1)
@@ -112,40 +127,46 @@ function promptParts(value: string) {
   if (parts.length === 0) {
     return [{ type: "text", content: value, start: 0, end: value.length }] satisfies Prompt
   }
+
   return parts
 }
 
 function parseBuilderSchedule(value: string | null | undefined) {
   const raw = value?.trim()
   if (!raw) return
+
   const lines = raw
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
   if (lines.length === 0) return
+
   const times: string[] = []
   let days: string[] | undefined
+
   for (const line of lines) {
     const parts = line.split(/\s+/)
     if (parts.length !== 5) return
+
     const minute = parts[0]
     const hour = parts[1]
     const day = parts[2]
     const month = parts[3]
     const week = parts[4]
     if (day !== "*" || month !== "*") return
+
     const parsedDays = parseDays(week)
     if (!parsedDays) return
+
     const time = parseTime(hour, minute)
     if (!time) return
-    if (!days) {
-      days = parsedDays
-    }
-    if (days.join(",") !== parsedDays.join(",")) {
-      return
-    }
+
+    if (days && days.join(",") !== parsedDays.join(",")) return
+    if (!days) days = parsedDays
+
     times.push(time)
   }
+
   return {
     days: days ?? dayOrder,
     times: [...new Set(times)].sort(),
@@ -155,7 +176,10 @@ function parseBuilderSchedule(value: string | null | undefined) {
 function buildSchedule(days: string[], times: string[]) {
   const normalizedDays = sortDays(days)
   const normalizedTimes = [...new Set(times)].filter(Boolean)
-  if (normalizedDays.length === 0 || normalizedTimes.length === 0) return ""
+
+  if (normalizedDays.length === 0) return ""
+  if (normalizedTimes.length === 0) return ""
+
   const dayList = normalizedDays.join(",")
   const lines = normalizedTimes
     .map((time) => {
@@ -163,12 +187,15 @@ function buildSchedule(days: string[], times: string[]) {
       const hour = parts[0]
       const minute = parts[1]
       if (!hour || !minute) return undefined
+
       const h = String(Number(hour)).padStart(2, "0")
       const m = String(Number(minute)).padStart(2, "0")
       if (!parseTime(h, m)) return undefined
+
       return `${m} ${h} * * ${dayList}`
     })
     .filter((line): line is string => !!line)
+
   return lines.join("\n")
 }
 
@@ -209,13 +236,17 @@ export function DialogAutomation(props: { automation?: Automation }) {
   let previewTimeout: ReturnType<typeof setTimeout> | undefined
   let previewId = 0
 
-  const title = () => (props.automation ? language.t("automations.edit.title") : language.t("automations.create.title"))
-  const projects = createMemo(() =>
-    globalSync.data.project
+  const title = () => {
+    if (props.automation) return language.t("automations.edit.title")
+    return language.t("automations.create.title")
+  }
+
+  const projects = createMemo(() => {
+    return globalSync.data.project
       .filter((project) => project.worktree && project.worktree !== "/")
       .slice()
-      .sort((a, b) => projectLabel(a).localeCompare(projectLabel(b))),
-  )
+      .sort((a, b) => projectLabel(a).localeCompare(projectLabel(b)))
+  })
   const home = createMemo(() => globalSync.data.path.home)
   const dayOptions = createMemo(() => [
     { key: "1", label: language.t("automations.day.mon") },
@@ -240,6 +271,7 @@ export function DialogAutomation(props: { automation?: Automation }) {
       times: defaultTimes,
     },
   ])
+
   const directory = createMemo(() => store.projects[0] ?? "")
   const clients = new Map<string, ReturnType<typeof createOpencodeClient>>()
   const clientFor = (dir: string) => {
@@ -254,6 +286,7 @@ export function DialogAutomation(props: { automation?: Automation }) {
     clients.set(dir, next)
     return next
   }
+
   const [customCommands] = createResource(directory, (dir) => {
     if (!dir) return []
     return clientFor(dir)
@@ -261,6 +294,7 @@ export function DialogAutomation(props: { automation?: Automation }) {
       .then((x) => x.data ?? [])
       .catch(() => [])
   })
+
   const [agents] = createResource(directory, (dir) => {
     if (!dir) return []
     return clientFor(dir)
@@ -268,6 +302,7 @@ export function DialogAutomation(props: { automation?: Automation }) {
       .then((x) => x.data ?? [])
       .catch(() => [])
   })
+
   const searchFiles = async (query: string) => {
     const dir = directory()
     if (!dir) return []
@@ -276,6 +311,7 @@ export function DialogAutomation(props: { automation?: Automation }) {
       .then((x) => x.data ?? [])
       .catch(() => [])
   }
+
   const slashCommands = createMemo<SlashCommand[]>(() => {
     const builtin = command.options
       .filter((opt) => !opt.disabled && !opt.id.startsWith("suggested.") && opt.slash)
@@ -297,6 +333,7 @@ export function DialogAutomation(props: { automation?: Automation }) {
     }))
     return [...custom, ...builtin]
   })
+
   const templates = createMemo<TemplateOption[]>(() => [
     {
       value: "{{date}}",
@@ -319,6 +356,7 @@ export function DialogAutomation(props: { automation?: Automation }) {
       description: language.t("automations.template.sessionQuery.description"),
     },
   ])
+
   const scheduleValue = createMemo(() => {
     if (store.mode === "cron") return store.schedule.trim()
     return buildSchedule(store.days, store.times)
@@ -327,30 +365,33 @@ export function DialogAutomation(props: { automation?: Automation }) {
     if (!store.enabled) return ""
     if (!scheduleValue()) return language.t("automations.form.schedule.invalid")
     if (preview.loading) return ""
-    if (preview.error) {
-      return language.t("automations.form.schedule.invalidCron", { error: preview.error })
-    }
-    return ""
+    if (!preview.error) return ""
+
+    return language.t("automations.form.schedule.invalidCron", { error: preview.error })
   })
   const schedulePreview = createMemo(() => {
     if (!store.enabled) return ""
     if (!scheduleValue()) return ""
     if (preview.loading) return language.t("automations.form.schedule.calculating")
     if (preview.error) return ""
+
     const next = preview.nextRun
     const label = next
       ? DateTime.fromMillis(next).toLocaleString(DateTime.DATETIME_SHORT)
       : language.t("automations.time.never")
     return `${language.t("automations.form.schedule.nextRun")}: ${label}`
   })
+
   const handlePromptChange = (value: Prompt) => {
     setStore({ parts: value, prompt: promptText(value) })
   }
   const scheduleReady = createMemo(() => {
     if (!store.enabled) return true
+
     if (!scheduleValue()) return false
     if (preview.loading) return false
     if (preview.error) return false
+
     return true
   })
   const canSave = createMemo(() => {
@@ -358,6 +399,7 @@ export function DialogAutomation(props: { automation?: Automation }) {
     if (!store.prompt.trim()) return false
     if (store.projects.length === 0) return false
     if (!scheduleReady()) return false
+
     return true
   })
 
@@ -406,6 +448,7 @@ export function DialogAutomation(props: { automation?: Automation }) {
       setStore("days", (prev) => sortDays([...prev, day]))
       return
     }
+
     setStore("days", (prev) => prev.filter((item) => item !== day))
   }
 
@@ -427,15 +470,20 @@ export function DialogAutomation(props: { automation?: Automation }) {
 
   function toggleProject(directory: string, checked: boolean) {
     if (checked) {
-      setStore("projects", (prev) => (prev.includes(directory) ? prev : [...prev, directory]))
+      setStore("projects", (prev) => {
+        if (prev.includes(directory)) return prev
+        return [...prev, directory]
+      })
       return
     }
+
     setStore("projects", (prev) => prev.filter((item) => item !== directory))
   }
 
   async function handleSave() {
     if (!canSave()) return
     setStore("saving", true)
+
     const schedule = scheduleValue()
     const savedSchedule = schedule ? schedule : null
     const payload = {
@@ -448,6 +496,7 @@ export function DialogAutomation(props: { automation?: Automation }) {
     const request = props.automation
       ? globalSDK.client.automation.update({ automationID: props.automation.id, ...payload })
       : globalSDK.client.automation.create(payload)
+
     await request.then(() => dialog.close()).finally(() => setStore("saving", false))
   }
 

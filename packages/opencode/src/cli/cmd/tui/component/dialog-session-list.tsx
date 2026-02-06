@@ -48,14 +48,15 @@ export function DialogSessionList() {
         const isDeleting = toDelete() === x.id
         const status = sync.data.session_status?.[x.id]
         const isWorking = status?.type === "busy"
-        const gutter = x.automation ? <text fg={theme.info}>A</text> : undefined
+        const automation = x.automation ? <text fg={theme.info}>A</text> : undefined
+        const gutter = isWorking ? <Spinner /> : automation
         return {
           title: isDeleting ? `Press ${keybind.print("session_delete")} again to confirm` : x.title,
           bg: isDeleting ? theme.error : undefined,
           value: x.id,
           category,
           footer: Locale.time(x.time.updated),
-          gutter: isWorking ? <Spinner /> : gutter,
+          gutter,
         }
       })
   })

@@ -21,6 +21,7 @@ export function DialogConfirm(props: {
   const handleConfirm = async () => {
     if (store.confirming) return
     setStore("confirming", true)
+
     await Promise.resolve(props.onConfirm())
       .then(() => {
         dialog.close()
@@ -32,6 +33,7 @@ export function DialogConfirm(props: {
 
   const handleCancel = () => {
     if (store.confirming) return
+
     props.onCancel?.()
     dialog.close()
   }
