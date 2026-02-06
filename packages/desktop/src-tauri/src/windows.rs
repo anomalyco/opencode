@@ -2,9 +2,7 @@ use crate::constants::{UPDATER_ENABLED, window_state_flags};
 use std::{ops::Deref, time::Duration};
 #[cfg(windows)]
 use tauri::Manager;
-use tauri::{
-    AppHandle, LogicalSize, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
-};
+use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_window_state::AppHandleExt;
 use tokio::sync::mpsc;
 
