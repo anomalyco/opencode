@@ -6,7 +6,7 @@ Refactor `context/file.tsx` into focused modules with unchanged API.
 
 ### Summary
 
-`packages/app/src/context/file.tsx` currently combines path normalization, file-content caching/eviction, file-tree loading, watcher event handling, and per-session file-view persistence. This spec separates those concerns into clear modules while preserving the existing `useFile()` interface.
+`packages/app/src/context/file.tsx` still combines path normalization, file-content caching/eviction, file-tree loading, watcher event handling, and file-view persistence orchestration. Recent refactoring extracted generic scoped-cache primitives to `packages/app/src/utils/scoped-cache.ts`, but most file-domain behavior remains in one module. This spec separates those concerns while preserving the existing `useFile()` interface.
 
 ---
 
@@ -33,6 +33,7 @@ This workstream owns:
 
 - `packages/app/src/context/file.tsx`
 - New files under `packages/app/src/context/file/**`
+- `packages/app/src/utils/scoped-cache.ts` (only when required for file-view cache extraction)
 
 This workstream must not edit:
 
@@ -44,7 +45,8 @@ This workstream must not edit:
 
 ### Current state
 
-- File size: ~729 LOC.
+- File size: ~751 LOC.
+- `packages/app/src/utils/scoped-cache.ts` now exists as a shared cache primitive used by file view persistence.
 - Multiple domains in one module:
   - path normalization/parsing
   - LRU content memory management
@@ -60,7 +62,7 @@ Create `packages/app/src/context/file/` modules such as:
 
 - `path.ts` - normalize/strip helpers.
 - `content-cache.ts` - content LRU + byte caps.
-- `view-cache.ts` - per-session file view persistence cache.
+- `view-cache.ts` - per-session file view persistence cache (building on `createScopedCache`).
 - `tree-store.ts` - directory/node store and list/expand/collapse actions.
 - `watcher.ts` - watcher event handling and invalidation routines.
 
@@ -72,7 +74,7 @@ Create `packages/app/src/context/file/` modules such as:
 
 1. Extract path helper functions with no behavior changes.
 2. Extract content cache and eviction logic.
-3. Extract view-cache loading/pruning logic.
+3. Extract file-specific view-cache loading/pruning logic on top of `createScopedCache`.
 4. Extract tree-store list/refresh/toggle actions.
 5. Extract watcher update handler and wire cleanup.
 6. Keep `useFile()` return shape unchanged.

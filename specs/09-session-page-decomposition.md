@@ -6,7 +6,7 @@ Split `pages/session.tsx` into focused modules without behavior changes.
 
 ### Summary
 
-`packages/app/src/pages/session.tsx` is currently a 3,700+ line file with rendering, keyboard handling, scroll logic, review-panel logic, file-view wiring, and terminal panel coordination mixed together. This spec extracts high-cohesion modules so the session page is easier to reason about and safer to change.
+`packages/app/src/pages/session.tsx` is still a large (~3,655 LOC) route coordinator. Recent refactoring already extracted `packages/app/src/pages/session/helpers.ts` and `packages/app/src/pages/session/scroll-spy.ts`, but review-panel wiring, message timeline orchestration, file-tab rendering, and terminal coordination remain tightly coupled. This spec continues the decomposition from that updated baseline.
 
 ---
 
@@ -45,19 +45,22 @@ This workstream must not edit:
 
 ### Current state
 
-- File size: ~3,735 LOC.
-- High effect density (`createEffect`) and local-state density (`createStore` + `createSignal`).
-- Deeply interleaved responsibilities:
-  - review panel state + scrolling
-  - message timeline + hash navigation
+- File size: ~3,655 LOC.
+- Existing extracted modules:
+  - `packages/app/src/pages/session/helpers.ts` (terminal focus and shared handlers)
+  - `packages/app/src/pages/session/scroll-spy.ts` (message visibility + active-section tracking)
+- High effect density (`createEffect`) and local-state density (`createStore` + `createSignal`) remain in `session.tsx`.
+- Remaining interleaved responsibilities:
+  - review panel state + scrolling integration
+  - message timeline + hash navigation wiring
   - file tab renderers + per-tab scroll sync
-  - terminal panel coordination
+  - terminal panel and tab coordination
 
 ---
 
 ### Proposed module split
 
-Create a `packages/app/src/pages/session/` directory with modules such as:
+Build on the existing `packages/app/src/pages/session/` directory and keep current extracted helpers in place. Add modules such as:
 
 - `review-panel.tsx` - review tab rendering and focused diff logic.
 - `message-timeline.tsx` - session turn rendering and active message tracking UI wiring.
@@ -71,7 +74,7 @@ Create a `packages/app/src/pages/session/` directory with modules such as:
 
 ### Phased steps
 
-1. Extract pure helper functions first (no behavior changes).
+1. Keep `helpers.ts` and `scroll-spy.ts` as baseline; extract any additional pure helpers first (no behavior changes).
 2. Extract review panel subtree and related handlers.
 3. Extract file-tab subtree and scroll synchronization logic.
 4. Extract terminal panel subtree.

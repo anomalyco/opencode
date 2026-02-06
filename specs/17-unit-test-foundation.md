@@ -6,7 +6,7 @@ Establish reliable unit coverage for core app logic.
 
 ### Summary
 
-`packages/app` is heavily e2e-focused but has very little active unit coverage in `src`, and both existing unit test files are currently skipped. This spec creates a stable unit-test baseline that runs quickly in CI/local and catches logic regressions earlier.
+`packages/app` is still e2e-first, but recent refactoring added a first wave of active source-unit tests (session helpers/scroll spy, prompt-input modules, file-tree, comments/layout/terminal/file context, and scoped-cache). This spec focuses on turning that momentum into a stable, explicit unit-test baseline in CI/local and unblocking the remaining skipped legacy suites.
 
 ---
 
@@ -42,10 +42,11 @@ This workstream should avoid editing product code files owned by other specs, un
 
 ### Current state
 
-- Unit tests in `src` are limited and skipped:
+- Active unit coverage now exists across several `src/**/*.test.*` files (including context, pages/session, components/prompt-input, and utils).
+- Remaining skipped legacy suites:
   - `src/context/layout-scroll.test.ts` (`test.skip`)
   - `src/addons/serialize.test.ts` (`describe.skip`)
-- Test scripts focus on Playwright e2e.
+- `package.json` scripts still focus on Playwright e2e and do not expose a dedicated `test:unit` entrypoint.
 
 ---
 
@@ -55,12 +56,12 @@ This workstream should avoid editing product code files owned by other specs, un
 
 - `test:unit` using Bun test + happydom preload where needed.
 
-2. Unskip and stabilize existing tests:
+2. Unskip and stabilize remaining skipped legacy tests:
 
 - make `layout-scroll.test.ts` deterministic
 - enable a reliable subset of `serialize.test.ts` (or split smoke vs heavy integration cases)
 
-3. Add new fast unit tests for pure logic already exposed by source:
+3. Add/expand fast unit tests for high-value pure logic not yet covered:
 
 - keybind parsing/formatting/matching (`context/command.tsx` exports)
 - worktree state machine (`utils/worktree.ts`)

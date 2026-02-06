@@ -6,7 +6,7 @@ Decompose prompt-input and unify optimistic message mutations.
 
 ### Summary
 
-`packages/app/src/components/prompt-input.tsx` is a 2,100+ line component that mixes editor UI, slash/mention state, prompt history, submission orchestration, worktree waiting, and optimistic message mutation. Optimistic updates are duplicated across call sites and should have one source of truth.
+`packages/app/src/components/prompt-input.tsx` has already been partially decomposed and is now ~1,391 LOC. Editor DOM helpers, attachments, history, and submit flow were extracted into `packages/app/src/components/prompt-input/*.ts`, but optimistic mutation ownership and some UI/controller responsibilities are still split across call sites. This spec continues from that refactored baseline.
 
 ---
 
@@ -46,24 +46,30 @@ This workstream must not edit:
 
 ### Current state
 
-- File size: ~2,196 LOC.
-- Duplicated optimistic mutation patterns in prompt send flow.
-- Multiple concerns tightly coupled in one component:
-  - input rendering and keyboard handling
-  - context pill interactions
-  - history persistence
-  - submission + abort + worktree wait
+- File size: ~1,391 LOC for `prompt-input.tsx`.
+- Existing extracted modules:
+  - `prompt-input/editor-dom.ts`
+  - `prompt-input/attachments.ts`
+  - `prompt-input/history.ts`
+  - `prompt-input/submit.ts`
+- Optimistic mutation and request-part casting still need consolidation (including remaining `as unknown as Part[]` in submit path).
+- Remaining concerns still tightly coupled in `prompt-input.tsx`:
+  - slash/mention UI rendering and keyboard orchestration
+  - context pill interactions and focus behavior
+  - composition glue across history/attachments/submit
 
 ---
 
 ### Proposed structure
 
-Create `packages/app/src/components/prompt-input/` modules such as:
+Build on the existing `packages/app/src/components/prompt-input/` modules by adding/further splitting modules such as:
 
 - `use-prompt-composer.ts` - state machine for submit/abort/history.
 - `build-request-parts.ts` - typed request-part construction.
 - `slash-popover.tsx` - slash command list rendering.
 - `context-items.tsx` - context pills and interactions.
+
+Keep existing lower-level modules (`attachments.ts`, `editor-dom.ts`, `history.ts`, `submit.ts`) and narrow their responsibilities where needed.
 
 Add sync-level optimistic APIs (in `context/sync.tsx` or `context/sync-optimistic.ts`):
 
@@ -76,10 +82,10 @@ Prompt input should call these APIs instead of directly mutating message/part st
 
 ### Phased steps
 
-1. Extract typed request-part builder to remove ad hoc casting.
+1. Extract typed request-part builder (likely from `prompt-input/submit.ts`) to remove ad hoc casting.
 2. Introduce sync optimistic APIs with current behavior.
-3. Replace prompt-input direct `produce(...)` mutations with optimistic APIs.
-4. Extract UI subtrees (slash popover, context items, toolbar controls).
+3. Replace remaining direct `produce(...)` optimistic mutations with optimistic APIs.
+4. Extract remaining UI subtrees (slash popover, context items, toolbar controls).
 5. Extract controller hook and keep route component as composition shell.
 
 ---
