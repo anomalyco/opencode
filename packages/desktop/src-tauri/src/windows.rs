@@ -127,7 +127,7 @@ fn base_window_config<'a, R: Runtime, M: Manager<R>>(
         .additional_browser_args(
             "--proxy-bypass-list=<-loopback> --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection",
         )
-        .data_directory(_app.path().config_dir().expect("Failed to get config dir").join(_app.config().product_name.unwrap()))
+        .data_directory(_app.path().config_dir().expect("Failed to get config dir").join(_app.config().product_name.clone().unwrap()))
         .decorations(false);
 
     #[cfg(target_os = "macos")]
