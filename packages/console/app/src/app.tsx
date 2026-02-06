@@ -8,11 +8,13 @@ import "@ibm/plex/css/ibm-plex.css"
 import "./app.css"
 import { LanguageProvider } from "~/context/language"
 import { I18nProvider } from "~/context/i18n"
+import { strip } from "~/lib/language"
 
 export default function App() {
   return (
     <Router
       explicitLinks={true}
+      transformUrl={strip}
       root={(props) => (
         <LanguageProvider>
           <I18nProvider>

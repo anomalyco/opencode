@@ -15,6 +15,7 @@ import { Modal } from "~/component/modal"
 import { BillingTable } from "@opencode-ai/console-core/schema/billing.sql.js"
 import { Billing } from "@opencode-ai/console-core/billing.js"
 import { useI18n } from "~/context/i18n"
+import { useLanguage } from "~/context/language"
 import { formError } from "~/lib/form-error"
 
 const plansMap = Object.fromEntries(plans.map((p) => [p.id, p])) as Record<PlanID, (typeof plans)[number]>
@@ -267,6 +268,7 @@ function IntentForm(props: { plan: PlanID; workspaceID: string; onSuccess: (data
 export default function BlackSubscribe() {
   const params = useParams()
   const i18n = useI18n()
+  const language = useLanguage()
   const planData = plansMap[(params.plan as PlanID) ?? "20"] ?? plansMap["20"]
   const plan = planData.id
 
@@ -467,7 +469,7 @@ export default function BlackSubscribe() {
         </Modal>
         <p data-slot="fine-print">
           {i18n.t("black.finePrint.beforeTerms")} ·{" "}
-          <A href="/legal/terms-of-service">{i18n.t("black.finePrint.terms")}</A>
+          <A href={language.route("/legal/terms-of-service")}>{i18n.t("black.finePrint.terms")}</A>
         </p>
       </section>
     </>

@@ -1,9 +1,8 @@
 import "./index.css"
 import { createAsync, query, redirect } from "@solidjs/router"
-import { Title, Meta, Link } from "@solidjs/meta"
+import { Title, Meta } from "@solidjs/meta"
 //import { HttpHeader } from "@solidjs/start"
 import zenLogoLight from "../../asset/zen-ornate-light.svg"
-import { config } from "~/config"
 import zenLogoDark from "../../asset/zen-ornate-dark.svg"
 import compareVideo from "../../asset/lander/opencode-comparison-min.mp4"
 import compareVideoPoster from "../../asset/lander/opencode-comparison-poster.png"
@@ -20,6 +19,8 @@ import { Header } from "~/component/header"
 import { getLastSeenWorkspaceID } from "../workspace/common"
 import { IconGemini, IconMiniMax, IconZai } from "~/component/icon"
 import { useI18n } from "~/context/i18n"
+import { useLanguage } from "~/context/language"
+import { LocaleLinks } from "~/component/locale-links"
 
 const checkLoggedIn = query(async () => {
   "use server"
@@ -30,11 +31,12 @@ const checkLoggedIn = query(async () => {
 export default function Home() {
   const loggedin = createAsync(() => checkLoggedIn())
   const i18n = useI18n()
+  const language = useLanguage()
   return (
     <main data-page="zen">
       {/*<HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />*/}
       <Title>{i18n.t("zen.title")}</Title>
-      <Link rel="canonical" href={`${config.baseUrl}/zen`} />
+      <LocaleLinks path="/zen" />
       <Meta property="og:image" content="/social-share-zen.png" />
       <Meta name="twitter:image" content="/social-share-zen.png" />
       <Meta name="opencode:auth" content={loggedin() ? "true" : "false"} />
@@ -120,7 +122,7 @@ export default function Home() {
                   </svg>
                 </div>
               </div>
-              <a href="/auth">
+              <a href={language.route("/auth")}>
                 <span>{i18n.t("zen.cta.start")}</span>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path
@@ -175,7 +177,7 @@ export default function Home() {
                 <span>[1]</span>
                 <div>
                   <strong>{i18n.t("zen.how.step1.title")}</strong> - {i18n.t("zen.how.step1.beforeLink")}{" "}
-                  <a href="/docs/zen/#how-it-works" title={i18n.t("zen.how.step1.link")}>
+                  <a href={language.route("/docs/zen/#how-it-works")} title={i18n.t("zen.how.step1.link")}>
                     {i18n.t("zen.how.step1.link")}
                   </a>
                 </div>
@@ -184,7 +186,8 @@ export default function Home() {
                 <span>[2]</span>
                 <div>
                   <strong>{i18n.t("zen.how.step2.title")}</strong> -{" "}
-                  <a href="/docs/zen/#pricing">{i18n.t("zen.how.step2.link")}</a> {i18n.t("zen.how.step2.afterLink")}
+                  <a href={language.route("/docs/zen/#pricing")}>{i18n.t("zen.how.step2.link")}</a>{" "}
+                  {i18n.t("zen.how.step2.afterLink")}
                 </div>
               </li>
               <li>
@@ -203,7 +206,7 @@ export default function Home() {
                 <span>[*]</span>
                 <p>
                   {i18n.t("zen.privacy.beforeExceptions")}{" "}
-                  <a href="/docs/zen/#privacy">{i18n.t("zen.privacy.exceptionsLink")}</a>.
+                  <a href={language.route("/docs/zen/#privacy")}>{i18n.t("zen.privacy.exceptionsLink")}</a>.
                 </p>
               </div>
             </div>
@@ -299,15 +302,15 @@ export default function Home() {
               <li>
                 <Faq question={i18n.t("zen.faq.q4")}>
                   {i18n.t("zen.faq.a4.p1.beforePricing")}{" "}
-                  <a href="/docs/zen/#pricing">{i18n.t("zen.faq.a4.p1.pricingLink")}</a>{" "}
+                  <a href={language.route("/docs/zen/#pricing")}>{i18n.t("zen.faq.a4.p1.pricingLink")}</a>{" "}
                   {i18n.t("zen.faq.a4.p1.afterPricing")} {i18n.t("zen.faq.a4.p2.beforeAccount")}{" "}
-                  <a href="/auth">{i18n.t("zen.faq.a4.p2.accountLink")}</a>. {i18n.t("zen.faq.a4.p3")}
+                  <a href={language.route("/auth")}>{i18n.t("zen.faq.a4.p2.accountLink")}</a>. {i18n.t("zen.faq.a4.p3")}
                 </Faq>
               </li>
               <li>
                 <Faq question={i18n.t("zen.faq.q5")}>
                   {i18n.t("zen.faq.a5.beforeExceptions")}{" "}
-                  <a href="/docs/zen/#privacy">{i18n.t("zen.faq.a5.exceptionsLink")}</a>.
+                  <a href={language.route("/docs/zen/#privacy")}>{i18n.t("zen.faq.a5.exceptionsLink")}</a>.
                 </Faq>
               </li>
               <li>

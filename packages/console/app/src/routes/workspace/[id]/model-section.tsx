@@ -17,6 +17,7 @@ import {
   IconZai,
 } from "~/component/icon"
 import { useI18n } from "~/context/i18n"
+import { useLanguage } from "~/context/language"
 import { formError } from "~/lib/form-error"
 
 const getModelLab = (modelId: string) => {
@@ -80,6 +81,7 @@ const updateModel = action(async (form: FormData) => {
 export function ModelSection() {
   const params = useParams()
   const i18n = useI18n()
+  const language = useLanguage()
   const modelsInfo = createAsync(() => getModelsInfo(params.id!))
   const userInfo = createAsync(() => querySessionInfo(params.id!))
 
@@ -96,8 +98,8 @@ export function ModelSection() {
       <div data-slot="section-title">
         <h2>{i18n.t("workspace.models.title")}</h2>
         <p>
-          {i18n.t("workspace.models.subtitle.beforeLink")} <a href="/docs/zen#pricing ">{i18n.t("common.learnMore")}</a>
-          .
+          {i18n.t("workspace.models.subtitle.beforeLink")}{" "}
+          <a href={language.route("/docs/zen#pricing")}>{i18n.t("common.learnMore")}</a>.
         </p>
       </div>
       <div data-slot="models-list">

@@ -6,6 +6,7 @@ import logoDark from "../asset/logo-ornate-dark.svg"
 import IMG_SPLASH from "../asset/lander/screenshot-splash.png"
 import { IconCopy, IconCheck } from "../component/icon"
 import { useI18n } from "~/context/i18n"
+import { useLanguage } from "~/context/language"
 
 function CopyStatus() {
   return (
@@ -18,6 +19,7 @@ function CopyStatus() {
 
 export default function Home() {
   const i18n = useI18n()
+  const language = useLanguage()
 
   onMount(() => {
     const commands = document.querySelectorAll("[data-copy]")
@@ -49,16 +51,16 @@ export default function Home() {
           <img data-slot="logo dark" src={logoDark} alt="opencode logo dark" />
           <h1 data-slot="title">{i18n.t("temp.hero.title")}</h1>
           <div data-slot="login">
-            <a href="/auth">{i18n.t("temp.zen")}</a>
+            <a href={language.route("/auth")}>{i18n.t("temp.zen")}</a>
           </div>
         </section>
 
         <section data-component="cta">
           <div data-slot="left">
-            <a href="/docs">{i18n.t("temp.getStarted")}</a>
+            <a href={language.route("/docs")}>{i18n.t("temp.getStarted")}</a>
           </div>
           <div data-slot="center">
-            <a href="/auth">{i18n.t("temp.zen")}</a>
+            <a href={language.route("/auth")}>{i18n.t("temp.zen")}</a>
           </div>
           <div data-slot="right">
             <button data-copy data-slot="command">
@@ -83,8 +85,8 @@ export default function Home() {
             </li>
             <li>
               <strong>{i18n.t("temp.zen")}</strong> {i18n.t("temp.feature.zen.beforeLink")}{" "}
-              <a href="/docs/zen">{i18n.t("temp.feature.zen.link")}</a> {i18n.t("temp.feature.zen.afterLink")}{" "}
-              <label>{i18n.t("home.banner.badge")}</label>
+              <a href={language.route("/docs/zen")}>{i18n.t("temp.feature.zen.link")}</a>{" "}
+              {i18n.t("temp.feature.zen.afterLink")} <label>{i18n.t("home.banner.badge")}</label>
             </li>
             <li>
               <strong>{i18n.t("home.what.multiSession.title")}</strong> {i18n.t("home.what.multiSession.body")}
@@ -148,7 +150,7 @@ export default function Home() {
         <section data-component="screenshots">
           <figure>
             <figcaption>{i18n.t("temp.screenshot.caption")}</figcaption>
-            <a href="/docs/cli">
+            <a href={language.route("/docs/cli")}>
               <img src={IMG_SPLASH} alt={i18n.t("temp.screenshot.alt")} />
             </a>
           </figure>

@@ -1,5 +1,5 @@
 import { A, createAsync, RouteSectionProps } from "@solidjs/router"
-import { Title, Meta, Link } from "@solidjs/meta"
+import { Title, Meta } from "@solidjs/meta"
 import { createMemo, createSignal } from "solid-js"
 import { github } from "~/lib/github"
 import { config } from "~/config"
@@ -7,6 +7,7 @@ import { useLanguage } from "~/context/language"
 import { LanguagePicker } from "~/component/language-picker"
 import { useI18n } from "~/context/i18n"
 import Spotlight, { defaultConfig, type SpotlightAnimationState } from "~/component/spotlight"
+import { LocaleLinks } from "~/component/locale-links"
 import "./black.css"
 
 export default function BlackLayout(props: RouteSectionProps) {
@@ -70,9 +71,9 @@ export default function BlackLayout(props: RouteSectionProps) {
     <div data-page="black">
       <Title>{i18n.t("black.meta.title")}</Title>
       <Meta name="description" content={i18n.t("black.meta.description")} />
-      <Link rel="canonical" href={`${config.baseUrl}/black`} />
+      <LocaleLinks path="/black" />
       <Meta property="og:type" content="website" />
-      <Meta property="og:url" content={`${config.baseUrl}/black`} />
+      <Meta property="og:url" content={`${config.baseUrl}${language.route("/black")}`} />
       <Meta property="og:title" content={i18n.t("black.meta.title")} />
       <Meta property="og:description" content={i18n.t("black.meta.description")} />
       <Meta property="og:image" content="/social-share-black.png" />
@@ -84,7 +85,7 @@ export default function BlackLayout(props: RouteSectionProps) {
       <Spotlight config={spotlightConfig} class="header-spotlight" onAnimationFrame={handleAnimationFrame} />
 
       <header data-component="header">
-        <A href="/" data-component="header-logo">
+        <A href={language.route("/")} data-component="header-logo">
           <svg xmlns="http://www.w3.org/2000/svg" width="179" height="32" viewBox="0 0 179 32" fill="none">
             <title>opencode</title>
             <g clip-path="url(#clip0_3654_210259)">
@@ -264,13 +265,13 @@ export default function BlackLayout(props: RouteSectionProps) {
           <a href={config.github.repoUrl} target="_blank">
             {i18n.t("nav.github")} <span data-slot="github-stars">[{starCount()}]</span>
           </a>
-          <a href="/docs">{i18n.t("nav.docs")}</a>
+          <a href={language.route("/docs")}>{i18n.t("nav.docs")}</a>
           <LanguagePicker align="right" />
           <span>
-            <A href="/legal/privacy-policy">{i18n.t("legal.privacy")}</A>
+            <A href={language.route("/legal/privacy-policy")}>{i18n.t("legal.privacy")}</A>
           </span>
           <span>
-            <A href="/legal/terms-of-service">{i18n.t("legal.terms")}</A>
+            <A href={language.route("/legal/terms-of-service")}>{i18n.t("legal.terms")}</A>
           </span>
         </div>
         <span data-slot="anomaly-alt">

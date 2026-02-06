@@ -21,6 +21,12 @@ export const LOCALES = [
 export type Locale = (typeof LOCALES)[number]
 
 export const LOCALE_COOKIE = "oc_locale" as const
+export const LOCALE_HEADER = "x-opencode-locale" as const
+
+function fix(pathname: string) {
+  if (pathname.startsWith("/")) return pathname
+  return `/${pathname}`
+}
 
 const LABEL = {
   en: "English",
@@ -66,6 +72,28 @@ export function parseLocale(value: unknown): Locale | null {
   if (typeof value !== "string") return null
   if ((LOCALES as readonly string[]).includes(value)) return value as Locale
   return null
+}
+
+export function fromPathname(pathname: string) {
+  return parseLocale(fix(pathname).split("/")[1])
+}
+
+export function strip(pathname: string) {
+  const locale = fromPathname(pathname)
+  if (!locale) return fix(pathname)
+
+  const next = fix(pathname).slice(locale.length + 1)
+  if (!next) return "/"
+  if (next.startsWith("/")) return next
+  return `/${next}`
+}
+
+export function route(locale: Locale, pathname: string) {
+  const next = strip(pathname)
+  if (next.startsWith("/docs")) return next
+  if (locale === "en") return next
+  if (next === "/") return `/${locale}`
+  return `/${locale}${next}`
 }
 
 export function label(locale: Locale) {
@@ -160,6 +188,12 @@ export function localeFromCookieHeader(header: string | null) {
 }
 
 export function localeFromRequest(request: Request) {
+  const fromHeader = parseLocale(request.headers.get(LOCALE_HEADER))
+  if (fromHeader) return fromHeader
+
+  const fromPath = fromPathname(new URL(request.url).pathname)
+  if (fromPath) return fromPath
+
   return (
     localeFromCookieHeader(request.headers.get("cookie")) ??
     detectFromAcceptLanguage(request.headers.get("accept-language"))

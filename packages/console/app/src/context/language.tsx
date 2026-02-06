@@ -13,6 +13,7 @@ import {
   localeFromCookieHeader,
   localeFromRequest,
   parseLocale,
+  route as localeRoute,
   tag as localeTag,
 } from "~/lib/language"
 
@@ -54,6 +55,9 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       label: localeLabel,
       tag: localeTag,
       dir: localeDir,
+      route(pathname: string) {
+        return localeRoute(store.locale, pathname)
+      },
       setLocale(next: Locale) {
         setStore("locale", next)
         if (typeof document !== "object") return
