@@ -23,7 +23,14 @@ export namespace ToolDependency {
   }
 
   function isFilePath(input: unknown): input is string {
-    return typeof input === "string" && (input.startsWith("/") || input.startsWith("./") || input.startsWith("../"))
+    if (typeof input !== "string") return false
+    return (
+      input.startsWith("/") ||
+      input.startsWith("./") ||
+      input.startsWith("../") ||
+      /^[a-zA-Z]:[\\/]/.test(input) ||
+      input.startsWith("\\\\")
+    )
   }
 
   function extractPathsFromInput(input: Record<string, any>): Set<string> {
@@ -53,6 +60,17 @@ export namespace ToolDependency {
 
     traverse(input)
     return paths
+  }
+
+  function extractLockFilesFromCommand(command: string): Set<string> {
+    const locks = new Set<string>()
+    const sharedDeps = ["package.json", "package-lock.json", "bun.lockb", "pnpm-lock.yaml", "yarn.lock"]
+    for (const dep of sharedDeps) {
+      if (command.includes(dep)) {
+        locks.add(dep)
+      }
+    }
+    return locks
   }
 
   function getToolDependencies(
@@ -292,5 +310,33 @@ export namespace ToolDependency {
     }
 
     return true
+  }
+
+  export function resourceKeys(call: MessageV2.ToolPart): Set<string> {
+    const keys = new Set<string>()
+    const input = call.state.input as Record<string, any>
+    const paths = extractPathsFromInput(input)
+    const normalize = (p: string) => {
+      let v = p.replaceAll("\\", "/")
+      v = v.replace(/^([A-Z]):/, (m, d: string) => `${d.toLowerCase()}:`)
+      if (v.endsWith("/")) v = v.slice(0, -1)
+      return v
+    }
+    for (const p of paths) {
+      keys.add(normalize(p))
+    }
+
+    if (call.tool === "bash") {
+      const cmd = String(input.cmd ?? input.command ?? "")
+      const locks = extractLockFilesFromCommand(cmd)
+      for (const lock of locks) {
+        keys.add(lock)
+      }
+    }
+
+    if (keys.size === 0) {
+      keys.add(`tool:${call.tool}`)
+    }
+    return keys
   }
 }

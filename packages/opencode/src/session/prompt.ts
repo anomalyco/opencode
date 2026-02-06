@@ -279,11 +279,90 @@ export namespace SessionPrompt {
 
     let step = 0
     const session = await Session.get(sessionID)
+    const messageMap = new Map<string, MessageV2.WithParts>()
+    let initialized = false
+
+    function filterCompactedFromArray(messages: MessageV2.WithParts[]) {
+      const result: MessageV2.WithParts[] = []
+      const completed = new Set<string>()
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const msg = messages[i]!
+        result.push(msg)
+        if (
+          msg.info.role === "user" &&
+          completed.has(msg.info.id) &&
+          msg.parts.some((part) => part.type === "compaction")
+        ) {
+          break
+        }
+        if (msg.info.role === "assistant" && (msg.info as MessageV2.Assistant).summary && msg.info.finish) {
+          completed.add((msg.info as MessageV2.Assistant).parentID)
+        }
+      }
+      result.reverse()
+      return result
+    }
+
+    async function ensureMessagesLoaded() {
+      if (initialized) return
+      const initial = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
+      for (const msg of initial) {
+        messageMap.set(msg.info.id, msg)
+      }
+      initialized = true
+    }
+
+    function getMessagesSnapshot() {
+      const all = Array.from(messageMap.values()).toSorted((a, b) => (a.info.id > b.info.id ? 1 : -1))
+      return filterCompactedFromArray(all)
+    }
+
+    const unsubUpdated = Bus.subscribe(MessageV2.Event.Updated, (event) => {
+      const info = event.properties.info
+      if (info.sessionID !== sessionID) return
+      const existing = messageMap.get(info.id)
+      if (existing) {
+        existing.info = info
+        return
+      }
+      messageMap.set(info.id, { info, parts: [] })
+    })
+    const unsubPartUpdated = Bus.subscribe(MessageV2.Event.PartUpdated, (event) => {
+      const part = event.properties.part
+      if (part.sessionID !== sessionID) return
+      const msg = messageMap.get(part.messageID)
+      if (!msg) return
+      const index = msg.parts.findIndex((p) => p.id === part.id)
+      if (index >= 0) msg.parts[index] = part
+      else msg.parts.push(part)
+      msg.parts.sort((a, b) => (a.id > b.id ? 1 : -1))
+    })
+    const unsubPartRemoved = Bus.subscribe(MessageV2.Event.PartRemoved, (event) => {
+      const { sessionID: s, messageID, partID } = event.properties
+      if (s !== sessionID) return
+      const msg = messageMap.get(messageID)
+      if (!msg) return
+      const index = msg.parts.findIndex((p) => p.id === partID)
+      if (index >= 0) msg.parts.splice(index, 1)
+    })
+    const unsubRemoved = Bus.subscribe(MessageV2.Event.Removed, (event) => {
+      const { sessionID: s, messageID } = event.properties
+      if (s !== sessionID) return
+      messageMap.delete(messageID)
+    })
+    using __ = defer(() => {
+      unsubUpdated()
+      unsubPartUpdated()
+      unsubPartRemoved()
+      unsubRemoved()
+    })
+
     while (true) {
       SessionStatus.set(sessionID, { type: "busy" })
       log.info("loop", { step, sessionID })
       if (abort.aborted) break
-      let msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
+      await ensureMessagesLoaded()
+      let msgs = getMessagesSnapshot()
 
       let lastUser: MessageV2.User | undefined
       let lastAssistant: MessageV2.Assistant | undefined

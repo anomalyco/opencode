@@ -8,15 +8,20 @@ import { Log } from "@/util/log"
 
 const log = Log.create({ service: "work-queue.loop" })
 
+const TICK_IDLE_TIMEOUT = 50
+const TICK_BUSY_TIMEOUT = 5
+
 export class EventLoop {
   private board: TaskSummaryBoard
   private decision: AgentDecisionCenter
-  private runningTasks: Set<string> = new Set()
+  private runningTasks: Map<string, { startTime: number; priority: number }> = new Map()
   private taskAbortControllers: Map<string, AbortController> = new Map()
   private maxConcurrency = 2
   private eventQueue: AsyncQueue<TaskEvent> = new AsyncQueue()
+  private pendingQueue: Map<string, number> = new Map()
   private abortController: AbortController
   private isRunning = false
+  private wakeUpResolver: (() => void) | null = null
 
   constructor(sessionID: string) {
     this.board = new TaskSummaryBoard()
@@ -45,8 +50,8 @@ export class EventLoop {
     })
 
     this.board.on(EVENTS.TASK_SUBMIT, (event) => {
-      if (event.taskID && this.canSchedule()) {
-        this.startTask(event.taskID)
+      if (event.taskID) {
+        this.queueTask(event.taskID)
       }
     })
 
@@ -57,6 +62,14 @@ export class EventLoop {
     this.board.on(EVENTS.USER_INTERRUPT, (event) => {
       this.onUserInterrupt(event)
     })
+  }
+
+  private queueTask(taskID: string): void {
+    const task = this.board.get(taskID)
+    if (!task) return
+
+    this.pendingQueue.set(taskID, task.priority)
+    this.wakeUp()
   }
 
   async start(): Promise<void> {
@@ -72,38 +85,84 @@ export class EventLoop {
       }
     }
 
+    this.cleanup()
     log.info("EventLoop stopped")
   }
 
   stop(): void {
     this.isRunning = false
     this.abortController.abort()
+    this.wakeUp()
+  }
+
+  private cleanup(): void {
+    for (const [, controller] of this.taskAbortControllers) {
+      controller.abort()
+    }
+    this.runningTasks.clear()
+    this.taskAbortControllers.clear()
+    this.pendingQueue.clear()
+  }
+
+  private wakeUp(): void {
+    if (this.wakeUpResolver) {
+      this.wakeUpResolver()
+      this.wakeUpResolver = null
+    }
   }
 
   private async tick(): Promise<void> {
+    const canSchedule = this.canSchedule()
+
+    if (canSchedule) {
+      const nextTask = this.getNextTask()
+      if (nextTask) {
+        const action = this.decision.decideNext(this.board)
+        if (action.type === "start_next" || action.type === "continue") {
+          await this.executeAction(action)
+          return
+        }
+      }
+
+      const action = this.decision.decideNext(this.board)
+      if (action.type !== "idle" && action.type !== "wait") {
+        await this.executeAction(action)
+        return
+      }
+    }
+
     const event = await Promise.race([
       this.eventQueue.next(),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 0)),
+      new Promise<null>((resolve) =>
+        setTimeout(() => resolve(null), canSchedule ? TICK_BUSY_TIMEOUT : TICK_IDLE_TIMEOUT),
+      ),
     ])
 
     if (event) {
       await this.handleEvent(event)
-      return
+    }
+  }
+
+  private getNextTask(): string | null {
+    let bestTask: string | null = null
+    let bestPriority = -Infinity
+
+    for (const [taskID, priority] of this.pendingQueue) {
+      const task = this.board.get(taskID)
+      if (task && task.status === "pending" && priority > bestPriority) {
+        bestPriority = priority
+        bestTask = taskID
+      }
     }
 
-    if (this.canSchedule()) {
-      const action = this.decision.decideNext(this.board)
-      await this.executeAction(action)
-    }
-
-    await Bun.sleep(10)
+    return bestTask
   }
 
   private async handleEvent(event: TaskEvent): Promise<void> {
     switch (event.type) {
       case EVENTS.TASK_SUBMIT:
-        if (event.taskID && this.canSchedule()) {
-          this.startTask(event.taskID)
+        if (event.taskID) {
+          this.queueTask(event.taskID)
         }
         break
       case EVENTS.USER_INPUT:
@@ -151,21 +210,32 @@ export class EventLoop {
       case "unblock":
         for (const taskID of action.taskIDs) {
           this.board.unblock(taskID)
+          this.pendingQueue.delete(taskID)
+          const task = this.board.get(taskID)
+          if (task) {
+            this.pendingQueue.set(taskID, task.priority)
+          }
         }
+        this.wakeUp()
         break
       case "handle_error":
         for (const taskID of action.taskIDs) {
+          this.pendingQueue.delete(taskID)
           this.board.error(taskID, "Task failed")
         }
         break
       case "idle":
       case "wait":
+      case "interrupt":
         break
     }
   }
 
   private canSchedule(): boolean {
-    return this.runningTasks.size < this.maxConcurrency
+    if (this.runningTasks.size >= this.maxConcurrency) return false
+    if (this.runningTasks.size === 0) return true
+    const oldestTask = Array.from(this.runningTasks.values()).reduce((a, b) => (a.startTime < b.startTime ? a : b))
+    return Date.now() - oldestTask.startTime > TICK_BUSY_TIMEOUT * 3
   }
 
   private startTask(taskID: string): void {
@@ -176,9 +246,10 @@ export class EventLoop {
     const controller = new AbortController()
     this.taskAbortControllers.set(taskID, controller)
     this.board.start(taskID)
-    log.info("Task started", { taskID, type: task.type })
+    log.info("Task started", { taskID, type: task.type, priority: task.priority })
 
-    this.runningTasks.add(taskID)
+    this.runningTasks.set(taskID, { startTime: Date.now(), priority: task.priority })
+    this.pendingQueue.delete(taskID)
     void this.runTask(task, controller)
   }
 
@@ -198,12 +269,21 @@ export class EventLoop {
       onProgress: (progress, summary) => {
         this.board.updateProgress(task.id, progress, summary)
       },
+      onHeartbeat: () => {
+        const taskInfo = this.runningTasks.get(task.id)
+        if (taskInfo) {
+          taskInfo.startTime = Date.now()
+        }
+      },
     }
 
     try {
       const result = await executor.execute(ctx)
       this.board.complete(task.id, result, "Task completed")
-      log.info("Task completed", { taskID: task.id })
+      log.info("Task completed", {
+        taskID: task.id,
+        duration: Date.now() - (this.runningTasks.get(task.id)?.startTime ?? Date.now()),
+      })
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error)
       this.board.error(task.id, errorMsg)
@@ -211,38 +291,41 @@ export class EventLoop {
     } finally {
       this.runningTasks.delete(task.id)
       this.taskAbortControllers.delete(task.id)
+      this.wakeUp()
     }
   }
 
-  private onTaskComplete(taskID: string): void {
+  private async onTaskComplete(taskID: string): Promise<void> {
     this.runningTasks.delete(taskID)
     this.taskAbortControllers.delete(taskID)
     const action = this.decision.handleTaskComplete(this.board, taskID)
-    this.executeAction(action)
+    await this.executeAction(action)
+    this.wakeUp()
   }
 
-  private onTaskError(taskID: string): void {
+  private async onTaskError(taskID: string): Promise<void> {
     const task = this.board.get(taskID)
     if (!task) return
     const action = this.decision.handleTaskError(this.board, [task])
-    this.executeAction(action)
+    await this.executeAction(action)
+    this.wakeUp()
   }
 
-  private onTaskBlocked(taskID: string): void {
+  private async onTaskBlocked(taskID: string): Promise<void> {
     const task = this.board.get(taskID)
     if (!task) return
     const action = this.decision.handleBlock(this.board, task)
-    this.executeAction(action)
+    await this.executeAction(action)
   }
 
-  private onUserInput(event: TaskEvent): void {
+  private async onUserInput(event: TaskEvent): Promise<void> {
     const input = event.data?.input
     if (!input) return
     const action = this.decision.handleUserInput(this.board, input)
-    this.executeAction(action)
+    await this.executeAction(action)
   }
 
-  private onUserInterrupt(event: TaskEvent): void {
+  private async onUserInterrupt(event: TaskEvent): Promise<void> {
     const current = this.board.getCurrentTask()
     if (!current) return
 
@@ -251,7 +334,9 @@ export class EventLoop {
       controller.abort()
     }
     this.runningTasks.delete(current.id)
+    this.taskAbortControllers.delete(current.id)
     this.board.pause(current.id, { interrupted: true, timestamp: Date.now() })
+    this.wakeUp()
   }
 
   publishEvent(type: EventType, data?: Record<string, any>): void {
@@ -262,13 +347,14 @@ export class EventLoop {
     return this.board
   }
 
-  getStats(): { running: string | null; pending: number; completed: number; error: number } {
+  getStats(): { running: string[]; pending: number; completed: number; error: number; queued: number } {
     const stats = this.board.stats()
     return {
-      running: this.runningTasks.values().next().value ?? null,
+      running: Array.from(this.runningTasks.keys()),
       pending: stats.pending + stats.blocked,
       completed: stats.completed,
       error: stats.error,
+      queued: this.pendingQueue.size,
     }
   }
 }

@@ -40,6 +40,7 @@ export namespace LLM {
     small?: boolean
     tools: Record<string, Tool>
     retries?: number
+    config?: Config.Info
   }
 
   export type StreamOutput = StreamTextResult<ToolSet, unknown>
@@ -58,7 +59,8 @@ export namespace LLM {
       providerID: input.model.providerID,
     })
 
-    const [language, cfg] = await Promise.all([Provider.getLanguage(input.model), Config.get()])
+    const cfgPromise = input.config ? Promise.resolve(input.config) : Config.get()
+    const [language, cfg] = await Promise.all([Provider.getLanguage(input.model), cfgPromise])
 
     let cached = providerCache.get(input.model.providerID)
     if (!cached) {
@@ -275,12 +277,12 @@ export namespace LLM {
 
   async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "user">) {
     const disabled = PermissionNext.disabled(Object.keys(input.tools), input.agent.permission)
-    for (const tool of Object.keys(input.tools)) {
-      if (input.user.tools?.[tool] === false || disabled.has(tool)) {
-        delete input.tools[tool]
-      }
+    const resolved: Record<string, Tool> = {}
+    for (const [id, toolDef] of Object.entries(input.tools)) {
+      if (input.user.tools?.[id] === false || disabled.has(id)) continue
+      resolved[id] = toolDef
     }
-    return input.tools
+    return resolved
   }
 
   // Check if messages contain any tool-call content
