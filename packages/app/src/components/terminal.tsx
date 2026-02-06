@@ -1,5 +1,6 @@
 import type { Ghostty, Terminal as Term, FitAddon } from "ghostty-web"
 import { ComponentProps, createEffect, createSignal, onCleanup, onMount, splitProps } from "solid-js"
+import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { monoFontFamily, useSettings } from "@/context/settings"
 import { SerializeAddon } from "@/addons/serialize"
@@ -52,6 +53,7 @@ const DEFAULT_TERMINAL_COLORS: Record<"light" | "dark", TerminalColors> = {
 }
 
 export const Terminal = (props: TerminalProps) => {
+  const platform = usePlatform()
   const sdk = useSDK()
   const settings = useSettings()
   const theme = useTheme()
@@ -68,6 +70,7 @@ export const Terminal = (props: TerminalProps) => {
   let handleTextareaBlur: () => void
   let disposed = false
   const cleanups: VoidFunction[] = []
+  let tail = local.pty.tail ?? ""
 
   const cleanup = () => {
     if (!cleanups.length) return
@@ -135,6 +138,22 @@ export const Terminal = (props: TerminalProps) => {
     focusTerminal()
   }
 
+  const handleLinkClick = (event: MouseEvent) => {
+    if (!event.shiftKey && !event.ctrlKey && !event.metaKey) return
+    if (event.altKey) return
+    if (event.button !== 0) return
+
+    const t = term
+    if (!t) return
+
+    const link = (t as unknown as { currentHoveredLink?: { text: string } }).currentHoveredLink
+    if (!link?.text) return
+
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    platform.openLink(link.text)
+  }
+
   onMount(() => {
     const run = async () => {
       const loaded = await loadGhostty()
@@ -146,6 +165,7 @@ export const Terminal = (props: TerminalProps) => {
       const once = { value: false }
 
       const url = new URL(sdk.url + `/pty/${local.pty.id}/connect?directory=${encodeURIComponent(sdk.directory)}`)
+      url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
       if (window.__OPENCODE__?.serverPassword) {
         url.username = "opencode"
         url.password = window.__OPENCODE__?.serverPassword
@@ -166,6 +186,7 @@ export const Terminal = (props: TerminalProps) => {
         fontSize: 14,
         fontFamily: monoFontFamily(settings.appearance.font()),
         allowTransparency: true,
+        convertEol: true,
         theme: terminalColors(),
         scrollback: 10_000,
         ghostty: g,
@@ -236,8 +257,12 @@ export const Terminal = (props: TerminalProps) => {
       serializeAddon = serializer
 
       t.open(container)
+
       container.addEventListener("pointerdown", handlePointerDown)
       cleanups.push(() => container.removeEventListener("pointerdown", handlePointerDown))
+
+      container.addEventListener("click", handleLinkClick, { capture: true })
+      cleanups.push(() => container.removeEventListener("click", handleLinkClick, { capture: true }))
 
       handleTextareaFocus = () => {
         t.options.cursorBlink = true
@@ -253,15 +278,11 @@ export const Terminal = (props: TerminalProps) => {
 
       focusTerminal()
 
+      fit.fit()
+
       if (local.pty.buffer) {
-        if (local.pty.rows && local.pty.cols) {
-          t.resize(local.pty.cols, local.pty.rows)
-        }
         t.write(local.pty.buffer, () => {
-          if (local.pty.scrollY) {
-            t.scrollToLine(local.pty.scrollY)
-          }
-          fitAddon.fit()
+          if (local.pty.scrollY) t.scrollToLine(local.pty.scrollY)
         })
       }
 
@@ -299,6 +320,19 @@ export const Terminal = (props: TerminalProps) => {
       // console.log("Scroll position:", ydisp)
       // })
 
+      const limit = 16_384
+      const seed = tail
+      let sync = !!seed
+
+      const overlap = (data: string) => {
+        if (!seed) return 0
+        const max = Math.min(seed.length, data.length)
+        for (let i = max; i > 0; i--) {
+          if (seed.slice(-i) === data.slice(0, i)) return i
+        }
+        return 0
+      }
+
       const handleOpen = () => {
         local.onConnect?.()
         sdk.client.pty
@@ -315,7 +349,25 @@ export const Terminal = (props: TerminalProps) => {
       cleanups.push(() => socket.removeEventListener("open", handleOpen))
 
       const handleMessage = (event: MessageEvent) => {
-        t.write(event.data)
+        const data = typeof event.data === "string" ? event.data : ""
+        if (!data) return
+
+        const next = (() => {
+          if (!sync) return data
+          const n = overlap(data)
+          if (!n) {
+            sync = false
+            return data
+          }
+          const trimmed = data.slice(n)
+          if (trimmed) sync = false
+          return trimmed
+        })()
+
+        if (!next) return
+
+        t.write(next)
+        tail = next.length >= limit ? next.slice(-limit) : (tail + next).slice(-limit)
       }
       socket.addEventListener("message", handleMessage)
       cleanups.push(() => socket.removeEventListener("message", handleMessage))
@@ -369,6 +421,7 @@ export const Terminal = (props: TerminalProps) => {
       props.onCleanup({
         ...local.pty,
         buffer,
+        tail,
         rows: t.rows,
         cols: t.cols,
         scrollY: t.getViewportY(),
