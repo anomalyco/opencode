@@ -7,14 +7,14 @@ import { Log } from "../util/log"
 import type { WSContext } from "hono/ws"
 import { Instance } from "../project/instance"
 import { lazy } from "@opencode-ai/util/lazy"
-import { Shell } from "@/shell/shell"
-import { BrokerClient } from "@/auth/broker-client"
 import { ServerAuth } from "@/config/server-auth"
-import * as BrokerPty from "./broker-pty"
-import { Plugin } from "@/plugin"
+import { createBrokerPtyManager } from "@opencode-ai/fork-terminal/broker-pty-manager"
+import { createTerminal } from "@opencode-ai/fork-terminal/server"
+import { createPtyViaBroker } from "@opencode-ai/fork-terminal/server-pty"
+import { Shell } from "@/shell/shell"
 
 // Re-export broker PTY module for authenticated sessions
-export { BrokerPty }
+export * as BrokerPty from "./broker-pty"
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
@@ -94,27 +94,20 @@ export namespace Pty {
   )
 
   const brokerState = Instance.state(
-    () => new Map<string, Info>(),
-    async (sessions) => {
-      for (const id of sessions.keys()) {
-        try {
-          await BrokerPty.kill(id)
-        } catch {}
-      }
-      sessions.clear()
+    () =>
+      createBrokerPtyManager<Info>({
+        onExit: (info) => {
+          info.status = "exited"
+          void Bus.publish(Event.Exited, { id: info.id, exitCode: 0 })
+        },
+      }),
+    async (manager) => {
+      await manager.cleanup()
     },
   )
 
-  BrokerPty.onExit((info) => {
-    const brokerInfo = brokerState().get(info.id)
-    if (!brokerInfo) return
-    brokerInfo.status = "exited"
-    void Bus.publish(Event.Exited, { id: info.id, exitCode: 0 })
-    brokerState().delete(info.id)
-  })
-
   export function list() {
-    return [...Array.from(state().values()).map((s) => s.info), ...Array.from(brokerState().values())]
+    return [...Array.from(state().values()).map((s) => s.info), ...brokerState().list()]
   }
 
   export function get(id: string) {
@@ -131,15 +124,18 @@ export namespace Pty {
    * @param maybeSessionId - Optional session ID for broker-based creation
    */
   export async function create(input: CreateInput, maybeSessionId?: string, requestId?: string): Promise<Info> {
-    const authConfig = ServerAuth.get()
-
-    // If auth is enabled and session ID provided, use broker
-    if (authConfig.enabled && maybeSessionId) {
-      return createViaBroker(input, maybeSessionId, requestId)
-    }
-
-    // Otherwise use existing bun-pty (runs as server user)
-    return createLocal(input, requestId)
+    return createTerminal(
+      input,
+      {
+        sessionId: maybeSessionId,
+        requestId,
+      },
+      {
+        isAuthEnabled: () => ServerAuth.get().enabled,
+        createLocal,
+        createViaBroker,
+      },
+    )
   }
 
   /**
@@ -152,36 +148,12 @@ export namespace Pty {
    * will be implemented in Plan 05-08.
    */
   async function createViaBroker(input: CreateInput, sessionId: string, requestId?: string): Promise<Info> {
-    const command = input.command || Shell.preferred()
-    const args = input.args ? [...input.args] : []
-    if (command.endsWith("sh")) {
-      args.push("-l")
-    }
-    const cwd = input.cwd || Instance.directory
-
-    const brokerInfo = await BrokerPty.create(
-      sessionId,
-      {
-        term: input.env?.TERM ?? "xterm-256color",
-        cols: 80, // Could get from input if added
-        rows: 24,
-        env: input.env,
-      },
-      requestId,
-    )
-
-    const info: Info = {
-      id: brokerInfo.ptyId,
-      title: input.title || `Terminal ${brokerInfo.ptyId.slice(-4)}`,
-      command,
-      args,
-      cwd,
-      status: "running",
-      pid: brokerInfo.pid,
-    }
-
-    brokerState().set(info.id, info)
-    log.info("broker PTY spawned", { sessionId, requestId, method: "spawnpty", ptyId: brokerInfo.ptyId, pid: brokerInfo.pid })
+    const info = await createPtyViaBroker(input, sessionId, requestId, {
+      brokerManager: brokerState(),
+      shellPreferred: Shell.preferred,
+      instanceDirectory: Instance.directory,
+      log,
+    })
     Bus.publish(Event.Created, { info })
     return info
   }
@@ -200,20 +172,7 @@ export namespace Pty {
     }
 
     const cwd = input.cwd || Instance.directory
-    const shellEnv = await Plugin.trigger("shell.env", { cwd }, { env: {} })
-    const env = {
-      ...process.env,
-      ...input.env,
-      ...shellEnv.env,
-      TERM: "xterm-256color",
-      OPENCODE_TERMINAL: "1",
-    } as Record<string, string>
-
-    if (process.platform === "win32") {
-      env.LC_ALL = "C.UTF-8"
-      env.LC_CTYPE = "C.UTF-8"
-      env.LANG = "C.UTF-8"
-    }
+    const env = { ...process.env, ...input.env, TERM: "xterm-256color" } as Record<string, string>
     log.info("creating session", { id, cmd: command, args, cwd, requestId })
 
     const spawn = await pty()
@@ -292,7 +251,7 @@ export namespace Pty {
       brokerInfo.title = input.title
     }
     if (input.size) {
-      await BrokerPty.resize(id, input.size.cols, input.size.rows)
+      await brokerState().resize(id, input.size.cols, input.size.rows)
     }
     Bus.publish(Event.Updated, { info: brokerInfo })
     return brokerInfo
@@ -315,8 +274,7 @@ export namespace Pty {
 
     const brokerInfo = brokerState().get(id)
     if (!brokerInfo) return
-    await BrokerPty.kill(id)
-    brokerState().delete(id)
+    await brokerState().kill(id)
     Bus.publish(Event.Deleted, { id })
   }
 
@@ -328,7 +286,7 @@ export namespace Pty {
     }
 
     if (brokerState().has(id)) {
-      void BrokerPty.resize(id, cols, rows)
+      void brokerState().resize(id, cols, rows)
     }
   }
 
@@ -340,8 +298,7 @@ export namespace Pty {
     }
 
     if (brokerState().has(id)) {
-      const brokerClient = new BrokerClient()
-      void brokerClient.ptyWrite(id, data)
+      void brokerState().write(id, data)
     }
   }
 
@@ -349,7 +306,7 @@ export namespace Pty {
     const session = state().get(id)
     if (!session) {
       if (brokerState().has(id)) {
-        return BrokerPty.connect(id, ws, options)
+        return brokerState().connect(id, ws, options)
       }
       ws.close()
       return

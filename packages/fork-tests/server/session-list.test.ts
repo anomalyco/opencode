@@ -1,0 +1,46 @@
+import { describe, expect, test } from "bun:test"
+import path from "path"
+import { Instance } from "../../../opencode/src/project/instance"
+import { Server } from "../../../opencode/src/server/server"
+import { Session } from "../../../opencode/src/session"
+import { Log } from "../../../opencode/src/util/log"
+import { AuthConfig } from "../../../opencode/src/config/auth"
+import { ServerAuth } from "../../../opencode/src/config/server-auth"
+
+const projectRoot = path.join(__dirname, "../..")
+Log.init({ print: false })
+
+describe("session.list", () => {
+  test("filters by directory", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        ServerAuth._setForTesting(AuthConfig.parse({ enabled: false }))
+        try {
+          const app = Server.App()
+
+          const first = await Session.create({})
+
+          const otherDir = path.join(projectRoot, "..", "__session_list_other")
+          const second = await Instance.provide({
+            directory: otherDir,
+            fn: async () => Session.create({}),
+          })
+
+          const response = await app.request(`/session?directory=${encodeURIComponent(projectRoot)}`)
+          expect(response.status).toBe(200)
+
+          const body = (await response.json()) as unknown[]
+          const ids = body
+            .map((s) => (typeof s === "object" && s && "id" in s ? (s as { id: string }).id : undefined))
+            .filter((x): x is string => typeof x === "string")
+
+          expect(ids).toContain(first.id)
+          expect(ids).not.toContain(second.id)
+        } finally {
+          ServerAuth._reset()
+        }
+      },
+    })
+  })
+})

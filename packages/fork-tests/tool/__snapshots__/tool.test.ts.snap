@@ -1,0 +1,9 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`tool.ls basic 1`] = `
+"packages/opencode/test/fixtures/example/
+  broken.ts
+  cli.ts
+  ink.tsx
+"
+`;

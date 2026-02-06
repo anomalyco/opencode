@@ -1,0 +1,23 @@
+{
+  "name": "@opencode-ai/fork-cli",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@clack/prompts": "catalog:",
+    "@opencode-ai/fork-auth": "workspace:*"
+  },
+  "devDependencies": {
+    "yargs": "catalog:",
+    "@types/yargs": "17.0.33",
+    "typescript": "catalog:",
+    "@types/bun": "catalog:"
+  }
+}

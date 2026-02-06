@@ -1,16 +1,16 @@
 # Upstream Sync Playbook
 
-## Baseline Snapshot (2026-02-05)
+## Baseline Snapshot (2026-02-06)
 - Upstream repo/branch: `anomalyco/opencode` `dev`
 - Fork repo/branch: `pRizz/opencode` `dev`
-- Merge base: `dac099a4892689d11abedb0fcc1098b50e0958c8` (source: `docs/upstream-sync/merge-base.txt`)
-- Fork commits ahead: 410 (source: `docs/upstream-sync/fork-commits.log`)
-- Upstream first-parent commits behind: 1307 (source: `docs/upstream-sync/upstream-first-parent.txt`)
-- Batch boundaries (every 200 commits): 6 (source: `docs/upstream-sync/boundary-commits.txt`)
+- Merge base: see `docs/upstream-sync/merge-base.txt`
+- Current divergence: `0` behind / `418` ahead (`git rev-list --left-right --count upstream/dev...origin/dev`)
+- `parent-dev` mirror status: `0 0` (`git rev-list --left-right --count upstream/dev...origin/parent-dev`)
+- Catch-up status: upstream catch-up complete; fork decoupling restored post-catch-up.
 
 ## Patchset Report
-- Fork commits: `docs/upstream-sync/fork-commits.log`
-- Range-diff: `docs/upstream-sync/range-diff.txt`
+- Restore manifest: `docs/upstream-sync/restore-missing-commits.txt`
+- Restore file map: `docs/upstream-sync/restore-file-map.txt`
 - Upstream first-parent list: `docs/upstream-sync/upstream-first-parent.txt`
 - Boundary commits: `docs/upstream-sync/boundary-commits.txt`
 
@@ -18,8 +18,8 @@ To regenerate:
 ```bash
 git fetch upstream --tags
 git branch -f parent-dev upstream/dev
-git log --oneline parent-dev..dev > docs/upstream-sync/fork-commits.log
-git range-diff parent-dev...dev > docs/upstream-sync/range-diff.txt
+git log --oneline dev..sync/decouple-fork-layer > docs/upstream-sync/restore-missing-commits.txt
+git diff --name-status dev...sync/decouple-fork-layer > docs/upstream-sync/restore-file-map.txt
 MERGE_BASE=$(git merge-base parent-dev dev)
 echo "$MERGE_BASE" > docs/upstream-sync/merge-base.txt
 git rev-list --first-parent ${MERGE_BASE}..parent-dev > docs/upstream-sync/upstream-first-parent.txt
@@ -28,9 +28,9 @@ wc -l docs/upstream-sync/upstream-first-parent.txt > docs/upstream-sync/upstream
 ```
 
 ## Must-Keep Fork Areas (Verify and Extend)
-- `docs/docker-install-fork.md` (fork installation guidance)
-- `docs/README.md` references fork-specific usage
-- Any fork-only auth features or configuration paths (audit during conflict resolution)
+- `docs/upstream-sync/fork-feature-audit.md` (authoritative ownership map)
+- `packages/fork-*` (fork behavior implementation)
+- Hook/stub surfaces under `packages/opencode/src/**` (must stay minimal)
 
 ## Known Conflict Notes
 - None recorded yet. Add entries here as they appear during the merge train.

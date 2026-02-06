@@ -3,6 +3,7 @@ import { Config } from "../config/config"
 import { MCP } from "../mcp"
 import { Provider } from "../provider/provider"
 import { UI } from "./ui"
+import { formatForkCliError } from "@opencode-ai/fork-cli/error"
 
 export function FormatError(input: unknown) {
   if (MCP.Failed.isInstance(input))
@@ -36,21 +37,8 @@ export function FormatError(input: unknown) {
         (input.data.message ? `: ${input.data.message}` : ""),
       ...(input.data.issues?.map((issue) => "↳ " + issue.message + " " + issue.path.join(".")) ?? []),
     ].join("\n")
-  if (Config.PamServiceNotFoundError.isInstance(input)) {
-    return [
-      `PAM service file not found: ${input.data.path}`,
-      "",
-      "To create the PAM service file, run as root:",
-      "",
-      `  sudo tee /etc/pam.d/${input.data.service} << 'EOF'`,
-      "  #%PAM-1.0",
-      "  auth       required     pam_unix.so",
-      "  account    required     pam_unix.so",
-      "  EOF",
-      "",
-      "Or use an existing PAM service by setting auth.pam.service in opencode.json",
-    ].join("\n")
-  }
+  const forkError = formatForkCliError(input)
+  if (forkError) return forkError
 
   if (UI.CancelledError.isInstance(input)) return ""
 }

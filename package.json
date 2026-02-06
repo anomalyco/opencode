@@ -23,6 +23,7 @@
       "packages/slack"
     ],
     "catalog": {
+      "@clack/prompts": "1.0.0-alpha.1",
       "@types/bun": "1.3.5",
       "@octokit/rest": "22.0.0",
       "@hono/zod-validator": "0.4.2",
@@ -55,6 +56,7 @@
       "tailwindcss": "4.1.11",
       "virtua": "0.42.3",
       "vite": "7.1.4",
+      "yargs": "17.7.2",
       "@solidjs/meta": "0.29.4",
       "@solidjs/router": "0.15.4",
       "@solidjs/start": "https://pkg.pr.new/@solidjs/start@dfb2020",

@@ -52,6 +52,8 @@ import { ServerAuth } from "../config/server-auth"
 import { setUiDir } from "./ui-dir"
 import path from "path"
 import { Installation } from "@/installation"
+import { registerAuthRoutes } from "@opencode-ai/fork-auth"
+import { registerSecurity } from "@opencode-ai/fork-security"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -86,6 +88,7 @@ export namespace Server {
   }
 
   const app = new Hono()
+  registerSecurity(app)
 
   function withCsp(response: Response) {
     response.headers.set("Content-Security-Policy", contentSecurityPolicy)
@@ -202,10 +205,7 @@ export namespace Server {
             onFound: applyLocalUiCsp,
           })(c, next)
         })
-        .use(authMiddleware)
-        .use(csrfMiddleware)
         .route("/global", GlobalRoutes())
-        .route("/auth", AuthRoutes())
         .use(async (c, next) => {
           let directory = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
           try {
@@ -234,6 +234,9 @@ export namespace Server {
             },
           }),
         )
+        .use(authMiddleware)
+        .use(csrfMiddleware)
+        .route("/auth", registerAuthRoutes(AuthRoutes))
         .use(validator("query", z.object({ directory: z.string().optional() })))
         .route("/project", ProjectRoutes())
         .route("/pty", PtyRoutes())
@@ -677,12 +680,12 @@ export namespace Server {
     port: number
     hostname: string
     mdns?: boolean
-    mdnsDomain?: string
     cors?: string[]
     uiDir?: string
   }) {
     // Load auth config at server startup (before any requests)
     await ServerAuth.load()
+
     _corsWhitelist = opts.cors ?? []
     _uiDir = opts.uiDir ? path.resolve(opts.uiDir) : undefined
     setUiDir(_uiDir)
@@ -712,7 +715,7 @@ export namespace Server {
       opts.hostname !== "localhost" &&
       opts.hostname !== "::1"
     if (shouldPublishMDNS) {
-      MDNS.publish(server.port!, opts.mdnsDomain)
+      MDNS.publish(server.port!)
     } else if (opts.mdns) {
       log.warn("mDNS enabled but hostname is loopback; skipping mDNS publish")
     }

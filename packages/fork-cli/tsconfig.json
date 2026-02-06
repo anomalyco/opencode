@@ -1,0 +1,6 @@
+{
+  "extends": "../opencode/tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  }
+}

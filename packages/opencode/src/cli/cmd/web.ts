@@ -5,11 +5,7 @@ import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { Flag } from "../../flag/flag"
 import open from "open"
 import { networkInterfaces } from "os"
-import path from "path"
-import { fileURLToPath } from "url"
-import { BunProc } from "../../bun"
-import { Filesystem } from "../../util/filesystem"
-import fs from "fs/promises"
+import { formatForkWebMdnsLabel, resolveForkWebUiDir } from "@opencode-ai/fork-cli/web"
 
 function getNetworkIPs() {
   const nets = networkInterfaces()
@@ -33,87 +29,6 @@ function getNetworkIPs() {
   return results
 }
 
-async function getLatestMtimeMs(startPath: string) {
-  const stat = await fs.stat(startPath)
-  if (!stat.isDirectory()) return stat.mtimeMs
-
-  let latest = stat.mtimeMs
-  const entries = await fs.readdir(startPath, { withFileTypes: true })
-  for (const entry of entries) {
-    const entryPath = path.join(startPath, entry.name)
-    if (entry.isDirectory()) {
-      const mtime = await getLatestMtimeMs(entryPath)
-      if (mtime > latest) latest = mtime
-      continue
-    }
-    if (entry.isFile()) {
-      const entryStat = await fs.stat(entryPath)
-      if (entryStat.mtimeMs > latest) latest = entryStat.mtimeMs
-    }
-  }
-  return latest
-}
-
-async function getPackagedUiDir() {
-  const execName = path.basename(process.execPath).toLowerCase()
-  const isExecutable = execName === "opencode" || execName === "opencode.exe"
-  if (!isExecutable) return { uiDir: undefined, isExecutable }
-  const maybeUiDir = path.resolve(process.execPath, "..", "..", "ui")
-  const hasUiDir = await Filesystem.isDir(maybeUiDir)
-  return { uiDir: hasUiDir ? maybeUiDir : undefined, isExecutable }
-}
-
-async function shouldRebuildUi(appDir: string, distDir: string) {
-  const hasDistDir = await Filesystem.isDir(distDir)
-  if (!hasDistDir) return true
-
-  const srcDir = path.join(appDir, "src")
-  const indexHtml = path.join(appDir, "index.html")
-  const viteConfig = path.join(appDir, "vite.config.ts")
-  const sourceLatest = await Promise.all([
-    getLatestMtimeMs(srcDir),
-    getLatestMtimeMs(indexHtml),
-    getLatestMtimeMs(viteConfig),
-  ]).then((items) => Math.max(...items))
-  const distLatest = await getLatestMtimeMs(distDir)
-  return sourceLatest > distLatest
-}
-
-async function resolveLocalWebUiDir() {
-  const packaged = await getPackagedUiDir()
-  if (packaged.uiDir) return packaged.uiDir
-
-  const appDir = fileURLToPath(new URL("../../../../app", import.meta.url))
-  const distDir = path.join(appDir, "dist")
-  const hasAppDir = await Filesystem.isDir(appDir)
-  if (!hasAppDir) {
-    throw new Error(`Local web app directory not found at ${appDir}`)
-  }
-
-  const rebuild = await shouldRebuildUi(appDir, distDir)
-  if (rebuild) {
-    try {
-      const isDevBuild = !packaged.isExecutable && process.env.NODE_ENV !== "production"
-      await BunProc.run(["run", "build"], {
-        cwd: appDir,
-        env: isDevBuild
-          ? {
-              VITE_SOURCEMAP: "true",
-              VITE_MINIFY: "false",
-            }
-          : undefined,
-      })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      throw new Error(`Failed to build local web UI: ${message}`)
-    }
-  }
-
-  const hasDistDir = await Filesystem.isDir(distDir)
-  if (!hasDistDir) throw new Error(`Expected build output directory not found at ${distDir}`)
-  return distDir
-}
-
 export const WebCommand = cmd({
   command: "web",
   builder: (yargs) => withNetworkOptions(yargs),
@@ -123,15 +38,16 @@ export const WebCommand = cmd({
       UI.println(UI.Style.TEXT_WARNING_BOLD + "!  " + "OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
     }
     const opts = await resolveNetworkOptions(args)
-    const uiDir = await resolveLocalWebUiDir()
-    const server = await Server.listen({ ...opts, uiDir })
+    const uiDir = await resolveForkWebUiDir()
+    const server = await Server.listen({ ...opts, ...(uiDir ? { uiDir } : {}) })
     UI.empty()
     UI.println(UI.logo("  "))
     UI.empty()
+    const activePort = server.port ?? Number(server.url.port || opts.port || 0)
 
     if (opts.hostname === "0.0.0.0") {
       // Show localhost for local access
-      const localhostUrl = `http://localhost:${server.port}`
+      const localhostUrl = `http://localhost:${activePort}`
       UI.println(UI.Style.TEXT_INFO_BOLD + "  Local access:      ", UI.Style.TEXT_NORMAL, localhostUrl)
 
       // Show network IPs for remote access
@@ -141,16 +57,19 @@ export const WebCommand = cmd({
           UI.println(
             UI.Style.TEXT_INFO_BOLD + "  Network access:    ",
             UI.Style.TEXT_NORMAL,
-            `http://${ip}:${server.port}`,
+            `http://${ip}:${activePort}`,
           )
         }
       }
 
       if (opts.mdns) {
+        const mdnsLabel =
+          formatForkWebMdnsLabel({ port: activePort, hostname: opts.hostname }) ??
+          `${opts.mdnsDomain ?? "opencode.local"}:${activePort}`
         UI.println(
           UI.Style.TEXT_INFO_BOLD + "  mDNS:              ",
           UI.Style.TEXT_NORMAL,
-          `${opts.mdnsDomain}:${server.port}`,
+          mdnsLabel,
         )
       }
 
