@@ -20,6 +20,7 @@ import { github } from "~/lib/github"
 import { createEffect, onCleanup } from "solid-js"
 import { config } from "~/config"
 import { useI18n } from "~/context/i18n"
+import { useLanguage } from "~/context/language"
 import "./header-context-menu.css"
 
 const isDarkMode = () => window.matchMedia("(prefers-color-scheme: dark)").matches
@@ -38,6 +39,7 @@ const fetchSvgContent = async (svgPath: string): Promise<string> => {
 export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
   const navigate = useNavigate()
   const i18n = useI18n()
+  const language = useLanguage()
   const githubData = createAsync(() => github())
   const starCount = createMemo(() =>
     githubData()?.stars
@@ -121,7 +123,7 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
   return (
     <section data-component="top">
       <div onContextMenu={handleLogoContextMenu}>
-        <A href="/">
+        <A href={language.route("/")}>
           <img data-slot="logo light" src={logoLight} alt="OpenCode" width="189" height="34" />
           <img data-slot="logo dark" src={logoDark} alt="OpenCode" width="189" height="34" />
         </A>
@@ -142,7 +144,7 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
             <img data-slot="copy dark" src={copyWordmarkDark} alt="" />
             {i18n.t("nav.context.copyWordmark")}
           </button>
-          <button class="context-menu-item" onClick={() => navigate("/brand")}>
+          <button class="context-menu-item" onClick={() => navigate(language.route("/brand"))}>
             <img data-slot="copy light" src={copyBrandAssetsLight} alt="" />
             <img data-slot="copy dark" src={copyBrandAssetsDark} alt="" />
             {i18n.t("nav.context.brandAssets")}
@@ -157,24 +159,24 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
             </a>
           </li>
           <li>
-            <a href="/docs">{i18n.t("nav.docs")}</a>
+            <a href={language.route("/docs")}>{i18n.t("nav.docs")}</a>
           </li>
           <li>
-            <A href="/enterprise">{i18n.t("nav.enterprise")}</A>
+            <A href={language.route("/enterprise")}>{i18n.t("nav.enterprise")}</A>
           </li>
           <li>
             <Switch>
               <Match when={props.zen}>
-                <a href="/auth">{i18n.t("nav.login")}</a>
+                <a href={language.route("/auth")}>{i18n.t("nav.login")}</a>
               </Match>
               <Match when={!props.zen}>
-                <A href="/zen">{i18n.t("nav.zen")}</A>
+                <A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>
               </Match>
             </Switch>
           </li>
           <Show when={!props.hideGetStarted}>
             <li>
-              <A href="/download" data-slot="cta-button">
+              <A href={language.route("/download")} data-slot="cta-button">
                 <svg
                   width="18"
                   height="18"
@@ -245,7 +247,7 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
             <nav data-component="nav-mobile-menu-list">
               <ul>
                 <li>
-                  <A href="/">{i18n.t("nav.home")}</A>
+                  <A href={language.route("/")}>{i18n.t("nav.home")}</A>
                 </li>
                 <li>
                   <a href={config.github.repoUrl} target="_blank" style="white-space: nowrap;">
@@ -253,24 +255,24 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
                   </a>
                 </li>
                 <li>
-                  <a href="/docs">{i18n.t("nav.docs")}</a>
+                  <a href={language.route("/docs")}>{i18n.t("nav.docs")}</a>
                 </li>
                 <li>
-                  <A href="/enterprise">{i18n.t("nav.enterprise")}</A>
+                  <A href={language.route("/enterprise")}>{i18n.t("nav.enterprise")}</A>
                 </li>
                 <li>
                   <Switch>
                     <Match when={props.zen}>
-                      <a href="/auth">{i18n.t("nav.login")}</a>
+                      <a href={language.route("/auth")}>{i18n.t("nav.login")}</a>
                     </Match>
                     <Match when={!props.zen}>
-                      <A href="/zen">{i18n.t("nav.zen")}</A>
+                      <A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>
                     </Match>
                   </Switch>
                 </li>
                 <Show when={!props.hideGetStarted}>
                   <li>
-                    <A href="/download" data-slot="cta-button">
+                    <A href={language.route("/download")} data-slot="cta-button">
                       {i18n.t("nav.getStartedFree")}
                     </A>
                   </li>
