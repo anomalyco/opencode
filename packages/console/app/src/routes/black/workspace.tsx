@@ -5,13 +5,18 @@ import { github } from "~/lib/github"
 import { createEffect, createMemo, For, onMount } from "solid-js"
 import { config } from "~/config"
 import { createList } from "solid-list"
+import { useLanguage } from "~/context/language"
+import { LanguagePicker } from "~/component/language-picker"
+import { useI18n } from "~/context/i18n"
 
 export default function BlackWorkspace() {
   const navigate = useNavigate()
+  const language = useLanguage()
+  const i18n = useI18n()
   const githubData = createAsync(() => github())
   const starCount = createMemo(() =>
     githubData()?.stars
-      ? new Intl.NumberFormat("en-US", {
+      ? new Intl.NumberFormat(language.tag(language.locale()), {
           notation: "compact",
           compactDisplay: "short",
         }).format(githubData()!.stars!)
@@ -20,15 +25,18 @@ export default function BlackWorkspace() {
 
   // TODO: Frank, replace with real workspaces
   const workspaces = [
-    { name: "Workspace 1", id: "wrk_123" },
-    { name: "Workspace 2", id: "wrk_456" },
-    { name: "Workspace 3", id: "wrk_789" },
-    { name: "Workspace 4", id: "wrk_111" },
-    { name: "Workspace 5", id: "wrk_222" },
-    { name: "Workspace 6", id: "wrk_333" },
-    { name: "Workspace 7", id: "wrk_444" },
-    { name: "Workspace 8", id: "wrk_555" },
-  ]
+    { id: "wrk_123", n: 1 },
+    { id: "wrk_456", n: 2 },
+    { id: "wrk_789", n: 3 },
+    { id: "wrk_111", n: 4 },
+    { id: "wrk_222", n: 5 },
+    { id: "wrk_333", n: 6 },
+    { id: "wrk_444", n: 7 },
+    { id: "wrk_555", n: 8 },
+  ].map((workspace) => ({
+    ...workspace,
+    name: i18n.t("black.workspace.name", { n: workspace.n }),
+  }))
 
   let listRef: HTMLUListElement | undefined
 
@@ -51,7 +59,7 @@ export default function BlackWorkspace() {
 
   return (
     <div data-page="black">
-      <Title>opencode</Title>
+      <Title>{i18n.t("black.workspace.title")}</Title>
       <div data-component="header-gradient" />
       <header data-component="header">
         <div data-component="header-logo">
@@ -171,7 +179,7 @@ export default function BlackWorkspace() {
           </svg>
         </div>
         <section data-slot="select-workspace">
-          <p data-slot="select-workspace-title">Select a workspace for this plan</p>
+          <p data-slot="select-workspace-title">{i18n.t("black.workspace.selectPlan")}</p>
           <ul
             ref={listRef}
             data-slot="workspaces"
@@ -210,14 +218,15 @@ export default function BlackWorkspace() {
             ©{new Date().getFullYear()} <a href="https://anoma.ly">Anomaly</a>
           </span>
           <a href={config.github.repoUrl} target="_blank">
-            GitHub <span data-slot="github-stars">[{starCount()}]</span>
+            {i18n.t("nav.github")} <span data-slot="github-stars">[{starCount()}]</span>
           </a>
-          <a href="/docs">Docs</a>
+          <a href={language.route("/docs")}>{i18n.t("nav.docs")}</a>
+          <LanguagePicker align="right" />
           <span>
-            <A href="/legal/privacy-policy">Privacy</A>
+            <A href={language.route("/legal/privacy-policy")}>{i18n.t("legal.privacy")}</A>
           </span>
           <span>
-            <A href="/legal/terms-of-service">Terms</A>
+            <A href={language.route("/legal/terms-of-service")}>{i18n.t("legal.terms")}</A>
           </span>
         </div>
         <span data-slot="anomaly-alt">
