@@ -1173,25 +1173,25 @@ export namespace Provider {
       for (const item of priority) {
         if (providerID === "amazon-bedrock") {
           const crossRegionPrefixes = ["global.", "us.", "eu."]
-          const candidates = Object.keys(provider.models).filter(m => m.includes(item))
+          const candidates = Object.keys(provider.models).filter((m) => m.includes(item))
 
           // Model selection priority:
           // 1. global. prefix (works everywhere)
           // 2. User's region prefix (us., eu.)
           // 3. Unprefixed model
-          const globalMatch = candidates.find(m => m.startsWith("global."))
+          const globalMatch = candidates.find((m) => m.startsWith("global."))
           if (globalMatch) return getModel(providerID, globalMatch)
 
           const region = provider.options?.region
           if (region) {
             const regionPrefix = region.split("-")[0]
             if (regionPrefix === "us" || regionPrefix === "eu") {
-              const regionalMatch = candidates.find(m => m.startsWith(`${regionPrefix}.`))
+              const regionalMatch = candidates.find((m) => m.startsWith(`${regionPrefix}.`))
               if (regionalMatch) return getModel(providerID, regionalMatch)
             }
           }
 
-          const unprefixed = candidates.find(m => !crossRegionPrefixes.some(p => m.startsWith(p)))
+          const unprefixed = candidates.find((m) => !crossRegionPrefixes.some((p) => m.startsWith(p)))
           if (unprefixed) return getModel(providerID, unprefixed)
         } else {
           for (const model of Object.keys(provider.models)) {
