@@ -1,6 +1,6 @@
 # Post-catchup baseline snapshot
-captured_at_utc: 2026-02-06T04:38:47Z
-upstream_dev_vs_origin_dev_left_right_count: 0	429
+captured_at_utc: 2026-02-06T04:54:14Z
+upstream_dev_vs_origin_dev_left_right_count: 0	431
 upstream_dev_vs_origin_parent_dev_left_right_count: 0	0
-origin_dev_sha: 71cd1ce0ebb1dbcc8cb9a9273bbe46fbd1bfd91d
+origin_dev_sha: fe6375d2ec61d8c266c1c7986fb5151810396253
 upstream_dev_sha: 8bf97ef9e5a4039e80bfb3d565d4718da6114afd
