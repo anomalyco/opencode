@@ -99,6 +99,96 @@ export namespace Provider {
         },
       }
     },
+    async "nano-gpt"(input) {
+      const key = await iife(async () => {
+        const env = Env.all()
+        const envKey = input.env.map((item) => env[item]).find(Boolean)
+        if (envKey) return envKey
+        const auth = await Auth.get(input.id)
+        if (auth?.type === "api") return auth.key
+        const config = await Config.get()
+        const configKey = config.provider?.[input.id]?.options?.apiKey
+        if (typeof configKey === "string" && configKey.length > 0) return configKey
+        return undefined
+      })
+
+      if (!key) return { autoload: false }
+
+      const seed = Object.values(input.models)[0]
+      if (!seed) return { autoload: true }
+
+      const base = String(input.options.baseURL ?? seed.api.url ?? "").replace(/\/+$/, "")
+      if (!base) return { autoload: true }
+
+      const request = async (query = "") =>
+        fetch(`${base}/models${query}`, {
+          headers: {
+            Authorization: `Bearer ${key}`,
+          },
+          signal: AbortSignal.timeout(5 * 1000),
+        })
+          .then((x) => (x.ok ? x.json() : undefined))
+          .catch(() => undefined)
+      const body = (await request("?detailed=true")) ?? (await request())
+
+      const ids = Array.isArray(body?.data)
+        ? body.data.flatMap((item: unknown) => {
+            if (!item || typeof item !== "object") return []
+            if (!("id" in item)) return []
+            return typeof item.id === "string" ? [item.id] : []
+          })
+        : []
+
+      for (const id of ids) {
+        const existing = input.models[id]
+        const model = existing ?? seed
+        const detailed = Array.isArray(body?.data)
+          ? body.data.find((item: unknown) => {
+              if (!item || typeof item !== "object") return false
+              if (!("id" in item)) return false
+              return item.id === id
+            })
+          : undefined
+        const context =
+          detailed && typeof detailed === "object" && "context_length" in detailed
+            ? Number(detailed.context_length)
+            : undefined
+        const output =
+          detailed && typeof detailed === "object" && "max_output_tokens" in detailed
+            ? Number(detailed.max_output_tokens)
+            : undefined
+        const name = detailed && typeof detailed === "object" && "name" in detailed ? String(detailed.name) : id
+        const contextLimit =
+          typeof context === "number" && Number.isFinite(context) && context > 0 ? context : model.limit.context
+        const outputLimit =
+          typeof output === "number" && Number.isFinite(output) && output > 0 ? output : model.limit.output
+        const reasoning = existing ? model.capabilities.reasoning : id.toLowerCase().includes("thinking")
+        input.models[id] = {
+          ...model,
+          id,
+          name,
+          api: {
+            ...model.api,
+            id,
+            url: base,
+          },
+          capabilities: {
+            ...model.capabilities,
+            reasoning,
+          },
+          limit: {
+            ...model.limit,
+            context: contextLimit,
+            output: outputLimit,
+          },
+          variants: model.variants,
+        }
+      }
+
+      return {
+        autoload: true,
+      }
+    },
     async opencode(input) {
       const hasKey = await (async () => {
         const env = Env.all()
