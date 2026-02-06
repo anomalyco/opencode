@@ -48,6 +48,18 @@
 - **🏗️ Workqueue & Background Tasks**: Enhanced the internal workqueue system for more robust background task management.
 - **🧠 AI-Native Logic Flow**: Refined the agent's decision-making logic to be more efficient and better suited for complex multi-step coding tasks.
 
+### Recent Improvements (v0.2.x)
+
+- **🔍 Precise Code Reading (Read Tool)**: Introduced advanced navigation and positioning. Supports direct jumping to functions, classes, or line numbers via `symbol`, with 1-based line support and file structure previews, significantly boosting AI context retrieval efficiency.
+- **📝 Enhanced Code Editing (Edit/MultiEdit)**:
+  - **Advanced Matching Strategies**: Supports `exact`, `fuzzy`, `block`, and `regex` matching, drastically improving the success rate of complex code modifications.
+  - **Range Constraints & Validation**: Added `anchorLines` to restrict search ranges, alongside `dryRun` and `validateOnly` modes for safer, more predictable edits.
+  - **Intelligent Error Feedback**: Provides smart suggestions on match failures (e.g., "Did you mean line X?"), enabling faster agent self-correction.
+- **⚙️ Robust Task Scheduling (Work Queue)**:
+  - **Optimized Task Identification**: Improved task ID generation using hashing to prevent collisions in large-scale workflows.
+  - **Enhanced State Management**: Introduced granular failure handling (`isFailed`) to increase reliability during parallel execution.
+- **💎 Code Quality & Standards**: Fully aligned with strict coding standards, adding comprehensive documentation and thread-safety annotations (`@VertxThreadSafety`) across core components.
+
 ---
 
 [![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
