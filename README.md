@@ -1,4 +1,4 @@
-del_9071hp<p align="center">
+>0<del_9071hp<p align="center">
   <a href="https://opencode.ai">
     <picture>
       <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
