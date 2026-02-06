@@ -15,8 +15,8 @@
     "noEmit": true,
     "emitDeclarationOnly": false,
     "outDir": "node_modules/.ts-dist",
-    "types": ["vite/client"],
+    "types": ["vite/client"]
   },
   "references": [{ "path": "../app" }],
-  "include": ["src", "package.json"],
+  "include": ["src", "package.json"]
 }

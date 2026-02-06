@@ -13,24 +13,23 @@ const root = document.getElementById("root")!
 
 render(() => {
   let splash!: SVGSVGElement
-  const [state, setState] = createSignal<InitStep | null>(null);
+  const [state, setState] = createSignal<InitStep | null>(null)
 
-  const channel = new Channel<InitStep>();
-  channel.onmessage = e => {
-    setState(e)
-  }
+  const channel = new Channel<InitStep>()
+  channel.onmessage = (e) => setState(e)
   commands.awaitInitialization(channel as any).then(() => {
-    const currentOpacity = getComputedStyle(splash).opacity;
+    const currentOpacity = getComputedStyle(splash).opacity
 
-    splash.style.animation = 'none';
-    splash.style.opacity = currentOpacity;
+    splash.style.animation = "none"
+    splash.style.animationPlayState = "paused"
+    splash.style.opacity = currentOpacity
 
     requestAnimationFrame(() => {
-      splash.style.transition = 'opacity 0.3s ease';
+      splash.style.transition = "opacity 0.3s ease"
       requestAnimationFrame(() => {
-        splash.style.opacity = '1';
-      });
-    });
+        splash.style.opacity = "1"
+      })
+    })
   })
 
   return (
@@ -40,28 +39,31 @@ render(() => {
         <div class="flex flex-col items-center gap-10">
           <Splash ref={splash} class="h-25 animate-[pulse-splash_2s_ease-in-out_infinite]" />
           <span class="text-text-base">
-            <Switch>
-              <Match when={state()?.phase === "done"}>{
-                (_) => {
+            <Switch fallback="Just a moment...">
+              <Match when={state()?.phase === "done"}>
+                {(_) => {
                   onMount(() => {
                     setTimeout(() => events.loadingWindowComplete.emit(null), 1000)
                   })
 
                   return "All done"
-                }
-              }</Match>
-              <Match when={state()?.phase === "server_waiting"}>Just a moment...</Match>
+                }}
+              </Match>
               <Match when={state()?.phase === "sqlite_waiting"}>
                 {(_) => {
-                  const textItems = ["Just a moment...", "Migrating your database", "This could take a couple of minutes"];
-                  const [textIndex, setTextIndex] = createSignal(0);
+                  const textItems = [
+                    "Just a moment...",
+                    "Migrating your database",
+                    "This could take a couple of minutes",
+                  ]
+                  const [textIndex, setTextIndex] = createSignal(0)
 
                   onMount(async () => {
-                    await new Promise(res => setTimeout(res, 3000));
-                    setTextIndex(1);
-                    await new Promise(res => setTimeout(res, 6000));
-                    setTextIndex(2);
-                  });
+                    await new Promise((res) => setTimeout(res, 3000))
+                    setTextIndex(1)
+                    await new Promise((res) => setTimeout(res, 6000))
+                    setTextIndex(2)
+                  })
 
                   return <>{textItems[textIndex()]}</>
                 }}

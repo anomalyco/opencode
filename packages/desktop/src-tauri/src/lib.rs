@@ -22,8 +22,6 @@ use std::{
     time::Duration,
 };
 use tauri::{AppHandle, Manager, RunEvent, State, ipc::Channel};
-#[cfg(windows)]
-use tauri_plugin_decorum::WebviewWindowExt;
 #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_shell::process::CommandChild;
@@ -37,13 +35,13 @@ use crate::constants::*;
 use crate::server::get_saved_server_url;
 use crate::windows::{LoadingWindow, MainWindow};
 
-#[derive(Clone, serde::Serialize, specta::Type)]
+#[derive(Clone, serde::Serialize, specta::Type, Debug)]
 struct ServerReadyData {
     url: String,
     password: Option<String>,
 }
 
-#[derive(Clone, serde::Serialize, specta::Type)]
+#[derive(Clone, Copy, serde::Serialize, specta::Type, Debug)]
 #[serde(tag = "phase", rename_all = "snake_case")]
 enum InitStep {
     ServerWaiting,
@@ -123,19 +121,25 @@ async fn await_initialization(
 ) -> Result<ServerReadyData, String> {
     let mut rx = init_state.current.clone();
 
-    while rx.changed().await.is_ok() {
-        let step = rx.borrow_and_update();
+    let events = async {
+        let e = (*rx.borrow()).clone();
+        let _ = events.send(e).unwrap();
 
-        let _ = events.send((*step).clone());
-    }
+        while rx.changed().await.is_ok() {
+            let step = *rx.borrow_and_update();
 
-    let res = state
-        .status
-        .clone()
+            let _ = events.send(step);
+
+            if matches!(step, InitStep::Done) {
+                break;
+            }
+        }
+    };
+
+    future::join(state.status.clone(), events)
         .await
-        .map_err(|_| "Failed to get server status".to_string())??;
-
-    Ok(res)
+        .0
+        .map_err(|_| "Failed to get server status".to_string())?
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -234,10 +238,7 @@ async fn initialize(app: AppHandle) {
     let server_ready_rx = server_ready_rx.shared();
     app.manage(ServerState::new(None, server_ready_rx.clone()));
 
-    let main_window = MainWindow::create(&app).expect("Failed to create main window");
-
     let loading_window_complete = event_once_fut::<LoadingWindowComplete>(&app);
-    let loading_window = LoadingWindow::create(&app).expect("Failed to create loading window");
 
     println!("Main and loading windows created");
 
@@ -323,15 +324,21 @@ async fn initialize(app: AppHandle) {
     .map_err(|_| ())
     .shared();
 
-    if timeout(Duration::from_secs(1), loading_task.clone())
-        .await
-        .is_err()
-    {
-        println!("Loading task timed out, showing loading window");
-        let _ = loading_window.show();
-        sleep(Duration::from_secs(1)).await;
-        let _ = loading_task.await;
-    }
+    let loading_window: Option<LoadingWindow> =
+        if timeout(Duration::from_secs(1), loading_task.clone())
+            .await
+            .is_err()
+        {
+            println!("Loading task timed out, showing loading window");
+            let app = app.clone();
+            let loading_window =
+                LoadingWindow::create(&app).expect("Failed to create loading window");
+            sleep(Duration::from_secs(1)).await;
+            let _ = loading_task.await;
+            Some(loading_window)
+        } else {
+            None
+        };
 
     println!("Loading done, completing initialisation");
 
@@ -339,8 +346,13 @@ async fn initialize(app: AppHandle) {
 
     loading_window_complete.await;
 
-    let _ = loading_window.close();
-    let _ = main_window.show();
+    println!("Loading window completed");
+
+    MainWindow::create(&app).expect("Failed to create main window");
+
+    if let Some(loading_window) = loading_window {
+        let _ = loading_window.close();
+    }
 }
 
 fn setup_app(app: &tauri::AppHandle, init_rx: watch::Receiver<InitStep>) {

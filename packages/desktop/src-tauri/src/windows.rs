@@ -1,6 +1,8 @@
 use crate::constants::{UPDATER_ENABLED, window_state_flags};
 use std::{ops::Deref, time::Duration};
-use tauri::{AppHandle, LogicalSize, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+#[cfg(windows)]
+use tauri::Manager;
+use tauri::{AppHandle, LogicalSize, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_window_state::AppHandleExt;
 use tokio::sync::mpsc;
 
@@ -18,42 +20,22 @@ impl MainWindow {
     pub const LABEL: &str = "main";
 
     pub fn create(app: &AppHandle) -> Result<Self, tauri::Error> {
-        let primary_monitor = app.primary_monitor().ok().flatten();
-        let size = primary_monitor
-            .map(|m| m.size().to_logical(m.scale_factor()))
-            .unwrap_or(LogicalSize::new(1920, 1080));
-
-        let window_builder =
-            WebviewWindowBuilder::new(app, Self::LABEL, WebviewUrl::App("/".into()))
-                .title("OpenCode")
-                .decorations(true)
-                .disable_drag_drop_handler()
-                .zoom_hotkeys_enabled(false)
-                .inner_size(size.width as f64, size.height as f64)
-                .visible(false)
-                .initialization_script(format!(
-                    r#"
+        let window_builder = base_window_config(
+            WebviewWindowBuilder::new(app, Self::LABEL, WebviewUrl::App("/".into())),
+            app,
+        )
+        .title("OpenCode")
+        .decorations(true)
+        .disable_drag_drop_handler()
+        .zoom_hotkeys_enabled(false)
+        .visible(true)
+        .maximized(true)
+        .initialization_script(format!(
+            r#"
             window.__OPENCODE__ ??= {{}};
             window.__OPENCODE__.updaterEnabled = {UPDATER_ENABLED};
           "#
-                ));
-
-        #[cfg(target_os = "macos")]
-        let window_builder = window_builder
-            .title_bar_style(tauri::TitleBarStyle::Overlay)
-            .hidden_title(true)
-            .traffic_light_position(tauri::LogicalPosition::new(12.0, 18.0));
-
-        #[cfg(windows)]
-        let window_builder = window_builder
-			// Some VPNs set a global/system proxy that WebView2 applies even for loopback
-			// connections, which breaks the app's localhost sidecar server.
-			// Note: when setting additional args, we must re-apply wry's default
-			// `--disable-features=...` flags.
-	        .additional_browser_args(
-	            "--proxy-bypass-list=<-loopback> --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection",
-	        )
-	        .decorations(false);
+        ));
 
         let window = window_builder.build()?;
 
@@ -115,19 +97,42 @@ impl LoadingWindow {
     pub const LABEL: &str = "loading";
 
     pub fn create(app: &AppHandle) -> Result<Self, tauri::Error> {
-        let window_builder =
-            WebviewWindowBuilder::new(app, Self::LABEL, tauri::WebviewUrl::App("/loading".into()))
-                .inner_size(640.0, 480.0)
-                .visible(false);
-
-        #[cfg(target_os = "macos")]
-        let window_builder = window_builder
-            .title_bar_style(tauri::TitleBarStyle::Overlay)
-            .hidden_title(true)
-            .resizable(false)
-            .center()
-            .traffic_light_position(tauri::LogicalPosition::new(12.0, 18.0));
+        let window_builder = base_window_config(
+            WebviewWindowBuilder::new(app, Self::LABEL, tauri::WebviewUrl::App("/loading".into())),
+            app,
+        )
+        .center()
+        .resizable(false)
+        .inner_size(640.0, 480.0)
+        .visible(true);
 
         Ok(Self(window_builder.build()?))
     }
+}
+
+fn base_window_config<'a, R: Runtime, M: Manager<R>>(
+    window_builder: WebviewWindowBuilder<'a, R, M>,
+    _app: &AppHandle,
+) -> WebviewWindowBuilder<'a, R, M> {
+    let window_builder = window_builder.decorations(true);
+
+    #[cfg(windows)]
+    let window_builder = window_builder
+        // Some VPNs set a global/system proxy that WebView2 applies even for loopback
+        // connections, which breaks the app's localhost sidecar server.
+        // Note: when setting additional args, we must re-apply wry's default
+        // `--disable-features=...` flags.
+        .additional_browser_args(
+            "--proxy-bypass-list=<-loopback> --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection",
+        )
+        .data_directory(_app.path().config_dir().expect("Failed to get config dir").join("OpenCode"))
+        .decorations(false);
+
+    #[cfg(target_os = "macos")]
+    let window_builder = window_builder
+        .title_bar_style(tauri::TitleBarStyle::Overlay)
+        .hidden_title(true)
+        .traffic_light_position(tauri::LogicalPosition::new(12.0, 18.0));
+
+    window_builder
 }
