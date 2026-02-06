@@ -129,9 +129,38 @@
   flex: 1;
   padding: var(--space-6) var(--space-8);
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 
   @media (max-width: 48rem) {
     padding: var(--space-6) var(--space-4);
+  }
+}
+
+[data-component="workspace-main"] {
+  flex: 1;
+}
+
+[data-component="workspace-content"] > [data-component="legal"] {
+  margin-top: var(--space-16);
+  padding-top: var(--space-8);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-weak);
+  display: flex;
+  gap: var(--space-8);
+
+  a {
+    color: var(--color-text-weak);
+    text-decoration: none;
+  }
+
+  a:hover {
+    color: var(--color-text);
+    text-decoration: underline;
+  }
+
+  @media (max-width: 48rem) {
+    gap: var(--space-4);
   }
 }
 

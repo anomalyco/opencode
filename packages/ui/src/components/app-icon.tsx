@@ -5,6 +5,7 @@ import type { IconName } from "./app-icons/types"
 import androidStudio from "../assets/icons/app/android-studio.svg"
 import antigravity from "../assets/icons/app/antigravity.svg"
 import cursor from "../assets/icons/app/cursor.svg"
+import fileExplorer from "../assets/icons/app/file-explorer.svg"
 import finder from "../assets/icons/app/finder.png"
 import ghostty from "../assets/icons/app/ghostty.svg"
 import iterm2 from "../assets/icons/app/iterm2.svg"
@@ -14,11 +15,13 @@ import textmate from "../assets/icons/app/textmate.png"
 import vscode from "../assets/icons/app/vscode.svg"
 import xcode from "../assets/icons/app/xcode.png"
 import zed from "../assets/icons/app/zed.svg"
+import sublimetext from "../assets/icons/app/sublimetext.svg"
 
 const icons = {
   vscode,
   cursor,
   zed,
+  "file-explorer": fileExplorer,
   finder,
   terminal,
   iterm2,
@@ -28,6 +31,7 @@ const icons = {
   antigravity,
   textmate,
   powershell,
+  "sublime-text": sublimetext,
 } satisfies Record<IconName, string>
 
 export type AppIconProps = Omit<ComponentProps<"img">, "src"> & {
