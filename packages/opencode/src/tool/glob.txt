@@ -1,6 +1,7 @@
-- Fast file pattern matching tool that works with any codebase size
-- Supports glob patterns like "**/*.js" or "src/**/*.ts"
-- Returns matching file paths sorted by modification time
-- Use this tool when you need to find files by name patterns
-- When you are doing an open-ended search that may require multiple rounds of globbing and grepping, use the Task tool instead
-- You have the capability to call multiple tools in a single response. It is always better to speculatively perform multiple searches as a batch that are potentially useful.
+- Fast file pattern matching tool that works with any codebase size.
+- Supports glob patterns like "**/*.js" or "src/**/*.ts".
+- Returns file paths relative to the project root, sorted by modification time.
+- Highly optimized for speed even in large repositories.
+- When there are many matches, it provides a summary and shows the most recently modified files first.
+- Use this tool when you need to find files by name patterns or explore the project structure.
+- If you get too many results, try narrowing your search by providing a more specific pattern or a subdirectory in the 'path' parameter.
