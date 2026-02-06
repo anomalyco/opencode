@@ -1,19 +1,10 @@
 import { Accessor } from "solid-js"
-import { produce } from "solid-js/store"
 import { useNavigate, useParams } from "@solidjs/router"
-import { getFilename } from "@opencode-ai/util/path"
-import { createOpencodeClient, type Message, type Part } from "@opencode-ai/sdk/v2/client"
-import { Binary } from "@opencode-ai/util/binary"
+import { createOpencodeClient, type Message } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { useLocal } from "@/context/local"
-import {
-  usePrompt,
-  type AgentPart,
-  type FileAttachmentPart,
-  type ImageAttachmentPart,
-  type Prompt,
-} from "@/context/prompt"
+import { usePrompt, type ImageAttachmentPart, type Prompt } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
@@ -24,6 +15,7 @@ import { Identifier } from "@/utils/id"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import type { FileSelection } from "@/context/file"
 import { setCursorPosition } from "./editor-dom"
+import { buildRequestParts } from "./build-request-parts"
 
 type PendingPrompt = {
   abort: AbortController
@@ -290,138 +282,19 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       }
     }
 
-    const toAbsolutePath = (path: string) =>
-      path.startsWith("/") ? path : (sessionDirectory + "/" + path).replace("//", "/")
-
-    const fileAttachments = currentPrompt.filter((part) => part.type === "file") as FileAttachmentPart[]
-    const agentAttachments = currentPrompt.filter((part) => part.type === "agent") as AgentPart[]
-
-    const fileAttachmentParts = fileAttachments.map((attachment) => {
-      const absolute = toAbsolutePath(attachment.path)
-      const query = attachment.selection
-        ? `?start=${attachment.selection.startLine}&end=${attachment.selection.endLine}`
-        : ""
-      return {
-        id: Identifier.ascending("part"),
-        type: "file" as const,
-        mime: "text/plain",
-        url: `file://${absolute}${query}`,
-        filename: getFilename(attachment.path),
-        source: {
-          type: "file" as const,
-          text: {
-            value: attachment.content,
-            start: attachment.start,
-            end: attachment.end,
-          },
-          path: absolute,
-        },
-      }
-    })
-
-    const agentAttachmentParts = agentAttachments.map((attachment) => ({
-      id: Identifier.ascending("part"),
-      type: "agent" as const,
-      name: attachment.name,
-      source: {
-        value: attachment.content,
-        start: attachment.start,
-        end: attachment.end,
-      },
-    }))
-
-    const usedUrls = new Set(fileAttachmentParts.map((part) => part.url))
-
     const context = prompt.context.items().slice()
     const commentItems = context.filter((item) => item.type === "file" && !!item.comment?.trim())
 
-    const contextParts: Array<
-      | {
-          id: string
-          type: "text"
-          text: string
-          synthetic?: boolean
-        }
-      | {
-          id: string
-          type: "file"
-          mime: string
-          url: string
-          filename?: string
-        }
-    > = []
-
-    const commentNote = (path: string, selection: FileSelection | undefined, comment: string) => {
-      const start = selection ? Math.min(selection.startLine, selection.endLine) : undefined
-      const end = selection ? Math.max(selection.startLine, selection.endLine) : undefined
-      const range =
-        start === undefined || end === undefined
-          ? "this file"
-          : start === end
-            ? `line ${start}`
-            : `lines ${start} through ${end}`
-
-      return `The user made the following comment regarding ${range} of ${path}: ${comment}`
-    }
-
-    const addContextFile = (item: { path: string; selection?: FileSelection; comment?: string }) => {
-      const absolute = toAbsolutePath(item.path)
-      const query = item.selection ? `?start=${item.selection.startLine}&end=${item.selection.endLine}` : ""
-      const url = `file://${absolute}${query}`
-
-      const comment = item.comment?.trim()
-      if (!comment && usedUrls.has(url)) return
-      usedUrls.add(url)
-
-      if (comment) {
-        contextParts.push({
-          id: Identifier.ascending("part"),
-          type: "text",
-          text: commentNote(item.path, item.selection, comment),
-          synthetic: true,
-        })
-      }
-
-      contextParts.push({
-        id: Identifier.ascending("part"),
-        type: "file",
-        mime: "text/plain",
-        url,
-        filename: getFilename(item.path),
-      })
-    }
-
-    for (const item of context) {
-      if (item.type !== "file") continue
-      addContextFile({ path: item.path, selection: item.selection, comment: item.comment })
-    }
-
-    const imageAttachmentParts = images.map((attachment) => ({
-      id: Identifier.ascending("part"),
-      type: "file" as const,
-      mime: attachment.mime,
-      url: attachment.dataUrl,
-      filename: attachment.filename,
-    }))
-
     const messageID = Identifier.ascending("message")
-    const requestParts = [
-      {
-        id: Identifier.ascending("part"),
-        type: "text" as const,
-        text,
-      },
-      ...fileAttachmentParts,
-      ...contextParts,
-      ...agentAttachmentParts,
-      ...imageAttachmentParts,
-    ]
-
-    const optimisticParts = requestParts.map((part) => ({
-      ...part,
+    const { requestParts, optimisticParts } = buildRequestParts({
+      prompt: currentPrompt,
+      context,
+      images,
+      text,
       sessionID: session.id,
       messageID,
-    })) as unknown as Part[]
+      sessionDirectory,
+    })
 
     const optimisticMessage: Message = {
       id: messageID,
@@ -432,69 +305,20 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       model,
     }
 
-    const addOptimisticMessage = () => {
-      if (sessionDirectory === projectDirectory) {
-        sync.set(
-          produce((draft) => {
-            const messages = draft.message[session.id]
-            if (!messages) {
-              draft.message[session.id] = [optimisticMessage]
-            } else {
-              const result = Binary.search(messages, messageID, (m) => m.id)
-              messages.splice(result.index, 0, optimisticMessage)
-            }
-            draft.part[messageID] = optimisticParts
-              .filter((part) => !!part?.id)
-              .slice()
-              .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-          }),
-        )
-        return
-      }
+    const addOptimisticMessage = () =>
+      sync.session.optimistic.add({
+        directory: sessionDirectory,
+        sessionID: session.id,
+        message: optimisticMessage,
+        parts: optimisticParts,
+      })
 
-      globalSync.child(sessionDirectory)[1](
-        produce((draft) => {
-          const messages = draft.message[session.id]
-          if (!messages) {
-            draft.message[session.id] = [optimisticMessage]
-          } else {
-            const result = Binary.search(messages, messageID, (m) => m.id)
-            messages.splice(result.index, 0, optimisticMessage)
-          }
-          draft.part[messageID] = optimisticParts
-            .filter((part) => !!part?.id)
-            .slice()
-            .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-        }),
-      )
-    }
-
-    const removeOptimisticMessage = () => {
-      if (sessionDirectory === projectDirectory) {
-        sync.set(
-          produce((draft) => {
-            const messages = draft.message[session.id]
-            if (messages) {
-              const result = Binary.search(messages, messageID, (m) => m.id)
-              if (result.found) messages.splice(result.index, 1)
-            }
-            delete draft.part[messageID]
-          }),
-        )
-        return
-      }
-
-      globalSync.child(sessionDirectory)[1](
-        produce((draft) => {
-          const messages = draft.message[session.id]
-          if (messages) {
-            const result = Binary.search(messages, messageID, (m) => m.id)
-            if (result.found) messages.splice(result.index, 1)
-          }
-          delete draft.part[messageID]
-        }),
-      )
-    }
+    const removeOptimisticMessage = () =>
+      sync.session.optimistic.remove({
+        directory: sessionDirectory,
+        sessionID: session.id,
+        messageID,
+      })
 
     removeCommentItems(commentItems)
     clearInput()

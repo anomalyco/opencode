@@ -8,6 +8,7 @@ import { LocalPTY } from "@/context/terminal"
 import { resolveThemeVariant, useTheme, withAlpha, type HexColor } from "@opencode-ai/ui/theme"
 import { useLanguage } from "@/context/language"
 import { showToast } from "@opencode-ai/ui/toast"
+import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
 
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
@@ -111,17 +112,13 @@ export const Terminal = (props: TerminalProps) => {
     const colors = getTerminalColors()
     setTerminalColors(colors)
     if (!term) return
-    const setOption = (term as unknown as { setOption?: (key: string, value: TerminalColors) => void }).setOption
-    if (!setOption) return
-    setOption("theme", colors)
+    setOptionIfSupported(term, "theme", colors)
   })
 
   createEffect(() => {
     const font = monoFontFamily(settings.appearance.font())
     if (!term) return
-    const setOption = (term as unknown as { setOption?: (key: string, value: string) => void }).setOption
-    if (!setOption) return
-    setOption("fontFamily", font)
+    setOptionIfSupported(term, "fontFamily", font)
   })
 
   const focusTerminal = () => {
@@ -146,12 +143,12 @@ export const Terminal = (props: TerminalProps) => {
     const t = term
     if (!t) return
 
-    const link = (t as unknown as { currentHoveredLink?: { text: string } }).currentHoveredLink
-    if (!link?.text) return
+    const text = getHoveredLinkText(t)
+    if (!text) return
 
     event.preventDefault()
     event.stopImmediatePropagation()
-    platform.openLink(link.text)
+    platform.openLink(text)
   }
 
   onMount(() => {
@@ -250,7 +247,7 @@ export const Terminal = (props: TerminalProps) => {
 
       const fit = new mod.FitAddon()
       const serializer = new SerializeAddon()
-      cleanups.push(() => (fit as unknown as { dispose?: VoidFunction }).dispose?.())
+      cleanups.push(() => disposeIfDisposable(fit))
       t.loadAddon(serializer)
       t.loadAddon(fit)
       fitAddon = fit
@@ -303,19 +300,19 @@ export const Terminal = (props: TerminalProps) => {
             .catch(() => {})
         }
       })
-      cleanups.push(() => (onResize as unknown as { dispose?: VoidFunction }).dispose?.())
+      cleanups.push(() => disposeIfDisposable(onResize))
       const onData = t.onData((data) => {
         if (socket.readyState === WebSocket.OPEN) {
           socket.send(data)
         }
       })
-      cleanups.push(() => (onData as unknown as { dispose?: VoidFunction }).dispose?.())
+      cleanups.push(() => disposeIfDisposable(onData))
       const onKey = t.onKey((key) => {
         if (key.key == "Enter") {
           props.onSubmit?.()
         }
       })
-      cleanups.push(() => (onKey as unknown as { dispose?: VoidFunction }).dispose?.())
+      cleanups.push(() => disposeIfDisposable(onKey))
       // t.onScroll((ydisp) => {
       // console.log("Scroll position:", ydisp)
       // })
