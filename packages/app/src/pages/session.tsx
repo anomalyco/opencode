@@ -75,6 +75,8 @@ import {
 } from "@/components/session"
 import { navMark, navParams } from "@/utils/perf"
 import { same } from "@/utils/same"
+import { combineCommandSections, createOpenReviewFile, focusTerminalById } from "@/pages/session/helpers"
+import { createScrollSpy } from "@/pages/session/scroll-spy"
 
 type DiffStyle = "unified" | "split"
 
@@ -872,19 +874,7 @@ export default function Page() {
         if (document.activeElement instanceof HTMLElement) {
           document.activeElement.blur()
         }
-        const wrapper = document.getElementById(`terminal-wrapper-${activeId}`)
-        const element = wrapper?.querySelector('[data-component="terminal"]') as HTMLElement
-        if (!element) return
-
-        // Find and focus the ghostty textarea (the actual input element)
-        const textarea = element.querySelector("textarea") as HTMLTextAreaElement
-        if (textarea) {
-          textarea.focus()
-          return
-        }
-        // Fallback: focus container and dispatch pointer event
-        element.focus()
-        element.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }))
+        focusTerminalById(activeId)
       },
     ),
   )
@@ -973,7 +963,7 @@ export default function Page() {
     })
   }
 
-  command.register(() => [
+  const sessionCommands = createMemo(() => [
     {
       id: "session.new",
       title: language.t("command.session.new"),
@@ -982,6 +972,9 @@ export default function Page() {
       slash: "new",
       onSelect: () => navigate(`/${params.dir}/session`),
     },
+  ])
+
+  const fileCommands = createMemo(() => [
     {
       id: "file.open",
       title: language.t("command.file.open"),
@@ -989,7 +982,7 @@ export default function Page() {
       category: language.t("command.category.file"),
       keybind: "mod+p",
       slash: "open",
-      onSelect: () => dialog.show(() => <DialogSelectFile onOpenFile={() => showAllFiles()} />),
+      onSelect: () => dialog.show(() => <DialogSelectFile onOpenFile={showAllFiles} />),
     },
     {
       id: "tab.close",
@@ -1003,6 +996,9 @@ export default function Page() {
         tabs().close(active)
       },
     },
+  ])
+
+  const contextCommands = createMemo(() => [
     {
       id: "context.addSelection",
       title: language.t("command.context.addSelection"),
@@ -1034,6 +1030,9 @@ export default function Page() {
         addSelectionToContext(path, selectionFromLines(range))
       },
     },
+  ])
+
+  const viewCommands = createMemo(() => [
     {
       id: "terminal.toggle",
       title: language.t("command.terminal.toggle"),
@@ -1087,6 +1086,9 @@ export default function Page() {
         setStore("expanded", msg.id, (open: boolean | undefined) => !open)
       },
     },
+  ])
+
+  const messageCommands = createMemo(() => [
     {
       id: "message.previous",
       title: language.t("command.message.previous"),
@@ -1105,6 +1107,9 @@ export default function Page() {
       disabled: !params.id,
       onSelect: () => navigateMessageByOffset(1),
     },
+  ])
+
+  const agentCommands = createMemo(() => [
     {
       id: "model.choose",
       title: language.t("command.model.choose"),
@@ -1150,6 +1155,9 @@ export default function Page() {
         local.model.variant.cycle()
       },
     },
+  ])
+
+  const permissionCommands = createMemo(() => [
     {
       id: "permissions.autoaccept",
       title:
@@ -1173,6 +1181,9 @@ export default function Page() {
         })
       },
     },
+  ])
+
+  const sessionActionCommands = createMemo(() => [
     {
       id: "session.undo",
       title: language.t("command.session.undo"),
@@ -1187,17 +1198,14 @@ export default function Page() {
           await sdk.client.session.abort({ sessionID }).catch(() => {})
         }
         const revert = info()?.revert?.messageID
-        // Find the last user message that's not already reverted
         const message = findLast(userMessages(), (x) => !revert || x.id < revert)
         if (!message) return
         await sdk.client.session.revert({ sessionID, messageID: message.id })
-        // Restore the prompt from the reverted message
         const parts = sync.data.part[message.id]
         if (parts) {
           const restored = extractPromptFromParts(parts, { directory: sdk.directory })
           prompt.set(restored)
         }
-        // Navigate to the message before the reverted one (which will be the new last visible message)
         const priorMessage = findLast(userMessages(), (x) => x.id < message.id)
         setActiveMessage(priorMessage)
       },
@@ -1216,17 +1224,13 @@ export default function Page() {
         if (!revertMessageID) return
         const nextMessage = userMessages().find((x) => x.id > revertMessageID)
         if (!nextMessage) {
-          // Full unrevert - restore all messages and navigate to last
           await sdk.client.session.unrevert({ sessionID })
           prompt.reset()
-          // Navigate to the last message (the one that was at the revert point)
           const lastMsg = findLast(userMessages(), (x) => x.id >= revertMessageID)
           setActiveMessage(lastMsg)
           return
         }
-        // Partial redo - move forward to next message
         await sdk.client.session.revert({ sessionID, messageID: nextMessage.id })
-        // Navigate to the message before the new revert point
         const priorMsg = findLast(userMessages(), (x) => x.id < nextMessage.id)
         setActiveMessage(priorMsg)
       },
@@ -1265,73 +1269,89 @@ export default function Page() {
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: () => dialog.show(() => <DialogFork />),
     },
-    ...(sync.data.config.share !== "disabled"
-      ? [
-          {
-            id: "session.share",
-            title: language.t("command.session.share"),
-            description: language.t("command.session.share.description"),
-            category: language.t("command.category.session"),
-            slash: "share",
-            disabled: !params.id || !!info()?.share?.url,
-            onSelect: async () => {
-              if (!params.id) return
-              await sdk.client.session
-                .share({ sessionID: params.id })
-                .then((res) => {
-                  navigator.clipboard.writeText(res.data!.share!.url).catch(() =>
-                    showToast({
-                      title: language.t("toast.session.share.copyFailed.title"),
-                      variant: "error",
-                    }),
-                  )
-                })
-                .then(() =>
-                  showToast({
-                    title: language.t("toast.session.share.success.title"),
-                    description: language.t("toast.session.share.success.description"),
-                    variant: "success",
-                  }),
-                )
-                .catch(() =>
-                  showToast({
-                    title: language.t("toast.session.share.failed.title"),
-                    description: language.t("toast.session.share.failed.description"),
-                    variant: "error",
-                  }),
-                )
-            },
-          },
-          {
-            id: "session.unshare",
-            title: language.t("command.session.unshare"),
-            description: language.t("command.session.unshare.description"),
-            category: language.t("command.category.session"),
-            slash: "unshare",
-            disabled: !params.id || !info()?.share?.url,
-            onSelect: async () => {
-              if (!params.id) return
-              await sdk.client.session
-                .unshare({ sessionID: params.id })
-                .then(() =>
-                  showToast({
-                    title: language.t("toast.session.unshare.success.title"),
-                    description: language.t("toast.session.unshare.success.description"),
-                    variant: "success",
-                  }),
-                )
-                .catch(() =>
-                  showToast({
-                    title: language.t("toast.session.unshare.failed.title"),
-                    description: language.t("toast.session.unshare.failed.description"),
-                    variant: "error",
-                  }),
-                )
-            },
-          },
-        ]
-      : []),
   ])
+
+  const shareCommands = createMemo(() => {
+    if (sync.data.config.share === "disabled") return []
+    return [
+      {
+        id: "session.share",
+        title: language.t("command.session.share"),
+        description: language.t("command.session.share.description"),
+        category: language.t("command.category.session"),
+        slash: "share",
+        disabled: !params.id || !!info()?.share?.url,
+        onSelect: async () => {
+          if (!params.id) return
+          await sdk.client.session
+            .share({ sessionID: params.id })
+            .then((res) => {
+              navigator.clipboard.writeText(res.data!.share!.url).catch(() =>
+                showToast({
+                  title: language.t("toast.session.share.copyFailed.title"),
+                  variant: "error",
+                }),
+              )
+            })
+            .then(() =>
+              showToast({
+                title: language.t("toast.session.share.success.title"),
+                description: language.t("toast.session.share.success.description"),
+                variant: "success",
+              }),
+            )
+            .catch(() =>
+              showToast({
+                title: language.t("toast.session.share.failed.title"),
+                description: language.t("toast.session.share.failed.description"),
+                variant: "error",
+              }),
+            )
+        },
+      },
+      {
+        id: "session.unshare",
+        title: language.t("command.session.unshare"),
+        description: language.t("command.session.unshare.description"),
+        category: language.t("command.category.session"),
+        slash: "unshare",
+        disabled: !params.id || !info()?.share?.url,
+        onSelect: async () => {
+          if (!params.id) return
+          await sdk.client.session
+            .unshare({ sessionID: params.id })
+            .then(() =>
+              showToast({
+                title: language.t("toast.session.unshare.success.title"),
+                description: language.t("toast.session.unshare.success.description"),
+                variant: "success",
+              }),
+            )
+            .catch(() =>
+              showToast({
+                title: language.t("toast.session.unshare.failed.title"),
+                description: language.t("toast.session.unshare.failed.description"),
+                variant: "error",
+              }),
+            )
+        },
+      },
+    ]
+  })
+
+  command.register("session", () =>
+    combineCommandSections([
+      sessionCommands(),
+      fileCommands(),
+      contextCommands(),
+      viewCommands(),
+      messageCommands(),
+      agentCommands(),
+      permissionCommands(),
+      sessionActionCommands(),
+      shareCommands(),
+    ]),
+  )
 
   const handleKeyDown = (event: KeyboardEvent) => {
     const activeElement = document.activeElement as HTMLElement | undefined
@@ -1407,19 +1427,7 @@ export default function Page() {
     const activeId = terminal.active()
     if (!activeId) return
     setTimeout(() => {
-      const wrapper = document.getElementById(`terminal-wrapper-${activeId}`)
-      const element = wrapper?.querySelector('[data-component="terminal"]') as HTMLElement
-      if (!element) return
-
-      // Find and focus the ghostty textarea (the actual input element)
-      const textarea = element.querySelector("textarea") as HTMLTextAreaElement
-      if (textarea) {
-        textarea.focus()
-        return
-      }
-      // Fallback: focus container and dispatch pointer event
-      element.focus()
-      element.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }))
+      focusTerminalById(activeId)
     }, 0)
   }
 
@@ -1457,6 +1465,13 @@ export default function Page() {
     setFileTreeTab("all")
   }
 
+  const openReviewFile = createOpenReviewFile({
+    showAllFiles,
+    tabForPath: file.tab,
+    openTab: tabs().open,
+    loadFile: file.load,
+  })
+
   const changesOptions = ["session", "turn"] as const
   const changesOptionsList = [...changesOptions]
 
@@ -1481,65 +1496,72 @@ export default function Page() {
     </div>
   )
 
+  const reviewContent = (input: {
+    diffStyle: DiffStyle
+    onDiffStyleChange?: (style: DiffStyle) => void
+    classes?: SessionReviewTabProps["classes"]
+    loadingClass: string
+    emptyClass: string
+  }) => (
+    <Switch>
+      <Match when={store.changes === "turn" && !!params.id}>
+        <SessionReviewTab
+          title={changesTitle()}
+          empty={emptyTurn()}
+          diffs={reviewDiffs}
+          view={view}
+          diffStyle={input.diffStyle}
+          onDiffStyleChange={input.onDiffStyleChange}
+          onScrollRef={(el) => setTree("reviewScroll", el)}
+          focusedFile={tree.activeDiff}
+          onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+          comments={comments.all()}
+          focusedComment={comments.focus()}
+          onFocusedCommentChange={comments.setFocus}
+          onViewFile={openReviewFile}
+          classes={input.classes}
+        />
+      </Match>
+      <Match when={hasReview()}>
+        <Show
+          when={diffsReady()}
+          fallback={<div class={input.loadingClass}>{language.t("session.review.loadingChanges")}</div>}
+        >
+          <SessionReviewTab
+            title={changesTitle()}
+            diffs={reviewDiffs}
+            view={view}
+            diffStyle={input.diffStyle}
+            onDiffStyleChange={input.onDiffStyleChange}
+            onScrollRef={(el) => setTree("reviewScroll", el)}
+            focusedFile={tree.activeDiff}
+            onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+            comments={comments.all()}
+            focusedComment={comments.focus()}
+            onFocusedCommentChange={comments.setFocus}
+            onViewFile={openReviewFile}
+            classes={input.classes}
+          />
+        </Show>
+      </Match>
+      <Match when={true}>
+        <div class={input.emptyClass}>
+          <Mark class="w-14 opacity-10" />
+          <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.empty")}</div>
+        </div>
+      </Match>
+    </Switch>
+  )
+
   const reviewPanel = () => (
     <div class="flex flex-col h-full overflow-hidden bg-background-stronger contain-strict">
       <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
-        <Switch>
-          <Match when={store.changes === "turn" && !!params.id}>
-            <SessionReviewTab
-              title={changesTitle()}
-              empty={emptyTurn()}
-              diffs={reviewDiffs}
-              view={view}
-              diffStyle={layout.review.diffStyle()}
-              onDiffStyleChange={layout.review.setDiffStyle}
-              onScrollRef={(el) => setTree("reviewScroll", el)}
-              focusedFile={tree.activeDiff}
-              onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
-              comments={comments.all()}
-              focusedComment={comments.focus()}
-              onFocusedCommentChange={comments.setFocus}
-              onViewFile={(path) => {
-                showAllFiles()
-                const value = file.tab(path)
-                tabs().open(value)
-                file.load(path)
-              }}
-            />
-          </Match>
-          <Match when={hasReview()}>
-            <Show
-              when={diffsReady()}
-              fallback={<div class="px-6 py-4 text-text-weak">{language.t("session.review.loadingChanges")}</div>}
-            >
-              <SessionReviewTab
-                title={changesTitle()}
-                diffs={reviewDiffs}
-                view={view}
-                diffStyle={layout.review.diffStyle()}
-                onDiffStyleChange={layout.review.setDiffStyle}
-                onScrollRef={(el) => setTree("reviewScroll", el)}
-                focusedFile={tree.activeDiff}
-                onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
-                comments={comments.all()}
-                focusedComment={comments.focus()}
-                onFocusedCommentChange={comments.setFocus}
-                onViewFile={(path) => {
-                  showAllFiles()
-                  const value = file.tab(path)
-                  tabs().open(value)
-                  file.load(path)
-                }}
-              />
-            </Show>
-          </Match>
-          <Match when={true}>
-            <div class="h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6">
-              <Mark class="w-14 opacity-10" />
-              <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.empty")}</div>
-            </div>
-          </Match>
-        </Switch>
+        {reviewContent({
+          diffStyle: layout.review.diffStyle(),
+          onDiffStyleChange: layout.review.setDiffStyle,
+          loadingClass: "px-6 py-4 text-text-weak",
+          emptyClass: "h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6",
+        })}
       </div>
     </div>
   )
@@ -1656,6 +1678,12 @@ export default function Page() {
     return "empty"
   })
 
+  const activeFileTab = createMemo(() => {
+    const active = activeTab()
+    if (!openedTabs().includes(active)) return
+    return active
+  })
+
   createEffect(() => {
     if (!layout.ready()) return
     if (tabs().active()) return
@@ -1760,6 +1788,12 @@ export default function Page() {
 
   let scrollStateFrame: number | undefined
   let scrollStateTarget: HTMLDivElement | undefined
+  const scrollSpy = createScrollSpy({
+    onActive: (id) => {
+      if (id === store.messageId) return
+      setStore("messageId", id)
+    },
+  })
 
   const updateScrollState = (el: HTMLDivElement) => {
     const max = el.scrollHeight - el.clientHeight
@@ -1807,16 +1841,11 @@ export default function Page() {
     ),
   )
 
-  let scrollSpyFrame: number | undefined
-  let scrollSpyTarget: HTMLDivElement | undefined
-
   createEffect(
     on(
       sessionKey,
       () => {
-        if (scrollSpyFrame !== undefined) cancelAnimationFrame(scrollSpyFrame)
-        scrollSpyFrame = undefined
-        scrollSpyTarget = undefined
+        scrollSpy.clear()
       },
       { defer: true },
     ),
@@ -1827,6 +1856,7 @@ export default function Page() {
   const setScrollRef = (el: HTMLDivElement | undefined) => {
     scroller = el
     autoScroll.scrollRef(el)
+    scrollSpy.setContainer(el)
     if (el) scheduleScrollState(el)
   }
 
@@ -1835,6 +1865,7 @@ export default function Page() {
     () => {
       const el = scroller
       if (el) scheduleScrollState(el)
+      scrollSpy.markDirty()
     },
   )
 
@@ -1940,6 +1971,7 @@ export default function Page() {
       }
 
       if (el) scheduleScrollState(el)
+      scrollSpy.markDirty()
     },
   )
 
@@ -2053,61 +2085,6 @@ export default function Page() {
     if (el) scheduleScrollState(el)
   }
 
-  const closestMessage = (node: Element | null): HTMLElement | null => {
-    if (!node) return null
-    const match = node.closest?.("[data-message-id]") as HTMLElement | null
-    if (match) return match
-    const root = node.getRootNode?.()
-    if (root instanceof ShadowRoot) return closestMessage(root.host)
-    return null
-  }
-
-  const getActiveMessageId = (container: HTMLDivElement) => {
-    const rect = container.getBoundingClientRect()
-    if (!rect.width || !rect.height) return
-
-    const x = Math.min(window.innerWidth - 1, Math.max(0, rect.left + rect.width / 2))
-    const y = Math.min(window.innerHeight - 1, Math.max(0, rect.top + 100))
-
-    const hit = document.elementFromPoint(x, y)
-    const host = closestMessage(hit)
-    const id = host?.dataset.messageId
-    if (id) return id
-
-    // Fallback: DOM query (handles edge hit-testing cases)
-    const cutoff = container.scrollTop + 100
-    const nodes = container.querySelectorAll<HTMLElement>("[data-message-id]")
-    let last: string | undefined
-
-    for (const node of nodes) {
-      const next = node.dataset.messageId
-      if (!next) continue
-      if (node.offsetTop > cutoff) break
-      last = next
-    }
-
-    return last
-  }
-
-  const scheduleScrollSpy = (container: HTMLDivElement) => {
-    scrollSpyTarget = container
-    if (scrollSpyFrame !== undefined) return
-
-    scrollSpyFrame = requestAnimationFrame(() => {
-      scrollSpyFrame = undefined
-
-      const target = scrollSpyTarget
-      scrollSpyTarget = undefined
-      if (!target) return
-
-      const id = getActiveMessageId(target)
-      if (!id) return
-      if (id === store.messageId) return
-
-      setStore("messageId", id)
-    })
-  }
-
   createEffect(() => {
     const sessionID = params.id
     const ready = messagesReady()
@@ -2215,7 +2192,7 @@ export default function Page() {
   onCleanup(() => {
     cancelTurnBackfill()
     document.removeEventListener("keydown", handleKeyDown)
-    if (scrollSpyFrame !== undefined) cancelAnimationFrame(scrollSpyFrame)
+    scrollSpy.destroy()
     if (scrollStateFrame !== undefined) cancelAnimationFrame(scrollStateFrame)
   })
 
@@ -2272,74 +2249,16 @@ export default function Page() {
                     when={!mobileChanges()}
                     fallback={
                       <div class="relative h-full overflow-hidden">
-                        <Switch>
-                          <Match when={store.changes === "turn" && !!params.id}>
-                            <SessionReviewTab
-                              title={changesTitle()}
-                              empty={emptyTurn()}
-                              diffs={reviewDiffs}
-                              view={view}
-                              diffStyle="unified"
-                              focusedFile={tree.activeDiff}
-                              onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
-                              comments={comments.all()}
-                              focusedComment={comments.focus()}
-                              onFocusedCommentChange={comments.setFocus}
-                              onViewFile={(path) => {
-                                showAllFiles()
-                                const value = file.tab(path)
-                                tabs().open(value)
-                                file.load(path)
-                              }}
-                              classes={{
-                                root: "pb-[calc(var(--prompt-height,8rem)+32px)]",
-                                header: "px-4",
-                                container: "px-4",
-                              }}
-                            />
-                          </Match>
-                          <Match when={hasReview()}>
-                            <Show
-                              when={diffsReady()}
-                              fallback={
-                                <div class="px-4 py-4 text-text-weak">
-                                  {language.t("session.review.loadingChanges")}
-                                </div>
-                              }
-                            >
-                              <SessionReviewTab
-                                title={changesTitle()}
-                                diffs={reviewDiffs}
-                                view={view}
-                                diffStyle="unified"
-                                focusedFile={tree.activeDiff}
-                                onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
-                                comments={comments.all()}
-                                focusedComment={comments.focus()}
-                                onFocusedCommentChange={comments.setFocus}
-                                onViewFile={(path) => {
-                                  showAllFiles()
-                                  const value = file.tab(path)
-                                  tabs().open(value)
-                                  file.load(path)
-                                }}
-                                classes={{
-                                  root: "pb-[calc(var(--prompt-height,8rem)+32px)]",
-                                  header: "px-4",
-                                  container: "px-4",
-                                }}
-                              />
-                            </Show>
-                          </Match>
-                          <Match when={true}>
-                            <div class="h-full px-4 pb-30 flex flex-col items-center justify-center text-center gap-6">
-                              <Mark class="w-14 opacity-10" />
-                              <div class="text-14-regular text-text-weak max-w-56">
-                                {language.t("session.review.empty")}
-                              </div>
-                            </div>
-                          </Match>
-                        </Switch>
+                        {reviewContent({
+                          diffStyle: "unified",
+                          classes: {
+                            root: "pb-[calc(var(--prompt-height,8rem)+32px)]",
+                            header: "px-4",
+                            container: "px-4",
+                          },
+                          loadingClass: "px-4 py-4 text-text-weak",
+                          emptyClass: "h-full px-4 pb-30 flex flex-col items-center justify-center text-center gap-6",
+                        })}
                       </div>
                     }
                   >
@@ -2451,7 +2370,7 @@ export default function Page() {
                           if (!hasScrollGesture()) return
                           autoScroll.handleScroll()
                           markScrollGesture(e.currentTarget)
-                          if (isDesktop()) scheduleScrollSpy(e.currentTarget)
+                          if (isDesktop()) scrollSpy.onScroll()
                         }}
                         onClick={autoScroll.handleInteraction}
                         class="relative min-w-0 w-full h-full overflow-y-auto session-scroller"
@@ -2636,6 +2555,10 @@ export default function Page() {
                                 <div
                                   id={anchor(message.id)}
                                   data-message-id={message.id}
+                                  ref={(el) => {
+                                    scrollSpy.register(el, message.id)
+                                    onCleanup(() => scrollSpy.unregister(message.id))
+                                  }}
                                   classList={{
                                     "min-w-0 w-full max-w-full": true,
                                     "md:max-w-200 3xl:max-w-[1200px]": centered(),
@@ -2979,7 +2902,7 @@ export default function Page() {
                         </Tabs.Content>
                       </Show>
 
-                      <For each={openedTabs()}>
+                      <Show when={activeFileTab()} keyed>
                         {(tab) => {
                           let scroll: HTMLDivElement | undefined
                           let scrollFrame: number | undefined
@@ -3483,7 +3406,7 @@ export default function Page() {
                             </Tabs.Content>
                           )
                         }}
-                      </For>
+                      </Show>
                     </Tabs>
                     <DragOverlay>
                       <Show when={store.activeDraggable}>
