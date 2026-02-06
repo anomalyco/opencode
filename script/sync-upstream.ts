@@ -102,8 +102,8 @@ async function main() {
   await $`git fetch ${REMOTE_UPSTREAM} --tags`
   await $`git fetch ${REMOTE_ORIGIN} ${DEV_BRANCH}`
 
-  await $`git checkout ${DEV_BRANCH}`
-  await $`git reset --hard ${REMOTE_ORIGIN}/${DEV_BRANCH}`
+  // Avoid ambiguous branch resolution once both origin/dev and upstream/dev exist.
+  await $`git checkout -B ${DEV_BRANCH} ${REMOTE_ORIGIN}/${DEV_BRANCH}`
 
   await $`git branch -f ${PARENT_BRANCH} ${REMOTE_UPSTREAM}/${UPSTREAM_BRANCH}`
   await $`git push ${REMOTE_ORIGIN} ${PARENT_BRANCH} --force`
