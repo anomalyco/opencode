@@ -32,20 +32,9 @@ export const EditTool = Tool.define("edit", {
     newString: z.string().describe("The text to replace it with (must be different from oldString)"),
     replaceAll: z.boolean().optional().describe("Replace all occurrences of oldString (default false)"),
     matchStrategy: z
-      .enum([
-        "simple",
-        "multi-occurrence",
-        "line-trimmed",
-        "block-anchor",
-        "whitespace-normalized",
-        "indentation-flexible",
-        "escape-normalized",
-        "trimmed-boundary",
-        "context-aware",
-        "regex",
-      ])
+      .enum(["exact", "fuzzy", "block", "regex"])
       .optional()
-      .describe("The strategy to use for matching oldString"),
+      .describe("The strategy to use for matching oldString (default: tries exact, then fuzzy, then block)"),
     contextLines: z.number().optional().describe("Number of context lines to use for matching (default 3)"),
     dryRun: z.boolean().optional().describe("If true, only return the diff without applying changes"),
     regexFlags: z.string().optional().describe("Regex flags to use if matchStrategy is 'regex' (e.g., 'gi')"),
@@ -268,8 +257,24 @@ function levenshtein(a: string, b: string): number {
   // Prevent excessive memory usage for very large strings
   const MAX_LENGTH = 10000
   if (a.length > MAX_LENGTH || b.length > MAX_LENGTH) {
-    // Return a simple approximation for very large strings to avoid O(N^2) time/space
-    return Math.abs(a.length - b.length) + (a.slice(0, 100) === b.slice(0, 100) ? 0 : 1)
+    // For very large strings, use a more representative approximation than just the first 100 chars
+    // Compare prefix, suffix and middle to get a better sense of similarity
+    const prefixLen = 500
+    const suffixLen = 500
+    const midLen = 500
+    
+    let diff = Math.abs(a.length - b.length)
+    
+    // Check prefix
+    if (a.slice(0, prefixLen) !== b.slice(0, prefixLen)) diff += 1
+    // Check suffix
+    if (a.slice(-suffixLen) !== b.slice(-suffixLen)) diff += 1
+    // Check middle
+    const aMid = a.slice(Math.floor(a.length / 2) - midLen / 2, Math.floor(a.length / 2) + midLen / 2)
+    const bMid = b.slice(Math.floor(b.length / 2) - midLen / 2, Math.floor(b.length / 2) + midLen / 2)
+    if (aMid !== bMid) diff += 1
+    
+    return diff
   }
 
   // Handle empty strings
@@ -654,29 +659,37 @@ export const RegexReplacer = (flags = "g"): Replacer => {
 }
 
 export const REPLACER_MAP: Record<string, Replacer | ((opts?: any) => Replacer)> = {
-  simple: SimpleReplacer,
-  "multi-occurrence": MultiOccurrenceReplacer,
-  "line-trimmed": LineTrimmedReplacer,
-  "block-anchor": BlockAnchorReplacer,
-  "whitespace-normalized": WhitespaceNormalizedReplacer,
-  "indentation-flexible": IndentationFlexibleReplacer,
-  "escape-normalized": EscapeNormalizedReplacer,
-  "trimmed-boundary": TrimmedBoundaryReplacer,
-  "context-aware": ContextAwareReplacer,
+  exact: SimpleReplacer,
+  fuzzy: function* (content, find, options) {
+    const fuzzyReplacers = [
+      LineTrimmedReplacer,
+      WhitespaceNormalizedReplacer,
+      IndentationFlexibleReplacer,
+      TrimmedBoundaryReplacer,
+      EscapeNormalizedReplacer,
+    ]
+    for (const replacer of fuzzyReplacers) {
+      const matches = Array.from(replacer(content, find, options))
+      if (matches.length > 0) {
+        yield* matches
+        return
+      }
+    }
+  },
+  block: function* (content, find, options) {
+    const blockReplacers = [BlockAnchorReplacer, ContextAwareReplacer]
+    for (const replacer of blockReplacers) {
+      const matches = Array.from(replacer(content, find, options))
+      if (matches.length > 0) {
+        yield* matches
+        return
+      }
+    }
+  },
   regex: (opts: any) => RegexReplacer(opts?.regexFlags || "g"),
 }
 
-export const DEFAULT_REPLACERS = [
-  "simple",
-  "multi-occurrence",
-  "line-trimmed",
-  "block-anchor",
-  "whitespace-normalized",
-  "indentation-flexible",
-  "escape-normalized",
-  "trimmed-boundary",
-  "context-aware",
-]
+export const DEFAULT_REPLACERS = ["exact", "fuzzy", "block"]
 
 export function trimDiff(diff: string): string {
   const lines = diff.split("\n")
@@ -736,6 +749,7 @@ export interface ReplaceResult {
   matches?: number
   startLine?: number
   endLine?: number
+  output?: string
 }
 
 export function replace(
@@ -788,6 +802,21 @@ export function replace(
         } else {
           // Replace all unique matches found by the fuzzy replacer
           const uniqueMatches = Array.from(new Set(matches))
+
+          // In fuzzy mode, replaceAll is dangerous if different matches are found.
+          // We restrict replaceAll to only apply if ALL matches are identical strings,
+          // OR if it's an exact match strategy.
+          if (replacer.name !== "exact" && uniqueMatches.length > 1) {
+            const error: any = new Error(
+              `replaceAll aborted: fuzzy matching found ${uniqueMatches.length} different variations of the content. This could lead to unintended replacements. Please use a more specific oldString or set matchStrategy to 'exact'.`,
+            )
+            error.metadata = {
+              type: "ambiguous_replace_all",
+              variations: uniqueMatches.slice(0, 5),
+            }
+            throw error
+          }
+
           // Sort by length descending to avoid partial replacements of longer matches
           uniqueMatches.sort((a, b) => b.length - a.length)
 
@@ -796,6 +825,8 @@ export function replace(
           }
         }
 
+        const matchCount = (newContent.match(new RegExp(escapeForRegExp(newString), "g")) || []).length
+
         return {
           content:
             content.substring(0, contentOffset) +
@@ -803,6 +834,7 @@ export function replace(
             content.substring(contentOffset + effectiveContent.length),
           replacer: replacer.name,
           matches: matches.length,
+          output: `Applied ${matches.length} replacements using ${replacer.name} strategy.`,
         }
       }
     }
@@ -855,7 +887,9 @@ export function replace(
         }
       }
 
-      const error: any = new Error(`oldString not found in content.`)
+      const error: any = new Error(
+        `oldString not found in content.${bestMatch.line !== -1 && bestMatch.similarity > 0.7 ? `\n\nSuggested oldString (Line ${bestMatch.line}):\n${bestMatch.content}` : ""}`,
+      )
       error.metadata = {
         type: "not_found",
         suggestions: bestMatch.line !== -1 && bestMatch.similarity > 0.7 ? [bestMatch] : [],

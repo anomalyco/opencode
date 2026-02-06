@@ -27,18 +27,7 @@ export const MultiEditTool = Tool.define("multiedit", {
           newString: z.string().describe("The text to replace it with (must be different from oldString)"),
           replaceAll: z.boolean().optional().describe("Replace all occurrences of oldString (default false)"),
           matchStrategy: z
-            .enum([
-              "simple",
-              "multi-occurrence",
-              "line-trimmed",
-              "block-anchor",
-              "whitespace-normalized",
-              "indentation-flexible",
-              "escape-normalized",
-              "trimmed-boundary",
-              "context-aware",
-              "regex",
-            ])
+            .enum(["exact", "fuzzy", "block", "regex"])
             .optional()
             .describe("The strategy to use for matching oldString"),
           contextLines: z.number().optional().describe("Number of context lines to use for matching (default 3)"),
@@ -78,26 +67,37 @@ export const MultiEditTool = Tool.define("multiedit", {
       contentNew = contentOld
 
       const editInfos: any[] = []
-      for (const edit of params.edits) {
-        if (edit.oldString === edit.newString) {
-          throw new Error("oldString and newString must be different")
-        }
-        try {
-          const result = replace(contentNew, edit.oldString, edit.newString, {
-            replaceAll: edit.replaceAll,
-            matchStrategy: edit.matchStrategy,
-            regexFlags: edit.regexFlags,
-            anchorLines: edit.anchorLines,
-            contextLines: edit.contextLines,
-          })
-          contentNew = result.content
-          editInfos.push(result)
-        } catch (e: any) {
-          if (e.metadata) {
-            ctx.metadata({ metadata: e.metadata })
+
+      try {
+        for (const edit of params.edits) {
+          if (edit.oldString === edit.newString) {
+            throw new Error(`Edit failed: oldString and newString must be different for edit at line ${edit.anchorLines?.start || "unknown"}`)
           }
-          throw e
+          try {
+            const result = replace(contentNew, edit.oldString, edit.newString, {
+              replaceAll: edit.replaceAll,
+              matchStrategy: edit.matchStrategy,
+              regexFlags: edit.regexFlags,
+              anchorLines: edit.anchorLines,
+              contextLines: edit.contextLines,
+            })
+            contentNew = result.content
+            editInfos.push(result)
+          } catch (e: any) {
+            // Enhance error message to specify which edit failed
+            const editIndex = params.edits.indexOf(edit) + 1
+            e.message = `Edit #${editIndex} failed: ${e.message}`
+            if (e.metadata) {
+              ctx.metadata({ metadata: e.metadata })
+            }
+            throw e
+          }
         }
+      } catch (e) {
+        // If any edit fails, we don't write anything to the file.
+        // The transactional nature is preserved because file.write(contentNew)
+        // is only called after all edits succeed.
+        throw e
       }
 
       diff = trimDiff(
