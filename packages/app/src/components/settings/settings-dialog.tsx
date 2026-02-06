@@ -166,9 +166,7 @@ function ConnectProviderSettings() {
         <Button
           size="normal"
           variant="ghost"
-          onClick={() =>
-            dialog.show(() => <DialogSelectProvider onBack={() => dialog.show(() => <SettingsDialog />)} />)
-          }
+          onClick={() => dialog.show(() => <DialogSelectProvider />)}
         >
           Connect provider
         </Button>

@@ -33,8 +33,11 @@
       packages = forEachSystem (
         pkgs:
         let
-          opencode = pkgs.callPackage ./nix/opencode.nix {
+          node_modules = pkgs.callPackage ./nix/node_modules.nix {
             inherit rev;
+          };
+          opencode = pkgs.callPackage ./nix/opencode.nix {
+            inherit node_modules;
           };
           desktop = pkgs.callPackage ./nix/desktop.nix {
             inherit opencode;
@@ -43,6 +46,10 @@
         {
           default = opencode;
           inherit opencode desktop;
+          # Updater derivation with fakeHash - build fails and reveals correct hash
+          node_modules_updater = node_modules.override {
+            hash = pkgs.lib.fakeHash;
+          };
         }
       );
     };

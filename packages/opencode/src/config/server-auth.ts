@@ -3,6 +3,7 @@ import { parse as parseJsonc } from "jsonc-parser"
 import { AuthConfig, type AuthConfig as AuthConfigType } from "./auth"
 import { Filesystem } from "../util/filesystem"
 import { Global } from "../global"
+import { Flag } from "../flag/flag"
 
 /**
  * Server-level auth configuration.
@@ -28,10 +29,12 @@ export namespace ServerAuth {
     const configFiles = ["opencode.jsonc", "opencode.json"]
     const searchPaths: string[] = []
 
-    // Find .opencode directories walking up from cwd
-    for await (const dir of Filesystem.up({ targets: [".opencode"], start: cwd })) {
-      for (const file of configFiles) {
-        searchPaths.push(path.join(dir, file))
+    // Find .opencode directories walking up from cwd unless project config is disabled.
+    if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+      for await (const dir of Filesystem.up({ targets: [".opencode"], start: cwd })) {
+        for (const file of configFiles) {
+          searchPaths.push(path.join(dir, file))
+        }
       }
     }
 

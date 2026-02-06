@@ -157,6 +157,7 @@ pub fn create_command(app: &tauri::AppHandle, args: &str) -> Command {
         .unwrap()
         .args(args.split_whitespace())
         .env("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY", "true")
+        .env("OPENCODE_EXPERIMENTAL_FILEWATCHER", "true")
         .env("OPENCODE_CLIENT", "desktop")
         .env("XDG_STATE_HOME", &state_dir);
 
@@ -164,11 +165,19 @@ pub fn create_command(app: &tauri::AppHandle, args: &str) -> Command {
     return {
         let sidecar = get_sidecar_path(app);
         let shell = get_user_shell();
+
+        let cmd = if shell.ends_with("/nu") {
+            format!("^\"{}\" {}", sidecar.display(), args)
+        } else {
+            format!("\"{}\" {}", sidecar.display(), args)
+        };
+
         app.shell()
             .command(&shell)
             .env("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY", "true")
+            .env("OPENCODE_EXPERIMENTAL_FILEWATCHER", "true")
             .env("OPENCODE_CLIENT", "desktop")
             .env("XDG_STATE_HOME", &state_dir)
-            .args(["-il", "-c", &format!("\"{}\" {}", sidecar.display(), args)])
+            .args(["-il", "-c", &cmd])
     };
 }

@@ -6,6 +6,7 @@ import { Font } from "@opencode-ai/ui/font"
 import { MarkedProvider } from "@opencode-ai/ui/context/marked"
 import { DiffComponentProvider } from "@opencode-ai/ui/context/diff"
 import { CodeComponentProvider } from "@opencode-ai/ui/context/code"
+import { I18nProvider } from "@opencode-ai/ui/context"
 import { Diff } from "@opencode-ai/ui/diff"
 import { Code } from "@opencode-ai/ui/code"
 import { ThemeProvider } from "@opencode-ai/ui/theme"
@@ -13,30 +14,42 @@ import { GlobalSyncProvider } from "@/context/global-sync"
 import { PermissionProvider } from "@/context/permission"
 import { LayoutProvider } from "@/context/layout"
 import { GlobalSDKProvider } from "@/context/global-sdk"
-import { ServerProvider, useServer } from "@/context/server"
-import { SessionProvider, useSession } from "@/context/session"
-import { SessionExpiredOverlay } from "@/components/session-expired-overlay"
+import { normalizeServerUrl, ServerProvider, useServer } from "@/context/server"
+import { SettingsProvider } from "@/context/settings"
 import { TerminalProvider } from "@/context/terminal"
 import { PromptProvider } from "@/context/prompt"
 import { FileProvider } from "@/context/file"
+import { CommentsProvider } from "@/context/comments"
 import { NotificationProvider } from "@/context/notification"
+import { ModelsProvider } from "@/context/models"
 import { DialogProvider } from "@opencode-ai/ui/context/dialog"
 import { CommandProvider } from "@/context/command"
-import { Logo } from "@opencode-ai/ui/logo"
+import { LanguageProvider, useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
+import { HighlightsProvider } from "@/context/highlights"
 import Layout from "@/pages/layout"
 import DirectoryLayout from "@/pages/directory-layout"
 import { ErrorPage } from "./pages/error"
-import { iife } from "@opencode-ai/util/iife"
 import { Suspense } from "solid-js"
 
 const Home = lazy(() => import("@/pages/home"))
 const Session = lazy(() => import("@/pages/session"))
 const Loading = () => <div class="size-full" />
 
+function UiI18nBridge(props: ParentProps) {
+  const language = useLanguage()
+  return <I18nProvider value={{ locale: language.locale, t: language.t }}>{props.children}</I18nProvider>
+}
+
 declare global {
   interface Window {
-    __OPENCODE__?: { updaterEnabled?: boolean; serverPassword?: string }
+    __OPENCODE__?: { updaterEnabled?: boolean; serverPassword?: string; deepLinks?: string[] }
   }
+}
+
+function MarkedProviderWithNativeParser(props: ParentProps) {
+  const platform = usePlatform()
+  return <MarkedProvider nativeParser={platform.parseMarkdown}>{props.children}</MarkedProvider>
 }
 
 export function AppBaseProviders(props: ParentProps) {
@@ -44,15 +57,19 @@ export function AppBaseProviders(props: ParentProps) {
     <MetaProvider>
       <Font />
       <ThemeProvider>
-        <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
-          <DialogProvider>
-            <MarkedProvider>
-              <DiffComponentProvider component={Diff}>
-                <CodeComponentProvider component={Code}>{props.children}</CodeComponentProvider>
-              </DiffComponentProvider>
-            </MarkedProvider>
-          </DialogProvider>
-        </ErrorBoundary>
+        <LanguageProvider>
+          <UiI18nBridge>
+            <ErrorBoundary fallback={(error) => <ErrorPage error={error} />}>
+              <DialogProvider>
+                <MarkedProviderWithNativeParser>
+                  <DiffComponentProvider component={Diff}>
+                    <CodeComponentProvider component={Code}>{props.children}</CodeComponentProvider>
+                  </DiffComponentProvider>
+                </MarkedProviderWithNativeParser>
+              </DialogProvider>
+            </ErrorBoundary>
+          </UiI18nBridge>
+        </LanguageProvider>
       </ThemeProvider>
     </MetaProvider>
   )
@@ -67,45 +84,23 @@ function ServerKey(props: ParentProps) {
   )
 }
 
-/**
- * Auth gate that waits for session check and redirects to login if needed.
- */
-function AuthGate(props: ParentProps) {
-  const session = useSession()
-  const server = useServer()
-
-  // Wait for initial session check
-  // If auth is required but not authenticated, redirect to login
-  return (
-    <Show when={session.ready()} fallback={<Loading />}>
-      <Show when={!session.authRequired()} fallback={<AuthRedirect url={server.url} />}>
-        {props.children}
-      </Show>
-    </Show>
-  )
-}
-
-/**
- * Component that redirects to the login page.
- * Passes current URL as returnUrl so user is redirected back after login.
- */
-function AuthRedirect(props: { url: string | undefined }) {
-  if (props.url) {
-    const returnUrl = encodeURIComponent(window.location.href)
-    window.location.href = `${props.url}/auth/login?returnUrl=${returnUrl}`
-  }
-  return <Loading />
-}
-
 export function AppInterface(props: { defaultUrl?: string }) {
+  const platform = usePlatform()
+
+  const stored = (() => {
+    if (platform.platform !== "web") return
+    const result = platform.getDefaultServerUrl?.()
+    if (result instanceof Promise) return
+    if (!result) return
+    return normalizeServerUrl(result)
+  })()
+
   const defaultServerUrl = () => {
     if (props.defaultUrl) return props.defaultUrl
-    const envUrl = import.meta.env.VITE_OPENCODE_SERVER_URL
-    if (envUrl) return envUrl
-    if (location.hostname.includes("opencode.ai")) return "http://localhost:3001"
-    // In dev mode, use current origin - Vite proxies API requests to backend
-    // This avoids CORS and cookie issues with cross-origin requests
-    if (import.meta.env.DEV) return window.location.origin
+    if (stored) return stored
+    if (location.hostname.includes("opencode.ai")) return "http://localhost:4096"
+    if (import.meta.env.DEV)
+      return `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}`
 
     return window.location.origin
   }
@@ -113,54 +108,59 @@ export function AppInterface(props: { defaultUrl?: string }) {
   return (
     <ServerProvider defaultUrl={defaultServerUrl()}>
       <ServerKey>
-        <SessionProvider>
-          <SessionExpiredOverlay />
-          <AuthGate>
-            <GlobalSDKProvider>
-              <GlobalSyncProvider>
-                <Router
-                  root={(props) => (
-                    <PermissionProvider>
-                      <LayoutProvider>
-                        <NotificationProvider>
+        <GlobalSDKProvider>
+          <GlobalSyncProvider>
+            <Router
+              root={(props) => (
+                <SettingsProvider>
+                  <PermissionProvider>
+                    <LayoutProvider>
+                      <NotificationProvider>
+                        <ModelsProvider>
                           <CommandProvider>
-                            <Layout>{props.children}</Layout>
+                            <HighlightsProvider>
+                              <Layout>{props.children}</Layout>
+                            </HighlightsProvider>
                           </CommandProvider>
-                        </NotificationProvider>
-                      </LayoutProvider>
-                    </PermissionProvider>
-                  )}
-                >
-                  <Route
-                    path="/"
-                    component={() => (
-                      <Suspense fallback={<Loading />}>
-                        <Home />
-                      </Suspense>
-                    )}
-                  />
-                  <Route path="/:dir" component={DirectoryLayout}>
-                    <Route path="/" component={() => <Navigate href="session" />} />
-                    <Route
-                      path="/session/:id?"
-                      component={() => (
-                        <TerminalProvider>
-                          <FileProvider>
-                            <PromptProvider>
+                        </ModelsProvider>
+                      </NotificationProvider>
+                    </LayoutProvider>
+                  </PermissionProvider>
+                </SettingsProvider>
+              )}
+            >
+              <Route
+                path="/"
+                component={() => (
+                  <Suspense fallback={<Loading />}>
+                    <Home />
+                  </Suspense>
+                )}
+              />
+              <Route path="/:dir" component={DirectoryLayout}>
+                <Route path="/" component={() => <Navigate href="session" />} />
+                <Route
+                  path="/session/:id?"
+                  component={(p) => (
+                    <Show when={p.params.id ?? "new"}>
+                      <TerminalProvider>
+                        <FileProvider>
+                          <PromptProvider>
+                            <CommentsProvider>
                               <Suspense fallback={<Loading />}>
                                 <Session />
                               </Suspense>
-                            </PromptProvider>
-                          </FileProvider>
-                        </TerminalProvider>
-                      )}
-                    />
-                  </Route>
-                </Router>
-              </GlobalSyncProvider>
-            </GlobalSDKProvider>
-          </AuthGate>
-        </SessionProvider>
+                            </CommentsProvider>
+                          </PromptProvider>
+                        </FileProvider>
+                      </TerminalProvider>
+                    </Show>
+                  )}
+                />
+              </Route>
+            </Router>
+          </GlobalSyncProvider>
+        </GlobalSDKProvider>
       </ServerKey>
     </ServerProvider>
   )

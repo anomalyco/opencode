@@ -1,14 +1,13 @@
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
-import { Button } from "@opencode-ai/ui/button"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { List } from "@opencode-ai/ui/list"
-import { TextField } from "@opencode-ai/ui/text-field"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
-import { createEffect, createMemo, createResource, createSignal, Show } from "solid-js"
-import { createStore } from "solid-js/store"
+import fuzzysort from "fuzzysort"
+import { createMemo } from "solid-js"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
+import { useLanguage } from "@/context/language"
 
 interface DialogSelectDirectoryProps {
   title?: string
@@ -20,313 +19,190 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const sync = useGlobalSync()
   const sdk = useGlobalSDK()
   const dialog = useDialog()
-  const [state, setState] = createStore({ error: "" })
-  const [filter, setFilter] = createSignal("")
+  const language = useLanguage()
 
-  const isSingleSelect = createMemo(() => !props.multiple)
   const home = createMemo(() => sync.data.path.home)
-  const root = createMemo(() => {
-    if (isSingleSelect()) return home() ?? sync.data.path.directory
-    return sync.data.path.directory
-  })
 
-  type DirectoryEntry =
-    | { kind: "parent"; name: string; path: string }
-    | { kind: "directory"; name: string; path: string }
+  const start = createMemo(() => sync.data.path.home || sync.data.path.directory)
+
+  const cache = new Map<string, Promise<Array<{ name: string; absolute: string }>>>()
+
+  function normalize(input: string) {
+    const v = input.replaceAll("\\", "/")
+    if (v.startsWith("//") && !v.startsWith("///")) return "//" + v.slice(2).replace(/\/+/g, "/")
+    return v.replace(/\/+/g, "/")
+  }
+
+  function normalizeDriveRoot(input: string) {
+    const v = normalize(input)
+    if (/^[A-Za-z]:$/.test(v)) return v + "/"
+    return v
+  }
+
+  function trimTrailing(input: string) {
+    const v = normalizeDriveRoot(input)
+    if (v === "/") return v
+    if (v === "//") return v
+    if (/^[A-Za-z]:\/$/.test(v)) return v
+    return v.replace(/\/+$/, "")
+  }
 
   function join(base: string | undefined, rel: string) {
-    const b = (base ?? "").replace(/[\\/]+$/, "")
-    const r = rel.replace(/^[\\/]+/, "").replace(/[\\/]+$/, "")
+    const b = trimTrailing(base ?? "")
+    const r = trimTrailing(rel).replace(/^\/+/, "")
     if (!b) return r
     if (!r) return b
+    if (b.endsWith("/")) return b + r
     return b + "/" + r
   }
 
-  function display(value: string) {
-    const isAbsolute = value.startsWith("/") || /^[A-Za-z]:[\\/]/.test(value)
-    const full = isAbsolute ? value : join(root(), value)
+  function rootOf(input: string) {
+    const v = normalizeDriveRoot(input)
+    if (v.startsWith("//")) return "//"
+    if (v.startsWith("/")) return "/"
+    if (/^[A-Za-z]:\//.test(v)) return v.slice(0, 3)
+    return ""
+  }
+
+  function display(path: string) {
+    const full = trimTrailing(path)
     const h = home()
     if (!h) return full
-    if (full === h) return "~"
-    if (full.startsWith(h + "/") || full.startsWith(h + "\\")) {
-      return "~" + full.slice(h.length)
-    }
+
+    const hn = trimTrailing(h)
+    const lc = full.toLowerCase()
+    const hc = hn.toLowerCase()
+    if (lc === hc) return "~"
+    if (lc.startsWith(hc + "/")) return "~" + full.slice(hn.length)
     return full
   }
 
-  function normalizePath(value: string | undefined) {
-    return (value ?? "").replace(/[\\/]+$/, "")
-  }
+  function scoped(filter: string) {
+    const base = start()
+    if (!base) return
 
-  function parentAbsolute(value: string) {
-    const normalized = normalizePath(value)
-    if (!normalized) return ""
-    const parent = normalizePath(getDirectory(normalized))
-    if (!parent || parent === normalized) return ""
-    return parent
-  }
+    const raw = normalizeDriveRoot(filter.trim())
+    if (!raw) return { directory: trimTrailing(base), path: "" }
 
-  function normalizeQuery(query: string) {
     const h = home()
+    if (raw === "~") return { directory: trimTrailing(h ?? base), path: "" }
+    if (raw.startsWith("~/")) return { directory: trimTrailing(h ?? base), path: raw.slice(2) }
 
-    if (!query) return query
-    if (query.startsWith("~/")) return query.slice(2)
-
-    if (h) {
-      const lc = query.toLowerCase()
-      const hc = h.toLowerCase()
-      if (lc === hc || lc.startsWith(hc + "/") || lc.startsWith(hc + "\\")) {
-        return query.slice(h.length).replace(/^[\\/]+/, "")
-      }
-    }
-
-    return query
+    const root = rootOf(raw)
+    if (root) return { directory: trimTrailing(root), path: raw.slice(root.length) }
+    return { directory: trimTrailing(base), path: raw }
   }
 
-  function normalizeFindFilesResponse(input: unknown): { results: string[]; error: string } {
-    if (Array.isArray(input)) return { results: input, error: "" }
-    if (!input || typeof input !== "object")
-      return { results: [], error: "Unable to load folders. Check the server connection." }
+  async function dirs(dir: string) {
+    const key = trimTrailing(dir)
+    const existing = cache.get(key)
+    if (existing) return existing
 
-    const maybeData = (input as { data?: unknown }).data
-    if (Array.isArray(maybeData)) return { results: maybeData, error: "" }
-    if (maybeData && typeof maybeData === "object") {
-      const nested = (maybeData as { data?: unknown }).data
-      if (Array.isArray(nested)) return { results: nested, error: "" }
-    }
-    console.error("Unexpected find.files response shape", { input })
-    return { results: [], error: "Unable to load folders. Check the dev proxy configuration." }
+    const request = sdk.client.file
+      .list({ directory: key, path: "" })
+      .then((x) => x.data ?? [])
+      .catch(() => [])
+      .then((nodes) =>
+        nodes
+          .filter((n) => n.type === "directory")
+          .map((n) => ({
+            name: n.name,
+            absolute: trimTrailing(normalizeDriveRoot(n.absolute)),
+          })),
+      )
+
+    cache.set(key, request)
+    return request
   }
 
-  function normalizeFileListResponse(input: unknown): {
-    results: { name: string; path: string; absolute: string; ignored: boolean; type: string }[]
-    error: string
-  } {
-    if (Array.isArray(input)) return { results: input, error: "" }
-    if (!input || typeof input !== "object") {
-      return { results: [], error: "Unable to load folders. Check the server connection." }
-    }
-    const maybeData = (input as { data?: unknown }).data
-    if (Array.isArray(maybeData)) {
-      return {
-        results: maybeData as { name: string; path: string; absolute: string; ignored: boolean; type: string }[],
-        error: "",
-      }
-    }
-    console.error("Unexpected file.list response shape", { input })
-    return { results: [], error: "Unable to load folders. Check the server connection." }
-  }
-
-  function errorMessage(err: unknown) {
-    if (err && typeof err === "object" && "data" in err) {
-      const data = (err as { data?: { message?: string; error?: { message?: string } } }).data
-      if (data?.message) return data.message
-      if (data?.error?.message) return data.error.message
-    }
-    if (err instanceof Error) return err.message
-    return "Unable to load folders. Check the server connection or dev proxy."
-  }
-
-  async function fetchDirs(query: string) {
-    const directory = root()
-    if (!directory) return [] as string[]
-
-    setState({ error: "" })
-    try {
-      const response = await sdk.client.find.files({ directory, query, type: "directory", limit: 50 })
-      const { results, error } = normalizeFindFilesResponse(response)
-      if (error) setState({ error })
-      return results.map((x) => x.replace(/[\\/]+$/, ""))
-    } catch {
-      setState({ error: "Unable to load folders. Check the server connection or dev proxy." })
-      return []
-    }
+  async function match(dir: string, query: string, limit: number) {
+    const items = await dirs(dir)
+    if (!query) return items.slice(0, limit).map((x) => x.absolute)
+    return fuzzysort.go(query, items, { key: "name", limit }).map((x) => x.obj.absolute)
   }
 
   const directories = async (filter: string) => {
-    const query = normalizeQuery(filter.trim())
-    return fetchDirs(query)
+    const input = scoped(filter)
+    if (!input) return [] as string[]
+
+    const raw = normalizeDriveRoot(filter.trim())
+    const isPath = raw.startsWith("~") || !!rootOf(raw) || raw.includes("/")
+
+    const query = normalizeDriveRoot(input.path)
+
+    if (!isPath) {
+      const results = await sdk.client.find
+        .files({ directory: input.directory, query, type: "directory", limit: 50 })
+        .then((x) => x.data ?? [])
+        .catch(() => [])
+
+      return results.map((rel) => join(input.directory, rel)).slice(0, 50)
+    }
+
+    const segments = query.replace(/^\/+/, "").split("/")
+    const head = segments.slice(0, segments.length - 1).filter((x) => x && x !== ".")
+    const tail = segments[segments.length - 1] ?? ""
+
+    const cap = 12
+    const branch = 4
+    let paths = [input.directory]
+    for (const part of head) {
+      if (part === "..") {
+        paths = paths.map((p) => {
+          const v = trimTrailing(p)
+          if (v === "/") return v
+          if (/^[A-Za-z]:\/$/.test(v)) return v
+          const i = v.lastIndexOf("/")
+          if (i <= 0) return "/"
+          return v.slice(0, i)
+        })
+        continue
+      }
+
+      const next = (await Promise.all(paths.map((p) => match(p, part, branch)))).flat()
+      paths = Array.from(new Set(next)).slice(0, cap)
+      if (paths.length === 0) return [] as string[]
+    }
+
+    const out = (await Promise.all(paths.map((p) => match(p, tail, 50)))).flat()
+    return Array.from(new Set(out)).slice(0, 50)
   }
 
-  const [currentPath, setCurrentPath] = createSignal("")
-  const [lastRoot, setLastRoot] = createSignal("")
-
-  createEffect(() => {
-    const base = normalizePath(root())
-    if (!base) return
-    const current = normalizePath(currentPath())
-    const previous = lastRoot()
-    if (!current || current === previous) {
-      setCurrentPath(base)
-    }
-    if (previous !== base) {
-      setLastRoot(base)
-    }
-  })
-
-  const [directoryNodes] = createResource(
-    () => (isSingleSelect() ? currentPath() : ""),
-    async (path) => {
-      if (!path) return [] as { name: string; path: string; absolute: string; ignored: boolean; type: string }[]
-      setState({ error: "" })
-      try {
-        const response = await sdk.client.file.list({ path })
-        const { results, error } = normalizeFileListResponse(response)
-        if (error) setState({ error })
-        return results
-      } catch (err) {
-        setState({ error: errorMessage(err) })
-        return []
-      }
-    },
-  )
-
-  const directoryItems = createMemo(() => {
-    const items: DirectoryEntry[] = []
-    const base = normalizePath(root())
-    const current = normalizePath(currentPath())
-    const parent = parentAbsolute(current)
-    if (parent && current !== base && parent.startsWith(base)) {
-      items.push({
-        kind: "parent",
-        name: "..",
-        path: parent,
-      })
-    }
-    const nodes = directoryNodes() ?? []
-    for (const node of nodes) {
-      if (node.type !== "directory") continue
-      if (node.ignored) continue
-      items.push({
-        kind: "directory",
-        name: node.name,
-        path: node.absolute,
-      })
-    }
-    return items
-  })
-
-  const parentPath = createMemo(() => {
-    const base = normalizePath(root())
-    const current = normalizePath(currentPath())
-    const parent = parentAbsolute(current)
-    if (!parent || !base || current === base) return ""
-    if (!parent.startsWith(base)) return ""
-    return parent
-  })
-
-  function resolve(rel: string) {
-    const absolute = join(root(), rel)
+  function resolve(absolute: string) {
     props.onSelect(props.multiple ? [absolute] : absolute)
     dialog.close()
   }
 
   return (
-    <Dialog title={props.title ?? "Open project"} class="dialog-no-body-scroll">
-      <Show
-        when={isSingleSelect()}
-        fallback={
-          <List
-            search={{ placeholder: "Search folders", autofocus: true }}
-            emptyMessage={state.error || "No folders found"}
-            items={directories}
-            key={(x) => x}
-            onSelect={(path) => {
-              if (!path) return
-              resolve(path)
-            }}
-          >
-            {(rel) => {
-              const path = display(rel)
-              return (
-                <div class="w-full flex items-center justify-between rounded-md">
-                  <div class="flex items-center gap-x-3 grow min-w-0">
-                    <FileIcon node={{ path: rel, type: "directory" }} class="shrink-0 size-4" />
-                    <div class="flex items-center text-14-regular min-w-0">
-                      <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
-                        {getDirectory(path)}
-                      </span>
-                      <span class="text-text-strong whitespace-nowrap">{getFilename(path)}</span>
-                    </div>
-                  </div>
-                </div>
-              )
-            }}
-          </List>
-        }
+    <Dialog title={props.title ?? language.t("command.project.open")}>
+      <List
+        search={{ placeholder: language.t("dialog.directory.search.placeholder"), autofocus: true }}
+        emptyMessage={language.t("dialog.directory.empty")}
+        loadingMessage={language.t("common.loading")}
+        items={directories}
+        key={(x) => x}
+        onSelect={(path) => {
+          if (!path) return
+          resolve(path)
+        }}
       >
-        <div class="directory-picker flex flex-col gap-3 flex-1 min-h-0">
-          <div class="sticky top-0 z-20 bg-surface-base/95 backdrop-blur px-3 pt-3">
-            <div class="flex items-center justify-between gap-3">
-              <div class="text-12-regular text-text-weak pl-1">
-                Current folder: <span class="text-text-strong">{display(currentPath())}</span>
-              </div>
-              <Button
-                size="large"
-                variant="ghost"
-                disabled={!parentPath()}
-                onClick={() => {
-                  const next = parentPath()
-                  if (!next && next !== "") return
-                  setCurrentPath(next)
-                }}
-              >
-                Up one level
-              </Button>
-            </div>
-            <div class="pt-2 pb-2">
-              <TextField value={filter()} onChange={setFilter} placeholder="Filter folders" variant="ghost" />
-            </div>
-          </div>
-          <List
-            emptyMessage={state.error || "No folders found"}
-            items={directoryItems()}
-            key={(item) => item.path}
-            filterKeys={["name"]}
-            filter={filter()}
-            onSelect={(item) => {
-              if (!item) return
-              setCurrentPath(item.path)
-            }}
-            class="flex-1 min-h-0"
-          >
-            {(item) => {
-              const path = display(item.path)
-              return (
-                <div class="w-full flex items-center justify-between rounded-md">
-                  <div class="flex items-center gap-x-3 grow min-w-0">
-                    <FileIcon node={{ path: item.path, type: "directory" }} class="shrink-0 size-4" />
-                    <div class="flex items-center text-14-regular min-w-0">
-                      <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
-                        {getDirectory(path)}
-                      </span>
-                      <span class="text-text-strong whitespace-nowrap">
-                        {item.kind === "parent" ? ".." : getFilename(path)}
-                      </span>
-                    </div>
-                  </div>
+        {(absolute) => {
+          const path = display(absolute)
+          return (
+            <div class="w-full flex items-center justify-between rounded-md">
+              <div class="flex items-center gap-x-3 grow min-w-0">
+                <FileIcon node={{ path: absolute, type: "directory" }} class="shrink-0 size-4" />
+                <div class="flex items-center text-14-regular min-w-0">
+                  <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
+                    {getDirectory(path)}
+                  </span>
+                  <span class="text-text-strong whitespace-nowrap">{getFilename(path)}</span>
                 </div>
-              )
-            }}
-          </List>
-          <div class="bg-surface-base backdrop-blur px-3 pb-3 pt-2 flex justify-end gap-3">
-            <Button size="large" variant="ghost" onClick={() => dialog.close()}>
-              Cancel
-            </Button>
-            <Button
-              size="large"
-              onClick={() => {
-                const selected = currentPath()
-                if (!selected) return
-                props.onSelect(props.multiple ? [selected] : selected)
-                dialog.close()
-              }}
-            >
-              Select this folder
-            </Button>
-          </div>
-        </div>
-      </Show>
+              </div>
+            </div>
+          )
+        }}
+      </List>
     </Dialog>
   )
 }

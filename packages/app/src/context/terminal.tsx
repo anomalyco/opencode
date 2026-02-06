@@ -9,18 +9,10 @@ export type LocalPTY = {
   id: string
   title: string
   titleNumber: number
-  order?: number
   rows?: number
   cols?: number
   buffer?: string
   scrollY?: number
-  status?: "running" | "error"
-  retryCount?: number
-  lastError?: {
-    code?: string
-    requestId?: string
-    message?: string
-  }
 }
 
 const WORKSPACE_KEY = "__workspace__"
@@ -33,39 +25,19 @@ type TerminalCacheEntry = {
   dispose: VoidFunction
 }
 
-type PtyErrorDetails = {
-  code?: string
-  requestId?: string
-  message?: string
-}
+function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, session?: string) {
+  const legacy = session ? [`${dir}/terminal/${session}.v1`, `${dir}/terminal.v1`] : [`${dir}/terminal.v1`]
 
-const getPtyErrorDetails = (error: unknown): PtyErrorDetails => {
-  if (error && typeof error === "object") {
-    const payload = error as Record<string, unknown>
-    const code = typeof payload.code === "string" ? payload.code : undefined
-    const requestId = typeof payload.requestId === "string" ? payload.requestId : undefined
-    const message =
-      typeof payload.error === "string"
-        ? payload.error
-        : typeof payload.message === "string"
-          ? payload.message
-          : undefined
-    return { code, requestId, message }
+  const numberFromTitle = (title: string) => {
+    const match = title.match(/^Terminal (\d+)$/)
+    if (!match) return
+    const value = Number(match[1])
+    if (!Number.isFinite(value) || value <= 0) return
+    return value
   }
-  if (typeof error === "string") {
-    return { message: error }
-  }
-  if (error instanceof Error) {
-    return { message: error.message }
-  }
-  return {}
-}
-
-function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: string | undefined) {
-  const legacy = `${dir}/terminal${id ? "/" + id : ""}.v1`
 
   const [store, setStore, _, ready] = persisted(
-    Persist.scoped(dir, id, "terminal", [legacy]),
+    Persist.workspace(dir, "terminal", legacy),
     createStore<{
       active?: string
       all: LocalPTY[]
@@ -74,136 +46,87 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
     }),
   )
 
-  const withSequentialOrder = (list: LocalPTY[]) =>
-    list.map((item, index) => (item.order === index ? item : { ...item, order: index }))
-
-  const normalizeOrder = () => {
-    const current = store.all
-    if (current.length === 0) return
-    const indexed = current.map((item, index) => ({
-      item,
-      index,
-      order: item.order ?? index,
-    }))
-    const sorted = [...indexed].sort((a, b) => {
-      if (a.order !== b.order) return a.order - b.order
-      return a.index - b.index
-    })
-    const next = sorted.map((entry, index) =>
-      entry.item.order === index ? entry.item : { ...entry.item, order: index },
-    )
-    const changed =
-      next.length !== current.length || next.some((item, index) => item.id !== current[index]?.id || item !== current[index])
-    if (changed) {
-      setStore("all", next)
-    }
-  }
-
-  let normalized = false
-  createEffect(() => {
-    if (!ready()) return
-    if (normalized) return
-    if (store.all.length === 0) return
-    normalized = true
-    normalizeOrder()
-  })
-
-  const removeLocal = (id: string) => {
+  const unsub = sdk.event.on("pty.exited", (event) => {
+    const id = event.properties.id
+    if (!store.all.some((x) => x.id === id)) return
     batch(() => {
-      const current = store.all
-      const index = current.findIndex((item) => item.id === id)
-      const nextAll = withSequentialOrder(current.filter((x) => x.id !== id))
       setStore(
         "all",
-        nextAll,
+        store.all.filter((x) => x.id !== id),
       )
       if (store.active === id) {
-        const next = index >= 0 ? current[index + 1] : undefined
-        const previous = index > 0 ? current[index - 1] : undefined
-        setStore("active", next?.id ?? previous?.id)
+        const remaining = store.all.filter((x) => x.id !== id)
+        setStore("active", remaining[0]?.id)
       }
     })
-  }
+  })
+  onCleanup(unsub)
 
-  const markError = (id: string, details?: PtyErrorDetails) => {
-    setStore("all", (items) =>
-      items.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              status: "error",
-              lastError: details,
-            }
-          : item,
-      ),
-    )
-  }
+  const meta = { migrated: false }
+
+  createEffect(() => {
+    if (!ready()) return
+    if (meta.migrated) return
+    meta.migrated = true
+
+    setStore("all", (all) => {
+      const next = all.map((pty) => {
+        const direct = Number.isFinite(pty.titleNumber) && pty.titleNumber > 0 ? pty.titleNumber : undefined
+        if (direct !== undefined) return pty
+        const parsed = numberFromTitle(pty.title)
+        if (parsed === undefined) return pty
+        return { ...pty, titleNumber: parsed }
+      })
+      if (next.every((pty, index) => pty === all[index])) return all
+      return next
+    })
+  })
 
   return {
     ready,
-    all: createMemo(() => {
-      const current = store.all
-      if (current.length <= 1) return current
-      const indexed = current.map((item, index) => ({
-        item,
-        index,
-        order: item.order ?? index,
-      }))
-      return indexed
-        .sort((a, b) => {
-          if (a.order !== b.order) return a.order - b.order
-          return a.index - b.index
-        })
-        .map((entry) => entry.item)
-    }),
+    all: createMemo(() => Object.values(store.all)),
     active: createMemo(() => store.active),
-    removeLocal,
-    markError,
     new() {
       const existingTitleNumbers = new Set(
-        store.all.map((pty) => {
-          const match = pty.titleNumber
-          return match
+        store.all.flatMap((pty) => {
+          const direct = Number.isFinite(pty.titleNumber) && pty.titleNumber > 0 ? pty.titleNumber : undefined
+          if (direct !== undefined) return [direct]
+          const parsed = numberFromTitle(pty.title)
+          if (parsed === undefined) return []
+          return [parsed]
         }),
       )
 
-      let nextNumber = 1
-      while (existingTitleNumbers.has(nextNumber)) {
-        nextNumber++
-      }
-
-      const nextOrder =
-        store.all.reduce((max, pty, index) => Math.max(max, pty.order ?? index), -1) + 1
+      const nextNumber =
+        Array.from({ length: existingTitleNumbers.size + 1 }, (_, index) => index + 1).find(
+          (number) => !existingTitleNumbers.has(number),
+        ) ?? 1
 
       sdk.client.pty
         .create({ title: `Terminal ${nextNumber}` })
         .then((pty) => {
           const id = pty.data?.id
           if (!id) return
-          setStore("all", [
-            ...store.all,
-            {
-              id,
-              title: pty.data?.title ?? "Terminal",
-              titleNumber: nextNumber,
-              order: nextOrder,
-              status: "running",
-              retryCount: 0,
-            },
-          ])
+          const newTerminal = {
+            id,
+            title: pty.data?.title ?? "Terminal",
+            titleNumber: nextNumber,
+          }
+          setStore("all", (all) => {
+            const newAll = [...all, newTerminal]
+            return newAll
+          })
           setStore("active", id)
         })
         .catch((e) => {
-          const details = getPtyErrorDetails(e)
-          console.error("Failed to create terminal", {
-            error: details.message ?? e,
-            code: details.code,
-            requestId: details.requestId,
-          })
+          console.error("Failed to create terminal", e)
         })
     },
     update(pty: Partial<LocalPTY> & { id: string }) {
-      setStore("all", (x) => x.map((x) => (x.id === pty.id ? { ...x, ...pty } : x)))
+      const index = store.all.findIndex((x) => x.id === pty.id)
+      if (index !== -1) {
+        setStore("all", index, (existing) => ({ ...existing, ...pty }))
+      }
       sdk.client.pty
         .update({
           ptyID: pty.id,
@@ -223,92 +146,53 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
           title: pty.title,
         })
         .catch((e) => {
-          const details = getPtyErrorDetails(e)
-          console.error("Failed to clone terminal", {
-            error: details.message ?? e,
-            code: details.code,
-            requestId: details.requestId,
-          })
+          console.error("Failed to clone terminal", e)
           return undefined
         })
       if (!clone?.data) return
-      setStore("all", index, {
-        ...pty,
-        ...clone.data,
-        status: "running",
-        lastError: undefined,
-        retryCount: 0,
-      })
-      if (store.active === pty.id) {
-        setStore("active", clone.data.id)
-      }
-    },
-    async reconnect(id: string, details?: PtyErrorDetails) {
-      const index = store.all.findIndex((x) => x.id === id)
-      const pty = store.all[index]
-      if (!pty) return
 
-      const retryCount = pty.retryCount ?? 0
-      if (retryCount >= 1) {
+      const active = store.active === pty.id
+
+      batch(() => {
         setStore("all", index, {
-          ...pty,
-          status: "error",
-          lastError: details,
-          retryCount,
+          id: clone.data.id,
+          title: clone.data.title ?? pty.title,
+          titleNumber: pty.titleNumber,
         })
-        return
-      }
-
-      setStore("all", index, {
-        ...pty,
-        status: "error",
-        lastError: details,
-        retryCount: retryCount + 1,
+        if (active) {
+          setStore("active", clone.data.id)
+        }
       })
-
-      const created = await sdk.client.pty
-        .create({
-          title: pty.title,
-        })
-        .catch((e) => {
-          const errorDetails = getPtyErrorDetails(e)
-          console.error("Failed to recover terminal", {
-            error: errorDetails.message ?? e,
-            code: errorDetails.code,
-            requestId: errorDetails.requestId,
-          })
-          setStore("all", index, {
-            ...pty,
-            status: "error",
-            lastError: errorDetails,
-            retryCount: retryCount + 1,
-          })
-          return undefined
-        })
-      if (!created?.data) return
-
-      setStore("all", index, {
-        ...pty,
-        ...created.data,
-        status: "running",
-        lastError: undefined,
-        retryCount: 0,
-      })
-      if (store.active === pty.id) {
-        setStore("active", created.data.id)
-      }
     },
     open(id: string) {
       setStore("active", id)
     },
+    next() {
+      const index = store.all.findIndex((x) => x.id === store.active)
+      if (index === -1) return
+      const nextIndex = (index + 1) % store.all.length
+      setStore("active", store.all[nextIndex]?.id)
+    },
+    previous() {
+      const index = store.all.findIndex((x) => x.id === store.active)
+      if (index === -1) return
+      const prevIndex = index === 0 ? store.all.length - 1 : index - 1
+      setStore("active", store.all[prevIndex]?.id)
+    },
     async close(id: string) {
-      removeLocal(id)
+      batch(() => {
+        const filtered = store.all.filter((x) => x.id !== id)
+        if (store.active === id) {
+          const index = store.all.findIndex((f) => f.id === id)
+          const next = index > 0 ? index - 1 : 0
+          setStore("active", filtered[next]?.id)
+        }
+        setStore("all", filtered)
+      })
+
       await sdk.client.pty.remove({ ptyID: id }).catch((e) => {
         console.error("Failed to close terminal", e)
       })
-    },
-    closeLocal(id: string) {
-      removeLocal(id)
     },
     move(id: string, to: number) {
       const index = store.all.findIndex((f) => f.id === id)
@@ -317,10 +201,6 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, id: 
         "all",
         produce((all) => {
           all.splice(to, 0, all.splice(index, 1)[0])
-          for (let i = 0; i < all.length; i++) {
-            if (all[i].order === i) continue
-            all[i] = { ...all[i], order: i }
-          }
         }),
       )
     },
@@ -354,8 +234,8 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       }
     }
 
-    const load = (dir: string, id: string | undefined) => {
-      const key = `${dir}:${id ?? WORKSPACE_KEY}`
+    const load = (dir: string, session?: string) => {
+      const key = `${dir}:${WORKSPACE_KEY}`
       const existing = cache.get(key)
       if (existing) {
         cache.delete(key)
@@ -364,7 +244,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       }
 
       const entry = createRoot((dispose) => ({
-        value: createTerminalSession(sdk, dir, id),
+        value: createTerminalSession(sdk, dir, session),
         dispose,
       }))
 
@@ -373,37 +253,20 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       return entry.value
     }
 
-    const session = createMemo(() => load(params.dir!, params.id))
-
-    const unsubscribe = sdk.event.listen((e) => {
-      const event = e.details
-      if (event.type !== "pty.exited" && event.type !== "pty.deleted") return
-      const id = (event.properties as { id?: string }).id
-      if (!id) return
-      const existing = session().all().find((pty) => pty.id === id)
-      if (!existing) return
-      if (event.type === "pty.deleted") {
-        session().removeLocal(id)
-        return
-      }
-      if (event.type === "pty.exited") {
-        session().markError(id, { code: "pty_closed", message: "Terminal session ended" })
-      }
-    })
-    onCleanup(unsubscribe)
+    const workspace = createMemo(() => load(params.dir!, params.id))
 
     return {
-      ready: () => session().ready(),
-      all: () => session().all(),
-      active: () => session().active(),
-      new: () => session().new(),
-      update: (pty: Partial<LocalPTY> & { id: string }) => session().update(pty),
-      clone: (id: string) => session().clone(id),
-      reconnect: (id: string, details?: PtyErrorDetails) => session().reconnect(id, details),
-      open: (id: string) => session().open(id),
-      close: (id: string) => session().close(id),
-      closeLocal: (id: string) => session().closeLocal(id),
-      move: (id: string, to: number) => session().move(id, to),
+      ready: () => workspace().ready(),
+      all: () => workspace().all(),
+      active: () => workspace().active(),
+      new: () => workspace().new(),
+      update: (pty: Partial<LocalPTY> & { id: string }) => workspace().update(pty),
+      clone: (id: string) => workspace().clone(id),
+      open: (id: string) => workspace().open(id),
+      close: (id: string) => workspace().close(id),
+      move: (id: string, to: number) => workspace().move(id, to),
+      next: () => workspace().next(),
+      previous: () => workspace().previous(),
     }
   },
 })

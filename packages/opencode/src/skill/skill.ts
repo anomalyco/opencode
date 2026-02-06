@@ -1,5 +1,6 @@
 import z from "zod"
 import path from "path"
+import os from "os"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
 import { NamedError } from "@opencode-ai/util/error"
@@ -9,7 +10,6 @@ import { Global } from "@/global"
 import { Filesystem } from "@/util/filesystem"
 import { Flag } from "@/flag/flag"
 import { Bus } from "@/bus"
-import { TuiEvent } from "@/cli/cmd/tui/event"
 import { Session } from "@/session"
 
 export namespace Skill {
@@ -18,6 +18,7 @@ export namespace Skill {
     name: z.string(),
     description: z.string(),
     location: z.string(),
+    content: z.string(),
   })
   export type Info = z.infer<typeof Info>
 
@@ -41,6 +42,7 @@ export namespace Skill {
 
   const OPENCODE_SKILL_GLOB = new Bun.Glob("{skill,skills}/**/SKILL.md")
   const CLAUDE_SKILL_GLOB = new Bun.Glob("skills/**/SKILL.md")
+  const SKILL_GLOB = new Bun.Glob("**/SKILL.md")
 
   export const state = Instance.state(async () => {
     const skills: Record<string, Info> = {}
@@ -73,6 +75,7 @@ export namespace Skill {
         name: parsed.data.name,
         description: parsed.data.description,
         location: match,
+        content: md.content,
       }
     }
 
@@ -115,6 +118,25 @@ export namespace Skill {
     for (const dir of await Config.directories()) {
       for await (const match of OPENCODE_SKILL_GLOB.scan({
         cwd: dir,
+        absolute: true,
+        onlyFiles: true,
+        followSymlinks: true,
+      })) {
+        await addSkill(match)
+      }
+    }
+
+    // Scan additional skill paths from config
+    const config = await Config.get()
+    for (const skillPath of config.skills?.paths ?? []) {
+      const expanded = skillPath.startsWith("~/") ? path.join(os.homedir(), skillPath.slice(2)) : skillPath
+      const resolved = path.isAbsolute(expanded) ? expanded : path.join(Instance.directory, expanded)
+      if (!(await Filesystem.isDir(resolved))) {
+        log.warn("skill path not found", { path: resolved })
+        continue
+      }
+      for await (const match of SKILL_GLOB.scan({
+        cwd: resolved,
         absolute: true,
         onlyFiles: true,
         followSymlinks: true,

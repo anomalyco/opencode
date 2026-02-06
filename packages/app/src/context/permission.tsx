@@ -6,7 +6,8 @@ import { Persist, persisted } from "@/utils/persist"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "./global-sync"
 import { useParams } from "@solidjs/router"
-import { base64Decode, base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode-ai/util/encode"
+import { decode64 } from "@/utils/base64"
 
 type PermissionRespondFn = (input: {
   sessionID: string
@@ -53,7 +54,7 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     const globalSync = useGlobalSync()
 
     const permissionsEnabled = createMemo(() => {
-      const directory = params.dir ? base64Decode(params.dir) : undefined
+      const directory = decode64(params.dir)
       if (!directory) return false
       const [store] = globalSync.child(directory)
       return hasAutoAcceptPermissionConfig(store.config.permission)
@@ -66,7 +67,21 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       }),
     )
 
-    const responded = new Set<string>()
+    const MAX_RESPONDED = 1000
+    const RESPONDED_TTL_MS = 60 * 60 * 1000
+    const responded = new Map<string, number>()
+
+    function pruneResponded(now: number) {
+      for (const [id, ts] of responded) {
+        if (now - ts < RESPONDED_TTL_MS) break
+        responded.delete(id)
+      }
+
+      for (const id of responded.keys()) {
+        if (responded.size <= MAX_RESPONDED) break
+        responded.delete(id)
+      }
+    }
 
     const respond: PermissionRespondFn = (input) => {
       globalSDK.client.permission.respond(input).catch(() => {
@@ -75,8 +90,12 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     }
 
     function respondOnce(permission: PermissionRequest, directory?: string) {
-      if (responded.has(permission.id)) return
-      responded.add(permission.id)
+      const now = Date.now()
+      const hit = responded.has(permission.id)
+      responded.delete(permission.id)
+      responded.set(permission.id, now)
+      pruneResponded(now)
+      if (hit) return
       respond({
         sessionID: permission.sessionID,
         permissionID: permission.id,

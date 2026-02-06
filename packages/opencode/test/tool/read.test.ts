@@ -14,6 +14,7 @@ const ctx = {
   callID: "",
   agent: "build",
   abort: AbortSignal.any([]),
+  messages: [],
   metadata: () => {},
   ask: async () => {},
 }
@@ -172,7 +173,9 @@ describe("tool.read truncation", () => {
   test("truncates large file by bytes and sets truncated metadata", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
-        const content = await Bun.file(path.join(FIXTURES_DIR, "models-api.json")).text()
+        const base = await Bun.file(path.join(FIXTURES_DIR, "models-api.json")).text()
+        const target = 60 * 1024
+        const content = base.length >= target ? base : base.repeat(Math.ceil(target / base.length))
         await Bun.write(path.join(dir, "large.json"), content)
       },
     })
@@ -297,6 +300,58 @@ describe("tool.read truncation", () => {
         expect(result.attachments).toBeDefined()
         expect(result.attachments?.length).toBe(1)
         expect(result.attachments?.[0].type).toBe("file")
+      },
+    })
+  })
+
+  test(".fbs files (FlatBuffers schema) are read as text, not images", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        // FlatBuffers schema content
+        const fbsContent = `namespace MyGame;
+
+table Monster {
+  pos:Vec3;
+  name:string;
+  inventory:[ubyte];
+}
+
+root_type Monster;`
+        await Bun.write(path.join(dir, "schema.fbs"), fbsContent)
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute({ filePath: path.join(tmp.path, "schema.fbs") }, ctx)
+        // Should be read as text, not as image
+        expect(result.attachments).toBeUndefined()
+        expect(result.output).toContain("namespace MyGame")
+        expect(result.output).toContain("table Monster")
+      },
+    })
+  })
+})
+
+describe("tool.read loaded instructions", () => {
+  test("loads AGENTS.md from parent directory and includes in metadata", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(path.join(dir, "subdir", "AGENTS.md"), "# Test Instructions\nDo something special.")
+        await Bun.write(path.join(dir, "subdir", "nested", "test.txt"), "test content")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const result = await read.execute({ filePath: path.join(tmp.path, "subdir", "nested", "test.txt") }, ctx)
+        expect(result.output).toContain("test content")
+        expect(result.output).toContain("system-reminder")
+        expect(result.output).toContain("Test Instructions")
+        expect(result.metadata.loaded).toBeDefined()
+        expect(result.metadata.loaded).toContain(path.join(tmp.path, "subdir", "AGENTS.md"))
       },
     })
   })

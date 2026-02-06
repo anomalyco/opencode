@@ -1,15 +1,1 @@
 @import "@opencode-ai/ui/styles/tailwind";
-
-:root {
-  a {
-    cursor: default;
-  }
-}
-
-*[data-tauri-drag-region] {
-  app-region: drag;
-}
-
-.security-badge-icon [data-slot="icon-svg"] {
-  color: currentColor;
-}

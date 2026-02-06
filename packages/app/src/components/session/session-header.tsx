@@ -4,13 +4,12 @@ import { Portal } from "solid-js/web"
 import { useParams } from "@solidjs/router"
 import { useLayout } from "@/context/layout"
 import { useCommand } from "@/context/command"
-// import { useServer } from "@/context/server"
-// import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSync } from "@/context/sync"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { getFilename } from "@opencode-ai/util/path"
-import { base64Decode } from "@opencode-ai/util/encode"
+import { decode64 } from "@/utils/base64"
 
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -19,18 +18,18 @@ import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { Popover } from "@opencode-ai/ui/popover"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Keybind } from "@opencode-ai/ui/keybind"
+import { StatusPopover } from "../status-popover"
 
 export function SessionHeader() {
   const globalSDK = useGlobalSDK()
   const layout = useLayout()
   const params = useParams()
   const command = useCommand()
-  // const server = useServer()
-  // const dialog = useDialog()
   const sync = useSync()
   const platform = usePlatform()
+  const language = useLanguage()
 
-  const projectDirectory = createMemo(() => base64Decode(params.dir ?? ""))
+  const projectDirectory = createMemo(() => decode64(params.dir) ?? "")
   const project = createMemo(() => {
     const directory = projectDirectory()
     if (!directory) return
@@ -45,9 +44,9 @@ export function SessionHeader() {
 
   const currentSession = createMemo(() => sync.data.session.find((s) => s.id === params.id))
   const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
+  const showShare = createMemo(() => shareEnabled() && !!currentSession())
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
-  const view = createMemo(() => layout.view(sessionKey()))
-  const terminalIcon = createMemo(() => (view().terminal.opened() ? "console-full" : "console"))
+  const view = createMemo(() => layout.view(sessionKey))
 
   const [state, setState] = createStore({
     share: false,
@@ -131,13 +130,14 @@ export function SessionHeader() {
           <Portal mount={mount()}>
             <button
               type="button"
-              class="hidden md:flex w-[320px] p-1 pl-1.5 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-raised-base transition-colors cursor-default hover:bg-surface-raised-base-hover focus:bg-surface-raised-base-hover active:bg-surface-raised-base-active"
+              class="hidden md:flex w-[320px] max-w-full min-w-0 p-1 pl-1.5 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-raised-base transition-colors cursor-default hover:bg-surface-raised-base-hover focus-visible:bg-surface-raised-base-hover active:bg-surface-raised-base-active"
               onClick={() => command.trigger("file.open")}
+              aria-label={language.t("session.header.searchFiles")}
             >
               <div class="flex min-w-0 flex-1 items-center gap-2 overflow-visible">
                 <Icon name="magnifying-glass" size="normal" class="icon-base shrink-0" />
                 <span class="flex-1 min-w-0 text-14-regular text-text-weak truncate h-4.5 flex items-center">
-                  Search {name()}
+                  {language.t("session.header.search.placeholder", { project: name() })}
                 </span>
               </div>
 
@@ -150,106 +150,28 @@ export function SessionHeader() {
         {(mount) => (
           <Portal mount={mount()}>
             <div class="flex items-center gap-3">
-              {/* <div class="hidden md:flex items-center gap-1"> */}
-              {/*   <Button */}
-              {/*     size="small" */}
-              {/*     variant="ghost" */}
-              {/*     onClick={() => { */}
-              {/*       dialog.show(() => <DialogSelectServer />) */}
-              {/*     }} */}
-              {/*   > */}
-              {/*     <div */}
-              {/*       classList={{ */}
-              {/*         "size-1.5 rounded-full": true, */}
-              {/*         "bg-icon-success-base": server.healthy() === true, */}
-              {/*         "bg-icon-critical-base": server.healthy() === false, */}
-              {/*         "bg-border-weak-base": server.healthy() === undefined, */}
-              {/*       }} */}
-              {/*     /> */}
-              {/*     <Icon name="server" size="small" class="text-icon-weak" /> */}
-              {/*     <span class="text-12-regular text-text-weak truncate max-w-[200px]">{server.name}</span> */}
-              {/*   </Button> */}
-              {/*   <SessionLspIndicator /> */}
-              {/*   <SessionMcpIndicator /> */}
-              {/* </div> */}
-              <div class="flex items-center gap-1">
-                <Show when={currentSession()?.summary?.files}>
-                  <TooltipKeybind
-                    class="hidden md:block shrink-0"
-                    title="Toggle review"
-                    keybind={command.keybind("review.toggle")}
-                  >
-                    <Button
-                      variant="ghost"
-                      class="group/review-toggle size-6 p-0"
-                      onClick={() => view().reviewPanel.toggle()}
-                    >
-                      <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
-                        <Icon
-                          name={view().reviewPanel.opened() ? "layout-right" : "layout-left"}
-                          size="small"
-                          class="group-hover/review-toggle:hidden"
-                        />
-                        <Icon
-                          name={view().reviewPanel.opened() ? "layout-right-partial" : "layout-left-partial"}
-                          size="small"
-                          class="hidden group-hover/review-toggle:inline-block"
-                        />
-                        <Icon
-                          name={view().reviewPanel.opened() ? "layout-right-full" : "layout-left-full"}
-                          size="small"
-                          class="hidden group-active/review-toggle:inline-block"
-                        />
-                      </div>
-                    </Button>
-                  </TooltipKeybind>
-                </Show>
-                <TooltipKeybind
-                  class="hidden md:block shrink-0"
-                  title="Toggle terminal"
-                  keybind={command.keybind("terminal.toggle")}
-                >
-                  <Button
-                    variant="ghost"
-                    class="group/terminal-toggle size-6 p-0"
-                    onClick={() => view().terminal.toggle()}
-                  >
-                    <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
-                      <Icon
-                        size="small"
-                        name={terminalIcon()}
-                        class="group-hover/terminal-toggle:hidden"
-                      />
-                      <Icon
-                        size="small"
-                        name={terminalIcon()}
-                        class="hidden group-hover/terminal-toggle:inline-block"
-                      />
-                      <Icon
-                        size="small"
-                        name={terminalIcon()}
-                        class="hidden group-active/terminal-toggle:inline-block"
-                      />
-                    </div>
-                  </Button>
-                </TooltipKeybind>
-              </div>
-              <Show when={shareEnabled() && currentSession()}>
+              <StatusPopover />
+              <Show when={showShare()}>
                 <div class="flex items-center">
                   <Popover
-                    title="Publish on web"
+                    title={language.t("session.share.popover.title")}
                     description={
                       shareUrl()
-                        ? "This session is public on the web. It is accessible to anyone with the link."
-                        : "Share session publicly on the web. It will be accessible to anyone with the link."
+                        ? language.t("session.share.popover.description.shared")
+                        : language.t("session.share.popover.description.unshared")
                     }
-                    trigger={
-                      <Tooltip class="shrink-0" value="Share session">
-                        <Button variant="secondary" classList={{ "rounded-r-none": shareUrl() !== undefined }}>
-                          Share
-                        </Button>
-                      </Tooltip>
-                    }
+                    gutter={6}
+                    placement="bottom-end"
+                    shift={-64}
+                    class="rounded-xl [&_[data-slot=popover-close-button]]:hidden"
+                    triggerAs={Button}
+                    triggerProps={{
+                      variant: "secondary",
+                      class: "rounded-sm h-[24px] px-3",
+                      classList: { "rounded-r-none": shareUrl() !== undefined },
+                      style: { scale: 1 },
+                    }}
+                    trigger={language.t("session.share.action.share")}
                   >
                     <div class="flex flex-col gap-2">
                       <Show
@@ -263,13 +185,15 @@ export function SessionHeader() {
                               onClick={shareSession}
                               disabled={state.share}
                             >
-                              {state.share ? "Publishing..." : "Publish"}
+                              {state.share
+                                ? language.t("session.share.action.publishing")
+                                : language.t("session.share.action.publish")}
                             </Button>
                           </div>
                         }
                       >
-                        <div class="flex flex-col gap-2 w-72">
-                          <TextField value={shareUrl() ?? ""} readOnly copyable class="w-full" />
+                        <div class="flex flex-col gap-2">
+                          <TextField value={shareUrl() ?? ""} readOnly copyable tabIndex={-1} class="w-full" />
                           <div class="grid grid-cols-2 gap-2">
                             <Button
                               size="large"
@@ -278,7 +202,9 @@ export function SessionHeader() {
                               onClick={unshareSession}
                               disabled={state.unshare}
                             >
-                              {state.unshare ? "Unpublishing..." : "Unpublish"}
+                              {state.unshare
+                                ? language.t("session.share.action.unpublishing")
+                                : language.t("session.share.action.unpublish")}
                             </Button>
                             <Button
                               size="large"
@@ -287,26 +213,102 @@ export function SessionHeader() {
                               onClick={viewShare}
                               disabled={state.unshare}
                             >
-                              View
+                              {language.t("session.share.action.view")}
                             </Button>
                           </div>
                         </div>
                       </Show>
                     </div>
                   </Popover>
-                  <Show when={shareUrl()}>
-                    <Tooltip value={state.copied ? "Copied" : "Copy link"} placement="top" gutter={8}>
+                  <Show when={shareUrl()} fallback={<div aria-hidden="true" />}>
+                    <Tooltip
+                      value={
+                        state.copied
+                          ? language.t("session.share.copy.copied")
+                          : language.t("session.share.copy.copyLink")
+                      }
+                      placement="top"
+                      gutter={8}
+                    >
                       <IconButton
-                        icon={state.copied ? "check" : "copy"}
+                        icon={state.copied ? "check" : "link"}
                         variant="secondary"
-                        class="rounded-l-none border-l border-border-weak-base"
+                        class="rounded-l-none"
                         onClick={copyLink}
                         disabled={state.unshare}
+                        aria-label={
+                          state.copied
+                            ? language.t("session.share.copy.copied")
+                            : language.t("session.share.copy.copyLink")
+                        }
                       />
                     </Tooltip>
                   </Show>
                 </div>
               </Show>
+              <div class="hidden md:flex items-center gap-3 ml-2 shrink-0">
+                <TooltipKeybind
+                  title={language.t("command.terminal.toggle")}
+                  keybind={command.keybind("terminal.toggle")}
+                >
+                  <Button
+                    variant="ghost"
+                    class="group/terminal-toggle size-6 p-0"
+                    onClick={() => view().terminal.toggle()}
+                    aria-label={language.t("command.terminal.toggle")}
+                    aria-expanded={view().terminal.opened()}
+                    aria-controls="terminal-panel"
+                  >
+                    <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
+                      <Icon
+                        size="small"
+                        name={view().terminal.opened() ? "layout-bottom-full" : "layout-bottom"}
+                        class="group-hover/terminal-toggle:hidden"
+                      />
+                      <Icon
+                        size="small"
+                        name="layout-bottom-partial"
+                        class="hidden group-hover/terminal-toggle:inline-block"
+                      />
+                      <Icon
+                        size="small"
+                        name={view().terminal.opened() ? "layout-bottom" : "layout-bottom-full"}
+                        class="hidden group-active/terminal-toggle:inline-block"
+                      />
+                    </div>
+                  </Button>
+                </TooltipKeybind>
+              </div>
+              <div class="hidden md:block shrink-0">
+                <TooltipKeybind title={language.t("command.review.toggle")} keybind={command.keybind("review.toggle")}>
+                  <Button
+                    variant="ghost"
+                    class="group/file-tree-toggle size-6 p-0"
+                    onClick={() => layout.fileTree.toggle()}
+                    aria-label={language.t("command.review.toggle")}
+                    aria-expanded={layout.fileTree.opened()}
+                    aria-controls="review-panel"
+                  >
+                    <div class="relative flex items-center justify-center size-4 [&>*]:absolute [&>*]:inset-0">
+                      <Icon
+                        size="small"
+                        name={layout.fileTree.opened() ? "layout-right-full" : "layout-right"}
+                        class="group-hover/file-tree-toggle:hidden"
+                      />
+                      <Icon
+                        size="small"
+                        name="layout-right-partial"
+                        class="hidden group-hover/file-tree-toggle:inline-block"
+                      />
+                      <Icon
+                        size="small"
+                        name={layout.fileTree.opened() ? "layout-right" : "layout-right-full"}
+                        class="hidden group-active/file-tree-toggle:inline-block"
+                      />
+                    </div>
+                  </Button>
+                </TooltipKeybind>
+              </div>
             </div>
           </Portal>
         )}

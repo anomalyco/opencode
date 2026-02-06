@@ -4,7 +4,6 @@
   // "enterprise": {
   //   "url": "https://enterprise.dev.opencode.ai",
   // },
-  "instructions": ["STYLE_GUIDE.md"],
   "provider": {
     "opencode": {
       "options": {},

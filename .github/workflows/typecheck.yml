@@ -1,13 +1,15 @@
 name: typecheck
 
 on:
+  push:
+    branches: [dev]
   pull_request:
     branches: [dev]
   workflow_dispatch:
 
 jobs:
   typecheck:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

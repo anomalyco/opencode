@@ -72,11 +72,14 @@ export namespace Config {
       log.debug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
     }
 
-    // Project config has highest precedence (overrides global and remote)
-    for (const file of ["opencode.jsonc", "opencode.json"]) {
-      const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
-      for (const resolved of found.toReversed()) {
-        result = mergeConfigConcatArrays(result, await loadFile(resolved))
+    // Project config has highest precedence (overrides global and remote),
+    // unless explicitly disabled (useful for CI/e2e isolation).
+    if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+      for (const file of ["opencode.jsonc", "opencode.json"]) {
+        const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
+        for (const resolved of found.toReversed()) {
+          result = mergeConfigConcatArrays(result, await loadFile(resolved))
+        }
       }
     }
 
@@ -94,15 +97,19 @@ export namespace Config {
       result.workspace.root = path.join(Global.Path.home, "opencode")
     }
 
+    const projectDirectories = Flag.OPENCODE_DISABLE_PROJECT_CONFIG
+      ? []
+      : await Array.fromAsync(
+          Filesystem.up({
+            targets: [".opencode"],
+            start: Instance.directory,
+            stop: Instance.worktree,
+          }),
+        )
+
     const directories = [
       Global.Path.config,
-      ...(await Array.fromAsync(
-        Filesystem.up({
-          targets: [".opencode"],
-          start: Instance.directory,
-          stop: Instance.worktree,
-        }),
-      )),
+      ...projectDirectories,
       ...(await Array.fromAsync(
         Filesystem.up({
           targets: [".opencode"],
@@ -1065,6 +1072,12 @@ export namespace Config {
           },
         ),
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
+      skills: z
+        .object({
+          paths: z.array(z.string()).optional().describe("Additional directories to scan for skills"),
+        })
+        .optional()
+        .describe("Skill discovery configuration"),
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
       permission: Permission.optional(),
       tools: z.record(z.string(), z.boolean()).optional(),
@@ -1305,6 +1318,19 @@ export namespace Config {
     const existing = await loadFile(filepath)
     await Bun.write(filepath, JSON.stringify(mergeDeep(existing, config), null, 2))
     await Instance.dispose()
+  }
+
+  export async function getGlobal() {
+    return global()
+  }
+
+  export async function updateGlobal(config: Info) {
+    const filepath = path.join(Global.Path.config, "config.json")
+    const existing = await global()
+    await Bun.write(filepath, JSON.stringify(mergeDeep(existing, config), null, 2))
+    global.reset()
+    await Instance.disposeAll()
+    return global()
   }
 
   export async function directories() {
