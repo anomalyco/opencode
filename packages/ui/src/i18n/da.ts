@@ -1,5 +1,6 @@
 export const dict = {
   "ui.sessionReview.title": "Sessionsændringer",
+  "ui.sessionReview.title.lastTurn": "Ændringer fra sidste tur",
   "ui.sessionReview.diffStyle.unified": "Samlet",
   "ui.sessionReview.diffStyle.split": "Opdelt",
   "ui.sessionReview.expandAll": "Udvid alle",

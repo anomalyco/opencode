@@ -11,6 +11,7 @@ import { Shell } from "@/shell/shell"
 import { BrokerClient } from "@/auth/broker-client"
 import { ServerAuth } from "@/config/server-auth"
 import * as BrokerPty from "./broker-pty"
+import { Plugin } from "@/plugin"
 
 // Re-export broker PTY module for authenticated sessions
 export { BrokerPty }
@@ -199,7 +200,20 @@ export namespace Pty {
     }
 
     const cwd = input.cwd || Instance.directory
-    const env = { ...process.env, ...input.env, TERM: "xterm-256color" } as Record<string, string>
+    const shellEnv = await Plugin.trigger("shell.env", { cwd }, { env: {} })
+    const env = {
+      ...process.env,
+      ...input.env,
+      ...shellEnv.env,
+      TERM: "xterm-256color",
+      OPENCODE_TERMINAL: "1",
+    } as Record<string, string>
+
+    if (process.platform === "win32") {
+      env.LC_ALL = "C.UTF-8"
+      env.LC_CTYPE = "C.UTF-8"
+      env.LANG = "C.UTF-8"
+    }
     log.info("creating session", { id, cmd: command, args, cwd, requestId })
 
     const spawn = await pty()

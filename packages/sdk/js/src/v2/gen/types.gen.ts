@@ -82,6 +82,7 @@ export type FileDiff = {
   after: string
   additions: number
   deletions: number
+  status?: "added" | "deleted" | "modified"
 }
 
 export type UserMessage = {
@@ -1308,6 +1309,10 @@ export type KeybindsConfig = {
    * Toggle tips on home screen
    */
   tips_toggle?: string
+  /**
+   * Toggle thinking blocks visibility
+   */
+  display_thinking?: string
 }
 
 /**
@@ -1331,6 +1336,10 @@ export type ServerConfig = {
    * Enable mDNS service discovery
    */
   mdns?: boolean
+  /**
+   * Custom domain name for mDNS service (default: opencode.local)
+   */
+  mdnsDomain?: string
   /**
    * Additional domains to allow for CORS
    */
@@ -1397,9 +1406,9 @@ export type AgentConfig = {
     [key: string]: unknown
   }
   /**
-   * Hex color code for the agent (e.g., #FF5733)
+   * Hex color code (e.g., #FF5733) or theme color (e.g., primary)
    */
-  color?: string
+  color?: string | "primary" | "secondary" | "accent" | "success" | "warning" | "error" | "info"
   /**
    * Maximum number of agentic iterations before forcing text-only response
    */
@@ -1424,6 +1433,13 @@ export type AgentConfig = {
         [key: string]: unknown
       }
     | string
+    | "primary"
+    | "secondary"
+    | "accent"
+    | "success"
+    | "warning"
+    | "error"
+    | "info"
     | number
     | PermissionConfig
     | undefined

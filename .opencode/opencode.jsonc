@@ -1,6 +1,5 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  // "plugin": ["opencode-openai-codex-auth"],
   // "enterprise": {
   //   "url": "https://enterprise.dev.opencode.ai",
   // },
@@ -9,12 +8,7 @@
       "options": {},
     },
   },
-  "mcp": {
-    "context7": {
-      "type": "remote",
-      "url": "https://mcp.context7.com/mcp",
-    },
-  },
+  "mcp": {},
   "tools": {
     "github-triage": false,
     "github-pr-search": false,

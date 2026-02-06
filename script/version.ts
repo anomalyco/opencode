@@ -14,8 +14,8 @@ if (!Script.preview) {
   const file = `${dir}/opencode-release-notes.txt`
   await Bun.write(file, body)
   await $`gh release create v${Script.version} -d --title "v${Script.version}" --notes-file ${file}`
-  const release = await $`gh release view v${Script.version} --json id,tagName`.json()
-  output.push(`release=${release.id}`)
+  const release = await $`gh release view v${Script.version} --json tagName,databaseId`.json()
+  output.push(`release=${release.databaseId}`)
   output.push(`tag=${release.tagName}`)
 }
 

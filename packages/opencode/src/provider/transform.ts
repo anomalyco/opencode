@@ -1,5 +1,6 @@
 import type { APICallError, ModelMessage } from "ai"
 import { mergeDeep, unique } from "remeda"
+import type { JSONSchema7 } from "@ai-sdk/provider"
 import type { JSONSchema } from "zod/v4/core"
 import type { Provider } from "./provider"
 import type { ModelsDev } from "./models"
@@ -333,7 +334,9 @@ export namespace ProviderTransform {
       id.includes("minimax") ||
       id.includes("glm") ||
       id.includes("mistral") ||
-      id.includes("kimi")
+      id.includes("kimi") ||
+      // TODO: Remove this after models.dev data is fixed to use "kimi-k2.5" instead of "k2p5"
+      id.includes("k2p5")
     )
       return {}
 
@@ -372,7 +375,8 @@ export namespace ProviderTransform {
           }
         }
         const copilotEfforts = iife(() => {
-          if (id.includes("5.1-codex-max") || id.includes("5.2")) return [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
+          if (id.includes("5.1-codex-max") || id.includes("5.2") || id.includes("5.3"))
+            return [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
           return WIDELY_SUPPORTED_EFFORTS
         })
         return Object.fromEntries(
@@ -419,7 +423,7 @@ export namespace ProviderTransform {
         if (id === "gpt-5-pro") return {}
         const openaiEfforts = iife(() => {
           if (id.includes("codex")) {
-            if (id.includes("5.2")) return [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
+            if (id.includes("5.2") || id.includes("5.3")) return [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
             return WIDELY_SUPPORTED_EFFORTS
           }
           const arr = [...WIDELY_SUPPORTED_EFFORTS]
@@ -627,6 +631,18 @@ export namespace ProviderTransform {
       }
     }
 
+    // Enable thinking by default for kimi-k2.5/k2p5 models using anthropic SDK
+    const modelId = input.model.api.id.toLowerCase()
+    if (
+      (input.model.api.npm === "@ai-sdk/anthropic" || input.model.api.npm === "@ai-sdk/google-vertex/anthropic") &&
+      (modelId.includes("k2p5") || modelId.includes("kimi-k2.5") || modelId.includes("kimi-k2p5"))
+    ) {
+      result["thinking"] = {
+        type: "enabled",
+        budgetTokens: Math.min(16_000, Math.floor(input.model.limit.output / 2 - 1)),
+      }
+    }
+
     if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
       if (!input.model.api.id.includes("gpt-5-pro")) {
         result["reasoningEffort"] = "medium"
@@ -717,7 +733,7 @@ export namespace ProviderTransform {
     return standardLimit
   }
 
-  export function schema(model: Provider.Model, schema: JSONSchema.BaseSchema) {
+  export function schema(model: Provider.Model, schema: JSONSchema.BaseSchema | JSONSchema7): JSONSchema7 {
     /*
     if (["openai", "azure"].includes(providerID)) {
       if (schema.type === "object" && schema.properties) {
@@ -768,8 +784,21 @@ export namespace ProviderTransform {
           result.required = result.required.filter((field: any) => field in result.properties)
         }
 
-        if (result.type === "array" && result.items == null) {
-          result.items = {}
+        if (result.type === "array") {
+          if (result.items == null) {
+            result.items = {}
+          }
+          // Ensure items has at least a type if it's an empty object
+          // This handles nested arrays like { type: "array", items: { type: "array", items: {} } }
+          if (typeof result.items === "object" && !Array.isArray(result.items) && !result.items.type) {
+            result.items.type = "string"
+          }
+        }
+
+        // Remove properties/required from non-object types (Gemini rejects these)
+        if (result.type && result.type !== "object") {
+          delete result.properties
+          delete result.required
         }
 
         return result
@@ -778,7 +807,7 @@ export namespace ProviderTransform {
       schema = sanitizeGemini(schema)
     }
 
-    return schema
+    return schema as JSONSchema7
   }
 
   export function error(providerID: string, error: APICallError) {

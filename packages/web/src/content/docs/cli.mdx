@@ -569,10 +569,14 @@ OpenCode can be configured using environment variables.
 | `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | Disable reading from `.claude` (prompt + skills)  |
 | `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | Disable reading `~/.claude/CLAUDE.md`             |
 | `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | Disable loading `.claude/skills`                  |
+| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | Disable fetching models from remote sources       |
+| `OPENCODE_FAKE_VCS`                   | string  | Fake VCS provider for testing purposes            |
+| `OPENCODE_DISABLE_FILETIME_CHECK`     | boolean | Disable file time checking for optimization       |
 | `OPENCODE_CLIENT`                     | string  | Client identifier (defaults to `cli`)             |
 | `OPENCODE_ENABLE_EXA`                 | boolean | Enable Exa web search tools                       |
 | `OPENCODE_SERVER_PASSWORD`            | string  | Enable basic auth for `serve`/`web`               |
 | `OPENCODE_SERVER_USERNAME`            | string  | Override basic auth username (default `opencode`) |
+| `OPENCODE_MODELS_URL`                 | string  | Custom URL for fetching models configuration      |
 
 ---
 
