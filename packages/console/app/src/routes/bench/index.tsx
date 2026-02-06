@@ -3,6 +3,7 @@ import { A, createAsync, query } from "@solidjs/router"
 import { createMemo, For, Show } from "solid-js"
 import { Database, desc } from "@opencode-ai/console-core/drizzle/index.js"
 import { BenchmarkTable } from "@opencode-ai/console-core/schema/benchmark.sql.js"
+import { useI18n } from "~/context/i18n"
 
 interface BenchmarkResult {
   averageScore: number
@@ -33,6 +34,7 @@ async function getBenchmarks() {
 const queryBenchmarks = query(getBenchmarks, "benchmarks.list")
 
 export default function Bench() {
+  const i18n = useI18n()
   const benchmarks = createAsync(() => queryBenchmarks())
 
   const taskIds = createMemo(() => {
@@ -47,14 +49,14 @@ export default function Bench() {
 
   return (
     <main data-page="bench" style={{ padding: "2rem" }}>
-      <Title>Benchmark</Title>
-      <h1 style={{ "margin-bottom": "1.5rem" }}>Benchmarks</h1>
+      <Title>{i18n.t("bench.list.title")}</Title>
+      <h1 style={{ "margin-bottom": "1.5rem" }}>{i18n.t("bench.list.heading")}</h1>
       <table style={{ "border-collapse": "collapse", width: "100%" }}>
         <thead>
           <tr>
-            <th style={{ "text-align": "left", padding: "0.75rem" }}>Agent</th>
-            <th style={{ "text-align": "left", padding: "0.75rem" }}>Model</th>
-            <th style={{ "text-align": "left", padding: "0.75rem" }}>Score</th>
+            <th style={{ "text-align": "left", padding: "0.75rem" }}>{i18n.t("bench.list.table.agent")}</th>
+            <th style={{ "text-align": "left", padding: "0.75rem" }}>{i18n.t("bench.list.table.model")}</th>
+            <th style={{ "text-align": "left", padding: "0.75rem" }}>{i18n.t("bench.list.table.score")}</th>
             <For each={taskIds()}>{(id) => <th style={{ "text-align": "left", padding: "0.75rem" }}>{id}</th>}</For>
           </tr>
         </thead>
