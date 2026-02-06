@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# Mammouth CLI Installer
+# Mammouth Code Installer
 # Usage: curl -fsSL https://raw.githubusercontent.com/mammouth-ai/code/dev/install.sh | bash
 
 REPO="mammouth-ai/code"
@@ -66,7 +66,7 @@ install() {
   detect_platform
   VERSION=$(get_latest_version)
 
-  info "Installing Mammouth CLI v${VERSION} for ${PLATFORM}..."
+  info "Installing Mammouth Code v${VERSION} for ${PLATFORM}..."
 
   # Create install directory
   mkdir -p "$INSTALL_DIR"
@@ -140,7 +140,7 @@ setup_path() {
 
   # Check if already in PATH
   if echo "$PATH" | grep -q ".mammouth/bin"; then
-    info "Mammouth CLI is ready! Run 'mammouth' to get started."
+    info "Mammouth Code is ready! Run 'mammouth' to get started."
     return
   fi
 
@@ -149,7 +149,7 @@ setup_path() {
     info "PATH already configured in $PROFILE"
   else
     echo "" >> "$PROFILE"
-    echo "# Mammouth CLI" >> "$PROFILE"
+    echo "# Mammouth Code" >> "$PROFILE"
     echo "$EXPORT_LINE" >> "$PROFILE"
     info "Added to PATH in $PROFILE"
   fi
@@ -157,7 +157,7 @@ setup_path() {
   echo ""
   info "Installation complete!"
   echo ""
-  echo "To start using Mammouth CLI, either:"
+  echo "To start using Mammouth Code, either:"
   echo "  1. Restart your terminal, or"
   echo "  2. Run: source $PROFILE"
   echo ""

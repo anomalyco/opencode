@@ -220,14 +220,14 @@ function App() {
     if (!terminalTitleEnabled() || Flag.OPENCODE_DISABLE_TERMINAL_TITLE) return
 
     if (route.data.type === "home") {
-      renderer.setTerminalTitle("Mammouth CLI")
+      renderer.setTerminalTitle("Mammouth Code")
       return
     }
 
     if (route.data.type === "session") {
       const session = sync.session.get(route.data.sessionID)
       if (!session || SessionApi.isDefaultTitle(session.title)) {
-        renderer.setTerminalTitle("Mammouth CLI")
+        renderer.setTerminalTitle("Mammouth Code")
         return
       }
 
@@ -660,7 +660,7 @@ function App() {
     toast.show({
       variant: "info",
       title: "Update Available",
-      message: `Mammouth CLI v${evt.properties.version} is available. Run 'mammouth upgrade' to update manually.`,
+      message: `Mammouth Code v${evt.properties.version} is available. Run 'mammouth upgrade' to update manually.`,
       duration: 10000,
     })
   })

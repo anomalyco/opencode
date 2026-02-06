@@ -23,7 +23,7 @@ interface RemovalTargets {
 
 export const UninstallCommand = {
   command: "uninstall",
-  describe: "uninstall Mammouth CLI and remove all related files",
+  describe: "uninstall Mammouth Code and remove all related files",
   builder: (yargs: Argv) =>
     yargs
       .option("keep-config", {
@@ -54,7 +54,7 @@ export const UninstallCommand = {
     UI.empty()
     UI.println(UI.logo("  "))
     UI.empty()
-    prompts.intro("Uninstall Mammouth CLI")
+    prompts.intro("Uninstall Mammouth Code")
 
     const method = await Installation.method()
     prompts.log.info(`Installation method: ${method}`)
@@ -135,8 +135,8 @@ async function showRemovalSummary(targets: RemovalTargets, method: Installation.
       brew: "brew uninstall mammouth",
       choco: "choco uninstall mammouth",
       scoop: "scoop uninstall mammouth",
-      paru: "paru -R mammouth-cli",
-      yay: "yay -R mammouth-cli",
+      paru: "paru -R mammouth-code",
+      yay: "yay -R mammouth-code",
     }
     prompts.log.info(`  ✓ Package: ${cmds[method] || method}`)
   }
@@ -188,8 +188,8 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
       brew: ["brew", "uninstall", "mammouth"],
       choco: ["choco", "uninstall", "mammouth"],
       scoop: ["scoop", "uninstall", "mammouth"],
-      paru: ["paru", "-R", "mammouth-cli"],
-      yay: ["yay", "-R", "mammouth-cli"],
+      paru: ["paru", "-R", "mammouth-code"],
+      yay: ["yay", "-R", "mammouth-code"],
     }
 
     const cmd = cmds[method]
@@ -235,7 +235,7 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
   }
 
   UI.empty()
-  prompts.log.success("Thank you for using Mammouth CLI!")
+  prompts.log.success("Thank you for using Mammouth Code!")
 }
 
 async function getShellConfigFile(): Promise<string | null> {

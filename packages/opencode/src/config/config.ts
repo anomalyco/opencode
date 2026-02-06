@@ -40,11 +40,11 @@ export namespace Config {
   function getManagedConfigDir(): string {
     switch (process.platform) {
       case "darwin":
-        return "/Library/Application Support/opencode"
+        return "/Library/Application Support/mammouth"
       case "win32":
-        return path.join(process.env.ProgramData || "C:\\ProgramData", "opencode")
+        return path.join(process.env.ProgramData || "C:\\ProgramData", "mammouth")
       default:
-        return "/etc/opencode"
+        return "/etc/mammouth"
     }
   }
 
@@ -77,8 +77,8 @@ export namespace Config {
     for (const [key, value] of Object.entries(auth)) {
       if (value.type === "wellknown") {
         process.env[value.key] = value.token
-        log.debug("fetching remote config", { url: `${key}/.well-known/opencode` })
-        const response = await fetch(`${key}/.well-known/opencode`)
+        log.debug("fetching remote config", { url: `${key}/.well-known/mammouth` })
+        const response = await fetch(`${key}/.well-known/mammouth`)
         if (!response.ok) {
           throw new Error(`failed to fetch remote config from ${key}: ${response.status}`)
         }
@@ -88,7 +88,7 @@ export namespace Config {
         if (!remoteConfig.$schema) remoteConfig.$schema = "https://opencode.ai/config.json"
         result = mergeConfigConcatArrays(
           result,
-          await load(JSON.stringify(remoteConfig), `${key}/.well-known/opencode`),
+          await load(JSON.stringify(remoteConfig), `${key}/.well-known/mammouth`),
         )
         log.debug("loaded remote config from well-known", { url: key })
       }
@@ -105,7 +105,7 @@ export namespace Config {
 
     // Project config overrides global and remote config.
     if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
-      for (const file of ["opencode.jsonc", "opencode.json"]) {
+      for (const file of ["mammouth.jsonc", "mammouth.json"]) {
         const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
         for (const resolved of found.toReversed()) {
           result = mergeConfigConcatArrays(result, await loadFile(resolved))
@@ -119,20 +119,20 @@ export namespace Config {
 
     const directories = [
       Global.Path.config,
-      // Only scan project .mammouth-cli/ directories when project discovery is enabled
+      // Only scan project .mammouth/ directories when project discovery is enabled
       ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
         ? await Array.fromAsync(
             Filesystem.up({
-              targets: [".opencode"],
+              targets: [".mammouth"],
               start: Instance.directory,
               stop: Instance.worktree,
             }),
           )
         : []),
-      // Always scan ~/.mammouth-cli/ (user home directory)
+      // Always scan ~/.mammouth/ (user home directory)
       ...(await Array.fromAsync(
         Filesystem.up({
-          targets: [".opencode"],
+          targets: [".mammouth"],
           start: Global.Path.home,
           stop: Global.Path.home,
         }),
@@ -148,8 +148,8 @@ export namespace Config {
     const deps = []
 
     for (const dir of unique(directories)) {
-      if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
-        for (const file of ["opencode.jsonc", "opencode.json"]) {
+      if (dir.endsWith(".mammouth") || dir === Flag.OPENCODE_CONFIG_DIR) {
+        for (const file of ["mammouth.jsonc", "mammouth.json"]) {
           log.debug(`loading config from ${path.join(dir, file)}`)
           result = mergeConfigConcatArrays(result, await loadFile(path.join(dir, file)))
           // to satisfy the type checker
@@ -183,7 +183,7 @@ export namespace Config {
     // which would fail on system directories requiring elevated permissions
     // This way it only loads config file and not skills/plugins/commands
     if (existsSync(managedConfigDir)) {
-      for (const file of ["opencode.jsonc", "opencode.json"]) {
+      for (const file of ["mammouth.jsonc", "mammouth.json"]) {
         result = mergeConfigConcatArrays(result, await loadFile(path.join(managedConfigDir, file)))
       }
     }
@@ -364,7 +364,7 @@ export namespace Config {
       })
       if (!md) continue
 
-      const patterns = ["/.opencode/command/", "/.opencode/commands/", "/command/", "/commands/"]
+      const patterns = ["/.mammouth/command/", "/.mammouth/commands/", "/command/", "/commands/"]
       const file = rel(item, patterns) ?? path.basename(item)
       const name = trim(file)
 
@@ -404,7 +404,7 @@ export namespace Config {
       })
       if (!md) continue
 
-      const patterns = ["/.opencode/agent/", "/.opencode/agents/", "/agent/", "/agents/"]
+      const patterns = ["/.mammouth/agent/", "/.mammouth/agents/", "/agent/", "/agents/"]
       const file = rel(item, patterns) ?? path.basename(item)
       const agentName = trim(file)
 
@@ -938,7 +938,7 @@ export namespace Config {
       port: z.number().int().positive().optional().describe("Port to listen on"),
       hostname: z.string().optional().describe("Hostname to listen on"),
       mdns: z.boolean().optional().describe("Enable mDNS service discovery"),
-      mdnsDomain: z.string().optional().describe("Custom domain name for mDNS service (default: opencode.local)"),
+      mdnsDomain: z.string().optional().describe("Custom domain name for mDNS service (default: mammouth.local)"),
       cors: z.array(z.string()).optional().describe("Additional domains to allow for CORS"),
     })
     .strict()
@@ -1011,7 +1011,7 @@ export namespace Config {
       keybinds: Keybinds.optional().describe("Custom keybind configurations"),
       logLevel: Log.Level.optional().describe("Log level"),
       tui: TUI.optional().describe("TUI specific settings"),
-      server: Server.optional().describe("Server configuration for opencode serve and web commands"),
+      server: Server.optional().describe("Server configuration for mammouth serve and web commands"),
       command: z
         .record(z.string(), Command)
         .optional()
@@ -1200,8 +1200,8 @@ export namespace Config {
     let result: Info = pipe(
       {},
       mergeDeep(await loadFile(path.join(Global.Path.config, "config.json"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.json"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.jsonc"))),
+      mergeDeep(await loadFile(path.join(Global.Path.config, "mammouth.json"))),
+      mergeDeep(await loadFile(path.join(Global.Path.config, "mammouth.jsonc"))),
     )
 
     const legacy = path.join(Global.Path.config, "config")
@@ -1371,7 +1371,7 @@ export namespace Config {
   }
 
   function globalConfigFile() {
-    const candidates = ["opencode.jsonc", "opencode.json", "config.json"].map((file) =>
+    const candidates = ["mammouth.jsonc", "mammouth.json", "config.json"].map((file) =>
       path.join(Global.Path.config, file),
     )
     for (const file of candidates) {
