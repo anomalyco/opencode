@@ -13,6 +13,12 @@ const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
 const MAX_BYTES = 50 * 1024
 
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
 export const ReadTool = Tool.define("read", {
   description: DESCRIPTION,
   parameters: z.object({
@@ -43,7 +49,7 @@ export const ReadTool = Tool.define("read", {
       const dir = path.dirname(filepath)
       const base = path.basename(filepath)
 
-      const dirEntries = fs.readdirSync(dir)
+      const dirEntries = await fs.promises.readdir(dir).catch(() => [])
       const suggestions = dirEntries
         .filter(
           (entry) =>
@@ -61,7 +67,9 @@ export const ReadTool = Tool.define("read", {
 
     const instructions = await InstructionPrompt.resolve(ctx.messages, filepath, ctx.messageID)
 
-    // Exclude SVG (XML-based) and vnd.fastbidsheet (.fbs extension, commonly FlatBuffers schema files)
+    const stat = await file.stat()
+    const fileSize = stat.size
+
     const isImage =
       file.type.startsWith("image/") && file.type !== "image/svg+xml" && file.type !== "image/vnd.fastbidsheet"
     const isPdf = file.type === "application/pdf"
@@ -74,6 +82,8 @@ export const ReadTool = Tool.define("read", {
         metadata: {
           preview: msg,
           truncated: false,
+          size: fileSize,
+          sizeHuman: formatSize(fileSize),
           ...(instructions.length > 0 && { loaded: instructions.map((i) => i.filepath) }),
         },
         attachments: [
@@ -86,25 +96,82 @@ export const ReadTool = Tool.define("read", {
       }
     }
 
-    const isBinary = await isBinaryFile(filepath, file)
+    const isBinary = await isBinaryFile(filepath, fileSize, file)
     if (isBinary) throw new Error(`Cannot read binary file: ${filepath}`)
 
     const limit = params.limit ?? DEFAULT_READ_LIMIT
     const offset = params.offset || 0
-    const lines = await file.text().then((text) => text.split("\n"))
 
     const raw: string[] = []
-    let bytes = 0
+    let bytesRead = 0
     let truncatedByBytes = false
-    for (let i = offset; i < Math.min(lines.length, offset + limit); i++) {
-      const line = lines[i].length > MAX_LINE_LENGTH ? lines[i].substring(0, MAX_LINE_LENGTH) + "..." : lines[i]
-      const size = Buffer.byteLength(line, "utf-8") + (raw.length > 0 ? 1 : 0)
-      if (bytes + size > MAX_BYTES) {
-        truncatedByBytes = true
-        break
+    let lineIndex = 0
+    let hasMoreLines = false
+
+    const stream = file.stream()
+    const reader = stream.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ""
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        
+        if (done) {
+          buffer += decoder.decode()
+          if (buffer) {
+            const lines = buffer.split(/\r?\n/)
+            for (const line of lines) {
+              if (lineIndex >= offset && lineIndex < offset + limit) {
+                const processedLine = line.length > MAX_LINE_LENGTH ? line.substring(0, MAX_LINE_LENGTH) + "..." : line
+                const size = Buffer.byteLength(processedLine, "utf-8") + (raw.length > 0 ? 1 : 0)
+                if (bytesRead + size > MAX_BYTES) {
+                  truncatedByBytes = true
+                  break
+                }
+                raw.push(processedLine)
+                bytesRead += size
+              } else if (lineIndex >= offset + limit) {
+                hasMoreLines = true
+                break
+              }
+              lineIndex++
+            }
+          }
+          break
+        }
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split(/\r?\n/)
+        buffer = lines.pop() || ""
+
+        let stop = false
+        for (const line of lines) {
+          if (lineIndex >= offset && lineIndex < offset + limit) {
+            const processedLine = line.length > MAX_LINE_LENGTH ? line.substring(0, MAX_LINE_LENGTH) + "..." : line
+            const size = Buffer.byteLength(processedLine, "utf-8") + (raw.length > 0 ? 1 : 0)
+            if (bytesRead + size > MAX_BYTES) {
+              truncatedByBytes = true
+              stop = true
+              break
+            }
+            raw.push(processedLine)
+            bytesRead += size
+          } else if (lineIndex >= offset + limit) {
+            hasMoreLines = true
+            stop = true
+            break
+          }
+          lineIndex++
+        }
+
+        if (stop) {
+          await reader.cancel()
+          break
+        }
       }
-      raw.push(line)
-      bytes += size
+    } finally {
+      reader.releaseLock()
     }
 
     const content = raw.map((line, index) => {
@@ -112,12 +179,10 @@ export const ReadTool = Tool.define("read", {
     })
     const preview = raw.slice(0, 20).join("\n")
 
-    let output = "<file>\n"
+    let output = `<file path="${title}" size="${formatSize(fileSize)}">\n`
     output += content.join("\n")
 
-    const totalLines = lines.length
     const lastReadLine = offset + raw.length
-    const hasMoreLines = totalLines > lastReadLine
     const truncated = hasMoreLines || truncatedByBytes
 
     if (truncatedByBytes) {
@@ -125,6 +190,7 @@ export const ReadTool = Tool.define("read", {
     } else if (hasMoreLines) {
       output += `\n\n(File has more lines. Use 'offset' parameter to read beyond line ${lastReadLine})`
     } else {
+      const totalLines = lineIndex + (buffer ? 1 : 0)
       output += `\n\n(End of file - total ${totalLines} lines)`
     }
     output += "\n</file>"
@@ -143,13 +209,15 @@ export const ReadTool = Tool.define("read", {
       metadata: {
         preview,
         truncated,
+        size: fileSize,
+        sizeHuman: formatSize(fileSize),
         ...(instructions.length > 0 && { loaded: instructions.map((i) => i.filepath) }),
       },
     }
   },
 })
 
-async function isBinaryFile(filepath: string, file: Bun.BunFile): Promise<boolean> {
+async function isBinaryFile(filepath: string, fileSize: number, file: Bun.BunFile): Promise<boolean> {
   const ext = path.extname(filepath).toLowerCase()
   // binary check for common non-text extensions
   switch (ext) {
@@ -186,18 +254,19 @@ async function isBinaryFile(filepath: string, file: Bun.BunFile): Promise<boolea
       break
   }
 
-  const stat = await file.stat()
-  const fileSize = stat.size
   if (fileSize === 0) return false
 
   const bufferSize = Math.min(4096, fileSize)
-  const buffer = await file.arrayBuffer()
+  // Only read the first 4KB to check for binary content
+  const buffer = await file.slice(0, bufferSize).arrayBuffer()
   if (buffer.byteLength === 0) return false
-  const bytes = new Uint8Array(buffer.slice(0, bufferSize))
+  const bytes = new Uint8Array(buffer)
 
   let nonPrintableCount = 0
   for (let i = 0; i < bytes.length; i++) {
+    // NULL byte is a definitive binary indicator
     if (bytes[i] === 0) return true
+    // Common control characters (TAB, LF, CR are allowed)
     if (bytes[i] < 9 || (bytes[i] > 13 && bytes[i] < 32)) {
       nonPrintableCount++
     }

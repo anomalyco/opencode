@@ -226,6 +226,14 @@ Avoid unnecessary destructuring - use `obj.a` and `obj.b` to preserve context
 - **Logging pattern**: `Log.create({ service: "name" })`
 - **Error pattern**: Use `NamedError` from `@opencode-ai/util/error`
 
+### Documentation Practices
+
+- **Feature Design Documents**: Write to `packages/opencode/doc/feat_*.md`
+- **Naming**: Use `feat_update_descriptive-name.md` format
+- **Content**: Include architecture diagrams, data structures, workflow examples, and implementation steps
+- **Purpose**: Document design rationale, API contracts, and integration points for review and future maintenance
+- **Location**: All feature documentation goes in `packages/opencode/doc/` directory
+
 ### Runtime APIs
 
 Use Bun APIs when available: `Bun.file()`, `Bun.spawn()`, etc.

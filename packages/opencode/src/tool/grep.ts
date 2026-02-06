@@ -8,6 +8,7 @@ import path from "path"
 import { assertExternalDirectory } from "./external-directory"
 
 const MAX_LINE_LENGTH = 2000
+const STAT_CONCURRENCY = 100 // 并发控制
 
 export const GrepTool = Tool.define("grep", {
   description: DESCRIPTION,
@@ -49,18 +50,16 @@ export const GrepTool = Tool.define("grep", {
       signal: ctx.abort,
     })
 
-    const output = await new Response(proc.stdout).text()
+    const outputText = await new Response(proc.stdout).text()
     const errorOutput = await new Response(proc.stderr).text()
     const exitCode = await proc.exited
 
     // Exit codes: 0 = matches found, 1 = no matches, 2 = errors (but may still have matches)
-    // With --no-messages, we suppress error output but still get exit code 2 for broken symlinks etc.
-    // Only fail if exit code is 2 AND no output was produced
-    if (exitCode === 1 || (exitCode === 2 && !output.trim())) {
+    if (exitCode === 1 || (exitCode === 2 && !outputText.trim())) {
       return {
         title: params.pattern,
-        metadata: { matches: 0, truncated: false },
-        output: "No files found",
+        metadata: { matches: 0, displayed: 0, truncated: false },
+        output: "No files found matching the pattern.",
       }
     }
 
@@ -69,65 +68,79 @@ export const GrepTool = Tool.define("grep", {
     }
 
     const hasErrors = exitCode === 2
-
-    // Handle both Unix (\n) and Windows (\r\n) line endings
-    const lines = output.trim().split(/\r?\n/)
-    const matches = []
-
-    for (const line of lines) {
-      if (!line) continue
-
-      const [filePath, lineNumStr, ...lineTextParts] = line.split("|")
-      if (!filePath || !lineNumStr || lineTextParts.length === 0) continue
-
-      const lineNum = parseInt(lineNumStr, 10)
-      const lineText = lineTextParts.join("|")
-
-      const file = Bun.file(filePath)
-      const stats = await file.stat().catch(() => null)
-      if (!stats) continue
-
-      matches.push({
-        path: filePath,
-        modTime: stats.mtime.getTime(),
-        lineNum,
-        lineText,
+    const lines = outputText.trim().split(/\r?\n/)
+    
+    // 解析结果
+    const rawMatches = lines
+      .map(line => {
+        if (!line) return null
+        const [filePath, lineNumStr, ...lineTextParts] = line.split("|")
+        if (!filePath || !lineNumStr || lineTextParts.length === 0) return null
+        return {
+          filePath,
+          lineNum: parseInt(lineNumStr, 10),
+          lineText: lineTextParts.join("|")
+        }
       })
+      .filter((m): m is NonNullable<typeof m> => m !== null)
+
+    // 并发获取文件状态
+    const matches: any[] = []
+    for (let i = 0; i < rawMatches.length; i += STAT_CONCURRENCY) {
+      const batch = rawMatches.slice(i, i + STAT_CONCURRENCY)
+      const batchResults = await Promise.all(
+        batch.map(async (m) => {
+          const file = Bun.file(m.filePath)
+          const stats = await file.stat().catch(() => null)
+          if (!stats) return null
+          return {
+            ...m,
+            modTime: stats.mtime.getTime()
+          }
+        })
+      )
+      matches.push(...batchResults.filter((m): m is NonNullable<typeof m> => m !== null))
     }
 
+    // 按修改时间降序排列
     matches.sort((a, b) => b.modTime - a.modTime)
 
-    const limit = 100
-    const truncated = matches.length > limit
-    const finalMatches = truncated ? matches.slice(0, limit) : matches
+    const totalMatches = matches.length
+    const SOFT_LIMIT = 200 // 展示上限
+    const truncated = totalMatches > SOFT_LIMIT
+    const finalMatches = matches.slice(0, SOFT_LIMIT)
 
     if (finalMatches.length === 0) {
       return {
         title: params.pattern,
-        metadata: { matches: 0, truncated: false },
-        output: "No files found",
+        metadata: { matches: 0, displayed: 0, truncated: false },
+        output: "No files found matching the pattern.",
       }
     }
 
-    const outputLines = [`Found ${finalMatches.length} matches`]
+    const outputLines: string[] = [`Found ${finalMatches.length} matches`]
+    const searchIsBase = searchPath === Instance.worktree
 
     let currentFile = ""
     for (const match of finalMatches) {
-      if (currentFile !== match.path) {
-        if (currentFile !== "") {
-          outputLines.push("")
-        }
-        currentFile = match.path
-        outputLines.push(`${match.path}:`)
+      if (currentFile !== match.filePath) {
+        if (currentFile !== "") outputLines.push("")
+        currentFile = match.filePath
+        const displayPath = searchIsBase 
+          ? path.relative(Instance.worktree, match.filePath) 
+          : match.filePath
+        outputLines.push(`${displayPath}:`)
       }
-      const truncatedLineText =
-        match.lineText.length > MAX_LINE_LENGTH ? match.lineText.substring(0, MAX_LINE_LENGTH) + "..." : match.lineText
+      
+      const truncatedLineText = match.lineText.length > MAX_LINE_LENGTH 
+        ? match.lineText.substring(0, MAX_LINE_LENGTH) + "..." 
+        : match.lineText
       outputLines.push(`  Line ${match.lineNum}: ${truncatedLineText}`)
     }
 
     if (truncated) {
       outputLines.push("")
-      outputLines.push("(Results are truncated. Consider using a more specific path or pattern.)")
+      outputLines.push(`... and ${totalMatches - SOFT_LIMIT} more matches. Consider using a more specific path or pattern.`)
     }
 
     if (hasErrors) {
@@ -138,7 +151,8 @@ export const GrepTool = Tool.define("grep", {
     return {
       title: params.pattern,
       metadata: {
-        matches: finalMatches.length,
+        matches: totalMatches,
+        displayed: finalMatches.length,
         truncated,
       },
       output: outputLines.join("\n"),

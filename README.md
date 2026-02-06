@@ -34,6 +34,22 @@
   <a href="README.tr.md">Türkçe</a>
 </p>
 
+---
+
+> [!IMPORTANT]
+> This project is a **fork** of the original [OpenCode](https://github.com/anomalyco/opencode). 
+> It includes several performance enhancements and architectural improvements to the AI agent core.
+
+### Key Updates & Enhancements
+
+- **🚀 Parallel Tool Execution**: Implemented a sophisticated resource lock manager supporting shared/exclusive locks. Multiple read-only operations (like `read`, `grep`) can now run in parallel, significantly reducing agent wait times.
+- **🔗 Dependency-Aware Scheduling**: Added intelligent analysis of tool dependencies to optimize execution flow and ensure data consistency.
+- **⚡ Async Performance Optimization**: Refactored core processing loops and introduced async lazy loading for heavy components (e.g., Tree-Sitter parsers) to achieve faster startup and smoother execution.
+- **🏗️ Workqueue & Background Tasks**: Enhanced the internal workqueue system for more robust background task management.
+- **🧠 AI-Native Logic Flow**: Refined the agent's decision-making logic to be more efficient and better suited for complex multi-step coding tasks.
+
+---
+
 [![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
 
 ---
