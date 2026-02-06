@@ -369,7 +369,7 @@ export function DialogSelectServer() {
 
   async function handleRemove(url: string) {
     server.remove(url)
-    if (await platform.getDefaultServerUrl?.() === url) {
+    if ((await platform.getDefaultServerUrl?.()) === url) {
       platform.setDefaultServerUrl?.(null)
     }
   }
