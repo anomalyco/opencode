@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./vite": "./vite.js"
+    "./vite": "./vite.js",
+    "./index.css": "./src/index.css"
   },
   "scripts": {
     "typecheck": "tsgo -b",
