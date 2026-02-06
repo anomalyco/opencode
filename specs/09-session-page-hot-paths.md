@@ -6,7 +6,7 @@ Reduce render work and duplication in `session.tsx`
 
 ### Summary
 
-`packages/app/src/pages/session.tsx` mixes routing, commands, tab rendering, review panel wiring, terminal focus logic, and message scrolling. This spec targets hot-path performance + local code quality improvements that can ship together in one session-page-focused PR.
+`packages/app/src/pages/session.tsx` mixes routing, commands, tab rendering, review panel wiring, terminal focus logic, and message scrolling. This spec targets hot-path performance + local code quality improvements that can ship together in one session-page-focused PR. It should follow the keyed command-registration pattern introduced in `packages/app/src/context/command.tsx`.
 
 ---
 
@@ -64,6 +64,7 @@ This spec should not modify:
 
 4. Reduce command registry reallocation
 
+- Register session commands with a stable key (`command.register("session", ...)`) so remounts replace prior session command entries.
 - Move large command-array construction into smaller memoized blocks:
   - stable command definitions
   - dynamic state fields (`disabled`, titles) as narrow computed closures
@@ -76,7 +77,7 @@ This spec should not modify:
 - File tab bodies are not all mounted at once for large open-tab sets.
 - `onViewFile` review behavior is defined in one shared helper.
 - Terminal focus query/dispatch logic lives in one function and is reused.
-- `command.register` no longer contains one monolithic inline array with repeated inline handlers for shared actions.
+- Session command registration uses a stable key (`"session"`) and `command.register` no longer contains one monolithic inline array with repeated inline handlers for shared actions.
 - Session UX remains unchanged for:
   - opening files from review
   - drag-reordering terminal tabs
