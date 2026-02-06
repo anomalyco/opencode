@@ -62,6 +62,9 @@ export type Platform = {
 
   /** Webview zoom level (desktop only) */
   webviewZoom?: Accessor<number>
+
+  /** Check if an editor app exists (desktop only) */
+  checkAppExists?(appName: string): Promise<boolean>
 }
 
 export const { use: usePlatform, provider: PlatformProvider } = createSimpleContext({

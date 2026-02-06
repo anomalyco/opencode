@@ -15,6 +15,7 @@ import textmate from "../assets/icons/app/textmate.png"
 import vscode from "../assets/icons/app/vscode.svg"
 import xcode from "../assets/icons/app/xcode.png"
 import zed from "../assets/icons/app/zed.svg"
+import sublimetext from "../assets/icons/app/sublimetext.svg"
 
 const icons = {
   vscode,
@@ -30,6 +31,7 @@ const icons = {
   antigravity,
   textmate,
   powershell,
+  "sublime-text": sublimetext,
 } satisfies Record<IconName, string>
 
 export type AppIconProps = Omit<ComponentProps<"img">, "src"> & {
