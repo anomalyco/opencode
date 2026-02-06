@@ -589,6 +589,22 @@ export namespace Provider {
         },
       }
     },
+    evroc: async (input) => {
+      const apiKey = await (async () => {
+        const env = Env.all()
+        if (env["EVROC_API_KEY"]) return env["EVROC_API_KEY"]
+        const auth = await Auth.get(input.id)
+        if (auth?.type === "api") return auth.key
+        return undefined
+      })()
+
+      return {
+        autoload: !!apiKey,
+        options: {
+          apiKey,
+        },
+      }
+    },
   }
 
   export const Model = z
