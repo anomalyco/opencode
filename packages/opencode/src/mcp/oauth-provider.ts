@@ -32,7 +32,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
   ) {}
 
   get redirectUrl(): string {
-    return `http://127.0.0.1:${OAUTH_CALLBACK_PORT}${OAUTH_CALLBACK_PATH}`
+    return `http://localhost:${OAUTH_CALLBACK_PORT}${OAUTH_CALLBACK_PATH}`
   }
 
   get clientMetadata(): OAuthClientMetadata {
@@ -121,6 +121,36 @@ export class McpOAuthProvider implements OAuthClientProvider {
     log.info("saved oauth tokens", { mcpName: this.mcpName })
   }
 
+  async validateResourceURL(serverUrl: string | URL, resource?: string): Promise<URL | undefined> {
+    // For Azure AD, disable resource parameter to use scope-based authentication (v2.0)
+    // Azure AD v2.0 doesn't allow both resource and scope parameters
+    const url = new URL(typeof serverUrl === "string" ? serverUrl : serverUrl.toString())
+    if (url.hostname === "login.microsoftonline.com") {
+      log.info("azure ad detected, disabling resource parameter", { mcpName: this.mcpName })
+      return undefined
+    }
+    // For other providers, use the resource if provided
+    return resource ? new URL(resource) : undefined
+  }
+
+  addClientAuthentication = (_headers: Headers, params: URLSearchParams, url: string | URL, _metadata?: any): Promise<void> => {
+    // For Azure AD token endpoint, ensure client_id is in the request body
+    // and remove resource parameter if present
+    return (async () => {
+      const endpoint = new URL(typeof url === "string" ? url : url.toString())
+      if (endpoint.hostname === "login.microsoftonline.com") {
+        // Ensure client_id is in the request body for public clients
+        if (this.config.clientId && !params.has("client_id")) {
+          params.set("client_id", this.config.clientId)
+          log.info("added client_id to token request", { mcpName: this.mcpName })
+        }
+        // Remove resource parameter - v2.0 uses scope only
+        params.delete("resource")
+        log.info("removed resource parameter from token request", { mcpName: this.mcpName })
+      }
+    })()
+  }
+  
   async redirectToAuthorization(authorizationUrl: URL): Promise<void> {
     const url = new URL(authorizationUrl.toString())
 
