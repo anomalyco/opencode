@@ -151,6 +151,11 @@ async fn set_default_server_url(app: AppHandle, url: Option<String>) -> Result<(
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
+fn shell_escape(s: &str) -> String {
+    format!("'{}'", s.replace("'", "'\\''"))
+}
+
 #[tauri::command]
 #[specta::specta]
 fn open_in_finder(path: String) -> Result<(), String> {
@@ -221,6 +226,34 @@ fn open_in_editor(editor: String, path: String, custom_path: Option<String>) -> 
                 .spawn()
                 .map(|_| ())
                 .map_err(|e| format!("Failed to open with custom editor '{}': {}", custom, e));
+        }
+
+        if editor == "WezTerm" {
+            // Check if WezTerm is running, launch if not, then spawn new tab
+            // This mirrors Alfred workflow behavior for reliable WezTerm integration
+            let script = format!(
+                r#"
+                tell application "System Events"
+                    set weztermRunning to (name of processes) contains "wezterm-gui"
+                end tell
+                
+                if not weztermRunning then
+                    tell application "WezTerm" to launch
+                    delay 2
+                end if
+                
+                tell application "WezTerm" to activate
+                
+                do shell script "/Applications/WezTerm.app/Contents/MacOS/wezterm cli spawn --cwd {}"
+                "#,
+                shell_escape(&path)
+            );
+            return std::process::Command::new("osascript")
+                .arg("-e")
+                .arg(&script)
+                .spawn()
+                .map(|_| ())
+                .map_err(|e| format!("Failed to open in WezTerm: {}", e));
         }
 
         let app_name = match editor.as_str() {

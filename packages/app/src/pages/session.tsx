@@ -1265,6 +1265,18 @@ export default function Page() {
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: () => dialog.show(() => <DialogFork />),
     },
+    {
+      id: "input.focus",
+      title: language.t("command.input.focus"),
+      description: language.t("command.input.focus.description"),
+      category: language.t("command.category.view"),
+      keybind: "mod+slash",
+      onSelect: () => {
+        if (inputRef) {
+          inputRef.focus()
+        }
+      },
+    },
     ...(sync.data.config.share !== "disabled"
       ? [
           {

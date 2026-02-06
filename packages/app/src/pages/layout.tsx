@@ -67,6 +67,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { DialogSelectProvider } from "@/components/dialog-select-provider"
 import { DialogSelectServer } from "@/components/dialog-select-server"
+import { DialogSelectTheme } from "@/components/dialog-select-theme"
 import { DialogSettings } from "@/components/dialog-settings"
 import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
@@ -1214,41 +1215,20 @@ export default function Layout(props: ParentProps) {
         keybind: "mod+shift+t",
         onSelect: () => cycleTheme(1),
       },
+      {
+        id: "theme.select",
+        title: language.t("command.theme.select"),
+        category: language.t("command.category.theme"),
+        onSelect: () => dialog.show(() => <DialogSelectTheme />),
+      },
+      {
+        id: "theme.scheme.cycle",
+        title: language.t("command.theme.scheme.cycle"),
+        category: language.t("command.category.theme"),
+        keybind: "mod+shift+s",
+        onSelect: () => cycleColorScheme(1),
+      },
     ]
-
-    for (const [id, definition] of availableThemeEntries()) {
-      commands.push({
-        id: `theme.set.${id}`,
-        title: language.t("command.theme.set", { theme: definition.name ?? id }),
-        category: language.t("command.category.theme"),
-        onSelect: () => theme.commitPreview(),
-        onHighlight: () => {
-          theme.previewTheme(id)
-          return () => theme.cancelPreview()
-        },
-      })
-    }
-
-    commands.push({
-      id: "theme.scheme.cycle",
-      title: language.t("command.theme.scheme.cycle"),
-      category: language.t("command.category.theme"),
-      keybind: "mod+shift+s",
-      onSelect: () => cycleColorScheme(1),
-    })
-
-    for (const scheme of colorSchemeOrder) {
-      commands.push({
-        id: `theme.scheme.${scheme}`,
-        title: language.t("command.theme.scheme.set", { scheme: colorSchemeLabel(scheme) }),
-        category: language.t("command.category.theme"),
-        onSelect: () => theme.commitPreview(),
-        onHighlight: () => {
-          theme.previewColorScheme(scheme)
-          return () => theme.cancelPreview()
-        },
-      })
-    }
 
     commands.push({
       id: "language.cycle",

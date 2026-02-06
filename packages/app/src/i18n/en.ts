@@ -44,6 +44,8 @@ export const dict = {
   "command.language.set": "Use language: {{language}}",
 
   "command.session.new": "New session",
+  "command.input.focus": "Focus input",
+  "command.input.focus.description": "Focus the chat input field",
   "command.file.open": "Open file",
   "command.tab.close": "Close tab",
   "command.context.addSelection": "Add selection to context",
@@ -255,6 +257,11 @@ export const dict = {
   "mcp.status.disabled": "disabled",
 
   "dialog.fork.empty": "No messages to fork from",
+
+  "dialog.theme.search.placeholder": "Search themes",
+  "dialog.theme.empty": "No themes found",
+  "dialog.theme.group.theme": "Themes",
+  "command.theme.select": "Select theme",
 
   "dialog.directory.search.placeholder": "Search folders",
   "dialog.directory.empty": "No folders found",

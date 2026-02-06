@@ -144,24 +144,13 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    height: 22px;
-    width: 22px;
+    height: 28px;
+    width: 28px;
     border: none;
     border-radius: 6px;
     background: transparent;
     cursor: pointer;
     color: var(--text-weak);
-
-    [data-slot="icon-svg"] {
-      transition: transform 0.15s ease;
-    }
-  }
-
-  [data-component="user-message"][data-expanded="true"]
-    [data-slot="user-message-text"]
-    [data-slot="user-message-expand"]
-    [data-slot="icon-svg"] {
-    transform: rotate(180deg);
   }
 
   [data-component="user-message"] [data-slot="user-message-text"] [data-slot="user-message-expand"]:hover {

@@ -21,6 +21,7 @@ function normalizeKey(key: string) {
   if (key === ",") return "comma"
   if (key === "+") return "plus"
   if (key === " ") return "space"
+  if (key === "/") return "slash"
   return key.toLowerCase()
 }
 
@@ -150,6 +151,7 @@ export function formatKeybind(config: string): string {
       comma: ",",
       plus: "+",
       space: "Space",
+      slash: "/",
     }
     const key = kb.key.toLowerCase()
     const displayKey = keys[key] ?? (key.length === 1 ? key.toUpperCase() : key.charAt(0).toUpperCase() + key.slice(1))

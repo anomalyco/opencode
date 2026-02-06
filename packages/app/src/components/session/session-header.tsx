@@ -64,6 +64,7 @@ export function SessionHeader() {
     "terminal",
     "iterm2",
     "ghostty",
+    "wezterm",
     "xcode",
     "android-studio",
     "powershell",
@@ -92,6 +93,7 @@ export function SessionHeader() {
         { id: "terminal", label: "Terminal", icon: "terminal", openWith: "Terminal" },
         { id: "iterm2", label: "iTerm2", icon: "iterm2", openWith: "iTerm" },
         { id: "ghostty", label: "Ghostty", icon: "ghostty", openWith: "Ghostty" },
+        { id: "wezterm", label: "WezTerm", icon: "wezterm", openWith: "WezTerm" },
         { id: "xcode", label: "Xcode", icon: "xcode", openWith: "Xcode" },
         { id: "android-studio", label: "Android Studio", icon: "android-studio", openWith: "Android Studio" },
       ] as const

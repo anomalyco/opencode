@@ -416,7 +416,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
               toggleExpanded()
             }}
           >
-            <Icon name="chevron-down" size="small" />
+            <Icon name="chevron-grabber-vertical" size="normal" />
           </button>
           <div data-slot="user-message-copy-wrapper">
             <Tooltip
@@ -1485,67 +1485,67 @@ function QuestionPrompt(props: { request: QuestionRequest }) {
               </div>
             </Collapsible.Trigger>
             <Collapsible.Content>
-                <div data-slot="question-options">
-                  <For each={options()}>
-                    {(opt, i) => {
-                      const picked = () => store.answers[store.tab]?.includes(opt.label) ?? false
-                      return (
-                        <button data-slot="question-option" data-picked={picked()} onClick={() => selectOption(i())}>
-                          <span data-slot="option-label">{opt.label}</span>
-                          <Show when={opt.description}>
-                            <span data-slot="option-description">{opt.description}</span>
-                          </Show>
-                          <Show when={picked()}>
-                            <Icon name="check-small" size="normal" />
-                          </Show>
-                        </button>
-                      )
-                    }}
-                  </For>
-                  <button
-                    data-slot="question-option"
-                    data-picked={customPicked()}
-                    onClick={() => selectOption(options().length)}
-                  >
-                    <span data-slot="option-label">{i18n.t("ui.messagePart.option.typeOwnAnswer")}</span>
-                    <Show when={!store.editing && input()}>
-                      <span data-slot="option-description">{input()}</span>
-                    </Show>
-                    <Show when={customPicked()}>
-                      <Icon name="check-small" size="normal" />
-                    </Show>
-                  </button>
-                  <Show when={store.editing}>
-                    <form data-slot="custom-input-form" onSubmit={handleCustomSubmit}>
-                      <textarea
-                        ref={(el) => setTimeout(() => el.focus(), 0)}
-                        data-slot="custom-input"
-                        placeholder={i18n.t("ui.question.custom.placeholder")}
-                        value={input()}
-                        rows={3}
-                        onInput={(e) => {
-                          const inputs = [...store.custom]
-                          inputs[store.tab] = e.currentTarget.value
-                          setStore("custom", inputs)
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && !e.shiftKey) {
-                            e.preventDefault()
-                            handleCustomSubmit(e)
-                          }
-                        }}
-                      />
-                      <div data-slot="button-group">
-                        <Button type="button" variant="ghost" size="normal" onClick={() => setStore("editing", false)}>
-                          {i18n.t("ui.common.cancel")}
-                        </Button>
-                        <Button type="submit" variant="primary" size="normal">
-                          {multi() ? i18n.t("ui.common.add") : i18n.t("ui.common.submit")}
-                        </Button>
-                      </div>
-                    </form>
+              <div data-slot="question-options">
+                <For each={options()}>
+                  {(opt, i) => {
+                    const picked = () => store.answers[store.tab]?.includes(opt.label) ?? false
+                    return (
+                      <button data-slot="question-option" data-picked={picked()} onClick={() => selectOption(i())}>
+                        <span data-slot="option-label">{opt.label}</span>
+                        <Show when={opt.description}>
+                          <span data-slot="option-description">{opt.description}</span>
+                        </Show>
+                        <Show when={picked()}>
+                          <Icon name="check-small" size="normal" />
+                        </Show>
+                      </button>
+                    )
+                  }}
+                </For>
+                <button
+                  data-slot="question-option"
+                  data-picked={customPicked()}
+                  onClick={() => selectOption(options().length)}
+                >
+                  <span data-slot="option-label">{i18n.t("ui.messagePart.option.typeOwnAnswer")}</span>
+                  <Show when={!store.editing && input()}>
+                    <span data-slot="option-description">{input()}</span>
                   </Show>
-                </div>
+                  <Show when={customPicked()}>
+                    <Icon name="check-small" size="normal" />
+                  </Show>
+                </button>
+                <Show when={store.editing}>
+                  <form data-slot="custom-input-form" onSubmit={handleCustomSubmit}>
+                    <textarea
+                      ref={(el) => setTimeout(() => el.focus(), 0)}
+                      data-slot="custom-input"
+                      placeholder={i18n.t("ui.question.custom.placeholder")}
+                      value={input()}
+                      rows={3}
+                      onInput={(e) => {
+                        const inputs = [...store.custom]
+                        inputs[store.tab] = e.currentTarget.value
+                        setStore("custom", inputs)
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault()
+                          handleCustomSubmit(e)
+                        }
+                      }}
+                    />
+                    <div data-slot="button-group">
+                      <Button type="button" variant="ghost" size="normal" onClick={() => setStore("editing", false)}>
+                        {i18n.t("ui.common.cancel")}
+                      </Button>
+                      <Button type="submit" variant="primary" size="normal">
+                        {multi() ? i18n.t("ui.common.add") : i18n.t("ui.common.submit")}
+                      </Button>
+                    </div>
+                  </form>
+                </Show>
+              </div>
             </Collapsible.Content>
           </div>
         </Show>

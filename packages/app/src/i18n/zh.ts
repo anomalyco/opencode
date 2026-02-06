@@ -48,6 +48,8 @@ export const dict = {
   "command.language.set": "使用语言：{{language}}",
 
   "command.session.new": "新建会话",
+  "command.input.focus": "聚焦输入框",
+  "command.input.focus.description": "聚焦到聊天输入框",
   "command.file.open": "打开文件",
   "command.context.addSelection": "将所选内容添加到上下文",
   "command.context.addSelection.description": "添加当前文件中选中的行",
@@ -92,6 +94,11 @@ export const dict = {
   "palette.empty": "未找到结果",
   "palette.group.commands": "命令",
   "palette.group.files": "文件",
+
+  "dialog.theme.search.placeholder": "搜索主题",
+  "dialog.theme.empty": "未找到主题",
+  "dialog.theme.group.theme": "主题",
+  "command.theme.select": "选择主题",
 
   "dialog.provider.search.placeholder": "搜索提供商",
   "dialog.provider.empty": "未找到提供商",
