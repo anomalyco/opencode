@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
     "dev:desktop": "bun --cwd packages/desktop tauri dev",
+    "dev:web": "bun --cwd packages/app dev",
     "typecheck": "bun turbo typecheck",
     "prepare": "husky",
     "random": "echo 'Random script'",
@@ -99,7 +100,5 @@
     "@types/bun": "catalog:",
     "@types/node": "catalog:"
   },
-  "patchedDependencies": {
-    "ghostty-web@0.3.0": "patches/ghostty-web@0.3.0.patch"
-  }
+  "patchedDependencies": {}
 }
