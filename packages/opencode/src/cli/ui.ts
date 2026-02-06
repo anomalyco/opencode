@@ -6,6 +6,30 @@ import { logo as glyphs } from "./logo"
 export namespace UI {
   export const CancelledError = NamedError.create("UICancelledError", z.void())
 
+  const draw = (line: string, fg: string, shadow: string, bg: string, reset: string) => {
+    const parts: string[] = []
+    for (const char of line) {
+      if (char === "_") {
+        parts.push(bg, " ", reset)
+        continue
+      }
+      if (char === "^") {
+        parts.push(fg, bg, "▀", reset)
+        continue
+      }
+      if (char === "~") {
+        parts.push(shadow, "▀", reset)
+        continue
+      }
+      if (char === " ") {
+        parts.push(" ")
+        continue
+      }
+      parts.push(fg, char, reset)
+    }
+    return parts.join("")
+  }
+
   export const Style = {
     TEXT_HIGHLIGHT: "\x1b[96m",
     TEXT_HIGHLIGHT_BOLD: "\x1b[96m\x1b[1m",
@@ -40,6 +64,19 @@ export namespace UI {
     blank = true
   }
 
+  export function logoMonogram(pad = ""): [string, string, string] {
+    const monogram = ["█▀▀█", "█__█", "▀▀▀▀"] as const
+    const reset = "\x1b[0m"
+    const fg = reset
+    const shadow = "\x1b[38;5;238m"
+    const bg = "\x1b[48;5;238m"
+    return [
+      `${pad}${draw(monogram[0], fg, shadow, bg, reset)}`,
+      `${pad}${draw(monogram[1], fg, shadow, bg, reset)}`,
+      `${pad}${draw(monogram[2], fg, shadow, bg, reset)}`,
+    ]
+  }
+
   export function logo(pad?: string) {
     const result: string[] = []
     const reset = "\x1b[0m"
@@ -54,35 +91,12 @@ export namespace UI {
       bg: "\x1b[48;5;238m",
     }
     const gap = " "
-    const draw = (line: string, fg: string, shadow: string, bg: string) => {
-      const parts: string[] = []
-      for (const char of line) {
-        if (char === "_") {
-          parts.push(bg, " ", reset)
-          continue
-        }
-        if (char === "^") {
-          parts.push(fg, bg, "▀", reset)
-          continue
-        }
-        if (char === "~") {
-          parts.push(shadow, "▀", reset)
-          continue
-        }
-        if (char === " ") {
-          parts.push(" ")
-          continue
-        }
-        parts.push(fg, char, reset)
-      }
-      return parts.join("")
-    }
     glyphs.left.forEach((row, index) => {
       if (pad) result.push(pad)
-      result.push(draw(row, left.fg, left.shadow, left.bg))
+      result.push(draw(row, left.fg, left.shadow, left.bg, reset))
       result.push(gap)
       const other = glyphs.right[index] ?? ""
-      result.push(draw(other, right.fg, right.shadow, right.bg))
+      result.push(draw(other, right.fg, right.shadow, right.bg, reset))
       result.push(EOL)
     })
     return result.join("").trimEnd()
