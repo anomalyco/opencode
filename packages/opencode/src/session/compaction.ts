@@ -141,6 +141,9 @@ export namespace SessionCompaction {
     const defaultPrompt =
       "Provide a detailed prompt for continuing our conversation above. Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next considering new session will not have access to our conversation."
     const promptText = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
+    const config = await Config.get()
+    const head = config.compaction?.window?.head ?? 0
+    const toSend = head > 0 ? MessageV2.windowMessages(input.messages, head) : input.messages
     const result = await processor.process({
       user: userMessage,
       agent,
@@ -149,7 +152,7 @@ export namespace SessionCompaction {
       tools: {},
       system: [],
       messages: [
-        ...MessageV2.toModelMessages(input.messages, model),
+        ...MessageV2.toModelMessages(toSend, model),
         {
           role: "user",
           content: [

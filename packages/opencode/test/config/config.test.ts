@@ -79,6 +79,24 @@ test("loads JSONC config file", async () => {
   })
 })
 
+test("loads compaction.window.head for context window limit", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        compaction: { window: { head: 50 } },
+      })
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.compaction?.window?.head).toBe(50)
+    },
+  })
+})
+
 test("merges multiple config files with correct precedence", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

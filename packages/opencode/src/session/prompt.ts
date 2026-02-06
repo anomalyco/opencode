@@ -33,6 +33,7 @@ import { ulid } from "ulid"
 import { spawn } from "child_process"
 import { Command } from "../command"
 import { $, fileURLToPath } from "bun"
+import { Config } from "../config/config"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/util/error"
@@ -594,6 +595,10 @@ export namespace SessionPrompt {
 
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
+      const config = await Config.get()
+      const head = config.compaction?.window?.head ?? 0
+      const toSend = head > 0 ? MessageV2.windowMessages(sessionMessages, head) : sessionMessages
+
       const result = await processor.process({
         user: lastUser,
         agent,
@@ -601,7 +606,7 @@ export namespace SessionPrompt {
         sessionID,
         system: [...(await SystemPrompt.environment(model)), ...(await InstructionPrompt.system())],
         messages: [
-          ...MessageV2.toModelMessages(sessionMessages, model),
+          ...MessageV2.toModelMessages(toSend, model),
           ...(isLastStep
             ? [
                 {

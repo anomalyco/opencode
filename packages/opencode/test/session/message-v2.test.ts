@@ -102,6 +102,105 @@ function basePart(messageID: string, id: string) {
   }
 }
 
+describe("session.message-v2.windowMessages", () => {
+  function msg(id: string, role: "user" | "assistant"): MessageV2.WithParts {
+    return {
+      info: (role === "user" ? userInfo(id) : assistantInfo(id, "p")) as MessageV2.WithParts["info"],
+      parts: [{ ...basePart(id, "p1"), type: "text", text: id }],
+    }
+  }
+  test("returns full list when length <= head", () => {
+    const input = [msg("1", "user"), msg("2", "assistant"), msg("3", "user")]
+    expect(MessageV2.windowMessages(input, 5)).toEqual(input)
+    expect(MessageV2.windowMessages(input, 3)).toEqual(input)
+  })
+  test("returns last N when length > head", () => {
+    const input = [msg("1", "user"), msg("2", "assistant"), msg("3", "user"), msg("4", "assistant"), msg("5", "user")]
+    const out = MessageV2.windowMessages(input, 3)
+    expect(out).toHaveLength(3)
+    expect(out[0].info.id).toBe("3")
+    expect(out[1].info.id).toBe("4")
+    expect(out[2].info.id).toBe("5")
+  })
+  test("no-op when head is 0", () => {
+    const input = [msg("1", "user"), msg("2", "assistant")]
+    expect(MessageV2.windowMessages(input, 0)).toBe(input)
+  })
+  test("returns empty when input is empty", () => {
+    expect(MessageV2.windowMessages([], 5)).toEqual([])
+    expect(MessageV2.windowMessages([], 0)).toEqual([])
+  })
+  test("head 1 returns only last message", () => {
+    const input = [msg("1", "user"), msg("2", "assistant"), msg("3", "user")]
+    const out = MessageV2.windowMessages(input, 1)
+    expect(out).toHaveLength(1)
+    expect(out[0].info.id).toBe("3")
+  })
+  test("single message with head 1 returns that message", () => {
+    const input = [msg("1", "user")]
+    expect(MessageV2.windowMessages(input, 1)).toEqual(input)
+  })
+  test("no message history: returns empty list", () => {
+    expect(MessageV2.windowMessages([], 10)).toEqual([])
+    expect(MessageV2.windowMessages([], 0)).toEqual([])
+  })
+  test("few message history: returns all when count below head", () => {
+    const input = [msg("1", "user"), msg("2", "assistant"), msg("3", "user"), msg("4", "assistant")]
+    expect(MessageV2.windowMessages(input, 10)).toEqual(input)
+    expect(MessageV2.windowMessages(input, 4)).toEqual(input)
+  })
+  test("large message history with batch of image or video: returns last N and preserves file parts", () => {
+    function msgWithMedia(id: string, role: "user" | "assistant", mime: string): MessageV2.WithParts {
+      return {
+        info: (role === "user" ? userInfo(id) : assistantInfo(id, "p")) as MessageV2.WithParts["info"],
+        parts: [
+          { ...basePart(id, "p1"), type: "text", text: id },
+          { ...basePart(id, "p2"), type: "file", mime, url: `https://example.com/${id}.${mime.split("/")[1]}`, filename: `${id}.bin` },
+        ],
+      }
+    }
+    const input: MessageV2.WithParts[] = [
+      msg("1", "user"),
+      msg("2", "assistant"),
+      msgWithMedia("3", "user", "image/png"),
+      msg("4", "assistant"),
+      msgWithMedia("5", "user", "video/mp4"),
+      msg("6", "assistant"),
+      msgWithMedia("7", "user", "image/jpeg"),
+      msg("8", "assistant"),
+      msg("9", "user"),
+      msg("10", "assistant"),
+    ]
+    const out = MessageV2.windowMessages(input, 4)
+    expect(out).toHaveLength(4)
+    expect(out.map((m) => m.info.id)).toEqual(["7", "8", "9", "10"])
+    const msg7 = out[0]
+    expect(msg7.parts.length).toBe(2)
+    expect(msg7.parts[1].type).toBe("file")
+    if (msg7.parts[1].type === "file") expect(msg7.parts[1].mime).toBe("image/jpeg")
+  })
+  // Steps to reproduce (manual): ask OpenCode to "edit large html css pages manually 20 pages";
+  // it goes into thinking mode, then can get stuck without compressing the window.
+  // This test ensures windowing limits sent messages so we avoid overflow and can continue.
+  test("reproduce scenario: 20 pages manual edit — window limits context so model gets last N and can continue", () => {
+    const PAGE_COUNT = 20
+    const messages: MessageV2.WithParts[] = []
+    for (let i = 0; i < PAGE_COUNT; i++) {
+      messages.push(msg(`user-${i}`, "user"))
+      messages.push(
+        msg(`assistant-${i}`, "assistant"), // simulates assistant doing one page edit
+      )
+    }
+    messages.push(msg("user-current", "user")) // current request
+    expect(messages.length).toBe(PAGE_COUNT * 2 + 1)
+    const head = 25
+    const out = MessageV2.windowMessages(messages, head)
+    expect(out).toHaveLength(head)
+    expect(out[out.length - 1].info.id).toBe("user-current")
+    expect(out[out.length - 1].info.role).toBe("user")
+  })
+})
+
 describe("session.message-v2.toModelMessage", () => {
   test("filters out messages with no parts", () => {
     const input: MessageV2.WithParts[] = [

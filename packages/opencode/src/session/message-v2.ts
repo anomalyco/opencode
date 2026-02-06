@@ -435,6 +435,13 @@ export namespace MessageV2 {
   })
   export type WithParts = z.infer<typeof WithParts>
 
+  /** Return last N messages (recent chat history) so the current turn is included; no-op when head <= 0 or length <= head. */
+  export function windowMessages(input: WithParts[], head: number): WithParts[] {
+    if (head <= 0) return input
+    if (input.length <= head) return input
+    return input.slice(-head)
+  }
+
   export function toModelMessages(input: WithParts[], model: Provider.Model): ModelMessage[] {
     const result: UIMessage[] = []
     const toolNames = new Set<string>()

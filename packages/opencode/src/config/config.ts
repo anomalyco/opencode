@@ -1156,6 +1156,16 @@ export namespace Config {
         .object({
           auto: z.boolean().optional().describe("Enable automatic compaction when context is full (default: true)"),
           prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
+          window: z
+            .object({
+              head: z
+                .number()
+                .int()
+                .min(0)
+                .describe("Max number of messages (recent chat history) to send to the model; 0 = no limit"),
+            })
+            .optional()
+            .describe("When set, send only the last N messages to reduce context usage and avoid cache overflow"),
         })
         .optional(),
       experimental: z

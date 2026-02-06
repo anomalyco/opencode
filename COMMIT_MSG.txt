@@ -1,0 +1,21 @@
+feat(compaction): add context window limit to reduce cache overflow and fix stuck-on-large-edits
+
+Add optional compaction.window.head config to send only the last N messages
+to the model instead of the full history. This avoids context/cache overflow
+and the "stuck without compressing" behavior when editing many files
+(e.g. 20+ HTML/CSS pages) or when compaction fails to run.
+
+Changes:
+- config: compaction.window.head (number, 0 = no limit) limits messages sent
+- MessageV2.windowMessages(input, head): returns last N messages so current turn is included
+- prompt.ts + compaction.ts: apply window before toModelMessages when config set
+- tests: windowMessages (no/few/large history, image/video, 20-page reproduce scenario)
+- tests: config load for compaction.window.head
+- .husky/pre-push: add common bun paths to PATH so push works from GitHub Desktop
+- .env.example: optional dev env vars at repo root
+
+Config example (opencode.jsonc):
+  "compaction": { "window": { "head": 50 } }
+
+Fixes issue where assistant gets stuck in thinking/retry loop when manually
+patching large codebases without successfully compressing the context window.
