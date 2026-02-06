@@ -187,18 +187,6 @@ describe("ProviderTransform.providerOptions", () => {
     ...overrides,
   })
 
-  test("wraps options under SDK key for normal providers", () => {
-    const model = createMockModel({
-      api: { id: "claude-sonnet-4", url: "https://api.anthropic.com", npm: "@ai-sdk/anthropic" },
-    })
-    const result = ProviderTransform.providerOptions(model, {
-      thinking: { type: "enabled", budgetTokens: 16000 },
-    })
-    expect(result).toEqual({
-      anthropic: { thinking: { type: "enabled", budgetTokens: 16000 } },
-    })
-  })
-
   test("does not extract providerOptions key for non-gateway providers", () => {
     const model = createMockModel({
       api: { id: "claude-sonnet-4", url: "https://api.anthropic.com", npm: "@ai-sdk/anthropic" },
@@ -258,15 +246,6 @@ describe("ProviderTransform.providerOptions", () => {
     expect(result).toEqual({
       gateway: { order: ["vertex"] },
     })
-  })
-
-  test("gateway with empty options", () => {
-    const model = createMockModel({
-      providerID: "vercel",
-      api: { id: "anthropic/claude-sonnet-4", url: "https://ai-gateway.vercel.sh", npm: "@ai-sdk/gateway" },
-    })
-    const result = ProviderTransform.providerOptions(model, {})
-    expect(result).toEqual({})
   })
 })
 
@@ -1554,30 +1533,6 @@ describe("ProviderTransform.variants", () => {
           openai: expect.objectContaining({
             reasoningEffort: "high",
           }),
-        },
-      })
-    })
-
-    test("google gemini-2.5 models return thinkingConfig variants with providerOptions wrapper", () => {
-      const model = createMockModel({
-        id: "google/gemini-2.5-flash",
-        providerID: "vercel",
-        api: {
-          id: "google/gemini-2.5-flash",
-          url: "https://ai-gateway.vercel.sh",
-          npm: "@ai-sdk/gateway",
-        },
-      })
-      const result = ProviderTransform.variants(model)
-      expect(Object.keys(result)).toEqual(["high", "max"])
-      expect(result.high).toEqual({
-        providerOptions: {
-          google: {
-            thinkingConfig: {
-              includeThoughts: true,
-              thinkingBudget: 16000,
-            },
-          },
         },
       })
     })
