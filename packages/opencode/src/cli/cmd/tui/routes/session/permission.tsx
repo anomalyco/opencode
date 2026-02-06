@@ -1,6 +1,6 @@
 import { createStore } from "solid-js/store"
 import { createMemo, For, Match, Show, Switch } from "solid-js"
-import { Portal, useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
+import { Portal, useKeyboard, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useKeybind } from "../../context/keybind"
 import { useTheme, selectedForeground } from "../../context/theme"
@@ -121,6 +121,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
   const sync = useSync()
   const [store, setStore] = createStore({
     stage: "permission" as PermissionStage,
+    expanded: false,
   })
 
   const session = createMemo(() => sync.data.session.find((s) => s.id === props.request.sessionID))
@@ -138,6 +139,28 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
   })
 
   const { theme } = useTheme()
+
+  const formatValue = (value: any, expanded: boolean = false) => {
+    if(value && (typeof value === "object" || typeof value === "string")){
+      if (typeof value === "object") {
+        if (expanded) {
+          // Show full content in fullscreen mode
+          return JSON.stringify(value, null, 2)
+        }
+        if (Array.isArray(value))
+          return `[${value.length} item${value.length === 1 ? "" : "s"}]`
+        return "{...}"
+      }
+      // String - truncate if too long (unless expanded)
+      const str = String(value)
+      if (expanded) return `"${str}"`
+      return str.length > 60 ? `"${str.slice(0, 57)}..."` : `"${str}"`
+    }
+    else{
+      return String(value)
+    }
+  }
+
 
   return (
     <Switch>
@@ -260,14 +283,39 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                     <TextBody icon="⟳" title="Continue after repeated failures" />
                   </Match>
                   <Match when={true}>
-                    <TextBody icon="⚙" title={`Call tool ` + props.request.permission} />
+                    <box flexDirection="column" gap={1}>
+                      <box flexDirection="row" gap={1} paddingLeft={1}>
+                        <text fg={theme.textMuted}>{"⚙"}</text>
+                        <text fg={theme.textMuted}>Call tool {props.request.permission}</text>
+                      </box>
+                      <Show when={Object.keys(input()).length > 0}>
+                        <box flexDirection="column" paddingLeft={4} gap={0}>
+                          <For each={Object.entries(input()).slice(0, store.expanded ? Infinity : 8)}>
+                            {([key, value]) => <box flexDirection="row" gap={1}>
+                                  <text fg={theme.text}>
+                                    <span style={{ bold: true }}>{key}:</span>
+                                  </text>
+                                  <text fg={theme.textMuted}>{formatValue(value, store.expanded)}</text>
+                                </box>
+                            }
+                          </For>
+                          <Show when={!store.expanded && Object.keys(input()).length > 8}>
+                            <text fg={theme.textMuted}>
+                              <span style={{ italic: true }}>... and {Object.keys(input()).length - 8} more</span>
+                            </text>
+                          </Show>
+                        </box>
+                      </Show>
+                    </box>
                   </Match>
                 </Switch>
               }
               options={{ once: "Allow once", always: "Allow always", reject: "Reject" }}
               escapeKey="reject"
-              fullscreen
+              expanded={store.expanded}
+              onExpandedToggle={() => setStore("expanded", (v) => !v)}
               onSelect={(option) => {
+                setStore("expanded", false);
                 if (option === "always") {
                   setStore("stage", "always")
                   return
@@ -375,7 +423,8 @@ function Prompt<const T extends Record<string, string>>(props: {
   body: JSX.Element
   options: T
   escapeKey?: keyof T
-  fullscreen?: boolean
+  expanded?: boolean
+  onExpandedToggle?: () => void
   onSelect: (option: keyof T) => void
 }) {
   const { theme } = useTheme()
@@ -384,7 +433,6 @@ function Prompt<const T extends Record<string, string>>(props: {
   const keys = Object.keys(props.options) as (keyof T)[]
   const [store, setStore] = createStore({
     selected: keys[0],
-    expanded: false,
   })
   const diffKey = Keybind.parse("ctrl+f")[0]
   const narrow = createMemo(() => dimensions().width < 80)
@@ -417,15 +465,14 @@ function Prompt<const T extends Record<string, string>>(props: {
       props.onSelect(props.escapeKey)
     }
 
-    if (props.fullscreen && diffKey && Keybind.match(diffKey, keybind.parse(evt))) {
+    if (props.onExpandedToggle && diffKey && Keybind.match(diffKey, keybind.parse(evt))) {
       evt.preventDefault()
       evt.stopPropagation()
-      setStore("expanded", (v) => !v)
+      props.onExpandedToggle?.()
     }
   })
 
-  const hint = createMemo(() => (store.expanded ? "minimize" : "fullscreen"))
-  const renderer = useRenderer()
+  const hint = createMemo(() => (props.expanded ? "minimize" : "fullscreen"))
 
   const content = () => (
     <box
@@ -433,7 +480,7 @@ function Prompt<const T extends Record<string, string>>(props: {
       border={["left"]}
       borderColor={theme.warning}
       customBorderChars={SplitBorder.customBorderChars}
-      {...(store.expanded
+      {...(props.expanded
         ? { top: dimensions().height * -1 + 1, bottom: 1, left: 2, right: 2, position: "absolute" }
         : {
             top: 0,
@@ -484,7 +531,7 @@ function Prompt<const T extends Record<string, string>>(props: {
           </For>
         </box>
         <box flexDirection="row" gap={2} flexShrink={0}>
-          <Show when={props.fullscreen}>
+          <Show when={props.onExpandedToggle}>
             <text fg={theme.text}>
               {"ctrl+f"} <span style={{ fg: theme.textMuted }}>{hint()}</span>
             </text>
@@ -501,7 +548,7 @@ function Prompt<const T extends Record<string, string>>(props: {
   )
 
   return (
-    <Show when={!store.expanded} fallback={<Portal>{content()}</Portal>}>
+    <Show when={!props.expanded} fallback={<Portal>{content()}</Portal>}>
       {content()}
     </Show>
   )
