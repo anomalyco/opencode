@@ -661,6 +661,10 @@ export namespace Config {
 
   export const Skills = z.object({
     paths: z.array(z.string()).optional().describe("Additional paths to skill folders"),
+    urls: z
+      .array(z.string())
+      .optional()
+      .describe("URLs to fetch skills from (e.g., https://example.com/.well-known/skills/)"),
   })
   export type Skills = z.infer<typeof Skills>
 
@@ -1269,8 +1273,8 @@ export namespace Config {
                 throw new InvalidError({ path: configFilepath, message: errMsg }, { cause: error })
               })
           ).trim()
-          text = text.replace(match, JSON.stringify(fileContent).slice(1, -1))
-        }
+        // escape newlines/quotes, strip outer quotes
+        text = text.replace(match, () => JSON.stringify(fileContent).slice(1, -1))
       }
     }
 

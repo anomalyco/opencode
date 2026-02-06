@@ -11,8 +11,9 @@ import { Accordion } from "@opencode-ai/ui/accordion"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { Code } from "@opencode-ai/ui/code"
 import { Markdown } from "@opencode-ai/ui/markdown"
-import type { AssistantMessage, Message, Part, UserMessage } from "@opencode-ai/sdk/v2/client"
+import type { Message, Part, UserMessage } from "@opencode-ai/sdk/v2/client"
 import { useLanguage } from "@/context/language"
+import { getSessionContextMetrics } from "./session-context-metrics"
 
 interface SessionContextTabProps {
   messages: () => Message[]
@@ -34,44 +35,11 @@ export function SessionContextTab(props: SessionContextTabProps) {
       }),
   )
 
-  const ctx = createMemo(() => {
-    const last = findLast(props.messages(), (x) => {
-      if (x.role !== "assistant") return false
-      const total = x.tokens.input + x.tokens.output + x.tokens.reasoning + x.tokens.cache.read + x.tokens.cache.write
-      return total > 0
-    }) as AssistantMessage
-    if (!last) return
-
-    const provider = sync.data.provider.all.find((x) => x.id === last.providerID)
-    const model = provider?.models[last.modelID]
-    const limit = model?.limit.context
-
-    const input = last.tokens.input
-    const output = last.tokens.output
-    const reasoning = last.tokens.reasoning
-    const cacheRead = last.tokens.cache.read
-    const cacheWrite = last.tokens.cache.write
-    const total = input + output + reasoning + cacheRead + cacheWrite
-    const usage = limit ? Math.round((total / limit) * 100) : null
-
-    return {
-      message: last,
-      provider,
-      model,
-      limit,
-      input,
-      output,
-      reasoning,
-      cacheRead,
-      cacheWrite,
-      total,
-      usage,
-    }
-  })
+  const metrics = createMemo(() => getSessionContextMetrics(props.messages(), sync.data.provider.all))
+  const ctx = createMemo(() => metrics().context)
 
   const cost = createMemo(() => {
-    const total = props.messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
-    return usd().format(total)
+    return usd().format(metrics().totalCost)
   })
 
   const counts = createMemo(() => {
@@ -114,14 +82,13 @@ export function SessionContextTab(props: SessionContextTabProps) {
   const providerLabel = createMemo(() => {
     const c = ctx()
     if (!c) return "—"
-    return c.provider?.name ?? c.message.providerID
+    return c.providerLabel
   })
 
   const modelLabel = createMemo(() => {
     const c = ctx()
     if (!c) return "—"
-    if (c.model?.name) return c.model.name
-    return c.message.modelID
+    return c.modelLabel
   })
 
   const breakdown = createMemo(
