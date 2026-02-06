@@ -5,10 +5,11 @@ Purpose: track **all** fork deltas and keep them preserved during upstream merge
 ## Status
 - Snapshot date: 2026-02-06
 - Base comparison: `upstream/dev...dev`
-- Current divergence: `0` behind / `418` ahead (`git rev-list --left-right --count upstream/dev...dev`)
+- Current divergence: `0` behind / `423` ahead (`git rev-list --left-right --count upstream/dev...dev`)
 - `parent-dev` mirror: `0 0` (`git rev-list --left-right --count upstream/dev...parent-dev`)
 - Source artifacts: `docs/upstream-sync/restore-missing-commits.txt`, `docs/upstream-sync/restore-file-map.txt`
 - Catch-up status: upstream catch-up is complete; this file reflects post-catch-up decoupling restoration from `sync/decouple-fork-layer`.
+- Continuous sync status: `.github/workflows/sync-upstream.yml` active; `parent-dev` stays mirrored to `upstream/dev`.
 
 ## A. System Authentication & Security (Core Runtime)
 
@@ -223,8 +224,9 @@ Purpose: track **all** fork deltas and keep them preserved during upstream merge
 ## I. Infra / CI / Workflows
 
 - Workflows under `.github/workflows/**`
-- Fork upstream sync automation: `.github/workflows/fork-sync-upstream.yml`
+- Fork upstream sync automation: `.github/workflows/sync-upstream.yml`
 - Fork sync orchestrator script: `script/sync-upstream.ts`
+- Upstream mirror verification script: `script/verify-upstream-mirror.sh`
 - Nix/flake updates: `flake.nix`, `flake.lock`, `nix/**`
 - Containers: `packages/containers/**`
 
@@ -263,6 +265,3 @@ Purpose: track **all** fork deltas and keep them preserved during upstream merge
 ## Notes
 - This is the restored post-catch-up inventory. Update this checklist whenever fork behavior ownership changes.
 - Fork hook packages: `packages/fork-auth`, `packages/fork-ui`, `packages/fork-terminal`, `packages/fork-cli`, `packages/fork-security`, `packages/fork-provider`, `packages/fork-config`.
-
-## Remaining Areas
-- None (current decoupling checklist complete)

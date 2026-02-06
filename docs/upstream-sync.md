@@ -4,9 +4,10 @@
 - Upstream repo/branch: `anomalyco/opencode` `dev`
 - Fork repo/branch: `pRizz/opencode` `dev`
 - Merge base: see `docs/upstream-sync/merge-base.txt`
-- Current divergence: `0` behind / `418` ahead (`git rev-list --left-right --count upstream/dev...origin/dev`)
+- Current divergence: `0` behind / `423` ahead (`git rev-list --left-right --count upstream/dev...origin/dev`)
 - `parent-dev` mirror status: `0 0` (`git rev-list --left-right --count upstream/dev...origin/parent-dev`)
 - Catch-up status: upstream catch-up complete; fork decoupling restored post-catch-up.
+- Post-catch-up snapshot artifact: `docs/upstream-sync/post-catchup-state.txt`
 
 ## Patchset Report
 - Restore manifest: `docs/upstream-sync/restore-missing-commits.txt`
@@ -47,15 +48,36 @@ wc -l docs/upstream-sync/upstream-first-parent.txt > docs/upstream-sync/upstream
 ## Ongoing Sync Automation
 - Script: `script/sync-upstream.ts`
 - Workflow: `.github/workflows/sync-upstream.yml` (runs every 3 hours)
-- Secrets required: `UPSTREAM_SYNC_TOKEN` (fine-grained PAT or GitHub App token)
+- Mirror verification script: `script/verify-upstream-mirror.sh`
+- Token behavior: uses `UPSTREAM_SYNC_TOKEN` when configured, otherwise falls back to `${{ github.token }}`.
 - Workflow behavior:
+  - Verifies `upstream/dev...origin/parent-dev` is `0 0` before running sync.
   - Updates `parent-dev` to match `upstream/dev` (force push).
   - Opens a sync PR when upstream is ahead.
   - Enables auto-merge once checks pass.
   - On conflict, opens an issue labeled `sync-conflict` with merge details.
 
+Manual dispatch and monitoring:
+```bash
+gh workflow run sync-upstream.yml --ref dev --repo pRizz/opencode
+gh run list --workflow sync-upstream.yml --repo pRizz/opencode --limit 1
+gh run view <run-id> --repo pRizz/opencode --log
+```
+
+Conflict handling:
+1. Check the `sync-conflict` issue for merge-base and conflict context.
+2. Create `sync/catchup-hotfix-<date>` from `dev`.
+3. Resolve conflicts with `docs/upstream-sync/fork-feature-audit.md` as ownership source of truth.
+4. Regenerate SDK, run typecheck/smoke, and merge immediately.
+
+Post-merge validation order:
+1. `./packages/sdk/js/script/build.ts`
+2. `bun turbo typecheck`
+3. Smoke in `packages/opencode`: `bun run dev:web` then `bun dev`
+
 ## Repo Settings Checklist
 - Enable auto-merge on the repository.
-- Require `test` and `typecheck` checks on `dev`.
+- Require `check-standards`, `typecheck`, and `test` checks on `dev`.
 - Allow merge commits.
-- Ensure the PAT/App used by `UPSTREAM_SYNC_TOKEN` can create PRs, labels, and enable auto-merge.
+- Disable force pushes to `dev`.
+- Require pull requests and up-to-date branches before merge.

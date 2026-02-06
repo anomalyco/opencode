@@ -9,6 +9,11 @@ concurrency:
   group: sync-upstream
   cancel-in-progress: true
 
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
 jobs:
   sync:
     runs-on: ubuntu-24.04
@@ -17,7 +22,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
+          token: ${{ secrets.UPSTREAM_SYNC_TOKEN || github.token }}
+
+      - name: Verify parent-dev mirror
+        run: ./script/verify-upstream-mirror.sh
 
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
@@ -25,5 +33,5 @@ jobs:
       - name: Sync upstream
         run: ./script/sync-upstream.ts
         env:
-          GH_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
-          UPSTREAM_SYNC_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
+          GH_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN || github.token }}
+          UPSTREAM_SYNC_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN || github.token }}
