@@ -496,6 +496,7 @@
     "tree-sitter-bash",
   ],
   "patchedDependencies": {
+    "@standard-community/standard-openapi@0.2.9": "patches/@standard-community%2Fstandard-openapi@0.2.9.patch",
     "ghostty-web@0.3.0": "patches/ghostty-web@0.3.0.patch",
   },
   "overrides": {
