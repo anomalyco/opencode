@@ -363,6 +363,29 @@ The model ID in your OpenCode config uses the format `provider/model-id`. For ex
 
 ---
 
+### Set a variant
+
+Set the default [model variant](/docs/models#variants) for an agent with the `variant` option. Variants control reasoning effort and thinking budgets for models that support them.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "build": {
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "variant": "max"
+    }
+  }
+}
+```
+
+:::note
+The variant only applies when the agent's configured `model` matches the model currently in use. You need to set both `model` and `variant` together.
+:::
+
+Available variant names depend on the provider. For example, Anthropic supports `high` and `max`, while OpenAI supports `low`, `medium`, `high`, and others. Learn more about [variants](/docs/models#variants).
+
+---
+
 ### Tools
 
 Control which tools are available in this agent with the `tools` config. You can enable or disable specific tools by setting them to `true` or `false`.
