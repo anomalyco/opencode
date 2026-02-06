@@ -21,21 +21,9 @@ jobs:
     name: test (${{ matrix.settings.name }})
     strategy:
       fail-fast: false
+      # Job-level `if` is evaluated before matrix expansion, so we select matrix rows by event here.
       matrix:
-        settings:
-          - name: linux
-            host: ubuntu-24.04
-            playwright: bunx playwright install --with-deps
-            workdir: packages/app
-            command: bun test:e2e
-          - name: windows
-            host: windows-latest
-            playwright: bunx playwright install
-            workdir: packages/app
-            # Run Windows lane with two workers to reduce total runtime on push/dev coverage.
-            command: bun test:e2e:local -- --workers=2
-    # PRs run Linux only for fast feedback; Windows coverage is still enforced on push to dev.
-    if: matrix.settings.name != 'windows' || github.event_name != 'pull_request'
+        settings: ${{ fromJSON(github.event_name == 'pull_request' && '[{"name":"linux","host":"ubuntu-24.04","playwright":"bunx playwright install --with-deps","workdir":"packages/app","command":"bun test:e2e"}]' || '[{"name":"linux","host":"ubuntu-24.04","playwright":"bunx playwright install --with-deps","workdir":"packages/app","command":"bun test:e2e"},{"name":"windows","host":"windows-latest","playwright":"bunx playwright install","workdir":"packages/app","command":"bun test:e2e:local -- --workers=2"}]') }}
     runs-on: ${{ matrix.settings.host }}
     defaults:
       run:
