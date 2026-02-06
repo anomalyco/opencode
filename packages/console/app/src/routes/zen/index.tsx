@@ -122,7 +122,7 @@ export default function Home() {
                   </svg>
                 </div>
               </div>
-              <a href={language.route("/auth")}>
+              <a href="/auth">
                 <span>{i18n.t("zen.cta.start")}</span>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path
@@ -304,7 +304,7 @@ export default function Home() {
                   {i18n.t("zen.faq.a4.p1.beforePricing")}{" "}
                   <a href={language.route("/docs/zen/#pricing")}>{i18n.t("zen.faq.a4.p1.pricingLink")}</a>{" "}
                   {i18n.t("zen.faq.a4.p1.afterPricing")} {i18n.t("zen.faq.a4.p2.beforeAccount")}{" "}
-                  <a href={language.route("/auth")}>{i18n.t("zen.faq.a4.p2.accountLink")}</a>. {i18n.t("zen.faq.a4.p3")}
+                  <a href="/auth">{i18n.t("zen.faq.a4.p2.accountLink")}</a>. {i18n.t("zen.faq.a4.p3")}
                 </Faq>
               </li>
               <li>

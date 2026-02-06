@@ -167,7 +167,7 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
           <li>
             <Switch>
               <Match when={props.zen}>
-                <a href={language.route("/auth")}>{i18n.t("nav.login")}</a>
+                <a href="/auth">{i18n.t("nav.login")}</a>
               </Match>
               <Match when={!props.zen}>
                 <A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>
@@ -263,7 +263,7 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
                 <li>
                   <Switch>
                     <Match when={props.zen}>
-                      <a href={language.route("/auth")}>{i18n.t("nav.login")}</a>
+                      <a href="/auth">{i18n.t("nav.login")}</a>
                     </Match>
                     <Match when={!props.zen}>
                       <A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>
