@@ -301,11 +301,14 @@ export const dict = {
   "workspace.home.billing.enable": "Activer la facturation",
   "workspace.home.billing.currentBalance": "Solde courant",
   "workspace.newUser.feature.tested.title": "Modèles testés et vérifiés",
-  "workspace.newUser.feature.tested.body": "Nous avons comparé et testé des modèles spécifiquement pour les agents de codage afin de garantir les meilleures performances.",
+  "workspace.newUser.feature.tested.body":
+    "Nous avons comparé et testé des modèles spécifiquement pour les agents de codage afin de garantir les meilleures performances.",
   "workspace.newUser.feature.quality.title": "La plus haute qualité",
-  "workspace.newUser.feature.quality.body": "Modèles d'accès configurés pour des performances optimales - pas de rétrogradation ni de routage vers des fournisseurs moins chers.",
+  "workspace.newUser.feature.quality.body":
+    "Modèles d'accès configurés pour des performances optimales - pas de rétrogradation ni de routage vers des fournisseurs moins chers.",
   "workspace.newUser.feature.lockin.title": "Pas de verrouillage",
-  "workspace.newUser.feature.lockin.body": "Utilisez Zen avec n'importe quel agent de codage et continuez à utiliser d'autres fournisseurs avec opencode quand vous le souhaitez.",
+  "workspace.newUser.feature.lockin.body":
+    "Utilisez Zen avec n'importe quel agent de codage et continuez à utiliser d'autres fournisseurs avec opencode quand vous le souhaitez.",
   "workspace.newUser.copyApiKey": "Copier la clé API",
   "workspace.newUser.copyKey": "Copier la clé",
   "workspace.newUser.copied": "Copié!",
@@ -316,7 +319,8 @@ export const dict = {
   "workspace.newUser.step.models.before": "Démarrez opencode et exécutez",
   "workspace.newUser.step.models.after": "pour sélectionner un modèle",
   "workspace.models.title": "Modèles",
-  "workspace.models.subtitle.beforeLink": "Gérez les modèles auxquels les membres de l’espace de travail peuvent accéder.",
+  "workspace.models.subtitle.beforeLink":
+    "Gérez les modèles auxquels les membres de l’espace de travail peuvent accéder.",
   "workspace.models.table.model": "Modèle",
   "workspace.models.table.enabled": "Activé",
   "workspace.providers.title": "Apportez votre propre clé",
@@ -457,9 +461,11 @@ export const dict = {
   "workspace.black.subscription.rollingUsage": "Utilisation de 5 heures",
   "workspace.black.subscription.weeklyUsage": "Utilisation hebdomadaire",
   "workspace.black.subscription.resetsIn": "Réinitialise dans",
-  "workspace.black.subscription.useBalance": "Utilisez votre solde disponible après avoir atteint les limites d'utilisation",
+  "workspace.black.subscription.useBalance":
+    "Utilisez votre solde disponible après avoir atteint les limites d'utilisation",
   "workspace.black.waitlist.title": "Liste d'attente",
-  "workspace.black.waitlist.joined": "Vous êtes sur la liste d'attente pour le forfait Black {{plan}} $ par mois OpenCode.",
+  "workspace.black.waitlist.joined":
+    "Vous êtes sur la liste d'attente pour le forfait Black {{plan}} $ par mois OpenCode.",
   "workspace.black.waitlist.ready": "Nous sommes prêts à vous inscrire au forfait Black {{plan}} $ par mois OpenCode.",
   "workspace.black.waitlist.leave": "Quitter la liste d'attente",
   "workspace.black.waitlist.leaving": "Sortie...",
@@ -467,5 +473,6 @@ export const dict = {
   "workspace.black.waitlist.enroll": "Inscrire",
   "workspace.black.waitlist.enrolling": "Inscription...",
   "workspace.black.waitlist.enrolled": "Inscrit",
-  "workspace.black.waitlist.enrollNote": "Lorsque vous cliquez sur S'inscrire, votre abonnement démarre immédiatement et votre carte sera débitée.",
+  "workspace.black.waitlist.enrollNote":
+    "Lorsque vous cliquez sur S'inscrire, votre abonnement démarre immédiatement et votre carte sera débitée.",
 } satisfies Dict

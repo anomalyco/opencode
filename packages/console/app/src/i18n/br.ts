@@ -296,11 +296,14 @@ export const dict = {
   "workspace.home.billing.enable": "Ativar faturamento",
   "workspace.home.billing.currentBalance": "Saldo atual",
   "workspace.newUser.feature.tested.title": "Modelos testados e verificados",
-  "workspace.newUser.feature.tested.body": "Comparamos e testamos modelos especificamente para agentes de codificação para garantir o melhor desempenho.",
+  "workspace.newUser.feature.tested.body":
+    "Comparamos e testamos modelos especificamente para agentes de codificação para garantir o melhor desempenho.",
   "workspace.newUser.feature.quality.title": "Mais alta qualidade",
-  "workspace.newUser.feature.quality.body": "Modelos de acesso configurados para desempenho ideal – sem downgrades ou roteamento para provedores mais baratos.",
+  "workspace.newUser.feature.quality.body":
+    "Modelos de acesso configurados para desempenho ideal – sem downgrades ou roteamento para provedores mais baratos.",
   "workspace.newUser.feature.lockin.title": "Sem bloqueio",
-  "workspace.newUser.feature.lockin.body": "Use Zen com qualquer agente de codificação e continue usando outros provedores com opencode sempre que quiser.",
+  "workspace.newUser.feature.lockin.body":
+    "Use Zen com qualquer agente de codificação e continue usando outros provedores com opencode sempre que quiser.",
   "workspace.newUser.copyApiKey": "Copiar chave API",
   "workspace.newUser.copyKey": "Copiar chave",
   "workspace.newUser.copied": "Copiado!",
@@ -462,5 +465,6 @@ export const dict = {
   "workspace.black.waitlist.enroll": "Matricular",
   "workspace.black.waitlist.enrolling": "Inscrevendo-se...",
   "workspace.black.waitlist.enrolled": "Inscrito",
-  "workspace.black.waitlist.enrollNote": "Ao clicar em Inscrever-se, sua assinatura será iniciada imediatamente e seu cartão será cobrado.",
+  "workspace.black.waitlist.enrollNote":
+    "Ao clicar em Inscrever-se, sua assinatura será iniciada imediatamente e seu cartão será cobrado.",
 } satisfies Dict

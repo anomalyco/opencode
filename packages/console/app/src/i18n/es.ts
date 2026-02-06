@@ -295,11 +295,14 @@ export const dict = {
   "workspace.home.billing.enable": "Habilitar facturación",
   "workspace.home.billing.currentBalance": "Saldo actual",
   "workspace.newUser.feature.tested.title": "Modelos probados y verificados",
-  "workspace.newUser.feature.tested.body": "Hemos evaluado y probado modelos específicamente para agentes de codificación para garantizar el mejor rendimiento.",
+  "workspace.newUser.feature.tested.body":
+    "Hemos evaluado y probado modelos específicamente para agentes de codificación para garantizar el mejor rendimiento.",
   "workspace.newUser.feature.quality.title": "La más alta calidad",
-  "workspace.newUser.feature.quality.body": "Acceda a modelos configurados para un rendimiento óptimo, sin degradaciones ni enrutamiento a proveedores más baratos.",
+  "workspace.newUser.feature.quality.body":
+    "Acceda a modelos configurados para un rendimiento óptimo, sin degradaciones ni enrutamiento a proveedores más baratos.",
   "workspace.newUser.feature.lockin.title": "Sin bloqueo",
-  "workspace.newUser.feature.lockin.body": "Utilice Zen con cualquier agente de codificación y continúe utilizando otros proveedores con opencode cuando lo desee.",
+  "workspace.newUser.feature.lockin.body":
+    "Utilice Zen con cualquier agente de codificación y continúe utilizando otros proveedores con opencode cuando lo desee.",
   "workspace.newUser.copyApiKey": "Copiar la clave API",
   "workspace.newUser.copyKey": "Copiar clave",
   "workspace.newUser.copied": "¡Copiado!",
@@ -310,7 +313,8 @@ export const dict = {
   "workspace.newUser.step.models.before": "Inicie opencode y ejecute",
   "workspace.newUser.step.models.after": "para seleccionar un modelo",
   "workspace.models.title": "Modelos",
-  "workspace.models.subtitle.beforeLink": "Administre a qué modelos pueden acceder los miembros del espacio de trabajo.",
+  "workspace.models.subtitle.beforeLink":
+    "Administre a qué modelos pueden acceder los miembros del espacio de trabajo.",
   "workspace.models.table.model": "Modelo",
   "workspace.models.table.enabled": "Activado",
   "workspace.providers.title": "Trae tu propia llave",
@@ -359,7 +363,8 @@ export const dict = {
   "workspace.members.subtitle": "Administre los miembros del espacio de trabajo y sus permisos.",
   "workspace.members.invite": "Invitar miembro",
   "workspace.members.inviting": "Atractivo...",
-  "workspace.members.beta.beforeLink": "Los espacios de trabajo son gratuitos para los equipos durante la versión beta.",
+  "workspace.members.beta.beforeLink":
+    "Los espacios de trabajo son gratuitos para los equipos durante la versión beta.",
   "workspace.members.form.invitee": "invitado",
   "workspace.members.form.emailPlaceholder": "Ingrese el correo electrónico",
   "workspace.members.form.role": "Role",
@@ -461,5 +466,6 @@ export const dict = {
   "workspace.black.waitlist.enroll": "Inscribirse",
   "workspace.black.waitlist.enrolling": "Inscribiéndose...",
   "workspace.black.waitlist.enrolled": "Inscrito",
-  "workspace.black.waitlist.enrollNote": "Cuando hace clic en Inscribirse, su suscripción comienza inmediatamente y se cargará en su tarjeta.",
+  "workspace.black.waitlist.enrollNote":
+    "Cuando hace clic en Inscribirse, su suscripción comienza inmediatamente y se cargará en su tarjeta.",
 } satisfies Dict

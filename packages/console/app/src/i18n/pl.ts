@@ -296,11 +296,14 @@ export const dict = {
   "workspace.home.billing.enable": "Włącz rozliczenia",
   "workspace.home.billing.currentBalance": "Aktualne saldo",
   "workspace.newUser.feature.tested.title": "Przetestowane i zweryfikowane modele",
-  "workspace.newUser.feature.tested.body": "Przeprowadziliśmy testy porównawcze i przetestowaliśmy modele specjalnie dla agentów kodujących, aby zapewnić najlepszą wydajność.",
+  "workspace.newUser.feature.tested.body":
+    "Przeprowadziliśmy testy porównawcze i przetestowaliśmy modele specjalnie dla agentów kodujących, aby zapewnić najlepszą wydajność.",
   "workspace.newUser.feature.quality.title": "Najwyższa jakość",
-  "workspace.newUser.feature.quality.body": "Modele dostępu skonfigurowane pod kątem optymalnej wydajności – bez konieczności zmiany wersji na wyższą lub przekierowania do tańszych dostawców.",
+  "workspace.newUser.feature.quality.body":
+    "Modele dostępu skonfigurowane pod kątem optymalnej wydajności – bez konieczności zmiany wersji na wyższą lub przekierowania do tańszych dostawców.",
   "workspace.newUser.feature.lockin.title": "Brak blokady",
-  "workspace.newUser.feature.lockin.body": "Używaj Zen z dowolnym agentem kodującym i kontynuuj korzystanie z innych dostawców z opencode, kiedy tylko chcesz.",
+  "workspace.newUser.feature.lockin.body":
+    "Używaj Zen z dowolnym agentem kodującym i kontynuuj korzystanie z innych dostawców z opencode, kiedy tylko chcesz.",
   "workspace.newUser.copyApiKey": "Skopiuj klucz API",
   "workspace.newUser.copyKey": "Skopiuj klucz",
   "workspace.newUser.copied": "Skopiowano!",
@@ -455,12 +458,14 @@ export const dict = {
   "workspace.black.subscription.useBalance": "Wykorzystaj dostępne saldo po osiągnięciu limitów wykorzystania",
   "workspace.black.waitlist.title": "Lista oczekujących",
   "workspace.black.waitlist.joined": "Jesteś na liście oczekujących na plan ${{plan}} miesięcznie OpenCode Black.",
-  "workspace.black.waitlist.ready": "Jesteśmy gotowi zapisać Cię do planu Black o wartości {{plan}} miesięcznie OpenCode.",
+  "workspace.black.waitlist.ready":
+    "Jesteśmy gotowi zapisać Cię do planu Black o wartości {{plan}} miesięcznie OpenCode.",
   "workspace.black.waitlist.leave": "Opuść listę oczekujących",
   "workspace.black.waitlist.leaving": "Odjazd...",
   "workspace.black.waitlist.left": "Lewy",
   "workspace.black.waitlist.enroll": "Zapisać",
   "workspace.black.waitlist.enrolling": "Rejestracja...",
   "workspace.black.waitlist.enrolled": "Przyjęty",
-  "workspace.black.waitlist.enrollNote": "Kiedy klikniesz Zarejestruj, Twoja subskrypcja rozpocznie się natychmiast, a Twoja karta zostanie obciążona.",
+  "workspace.black.waitlist.enrollNote":
+    "Kiedy klikniesz Zarejestruj, Twoja subskrypcja rozpocznie się natychmiast, a Twoja karta zostanie obciążona.",
 } satisfies Dict

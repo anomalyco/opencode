@@ -332,11 +332,14 @@ export const dict = {
   "workspace.home.billing.enable": "課金を有効にする",
   "workspace.home.billing.currentBalance": "現在の残高",
   "workspace.newUser.feature.tested.title": "テストおよび検証されたモデル",
-  "workspace.newUser.feature.tested.body": "最高のパフォーマンスを保証するために、コーディング エージェントに特化したモデルのベンチマークとテストを行いました。",
+  "workspace.newUser.feature.tested.body":
+    "最高のパフォーマンスを保証するために、コーディング エージェントに特化したモデルのベンチマークとテストを行いました。",
   "workspace.newUser.feature.quality.title": "最高の品質",
-  "workspace.newUser.feature.quality.body": "最適なパフォーマンスを実現するように構成されたモデルにアクセスします。ダウングレードしたり、より安価なプロバイダーにルーティングしたりする必要はありません。",
+  "workspace.newUser.feature.quality.body":
+    "最適なパフォーマンスを実現するように構成されたモデルにアクセスします。ダウングレードしたり、より安価なプロバイダーにルーティングしたりする必要はありません。",
   "workspace.newUser.feature.lockin.title": "ロックインなし",
-  "workspace.newUser.feature.lockin.body": "任意のコーディング エージェントで Zen を使用し、必要に応じていつでも opencode を備えた他のプロバイダーを使用し続けます。",
+  "workspace.newUser.feature.lockin.body":
+    "任意のコーディング エージェントで Zen を使用し、必要に応じていつでも opencode を備えた他のプロバイダーを使用し続けます。",
   "workspace.newUser.copyApiKey": "API キーをコピーします",
   "workspace.newUser.copyKey": "キーをコピーする",
   "workspace.newUser.copied": "コピーしました！",
@@ -490,7 +493,8 @@ export const dict = {
   "workspace.black.subscription.resetsIn": "でリセットします",
   "workspace.black.subscription.useBalance": "利用限度額に達したら利用可能な残高を使い切る",
   "workspace.black.waitlist.title": "順番待ちリスト",
-  "workspace.black.waitlist.joined": "あなたは、月額 ${{plan}} OpenCode ブラック プランの待機リストに登録されています。",
+  "workspace.black.waitlist.joined":
+    "あなたは、月額 ${{plan}} OpenCode ブラック プランの待機リストに登録されています。",
   "workspace.black.waitlist.ready": "月額 ${{plan}} の OpenCode ブラック プランに登録する準備ができました。",
   "workspace.black.waitlist.leave": "順番待ちリストを残す",
   "workspace.black.waitlist.leaving": "出発中...",
@@ -498,5 +502,6 @@ export const dict = {
   "workspace.black.waitlist.enroll": "登録する",
   "workspace.black.waitlist.enrolling": "登録中...",
   "workspace.black.waitlist.enrolled": "登録済み",
-  "workspace.black.waitlist.enrollNote": "[登録] をクリックすると、サブスクリプションがすぐに開始され、カードに請求されます。",
+  "workspace.black.waitlist.enrollNote":
+    "[登録] をクリックすると、サブスクリプションがすぐに開始され、カードに請求されます。",
 } satisfies Dict

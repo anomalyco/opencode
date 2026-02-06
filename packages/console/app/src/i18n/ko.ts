@@ -324,11 +324,14 @@ export const dict = {
   "workspace.home.billing.enable": "결제 활성화",
   "workspace.home.billing.currentBalance": "현재 잔액",
   "workspace.newUser.feature.tested.title": "테스트 및 검증된 모델",
-  "workspace.newUser.feature.tested.body": "최고의 성능을 보장하기 위해 코딩 에이전트용 모델을 벤치마킹하고 테스트했습니다.",
+  "workspace.newUser.feature.tested.body":
+    "최고의 성능을 보장하기 위해 코딩 에이전트용 모델을 벤치마킹하고 테스트했습니다.",
   "workspace.newUser.feature.quality.title": "최고 품질",
-  "workspace.newUser.feature.quality.body": "최적의 성능을 위해 구성된 액세스 모델 - 다운그레이드나 저렴한 공급자로의 라우팅이 없습니다.",
+  "workspace.newUser.feature.quality.body":
+    "최적의 성능을 위해 구성된 액세스 모델 - 다운그레이드나 저렴한 공급자로의 라우팅이 없습니다.",
   "workspace.newUser.feature.lockin.title": "잠금 없음",
-  "workspace.newUser.feature.lockin.body": "코딩 에이전트와 함께 Zen을 사용하고 원할 때마다 opencode와 함께 다른 공급자를 계속 사용하세요.",
+  "workspace.newUser.feature.lockin.body":
+    "코딩 에이전트와 함께 Zen을 사용하고 원할 때마다 opencode와 함께 다른 공급자를 계속 사용하세요.",
   "workspace.newUser.copyApiKey": "API 키 복사",
   "workspace.newUser.copyKey": "키 복사",
   "workspace.newUser.copied": "복사되었습니다!",

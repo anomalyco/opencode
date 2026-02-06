@@ -292,11 +292,14 @@ export const dict = {
   "workspace.home.billing.enable": "Aktiver fakturering",
   "workspace.home.billing.currentBalance": "Gjeldende saldo",
   "workspace.newUser.feature.tested.title": "Testede og verifiserte modeller",
-  "workspace.newUser.feature.tested.body": "Vi har benchmarked og testet modeller spesifikt for kodingsagenter for å sikre best mulig ytelse.",
+  "workspace.newUser.feature.tested.body":
+    "Vi har benchmarked og testet modeller spesifikt for kodingsagenter for å sikre best mulig ytelse.",
   "workspace.newUser.feature.quality.title": "Høyeste kvalitet",
-  "workspace.newUser.feature.quality.body": "Få tilgang til modeller konfigurert for optimal ytelse – ingen nedgraderinger eller ruting til billigere leverandører.",
+  "workspace.newUser.feature.quality.body":
+    "Få tilgang til modeller konfigurert for optimal ytelse – ingen nedgraderinger eller ruting til billigere leverandører.",
   "workspace.newUser.feature.lockin.title": "Ingen innlåsing",
-  "workspace.newUser.feature.lockin.body": "Bruk Zen med hvilken som helst kodeagent, og fortsett å bruke andre leverandører med opencode når du vil.",
+  "workspace.newUser.feature.lockin.body":
+    "Bruk Zen med hvilken som helst kodeagent, og fortsett å bruke andre leverandører med opencode når du vil.",
   "workspace.newUser.copyApiKey": "Kopier API-nøkkelen",
   "workspace.newUser.copyKey": "Kopier nøkkel",
   "workspace.newUser.copied": "Kopiert!",
@@ -458,5 +461,6 @@ export const dict = {
   "workspace.black.waitlist.enroll": "Registrere",
   "workspace.black.waitlist.enrolling": "Registrerer...",
   "workspace.black.waitlist.enrolled": "Påmeldt",
-  "workspace.black.waitlist.enrollNote": "Når du klikker på Registrer, starter abonnementet umiddelbart og kortet ditt belastes.",
+  "workspace.black.waitlist.enrollNote":
+    "Når du klikker på Registrer, starter abonnementet umiddelbart og kortet ditt belastes.",
 } satisfies Dict
