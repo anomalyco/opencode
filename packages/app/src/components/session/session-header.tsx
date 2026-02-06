@@ -102,7 +102,7 @@ export function SessionHeader() {
         { id: "vscode", label: "VS Code", icon: "vscode", openWith: "code" },
         { id: "cursor", label: "Cursor", icon: "cursor", openWith: "cursor" },
         { id: "zed", label: "Zed", icon: "zed", openWith: "zed" },
-        { id: "finder", label: "File Explorer", icon: "finder" },
+        { id: "finder", label: "File Explorer", icon: "file-explorer" },
         { id: "powershell", label: "PowerShell", icon: "powershell", openWith: "powershell" },
       ] as const
     }
