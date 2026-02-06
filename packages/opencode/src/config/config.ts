@@ -1277,6 +1277,7 @@ export namespace Config {
         text = text.replace(match, () => JSON.stringify(fileContent).slice(1, -1))
       }
     }
+    }
 
     const errors: JsoncParseError[] = []
     const data = parseJsonc(text, errors, { allowTrailingComma: true })
@@ -1327,6 +1328,8 @@ export namespace Config {
       issues: parsed.error.issues,
     })
   }
+
+  // Error types
   export const JsonError = NamedError.create(
     "ConfigJsonError",
     z.object({
