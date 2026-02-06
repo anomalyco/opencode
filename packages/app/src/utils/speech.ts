@@ -1,5 +1,6 @@
 import { onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
+import { getSpeechRecognitionCtor } from "@/utils/runtime-adapters"
 
 // Minimal types to avoid relying on non-standard DOM typings
 type RecognitionResult = {
@@ -56,9 +57,8 @@ export function createSpeechRecognition(opts?: {
   onFinal?: (text: string) => void
   onInterim?: (text: string) => void
 }) {
-  const hasSupport =
-    typeof window !== "undefined" &&
-    Boolean((window as any).webkitSpeechRecognition || (window as any).SpeechRecognition)
+  const ctor = getSpeechRecognitionCtor<Recognition>(typeof window === "undefined" ? undefined : window)
+  const hasSupport = Boolean(ctor)
 
   const [store, setStore] = createStore({
     isRecording: false,
@@ -155,10 +155,8 @@ export function createSpeechRecognition(opts?: {
     }, COMMIT_DELAY)
   }
 
-  if (hasSupport) {
-    const Ctor: new () => Recognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition
-
-    recognition = new Ctor()
+  if (ctor) {
+    recognition = new ctor()
     recognition.continuous = false
     recognition.interimResults = true
     recognition.lang = opts?.lang || (typeof navigator !== "undefined" ? navigator.language : "en-US")

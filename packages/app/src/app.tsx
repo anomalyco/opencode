@@ -30,7 +30,7 @@ import { HighlightsProvider } from "@/context/highlights"
 import Layout from "@/pages/layout"
 import DirectoryLayout from "@/pages/directory-layout"
 import { ErrorPage } from "./pages/error"
-import { Suspense } from "solid-js"
+import { Suspense, JSX } from "solid-js"
 
 const Home = lazy(() => import("@/pages/home"))
 const Session = lazy(() => import("@/pages/session"))
@@ -85,7 +85,7 @@ function ServerKey(props: ParentProps) {
   )
 }
 
-export function AppInterface(props: { defaultUrl?: string }) {
+export function AppInterface(props: { defaultUrl?: string; children?: JSX.Element }) {
   const platform = usePlatform()
 
   const stored = (() => {
@@ -112,7 +112,7 @@ export function AppInterface(props: { defaultUrl?: string }) {
         <GlobalSDKProvider>
           <GlobalSyncProvider>
             <Router
-              root={(props) => (
+              root={(routerProps) => (
                 <SettingsProvider>
                   <PermissionProvider>
                     <LayoutProvider>
@@ -120,7 +120,10 @@ export function AppInterface(props: { defaultUrl?: string }) {
                         <ModelsProvider>
                           <CommandProvider>
                             <HighlightsProvider>
-                              <Layout>{props.children}</Layout>
+                              <Layout>
+                                {props.children}
+                                {routerProps.children}
+                              </Layout>
                             </HighlightsProvider>
                           </CommandProvider>
                         </ModelsProvider>
