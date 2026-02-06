@@ -2,6 +2,7 @@ import { action } from "@solidjs/router"
 import { getRequestEvent } from "solid-js/web"
 import { useAuthSession } from "~/context/auth"
 import { Dropdown } from "~/component/dropdown"
+import { useI18n } from "~/context/i18n"
 import "./user-menu.css"
 
 const logout = action(async () => {
@@ -20,11 +21,12 @@ const logout = action(async () => {
 }, "auth.logout")
 
 export function UserMenu(props: { email: string | null | undefined }) {
+  const i18n = useI18n()
   return (
     <div data-component="user-menu">
       <Dropdown trigger={props.email ?? ""} align="right">
         <a href="/auth/logout" data-slot="item">
-          Logout
+          {i18n.t("user.logout")}
         </a>
       </Dropdown>
     </div>
