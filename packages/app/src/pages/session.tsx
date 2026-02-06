@@ -929,6 +929,7 @@ export default function Page() {
     setExpanded: (id, fn) => setStore("expanded", id, fn),
     setActiveMessage,
     addSelectionToContext,
+    inputRef,
   })
 
   const openReviewFile = createOpenReviewFile({

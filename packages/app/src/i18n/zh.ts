@@ -50,6 +50,7 @@ export const dict = {
   "command.file.open": "打开文件",
   "command.context.addSelection": "将所选内容添加到上下文",
   "command.context.addSelection.description": "添加当前文件中选中的行",
+  "command.input.focus": "聚焦输入框",
   "command.terminal.toggle": "切换终端",
   "command.fileTree.toggle": "切换文件树",
   "command.review.toggle": "切换审查",

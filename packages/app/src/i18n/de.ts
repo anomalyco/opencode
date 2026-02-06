@@ -50,6 +50,7 @@ export const dict = {
   "command.file.open": "Datei öffnen",
   "command.context.addSelection": "Auswahl zum Kontext hinzufügen",
   "command.context.addSelection.description": "Ausgewählte Zeilen aus der aktuellen Datei hinzufügen",
+  "command.input.focus": "Eingabefeld fokussieren",
   "command.terminal.toggle": "Terminal umschalten",
   "command.fileTree.toggle": "Dateibaum umschalten",
   "command.review.toggle": "Überprüfung umschalten",

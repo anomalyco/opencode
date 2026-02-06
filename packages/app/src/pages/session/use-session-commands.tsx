@@ -48,6 +48,7 @@ export const useSessionCommands = (input: {
   setExpanded: (id: string, fn: (open: boolean | undefined) => boolean) => void
   setActiveMessage: (message: UserMessage | undefined) => void
   addSelectionToContext: (path: string, selection: FileSelection) => void
+  inputRef: HTMLDivElement | undefined
 }) => {
   const sessionCommands = createMemo(() => [
     {
@@ -144,6 +145,13 @@ export const useSessionCommands = (input: {
         if (opening && !input.view().reviewPanel.opened()) input.view().reviewPanel.open()
         input.layout.fileTree.toggle()
       },
+    },
+    {
+      id: "input.focus",
+      title: input.language.t("command.input.focus"),
+      category: input.language.t("command.category.view"),
+      keybind: "ctrl+l",
+      onSelect: () => input.inputRef?.focus(),
     },
     {
       id: "terminal.new",
