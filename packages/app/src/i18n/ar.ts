@@ -321,22 +321,6 @@ export const dict = {
   "context.usage.clickToView": "انقر لعرض السياق",
   "context.usage.view": "عرض استخدام السياق",
 
-  "language.en": "English",
-  "language.zh": "简体中文",
-  "language.zht": "繁體中文",
-  "language.ko": "한국어",
-  "language.de": "Deutsch",
-  "language.es": "Español",
-  "language.fr": "Français",
-  "language.da": "Dansk",
-  "language.ja": "日本語",
-  "language.pl": "Polski",
-  "language.ru": "Русский",
-  "language.ar": "العربية",
-  "language.no": "Norsk",
-  "language.br": "Português (Brasil)",
-  "language.th": "ไทย",
-
   "toast.language.title": "لغة",
   "toast.language.description": "تم التبديل إلى {{language}}",
 
