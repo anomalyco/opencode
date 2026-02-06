@@ -56,8 +56,9 @@ wc -l docs/upstream-sync/upstream-first-parent.txt > docs/upstream-sync/upstream
     - allows upstream-ahead stale state and lets sync refresh `parent-dev` via force update
   - Updates `parent-dev` to match `upstream/dev` (force push).
   - Opens a sync PR when upstream is ahead.
+  - Creates/uses labels in the fork repository (`sync`, `sync-conflict`) via CLI.
   - Enables auto-merge once checks pass.
-  - On conflict, opens an issue labeled `sync-conflict` with merge details.
+  - On conflict, opens an issue (prefers `sync-conflict` label) with merge details.
 
 Manual dispatch and monitoring:
 ```bash
