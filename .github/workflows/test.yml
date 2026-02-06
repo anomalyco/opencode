@@ -7,8 +7,32 @@ on:
   pull_request:
   workflow_dispatch:
 jobs:
-  test:
-    name: test (${{ matrix.settings.name }})
+  unit:
+    name: unit (linux)
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Configure git identity
+        run: |
+          git config --global user.email "bot@opencode.ai"
+          git config --global user.name "opencode"
+
+      - name: Run unit tests
+        run: bun turbo test
+
+  e2e:
+    name: e2e (${{ matrix.settings.name }})
+    needs: unit
     strategy:
       fail-fast: false
       matrix:
@@ -16,17 +40,12 @@ jobs:
           - name: linux
             host: blacksmith-4vcpu-ubuntu-2404
             playwright: bunx playwright install --with-deps
-            workdir: .
-            command: |
-              git config --global user.email "bot@opencode.ai"
-              git config --global user.name "opencode"
-              bun turbo test
           - name: windows
-            host: windows-latest
+            host: blacksmith-4vcpu-windows-2025
             playwright: bunx playwright install
-            workdir: packages/app
-            command: bun test:e2e:local
     runs-on: ${{ matrix.settings.host }}
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: 0
     defaults:
       run:
         shell: bash
@@ -43,87 +62,10 @@ jobs:
         working-directory: packages/app
         run: ${{ matrix.settings.playwright }}
 
-      - name: Set OS-specific paths
-        run: |
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            printf '%s\n' "OPENCODE_E2E_ROOT=${{ runner.temp }}\\opencode-e2e" >> "$GITHUB_ENV"
-            printf '%s\n' "OPENCODE_TEST_HOME=${{ runner.temp }}\\opencode-e2e\\home" >> "$GITHUB_ENV"
-            printf '%s\n' "XDG_DATA_HOME=${{ runner.temp }}\\opencode-e2e\\share" >> "$GITHUB_ENV"
-            printf '%s\n' "XDG_CACHE_HOME=${{ runner.temp }}\\opencode-e2e\\cache" >> "$GITHUB_ENV"
-            printf '%s\n' "XDG_CONFIG_HOME=${{ runner.temp }}\\opencode-e2e\\config" >> "$GITHUB_ENV"
-            printf '%s\n' "XDG_STATE_HOME=${{ runner.temp }}\\opencode-e2e\\state" >> "$GITHUB_ENV"
-          else
-            printf '%s\n' "OPENCODE_E2E_ROOT=${{ runner.temp }}/opencode-e2e" >> "$GITHUB_ENV"
-            printf '%s\n' "OPENCODE_TEST_HOME=${{ runner.temp }}/opencode-e2e/home" >> "$GITHUB_ENV"
-            printf '%s\n' "XDG_DATA_HOME=${{ runner.temp }}/opencode-e2e/share" >> "$GITHUB_ENV"
-            printf '%s\n' "XDG_CACHE_HOME=${{ runner.temp }}/opencode-e2e/cache" >> "$GITHUB_ENV"
-            printf '%s\n' "XDG_CONFIG_HOME=${{ runner.temp }}/opencode-e2e/config" >> "$GITHUB_ENV"
-            printf '%s\n' "XDG_STATE_HOME=${{ runner.temp }}/opencode-e2e/state" >> "$GITHUB_ENV"
-          fi
-
-      - name: Seed opencode data
-        if: matrix.settings.name != 'windows'
-        working-directory: packages/opencode
-        run: bun script/seed-e2e.ts
-        env:
-          OPENCODE_DISABLE_SHARE: "true"
-          OPENCODE_DISABLE_LSP_DOWNLOAD: "true"
-          OPENCODE_DISABLE_DEFAULT_PLUGINS: "true"
-          OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true"
-          OPENCODE_TEST_HOME: ${{ env.OPENCODE_TEST_HOME }}
-          XDG_DATA_HOME: ${{ env.XDG_DATA_HOME }}
-          XDG_CACHE_HOME: ${{ env.XDG_CACHE_HOME }}
-          XDG_CONFIG_HOME: ${{ env.XDG_CONFIG_HOME }}
-          XDG_STATE_HOME: ${{ env.XDG_STATE_HOME }}
-          OPENCODE_E2E_PROJECT_DIR: ${{ github.workspace }}
-          OPENCODE_E2E_SESSION_TITLE: "E2E Session"
-          OPENCODE_E2E_MESSAGE: "Seeded for UI e2e"
-          OPENCODE_E2E_MODEL: "opencode/gpt-5-nano"
-
-      - name: Run opencode server
-        if: matrix.settings.name != 'windows'
-        working-directory: packages/opencode
-        run: bun dev -- --print-logs --log-level WARN serve --port 4096 --hostname 127.0.0.1 &
-        env:
-          OPENCODE_DISABLE_SHARE: "true"
-          OPENCODE_DISABLE_LSP_DOWNLOAD: "true"
-          OPENCODE_DISABLE_DEFAULT_PLUGINS: "true"
-          OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true"
-          OPENCODE_TEST_HOME: ${{ env.OPENCODE_TEST_HOME }}
-          XDG_DATA_HOME: ${{ env.XDG_DATA_HOME }}
-          XDG_CACHE_HOME: ${{ env.XDG_CACHE_HOME }}
-          XDG_CONFIG_HOME: ${{ env.XDG_CONFIG_HOME }}
-          XDG_STATE_HOME: ${{ env.XDG_STATE_HOME }}
-          OPENCODE_CLIENT: "app"
-
-      - name: Wait for opencode server
-        if: matrix.settings.name != 'windows'
-        run: |
-          for i in {1..120}; do
-            curl -fsS "http://127.0.0.1:4096/global/health" > /dev/null && exit 0
-            sleep 1
-          done
-          exit 1
-
-      - name: run
-        working-directory: ${{ matrix.settings.workdir }}
-        run: ${{ matrix.settings.command }}
+      - name: Run app e2e tests
+        run: bun --cwd packages/app test:e2e:local
         env:
           CI: true
-          OPENCODE_DISABLE_SHARE: "true"
-          OPENCODE_DISABLE_LSP_DOWNLOAD: "true"
-          OPENCODE_DISABLE_DEFAULT_PLUGINS: "true"
-          OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true"
-          OPENCODE_TEST_HOME: ${{ env.OPENCODE_TEST_HOME }}
-          XDG_DATA_HOME: ${{ env.XDG_DATA_HOME }}
-          XDG_CACHE_HOME: ${{ env.XDG_CACHE_HOME }}
-          XDG_CONFIG_HOME: ${{ env.XDG_CONFIG_HOME }}
-          XDG_STATE_HOME: ${{ env.XDG_STATE_HOME }}
-          PLAYWRIGHT_SERVER_HOST: "127.0.0.1"
-          PLAYWRIGHT_SERVER_PORT: "4096"
-          VITE_OPENCODE_SERVER_HOST: "127.0.0.1"
-          VITE_OPENCODE_SERVER_PORT: "4096"
-          OPENCODE_CLIENT: "app"
         timeout-minutes: 30
 
       - name: Upload Playwright artifacts
@@ -136,3 +78,18 @@ jobs:
           path: |
             packages/app/e2e/test-results
             packages/app/e2e/playwright-report
+
+  required:
+    name: test (linux)
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs:
+      - unit
+      - e2e
+    if: always()
+    steps:
+      - name: Verify upstream test jobs passed
+        run: |
+          echo "unit=${{ needs.unit.result }}"
+          echo "e2e=${{ needs.e2e.result }}"
+          test "${{ needs.unit.result }}" = "success"
+          test "${{ needs.e2e.result }}" = "success"

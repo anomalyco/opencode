@@ -259,6 +259,7 @@ body {
             display: flex;
             align-items: center;
             gap: 8px;
+            white-space: nowrap;
 
             @media (max-width: 55rem) {
               display: none;

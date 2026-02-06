@@ -15,6 +15,7 @@ import { useLayout } from "@/context/layout"
 import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { decode64 } from "@/utils/base64"
+import { getRelativeTime } from "@/utils/time"
 
 type EntryType = "command" | "file" | "session"
 
@@ -30,6 +31,7 @@ type Entry = {
   directory?: string
   sessionID?: string
   archived?: number
+  updated?: number
 }
 
 type DialogSelectFileMode = "all" | "files"
@@ -47,6 +49,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
   const filesOnly = () => props.mode === "files"
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey))
+  const view = createMemo(() => layout.view(sessionKey))
   const state = { cleanup: undefined as (() => void) | void, committed: false }
   const [grouped, setGrouped] = createSignal(false)
   const common = [
@@ -119,6 +122,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
     title: string
     description: string
     archived?: number
+    updated?: number
   }): Entry => ({
     id: `session:${input.directory}:${input.id}`,
     type: "session",
@@ -128,6 +132,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
     directory: input.directory,
     sessionID: input.id,
     archived: input.archived,
+    updated: input.updated,
   })
 
   const list = createMemo(() => allowed().map(commandItem))
@@ -213,6 +218,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
                 description,
                 directory,
                 archived: s.time?.archived,
+                updated: s.time?.updated,
               })),
           )
           .catch(() => [] as { id: string; title: string; description: string; directory: string; archived?: number }[])
@@ -282,6 +288,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
     const value = file.tab(path)
     tabs().open(value)
     file.load(path)
+    if (!view().reviewPanel.opened()) view().reviewPanel.open()
     layout.fileTree.open()
     layout.fileTree.setTab("all")
     props.onOpenFile?.(path)
@@ -382,6 +389,11 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
                     </Show>
                   </div>
                 </div>
+                <Show when={item.updated}>
+                  <span class="text-12-regular text-text-weak whitespace-nowrap ml-2">
+                    {getRelativeTime(new Date(item.updated!).toISOString())}
+                  </span>
+                </Show>
               </div>
             </Match>
           </Switch>
