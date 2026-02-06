@@ -18,12 +18,13 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 
 #### Options
 
-| Flag         | Description                         | Default     |
-| ------------ | ----------------------------------- | ----------- |
-| `--port`     | Port to listen on                   | `4096`      |
-| `--hostname` | Hostname to listen on               | `127.0.0.1` |
-| `--mdns`     | Enable mDNS discovery               | `false`     |
-| `--cors`     | Additional browser origins to allow | `[]`        |
+| Flag            | Description                         | Default          |
+| --------------- | ----------------------------------- | ---------------- |
+| `--port`        | Port to listen on                   | `4096`           |
+| `--hostname`    | Hostname to listen on               | `127.0.0.1`      |
+| `--mdns`        | Enable mDNS discovery               | `false`          |
+| `--mdns-domain` | Custom domain name for mDNS service | `opencode.local` |
+| `--cors`        | Additional browser origins to allow | `[]`             |
 
 `--cors` can be passed multiple times:
 

@@ -28,6 +28,8 @@ export const dict = {
   "command.settings.open": "เปิดการตั้งค่า",
   "command.session.previous": "เซสชันก่อนหน้า",
   "command.session.next": "เซสชันถัดไป",
+  "command.session.previous.unseen": "Previous unread session",
+  "command.session.next.unseen": "Next unread session",
   "command.session.archive": "จัดเก็บเซสชัน",
 
   "command.palette": "คำสั่งค้นหา",
@@ -42,7 +44,6 @@ export const dict = {
 
   "command.session.new": "เซสชันใหม่",
   "command.file.open": "เปิดไฟล์",
-  "command.file.open.description": "ค้นหาไฟล์และคำสั่ง",
   "command.context.addSelection": "เพิ่มส่วนที่เลือกไปยังบริบท",
   "command.context.addSelection.description": "เพิ่มบรรทัดที่เลือกจากไฟล์ปัจจุบัน",
   "command.terminal.toggle": "สลับเทอร์มินัล",
@@ -68,6 +69,7 @@ export const dict = {
   "command.model.variant.cycle.description": "สลับไปยังระดับความพยายามถัดไป",
   "command.permissions.autoaccept.enable": "ยอมรับการแก้ไขโดยอัตโนมัติ",
   "command.permissions.autoaccept.disable": "หยุดยอมรับการแก้ไขโดยอัตโนมัติ",
+  "command.workspace.toggle": "สลับพื้นที่ทำงาน",
   "command.session.undo": "ยกเลิก",
   "command.session.undo.description": "ยกเลิกข้อความล่าสุด",
   "command.session.redo": "ทำซ้ำ",
@@ -81,7 +83,7 @@ export const dict = {
   "command.session.unshare": "ยกเลิกการแชร์เซสชัน",
   "command.session.unshare.description": "หยุดการแชร์เซสชันนี้",
 
-  "palette.search.placeholder": "ค้นหาไฟล์และคำสั่ง",
+  "palette.search.placeholder": "ค้นหาไฟล์ คำสั่ง และเซสชัน",
   "palette.empty": "ไม่พบผลลัพธ์",
   "palette.group.commands": "คำสั่ง",
   "palette.group.files": "ไฟล์",
@@ -215,6 +217,8 @@ export const dict = {
   "prompt.popover.emptyCommands": "ไม่พบคำสั่งที่ตรงกัน",
   "prompt.dropzone.label": "วางรูปภาพหรือ PDF ที่นี่",
   "prompt.slash.badge.custom": "กำหนดเอง",
+  "prompt.slash.badge.skill": "skill",
+  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "ใช้งานอยู่",
   "prompt.context.includeActiveFile": "รวมไฟล์ที่ใช้งานอยู่",
   "prompt.context.removeActiveFile": "เอาไฟล์ที่ใช้งานอยู่ออกจากบริบท",
@@ -322,22 +326,6 @@ export const dict = {
   "context.usage.clickToView": "คลิกเพื่อดูบริบท",
   "context.usage.view": "ดูการใช้บริบท",
 
-  "language.en": "อังกฤษ",
-  "language.zh": "จีนตัวย่อ",
-  "language.zht": "จีนตัวเต็ม",
-  "language.ko": "เกาหลี",
-  "language.de": "เยอรมัน",
-  "language.es": "สเปน",
-  "language.fr": "ฝรั่งเศส",
-  "language.da": "เดนมาร์ก",
-  "language.ja": "ญี่ปุ่น",
-  "language.pl": "โปแลนด์",
-  "language.ru": "รัสเซีย",
-  "language.ar": "อาหรับ",
-  "language.no": "นอร์เวย์",
-  "language.br": "โปรตุเกส (บราซิล)",
-  "language.th": "ไทย",
-
   "toast.language.title": "ภาษา",
   "toast.language.description": "สลับไปที่ {{language}}",
 
@@ -345,9 +333,14 @@ export const dict = {
   "toast.scheme.title": "โทนสี",
 
   "toast.permissions.autoaccept.on.title": "กำลังยอมรับการแก้ไขโดยอัตโนมัติ",
-  "toast.permissions.autoaccept.on.description": "สิทธิ์การแก้ไขและเขียนจะได้รับการอนุมัติโดยอัตโนมัติ",
+  "toast.permissions.autoaccept.on.description": "สิทธิ์การแก้ไขและจะได้รับเขียนการอนุมัติโดยอัตโนมัติ",
   "toast.permissions.autoaccept.off.title": "หยุดยอมรับการแก้ไขโดยอัตโนมัติ",
   "toast.permissions.autoaccept.off.description": "สิทธิ์การแก้ไขและเขียนจะต้องได้รับการอนุมัติ",
+
+  "toast.workspace.enabled.title": "เปิดใช้งานพื้นที่ทำงานแล้ว",
+  "toast.workspace.enabled.description": "ตอนนี้จะแสดง worktree หลายรายการในแถบด้านข้าง",
+  "toast.workspace.disabled.title": "ปิดใช้งานพื้นที่ทำงานแล้ว",
+  "toast.workspace.disabled.description": "จะแสดงเฉพาะ worktree หลักในแถบด้านข้าง",
 
   "toast.model.none.title": "ไม่ได้เลือกโมเดล",
   "toast.model.none.description": "เชื่อมต่อผู้ให้บริการเพื่อสรุปเซสชันนี้",
@@ -438,6 +431,7 @@ export const dict = {
 
   "session.files.selectToOpen": "เลือกไฟล์เพื่อเปิด",
   "session.files.all": "ไฟล์ทั้งหมด",
+  "session.files.binaryContent": "ไฟล์ไบนารี (ไม่สามารถแสดงเนื้อหาได้)",
 
   "session.messages.renderEarlier": "แสดงข้อความก่อนหน้า",
   "session.messages.loadingEarlier": "กำลังโหลดข้อความก่อนหน้า...",

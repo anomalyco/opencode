@@ -5,6 +5,7 @@ node_modules
 .env
 .idea
 .vscode
+.codex
 *~
 playground
 tmp
