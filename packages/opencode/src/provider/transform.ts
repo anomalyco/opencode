@@ -706,6 +706,22 @@ export namespace ProviderTransform {
 
   export function providerOptions(model: Provider.Model, options: { [x: string]: any }) {
     const key = sdkKey(model.api.npm) ?? model.providerID
+
+    // The @ai-sdk/openai-compatible SDK does not convert camelCase to snake_case
+    // for custom providerOptions (only for its own schema fields like reasoningEffort).
+    // When thinking.budgetTokens is set, we must convert it to budget_tokens so that
+    // OpenAI-compatible proxies (LiteLLM, OpenRouter, etc.) can forward it correctly.
+    if (model.api.npm === "@ai-sdk/openai-compatible" && options?.thinking?.budgetTokens != null) {
+      const { budgetTokens, ...thinkingRest } = options.thinking
+      options = {
+        ...options,
+        thinking: {
+          ...thinkingRest,
+          budget_tokens: budgetTokens,
+        },
+      }
+    }
+
     return { [key]: options }
   }
 
@@ -718,9 +734,14 @@ export namespace ProviderTransform {
     const modelCap = modelLimit || globalLimit
     const standardLimit = Math.min(modelCap, globalLimit)
 
-    if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic") {
+    if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic" || npm === "@ai-sdk/openai-compatible") {
       const thinking = options?.["thinking"]
-      const budgetTokens = typeof thinking?.["budgetTokens"] === "number" ? thinking["budgetTokens"] : 0
+      const budgetTokens =
+        typeof thinking?.["budgetTokens"] === "number"
+          ? thinking["budgetTokens"]
+          : typeof thinking?.["budget_tokens"] === "number"
+            ? thinking["budget_tokens"]
+            : 0
       const enabled = thinking?.["type"] === "enabled"
       if (enabled && budgetTokens > 0) {
         // Return text tokens so that text + thinking <= model cap, preferring 32k text when possible.
