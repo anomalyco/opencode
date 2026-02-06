@@ -1,4 +1,5 @@
 import { A } from "@solidjs/router"
+import { LanguagePicker } from "~/component/language-picker"
 import { useI18n } from "~/context/i18n"
 
 export function Legal() {
@@ -16,6 +17,9 @@ export function Legal() {
       </span>
       <span>
         <A href="/legal/terms-of-service">{i18n.t("legal.terms")}</A>
+      </span>
+      <span>
+        <LanguagePicker align="right" />
       </span>
     </div>
   )

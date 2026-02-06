@@ -1,4 +1,8 @@
 [data-component="language-picker"] {
+  width: auto;
+}
+
+[data-component="footer"] [data-component="language-picker"] {
   width: 100%;
 }
 
@@ -36,6 +40,45 @@
 
 /* Footer dropdown should open upward */
 [data-component="footer"] [data-component="language-picker"] [data-slot="dropdown"] {
+  top: auto;
+  bottom: 100%;
+  margin-top: 0;
+  margin-bottom: var(--space-2);
+  max-height: min(60vh, 420px);
+  overflow: auto;
+}
+
+[data-component="legal"] {
+  flex-wrap: wrap;
+  row-gap: var(--space-2);
+}
+
+[data-component="legal"] [data-component="language-picker"] {
+  width: auto;
+}
+
+[data-component="legal"] [data-component="language-picker"] [data-slot="trigger"] {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  font: inherit;
+  color: var(--color-text-weak);
+  white-space: nowrap;
+}
+
+[data-component="legal"] [data-component="language-picker"] [data-slot="trigger"] span {
+  font-weight: inherit;
+}
+
+[data-component="legal"] [data-component="language-picker"] [data-slot="trigger"]:hover {
+  background: transparent;
+  color: var(--color-text);
+  text-decoration: underline;
+  text-underline-offset: var(--space-1);
+  text-decoration-thickness: 1px;
+}
+
+[data-component="legal"] [data-component="language-picker"] [data-slot="dropdown"] {
   top: auto;
   bottom: 100%;
   margin-top: 0;

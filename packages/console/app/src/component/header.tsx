@@ -19,7 +19,6 @@ import { createStore } from "solid-js/store"
 import { github } from "~/lib/github"
 import { createEffect, onCleanup } from "solid-js"
 import { config } from "~/config"
-import { useLanguage } from "~/context/language"
 import { useI18n } from "~/context/i18n"
 import "./header-context-menu.css"
 
@@ -38,14 +37,14 @@ const fetchSvgContent = async (svgPath: string): Promise<string> => {
 
 export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
   const navigate = useNavigate()
-  const language = useLanguage()
   const i18n = useI18n()
   const githubData = createAsync(() => github())
   const starCount = createMemo(() =>
     githubData()?.stars
-      ? new Intl.NumberFormat(language.tag(language.locale()), {
+      ? new Intl.NumberFormat("en-US", {
           notation: "compact",
           compactDisplay: "short",
+          maximumFractionDigits: 0,
         }).format(githubData()?.stars!)
       : config.github.starsFormatted.compact,
   )
@@ -123,8 +122,8 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
     <section data-component="top">
       <div onContextMenu={handleLogoContextMenu}>
         <A href="/">
-          <img data-slot="logo light" src={logoLight} alt="opencode logo light" width="189" height="34" />
-          <img data-slot="logo dark" src={logoDark} alt="opencode logo dark" width="189" height="34" />
+          <img data-slot="logo light" src={logoLight} alt="OpenCode" width="189" height="34" />
+          <img data-slot="logo dark" src={logoDark} alt="OpenCode" width="189" height="34" />
         </A>
       </div>
 
@@ -134,18 +133,18 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
           style={`left: ${store.contextMenuPosition.x}px; top: ${store.contextMenuPosition.y}px;`}
         >
           <button class="context-menu-item" onClick={copyLogoToClipboard}>
-            <img data-slot="copy light" src={copyLogoLight} alt="Logo" />
-            <img data-slot="copy dark" src={copyLogoDark} alt="Logo" />
+            <img data-slot="copy light" src={copyLogoLight} alt="" />
+            <img data-slot="copy dark" src={copyLogoDark} alt="" />
             {i18n.t("nav.context.copyLogo")}
           </button>
           <button class="context-menu-item" onClick={copyWordmarkToClipboard}>
-            <img data-slot="copy light" src={copyWordmarkLight} alt="Wordmark" />
-            <img data-slot="copy dark" src={copyWordmarkDark} alt="Wordmark" />
+            <img data-slot="copy light" src={copyWordmarkLight} alt="" />
+            <img data-slot="copy dark" src={copyWordmarkDark} alt="" />
             {i18n.t("nav.context.copyWordmark")}
           </button>
           <button class="context-menu-item" onClick={() => navigate("/brand")}>
-            <img data-slot="copy light" src={copyBrandAssetsLight} alt="Brand Assets" />
-            <img data-slot="copy dark" src={copyBrandAssetsDark} alt="Brand Assets" />
+            <img data-slot="copy light" src={copyBrandAssetsLight} alt="" />
+            <img data-slot="copy dark" src={copyBrandAssetsDark} alt="" />
             {i18n.t("nav.context.brandAssets")}
           </button>
         </div>
@@ -153,7 +152,7 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
       <nav data-component="nav-desktop">
         <ul>
           <li>
-            <a href={config.github.repoUrl} target="_blank">
+            <a href={config.github.repoUrl} target="_blank" style="white-space: nowrap;">
               {i18n.t("nav.github")} <span>[{starCount()}]</span>
             </a>
           </li>
@@ -169,14 +168,21 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
                 <a href="/auth">{i18n.t("nav.login")}</a>
               </Match>
               <Match when={!props.zen}>
-                <A href="/zen">Zen</A>
+                <A href="/zen">{i18n.t("nav.zen")}</A>
               </Match>
             </Switch>
           </li>
           <Show when={!props.hideGetStarted}>
             <li>
               <A href="/download" data-slot="cta-button">
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 18 18"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  style="flex-shrink: 0;"
+                >
                   <path
                     d="M12.1875 9.75L9.00001 12.9375L5.8125 9.75M9.00001 2.0625L9 12.375M14.4375 15.9375H3.5625"
                     stroke="currentColor"
@@ -242,7 +248,7 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
                   <A href="/">{i18n.t("nav.home")}</A>
                 </li>
                 <li>
-                  <a href={config.github.repoUrl} target="_blank">
+                  <a href={config.github.repoUrl} target="_blank" style="white-space: nowrap;">
                     {i18n.t("nav.github")} <span>[{starCount()}]</span>
                   </a>
                 </li>
@@ -258,7 +264,7 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
                       <a href="/auth">{i18n.t("nav.login")}</a>
                     </Match>
                     <Match when={!props.zen}>
-                      <A href="/zen">Zen</A>
+                      <A href="/zen">{i18n.t("nav.zen")}</A>
                     </Match>
                   </Switch>
                 </li>

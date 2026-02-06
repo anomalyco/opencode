@@ -3,7 +3,6 @@ import { createMemo } from "solid-js"
 import { github } from "~/lib/github"
 import { config } from "~/config"
 import { useLanguage } from "~/context/language"
-import { LanguagePicker } from "~/component/language-picker"
 import { useI18n } from "~/context/i18n"
 
 export function Footer() {
@@ -37,9 +36,6 @@ export function Footer() {
       </div>
       <div data-slot="cell">
         <a href={config.social.twitter}>{i18n.t("footer.x")}</a>
-      </div>
-      <div data-slot="cell">
-        <LanguagePicker align="right" />
       </div>
     </footer>
   )
