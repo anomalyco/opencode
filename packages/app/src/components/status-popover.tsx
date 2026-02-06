@@ -16,6 +16,7 @@ import { useLanguage } from "@/context/language"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { DialogSelectServer } from "./dialog-select-server"
 import { showToast } from "@opencode-ai/ui/toast"
+import { parsePluginSpecifier } from "./plugin-specifier"
 
 type ServerStatus = { healthy: boolean; version?: string }
 
@@ -121,7 +122,11 @@ export function StatusPopover() {
 
   const lspItems = createMemo(() => sync.data.lsp ?? [])
   const lspCount = createMemo(() => lspItems().length)
-  const plugins = createMemo(() => sync.data.config.plugin ?? [])
+  const plugins = createMemo(() =>
+    (sync.data.config.plugin ?? [])
+      .map(parsePluginSpecifier)
+      .toSorted((a, b) => a.name.localeCompare(b.name)),
+  )
   const pluginCount = createMemo(() => plugins().length)
 
   const overallHealthy = createMemo(() => {
@@ -402,12 +407,38 @@ export function StatusPopover() {
                   }
                 >
                   <For each={plugins()}>
-                    {(plugin) => (
-                      <div class="flex items-center gap-2 w-full px-2 py-1">
-                        <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
-                        <span class="text-14-regular text-text-base truncate">{plugin}</span>
-                      </div>
-                    )}
+                    {(plugin) => {
+                      const [truncated, setTruncated] = createSignal(false)
+                      let nameRef: HTMLSpanElement | undefined
+                      let versionRef: HTMLSpanElement | undefined
+
+                      onMount(() => {
+                        const check = () => {
+                          const nameTruncated = nameRef ? nameRef.scrollWidth > nameRef.clientWidth : false
+                          const versionTruncated = versionRef ? versionRef.scrollWidth > versionRef.clientWidth : false
+                          setTruncated(nameTruncated || versionTruncated)
+                        }
+                        check()
+                        window.addEventListener("resize", check)
+                        onCleanup(() => window.removeEventListener("resize", check))
+                      })
+
+                      return (
+                        <Tooltip value={plugin.raw} placement="top" inactive={!truncated()}>
+                          <div class="flex items-center gap-2 w-full px-2 py-1">
+                            <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
+                            <span ref={nameRef} class="text-14-regular text-text-base truncate min-w-0 flex-1">
+                              {plugin.name}
+                            </span>
+                            <Show when={plugin.version}>
+                              <span ref={versionRef} class="text-12-regular text-text-weak shrink-0">
+                                @{plugin.version}
+                              </span>
+                            </Show>
+                          </div>
+                        </Tooltip>
+                      )
+                    }}
                   </For>
                 </Show>
               </div>
