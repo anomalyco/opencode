@@ -23,8 +23,4 @@ export const dict = {
   "desktop.cli.installed.message": "CLI 已安裝到 {{path}}\n\n重新啟動終端機以使用 'opencode' 命令。",
   "desktop.cli.failed.title": "安裝失敗",
   "desktop.cli.failed.message": "無法安裝 CLI: {{error}}",
-
-  "desktop.error.serverStartFailed.title": "OpenCode 啟動失敗",
-  "desktop.error.serverStartFailed.description":
-    "無法啟動本地 OpenCode 伺服器。請重新啟動應用程式，或檢查網路設定 (VPN/proxy) 後再試一次。",
 }
