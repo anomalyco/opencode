@@ -401,7 +401,15 @@ export default function Page() {
   }
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
-  const centered = createMemo(() => isDesktop() && !view().reviewPanel.opened())
+  const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
+  const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
+  const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
+  const sessionPanelWidth = createMemo(() => {
+    if (!desktopSidePanelOpen()) return "100%"
+    if (desktopReviewOpen()) return `${layout.session.width()}px`
+    return `calc(100% - ${layout.fileTree.width()}px)`
+  })
+  const centered = createMemo(() => isDesktop() && !desktopSidePanelOpen())
 
   function normalizeTab(tab: string) {
     if (!tab.startsWith("file://")) return tab
@@ -420,12 +428,18 @@ export default function Page() {
     return next
   }
 
+  const openReviewPanel = () => {
+    if (!view().reviewPanel.opened()) view().reviewPanel.open()
+  }
+
   const openTab = (value: string) => {
     const next = normalizeTab(value)
     tabs().open(next)
 
     const path = file.pathFromTab(next)
-    if (path) file.load(path)
+    if (!path) return
+    file.load(path)
+    openReviewPanel()
   }
 
   createEffect(() => {
@@ -1056,11 +1070,8 @@ export default function Page() {
       title: language.t("command.fileTree.toggle"),
       description: "",
       category: language.t("command.category.view"),
-      onSelect: () => {
-        const opening = !layout.fileTree.opened()
-        if (opening && !view().reviewPanel.opened()) view().reviewPanel.open()
-        layout.fileTree.toggle()
-      },
+      keybind: "mod+\\",
+      onSelect: () => layout.fileTree.toggle(),
     },
     {
       id: "terminal.new",
@@ -1597,6 +1608,7 @@ export default function Page() {
   }
 
   const focusReviewDiff = (path: string) => {
+    openReviewPanel()
     const current = view().review.open() ?? []
     if (!current.includes(path)) view().review.setOpen([...current, path])
     setTree({ activeDiff: path, pendingDiff: path })
@@ -1709,7 +1721,7 @@ export default function Page() {
     if (!id) return
 
     const wants = isDesktop()
-      ? view().reviewPanel.opened() && (layout.fileTree.opened() || activeTab() === "review")
+      ? desktopFileTreeOpen() || (desktopReviewOpen() && activeTab() === "review")
       : store.mobileTab === "changes"
     if (!wants) return
     if (sync.data.session_diff[id] !== undefined) return
@@ -1722,7 +1734,6 @@ export default function Page() {
   createEffect(() => {
     const dir = sdk.directory
     if (!isDesktop()) return
-    if (!view().reviewPanel.opened()) return
     if (!layout.fileTree.opened()) return
     if (sync.status === "loading") return
 
@@ -2257,10 +2268,10 @@ export default function Page() {
           classList={{
             "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger": true,
             "flex-1 pt-2 md:pt-3": true,
-            "md:flex-none": view().reviewPanel.opened(),
+            "md:flex-none": desktopSidePanelOpen(),
           }}
           style={{
-            width: isDesktop() && view().reviewPanel.opened() ? `${layout.session.width()}px` : "100%",
+            width: sessionPanelWidth(),
             "--prompt-height": store.promptHeight ? `${store.promptHeight}px` : undefined,
           }}
         >
@@ -2797,7 +2808,7 @@ export default function Page() {
             </div>
           </div>
 
-          <Show when={isDesktop() && view().reviewPanel.opened()}>
+          <Show when={desktopReviewOpen()}>
             <ResizeHandle
               direction="horizontal"
               size={layout.session.width()}
@@ -2809,25 +2820,31 @@ export default function Page() {
         </div>
 
         {/* Desktop side panel - hidden on mobile */}
-        <Show when={isDesktop() && view().reviewPanel.opened()}>
+        <Show when={desktopSidePanelOpen()}>
           <aside
             id="review-panel"
             aria-label={language.t("session.panel.reviewAndFiles")}
-            class="relative flex-1 min-w-0 h-full border-l border-border-weak-base flex"
+            class="relative min-w-0 h-full border-l border-border-weak-base flex"
+            classList={{
+              "flex-1": desktopReviewOpen(),
+              "shrink-0": !desktopReviewOpen(),
+            }}
+            style={{ width: desktopReviewOpen() ? undefined : `${layout.fileTree.width()}px` }}
           >
-            <div class="flex-1 min-w-0 h-full">
-              <Show
-                when={layout.fileTree.opened() && fileTreeTab() === "changes"}
-                fallback={
-                  <DragDropProvider
-                    onDragStart={handleDragStart}
-                    onDragEnd={handleDragEnd}
-                    onDragOver={handleDragOver}
-                    collisionDetector={closestCenter}
-                  >
-                    <DragDropSensors />
-                    <ConstrainDragYAxis />
-                    <Tabs value={activeTab()} onChange={openTab}>
+            <Show when={desktopReviewOpen()}>
+              <div class="flex-1 min-w-0 h-full">
+                <Show
+                  when={desktopFileTreeOpen() && fileTreeTab() === "changes"}
+                  fallback={
+                    <DragDropProvider
+                      onDragStart={handleDragStart}
+                      onDragEnd={handleDragEnd}
+                      onDragOver={handleDragOver}
+                      collisionDetector={closestCenter}
+                    >
+                      <DragDropSensors />
+                      <ConstrainDragYAxis />
+                      <Tabs value={activeTab()} onChange={openTab}>
                       <div class="sticky top-0 shrink-0 flex">
                         <Tabs.List
                           ref={(el: HTMLDivElement) => {
@@ -3484,33 +3501,37 @@ export default function Page() {
                           )
                         }}
                       </For>
-                    </Tabs>
-                    <DragOverlay>
-                      <Show when={store.activeDraggable}>
-                        {(tab) => {
-                          const path = createMemo(() => file.pathFromTab(tab()))
-                          return (
-                            <div class="relative px-6 h-12 flex items-center bg-background-stronger border-x border-border-weak-base border-b border-b-transparent">
-                              <Show when={path()}>{(p) => <FileVisual active path={p()} />}</Show>
-                            </div>
-                          )
-                        }}
-                      </Show>
-                    </DragOverlay>
-                  </DragDropProvider>
-                }
-              >
-                {reviewPanel()}
-              </Show>
-            </div>
+                      </Tabs>
+                      <DragOverlay>
+                        <Show when={store.activeDraggable}>
+                          {(tab) => {
+                            const path = createMemo(() => file.pathFromTab(tab()))
+                            return (
+                              <div class="relative px-6 h-12 flex items-center bg-background-stronger border-x border-border-weak-base border-b border-b-transparent">
+                                <Show when={path()}>{(p) => <FileVisual active path={p()} />}</Show>
+                              </div>
+                            )
+                          }}
+                        </Show>
+                      </DragOverlay>
+                    </DragDropProvider>
+                  }
+                >
+                  {reviewPanel()}
+                </Show>
+              </div>
+            </Show>
 
-            <Show when={layout.fileTree.opened()}>
+            <Show when={desktopFileTreeOpen()}>
               <div
                 id="file-tree-panel"
                 class="relative shrink-0 h-full"
                 style={{ width: `${layout.fileTree.width()}px` }}
               >
-                <div class="h-full border-l border-border-weak-base flex flex-col overflow-hidden group/filetree">
+                <div
+                  class="h-full flex flex-col overflow-hidden group/filetree"
+                  classList={{ "border-l border-border-weak-base": desktopReviewOpen() }}
+                >
                   <Tabs
                     variant="pill"
                     value={fileTreeTab()}
