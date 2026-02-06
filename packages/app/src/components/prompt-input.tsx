@@ -1002,8 +1002,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             </div>
           </Show>
         </div>
-        <div class="relative p-3 flex items-center justify-between gap-2">
-          <div class="flex items-center gap-2 min-w-0 flex-1">
+        <div class="relative p-3 flex items-center justify-between gap-1 sm:gap-2">
+          <div class="flex items-center gap-1 sm:gap-2 min-w-0 flex-1">
             <Switch>
               <Match when={store.mode === "shell"}>
                 <div class="flex items-center gap-2 px-2 h-6">
@@ -1040,13 +1040,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       <Button
                         as="div"
                         variant="ghost"
-                        class="px-2 min-w-0 max-w-[240px]"
+                        class="px-2 min-w-0 max-w-[140px] sm:max-w-[240px] shrink-0"
                         onClick={() => dialog.show(() => <DialogSelectModelUnpaid />)}
                       >
                         <Show when={local.model.current()?.provider?.id}>
                           <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
                         </Show>
-                        <span class="truncate">
+                        <span class="truncate hidden sm:inline">
                           {local.model.current()?.name ?? language.t("dialog.model.select.title")}
                         </span>
                         <Icon name="chevron-down" size="small" class="shrink-0" />
@@ -1062,12 +1062,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   >
                     <ModelSelectorPopover
                       triggerAs={Button}
-                      triggerProps={{ variant: "ghost", class: "min-w-0 max-w-[240px]" }}
+                      triggerProps={{ variant: "ghost", class: "min-w-0 max-w-[140px] sm:max-w-[240px] shrink-0" }}
                     >
                       <Show when={local.model.current()?.provider?.id}>
                         <ProviderIcon id={local.model.current()!.provider.id as IconName} class="size-4 shrink-0" />
                       </Show>
-                      <span class="truncate">
+                      <span class="truncate hidden sm:inline">
                         {local.model.current()?.name ?? language.t("dialog.model.select.title")}
                       </span>
                       <Icon name="chevron-down" size="small" class="shrink-0" />
@@ -1084,10 +1084,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <Button
                       data-action="model-variant-cycle"
                       variant="ghost"
-                      class="text-text-base _hidden group-hover/prompt-input:inline-block capitalize text-12-regular"
+                      class="text-text-base _hidden group-hover/prompt-input:inline-block capitalize text-12-regular shrink-0"
                       onClick={() => local.model.variant.cycle()}
                     >
-                      {local.model.variant.current() ?? language.t("common.default")}
+                      <span class="hidden sm:inline">
+                        {local.model.variant.current() ?? language.t("common.default")}
+                      </span>
+                      <span class="sm:hidden">
+                        <Icon name="brain" size="small" />
+                      </span>
                     </Button>
                   </TooltipKeybind>
                 </Show>
