@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
+import path from "node:path"
 
 const UPSTREAM_REPO = "anomalyco/opencode"
 const UPSTREAM_BRANCH = "dev"
@@ -167,6 +168,7 @@ async function runLinuxE2EGate(params: {
   ahead: number
 }) {
   console.log("Running linux e2e gate before opening sync PR...")
+  const modelsPath = path.resolve("packages/opencode/test/tool/fixtures/models-api.json")
 
   const install = await $`bunx playwright install --with-deps`.cwd("packages/app").nothrow()
   if (install.exitCode !== 0) {
@@ -201,7 +203,14 @@ async function runLinuxE2EGate(params: {
     throw new Error("Linux e2e gate failed during Playwright setup.")
   }
 
-  const test = await $`bun run test:e2e:local -- --workers=2`.cwd("packages/app").nothrow()
+  const test = await $`bun run test:e2e:local -- --workers=2`
+    .cwd("packages/app")
+    .env({
+      ...process.env,
+      OPENCODE_DISABLE_MODELS_FETCH: "true",
+      OPENCODE_MODELS_PATH: modelsPath,
+    })
+    .nothrow()
   if (test.exitCode === 0) {
     console.log("Linux e2e gate passed.")
     return
