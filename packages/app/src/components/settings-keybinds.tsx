@@ -71,6 +71,7 @@ function normalizeKey(key: string) {
   if (key === ",") return "comma"
   if (key === "+") return "plus"
   if (key === " ") return "space"
+  if (key === "/") return "slash"
   return key.toLowerCase()
 }
 

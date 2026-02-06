@@ -1093,12 +1093,16 @@ export default function Page() {
       onSelect: () => dialog.show(() => <DialogFork />),
     },
     {
-      id: "prompt.focus",
-      title: "Focus Input",
-      description: "Focus the prompt input box",
-      category: language.t("command.category.session"),
-      keybind: "mod+/",
-      onSelect: () => inputRef?.focus(),
+      id: "input.focus",
+      title: language.t("command.input.focus"),
+      description: language.t("command.input.focus.description"),
+      category: language.t("command.category.view"),
+      keybind: "mod+slash",
+      onSelect: () => {
+        if (inputRef) {
+          inputRef.focus()
+        }
+      },
     },
     ...(sync.data.config.share !== "disabled"
       ? [

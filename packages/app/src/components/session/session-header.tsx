@@ -159,14 +159,73 @@ export function SessionHeader() {
   const term = createMemo(() => !isDesktopBeta || settings.general.showTerminal())
   const status = createMemo(() => !isDesktopBeta || settings.general.showStatus())
 
-  const [exists, setExists] = createStore<Partial<Record<OpenApp, boolean>>>({
-    finder: true,
+  const currentSession = createMemo(() => sync.data.session.find((s) => s.id === params.id))
+  const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
+  const showShare = createMemo(() => shareEnabled() && !!currentSession())
+  const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
+  const view = createMemo(() => layout.view(sessionKey))
+
+  const OPEN_APPS = [
+    "vscode",
+    "cursor",
+    "zed",
+    "textmate",
+    "antigravity",
+    "finder",
+    "terminal",
+    "iterm2",
+    "ghostty",
+    "wezterm",
+    "xcode",
+    "android-studio",
+    "powershell",
+  ] as const
+  type OpenApp = (typeof OPEN_APPS)[number]
+
+  const os = createMemo<"macos" | "windows" | "linux" | "unknown">(() => {
+    if (platform.platform === "desktop" && platform.os) return platform.os
+    if (typeof navigator !== "object") return "unknown"
+    const value = navigator.platform || navigator.userAgent
+    if (/Mac/i.test(value)) return "macos"
+    if (/Win/i.test(value)) return "windows"
+    if (/Linux/i.test(value)) return "linux"
+    return "unknown"
   })
 
-  const apps = createMemo(() => {
-    if (os() === "macos") return MAC_APPS
-    if (os() === "windows") return WINDOWS_APPS
-    return LINUX_APPS
+  const options = createMemo(() => {
+    if (os() === "macos") {
+      return [
+        { id: "vscode", label: "VS Code", icon: "vscode", openWith: "Visual Studio Code" },
+        { id: "cursor", label: "Cursor", icon: "cursor", openWith: "Cursor" },
+        { id: "zed", label: "Zed", icon: "zed", openWith: "Zed" },
+        { id: "textmate", label: "TextMate", icon: "textmate", openWith: "TextMate" },
+        { id: "antigravity", label: "Antigravity", icon: "antigravity", openWith: "Antigravity" },
+        { id: "finder", label: "Finder", icon: "finder" },
+        { id: "terminal", label: "Terminal", icon: "terminal", openWith: "Terminal" },
+        { id: "iterm2", label: "iTerm2", icon: "iterm2", openWith: "iTerm" },
+        { id: "ghostty", label: "Ghostty", icon: "ghostty", openWith: "Ghostty" },
+        { id: "wezterm", label: "WezTerm", icon: "wezterm", openWith: "WezTerm" },
+        { id: "xcode", label: "Xcode", icon: "xcode", openWith: "Xcode" },
+        { id: "android-studio", label: "Android Studio", icon: "android-studio", openWith: "Android Studio" },
+      ] as const
+    }
+
+    if (os() === "windows") {
+      return [
+        { id: "vscode", label: "VS Code", icon: "vscode", openWith: "code" },
+        { id: "cursor", label: "Cursor", icon: "cursor", openWith: "cursor" },
+        { id: "zed", label: "Zed", icon: "zed", openWith: "zed" },
+        { id: "finder", label: "File Explorer", icon: "finder" },
+        { id: "powershell", label: "PowerShell", icon: "powershell", openWith: "powershell" },
+      ] as const
+    }
+
+    return [
+      { id: "vscode", label: "VS Code", icon: "vscode", openWith: "code" },
+      { id: "cursor", label: "Cursor", icon: "cursor", openWith: "cursor" },
+      { id: "zed", label: "Zed", icon: "zed", openWith: "zed" },
+      { id: "finder", label: "File Manager", icon: "finder" },
+    ] as const
   })
 
   const fileManager = createMemo(() => {

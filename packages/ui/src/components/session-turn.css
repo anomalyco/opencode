@@ -37,7 +37,72 @@
     max-width: 100%;
   }
 
-  [data-slot="session-turn-compaction"] {
+  [data-component="user-message"] [data-slot="user-message-text"] {
+    max-height: var(--user-message-collapsed-height, 64px);
+  }
+
+  [data-component="user-message"][data-expanded="true"] [data-slot="user-message-text"] {
+    max-height: none;
+  }
+
+  [data-component="user-message"][data-can-expand="true"] [data-slot="user-message-text"] {
+    padding-right: 36px;
+    padding-bottom: 28px;
+  }
+
+  [data-component="user-message"][data-can-expand="true"]:not([data-expanded="true"])
+    [data-slot="user-message-text"]::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 8px;
+    bottom: 0px;
+    background:
+      linear-gradient(to bottom, transparent, var(--surface-weak)),
+      linear-gradient(to bottom, transparent, var(--surface-weak));
+    pointer-events: none;
+  }
+
+  [data-component="user-message"] [data-slot="user-message-text"] [data-slot="user-message-expand"] {
+    display: none;
+    position: absolute;
+    bottom: 6px;
+    right: 6px;
+    padding: 0;
+  }
+
+  [data-component="user-message"][data-can-expand="true"]
+    [data-slot="user-message-text"]
+    [data-slot="user-message-expand"],
+  [data-component="user-message"][data-expanded="true"]
+    [data-slot="user-message-text"]
+    [data-slot="user-message-expand"] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 28px;
+    width: 28px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+    color: var(--text-weak);
+  }
+
+  [data-component="user-message"] [data-slot="user-message-text"] [data-slot="user-message-expand"]:hover {
+    background: var(--surface-raised-base);
+    color: var(--text-base);
+  }
+
+  [data-slot="session-turn-user-badges"] {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-left: 16px;
+  }
+
+  [data-slot="session-turn-message-title"] {
     width: 100%;
     min-width: 0;
     align-self: stretch;

@@ -45,6 +45,7 @@ function normalizeKey(key: string) {
   if (key === ",") return "comma"
   if (key === "+") return "plus"
   if (key === " ") return "space"
+  if (key === "/") return "slash"
   return key.toLowerCase()
 }
 
@@ -192,20 +193,8 @@ export function formatKeybind(config: string, t?: (key: KeyLabel) => string): st
       arrowright: "→",
       comma: ",",
       plus: "+",
-    }
-    const named: Record<string, KeyLabel> = {
-      backspace: "common.key.backspace",
-      delete: "common.key.delete",
-      end: "common.key.end",
-      enter: "common.key.enter",
-      esc: "common.key.esc",
-      escape: "common.key.esc",
-      home: "common.key.home",
-      insert: "common.key.insert",
-      pagedown: "common.key.pageDown",
-      pageup: "common.key.pageUp",
-      space: "common.key.space",
-      tab: "common.key.tab",
+      space: "Space",
+      slash: "/",
     }
     const key = kb.key.toLowerCase()
     const displayKey =
