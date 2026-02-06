@@ -1,9 +1,10 @@
 // @refresh reload
 import { webviewZoom } from "./webview-zoom"
 import { render } from "solid-js/web"
-import { AppBaseProviders, AppInterface, PlatformProvider, Platform } from "@opencode-ai/app"
+import { AppBaseProviders, AppInterface, PlatformProvider, Platform, useCommand } from "@opencode-ai/app"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link"
+import { openPath as openerOpenPath } from "@tauri-apps/plugin-opener"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { type as ostype } from "@tauri-apps/plugin-os"
 import { check, Update } from "@tauri-apps/plugin-updater"
@@ -17,11 +18,12 @@ import { Splash } from "@opencode-ai/ui/logo"
 import { createSignal, Show, Accessor, JSX, createResource, onMount, onCleanup } from "solid-js"
 
 import { UPDATER_ENABLED } from "./updater"
-import { createMenu } from "./menu"
 import { initI18n, t } from "./i18n"
 import pkg from "../package.json"
 import "./styles.css"
-import { commands } from "./bindings"
+import { commands, InitStep } from "./bindings"
+import { Channel } from "@tauri-apps/api/core"
+import { createMenu } from "./menu"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -85,6 +87,10 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
 
   openLink(url: string) {
     void shellOpen(url).catch(() => undefined)
+  },
+
+  openPath(path: string, app?: string) {
+    return openerOpenPath(path, app)
   },
 
   back() {
@@ -302,7 +308,6 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
       .catch(() => undefined)
   },
 
-  // @ts-expect-error
   fetch: (input, init) => {
     const pw = password()
 
@@ -335,9 +340,16 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
   parseMarkdown: (markdown: string) => commands.parseMarkdownCommand(markdown),
 
   webviewZoom,
+
+  checkAppExists: async (appName: string) => {
+    return commands.checkAppExists(appName)
+  },
 })
 
-createMenu()
+let menuTrigger = null as null | ((id: string) => void)
+createMenu((id) => {
+  menuTrigger?.(id)
+})
 void listenForDeepLinks()
 
 render(() => {
@@ -368,7 +380,19 @@ render(() => {
             window.__OPENCODE__ ??= {}
             window.__OPENCODE__.serverPassword = data().password ?? undefined
 
-            return <AppInterface defaultUrl={data().url} />
+            function Inner() {
+              const cmd = useCommand()
+
+              menuTrigger = (id) => cmd.trigger(id)
+
+              return null
+            }
+
+            return (
+              <AppInterface defaultUrl={data().url}>
+                <Inner />
+              </AppInterface>
+            )
           }}
         </ServerGate>
       </AppBaseProviders>
@@ -380,52 +404,22 @@ type ServerReadyData = { url: string; password: string | null }
 
 // Gate component that waits for the server to be ready
 function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.Element }) {
-  const [serverData] = createResource(() => commands.ensureServerReady())
+  const [serverData] = createResource(() => commands.awaitInitialization(new Channel<InitStep>() as any))
 
-  const errorMessage = () => {
-    const error = serverData.error
-    if (!error) return t("error.chain.unknown")
-    if (typeof error === "string") return error
-    if (error instanceof Error) return error.message
-    return String(error)
-  }
-
-  const restartApp = async () => {
-    await commands.killSidecar().catch(() => undefined)
-    await relaunch().catch(() => undefined)
-  }
+  if (serverData.state === "errored") throw serverData.error
 
   return (
     // Not using suspense as not all components are compatible with it (undefined refs)
     <Show
-      when={serverData.state === "errored"}
+      when={serverData.state !== "pending" && serverData()}
       fallback={
-        <Show
-          when={serverData.state !== "pending" && serverData()}
-          fallback={
-            <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
-              <Splash class="w-16 h-20 opacity-50 animate-pulse" />
-              <div data-tauri-decorum-tb class="flex flex-row absolute top-0 right-0 z-10 h-10" />
-            </div>
-          }
-        >
-          {(data) => props.children(data)}
-        </Show>
+        <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
+          <Splash class="w-16 h-20 opacity-50 animate-pulse" />
+          <div data-tauri-decorum-tb class="flex flex-row absolute top-0 right-0 z-10 h-10" />
+        </div>
       }
     >
-      <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base gap-4 px-6">
-        <div class="text-16-semibold">{t("desktop.error.serverStartFailed.title")}</div>
-        <div class="text-12-regular opacity-70 text-center max-w-xl">
-          {t("desktop.error.serverStartFailed.description")}
-        </div>
-        <div class="w-full max-w-3xl rounded border border-border bg-background-base overflow-auto max-h-64">
-          <pre class="p-3 whitespace-pre-wrap break-words text-11-regular">{errorMessage()}</pre>
-        </div>
-        <button class="px-3 py-2 rounded bg-primary text-primary-foreground" onClick={() => void restartApp()}>
-          {t("error.page.action.restart")}
-        </button>
-        <div data-tauri-decorum-tb class="flex flex-row absolute top-0 right-0 z-10 h-10" />
-      </div>
+      {(data) => props.children(data)}
     </Show>
   )
 }

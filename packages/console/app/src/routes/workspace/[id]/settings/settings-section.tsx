@@ -6,6 +6,8 @@ import { Workspace } from "@opencode-ai/console-core/workspace.js"
 import styles from "./settings-section.module.css"
 import { Database, eq } from "@opencode-ai/console-core/drizzle/index.js"
 import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.js"
+import { useI18n } from "~/context/i18n"
+import { formError, localizeError } from "~/lib/form-error"
 
 const getWorkspaceInfo = query(async (workspaceID: string) => {
   "use server"
@@ -29,10 +31,10 @@ const getWorkspaceInfo = query(async (workspaceID: string) => {
 const updateWorkspace = action(async (form: FormData) => {
   "use server"
   const name = form.get("name")?.toString().trim()
-  if (!name) return { error: "Workspace name is required." }
-  if (name.length > 255) return { error: "Name must be 255 characters or less." }
+  if (!name) return { error: formError.workspaceNameRequired }
+  if (name.length > 255) return { error: formError.nameTooLong }
   const workspaceID = form.get("workspaceID")?.toString()
-  if (!workspaceID) return { error: "Workspace ID is required." }
+  if (!workspaceID) return { error: formError.workspaceRequired }
   return json(
     await withActor(
       () =>
@@ -46,6 +48,7 @@ const updateWorkspace = action(async (form: FormData) => {
 
 export function SettingsSection() {
   const params = useParams()
+  const i18n = useI18n()
   const workspaceInfo = createAsync(() => getWorkspaceInfo(params.id!))
   const submission = useSubmission(updateWorkspace)
   const [store, setStore] = createStore({ show: false })
@@ -74,12 +77,12 @@ export function SettingsSection() {
   return (
     <section class={styles.root}>
       <div data-slot="section-title">
-        <h2>Settings</h2>
-        <p>Update your workspace name and preferences.</p>
+        <h2>{i18n.t("workspace.settings.title")}</h2>
+        <p>{i18n.t("workspace.settings.subtitle")}</p>
       </div>
       <div data-slot="section-content">
         <div data-slot="setting">
-          <p>Workspace name</p>
+          <p>{i18n.t("workspace.settings.workspaceName")}</p>
           <Show
             when={!store.show}
             fallback={
@@ -91,19 +94,19 @@ export function SettingsSection() {
                     data-component="input"
                     name="name"
                     type="text"
-                    placeholder="Workspace name"
-                    value={workspaceInfo()?.name ?? "Default"}
+                    placeholder={i18n.t("workspace.settings.workspaceName")}
+                    value={workspaceInfo()?.name ?? i18n.t("workspace.settings.defaultName")}
                   />
                   <input type="hidden" name="workspaceID" value={params.id} />
                   <button type="submit" data-color="primary" disabled={submission.pending}>
-                    {submission.pending ? "Updating..." : "Save"}
+                    {submission.pending ? i18n.t("workspace.settings.updating") : i18n.t("workspace.settings.save")}
                   </button>
                   <button type="reset" data-color="ghost" onClick={() => hide()}>
-                    Cancel
+                    {i18n.t("common.cancel")}
                   </button>
                 </div>
                 <Show when={submission.result && submission.result.error}>
-                  {(err) => <div data-slot="form-error">{err()}</div>}
+                  {(err) => <div data-slot="form-error">{localizeError(i18n.t, err())}</div>}
                 </Show>
               </form>
             }
@@ -111,7 +114,7 @@ export function SettingsSection() {
             <div data-slot="value-with-action">
               <p data-slot="current-value">{workspaceInfo()?.name}</p>
               <button data-color="primary" onClick={() => show()}>
-                Edit
+                {i18n.t("workspace.settings.edit")}
               </button>
             </div>
           </Show>

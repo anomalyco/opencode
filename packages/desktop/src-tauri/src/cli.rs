@@ -1,5 +1,10 @@
 use tauri::{AppHandle, Manager, path::BaseDirectory};
-use tauri_plugin_shell::{ShellExt, process::Command};
+use tauri_plugin_shell::{
+    ShellExt,
+    process::{Command, CommandChild, CommandEvent},
+};
+
+use crate::{LogState, constants::MAX_LOG_ENTRIES};
 
 const CLI_INSTALL_DIR: &str = ".opencode/bin";
 const CLI_BINARY_NAME: &str = "opencode";
@@ -181,4 +186,56 @@ pub fn create_command(app: &tauri::AppHandle, args: &str) -> Command {
             .env("XDG_STATE_HOME", &state_dir)
             .args(["-il", "-c", &cmd])
     };
+}
+
+pub fn serve(app: &AppHandle, hostname: &str, port: u32, password: &str) -> CommandChild {
+    let log_state = app.state::<LogState>();
+    let log_state_clone = log_state.inner().clone();
+
+    println!("spawning sidecar on port {port}");
+
+    let (mut rx, child) = create_command(
+        app,
+        format!("serve --hostname {hostname} --port {port}").as_str(),
+    )
+    .env("OPENCODE_SERVER_USERNAME", "opencode")
+    .env("OPENCODE_SERVER_PASSWORD", password)
+    .spawn()
+    .expect("Failed to spawn opencode");
+
+    tokio::spawn(async move {
+        while let Some(event) = rx.recv().await {
+            match event {
+                CommandEvent::Stdout(line_bytes) => {
+                    let line = String::from_utf8_lossy(&line_bytes);
+                    print!("{line}");
+
+                    // Store log in shared state
+                    if let Ok(mut logs) = log_state_clone.0.lock() {
+                        logs.push_back(format!("[STDOUT] {}", line));
+                        // Keep only the last MAX_LOG_ENTRIES
+                        while logs.len() > MAX_LOG_ENTRIES {
+                            logs.pop_front();
+                        }
+                    }
+                }
+                CommandEvent::Stderr(line_bytes) => {
+                    let line = String::from_utf8_lossy(&line_bytes);
+                    eprint!("{line}");
+
+                    // Store log in shared state
+                    if let Ok(mut logs) = log_state_clone.0.lock() {
+                        logs.push_back(format!("[STDERR] {}", line));
+                        // Keep only the last MAX_LOG_ENTRIES
+                        while logs.len() > MAX_LOG_ENTRIES {
+                            logs.pop_front();
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    });
+
+    child
 }
