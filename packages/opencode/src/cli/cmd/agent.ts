@@ -4,6 +4,7 @@ import { UI } from "../ui"
 import { Global } from "../../global"
 import { Agent } from "../../agent/agent"
 import { Provider } from "../../provider/provider"
+import { ProviderTransform } from "../../provider/transform"
 import path from "path"
 import fs from "fs/promises"
 import matter from "gray-matter"
@@ -120,7 +121,7 @@ const AgentCreateCommand = cmd({
         // Generate agent
         const spinner = prompts.spinner()
         spinner.start("Generating agent configuration...")
-        const model = args.model ? Provider.parseModel(args.model) : undefined
+        const model = args.model ? ProviderTransform.parseModel(args.model) : undefined
         const generated = await Agent.generate({ description, model }).catch((error) => {
           spinner.stop(`LLM failed to generate agent: ${error.message}`, 1)
           if (isFullyNonInteractive) process.exit(1)

@@ -4,6 +4,7 @@ import path from "path"
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
+import { ProviderTransform } from "../../src/provider/transform"
 import { Env } from "../../src/env"
 
 test("provider loaded from env variable", async () => {
@@ -350,13 +351,13 @@ test("getModel throws ModelNotFoundError for invalid provider", async () => {
 })
 
 test("parseModel correctly parses provider/model string", () => {
-  const result = Provider.parseModel("anthropic/claude-sonnet-4")
+  const result = ProviderTransform.parseModel("anthropic/claude-sonnet-4")
   expect(result.providerID).toBe("anthropic")
   expect(result.modelID).toBe("claude-sonnet-4")
 })
 
 test("parseModel handles model IDs with slashes", () => {
-  const result = Provider.parseModel("openrouter/anthropic/claude-3-opus")
+  const result = ProviderTransform.parseModel("openrouter/anthropic/claude-3-opus")
   expect(result.providerID).toBe("openrouter")
   expect(result.modelID).toBe("anthropic/claude-3-opus")
 })

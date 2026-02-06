@@ -9,6 +9,7 @@ import { EOL } from "os"
 import { createOpencodeClient, type Message, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { Server } from "../../server/server"
 import { Provider } from "../../provider/provider"
+import { ProviderTransform } from "../../provider/transform"
 import { Agent } from "../../agent/agent"
 import { PermissionNext } from "../../permission/next"
 import { Tool } from "../../tool/tool"
@@ -570,7 +571,7 @@ export const RunCommand = cmd({
           variant: args.variant,
         })
       } else {
-        const model = args.model ? Provider.parseModel(args.model) : undefined
+        const model = args.model ? ProviderTransform.parseModel(args.model) : undefined
         await sdk.session.prompt({
           sessionID,
           agent,

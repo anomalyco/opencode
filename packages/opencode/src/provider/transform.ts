@@ -44,12 +44,19 @@ export namespace ProviderTransform {
     return undefined
   }
 
+  export function parseModel(model: string) {
+    const [providerID, ...rest] = model.split("/")
+    return {
+      providerID: providerID,
+      modelID: rest.join("/"),
+    }
+  }
+
   // For Vercel AI Gateway models, maps the model ID prefix to the native SDK
   // npm package so we can reuse existing provider-specific logic.
   function gatewayUnderlyingNpm(model: Provider.Model): string | undefined {
     if (model.api.npm !== "@ai-sdk/gateway") return undefined
-    const prefix = model.api.id.split("/")[0]
-    switch (prefix) {
+    switch (parseModel(model.api.id).providerID) {
       case "anthropic":
         return "@ai-sdk/anthropic"
       case "openai":
@@ -67,17 +74,20 @@ export namespace ProviderTransform {
   // Creates a virtual model that looks like it comes from the native SDK,
   // stripping the gateway provider prefix from IDs so existing checks work.
   function gatewayModel(model: Provider.Model, npm: string): Provider.Model {
-    const prefix = model.api.id.split("/")[0]
-    const id = model.api.id.slice(prefix.length + 1)
-    return { ...model, id, providerID: prefix, api: { ...model.api, id, npm } }
+    const parsed = parseModel(model.api.id)
+    return {
+      ...model,
+      id: parsed.modelID,
+      providerID: parsed.providerID,
+      api: { ...model.api, id: parsed.modelID, npm },
+    }
   }
 
   // Wraps provider-specific options under a providerOptions key so that
   // providerOptions() can extract and place them under the correct provider key.
   function wrapGatewayOptions(model: Provider.Model, opts: Record<string, any>): Record<string, any> {
     if (Object.keys(opts).length === 0) return opts
-    const prefix = model.api.id.split("/")[0]
-    return { providerOptions: { [prefix]: opts } }
+    return { providerOptions: { [parseModel(model.api.id).providerID]: opts } }
   }
 
   function normalizeMessages(

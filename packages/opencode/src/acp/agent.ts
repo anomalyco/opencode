@@ -33,6 +33,7 @@ import { pathToFileURL } from "bun"
 import { ACPSessionManager } from "./session"
 import type { ACPConfig } from "./types"
 import { Provider } from "../provider/provider"
+import { ProviderTransform } from "../provider/transform"
 import { Agent as AgentModule } from "../agent/agent"
 import { Installation } from "@/installation"
 import { MessageV2 } from "@/session/message-v2"
@@ -1471,7 +1472,7 @@ export namespace ACP {
       .then((resp) => {
         const cfg = resp.data
         if (!cfg || !cfg.model) return undefined
-        const parsed = Provider.parseModel(cfg.model)
+        const parsed = ProviderTransform.parseModel(cfg.model)
         return {
           providerID: parsed.providerID,
           modelID: parsed.modelID,
@@ -1646,7 +1647,7 @@ export namespace ACP {
     modelId: string,
     providers: Array<{ id: string; models: Record<string, { variants?: Record<string, any> }> }>,
   ): { model: { providerID: string; modelID: string }; variant?: string } {
-    const parsed = Provider.parseModel(modelId)
+    const parsed = ProviderTransform.parseModel(modelId)
     const provider = providers.find((p) => p.id === parsed.providerID)
     if (!provider) {
       return { model: parsed, variant: undefined }

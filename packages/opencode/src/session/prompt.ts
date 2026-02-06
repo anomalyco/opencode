@@ -1795,7 +1795,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
     const taskModel = await (async () => {
       if (command.model) {
-        return Provider.parseModel(command.model)
+        return ProviderTransform.parseModel(command.model)
       }
       if (command.agent) {
         const cmdAgent = await Agent.get(command.agent)
@@ -1803,7 +1803,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           return cmdAgent.model
         }
       }
-      if (input.model) return Provider.parseModel(input.model)
+      if (input.model) return ProviderTransform.parseModel(input.model)
       return await lastModel(input.sessionID)
     })()
 
@@ -1854,7 +1854,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     const userAgent = isSubtask ? (input.agent ?? (await Agent.defaultAgent())) : agentName
     const userModel = isSubtask
       ? input.model
-        ? Provider.parseModel(input.model)
+        ? ProviderTransform.parseModel(input.model)
         : await lastModel(input.sessionID)
       : taskModel
 

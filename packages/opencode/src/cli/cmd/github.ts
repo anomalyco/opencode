@@ -23,6 +23,7 @@ import { bootstrap } from "../bootstrap"
 import { Session } from "../../session"
 import { Identifier } from "../../id/id"
 import { Provider } from "../../provider/provider"
+import { ProviderTransform } from "../../provider/transform"
 import { Bus } from "../../bus"
 import { MessageV2 } from "../../session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
@@ -644,7 +645,7 @@ export const GithubRunCommand = cmd({
         const value = process.env["MODEL"]
         if (!value) throw new Error(`Environment variable "MODEL" is not set`)
 
-        const { providerID, modelID } = Provider.parseModel(value)
+        const { providerID, modelID } = ProviderTransform.parseModel(value)
 
         if (!providerID.length || !modelID.length)
           throw new Error(`Invalid model ${value}. Model must be in the format "provider/model".`)

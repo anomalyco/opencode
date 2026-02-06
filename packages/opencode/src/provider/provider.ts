@@ -1155,7 +1155,7 @@ export namespace Provider {
     const cfg = await Config.get()
 
     if (cfg.small_model) {
-      const parsed = parseModel(cfg.small_model)
+      const parsed = ProviderTransform.parseModel(cfg.small_model)
       return getModel(parsed.providerID, parsed.modelID)
     }
 
@@ -1229,7 +1229,7 @@ export namespace Provider {
 
   export async function defaultModel() {
     const cfg = await Config.get()
-    if (cfg.model) return parseModel(cfg.model)
+    if (cfg.model) return ProviderTransform.parseModel(cfg.model)
 
     const providers = await list()
     const recent = (await Bun.file(path.join(Global.Path.state, "model.json"))
@@ -1250,14 +1250,6 @@ export namespace Provider {
     return {
       providerID: provider.id,
       modelID: model.id,
-    }
-  }
-
-  export function parseModel(model: string) {
-    const [providerID, ...rest] = model.split("/")
-    return {
-      providerID: providerID,
-      modelID: rest.join("/"),
     }
   }
 
