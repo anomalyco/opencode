@@ -54,11 +54,33 @@ export namespace BunProc {
     }),
   )
 
+  // For github: dependencies, bun installs under the package's actual name
+  // (from its package.json "name" field), not under the github: specifier.
+  // Resolve the real module path by reading the installed package name from
+  // the cache lockfile.
+  async function resolveModulePath(pkg: string): Promise<string> {
+    const nodeModules = path.join(Global.Path.cache, "node_modules")
+    if (!pkg.startsWith("github:")) return path.join(nodeModules, pkg)
+    const lockPath = path.join(Global.Path.cache, "bun.lock")
+    const lock = await Filesystem.readText(lockPath).catch(() => "")
+    // lockfile maps "actual-name": "github:owner/repo#ref"
+    for (const line of lock.split("\n")) {
+      if (line.includes(pkg)) {
+        const match = line.match(/^\s*"([^"]+)":\s*"/)
+        if (match && match[1] !== pkg) return path.join(nodeModules, match[1])
+      }
+    }
+    // Fallback: strip github: prefix and use repo name
+    const repoName = pkg.replace(/^github:/, "").split("#")[0].split("/").pop()
+    if (repoName) return path.join(nodeModules, repoName)
+    return path.join(nodeModules, pkg)
+  }
+
   export async function install(pkg: string, version = "latest") {
     // Use lock to ensure only one install at a time
     using _ = await Lock.write("bun-install")
 
-    const mod = path.join(Global.Path.cache, "node_modules", pkg)
+    const mod = await resolveModulePath(pkg)
     const pkgjsonPath = path.join(Global.Path.cache, "package.json")
     const parsed = await Filesystem.readJson<{ dependencies: Record<string, string> }>(pkgjsonPath).catch(async () => {
       const result = { dependencies: {} as Record<string, string> }
@@ -89,7 +111,7 @@ export namespace BunProc {
       ...(proxied() || process.env.CI ? ["--no-cache"] : []),
       "--cwd",
       Global.Path.cache,
-      pkg + "@" + version,
+      pkg.includes("#") ? pkg : pkg + "@" + version,
     ]
 
     // Let Bun handle registry resolution:
@@ -112,11 +134,14 @@ export namespace BunProc {
       )
     })
 
+    // Re-resolve after install in case lockfile changed
+    const installedMod = await resolveModulePath(pkg)
+
     // Resolve actual version from installed package when using "latest"
     // This ensures subsequent starts use the cached version until explicitly updated
     let resolvedVersion = version
     if (version === "latest") {
-      const installedPkg = await Filesystem.readJson<{ version?: string }>(path.join(mod, "package.json")).catch(
+      const installedPkg = await Filesystem.readJson<{ version?: string }>(path.join(installedMod, "package.json")).catch(
         () => null,
       )
       if (installedPkg?.version) {
@@ -126,6 +151,6 @@ export namespace BunProc {
 
     parsed.dependencies[pkg] = resolvedVersion
     await Filesystem.writeJson(pkgjsonPath, parsed)
-    return mod
+    return installedMod
   }
 }

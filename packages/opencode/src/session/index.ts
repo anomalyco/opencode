@@ -796,23 +796,31 @@ export namespace Session {
       const outputTokens = safe(input.usage.outputTokens ?? 0)
       const reasoningTokens = safe(input.usage.reasoningTokens ?? 0)
 
-      const cacheReadInputTokens = safe(input.usage.cachedInputTokens ?? 0)
+      // SDK v6: forward-compat for inputTokenDetails (not yet in @ai-sdk/provider types)
+      const usage = input.usage as LanguageModelUsage & {
+        inputTokenDetails?: { noCacheTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number }
+      }
+
+      const cacheReadInputTokens = safe(
+        usage.inputTokenDetails?.cacheReadTokens ?? input.usage.cachedInputTokens ?? 0,
+      )
       const cacheWriteInputTokens = safe(
-        (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
-          // @ts-expect-error
-          input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
-          // @ts-expect-error
-          input.metadata?.["venice"]?.["usage"]?.["cacheCreationInputTokens"] ??
-          0) as number,
+        usage.inputTokenDetails?.cacheWriteTokens ??
+          ((input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
+            // @ts-expect-error
+            input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
+            // @ts-expect-error
+            input.metadata?.["venice"]?.["usage"]?.["cacheCreationInputTokens"] ??
+            0) as number),
       )
 
-      // OpenRouter provides inputTokens as the total count of input tokens (including cached).
-      // AFAIK other providers (OpenRouter/OpenAI/Gemini etc.) do it the same way e.g. vercel/ai#8794 (comment)
-      // Anthropic does it differently though - inputTokens doesn't include cached tokens.
-      // It looks like OpenCode's cost calculation assumes all providers return inputTokens the same way Anthropic does (I'm guessing getUsage logic was originally implemented with anthropic), so it's causing incorrect cost calculation for OpenRouter and others.
-      const excludesCachedTokens = !!(input.metadata?.["anthropic"] || input.metadata?.["bedrock"])
+      // SDK v6: inputTokens is now the TOTAL (including cache). Use noCacheTokens when available.
+      // Fallback: OpenRouter/OpenAI/Gemini include cache in inputTokens, Anthropic/Bedrock don't.
       const adjustedInputTokens = safe(
-        excludesCachedTokens ? inputTokens : inputTokens - cacheReadInputTokens - cacheWriteInputTokens,
+        usage.inputTokenDetails?.noCacheTokens ??
+          (!!(input.metadata?.["anthropic"] || input.metadata?.["bedrock"])
+            ? inputTokens
+            : inputTokens - cacheReadInputTokens - cacheWriteInputTokens),
       )
 
       const total = iife(() => {
