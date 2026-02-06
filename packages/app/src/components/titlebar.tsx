@@ -11,6 +11,7 @@ import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
+import { applyPath, backPath, forwardPath } from "./titlebar-history"
 
 export function Titlebar() {
   const layout = useLayout()
@@ -39,25 +40,9 @@ export function Titlebar() {
     const current = path()
 
     untrack(() => {
-      if (!history.stack.length) {
-        const stack = current === "/" ? ["/"] : ["/", current]
-        setHistory({ stack, index: stack.length - 1 })
-        return
-      }
-
-      const active = history.stack[history.index]
-      if (current === active) {
-        if (history.action) setHistory("action", undefined)
-        return
-      }
-
-      if (history.action) {
-        setHistory("action", undefined)
-        return
-      }
-
-      const next = history.stack.slice(0, history.index + 1).concat(current)
-      setHistory({ stack: next, index: next.length - 1 })
+      const next = applyPath(history, current)
+      if (next === history) return
+      setHistory(next)
     })
   })
 
@@ -65,21 +50,17 @@ export function Titlebar() {
   const canForward = createMemo(() => history.index < history.stack.length - 1)
 
   const back = () => {
-    if (!canBack()) return
-    const index = history.index - 1
-    const to = history.stack[index]
-    if (!to) return
-    setHistory({ index, action: "back" })
-    navigate(to)
+    const next = backPath(history)
+    if (!next) return
+    setHistory(next.state)
+    navigate(next.to)
   }
 
   const forward = () => {
-    if (!canForward()) return
-    const index = history.index + 1
-    const to = history.stack[index]
-    if (!to) return
-    setHistory({ index, action: "forward" })
-    navigate(to)
+    const next = forwardPath(history)
+    if (!next) return
+    setHistory(next.state)
+    navigate(next.to)
   }
 
   command.register(() => [
