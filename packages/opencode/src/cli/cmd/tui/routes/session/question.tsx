@@ -93,6 +93,38 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
   }
 
   function selectTab(index: number) {
+    // Auto-save any uncommitted custom answer before switching
+    if (store.editing && textarea) {
+      const text = textarea.plainText?.trim() ?? ""
+      const prevTab = store.tab
+
+      if (text) {
+        // Save the typed text to the previous tab's custom array
+        const inputs = [...store.custom]
+        inputs[prevTab] = text
+        setStore("custom", inputs)
+
+        // Also update answers if this is a new custom value
+        const existing = store.answers[prevTab] ?? []
+        const prev = store.custom[prevTab]
+        const next = [...existing]
+
+        // Remove old custom value if it existed and differs
+        if (prev && prev !== text) {
+          const oldIndex = next.indexOf(prev)
+          if (oldIndex !== -1) next.splice(oldIndex, 1)
+        }
+
+        // Add new custom value if not already present
+        if (!next.includes(text)) next.push(text)
+
+        const answers = [...store.answers]
+        answers[prevTab] = next
+        setStore("answers", answers)
+      }
+    }
+
+    setStore("editing", false)
     setStore("tab", index)
     setStore("selected", 0)
   }
