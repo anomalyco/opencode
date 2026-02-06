@@ -1,5 +1,6 @@
 import type { APICallError, ModelMessage } from "ai"
 import { mergeDeep, unique } from "remeda"
+import type { JSONSchema7 } from "@ai-sdk/provider"
 import type { JSONSchema } from "zod/v4/core"
 import type { Provider } from "./provider"
 import type { ModelsDev } from "./models"
@@ -374,7 +375,8 @@ export namespace ProviderTransform {
           }
         }
         const copilotEfforts = iife(() => {
-          if (id.includes("5.1-codex-max") || id.includes("5.2")) return [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
+          if (id.includes("5.1-codex-max") || id.includes("5.2") || id.includes("5.3"))
+            return [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
           return WIDELY_SUPPORTED_EFFORTS
         })
         return Object.fromEntries(
@@ -421,7 +423,7 @@ export namespace ProviderTransform {
         if (id === "gpt-5-pro") return {}
         const openaiEfforts = iife(() => {
           if (id.includes("codex")) {
-            if (id.includes("5.2")) return [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
+            if (id.includes("5.2") || id.includes("5.3")) return [...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
             return WIDELY_SUPPORTED_EFFORTS
           }
           const arr = [...WIDELY_SUPPORTED_EFFORTS]
@@ -629,9 +631,22 @@ export namespace ProviderTransform {
       }
     }
 
+    // Enable thinking by default for kimi-k2.5/k2p5 models using anthropic SDK
+    const modelId = input.model.api.id.toLowerCase()
+    if (
+      (input.model.api.npm === "@ai-sdk/anthropic" || input.model.api.npm === "@ai-sdk/google-vertex/anthropic") &&
+      (modelId.includes("k2p5") || modelId.includes("kimi-k2.5") || modelId.includes("kimi-k2p5"))
+    ) {
+      result["thinking"] = {
+        type: "enabled",
+        budgetTokens: Math.min(16_000, Math.floor(input.model.limit.output / 2 - 1)),
+      }
+    }
+
     if (input.model.api.id.includes("gpt-5") && !input.model.api.id.includes("gpt-5-chat")) {
       if (!input.model.api.id.includes("gpt-5-pro")) {
         result["reasoningEffort"] = "medium"
+        result["reasoningSummary"] = "auto"
       }
 
       // Only set textVerbosity for non-chat gpt-5.x models
@@ -719,7 +734,7 @@ export namespace ProviderTransform {
     return standardLimit
   }
 
-  export function schema(model: Provider.Model, schema: JSONSchema.BaseSchema) {
+  export function schema(model: Provider.Model, schema: JSONSchema.BaseSchema | JSONSchema7): JSONSchema7 {
     /*
     if (["openai", "azure"].includes(providerID)) {
       if (schema.type === "object" && schema.properties) {
@@ -793,7 +808,7 @@ export namespace ProviderTransform {
       schema = sanitizeGemini(schema)
     }
 
-    return schema
+    return schema as JSONSchema7
   }
 
   export function error(providerID: string, error: APICallError) {
