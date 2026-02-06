@@ -51,7 +51,7 @@ export default function Home() {
           <img data-slot="logo dark" src={logoDark} alt="opencode logo dark" />
           <h1 data-slot="title">{i18n.t("temp.hero.title")}</h1>
           <div data-slot="login">
-            <a href={language.route("/auth")}>{i18n.t("temp.zen")}</a>
+            <a href="/auth">{i18n.t("temp.zen")}</a>
           </div>
         </section>
 
@@ -60,7 +60,7 @@ export default function Home() {
             <a href={language.route("/docs")}>{i18n.t("temp.getStarted")}</a>
           </div>
           <div data-slot="center">
-            <a href={language.route("/auth")}>{i18n.t("temp.zen")}</a>
+            <a href="/auth">{i18n.t("temp.zen")}</a>
           </div>
           <div data-slot="right">
             <button data-copy data-slot="command">
