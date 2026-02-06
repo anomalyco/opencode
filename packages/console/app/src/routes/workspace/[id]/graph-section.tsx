@@ -1,4 +1,4 @@
-import { and, Database, eq, gte, inArray, isNull, lte, or, sql, sum } from "@opencode-ai/console-core/drizzle/index.js"
+import { and, Database, eq, gte, inArray, isNull, lt, or, sql, sum } from "@opencode-ai/console-core/drizzle/index.js"
 import { UsageTable } from "@opencode-ai/console-core/schema/billing.sql.js"
 import { KeyTable } from "@opencode-ai/console-core/schema/key.sql.js"
 import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
@@ -27,7 +27,7 @@ async function getCosts(workspaceID: string, year: number, month: number) {
   "use server"
   return withActor(async () => {
     const startDate = new Date(year, month, 1)
-    const endDate = new Date(year, month + 1, 0)
+    const endDate = new Date(year, month + 1, 1)
     const usageData = await Database.use((tx) =>
       tx
         .select({
@@ -42,7 +42,7 @@ async function getCosts(workspaceID: string, year: number, month: number) {
           and(
             eq(UsageTable.workspaceID, workspaceID),
             gte(UsageTable.timeCreated, startDate),
-            lte(UsageTable.timeCreated, endDate),
+            lt(UsageTable.timeCreated, endDate),
           ),
         )
         .groupBy(
