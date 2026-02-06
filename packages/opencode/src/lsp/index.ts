@@ -74,6 +74,17 @@ export namespace LSP {
         delete servers["ty"]
       }
     }
+
+    if (Flag.OPENCODE_EXPERIMENTAL_TSGO) {
+      if (servers["typescript"]) {
+        log.info("LSP server typescript is disabled because OPENCODE_EXPERIMENTAL_TSGO is enabled")
+        delete servers["typescript"]
+      }
+    } else {
+      if (servers["tsgo"]) {
+        delete servers["tsgo"]
+      }
+    }
   }
 
   const state = Instance.state(

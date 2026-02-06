@@ -50,6 +50,22 @@ export namespace LSPServer {
     }
   }
 
+const resolveBin = async (root: string, target: string) => {
+  const localBin = path.join(root, target)
+  if (await Bun.file(localBin).exists()) return localBin
+
+  const candidates = Filesystem.up({
+    targets: [target],
+    start: root,
+    stop: Instance.worktree,
+  })
+  const first = await candidates.next()
+  await candidates.return()
+  if (first.value) return first.value
+
+  return undefined
+}
+
   export interface Info {
     id: string
     extensions: string[]
@@ -113,6 +129,41 @@ export namespace LSPServer {
         },
       }
     },
+  }
+
+  export const Tsgo: Info = {
+    id: "tsgo",
+    root: NearestRoot(
+      ["package-lock.json", "bun.lockb", "bun.lock", "pnpm-lock.yaml", "yarn.lock"],
+      ["deno.json", "deno.jsonc"],
+    ),
+    extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"],
+    async spawn(root) {
+      const ext = process.platform === "win32" ? ".exe" : ""
+      let tsgoBin = await resolveBin(root, path.join("node_modules", ".bin", "tsgo" + ext))
+      if (!tsgoBin) {
+        const found = Bun.which("tsgo")
+        if (found) tsgoBin = found
+      }
+
+      if (!tsgoBin) {
+        log.info('tsgo not found, install @typescript/native-preview to use tsgo LSP')
+        return;
+      }
+
+      return {
+        process: spawn(tsgoBin, ["--lsp", "--stdio"], {
+          cwd: root,
+          env: {
+            ...process.env,
+            BUN_BE_BUN: "1",
+          },
+        }),
+        initialization: {
+          // Leave empty; the server will auto-detect workspace TypeScript.
+        },
+      }
+    }
   }
 
   export const Vue: Info = {
@@ -240,23 +291,7 @@ export namespace LSPServer {
       const serverTarget = path.join("node_modules", ".bin", "oxc_language_server" + ext)
       const lintTarget = path.join("node_modules", ".bin", "oxlint" + ext)
 
-      const resolveBin = async (target: string) => {
-        const localBin = path.join(root, target)
-        if (await Bun.file(localBin).exists()) return localBin
-
-        const candidates = Filesystem.up({
-          targets: [target],
-          start: root,
-          stop: Instance.worktree,
-        })
-        const first = await candidates.next()
-        await candidates.return()
-        if (first.value) return first.value
-
-        return undefined
-      }
-
-      let lintBin = await resolveBin(lintTarget)
+      let lintBin = await resolveBin(root, lintTarget)
       if (!lintBin) {
         const found = Bun.which("oxlint")
         if (found) lintBin = found
@@ -275,7 +310,7 @@ export namespace LSPServer {
         }
       }
 
-      let serverBin = await resolveBin(serverTarget)
+      let serverBin = await resolveBin(root, serverTarget)
       if (!serverBin) {
         const found = Bun.which("oxc_language_server")
         if (found) serverBin = found
