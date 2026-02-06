@@ -530,7 +530,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
           label: "ChatGPT Pro/Plus (headless)",
           type: "oauth",
           authorize: async () => {
-            const deviceResponse = await fetch(`${ISSUER}/api/accounts/deviceauth/usercode`, {
+            const deviceResponse = await proxyFetch(`${ISSUER}/api/accounts/deviceauth/usercode`, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
@@ -554,7 +554,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
               method: "auto" as const,
               async callback() {
                 while (true) {
-                  const response = await fetch(`${ISSUER}/api/accounts/deviceauth/token`, {
+                  const response = await proxyFetch(`${ISSUER}/api/accounts/deviceauth/token`, {
                     method: "POST",
                     headers: {
                       "Content-Type": "application/json",
@@ -572,7 +572,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
                       code_verifier: string
                     }
 
-                    const tokenResponse = await fetch(`${ISSUER}/oauth/token`, {
+                    const tokenResponse = await proxyFetch(`${ISSUER}/oauth/token`, {
                       method: "POST",
                       headers: { "Content-Type": "application/x-www-form-urlencoded" },
                       body: new URLSearchParams({
