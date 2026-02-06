@@ -373,6 +373,11 @@ You can customize TUI behavior through your OpenCode config file.
 
 - `scroll_acceleration` - Enable macOS-style scroll acceleration for smooth, natural scrolling. When enabled, scroll speed increases with rapid scrolling gestures and stays precise for slower movements. **This setting takes precedence over `scroll_speed` and overrides it when enabled.**
 - `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (minimum: `1`). Defaults to `3`. **Note: This is ignored if `scroll_acceleration.enabled` is set to `true`.**
+- `mcp_show_parameters` - Control MCP tool parameter visibility in permission prompts. Options:
+  - `"all"` (default) - Show parameters for all MCP tools
+  - `"none"` - Hide parameters for all MCP tools
+  - `"selected"` - Show parameters only for tools listed in `mcp_show_parameters_tools`
+- `mcp_show_parameters_tools` - Array of MCP tool names to show parameters for when `mcp_show_parameters` is set to `"selected"`. Example: `["memory_create_entities", "memory_add_observations"]`
 
 ---
 

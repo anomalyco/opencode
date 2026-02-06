@@ -140,6 +140,21 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
 
   const { theme } = useTheme()
 
+  const shouldShowParameters = createMemo(() => {
+    const mcpConfig = sync.data.config.tui?.mcp_show_parameters ?? "all"
+    const toolsList = sync.data.config.tui?.mcp_show_parameters_tools ?? []
+    switch(mcpConfig){
+      case "all":
+        return true;
+      case "none":
+        return false;
+      case "selected":
+        return toolsList.includes(props.request.permission);
+      default:
+        return true;
+    }
+  })
+
   const formatValue = (value: any, expanded: boolean = false) => {
     if(value && (typeof value === "object" || typeof value === "string")){
       if (typeof value === "object") {
@@ -288,7 +303,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                         <text fg={theme.textMuted}>{"⚙"}</text>
                         <text fg={theme.textMuted}>Call tool {props.request.permission}</text>
                       </box>
-                      <Show when={Object.keys(input()).length > 0}>
+                      <Show when={shouldShowParameters() && Object.keys(input()).length > 0}>
                         <box flexDirection="column" paddingLeft={4} gap={0}>
                           <For each={Object.entries(input()).slice(0, store.expanded ? Infinity : 8)}>
                             {([key, value]) => <box flexDirection="row" gap={1}>

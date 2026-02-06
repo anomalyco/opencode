@@ -926,6 +926,15 @@ export namespace Config {
       .enum(["auto", "stacked"])
       .optional()
       .describe("Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column"),
+    mcp_show_parameters: z
+      .enum(["all", "none", "selected"])
+      .optional()
+      .default("all")
+      .describe("Control MCP tool parameter visibility in permission prompts: 'all' shows all parameters, 'none' hides all parameters, 'selected' shows only parameters for tools in mcp_show_parameters_tools"),
+    mcp_show_parameters_tools: z
+      .array(z.string())
+      .optional()
+      .describe("List of MCP tool names to show parameters for when mcp_show_parameters is 'selected'"),
   })
 
   export const Server = z

@@ -9503,6 +9503,19 @@
                 "description": "Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column",
                 "type": "string",
                 "enum": ["auto", "stacked"]
+              },
+              "mcp_show_parameters": {
+                "description": "Control MCP tool parameter visibility in permission prompts: 'all' shows all parameters, 'none' hides all parameters, 'selected' shows only parameters for tools in mcp_show_parameters_tools",
+                "type": "string",
+                "enum": ["all", "none", "selected"],
+                "default": "all"
+              },
+              "mcp_show_parameters_tools": {
+                "description": "List of MCP tool names to show parameters for when mcp_show_parameters is 'selected'",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             }
           },

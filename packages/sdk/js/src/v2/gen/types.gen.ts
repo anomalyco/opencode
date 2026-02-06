@@ -1640,6 +1640,14 @@ export type Config = {
      * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
      */
     diff_style?: "auto" | "stacked"
+    /**
+     * Control MCP tool parameter visibility in permission prompts: 'all' shows all parameters, 'none' hides all parameters, 'selected' shows only parameters for tools in mcp_show_parameters_tools
+     */
+    mcp_show_parameters?: "all" | "none" | "selected"
+    /**
+     * List of MCP tool names to show parameters for when mcp_show_parameters is 'selected'
+     */
+    mcp_show_parameters_tools?: Array<string>
   }
   server?: ServerConfig
   /**

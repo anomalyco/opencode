@@ -164,7 +164,9 @@ You can configure TUI-specific settings through the `tui` option.
     "scroll_acceleration": {
       "enabled": true
     },
-    "diff_style": "auto"
+    "diff_style": "auto",
+    "mcp_show_parameters": "selected",
+    "mcp_show_parameters_tools": ["memory_create_entities", "memory_add_observations"]
   }
 }
 ```
@@ -174,6 +176,8 @@ Available options:
 - `scroll_acceleration.enabled` - Enable macOS-style scroll acceleration. **Takes precedence over `scroll_speed`.**
 - `scroll_speed` - Custom scroll speed multiplier (default: `3`, minimum: `1`). Ignored if `scroll_acceleration.enabled` is `true`.
 - `diff_style` - Control diff rendering. `"auto"` adapts to terminal width, `"stacked"` always shows single column.
+- `mcp_show_parameters` - Control MCP tool parameter visibility in permission prompts. Options: `"all"` (default), `"none"`, or `"selected"`.
+- `mcp_show_parameters_tools` - Array of MCP tool names to show parameters for when `mcp_show_parameters` is `"selected"`.
 
 [Learn more about using the TUI here](/docs/tui).
 
