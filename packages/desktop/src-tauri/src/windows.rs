@@ -2,7 +2,9 @@ use crate::constants::{UPDATER_ENABLED, window_state_flags};
 use std::{ops::Deref, time::Duration};
 #[cfg(windows)]
 use tauri::Manager;
-use tauri::{AppHandle, LogicalSize, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{
+    AppHandle, LogicalSize, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+};
 use tauri_plugin_window_state::AppHandleExt;
 use tokio::sync::mpsc;
 
@@ -20,6 +22,10 @@ impl MainWindow {
     pub const LABEL: &str = "main";
 
     pub fn create(app: &AppHandle) -> Result<Self, tauri::Error> {
+        if let Some(window) = app.get_webview_window(Self::LABEL) {
+            return Ok(Self(window));
+        }
+
         let window_builder = base_window_config(
             WebviewWindowBuilder::new(app, Self::LABEL, WebviewUrl::App("/".into())),
             app,

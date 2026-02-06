@@ -242,6 +242,8 @@ async fn initialize(app: AppHandle) {
 
     println!("Main and loading windows created");
 
+    let sqlite_enabled = option_env!("OPENCODE_SQLITE").is_some();
+
     let loading_task = tokio::spawn({
         let init_tx = init_tx.clone();
         let app = app.clone();
@@ -299,7 +301,7 @@ async fn initialize(app: AppHandle) {
             };
 
             if let Some(cli_health_check) = cli_health_check {
-                if option_env!("OPENCODE_SQLITE").is_some() {
+                if sqlite_enabled {
                     println!("Does sqlite file exist: {sqlite_exists}");
                     if !sqlite_exists {
                         println!(
@@ -324,29 +326,33 @@ async fn initialize(app: AppHandle) {
     .map_err(|_| ())
     .shared();
 
-    let loading_window: Option<LoadingWindow> =
-        if timeout(Duration::from_secs(1), loading_task.clone())
+    let loading_window = if sqlite_enabled
+        && timeout(Duration::from_secs(1), loading_task.clone())
             .await
             .is_err()
-        {
-            println!("Loading task timed out, showing loading window");
-            let app = app.clone();
-            let loading_window =
-                LoadingWindow::create(&app).expect("Failed to create loading window");
-            sleep(Duration::from_secs(1)).await;
-            let _ = loading_task.await;
-            Some(loading_window)
-        } else {
-            None
-        };
+    {
+        println!("Loading task timed out, showing loading window");
+        let app = app.clone();
+        let loading_window = LoadingWindow::create(&app).expect("Failed to create loading window");
+        sleep(Duration::from_secs(1)).await;
+        Some(loading_window)
+    } else {
+        MainWindow::create(&app).expect("Failed to create main window");
+
+        None
+    };
+
+    let _ = loading_task.await;
 
     println!("Loading done, completing initialisation");
 
     let _ = init_tx.send(InitStep::Done);
 
-    loading_window_complete.await;
+    if loading_window.is_some() {
+        loading_window_complete.await;
 
-    println!("Loading window completed");
+        println!("Loading window completed");
+    }
 
     MainWindow::create(&app).expect("Failed to create main window");
 
