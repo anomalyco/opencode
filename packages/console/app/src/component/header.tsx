@@ -19,6 +19,8 @@ import { createStore } from "solid-js/store"
 import { github } from "~/lib/github"
 import { createEffect, onCleanup } from "solid-js"
 import { config } from "~/config"
+import { useI18n } from "~/context/i18n"
+import { useLanguage } from "~/context/language"
 import "./header-context-menu.css"
 
 const isDarkMode = () => window.matchMedia("(prefers-color-scheme: dark)").matches
@@ -36,12 +38,15 @@ const fetchSvgContent = async (svgPath: string): Promise<string> => {
 
 export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
   const navigate = useNavigate()
+  const i18n = useI18n()
+  const language = useLanguage()
   const githubData = createAsync(() => github())
   const starCount = createMemo(() =>
     githubData()?.stars
       ? new Intl.NumberFormat("en-US", {
           notation: "compact",
           compactDisplay: "short",
+          maximumFractionDigits: 0,
         }).format(githubData()?.stars!)
       : config.github.starsFormatted.compact,
   )
@@ -118,9 +123,9 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
   return (
     <section data-component="top">
       <div onContextMenu={handleLogoContextMenu}>
-        <A href="/">
-          <img data-slot="logo light" src={logoLight} alt="opencode logo light" width="189" height="34" />
-          <img data-slot="logo dark" src={logoDark} alt="opencode logo dark" width="189" height="34" />
+        <A href={language.route("/")}>
+          <img data-slot="logo light" src={logoLight} alt="OpenCode" width="189" height="34" />
+          <img data-slot="logo dark" src={logoDark} alt="OpenCode" width="189" height="34" />
         </A>
       </div>
 
@@ -130,49 +135,56 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
           style={`left: ${store.contextMenuPosition.x}px; top: ${store.contextMenuPosition.y}px;`}
         >
           <button class="context-menu-item" onClick={copyLogoToClipboard}>
-            <img data-slot="copy light" src={copyLogoLight} alt="Logo" />
-            <img data-slot="copy dark" src={copyLogoDark} alt="Logo" />
-            Copy logo as SVG
+            <img data-slot="copy light" src={copyLogoLight} alt="" />
+            <img data-slot="copy dark" src={copyLogoDark} alt="" />
+            {i18n.t("nav.context.copyLogo")}
           </button>
           <button class="context-menu-item" onClick={copyWordmarkToClipboard}>
-            <img data-slot="copy light" src={copyWordmarkLight} alt="Wordmark" />
-            <img data-slot="copy dark" src={copyWordmarkDark} alt="Wordmark" />
-            Copy wordmark as SVG
+            <img data-slot="copy light" src={copyWordmarkLight} alt="" />
+            <img data-slot="copy dark" src={copyWordmarkDark} alt="" />
+            {i18n.t("nav.context.copyWordmark")}
           </button>
-          <button class="context-menu-item" onClick={() => navigate("/brand")}>
-            <img data-slot="copy light" src={copyBrandAssetsLight} alt="Brand Assets" />
-            <img data-slot="copy dark" src={copyBrandAssetsDark} alt="Brand Assets" />
-            Brand assets
+          <button class="context-menu-item" onClick={() => navigate(language.route("/brand"))}>
+            <img data-slot="copy light" src={copyBrandAssetsLight} alt="" />
+            <img data-slot="copy dark" src={copyBrandAssetsDark} alt="" />
+            {i18n.t("nav.context.brandAssets")}
           </button>
         </div>
       </Show>
       <nav data-component="nav-desktop">
         <ul>
           <li>
-            <a href={config.github.repoUrl} target="_blank">
-              GitHub <span>[{starCount()}]</span>
+            <a href={config.github.repoUrl} target="_blank" style="white-space: nowrap;">
+              {i18n.t("nav.github")} <span>[{starCount()}]</span>
             </a>
           </li>
           <li>
-            <a href="/docs">Docs</a>
+            <a href={language.route("/docs")}>{i18n.t("nav.docs")}</a>
           </li>
           <li>
-            <A href="/enterprise">Enterprise</A>
+            <A href={language.route("/enterprise")}>{i18n.t("nav.enterprise")}</A>
           </li>
           <li>
             <Switch>
               <Match when={props.zen}>
-                <a href="/auth">Login</a>
+                <a href="/auth">{i18n.t("nav.login")}</a>
               </Match>
               <Match when={!props.zen}>
-                <A href="/zen">Zen</A>
+                <A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>
               </Match>
             </Switch>
           </li>
           <Show when={!props.hideGetStarted}>
             <li>
-              <A href="/download" data-slot="cta-button">
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <A href={language.route("/download")} data-slot="cta-button">
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 18 18"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  style="flex-shrink: 0;"
+                >
                   <path
                     d="M12.1875 9.75L9.00001 12.9375L5.8125 9.75M9.00001 2.0625L9 12.375M14.4375 15.9375H3.5625"
                     stroke="currentColor"
@@ -180,7 +192,7 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
                     stroke-linecap="square"
                   />
                 </svg>
-                Free
+                {i18n.t("nav.free")}
               </A>
             </li>
           </Show>
@@ -195,7 +207,7 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
           class="nav-toggle"
           onClick={() => setStore("mobileMenuOpen", !store.mobileMenuOpen)}
         >
-          <span class="sr-only">Open menu</span>
+          <span class="sr-only">{i18n.t("nav.openMenu")}</span>
           <Switch>
             <Match when={store.mobileMenuOpen}>
               <svg
@@ -235,33 +247,33 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
             <nav data-component="nav-mobile-menu-list">
               <ul>
                 <li>
-                  <A href="/">Home</A>
+                  <A href={language.route("/")}>{i18n.t("nav.home")}</A>
                 </li>
                 <li>
-                  <a href={config.github.repoUrl} target="_blank">
-                    GitHub <span>[{starCount()}]</span>
+                  <a href={config.github.repoUrl} target="_blank" style="white-space: nowrap;">
+                    {i18n.t("nav.github")} <span>[{starCount()}]</span>
                   </a>
                 </li>
                 <li>
-                  <a href="/docs">Docs</a>
+                  <a href={language.route("/docs")}>{i18n.t("nav.docs")}</a>
                 </li>
                 <li>
-                  <A href="/enterprise">Enterprise</A>
+                  <A href={language.route("/enterprise")}>{i18n.t("nav.enterprise")}</A>
                 </li>
                 <li>
                   <Switch>
                     <Match when={props.zen}>
-                      <a href="/auth">Login</a>
+                      <a href="/auth">{i18n.t("nav.login")}</a>
                     </Match>
                     <Match when={!props.zen}>
-                      <A href="/zen">Zen</A>
+                      <A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>
                     </Match>
                   </Switch>
                 </li>
                 <Show when={!props.hideGetStarted}>
                   <li>
-                    <A href="/download" data-slot="cta-button">
-                      Get started for free
+                    <A href={language.route("/download")} data-slot="cta-button">
+                      {i18n.t("nav.getStartedFree")}
                     </A>
                   </li>
                 </Show>
