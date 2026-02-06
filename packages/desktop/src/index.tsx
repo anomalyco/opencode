@@ -402,50 +402,20 @@ type ServerReadyData = { url: string; password: string | null }
 function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.Element }) {
   const [serverData] = createResource(() => commands.awaitInitialization(new Channel<InitStep>() as any))
 
-  const errorMessage = () => {
-    const error = serverData.error
-    if (!error) return t("error.chain.unknown")
-    if (typeof error === "string") return error
-    if (error instanceof Error) return error.message
-    return String(error)
-  }
-
-  const restartApp = async () => {
-    await commands.killSidecar().catch(() => undefined)
-    await relaunch().catch(() => undefined)
-  }
+  if (serverData.state === "errored") throw serverData.error
 
   return (
     // Not using suspense as not all components are compatible with it (undefined refs)
     <Show
-      when={serverData.state === "errored"}
+      when={serverData.state !== "pending" && serverData()}
       fallback={
-        <Show
-          when={serverData.state !== "pending" && serverData()}
-          fallback={
-            <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
-              <Splash class="w-16 h-20 opacity-50 animate-pulse" />
-              <div data-tauri-decorum-tb class="flex flex-row absolute top-0 right-0 z-10 h-10" />
-            </div>
-          }
-        >
-          {(data) => props.children(data)}
-        </Show>
+        <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
+          <Splash class="w-16 h-20 opacity-50 animate-pulse" />
+          <div data-tauri-decorum-tb class="flex flex-row absolute top-0 right-0 z-10 h-10" />
+        </div>
       }
     >
-      <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base gap-4 px-6">
-        <div class="text-16-semibold">{t("desktop.error.serverStartFailed.title")}</div>
-        <div class="text-12-regular opacity-70 text-center max-w-xl">
-          {t("desktop.error.serverStartFailed.description")}
-        </div>
-        <div class="w-full max-w-3xl rounded border border-border bg-background-base overflow-auto max-h-64">
-          <pre class="p-3 whitespace-pre-wrap break-words text-11-regular">{errorMessage()}</pre>
-        </div>
-        <button class="px-3 py-2 rounded bg-primary text-primary-foreground" onClick={() => void restartApp()}>
-          {t("error.page.action.restart")}
-        </button>
-        <div data-tauri-decorum-tb class="flex flex-row absolute top-0 right-0 z-10 h-10" />
-      </div>
+      {(data) => props.children(data)}
     </Show>
   )
 }
