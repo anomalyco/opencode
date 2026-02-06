@@ -1,3 +1,5 @@
+import { ComponentProps } from "solid-js"
+
 export const Mark = (props: { class?: string }) => {
   return (
     <svg
@@ -13,9 +15,10 @@ export const Mark = (props: { class?: string }) => {
   )
 }
 
-export const Splash = (props: { class?: string }) => {
+export const Splash = (props: Pick<ComponentProps<"svg">, "ref" | "class">) => {
   return (
     <svg
+      ref={props.ref}
       data-component="logo-splash"
       classList={{ [props.class ?? ""]: !!props.class }}
       viewBox="0 0 80 100"
