@@ -268,74 +268,78 @@ export function SessionHeader() {
           <Portal mount={mount()}>
             <div class="flex items-center gap-3">
               <Show when={projectDirectory()}>
-                <Show
-                  when={canOpen()}
-                  fallback={
-                    <Button
-                      variant="ghost"
-                      class="rounded-sm h-[24px] py-1.5 pr-3 pl-2 gap-2 border-none shadow-none"
-                      onClick={copyPath}
-                      aria-label={language.t("session.header.open.copyPath")}
-                    >
-                      <Icon name="copy" size="small" class="text-icon-base" />
-                      <span class="text-12-regular text-text-strong">{language.t("session.header.open.copyPath")}</span>
-                    </Button>
-                  }
-                >
-                  <div class="flex items-center">
-                    <Button
-                      variant="ghost"
-                      class="rounded-sm h-[24px] py-1.5 pr-3 pl-2 gap-2 border-none shadow-none rounded-r-none"
-                      onClick={() => openDir(current().id)}
-                      aria-label={language.t("session.header.open.ariaLabel", { app: current().label })}
-                    >
-                      <AppIcon id={current().icon} class="size-5" />
-                      <span class="text-12-regular text-text-strong">
-                        {language.t("session.header.open.action", { app: current().label })}
-                      </span>
-                    </Button>
-                    <DropdownMenu>
-                      <DropdownMenu.Trigger
-                        as={IconButton}
-                        icon="chevron-down"
+                <div class="hidden xl:flex items-center">
+                  <Show
+                    when={canOpen()}
+                    fallback={
+                      <Button
                         variant="ghost"
-                        class="rounded-sm h-[24px] w-auto px-1.5 border-none shadow-none rounded-l-none data-[expanded]:bg-surface-raised-base-active"
-                        aria-label={language.t("session.header.open.menu")}
-                      />
-                      <DropdownMenu.Portal>
-                        <DropdownMenu.Content placement="bottom-end" gutter={6}>
-                          <DropdownMenu.Group>
-                            <DropdownMenu.GroupLabel>{language.t("session.header.openIn")}</DropdownMenu.GroupLabel>
-                            <DropdownMenu.RadioGroup
-                              value={prefs.app}
-                              onChange={(value) => {
-                                if (!OPEN_APPS.includes(value as OpenApp)) return
-                                setPrefs("app", value as OpenApp)
-                              }}
-                            >
-                              {options().map((o) => (
-                                <DropdownMenu.RadioItem value={o.id} onSelect={() => openDir(o.id)}>
-                                  <AppIcon id={o.icon} class="size-5" />
-                                  <DropdownMenu.ItemLabel>{o.label}</DropdownMenu.ItemLabel>
-                                  <DropdownMenu.ItemIndicator>
-                                    <Icon name="check-small" size="small" class="text-icon-weak" />
-                                  </DropdownMenu.ItemIndicator>
-                                </DropdownMenu.RadioItem>
-                              ))}
-                            </DropdownMenu.RadioGroup>
-                          </DropdownMenu.Group>
-                          <DropdownMenu.Separator />
-                          <DropdownMenu.Item onSelect={copyPath}>
-                            <Icon name="copy" size="small" class="text-icon-weak" />
-                            <DropdownMenu.ItemLabel>
-                              {language.t("session.header.open.copyPath")}
-                            </DropdownMenu.ItemLabel>
-                          </DropdownMenu.Item>
-                        </DropdownMenu.Content>
-                      </DropdownMenu.Portal>
-                    </DropdownMenu>
-                  </div>
-                </Show>
+                        class="rounded-sm h-[24px] py-1.5 pr-3 pl-2 gap-2 border-none shadow-none"
+                        onClick={copyPath}
+                        aria-label={language.t("session.header.open.copyPath")}
+                      >
+                        <Icon name="copy" size="small" class="text-icon-base" />
+                        <span class="text-12-regular text-text-strong">
+                          {language.t("session.header.open.copyPath")}
+                        </span>
+                      </Button>
+                    }
+                  >
+                    <div class="flex items-center">
+                      <Button
+                        variant="ghost"
+                        class="rounded-sm h-[24px] py-1.5 pr-3 pl-2 gap-2 border-none shadow-none rounded-r-none"
+                        onClick={() => openDir(current().id)}
+                        aria-label={language.t("session.header.open.ariaLabel", { app: current().label })}
+                      >
+                        <AppIcon id={current().icon} class="size-5" />
+                        <span class="text-12-regular text-text-strong">
+                          {language.t("session.header.open.action", { app: current().label })}
+                        </span>
+                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenu.Trigger
+                          as={IconButton}
+                          icon="chevron-down"
+                          variant="ghost"
+                          class="rounded-sm h-[24px] w-auto px-1.5 border-none shadow-none rounded-l-none data-[expanded]:bg-surface-raised-base-active"
+                          aria-label={language.t("session.header.open.menu")}
+                        />
+                        <DropdownMenu.Portal>
+                          <DropdownMenu.Content placement="bottom-end" gutter={6}>
+                            <DropdownMenu.Group>
+                              <DropdownMenu.GroupLabel>{language.t("session.header.openIn")}</DropdownMenu.GroupLabel>
+                              <DropdownMenu.RadioGroup
+                                value={prefs.app}
+                                onChange={(value) => {
+                                  if (!OPEN_APPS.includes(value as OpenApp)) return
+                                  setPrefs("app", value as OpenApp)
+                                }}
+                              >
+                                {options().map((o) => (
+                                  <DropdownMenu.RadioItem value={o.id} onSelect={() => openDir(o.id)}>
+                                    <AppIcon id={o.icon} class="size-5" />
+                                    <DropdownMenu.ItemLabel>{o.label}</DropdownMenu.ItemLabel>
+                                    <DropdownMenu.ItemIndicator>
+                                      <Icon name="check-small" size="small" class="text-icon-weak" />
+                                    </DropdownMenu.ItemIndicator>
+                                  </DropdownMenu.RadioItem>
+                                ))}
+                              </DropdownMenu.RadioGroup>
+                            </DropdownMenu.Group>
+                            <DropdownMenu.Separator />
+                            <DropdownMenu.Item onSelect={copyPath}>
+                              <Icon name="copy" size="small" class="text-icon-weak" />
+                              <DropdownMenu.ItemLabel>
+                                {language.t("session.header.open.copyPath")}
+                              </DropdownMenu.ItemLabel>
+                            </DropdownMenu.Item>
+                          </DropdownMenu.Content>
+                        </DropdownMenu.Portal>
+                      </DropdownMenu>
+                    </div>
+                  </Show>
+                </div>
               </Show>
               <StatusPopover />
               <Show when={showShare()}>
