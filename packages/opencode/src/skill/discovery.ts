@@ -1,7 +1,7 @@
 import path from "path"
 import { mkdir } from "fs/promises"
 import { Log } from "../util/log"
-import { Global } from "@/global"
+import { Global } from "../global"
 
 export namespace Discovery {
   const log = Log.create({ service: "skill-discovery" })
@@ -20,60 +20,77 @@ export namespace Discovery {
 
   async function get(url: string, dest: string): Promise<boolean> {
     if (await Bun.file(dest).exists()) return true
-    try {
-      const response = await fetch(url)
-      if (!response.ok) {
-        log.error("failed to download", { url, status: response.status })
+    return fetch(url)
+      .then(async (response) => {
+        if (!response.ok) {
+          log.error("failed to download", { url, status: response.status })
+          return false
+        }
+        await Bun.write(dest, await response.text())
+        return true
+      })
+      .catch((err) => {
+        log.error("failed to download", { url, err })
         return false
-      }
-      const content = await response.text()
-      await Bun.write(dest, content)
-      return true
-    } catch (err) {
-      log.error("failed to download", { url, err })
-      return false
-    }
+      })
   }
 
   export async function pull(url: string): Promise<string[]> {
     const result: string[] = []
-    const indexUrl = new URL("index.json", url.endsWith("/") ? url : `${url}/`).href
-    const cacheDir = dir()
+    const base = url.endsWith("/") ? url : `${url}/`
+    const index = new URL("index.json", base).href
+    const cache = dir()
+    const host = base.slice(0, -1)
 
-    try {
-      log.info("fetching index", { url: indexUrl })
-      const response = await fetch(indexUrl)
-      if (!response.ok) {
-        log.error("failed to fetch index", { url: indexUrl, status: response.status })
-        return result
-      }
-
-      const index = (await response.json()) as Index
-      if (!index.skills || !Array.isArray(index.skills)) {
-        log.warn("invalid index format", { url: indexUrl })
-        return result
-      }
-
-      for (const skill of index.skills) {
-        if (!skill.name || !skill.files || !Array.isArray(skill.files)) {
-          log.warn("invalid skill entry", { url: indexUrl, skill })
-          continue
+    log.info("fetching index", { url: index })
+    const data = await fetch(index)
+      .then(async (response) => {
+        if (!response.ok) {
+          log.error("failed to fetch index", { url: index, status: response.status })
+          return undefined
         }
+        return response
+          .json()
+          .then((json) => json as Index)
+          .catch((err) => {
+            log.error("failed to parse index", { url: index, err })
+            return undefined
+          })
+      })
+      .catch((err) => {
+        log.error("failed to fetch index", { url: index, err })
+        return undefined
+      })
 
-        const skillDir = path.join(cacheDir, skill.name)
-        for (const file of skill.files) {
-          const fileUrl = new URL(file, `${url.replace(/\/$/, "")}/${skill.name}/`).href
-          const localPath = path.join(skillDir, file)
-          await mkdir(path.dirname(localPath), { recursive: true })
-          await get(fileUrl, localPath)
-        }
-
-        const skillMd = path.join(skillDir, "SKILL.md")
-        if (await Bun.file(skillMd).exists()) result.push(skillDir)
-      }
-    } catch (err) {
-      log.error("failed to fetch from URL", { url, err })
+    if (!data?.skills || !Array.isArray(data.skills)) {
+      log.warn("invalid index format", { url: index })
+      return result
     }
+
+    const list = data.skills.filter((skill) => {
+      if (!skill?.name || !Array.isArray(skill.files)) {
+        log.warn("invalid skill entry", { url: index, skill })
+        return false
+      }
+      return true
+    })
+
+    await Promise.all(
+      list.map(async (skill) => {
+        const root = path.join(cache, skill.name)
+        await Promise.all(
+          skill.files.map(async (file) => {
+            const link = new URL(file, `${host}/${skill.name}/`).href
+            const dest = path.join(root, file)
+            await mkdir(path.dirname(dest), { recursive: true })
+            await get(link, dest)
+          }),
+        )
+
+        const md = path.join(root, "SKILL.md")
+        if (await Bun.file(md).exists()) result.push(root)
+      }),
+    )
 
     return result
   }
