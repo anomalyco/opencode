@@ -287,6 +287,27 @@ export const Terminal = (props: TerminalProps) => {
       handleResize = () => fit.fit()
       window.addEventListener("resize", handleResize)
       cleanups.push(() => window.removeEventListener("resize", handleResize))
+      const limit = 16_384
+      const min = 32
+      const windowMs = 750
+      const seed = tail.length > limit ? tail.slice(-limit) : tail
+      let sync = seed.length >= min
+      let syncUntil = 0
+      const stopSync = () => {
+        sync = false
+        syncUntil = 0
+      }
+
+      const overlap = (data: string) => {
+        if (!seed) return 0
+        const max = Math.min(seed.length, data.length)
+        if (max < min) return 0
+        for (let i = max; i >= min; i--) {
+          if (seed.slice(-i) === data.slice(0, i)) return i
+        }
+        return 0
+      }
+
       const onResize = t.onResize(async (size) => {
         if (socket.readyState === WebSocket.OPEN) {
           await sdk.client.pty
@@ -302,6 +323,7 @@ export const Terminal = (props: TerminalProps) => {
       })
       cleanups.push(() => disposeIfDisposable(onResize))
       const onData = t.onData((data) => {
+        if (data) stopSync()
         if (socket.readyState === WebSocket.OPEN) {
           socket.send(data)
         }
@@ -317,21 +339,9 @@ export const Terminal = (props: TerminalProps) => {
       // console.log("Scroll position:", ydisp)
       // })
 
-      const limit = 16_384
-      const seed = tail
-      let sync = !!seed
-
-      const overlap = (data: string) => {
-        if (!seed) return 0
-        const max = Math.min(seed.length, data.length)
-        for (let i = max; i > 0; i--) {
-          if (seed.slice(-i) === data.slice(0, i)) return i
-        }
-        return 0
-      }
-
       const handleOpen = () => {
         local.onConnect?.()
+        if (sync) syncUntil = Date.now() + windowMs
         sdk.client.pty
           .update({
             ptyID: local.pty.id,
@@ -346,18 +356,23 @@ export const Terminal = (props: TerminalProps) => {
       cleanups.push(() => socket.removeEventListener("open", handleOpen))
 
       const handleMessage = (event: MessageEvent) => {
+        if (disposed) return
         const data = typeof event.data === "string" ? event.data : ""
         if (!data) return
 
         const next = (() => {
           if (!sync) return data
+          if (syncUntil && Date.now() > syncUntil) {
+            stopSync()
+            return data
+          }
           const n = overlap(data)
           if (!n) {
-            sync = false
+            stopSync()
             return data
           }
           const trimmed = data.slice(n)
-          if (trimmed) sync = false
+          if (trimmed) stopSync()
           return trimmed
         })()
 
