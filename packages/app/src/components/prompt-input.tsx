@@ -19,7 +19,6 @@ import { useSDK } from "@/context/sdk"
 import { useParams } from "@solidjs/router"
 import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
-import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
@@ -27,9 +26,7 @@ import type { IconName } from "@opencode-ai/ui/icons/provider"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
-import { getDirectory, getFilename, getFilenameTruncated } from "@opencode-ai/util/path"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { ModelSelectorPopover } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
 import { useProviders } from "@/hooks/use-providers"
@@ -42,6 +39,12 @@ import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge 
 import { createPromptAttachments, ACCEPTED_FILE_TYPES } from "./prompt-input/attachments"
 import { navigatePromptHistory, prependHistoryEntry, promptLength } from "./prompt-input/history"
 import { createPromptSubmit } from "./prompt-input/submit"
+import { PromptPopover, type AtOption, type SlashCommand } from "./prompt-input/slash-popover"
+import { PromptContextItems } from "./prompt-input/context-items"
+import { PromptImageAttachments } from "./prompt-input/image-attachments"
+import { PromptDragOverlay } from "./prompt-input/drag-overlay"
+import { promptPlaceholder } from "./prompt-input/placeholder"
+import { ImagePreview } from "@opencode-ai/ui/image-preview"
 
 interface PromptInputProps {
   class?: string
@@ -78,16 +81,6 @@ const EXAMPLES = [
   "prompt.example.24",
   "prompt.example.25",
 ] as const
-
-interface SlashCommand {
-  id: string
-  trigger: string
-  title: string
-  description?: string
-  keybind?: string
-  type: "builtin" | "custom"
-  source?: "command" | "mcp" | "skill"
-}
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
@@ -203,8 +196,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       },
   )
   const working = createMemo(() => status()?.type !== "idle")
-  const imageAttachments = createMemo(
-    () => prompt.current().filter((part) => part.type === "image") as ImageAttachmentPart[],
+  const imageAttachments = createMemo(() =>
+    prompt.current().filter((part): part is ImageAttachmentPart => part.type === "image"),
   )
 
   const [store, setStore] = createStore<{
@@ -224,6 +217,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     mode: "normal",
     applyingHistory: false,
   })
+  const placeholder = createMemo(() =>
+    promptPlaceholder({
+      mode: store.mode,
+      commentCount: commentCount(),
+      example: language.t(EXAMPLES[store.placeholder]),
+      t: (key, params) => language.t(key as Parameters<typeof language.t>[0], params as never),
+    }),
+  )
 
   const MAX_HISTORY = 100
   const [history, setHistory] = persisted(
@@ -295,10 +296,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   createEffect(() => {
     if (!isFocused()) setComposing(false)
   })
-
-  type AtOption =
-    | { type: "agent"; name: string; display: string }
-    | { type: "file"; path: string; display: string; recent?: boolean }
 
   const agentList = createMemo(() =>
     sync.data.agent
@@ -509,7 +506,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     on(
       () => prompt.current(),
       (currentParts) => {
-        const inputParts = currentParts.filter((part) => part.type !== "image") as Prompt
+        const inputParts = currentParts.filter((part) => part.type !== "image")
 
         if (mirror.input) {
           mirror.input = false
@@ -928,110 +925,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   return (
     <div class="relative size-full _max-h-[320px] flex flex-col gap-3">
-      <Show when={store.popover}>
-        <div
-          ref={(el) => {
-            if (store.popover === "slash") slashPopoverRef = el
-          }}
-          class="absolute inset-x-0 -top-3 -translate-y-full origin-bottom-left max-h-80 min-h-10
-                 overflow-auto no-scrollbar flex flex-col p-2 rounded-md
-                 border border-border-base bg-surface-raised-stronger-non-alpha shadow-md"
-          onMouseDown={(e) => e.preventDefault()}
-        >
-          <Switch>
-            <Match when={store.popover === "at"}>
-              <Show
-                when={atFlat().length > 0}
-                fallback={<div class="text-text-weak px-2 py-1">{language.t("prompt.popover.emptyResults")}</div>}
-              >
-                <For each={atFlat().slice(0, 10)}>
-                  {(item) => (
-                    <button
-                      classList={{
-                        "w-full flex items-center gap-x-2 rounded-md px-2 py-0.5": true,
-                        "bg-surface-raised-base-hover": atActive() === atKey(item),
-                      }}
-                      onClick={() => handleAtSelect(item)}
-                      onMouseEnter={() => setAtActive(atKey(item))}
-                    >
-                      <Show
-                        when={item.type === "agent"}
-                        fallback={
-                          <>
-                            <FileIcon
-                              node={{ path: (item as { type: "file"; path: string }).path, type: "file" }}
-                              class="shrink-0 size-4"
-                            />
-                            <div class="flex items-center text-14-regular min-w-0">
-                              <span class="text-text-weak whitespace-nowrap truncate min-w-0">
-                                {(() => {
-                                  const path = (item as { type: "file"; path: string }).path
-                                  return path.endsWith("/") ? path : getDirectory(path)
-                                })()}
-                              </span>
-                              <Show when={!(item as { type: "file"; path: string }).path.endsWith("/")}>
-                                <span class="text-text-strong whitespace-nowrap">
-                                  {getFilename((item as { type: "file"; path: string }).path)}
-                                </span>
-                              </Show>
-                            </div>
-                          </>
-                        }
-                      >
-                        <Icon name="brain" size="small" class="text-icon-info-active shrink-0" />
-                        <span class="text-14-regular text-text-strong whitespace-nowrap">
-                          @{(item as { type: "agent"; name: string }).name}
-                        </span>
-                      </Show>
-                    </button>
-                  )}
-                </For>
-              </Show>
-            </Match>
-            <Match when={store.popover === "slash"}>
-              <Show
-                when={slashFlat().length > 0}
-                fallback={<div class="text-text-weak px-2 py-1">{language.t("prompt.popover.emptyCommands")}</div>}
-              >
-                <For each={slashFlat()}>
-                  {(cmd) => (
-                    <button
-                      data-slash-id={cmd.id}
-                      classList={{
-                        "w-full flex items-center justify-between gap-4 rounded-md px-2 py-1": true,
-                        "bg-surface-raised-base-hover": slashActive() === cmd.id,
-                      }}
-                      onClick={() => handleSlashSelect(cmd)}
-                      onMouseEnter={() => setSlashActive(cmd.id)}
-                    >
-                      <div class="flex items-center gap-2 min-w-0">
-                        <span class="text-14-regular text-text-strong whitespace-nowrap">/{cmd.trigger}</span>
-                        <Show when={cmd.description}>
-                          <span class="text-14-regular text-text-weak truncate">{cmd.description}</span>
-                        </Show>
-                      </div>
-                      <div class="flex items-center gap-2 shrink-0">
-                        <Show when={cmd.type === "custom" && cmd.source !== "command"}>
-                          <span class="text-11-regular text-text-subtle px-1.5 py-0.5 bg-surface-base rounded">
-                            {cmd.source === "skill"
-                              ? language.t("prompt.slash.badge.skill")
-                              : cmd.source === "mcp"
-                                ? language.t("prompt.slash.badge.mcp")
-                                : language.t("prompt.slash.badge.custom")}
-                          </span>
-                        </Show>
-                        <Show when={command.keybind(cmd.id)}>
-                          <span class="text-12-regular text-text-subtle">{command.keybind(cmd.id)}</span>
-                        </Show>
-                      </div>
-                    </button>
-                  )}
-                </For>
-              </Show>
-            </Match>
-          </Switch>
-        </div>
-      </Show>
+      <PromptPopover
+        popover={store.popover}
+        setSlashPopoverRef={(el) => (slashPopoverRef = el)}
+        atFlat={atFlat()}
+        atActive={atActive() ?? undefined}
+        atKey={atKey}
+        setAtActive={setAtActive}
+        onAtSelect={handleAtSelect}
+        slashFlat={slashFlat()}
+        slashActive={slashActive() ?? undefined}
+        setSlashActive={setSlashActive}
+        onSlashSelect={handleSlashSelect}
+        commandKeybind={command.keybind}
+        t={(key) => language.t(key as Parameters<typeof language.t>[0])}
+      />
       <form
         onSubmit={handleSubmit}
         classList={{
@@ -1042,124 +950,28 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           [props.class ?? ""]: !!props.class,
         }}
       >
-        <Show when={store.dragging}>
-          <div class="absolute inset-0 z-10 flex items-center justify-center bg-surface-raised-stronger-non-alpha/90 pointer-events-none">
-            <div class="flex flex-col items-center gap-2 text-text-weak">
-              <Icon name="photo" class="size-8" />
-              <span class="text-14-regular">{language.t("prompt.dropzone.label")}</span>
-            </div>
-          </div>
-        </Show>
-        <Show when={prompt.context.items().length > 0}>
-          <div class="flex flex-nowrap items-start gap-2 p-2 overflow-x-auto no-scrollbar">
-            <For each={prompt.context.items()}>
-              {(item) => {
-                const active = () => {
-                  const a = comments.active()
-                  return !!item.commentID && item.commentID === a?.id && item.path === a?.file
-                }
-                return (
-                  <Tooltip
-                    value={
-                      <span class="flex max-w-[300px]">
-                        <span class="text-text-invert-base truncate-start [unicode-bidi:plaintext] min-w-0">
-                          {getDirectory(item.path)}
-                        </span>
-                        <span class="shrink-0">{getFilename(item.path)}</span>
-                      </span>
-                    }
-                    placement="top"
-                    openDelay={2000}
-                  >
-                    <div
-                      classList={{
-                        "group shrink-0 flex flex-col rounded-[6px] pl-2 pr-1 py-1 max-w-[200px] h-12 transition-all transition-transform shadow-xs-border hover:shadow-xs-border-hover": true,
-                        "cursor-pointer hover:bg-surface-interactive-weak": !!item.commentID && !active(),
-                        "cursor-pointer bg-surface-interactive-hover hover:bg-surface-interactive-hover shadow-xs-border-hover":
-                          active(),
-                        "bg-background-stronger": !active(),
-                      }}
-                      onClick={() => {
-                        openComment(item)
-                      }}
-                    >
-                      <div class="flex items-center gap-1.5">
-                        <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-3.5" />
-                        <div class="flex items-center text-11-regular min-w-0 font-medium">
-                          <span class="text-text-strong whitespace-nowrap">{getFilenameTruncated(item.path, 14)}</span>
-                          <Show when={item.selection}>
-                            {(sel) => (
-                              <span class="text-text-weak whitespace-nowrap shrink-0">
-                                {sel().startLine === sel().endLine
-                                  ? `:${sel().startLine}`
-                                  : `:${sel().startLine}-${sel().endLine}`}
-                              </span>
-                            )}
-                          </Show>
-                        </div>
-                        <IconButton
-                          type="button"
-                          icon="close-small"
-                          variant="ghost"
-                          class="ml-auto size-3.5 text-text-weak hover:text-text-strong transition-all"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            if (item.commentID) comments.remove(item.path, item.commentID)
-                            prompt.context.remove(item.key)
-                          }}
-                          aria-label={language.t("prompt.context.removeFile")}
-                        />
-                      </div>
-                      <Show when={item.comment}>
-                        {(comment) => (
-                          <div class="text-12-regular text-text-strong ml-5 pr-1 truncate">{comment()}</div>
-                        )}
-                      </Show>
-                    </div>
-                  </Tooltip>
-                )
-              }}
-            </For>
-          </div>
-        </Show>
-        <Show when={imageAttachments().length > 0}>
-          <div class="flex flex-wrap gap-2 px-3 pt-3">
-            <For each={imageAttachments()}>
-              {(attachment) => (
-                <div class="relative group">
-                  <Show
-                    when={attachment.mime.startsWith("image/")}
-                    fallback={
-                      <div class="size-16 rounded-md bg-surface-base flex items-center justify-center border border-border-base">
-                        <Icon name="folder" class="size-6 text-text-weak" />
-                      </div>
-                    }
-                  >
-                    <img
-                      src={attachment.dataUrl}
-                      alt={attachment.filename}
-                      class="size-16 rounded-md object-cover border border-border-base hover:border-border-strong-base transition-colors"
-                      onClick={() =>
-                        dialog.show(() => <ImagePreview src={attachment.dataUrl} alt={attachment.filename} />)
-                      }
-                    />
-                  </Show>
-                  <button
-                    type="button"
-                    onClick={() => removeImageAttachment(attachment.id)}
-                    class="absolute -top-1.5 -right-1.5 size-5 rounded-full bg-surface-raised-stronger-non-alpha border border-border-base flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-surface-raised-base-hover"
-                    aria-label={language.t("prompt.attachment.remove")}
-                  >
-                    <Icon name="close" class="size-3 text-text-weak" />
-                  </button>
-                  <div class="absolute bottom-0 left-0 right-0 px-1 py-0.5 bg-black/50 rounded-b-md">
-                    <span class="text-10-regular text-white truncate block">{attachment.filename}</span>
-                  </div>
-                </div>
-              )}
-            </For>
-          </div>
-        </Show>
+        <PromptDragOverlay dragging={store.dragging} label={language.t("prompt.dropzone.label")} />
+        <PromptContextItems
+          items={prompt.context.items()}
+          active={(item) => {
+            const active = comments.active()
+            return !!item.commentID && item.commentID === active?.id && item.path === active?.file
+          }}
+          openComment={openComment}
+          remove={(item) => {
+            if (item.commentID) comments.remove(item.path, item.commentID)
+            prompt.context.remove(item.key)
+          }}
+          t={(key) => language.t(key as Parameters<typeof language.t>[0])}
+        />
+        <PromptImageAttachments
+          attachments={imageAttachments()}
+          onOpen={(attachment) =>
+            dialog.show(() => <ImagePreview src={attachment.dataUrl} alt={attachment.filename} />)
+          }
+          onRemove={removeImageAttachment}
+          removeLabel={language.t("prompt.attachment.remove")}
+        />
         <div class="relative max-h-[240px] overflow-y-auto" ref={(el) => (scrollRef = el)}>
           <div
             data-component="prompt-input"
@@ -1169,15 +981,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             }}
             role="textbox"
             aria-multiline="true"
-            aria-label={
-              store.mode === "shell"
-                ? language.t("prompt.placeholder.shell")
-                : commentCount() > 1
-                  ? language.t("prompt.placeholder.summarizeComments")
-                  : commentCount() === 1
-                    ? language.t("prompt.placeholder.summarizeComment")
-                    : language.t("prompt.placeholder.normal", { example: language.t(EXAMPLES[store.placeholder]) })
-            }
+            aria-label={placeholder()}
             contenteditable="true"
             onInput={handleInput}
             onPaste={handlePaste}
@@ -1194,13 +998,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           />
           <Show when={!prompt.dirty()}>
             <div class="absolute top-0 inset-x-0 p-3 pr-12 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate">
-              {store.mode === "shell"
-                ? language.t("prompt.placeholder.shell")
-                : commentCount() > 1
-                  ? language.t("prompt.placeholder.summarizeComments")
-                  : commentCount() === 1
-                    ? language.t("prompt.placeholder.summarizeComment")
-                    : language.t("prompt.placeholder.normal", { example: language.t(EXAMPLES[store.placeholder]) })}
+              {placeholder()}
             </div>
           </Show>
         </div>

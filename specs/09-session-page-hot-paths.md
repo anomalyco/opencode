@@ -68,7 +68,7 @@ This spec should not modify:
 - Move large command-array construction into smaller memoized blocks:
   - stable command definitions
   - dynamic state fields (`disabled`, titles) as narrow computed closures
-- Keep command IDs, keybinds, and behavior identical.
+  - Keep command IDs, keybinds, and behavior identical.
 
 ---
 
