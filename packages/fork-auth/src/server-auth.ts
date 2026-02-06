@@ -27,6 +27,12 @@ async function* findDotOpencodeDirs(start: string): AsyncGenerator<string> {
   }
 }
 
+function isTrue(value: string | undefined): boolean {
+  if (!value) return false
+  const normalized = value.trim().toLowerCase()
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on"
+}
+
 /**
  * Server-level auth configuration.
  *
@@ -45,16 +51,19 @@ export namespace ServerAuth {
    */
   export async function load(): Promise<void> {
     const cwd = process.cwd()
+    const disableProjectConfig = isTrue(process.env.OPENCODE_DISABLE_PROJECT_CONFIG)
 
     // Search for config files, walking up from cwd
     // Also check global config directory
     const configFiles = ["opencode.jsonc", "opencode.json"]
     const searchPaths: string[] = []
 
-    // Find .opencode directories walking up from cwd
-    for await (const dir of findDotOpencodeDirs(cwd)) {
-      for (const file of configFiles) {
-        searchPaths.push(path.join(dir, file))
+    // Project config is optional in CI/e2e; follow the same env gate used by Config.
+    if (!disableProjectConfig) {
+      for await (const dir of findDotOpencodeDirs(cwd)) {
+        for (const file of configFiles) {
+          searchPaths.push(path.join(dir, file))
+        }
       }
     }
 
@@ -82,8 +91,8 @@ export namespace ServerAuth {
       }
     }
 
-    // Default: auth disabled
-    _config = AuthConfig.parse({})
+    // Default: auth disabled when no auth section is found.
+    _config = AuthConfig.parse({ enabled: false })
   }
 
   /**
