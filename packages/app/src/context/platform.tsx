@@ -18,6 +18,9 @@ export type Platform = {
   /** Open a local path in a local app (desktop only) */
   openPath?(path: string, app?: string): Promise<void>
 
+  /** Check if apps exist on the system (desktop only) */
+  checkAppsExist?(apps: string[]): Promise<boolean[]>
+
   /** Restart the app  */
   restart(): Promise<void>
 

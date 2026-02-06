@@ -1,4 +1,4 @@
-import { createEffect, createMemo, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, createResource, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { useParams } from "@solidjs/router"
@@ -80,7 +80,7 @@ export function SessionHeader() {
     return "unknown"
   })
 
-  const options = createMemo(() => {
+  const allOptions = createMemo(() => {
     if (os() === "macos") {
       return [
         { id: "vscode", label: "VS Code", icon: "vscode", openWith: "Visual Studio Code" },
@@ -88,8 +88,8 @@ export function SessionHeader() {
         { id: "zed", label: "Zed", icon: "zed", openWith: "Zed" },
         { id: "textmate", label: "TextMate", icon: "textmate", openWith: "TextMate" },
         { id: "antigravity", label: "Antigravity", icon: "antigravity", openWith: "Antigravity" },
-        { id: "finder", label: "Finder", icon: "finder" },
-        { id: "terminal", label: "Terminal", icon: "terminal", openWith: "Terminal" },
+        { id: "finder", label: "Finder", icon: "finder", alwaysShow: true },
+        { id: "terminal", label: "Terminal", icon: "terminal", openWith: "Terminal", alwaysShow: true },
         { id: "iterm2", label: "iTerm2", icon: "iterm2", openWith: "iTerm" },
         { id: "ghostty", label: "Ghostty", icon: "ghostty", openWith: "Ghostty" },
         { id: "xcode", label: "Xcode", icon: "xcode", openWith: "Xcode" },
@@ -102,8 +102,8 @@ export function SessionHeader() {
         { id: "vscode", label: "VS Code", icon: "vscode", openWith: "code" },
         { id: "cursor", label: "Cursor", icon: "cursor", openWith: "cursor" },
         { id: "zed", label: "Zed", icon: "zed", openWith: "zed" },
-        { id: "finder", label: "File Explorer", icon: "finder" },
-        { id: "powershell", label: "PowerShell", icon: "powershell", openWith: "powershell" },
+        { id: "finder", label: "File Explorer", icon: "finder", alwaysShow: true },
+        { id: "powershell", label: "PowerShell", icon: "powershell", openWith: "powershell", alwaysShow: true },
       ] as const
     }
 
@@ -111,8 +111,38 @@ export function SessionHeader() {
       { id: "vscode", label: "VS Code", icon: "vscode", openWith: "code" },
       { id: "cursor", label: "Cursor", icon: "cursor", openWith: "cursor" },
       { id: "zed", label: "Zed", icon: "zed", openWith: "zed" },
-      { id: "finder", label: "File Manager", icon: "finder" },
+      { id: "finder", label: "File Manager", icon: "finder", alwaysShow: true },
     ] as const
+  })
+
+  // Check which apps are installed (only for apps that need detection)
+  const [installedApps] = createResource(
+    () => {
+      if (!platform.checkAppsExist) return null
+      const appsToCheck = allOptions()
+        .filter((o) => "openWith" in o && !("alwaysShow" in o && o.alwaysShow))
+        .map((o) => ("openWith" in o ? o.openWith : o.id))
+      return appsToCheck.length > 0 ? appsToCheck : null
+    },
+    async (apps) => {
+      if (!apps || !platform.checkAppsExist) return new Set<string>()
+      const results = await platform.checkAppsExist(apps)
+      return new Set(apps.filter((_, i) => results[i]))
+    },
+  )
+
+  const options = createMemo(() => {
+    const installed = installedApps()
+    // If we don't have app detection or it's still loading, show all options
+    if (!platform.checkAppsExist || installed === undefined) return allOptions()
+
+    return allOptions().filter((o) => {
+      // Always show apps marked with alwaysShow
+      if ("alwaysShow" in o && o.alwaysShow) return true
+      // Show apps that are installed
+      const appName = "openWith" in o ? o.openWith : o.id
+      return installed.has(appName)
+    })
   })
 
   const [prefs, setPrefs] = persisted(Persist.global("open.app"), createStore({ app: "finder" as OpenApp }))

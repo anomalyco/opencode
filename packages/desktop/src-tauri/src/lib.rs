@@ -29,6 +29,77 @@ use tokio::sync::{mpsc, oneshot};
 use crate::window_customizer::PinchZoomDisablePlugin;
 
 const SETTINGS_STORE: &str = "opencode.settings.dat";
+
+#[cfg(target_os = "macos")]
+fn check_app_exists_macos(app_name: &str) -> bool {
+    use std::process::Command;
+
+    // Use `open -Ra` to check if the app exists
+    // -R: Reveal in Finder (but we don't actually open)
+    // -a: Specify the application by name
+    // This returns exit code 0 if the app is found, non-zero otherwise
+    let output = Command::new("open")
+        .args(["-Ra", app_name])
+        .output();
+
+    match output {
+        Ok(output) => output.status.success(),
+        Err(_) => false,
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn check_app_exists_windows(app_name: &str) -> bool {
+    use std::process::Command;
+
+    // Use `where` command to check if the executable exists in PATH
+    let output = Command::new("where").arg(app_name).output();
+
+    match output {
+        Ok(output) => output.status.success(),
+        Err(_) => false,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn check_app_exists_linux(app_name: &str) -> bool {
+    use std::process::Command;
+
+    // Use `which` command to check if the executable exists in PATH
+    let output = Command::new("which").arg(app_name).output();
+
+    match output {
+        Ok(output) => output.status.success(),
+        Err(_) => false,
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+fn check_apps_exist(apps: Vec<String>) -> Vec<bool> {
+    apps.iter()
+        .map(|app| {
+            #[cfg(target_os = "macos")]
+            {
+                check_app_exists_macos(app)
+            }
+            #[cfg(target_os = "windows")]
+            {
+                check_app_exists_windows(app)
+            }
+            #[cfg(target_os = "linux")]
+            {
+                check_app_exists_linux(app)
+            }
+            #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+            {
+                let _ = app;
+                false
+            }
+        })
+        .collect()
+}
+
 const DEFAULT_SERVER_URL_KEY: &str = "defaultServerUrl";
 
 fn window_state_flags() -> StateFlags {
@@ -269,7 +340,8 @@ pub fn run() {
             ensure_server_ready,
             get_default_server_url,
             set_default_server_url,
-            markdown::parse_markdown_command
+            markdown::parse_markdown_command,
+            check_apps_exist
         ])
         .error_handling(tauri_specta::ErrorHandlingMode::Throw);
 
@@ -591,4 +663,78 @@ fn setup_window_state_listener(app: &tauri::AppHandle, window: &tauri::WebviewWi
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_check_app_exists_macos_finder() {
+        // Finder should always exist on macOS
+        assert!(check_app_exists_macos("Finder"));
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_check_app_exists_macos_terminal() {
+        // Terminal should always exist on macOS
+        assert!(check_app_exists_macos("Terminal"));
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_check_app_exists_macos_nonexistent() {
+        // A made-up app name should not exist
+        assert!(!check_app_exists_macos("NonExistentApp12345XYZ"));
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_check_apps_exist_batch() {
+        let apps = vec![
+            "Finder".to_string(),
+            "Terminal".to_string(),
+            "NonExistentApp12345XYZ".to_string(),
+        ];
+        let results = check_apps_exist(apps);
+        assert_eq!(results.len(), 3);
+        assert!(results[0]); // Finder exists
+        assert!(results[1]); // Terminal exists
+        assert!(!results[2]); // NonExistent doesn't exist
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn test_check_app_exists_windows_cmd() {
+        // cmd should always exist on Windows
+        assert!(check_app_exists_windows("cmd"));
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn test_check_app_exists_windows_nonexistent() {
+        assert!(!check_app_exists_windows("nonexistentapp12345xyz"));
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_check_app_exists_linux_sh() {
+        // sh should always exist on Linux
+        assert!(check_app_exists_linux("sh"));
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_check_app_exists_linux_nonexistent() {
+        assert!(!check_app_exists_linux("nonexistentapp12345xyz"));
+    }
+
+    #[test]
+    fn test_check_apps_exist_empty() {
+        let apps: Vec<String> = vec![];
+        let results = check_apps_exist(apps);
+        assert!(results.is_empty());
+    }
 }

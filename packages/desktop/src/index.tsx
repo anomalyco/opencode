@@ -92,6 +92,10 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
     return openerOpenPath(path, app)
   },
 
+  checkAppsExist(apps: string[]) {
+    return commands.checkAppsExist(apps)
+  },
+
   back() {
     window.history.back()
   },
