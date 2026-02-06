@@ -2767,6 +2767,9 @@ export default function Layout(props: ParentProps) {
                       data-action="project-menu"
                       data-project={base64Encode(p().worktree)}
                       class="shrink-0 size-6 rounded-md data-[expanded]:bg-surface-base-active"
+                      classList={{
+                        "opacity-0 group-hover/project:opacity-100 data-[expanded]:opacity-100": !panelProps.mobile,
+                      }}
                       aria-label={language.t("common.moreOptions")}
                     />
                     <DropdownMenu.Portal mount={!panelProps.mobile ? state.nav : undefined}>
