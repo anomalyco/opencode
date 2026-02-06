@@ -9,6 +9,7 @@ import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
+import { createScopedCache } from "@/utils/scoped-cache"
 
 export type FileSelection = {
   startLine: number
@@ -155,6 +156,7 @@ const MAX_FILE_CONTENT_ENTRIES = 40
 const MAX_FILE_CONTENT_BYTES = 20 * 1024 * 1024
 
 const contentLru = new Map<string, number>()
+let contentBytesTotal = 0
 
 function approxBytes(content: FileContent) {
   const patchBytes =
@@ -165,19 +167,72 @@ function approxBytes(content: FileContent) {
   return (content.content.length + (content.diff?.length ?? 0) + patchBytes) * 2
 }
 
+function setContentBytes(path: string, nextBytes: number) {
+  const prev = contentLru.get(path)
+  if (prev !== undefined) contentBytesTotal -= prev
+  contentLru.delete(path)
+  contentLru.set(path, nextBytes)
+  contentBytesTotal += nextBytes
+}
+
 function touchContent(path: string, bytes?: number) {
   const prev = contentLru.get(path)
   if (prev === undefined && bytes === undefined) return
-  const value = bytes ?? prev ?? 0
-  contentLru.delete(path)
-  contentLru.set(path, value)
+  setContentBytes(path, bytes ?? prev ?? 0)
 }
 
-type ViewSession = ReturnType<typeof createViewSession>
+function removeContentBytes(path: string) {
+  const prev = contentLru.get(path)
+  if (prev === undefined) return
+  contentLru.delete(path)
+  contentBytesTotal -= prev
+}
 
-type ViewCacheEntry = {
-  value: ViewSession
-  dispose: VoidFunction
+function resetContentBytes() {
+  contentLru.clear()
+  contentBytesTotal = 0
+}
+
+export function evictContentLru(keep: Set<string> | undefined, evict: (path: string) => void) {
+  const protectedSet = keep ?? new Set<string>()
+
+  while (contentLru.size > MAX_FILE_CONTENT_ENTRIES || contentBytesTotal > MAX_FILE_CONTENT_BYTES) {
+    const path = contentLru.keys().next().value
+    if (!path) return
+
+    if (protectedSet.has(path)) {
+      touchContent(path)
+      if (contentLru.size <= protectedSet.size) return
+      continue
+    }
+
+    removeContentBytes(path)
+    evict(path)
+  }
+}
+
+export function resetFileContentLru() {
+  resetContentBytes()
+}
+
+export function setFileContentBytes(path: string, bytes: number) {
+  setContentBytes(path, bytes)
+}
+
+export function removeFileContentBytes(path: string) {
+  removeContentBytes(path)
+}
+
+export function touchFileContent(path: string, bytes?: number) {
+  touchContent(path, bytes)
+}
+
+export function getFileContentBytesTotal() {
+  return contentBytesTotal
+}
+
+export function getFileContentEntryCount() {
+  return contentLru.size
 }
 
 function createViewSession(dir: string, id: string | undefined) {
@@ -336,23 +391,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     })
 
     const evictContent = (keep?: Set<string>) => {
-      const protectedSet = keep ?? new Set<string>()
-      const total = () => {
-        return Array.from(contentLru.values()).reduce((sum, bytes) => sum + bytes, 0)
-      }
-
-      while (contentLru.size > MAX_FILE_CONTENT_ENTRIES || total() > MAX_FILE_CONTENT_BYTES) {
-        const path = contentLru.keys().next().value
-        if (!path) return
-
-        if (protectedSet.has(path)) {
-          touchContent(path)
-          if (contentLru.size <= protectedSet.size) return
-          continue
-        }
-
-        contentLru.delete(path)
-        if (!store.file[path]) continue
+      evictContentLru(keep, (path) => {
+        if (!store.file[path]) return
         setStore(
           "file",
           path,
@@ -361,14 +401,14 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
             draft.loaded = false
           }),
         )
-      }
+      })
     }
 
     createEffect(() => {
       scope()
       inflight.clear()
       treeInflight.clear()
-      contentLru.clear()
+      resetContentBytes()
 
       batch(() => {
         setStore("file", reconcile({}))
@@ -378,42 +418,25 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       })
     })
 
-    const viewCache = new Map<string, ViewCacheEntry>()
-
-    const disposeViews = () => {
-      for (const entry of viewCache.values()) {
-        entry.dispose()
-      }
-      viewCache.clear()
-    }
-
-    const pruneViews = () => {
-      while (viewCache.size > MAX_FILE_VIEW_SESSIONS) {
-        const first = viewCache.keys().next().value
-        if (!first) return
-        const entry = viewCache.get(first)
-        entry?.dispose()
-        viewCache.delete(first)
-      }
-    }
+    const viewCache = createScopedCache(
+      (key) => {
+        const split = key.lastIndexOf("\n")
+        const dir = split >= 0 ? key.slice(0, split) : key
+        const id = split >= 0 ? key.slice(split + 1) : WORKSPACE_KEY
+        return createRoot((dispose) => ({
+          value: createViewSession(dir, id === WORKSPACE_KEY ? undefined : id),
+          dispose,
+        }))
+      },
+      {
+        maxEntries: MAX_FILE_VIEW_SESSIONS,
+        dispose: (entry) => entry.dispose(),
+      },
+    )
 
     const loadView = (dir: string, id: string | undefined) => {
-      const key = `${dir}:${id ?? WORKSPACE_KEY}`
-      const existing = viewCache.get(key)
-      if (existing) {
-        viewCache.delete(key)
-        viewCache.set(key, existing)
-        return existing.value
-      }
-
-      const entry = createRoot((dispose) => ({
-        value: createViewSession(dir, id),
-        dispose,
-      }))
-
-      viewCache.set(key, entry)
-      pruneViews()
-      return entry.value
+      const key = `${dir}\n${id ?? WORKSPACE_KEY}`
+      return viewCache.get(key).value
     }
 
     const view = createMemo(() => loadView(scope(), params.id))
@@ -690,7 +713,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
     onCleanup(() => {
       stop()
-      disposeViews()
+      viewCache.clear()
     })
 
     return {
