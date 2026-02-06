@@ -47,7 +47,7 @@ wc -l docs/upstream-sync/upstream-first-parent.txt > docs/upstream-sync/upstream
 
 ## Ongoing Sync Automation
 - Script: `script/sync-upstream.ts`
-- Workflow: `.github/workflows/sync-upstream.yml` (runs every 3 hours)
+- Workflow: `.github/workflows/sync-upstream.yml` (runs every 30 minutes)
 - Mirror verification script: `script/verify-upstream-mirror.sh`
 - Token behavior: uses `UPSTREAM_SYNC_TOKEN` when configured, otherwise falls back to `${{ github.token }}`.
 - Workflow behavior:
