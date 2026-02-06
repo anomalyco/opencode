@@ -19,7 +19,7 @@ jobs:
             workdir: packages/app
             command: bun test:e2e
           - name: windows
-            host: windows-latest
+            host: blacksmith-4vcpu-windows-2025
             playwright: bunx playwright install
             workdir: packages/app
             command: bun test:e2e:local

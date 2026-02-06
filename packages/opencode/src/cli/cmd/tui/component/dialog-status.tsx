@@ -2,7 +2,7 @@ import { TextAttributes } from "@opentui/core"
 import { useTheme } from "../context/theme"
 import { useDialog } from "@tui/ui/dialog"
 import { useSync } from "@tui/context/sync"
-import { For, Match, Switch, Show, createMemo } from "solid-js"
+import { For, Match, Switch, Show, createMemo, createSignal } from "solid-js"
 import { Installation } from "@/installation"
 
 export type DialogStatusProps = {}
@@ -11,6 +11,7 @@ export function DialogStatus() {
   const sync = useSync()
   const { theme } = useTheme()
   const dialog = useDialog()
+  const [hover, setHover] = createSignal(false)
 
   const enabledFormatters = createMemo(() => sync.data.formatter.filter((f) => f.enabled))
 
@@ -45,9 +46,16 @@ export function DialogStatus() {
         <text fg={theme.text} attributes={TextAttributes.BOLD}>
           Status
         </text>
-        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
-          esc
-        </text>
+        <box
+          paddingLeft={1}
+          paddingRight={1}
+          backgroundColor={hover() ? theme.primary : undefined}
+          onMouseOver={() => setHover(true)}
+          onMouseOut={() => setHover(false)}
+          onMouseUp={() => dialog.clear()}
+        >
+          <text fg={hover() ? theme.selectedListItemText : theme.textMuted}>esc</text>
+        </box>
       </box>
       <text fg={theme.textMuted}>OpenCode v{Installation.VERSION}</text>
       <Show when={Object.keys(sync.data.mcp).length > 0} fallback={<text fg={theme.text}>No MCP Servers</text>}>
