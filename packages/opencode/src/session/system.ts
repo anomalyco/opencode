@@ -9,6 +9,7 @@ import PROMPT_GEMINI from "./prompt/gemini.txt"
 
 import PROMPT_CODEX from "./prompt/codex_header.txt"
 import PROMPT_TRINITY from "./prompt/trinity.txt"
+import PROMPT_GLM from "./prompt/glm.txt"
 import type { Provider } from "@/provider/provider"
 
 export namespace SystemPrompt {
@@ -23,6 +24,7 @@ export namespace SystemPrompt {
     if (model.api.id.includes("gemini-")) return [PROMPT_GEMINI]
     if (model.api.id.includes("claude")) return [PROMPT_ANTHROPIC]
     if (model.api.id.toLowerCase().includes("trinity")) return [PROMPT_TRINITY]
+    if (model.api.id.includes("glm-")) return [PROMPT_GLM]
     return [PROMPT_ANTHROPIC_WITHOUT_TODO]
   }
 
@@ -39,13 +41,12 @@ export namespace SystemPrompt {
         `  Today's date: ${new Date().toDateString()}`,
         `</env>`,
         `<directories>`,
-        `  ${
-          project.vcs === "git" && false
-            ? await Ripgrep.tree({
-                cwd: Instance.directory,
-                limit: 50,
-              })
-            : ""
+        `  ${project.vcs === "git" && false
+          ? await Ripgrep.tree({
+            cwd: Instance.directory,
+            limit: 50,
+          })
+          : ""
         }`,
         `</directories>`,
       ].join("\n"),
