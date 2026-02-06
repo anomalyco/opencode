@@ -71,6 +71,10 @@ export const TuiThreadCommand = cmd({
       .option("agent", {
         type: "string",
         describe: "agent to use",
+      })
+      .option("variant", {
+        type: "string",
+        describe: "model variant (provider-specific reasoning effort, e.g., high, max, minimal)",
       }),
   handler: async (args) => {
     // Resolve relative paths against PWD to preserve behavior when using --cwd flag
@@ -149,6 +153,7 @@ export const TuiThreadCommand = cmd({
         sessionID: args.session,
         agent: args.agent,
         model: args.model,
+        variant: args.variant,
         prompt,
       },
       onExit: async () => {

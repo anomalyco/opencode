@@ -29,15 +29,16 @@ opencode [project]
 
 #### Flags
 
-| Flag         | Short | Description                                |
-| ------------ | ----- | ------------------------------------------ |
-| `--continue` | `-c`  | Continue the last session                  |
-| `--session`  | `-s`  | Session ID to continue                     |
-| `--prompt`   |       | Prompt to use                              |
-| `--model`    | `-m`  | Model to use in the form of provider/model |
-| `--agent`    |       | Agent to use                               |
-| `--port`     |       | Port to listen on                          |
-| `--hostname` |       | Hostname to listen on                      |
+| Flag         | Short | Description                                                    |
+| ------------ | ----- | -------------------------------------------------------------- |
+| `--continue` | `-c`  | Continue the last session                                      |
+| `--session`  | `-s`  | Session ID to continue                                         |
+| `--prompt`   |       | Prompt to use                                                  |
+| `--model`    | `-m`  | Model to use in the form of provider/model                     |
+| `--variant`  |       | Model variant (provider-specific reasoning effort, e.g., high) |
+| `--agent`    |       | Agent to use                                                   |
+| `--port`     |       | Port to listen on                                              |
+| `--hostname` |       | Hostname to listen on                                          |
 
 ---
 
@@ -341,6 +342,7 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | `--session`  | `-s`  | Session ID to continue                                             |
 | `--share`    |       | Share the session                                                  |
 | `--model`    | `-m`  | Model to use in the form of provider/model                         |
+| `--variant`  |       | Model variant (provider-specific reasoning effort, e.g., high)     |
 | `--agent`    |       | Agent to use                                                       |
 | `--file`     | `-f`  | File(s) to attach to message                                       |
 | `--format`   |       | Format: default (formatted) or json (raw JSON events)              |

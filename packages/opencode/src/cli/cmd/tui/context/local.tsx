@@ -399,6 +399,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
     })
 
+    // Initialize variant from CLI args
+    const args = useArgs()
+    let variantInitialized = false
+    createEffect(() => {
+      if (variantInitialized) return
+      if (!model.ready || !args.variant || !model.current()) return
+      variantInitialized = true
+      model.variant.set(args.variant)
+    })
+
     const result = {
       model,
       agent,
