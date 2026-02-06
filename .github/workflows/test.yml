@@ -31,6 +31,8 @@ jobs:
     env:
       # Avoid external models.dev refresh during CI startup to reduce timeout-related delays/noise.
       OPENCODE_DISABLE_MODELS_FETCH: "true"
+      # Use a local snapshot fixture so model-dependent e2e tests remain deterministic without network fetches.
+      OPENCODE_MODELS_PATH: ${{ github.workspace }}/packages/opencode/test/tool/fixtures/models-api.json
       # Keep browser binaries in a stable location so they can be cached across runs.
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
     steps:
