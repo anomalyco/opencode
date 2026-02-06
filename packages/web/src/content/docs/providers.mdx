@@ -1675,6 +1675,30 @@ Some useful routing options:
 | `only`              | Restrict to specific providers                       |
 | `zeroDataRetention` | Only use providers with zero data retention policies |
 
+To pass provider-specific settings through the gateway, use the `providerOptions` key.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "vercel": {
+      "models": {
+        "openai/gpt-5.2": {
+          "options": {
+            "order": ["openai", "azure"],
+            "providerOptions": {
+              "openai": {
+                "textVerbosity": "high"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
 ---
 
 ### xAI
