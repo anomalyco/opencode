@@ -1,7 +1,7 @@
 // @refresh reload
 import { webviewZoom } from "./webview-zoom"
 import { render } from "solid-js/web"
-import { AppBaseProviders, AppInterface, PlatformProvider, Platform } from "@opencode-ai/app"
+import { AppBaseProviders, AppInterface, PlatformProvider, Platform, useCommand } from "@opencode-ai/app"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link"
 import { openPath as openerOpenPath } from "@tauri-apps/plugin-opener"
@@ -18,11 +18,11 @@ import { Splash } from "@opencode-ai/ui/logo"
 import { createSignal, Show, Accessor, JSX, createResource, onMount, onCleanup } from "solid-js"
 
 import { UPDATER_ENABLED } from "./updater"
-import { createMenu } from "./menu"
 import { initI18n, t } from "./i18n"
 import pkg from "../package.json"
 import "./styles.css"
 import { commands } from "./bindings"
+import { createMenu } from "./menu"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -342,7 +342,10 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
   webviewZoom,
 })
 
-createMenu()
+let menuTrigger = null as null | ((id: string) => void)
+createMenu((id) => {
+  menuTrigger?.(id)
+})
 void listenForDeepLinks()
 
 render(() => {
@@ -373,7 +376,19 @@ render(() => {
             window.__OPENCODE__ ??= {}
             window.__OPENCODE__.serverPassword = data().password ?? undefined
 
-            return <AppInterface defaultUrl={data().url} />
+            function Inner() {
+              const cmd = useCommand()
+
+              menuTrigger = (id) => cmd.trigger(id)
+
+              return null
+            }
+
+            return (
+              <AppInterface defaultUrl={data().url}>
+                <Inner />
+              </AppInterface>
+            )
           }}
         </ServerGate>
       </AppBaseProviders>
