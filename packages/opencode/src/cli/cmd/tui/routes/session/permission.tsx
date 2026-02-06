@@ -14,6 +14,7 @@ import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
 import { Keybind } from "@/util/keybind"
 import { Locale } from "@/util/locale"
 import { Global } from "@/global"
+import { PermissionNext } from "@/permission/next"
 import { useDialog } from "../../ui/dialog"
 
 type PermissionStage = "permission" | "always" | "reject"
@@ -260,7 +261,10 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                     <TextBody icon="⟳" title="Continue after repeated failures" />
                   </Match>
                   <Match when={true}>
-                    <TextBody icon="⚙" title={`Call tool ` + props.request.permission} />
+                    {(() => {
+                      const detail = PermissionNext.serialize(input() as Record<string, unknown>) || undefined
+                      return <TextBody icon="⚙" title={`Call tool ` + props.request.permission} description={detail} />
+                    })()}
                   </Match>
                 </Switch>
               }

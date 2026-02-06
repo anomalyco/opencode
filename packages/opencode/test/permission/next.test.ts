@@ -688,3 +688,98 @@ test("ask - allows all patterns when all match allow rules", async () => {
     },
   })
 })
+
+// serialize tests
+
+test("serialize - basic key-value pairs sorted alphabetically", () => {
+  const result = PermissionNext.serialize({ operation: "read", meetingId: "AAMk123" })
+  expect(result).toBe("meetingId=AAMk123, operation=read")
+})
+
+test("serialize - empty object returns empty string", () => {
+  expect(PermissionNext.serialize({})).toBe("")
+})
+
+test("serialize - single key-value pair", () => {
+  expect(PermissionNext.serialize({ operation: "read" })).toBe("operation=read")
+})
+
+test("serialize - numeric values", () => {
+  expect(PermissionNext.serialize({ count: 5, page: 1 })).toBe("count=5, page=1")
+})
+
+test("serialize - boolean values", () => {
+  expect(PermissionNext.serialize({ active: true, deleted: false })).toBe("active=true, deleted=false")
+})
+
+test("serialize - nested objects are JSON stringified", () => {
+  const result = PermissionNext.serialize({ filter: { date: "2024-01-01" }, operation: "read" })
+  expect(result).toBe(`filter={"date":"2024-01-01"}, operation=read`)
+})
+
+test("serialize - null and undefined values", () => {
+  const result = PermissionNext.serialize({ a: null, b: undefined })
+  expect(result).toBe("a=null, b=undefined")
+})
+
+test("serialize - array values are JSON stringified", () => {
+  const result = PermissionNext.serialize({ ids: [1, 2, 3] })
+  expect(result).toBe("ids=[1,2,3]")
+})
+
+// MCP permission pattern matching integration tests
+
+test("evaluate - MCP tool with serialized args matches wildcard pattern", () => {
+  const ruleset = PermissionNext.fromConfig({
+    outlook_calendar_meeting: {
+      "*": "ask",
+      "*operation=read*": "allow",
+    },
+  })
+  const serialized = PermissionNext.serialize({ operation: "read", meetingId: "AAMk123" })
+  const result = PermissionNext.evaluate("outlook_calendar_meeting", serialized, ruleset)
+  expect(result.action).toBe("allow")
+})
+
+test("evaluate - MCP tool with non-matching operation falls to default ask", () => {
+  const ruleset = PermissionNext.fromConfig({
+    outlook_calendar_meeting: {
+      "*": "ask",
+      "*operation=read*": "allow",
+    },
+  })
+  const serialized = PermissionNext.serialize({ operation: "create", subject: "Sprint Review" })
+  const result = PermissionNext.evaluate("outlook_calendar_meeting", serialized, ruleset)
+  expect(result.action).toBe("ask")
+})
+
+test("evaluate - MCP tool deny destructive operations", () => {
+  const ruleset = PermissionNext.fromConfig({
+    outlook_calendar_meeting: {
+      "*": "ask",
+      "*operation=read*": "allow",
+      "*operation=delete*": "deny",
+    },
+  })
+  const serialized = PermissionNext.serialize({ operation: "delete", meetingId: "AAMk123" })
+  const result = PermissionNext.evaluate("outlook_calendar_meeting", serialized, ruleset)
+  expect(result.action).toBe("deny")
+})
+
+test("evaluate - MCP tool blanket allow", () => {
+  const ruleset = PermissionNext.fromConfig({
+    slack_read_messages: "allow",
+  })
+  const serialized = PermissionNext.serialize({ channel: "general" })
+  const result = PermissionNext.evaluate("slack_read_messages", serialized, ruleset)
+  expect(result.action).toBe("allow")
+})
+
+test("evaluate - MCP tool with empty args and blanket allow", () => {
+  const ruleset = PermissionNext.fromConfig({
+    my_mcp_tool: "allow",
+  })
+  // empty args -> PermissionNext.serialize returns "" -> pattern falls back to "*"
+  const result = PermissionNext.evaluate("my_mcp_tool", "*", ruleset)
+  expect(result.action).toBe("allow")
+})

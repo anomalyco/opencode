@@ -274,6 +274,13 @@ export namespace PermissionNext {
     }
   }
 
+  export function serialize(args: Record<string, unknown>): string {
+    return Object.entries(args)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => `${k}=${v === null || typeof v !== "object" ? v : JSON.stringify(v)}`)
+      .join(", ")
+  }
+
   export async function list() {
     return state().then((x) => Object.values(x.pending).map((x) => x.info))
   }
