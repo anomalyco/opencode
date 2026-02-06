@@ -3,17 +3,22 @@ description: "Setup Bun with caching and install dependencies"
 runs:
   using: "composite"
   steps:
-    - name: Mount Bun Cache
-      uses: useblacksmith/stickydisk@v1
+    # Use GitHub cache for Bun's package tarball cache.
+    # This replaces stickydisk, which was introducing frequent timeout penalties on our runners.
+    - name: Cache Bun install cache
+      uses: actions/cache@v4
       with:
-        key: ${{ github.repository }}-bun-cache-${{ runner.os }}
-        path: ~/.bun
+        path: ~/.bun/install/cache
+        key: ${{ runner.os }}-bun-install-${{ hashFiles('bun.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-bun-install-
 
     - name: Setup Bun
       uses: oven-sh/setup-bun@v2
       with:
         bun-version-file: package.json
 
+    # Keep CI deterministic and avoid lockfile churn during workflow runs.
     - name: Install dependencies
-      run: bun install
+      run: bun install --frozen-lockfile
       shell: bash

@@ -5,7 +5,17 @@ on:
     branches:
       - dev
   pull_request:
+    # Skip expensive e2e jobs for docs-only changes.
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
   workflow_dispatch:
+
+# Cancel superseded runs from the same branch/PR to reduce queue time and wasted CI minutes.
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: test (${{ matrix.settings.name }})
@@ -19,14 +29,22 @@ jobs:
             workdir: packages/app
             command: bun test:e2e
           - name: windows
-            host: blacksmith-4vcpu-windows-2025
+            host: windows-latest
             playwright: bunx playwright install
             workdir: packages/app
-            command: bun test:e2e:local
+            # Run Windows lane with two workers to reduce total runtime on push/dev coverage.
+            command: bun test:e2e:local -- --workers=2
+    # PRs run Linux only for fast feedback; Windows coverage is still enforced on push to dev.
+    if: matrix.settings.name != 'windows' || github.event_name != 'pull_request'
     runs-on: ${{ matrix.settings.host }}
     defaults:
       run:
         shell: bash
+    env:
+      # Avoid external models.dev refresh during CI startup to reduce timeout-related delays/noise.
+      OPENCODE_DISABLE_MODELS_FETCH: "true"
+      # Keep browser binaries in a stable location so they can be cached across runs.
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -35,6 +53,15 @@ jobs:
 
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
+
+      # Cache Playwright browser binaries because install/download is a recurring setup cost.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: ${{ runner.os }}-playwright-${{ hashFiles('packages/app/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
 
       - name: Set OS-specific paths
         run: |
