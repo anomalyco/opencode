@@ -147,6 +147,10 @@ export namespace Config {
 
     const deps = []
 
+    // Load external commands from .agents/commands/ BEFORE .opencode/ directories
+    // so that .opencode/commands/ can override them
+    result.command = mergeDeep(result.command ?? {}, await loadExternalCommands())
+
     for (const dir of unique(directories)) {
       if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
         for (const file of ["opencode.jsonc", "opencode.json"]) {
@@ -336,41 +340,160 @@ export namespace Config {
   }
 
   const COMMAND_GLOB = new Bun.Glob("{command,commands}/**/*.md")
+  const AGENTS_COMMAND_GLOB = new Bun.Glob("commands/**/*.md")
+
+  async function loadCommandFromFile(item: string, result: Record<string, Command>, patterns: string[]) {
+    const md = await ConfigMarkdown.parse(item).catch(async (err) => {
+      const message = ConfigMarkdown.FrontmatterError.isInstance(err)
+        ? err.data.message
+        : `Failed to parse command ${item}`
+      const { Session } = await import("@/session")
+      Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+      log.error("failed to load command", { command: item, err })
+      return undefined
+    })
+    if (!md) return
+
+    const file = rel(item, patterns) ?? path.basename(item)
+    const name = trim(file)
+
+    // Skip if command already exists (precedence: .opencode/commands/ > .agents/commands/)
+    if (result[name]) {
+      log.debug("skipping duplicate command", { name, location: item, existing: result[name] })
+      return
+    }
+
+    const config = {
+      name,
+      ...md.data,
+      template: md.content.trim(),
+    }
+    const parsed = Command.safeParse(config)
+    if (parsed.success) {
+      result[name] = parsed.data
+      return
+    }
+    throw new InvalidError({ path: item, issues: parsed.error.issues }, { cause: parsed.error })
+  }
+
   async function loadCommand(dir: string) {
     const result: Record<string, Command> = {}
+
+    // Scan .opencode/command/ directories (highest priority)
     for await (const item of COMMAND_GLOB.scan({
       absolute: true,
       followSymlinks: true,
       dot: true,
       cwd: dir,
     })) {
-      const md = await ConfigMarkdown.parse(item).catch(async (err) => {
-        const message = ConfigMarkdown.FrontmatterError.isInstance(err)
-          ? err.data.message
-          : `Failed to parse command ${item}`
-        const { Session } = await import("@/session")
-        Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
-        log.error("failed to load command", { command: item, err })
-        return undefined
-      })
-      if (!md) continue
-
-      const patterns = ["/.opencode/command/", "/.opencode/commands/", "/command/", "/commands/"]
-      const file = rel(item, patterns) ?? path.basename(item)
-      const name = trim(file)
-
-      const config = {
-        name,
-        ...md.data,
-        template: md.content.trim(),
-      }
-      const parsed = Command.safeParse(config)
-      if (parsed.success) {
-        result[config.name] = parsed.data
-        continue
-      }
-      throw new InvalidError({ path: item, issues: parsed.error.issues }, { cause: parsed.error })
+      await loadCommandFromFile(item, result, [
+        "/.opencode/command/",
+        "/.opencode/commands/",
+        "/command/",
+        "/commands/",
+      ])
     }
+
+    return result
+  }
+
+  export async function loadExternalCommands(): Promise<Record<string, Command>> {
+    const result: Record<string, Command> = {}
+
+    if (Flag.OPENCODE_DISABLE_EXTERNAL_COMMANDS) {
+      return result
+    }
+
+    const patterns = ["/.agents/commands/", "/commands/"]
+
+    // Scan global ~/.agents/commands/ first (lower priority)
+    // Later loads (project-level) will overwrite these (matching skills behavior)
+    const globalAgentsDir = path.join(Global.Path.home, ".agents")
+    if (await Filesystem.isDir(globalAgentsDir)) {
+      for await (const item of AGENTS_COMMAND_GLOB.scan({
+        cwd: globalAgentsDir,
+        absolute: true,
+        followSymlinks: true,
+        dot: true,
+      })) {
+        const md = await ConfigMarkdown.parse(item).catch(async (err) => {
+          const message = ConfigMarkdown.FrontmatterError.isInstance(err)
+            ? err.data.message
+            : `Failed to parse command ${item}`
+          const { Session } = await import("@/session")
+          Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+          log.error("failed to load command", { command: item, err })
+          return undefined
+        })
+        if (!md) continue
+
+        const file = rel(item, patterns) ?? path.basename(item)
+        const name = trim(file)
+
+        const config = {
+          name,
+          ...md.data,
+          template: md.content.trim(),
+        }
+        const parsed = Command.safeParse(config)
+        if (parsed.success) {
+          result[name] = parsed.data
+          continue
+        }
+        throw new InvalidError({ path: item, issues: parsed.error.issues }, { cause: parsed.error })
+      }
+    }
+
+    // Scan project .agents/commands/ directories (higher priority than global)
+    // These will overwrite any global commands with the same name
+    for await (const dir of Filesystem.up({
+      targets: [".agents"],
+      start: Instance.directory,
+      stop: Instance.worktree,
+    })) {
+      for await (const item of AGENTS_COMMAND_GLOB.scan({
+        cwd: dir,
+        absolute: true,
+        followSymlinks: true,
+        dot: true,
+      })) {
+        const md = await ConfigMarkdown.parse(item).catch(async (err) => {
+          const message = ConfigMarkdown.FrontmatterError.isInstance(err)
+            ? err.data.message
+            : `Failed to parse command ${item}`
+          const { Session } = await import("@/session")
+          Bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+          log.error("failed to load command", { command: item, err })
+          return undefined
+        })
+        if (!md) continue
+
+        const file = rel(item, patterns) ?? path.basename(item)
+        const name = trim(file)
+
+        // Warn on duplicate command names (same behavior as skills)
+        if (result[name]) {
+          log.warn("duplicate command name", {
+            name,
+            existing: result[name],
+            duplicate: item,
+          })
+        }
+
+        const config = {
+          name,
+          ...md.data,
+          template: md.content.trim(),
+        }
+        const parsed = Command.safeParse(config)
+        if (parsed.success) {
+          result[name] = parsed.data
+          continue
+        }
+        throw new InvalidError({ path: item, issues: parsed.error.issues }, { cause: parsed.error })
+      }
+    }
+
     return result
   }
 

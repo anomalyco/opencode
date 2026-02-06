@@ -40,6 +40,43 @@ Use the command by typing `/` followed by the command name.
 
 ---
 
+## Co-host commands with skills
+
+If you're using the [Agent Skills](/docs/skills) standard with `.agents/skills/`, you can keep all your agentic coding instructions together by also placing commands in `.agents/commands/`:
+
+```
+my-project/
+├── .agents/
+│   ├── skills/
+│   │   ├── git-workflow/SKILL.md
+│   │   └── testing/SKILL.md
+│   └── commands/
+│       ├── pr-review.md
+│       ├── refactor.md
+│       └── release.md
+├── src/
+└── ...
+```
+
+This structure makes it easier to:
+
+- **Share configurations**: Distribute your entire `.agents/` folder to team members
+- **Version control**: Keep agent instructions in your repo without cluttering `.opencode/`
+- **Standardize**: Follow emerging agent standards across different AI coding tools
+
+### Location support
+
+OpenCode discovers commands from these locations (in priority order):
+
+1. **Project**: `.opencode/commands/` (highest priority)
+2. **Project**: `.agents/commands/`
+3. **Global**: `~/.config/opencode/commands/`
+4. **Global**: `~/.agents/commands/`
+
+If a command exists in multiple locations, the first one found wins. Use `.opencode/commands/` for project-specific overrides of shared agent commands.
+
+---
+
 ## Configure
 
 You can add custom commands through the OpenCode config or by creating markdown files in the `commands/` directory.
@@ -79,8 +116,8 @@ Now you can run this command in the TUI:
 
 You can also define commands using markdown files. Place them in:
 
-- Global: `~/.config/opencode/commands/`
-- Per-project: `.opencode/commands/`
+- **Global**: `~/.config/opencode/commands/` or `~/.agents/commands/`
+- **Per-project**: `.opencode/commands/` or `.agents/commands/`
 
 ```markdown title="~/.config/opencode/commands/test.md"
 ---

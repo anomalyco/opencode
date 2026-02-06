@@ -1583,6 +1583,217 @@ describe("deduplicatePlugins", () => {
   })
 })
 
+describe("external commands from .agents/commands/", () => {
+  test("discovers commands from project .agents/commands/ directory", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const agentsDir = path.join(dir, ".agents", "commands")
+        await fs.mkdir(agentsDir, { recursive: true })
+
+        await Bun.write(
+          path.join(agentsDir, "test-cmd.md"),
+          `---
+description: Test command from .agents
+---
+Test command template`,
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.command?.["test-cmd"]).toEqual({
+          description: "Test command from .agents",
+          template: "Test command template",
+        })
+      },
+    })
+  })
+
+  test("discovers commands from global ~/.agents/commands/ directory", async () => {
+    await using tmp = await tmpdir()
+    const homeDir = path.join(tmp.path, "home")
+    await fs.mkdir(homeDir, { recursive: true })
+
+    const globalAgentsDir = path.join(homeDir, ".agents", "commands")
+    await fs.mkdir(globalAgentsDir, { recursive: true })
+
+    await Bun.write(
+      path.join(globalAgentsDir, "global-cmd.md"),
+      `---
+description: Global test command
+---
+Global command template`,
+    )
+
+    const originalHome = process.env.OPENCODE_TEST_HOME
+    process.env.OPENCODE_TEST_HOME = homeDir
+
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          expect(config.command?.["global-cmd"]).toEqual({
+            description: "Global test command",
+            template: "Global command template",
+          })
+        },
+      })
+    } finally {
+      if (originalHome === undefined) delete process.env.OPENCODE_TEST_HOME
+      else process.env.OPENCODE_TEST_HOME = originalHome
+    }
+  })
+
+  test(".opencode/commands/ takes precedence over .agents/commands/", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        // Create .opencode/commands/ version (highest priority)
+        const opencodeDir = path.join(dir, ".opencode", "commands")
+        await fs.mkdir(opencodeDir, { recursive: true })
+        await Bun.write(
+          path.join(opencodeDir, "shared.md"),
+          `---
+description: From .opencode
+---
+Opencode template`,
+        )
+
+        // Create .agents/commands/ version (lower priority)
+        const agentsDir = path.join(dir, ".agents", "commands")
+        await fs.mkdir(agentsDir, { recursive: true })
+        await Bun.write(
+          path.join(agentsDir, "shared.md"),
+          `---
+description: From .agents
+---
+Agents template`,
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        // .opencode version should win
+        expect(config.command?.["shared"]).toEqual({
+          description: "From .opencode",
+          template: "Opencode template",
+        })
+      },
+    })
+  })
+
+  test("project .agents/commands/ takes precedence over global ~/.agents/commands/", async () => {
+    await using tmp = await tmpdir()
+
+    const homeDir = path.join(tmp.path, "home")
+    await fs.mkdir(homeDir, { recursive: true })
+
+    // Create global ~/.agents/commands/
+    const globalAgentsDir = path.join(homeDir, ".agents", "commands")
+    await fs.mkdir(globalAgentsDir, { recursive: true })
+    await Bun.write(
+      path.join(globalAgentsDir, "shared.md"),
+      `---
+description: Global command
+---
+Global template`,
+    )
+
+    // Create project .agents/commands/ (in tmp.path)
+    const projectAgentsDir = path.join(tmp.path, ".agents", "commands")
+    await fs.mkdir(projectAgentsDir, { recursive: true })
+    await Bun.write(
+      path.join(projectAgentsDir, "shared.md"),
+      `---
+description: Project command
+---
+Project template`,
+    )
+
+    const originalHome = process.env.OPENCODE_TEST_HOME
+    process.env.OPENCODE_TEST_HOME = homeDir
+
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          // Project version should win
+          expect(config.command?.["shared"]).toEqual({
+            description: "Project command",
+            template: "Project template",
+          })
+        },
+      })
+    } finally {
+      if (originalHome === undefined) delete process.env.OPENCODE_TEST_HOME
+      else process.env.OPENCODE_TEST_HOME = originalHome
+    }
+  })
+
+  test("OPENCODE_DISABLE_EXTERNAL_COMMANDS flag disables .agents/commands/ loading", async () => {
+    const originalFlag = process.env.OPENCODE_DISABLE_EXTERNAL_COMMANDS
+    process.env.OPENCODE_DISABLE_EXTERNAL_COMMANDS = "true"
+
+    try {
+      await using tmp = await tmpdir({
+        init: async (dir) => {
+          const agentsDir = path.join(dir, ".agents", "commands")
+          await fs.mkdir(agentsDir, { recursive: true })
+          await Bun.write(
+            path.join(agentsDir, "should-not-load.md"),
+            `---
+description: Should not load
+---
+Template`,
+          )
+        },
+      })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const config = await Config.get()
+          expect(config.command?.["should-not-load"]).toBeUndefined()
+        },
+      })
+    } finally {
+      if (originalFlag === undefined) delete process.env.OPENCODE_DISABLE_EXTERNAL_COMMANDS
+      else process.env.OPENCODE_DISABLE_EXTERNAL_COMMANDS = originalFlag
+    }
+  })
+
+  test("discovers nested commands from .agents/commands/ subdirectories", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const agentsDir = path.join(dir, ".agents", "commands")
+        await fs.mkdir(path.join(agentsDir, "nested"), { recursive: true })
+
+        await Bun.write(
+          path.join(agentsDir, "nested", "deep-cmd.md"),
+          `---
+description: Deep nested command
+---
+Nested template`,
+        )
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const config = await Config.get()
+        expect(config.command?.["nested/deep-cmd"]).toEqual({
+          description: "Deep nested command",
+          template: "Nested template",
+        })
+      },
+    })
+  })
+})
+
 describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
   test("skips project config files when flag is set", async () => {
     const originalEnv = process.env["OPENCODE_DISABLE_PROJECT_CONFIG"]
