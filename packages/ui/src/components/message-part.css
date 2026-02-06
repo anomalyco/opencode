@@ -121,7 +121,7 @@
 
   [data-slot="text-part-copy-wrapper"] {
     position: absolute;
-    top: 8px;
+    top: -28px;
     right: 8px;
     opacity: 0;
     transition: opacity 0.15s ease;
