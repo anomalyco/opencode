@@ -51,6 +51,16 @@ export namespace Plugin {
       plugins = [...BUILTIN, ...plugins]
     }
 
+    const disabled = new Set(config.disabled_plugins ?? [])
+    plugins = plugins.filter((plugin) => {
+      const name = Config.getPluginName(plugin)
+      if (disabled.has(name)) {
+        log.info("skipping disabled plugin", { name, path: plugin })
+        return false
+      }
+      return true
+    })
+
     for (let plugin of plugins) {
       // ignore old codex plugin since it is supported first party now
       if (plugin.includes("opencode-openai-codex-auth") || plugin.includes("opencode-copilot-auth")) continue

@@ -31,6 +31,7 @@ import path from "path"
 import { Global } from "./global"
 import { JsonMigration } from "./storage/json-migration"
 import { Database } from "./storage/db"
+import { PluginCommand } from "./cli/cmd/plugin"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -121,6 +122,7 @@ const cli = yargs(hideBin(process.argv))
   .completion("completion", "generate shell completion script")
   .command(AcpCommand)
   .command(McpCommand)
+  .command(PluginCommand)
   .command(TuiThreadCommand)
   .command(AttachCommand)
   .command(RunCommand)

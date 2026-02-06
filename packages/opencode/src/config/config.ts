@@ -1022,6 +1022,12 @@ export namespace Config {
         })
         .optional(),
       plugin: z.string().array().optional(),
+      disabled_plugins: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Plugins to disable. Can be plugin names (e.g., 'my-plugin') or package specifiers (e.g., '@scope/plugin@1.0.0')",
+        ),
       snapshot: z.boolean().optional(),
       share: z
         .enum(["manual", "auto", "disabled"])
