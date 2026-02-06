@@ -9547,6 +9547,13 @@
                 "items": {
                   "type": "string"
                 }
+              },
+              "urls": {
+                "description": "URLs to fetch skills from (e.g., https://example.com/.well-known/skills/)",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             }
           },
