@@ -13,7 +13,7 @@ import { ServerAuth } from "../server-auth"
 import { Log } from "../../../opencode/src/util/log"
 import { createManualRateLimiter, getClientIP, type ManualRateLimiter } from "../security/rate-limit"
 import { parseDuration } from "../../../opencode/src/util/duration"
-import { getConnectionSecurityInfo, shouldBlockInsecureLogin } from "../security/https-detection"
+import { shouldBlockInsecureLogin } from "../security/https-detection"
 import { create2FAToken, verify2FAToken, type TwoFactorUserInfo } from "../auth/two-factor-token"
 import { verifyDeviceTrustToken, createDeviceTrustToken, createDeviceFingerprint } from "../auth/device-trust"
 import { getTokenSecret } from "../security/token-secret"
@@ -192,7 +192,7 @@ async function loadLoginTemplate(uiDir: string): Promise<string> {
 
 function injectLoginBootstrap(
   template: string,
-  securityContext: { shouldWarn: boolean; shouldBlock: boolean; isSecure: boolean },
+  securityContext: { shouldBlock: boolean },
 ): string {
   const bootstrap = `<script>window.__OPENCODE_LOGIN__ = ${JSON.stringify(securityContext)};</script>`
   if (template.includes("</head>")) {
@@ -296,9 +296,8 @@ function injectTwoFactorSetupBootstrap(
 export const AuthRoutes = lazy(() =>
   new Hono<AuthEnv>()
     .get("/login", async (c) => {
-      // Get security context for connection
       const authConfig = ServerAuth.get()
-      const securityContext = getConnectionSecurityInfo(c, {
+      const shouldBlock = shouldBlockInsecureLogin(c, {
         requireHttps: authConfig.requireHttps,
         trustProxy: authConfig.trustProxy,
       })
@@ -310,7 +309,7 @@ export const AuthRoutes = lazy(() =>
 
       try {
         const template = await loadLoginTemplate(uiDir)
-        return c.html(injectLoginBootstrap(template, securityContext))
+        return c.html(injectLoginBootstrap(template, { shouldBlock }))
       } catch (error) {
         log.error("Failed to load login HTML", { error })
         return c.text("Login UI is missing. Run the app build to generate login.html.", 500)

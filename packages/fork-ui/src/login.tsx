@@ -2,9 +2,7 @@ import { Show, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 
 type LoginBootstrap = {
-  shouldWarn?: boolean
   shouldBlock?: boolean
-  isSecure?: boolean
 }
 
 declare global {
@@ -15,9 +13,15 @@ declare global {
 
 const HTTP_WARNING_KEY = "http-warning-dismissed"
 
+function shouldWarnForHttpConnection(): boolean {
+  const hostname = window.location.hostname
+  const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1"
+  return window.location.protocol === "http:" && !isLocalhost
+}
+
 export function LoginApp() {
   const bootstrap = window.__OPENCODE_LOGIN__ ?? {}
-  const shouldWarn = Boolean(bootstrap.shouldWarn)
+  const shouldWarn = shouldWarnForHttpConnection()
   const shouldBlock = Boolean(bootstrap.shouldBlock)
 
   const [state, setState] = createStore({

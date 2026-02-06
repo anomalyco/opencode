@@ -617,8 +617,8 @@ describe("HTTPS detection and enforcement", () => {
     expect(res.status).toBe(200)
     const html = await res.text()
     expect(html).toContain("window.__OPENCODE_LOGIN__")
-    expect(html).toContain('"shouldWarn":true')
     expect(html).toContain('"shouldBlock":false')
+    expect(html).not.toContain('"shouldWarn":')
   })
 
   test("GET /login returns blocked HTML when requireHttps is block and HTTP", async () => {
@@ -645,8 +645,8 @@ describe("HTTPS detection and enforcement", () => {
     })
     expect(res.status).toBe(200)
     const html = await res.text()
-    expect(html).not.toContain('id="httpWarning"')
-    expect(html).not.toContain("HTTPS is required")
+    expect(html).toContain("window.__OPENCODE_LOGIN__")
+    expect(html).toContain('"shouldBlock":false')
   })
 
   test("GET /login returns normal HTML for localhost over HTTP", async () => {
@@ -659,8 +659,8 @@ describe("HTTPS detection and enforcement", () => {
     })
     expect(res.status).toBe(200)
     const html = await res.text()
-    expect(html).not.toContain('id="httpWarning"')
-    expect(html).not.toContain("HTTPS is required")
+    expect(html).toContain("window.__OPENCODE_LOGIN__")
+    expect(html).toContain('"shouldBlock":false')
   })
 
   test("POST /login returns 403 when requireHttps is block and HTTP", async () => {
@@ -712,7 +712,8 @@ describe("HTTPS detection and enforcement", () => {
     })
     expect(res.status).toBe(200)
     const html = await res.text()
-    expect(html).not.toContain('id="httpWarning"') // Should not warn because X-Forwarded-Proto says https
+    expect(html).toContain("window.__OPENCODE_LOGIN__")
+    expect(html).toContain('"shouldBlock":false')
   })
 
   test("respects multi-value X-Forwarded-Proto when trustProxy is true", async () => {
@@ -728,7 +729,8 @@ describe("HTTPS detection and enforcement", () => {
     })
     expect(res.status).toBe(200)
     const html = await res.text()
-    expect(html).not.toContain('id="httpWarning"')
+    expect(html).toContain("window.__OPENCODE_LOGIN__")
+    expect(html).toContain('"shouldBlock":false')
   })
 
   test("respects Forwarded proto when trustProxy is true", async () => {
@@ -744,7 +746,8 @@ describe("HTTPS detection and enforcement", () => {
     })
     expect(res.status).toBe(200)
     const html = await res.text()
-    expect(html).not.toContain('id="httpWarning"')
+    expect(html).toContain("window.__OPENCODE_LOGIN__")
+    expect(html).toContain('"shouldBlock":false')
   })
 
   test("ignores X-Forwarded-Proto when trustProxy is false", async () => {
@@ -761,6 +764,7 @@ describe("HTTPS detection and enforcement", () => {
     expect(res.status).toBe(200)
     const html = await res.text()
     expect(html).toContain("window.__OPENCODE_LOGIN__")
-    expect(html).toContain('"shouldWarn":true') // Should warn because trustProxy is false
+    expect(html).toContain('"shouldBlock":false')
+    expect(html).not.toContain('"shouldWarn":')
   })
 })
