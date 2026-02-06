@@ -66,10 +66,12 @@ export async function createMenu(trigger: (id: string) => void) {
         items: [
           await MenuItem.new({
             text: "New Session",
+            accelerator: "Shift+Cmd+S",
             action: () => trigger("session.new"),
           }),
           await MenuItem.new({
             text: "Open Project...",
+            accelerator: "Cmd+O",
             action: () => trigger("project.open"),
           }),
           await PredefinedMenuItem.new({
@@ -112,10 +114,12 @@ export async function createMenu(trigger: (id: string) => void) {
           await MenuItem.new({
             action: () => trigger("sidebar.toggle"),
             text: "Toggle Sidebar",
+            accelerator: "Cmd+B"
           }),
           await MenuItem.new({
             action: () => trigger("terminal.toggle"),
             text: "Toggle Terminal",
+            accelerator: "Ctrl+`"
           }),
           await MenuItem.new({
             action: () => trigger("fileTree.toggle"),
@@ -136,12 +140,14 @@ export async function createMenu(trigger: (id: string) => void) {
             item: "Separator",
           }),
           await MenuItem.new({
-            action: () => trigger("session.next"),
+            action: () => trigger("session.previous"),
             text: "Previous Session",
+            accelerator: "Option+ArrowUp"
           }),
           await MenuItem.new({
-            action: () => trigger("session.previous"),
+            action: () => trigger("session.next"),
             text: "Next Session",
+            accelerator: "Option+ArrowDown"
           }),
           await PredefinedMenuItem.new({
             item: "Separator",
