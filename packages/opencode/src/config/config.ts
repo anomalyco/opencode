@@ -639,6 +639,16 @@ export namespace Config {
   })
   export type Command = z.infer<typeof Command>
 
+  export const Skills = z.object({
+    paths: z.array(z.string()).optional().describe("Additional paths to skill folders"),
+    urls: z
+      .array(z.string())
+      .optional()
+      .describe("URLs to fetch skills from (e.g., https://example.com/.well-known/skills/)"),
+  })
+  export type Skills = z.infer<typeof Skills>
+
+
   export const Agent = z
     .object({
       model: z.string().optional(),
@@ -1144,12 +1154,7 @@ export namespace Config {
           },
         ),
       instructions: z.array(z.string()).optional().describe("Additional instruction files or patterns to include"),
-      skills: z
-        .object({
-          paths: z.array(z.string()).optional().describe("Additional directories to scan for skills"),
-        })
-        .optional()
-        .describe("Skill discovery configuration"),
+      skills: Skills.optional().describe("Additional skill folder paths"),
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
       permission: Permission.optional(),
       tools: z.record(z.string(), z.boolean()).optional(),
