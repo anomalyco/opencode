@@ -412,6 +412,8 @@ export const dict = {
   "session.tab.session": "セッション",
   "session.tab.review": "レビュー",
   "session.tab.context": "コンテキスト",
+  "tab.context.closeOthers": "他のタブを閉じる",
+  "session.files.mention": "メンション",
   "session.panel.reviewAndFiles": "レビューとファイル",
   "session.review.filesChanged": "{{count}} ファイル変更",
   "session.review.change.one": "変更",

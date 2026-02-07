@@ -66,6 +66,8 @@ export function SessionSidePanel(props: {
   kinds: Map<string, "add" | "del" | "mix">
   activeDiff?: string
   focusReviewDiff: (path: string) => void
+  onMention?: (tab: string) => void
+  onCloseOthers?: (tab: string) => void
 }) {
   return (
     <Show when={props.open}>
@@ -131,7 +133,15 @@ export function SessionSidePanel(props: {
                       </Show>
                       <SortableProvider ids={props.openedTabs()}>
                         <For each={props.openedTabs()}>
-                          {(tab) => <SortableTab tab={tab} onTabClose={props.tabs().close} />}
+                          {(tab) => (
+                            <SortableTab
+                              tab={tab}
+                              onTabClose={props.tabs().close}
+                              onMention={props.onMention}
+                              onCloseOthers={props.onCloseOthers}
+                              onClick={() => props.openTab(tab)}
+                            />
+                          )}
                         </For>
                       </SortableProvider>
                       <StickyAddButton>

@@ -815,6 +815,17 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
               setStore("sessionTabs", session, "active", next)
             })
           },
+          closeOthers(tab: string) {
+            const session = key()
+            const current = store.sessionTabs[session]
+            if (!current) return
+            const all = [tab, "context", "review"].filter((x) => current.all.includes(x))
+            const active = current.active === tab || all.includes(current.active!) ? current.active! : tab
+            batch(() => {
+              setStore("sessionTabs", session, "all", all)
+              setStore("sessionTabs", session, "active", active)
+            })
+          },
           move(tab: string, to: number) {
             const session = key()
             const current = store.sessionTabs[session]

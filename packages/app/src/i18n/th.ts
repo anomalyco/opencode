@@ -421,6 +421,8 @@ export const dict = {
   "session.tab.session": "เซสชัน",
   "session.tab.review": "ตรวจสอบ",
   "session.tab.context": "บริบท",
+  "tab.context.closeOthers": "ปิดแท็บอื่นๆ",
+  "session.files.mention": "กล่าวถึง",
   "session.panel.reviewAndFiles": "ตรวจสอบและไฟล์",
   "session.review.filesChanged": "{{count}} ไฟล์ที่เปลี่ยนแปลง",
   "session.review.change.one": "การเปลี่ยนแปลง",

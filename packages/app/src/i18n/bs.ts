@@ -444,6 +444,8 @@ export const dict = {
   "session.tab.session": "Sesija",
   "session.tab.review": "Pregled",
   "session.tab.context": "Kontekst",
+  "tab.context.closeOthers": "Zatvori ostale",
+  "session.files.mention": "Spomeni",
   "session.panel.reviewAndFiles": "Pregled i datoteke",
   "session.review.filesChanged": "Izmijenjeno {{count}} datoteka",
   "session.review.change.one": "Izmjena",

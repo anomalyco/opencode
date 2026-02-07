@@ -416,6 +416,8 @@ export const dict = {
   "session.tab.session": "جلسة",
   "session.tab.review": "مراجعة",
   "session.tab.context": "سياق",
+  "tab.context.closeOthers": "إغلاق البقية",
+  "session.files.mention": "إشارة",
   "session.panel.reviewAndFiles": "المراجعة والملفات",
   "session.review.filesChanged": "تم تغيير {{count}} ملفات",
   "session.review.change.one": "تغيير",

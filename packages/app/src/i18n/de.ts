@@ -460,6 +460,8 @@ export const dict = {
   "session.tab.session": "Sitzung",
   "session.tab.review": "Überprüfung",
   "session.tab.context": "Kontext",
+  "tab.context.closeOthers": "Andere schließen",
+  "session.files.mention": "Erwähnen",
   "session.panel.reviewAndFiles": "Überprüfung und Dateien",
   "session.review.filesChanged": "{{count}} Dateien geändert",
   "session.review.change.one": "Änderung",
