@@ -466,8 +466,10 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
   init: (props: { nativeParser?: NativeMarkdownParser }) => {
     const jsParser = marked.use(
       {
+        gfm: true,
         renderer: {
           link({ href, title, text }) {
+            if (!href) return text
             const titleAttr = title ? ` title="${title}"` : ""
             return `<a href="${href}"${titleAttr} class="external-link" target="_blank" rel="noopener noreferrer">${text}</a>`
           },

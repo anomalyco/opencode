@@ -49,6 +49,19 @@ type CopyLabels = {
   copied: string
 }
 
+const urlPattern = /^https?:\/\/[^\s<>()`"']+$/
+
+function codeUrl(text: string) {
+  const href = text.trim().replace(/[),.;!?]+$/, "")
+  if (!href.match(urlPattern)) return
+  try {
+    const url = new URL(href)
+    return url.toString()
+  } catch {
+    return
+  }
+}
+
 function createIcon(path: string, slot: string) {
   const icon = document.createElement("div")
   icon.setAttribute("data-component", "icon")
@@ -110,13 +123,69 @@ function setupCodeCopy(root: HTMLDivElement, labels: CopyLabels) {
     wrapper.appendChild(createCopyButton(labels))
   }
 
+  const markCodeLinks = () => {
+    const codeNodes = Array.from(root.querySelectorAll(":not(pre) > code"))
+    for (const code of codeNodes) {
+      const href = codeUrl(code.textContent ?? "")
+      if (!href) {
+        code.removeAttribute("data-link-url")
+        continue
+      }
+      code.setAttribute("data-link-url", href)
+    }
+  }
+
+  const updateModifier = (event: Pick<KeyboardEvent, "metaKey" | "ctrlKey">) => {
+    if (event.metaKey || event.ctrlKey) {
+      root.setAttribute("data-link-modifier", "true")
+      return
+    }
+    root.removeAttribute("data-link-modifier")
+  }
+
+  const handleKeyDown = (event: KeyboardEvent) => updateModifier(event)
+
+  const handleKeyUp = (event: KeyboardEvent) => updateModifier(event)
+
+  const handleWindowBlur = () => {
+    root.removeAttribute("data-link-modifier")
+  }
+
   const handleClick = async (event: MouseEvent) => {
     const target = event.target
     if (!(target instanceof Element)) return
+
+    const link = target.closest("a.external-link")
+    if (link instanceof HTMLAnchorElement) {
+      if (event.defaultPrevented) return
+      if (event.button !== 0) return
+      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
+      const href = link.href
+      if (!href) return
+      event.preventDefault()
+      event.stopPropagation()
+      window.open(href, "_blank", "noopener,noreferrer")
+      return
+    }
+
+    const codeEl = target.closest("code[data-link-url]")
+    if (codeEl instanceof HTMLElement) {
+      if (event.defaultPrevented) return
+      if (event.button !== 0) return
+      if (!event.metaKey && !event.ctrlKey) return
+      if (event.altKey || event.shiftKey) return
+      const href = codeEl.getAttribute("data-link-url")
+      if (!href) return
+      event.preventDefault()
+      event.stopPropagation()
+      window.open(href, "_blank", "noopener,noreferrer")
+      return
+    }
+
     const button = target.closest('[data-slot="markdown-copy-button"]')
     if (!(button instanceof HTMLButtonElement)) return
-    const code = button.closest('[data-component="markdown-code"]')?.querySelector("code")
-    const content = code?.textContent ?? ""
+    const copyCode = button.closest('[data-component="markdown-code"]')?.querySelector("code")
+    const content = copyCode?.textContent ?? ""
     if (!content) return
     const clipboard = navigator?.clipboard
     if (!clipboard) return
@@ -132,6 +201,7 @@ function setupCodeCopy(root: HTMLDivElement, labels: CopyLabels) {
   for (const block of blocks) {
     ensureWrapper(block)
   }
+  markCodeLinks()
 
   const buttons = Array.from(root.querySelectorAll('[data-slot="markdown-copy-button"]'))
   for (const button of buttons) {
@@ -139,9 +209,16 @@ function setupCodeCopy(root: HTMLDivElement, labels: CopyLabels) {
   }
 
   root.addEventListener("click", handleClick)
+  document.addEventListener("keydown", handleKeyDown, true)
+  document.addEventListener("keyup", handleKeyUp, true)
+  window.addEventListener("blur", handleWindowBlur)
 
   return () => {
     root.removeEventListener("click", handleClick)
+    document.removeEventListener("keydown", handleKeyDown, true)
+    document.removeEventListener("keyup", handleKeyUp, true)
+    window.removeEventListener("blur", handleWindowBlur)
+    root.removeAttribute("data-link-modifier")
     for (const timeout of timeouts.values()) {
       clearTimeout(timeout)
     }

@@ -175,6 +175,12 @@
     /* box-shadow: 0 0 0 0.5px var(--border-weak-base); */
   }
 
+  &[data-link-modifier="true"] code[data-link-url]:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+  }
+
   /* Tables */
   table {
     width: 100%;
