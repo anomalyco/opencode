@@ -1,0 +1,13 @@
+List all available skills that are currently loaded.
+
+For each skill, show:
+- Name (the command trigger, e.g. /skill-name)
+- Description
+- Location (file path where the skill is defined)
+
+Format the output as a clear, readable list. Group skills by their source location if there are many.
+
+If no skills are loaded, explain where skills can be defined:
+- Project-level: .opencode/skill/, .claude/skills/, .agents/skills/
+- Global: ~/.opencode/skill/, ~/.claude/skills/, ~/.agents/skills/
+- Config: skills.paths and skills.urls in opencode.json

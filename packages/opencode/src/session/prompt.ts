@@ -99,6 +99,12 @@ export namespace SessionPrompt {
       ),
     system: z.string().optional(),
     variant: z.string().optional(),
+    command: z
+      .object({
+        name: z.string(),
+        source: z.enum(["command", "mcp", "skill"]).optional(),
+      })
+      .optional(),
     parts: z.array(
       z.discriminatedUnion("type", [
         MessageV2.TextPart.omit({
@@ -849,6 +855,7 @@ export namespace SessionPrompt {
       model,
       system: input.system,
       variant,
+      command: input.command,
     }
     using _ = defer(() => InstructionPrompt.clear(info.id))
 
@@ -1625,29 +1632,41 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     const args = raw.map((arg) => arg.replace(quoteTrimRegex, ""))
 
     const templateCommand = await command.template
+    const isSkill = command.source === "skill"
 
-    const placeholders = templateCommand.match(placeholderRegex) ?? []
-    let last = 0
-    for (const item of placeholders) {
-      const value = Number(item.slice(1))
-      if (value > last) last = value
-    }
+    let template: string
+    if (isSkill) {
+      // Skills don't use $N placeholders — skip substitution to avoid
+      // corrupting LaTeX / currency patterns like $1, $2 in SKILL.md content.
+      // User arguments are appended via ARGUMENTS footer below.
+      template = templateCommand
+      if (input.arguments.trim()) {
+        template = template + "\n\nARGUMENTS: " + input.arguments
+      }
+    } else {
+      const placeholders = templateCommand.match(placeholderRegex) ?? []
+      let last = 0
+      for (const item of placeholders) {
+        const value = Number(item.slice(1))
+        if (value > last) last = value
+      }
 
-    // Let the final placeholder swallow any extra arguments so prompts read naturally
-    const withArgs = templateCommand.replaceAll(placeholderRegex, (_, index) => {
-      const position = Number(index)
-      const argIndex = position - 1
-      if (argIndex >= args.length) return ""
-      if (position === last) return args.slice(argIndex).join(" ")
-      return args[argIndex]
-    })
-    const usesArgumentsPlaceholder = templateCommand.includes("$ARGUMENTS")
-    let template = withArgs.replaceAll("$ARGUMENTS", input.arguments)
+      // Let the final placeholder swallow any extra arguments so prompts read naturally
+      const withArgs = templateCommand.replaceAll(placeholderRegex, (_, index) => {
+        const position = Number(index)
+        const argIndex = position - 1
+        if (argIndex >= args.length) return ""
+        if (position === last) return args.slice(argIndex).join(" ")
+        return args[argIndex]
+      })
+      const usesArgumentsPlaceholder = templateCommand.includes("$ARGUMENTS")
+      template = withArgs.replaceAll("$ARGUMENTS", input.arguments)
 
-    // If command doesn't explicitly handle arguments (no $N or $ARGUMENTS placeholders)
-    // but user provided arguments, append them to the template
-    if (placeholders.length === 0 && !usesArgumentsPlaceholder && input.arguments.trim()) {
-      template = template + "\n\n" + input.arguments
+      // If command doesn't explicitly handle arguments (no $N or $ARGUMENTS placeholders)
+      // but user provided arguments, append them to the template
+      if (placeholders.length === 0 && !usesArgumentsPlaceholder && input.arguments.trim()) {
+        template = template + "\n\n" + input.arguments
+      }
     }
 
     const shell = ConfigMarkdown.shell(template)
@@ -1707,22 +1726,44 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
     const templateParts = await resolvePromptParts(template)
     const isSubtask = (agent.mode === "subagent" && command.subtask !== false) || command.subtask === true
-    const parts = isSubtask
-      ? [
-          {
-            type: "subtask" as const,
-            agent: agent.name,
-            description: command.description ?? "",
-            command: input.command,
-            model: {
-              providerID: taskModel.providerID,
-              modelID: taskModel.modelID,
-            },
-            // TODO: how can we make task tool accept a more complex input?
-            prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
+    let parts: typeof templateParts
+    if (isSubtask) {
+      parts = [
+        {
+          type: "subtask" as const,
+          agent: agent.name,
+          description: command.description ?? "",
+          command: input.command,
+          model: {
+            providerID: taskModel.providerID,
+            modelID: taskModel.modelID,
           },
-        ]
-      : [...templateParts, ...(input.parts ?? [])]
+          // TODO: how can we make task tool accept a more complex input?
+          prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
+        },
+      ]
+    } else if (isSkill) {
+      // For skills: user arguments are displayed as the primary message,
+      // the full skill template is sent as synthetic (hidden from UI, visible to LLM).
+      const skillParts: typeof templateParts = []
+      if (input.arguments.trim()) {
+        skillParts.push({
+          type: "text" as const,
+          text: input.arguments,
+        })
+      }
+      // Mark all template parts as synthetic so they're hidden from the user message display
+      for (const part of templateParts) {
+        if (part.type === "text") {
+          skillParts.push({ ...part, synthetic: true })
+        } else {
+          skillParts.push(part)
+        }
+      }
+      parts = [...skillParts, ...(input.parts ?? [])]
+    } else {
+      parts = [...templateParts, ...(input.parts ?? [])]
+    }
 
     const userAgent = isSubtask ? (input.agent ?? (await Agent.defaultAgent())) : agentName
     const userModel = isSubtask
@@ -1748,6 +1789,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       agent: userAgent,
       parts,
       variant: input.variant,
+      command: {
+        name: input.command,
+        source: command.source,
+      },
     })) as MessageV2.WithParts
 
     Bus.publish(Command.Event.Executed, {

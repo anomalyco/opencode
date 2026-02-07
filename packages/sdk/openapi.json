@@ -2426,6 +2426,19 @@
                   "variant": {
                     "type": "string"
                   },
+                  "command": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "source": {
+                        "type": "string",
+                        "enum": ["command", "mcp", "skill"]
+                      }
+                    },
+                    "required": ["name"]
+                  },
                   "parts": {
                     "type": "array",
                     "items": {
@@ -2801,6 +2814,19 @@
                   },
                   "variant": {
                     "type": "string"
+                  },
+                  "command": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "source": {
+                        "type": "string",
+                        "enum": ["command", "mcp", "skill"]
+                      }
+                    },
+                    "required": ["name"]
                   },
                   "parts": {
                     "type": "array",
@@ -6164,6 +6190,19 @@
           },
           "variant": {
             "type": "string"
+          },
+          "command": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string",
+                "enum": ["command", "mcp", "skill"]
+              }
+            },
+            "required": ["name"]
           }
         },
         "required": ["id", "sessionID", "role", "time", "agent", "model"]
@@ -8846,12 +8885,12 @@
           },
           "history_previous": {
             "description": "Previous history item",
-            "default": "up",
+            "default": "ctrl+up",
             "type": "string"
           },
           "history_next": {
             "description": "Next history item",
-            "default": "down",
+            "default": "ctrl+down",
             "type": "string"
           },
           "session_child_cycle": {

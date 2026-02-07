@@ -5,6 +5,7 @@ import { Instance } from "../project/instance"
 import { Identifier } from "../id/id"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
+import PROMPT_SKILLS from "./template/skills.txt"
 import { MCP } from "../mcp"
 import { Skill } from "../skill"
 
@@ -54,6 +55,7 @@ export namespace Command {
   export const Default = {
     INIT: "init",
     REVIEW: "review",
+    SKILLS: "skills",
   } as const
 
   const state = Instance.state(async () => {
@@ -78,6 +80,24 @@ export namespace Command {
         },
         subtask: true,
         hints: hints(PROMPT_REVIEW),
+      },
+      [Default.SKILLS]: {
+        name: Default.SKILLS,
+        description: "list all available skills",
+        source: "command",
+        get template() {
+          return (async () => {
+            const skills = await Skill.all()
+            if (skills.length === 0) {
+              return `${PROMPT_SKILLS}\n\n**No skills are currently loaded.**`
+            }
+            const skillList = skills
+              .map((s) => `- **/${s.name}**: ${s.description}\n  Location: \`${s.location}\``)
+              .join("\n")
+            return `${PROMPT_SKILLS}\n\n**Currently loaded skills (${skills.length}):**\n\n${skillList}`
+          })()
+        },
+        hints: [],
       },
     }
 

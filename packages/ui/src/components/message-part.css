@@ -140,6 +140,33 @@
   .font-medium {
     font-weight: var(--font-weight-medium);
   }
+
+  [data-slot="user-message-skill-content"] {
+    padding: 8px 12px;
+    max-height: 320px;
+    overflow-y: auto;
+    border-top: 1px solid var(--border-weaker-base);
+    background-color: var(--surface-inset-base);
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+
+    [data-component="markdown"] {
+      font-size: var(--font-size-small);
+      color: var(--text-weak);
+
+      p:first-child {
+        margin-top: 0;
+      }
+
+      p:last-child {
+        margin-bottom: 0;
+      }
+    }
+  }
 }
 
 [data-component="text-part"] {

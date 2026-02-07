@@ -121,6 +121,10 @@ export type UserMessage = {
     [key: string]: boolean
   }
   variant?: string
+  command?: {
+    name: string
+    source?: "command" | "mcp" | "skill"
+  }
 }
 
 export type ProviderAuthError = {
@@ -3377,6 +3381,10 @@ export type SessionPromptData = {
     }
     system?: string
     variant?: string
+    command?: {
+      name: string
+      source?: "command" | "mcp" | "skill"
+    }
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
@@ -3564,6 +3572,10 @@ export type SessionPromptAsyncData = {
     }
     system?: string
     variant?: string
+    command?: {
+      name: string
+      source?: "command" | "mcp" | "skill"
+    }
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {

@@ -330,6 +330,13 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
 
   const text = createMemo(() => textPart()?.text || "")
 
+  const isSkillCommand = createMemo(() => props.message.command?.source === "skill")
+
+  const skillTemplatePart = createMemo(() => {
+    if (!isSkillCommand()) return undefined
+    return props.parts?.find((p) => p.type === "text" && (p as TextPart).synthetic) as TextPart | undefined
+  })
+
   createEffect(() => {
     text()
     updateCanExpand()
@@ -438,6 +445,18 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
             </Tooltip>
           </div>
         </div>
+      </Show>
+      <Show when={isSkillCommand() && skillTemplatePart()}>
+        <BasicTool
+          icon="console"
+          trigger={{
+            title: `Skill: /${props.message.command!.name}`,
+          }}
+        >
+          <div data-slot="user-message-skill-content">
+            <Markdown text={skillTemplatePart()!.text} />
+          </div>
+        </BasicTool>
       </Show>
     </div>
   )

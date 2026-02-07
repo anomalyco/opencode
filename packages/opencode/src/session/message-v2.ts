@@ -324,6 +324,12 @@ export namespace MessageV2 {
     system: z.string().optional(),
     tools: z.record(z.string(), z.boolean()).optional(),
     variant: z.string().optional(),
+    command: z
+      .object({
+        name: z.string(),
+        source: z.enum(["command", "mcp", "skill"]).optional(),
+      })
+      .optional(),
   }).meta({
     ref: "UserMessage",
   })
