@@ -736,10 +736,7 @@ export namespace ProviderTransform {
 
     if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic") {
       const thinking = options?.["thinking"]
-      const budgetTokens =
-        typeof thinking?.["budgetTokens"] === "number"
-          ? thinking["budgetTokens"]
-          : 0
+      const budgetTokens = typeof thinking?.["budgetTokens"] === "number" ? thinking["budgetTokens"] : 0
       const enabled = thinking?.["type"] === "enabled"
       if (enabled && budgetTokens > 0) {
         // Return text tokens so that text + thinking <= model cap, preferring 32k text when possible.
