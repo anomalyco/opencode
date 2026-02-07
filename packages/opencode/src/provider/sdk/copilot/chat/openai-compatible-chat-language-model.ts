@@ -517,12 +517,20 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
                 const index = toolCallDelta.index
 
                 if (toolCalls[index] == null) {
-                  if (toolCallDelta.id == null) {
+                  // Providers known to not send tool call IDs (see https://github.com/anomalyco/opencode/issues/6290)
+                  const providersMissingToolCallId = ["nvidia", "glm", "bedrock", "chutes"]
+                  const shouldGenerateFallbackId = providersMissingToolCallId.some((p) =>
+                    providerOptionsName.toLowerCase().includes(p),
+                  )
+
+                  if (toolCallDelta.id == null && !shouldGenerateFallbackId) {
                     throw new InvalidResponseDataError({
                       data: toolCallDelta,
                       message: `Expected 'id' to be a string.`,
                     })
                   }
+
+                  const toolCallId = toolCallDelta.id ?? generateId()
 
                   if (toolCallDelta.function?.name == null) {
                     throw new InvalidResponseDataError({
@@ -533,12 +541,12 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
 
                   controller.enqueue({
                     type: "tool-input-start",
-                    id: toolCallDelta.id,
+                    id: toolCallId,
                     toolName: toolCallDelta.function.name,
                   })
 
                   toolCalls[index] = {
-                    id: toolCallDelta.id,
+                    id: toolCallId,
                     type: "function",
                     function: {
                       name: toolCallDelta.function.name,
