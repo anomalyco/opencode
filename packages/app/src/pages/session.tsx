@@ -235,7 +235,15 @@ export default function Page() {
   }
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
-  const centered = createMemo(() => isDesktop() && !view().reviewPanel.opened())
+  const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
+  const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
+  const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
+  const sessionPanelWidth = createMemo(() => {
+    if (!desktopSidePanelOpen()) return "100%"
+    if (desktopReviewOpen()) return `${layout.session.width()}px`
+    return `calc(100% - ${layout.fileTree.width()}px)`
+  })
+  const centered = createMemo(() => isDesktop() && !desktopSidePanelOpen())
   const [sessionResizing, setSessionResizing] = createSignal(false)
 
   function normalizeTab(tab: string) {
@@ -255,12 +263,18 @@ export default function Page() {
     return next
   }
 
+  const openReviewPanel = () => {
+    if (!view().reviewPanel.opened()) view().reviewPanel.open()
+  }
+
   const openTab = (value: string) => {
     const next = normalizeTab(value)
     tabs().open(next)
 
     const path = file.pathFromTab(next)
-    if (path) file.load(path)
+    if (!path) return
+    file.load(path)
+    openReviewPanel()
   }
 
   createEffect(() => {
@@ -1088,6 +1102,7 @@ export default function Page() {
   }
 
   const focusReviewDiff = (path: string) => {
+    openReviewPanel()
     const current = view().review.open() ?? []
     if (!current.includes(path)) view().review.setOpen([...current, path])
     setTree({ activeDiff: path, pendingDiff: path })
@@ -1206,7 +1221,7 @@ export default function Page() {
     if (!id) return
 
     const wants = isDesktop()
-      ? view().reviewPanel.opened() && (layout.fileTree.opened() || activeTab() === "review")
+      ? desktopFileTreeOpen() || (desktopReviewOpen() && activeTab() === "review")
       : store.mobileTab === "changes"
     if (!wants) return
     if (sync.data.session_diff[id] !== undefined) return
@@ -1219,7 +1234,6 @@ export default function Page() {
   createEffect(() => {
     const dir = sdk.directory
     if (!isDesktop()) return
-    if (!view().reviewPanel.opened()) return
     if (!layout.fileTree.opened()) return
     if (sync.status === "loading") return
 
@@ -1540,7 +1554,7 @@ export default function Page() {
             "md:transition-[width] md:duration-200 md:ease-out": settings.appearance.animations() && !sessionResizing(),
           }}
           style={{
-            width: isDesktop() && view().reviewPanel.opened() ? `${layout.session.width()}px` : "100%",
+            width: sessionPanelWidth(),
             "--prompt-height": store.promptHeight ? `${store.promptHeight}px` : undefined,
           }}
         >
@@ -1667,7 +1681,7 @@ export default function Page() {
             setPromptDockRef={(el) => (promptDock = el)}
           />
 
-          <Show when={isDesktop() && view().reviewPanel.opened()}>
+          <Show when={desktopReviewOpen()}>
             <ResizeHandle
               direction="horizontal"
               size={layout.session.width()}
@@ -1681,7 +1695,8 @@ export default function Page() {
         </div>
 
         <SessionSidePanel
-          open={isDesktop() && view().reviewPanel.opened()}
+          open={desktopSidePanelOpen()}
+          reviewOpen={desktopReviewOpen()}
           animations={settings.appearance.animations()}
           language={language}
           layout={layout}
