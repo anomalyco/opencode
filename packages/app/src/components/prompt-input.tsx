@@ -49,6 +49,7 @@ import { ImagePreview } from "@opencode-ai/ui/image-preview"
 interface PromptInputProps {
   class?: string
   ref?: (el: HTMLDivElement) => void
+  focusKey?: string
   newSessionWorktree?: string
   onNewSessionWorktreeReset?: () => void
   onSubmit?: () => void
@@ -273,7 +274,27 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
   }
 
+  const ensureCaret = () => {
+    requestAnimationFrame(() => {
+      const selection = window.getSelection()
+      if (selection && selection.rangeCount > 0 && editorRef.contains(selection.anchorNode)) return
+      setCursorPosition(editorRef, promptLength(prompt.current()))
+    })
+  }
+
   const isFocused = createFocusSignal(() => editorRef)
+
+  createEffect(
+    on(
+      () => props.focusKey,
+      () => {
+        requestAnimationFrame(() => {
+          editorRef.focus()
+          ensureCaret()
+        })
+      },
+    ),
+  )
 
   createEffect(() => {
     params.id
@@ -984,20 +1005,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             aria-label={placeholder()}
             contenteditable="true"
             onInput={handleInput}
+            onFocus={ensureCaret}
             onPaste={handlePaste}
             onCompositionStart={() => setComposing(true)}
             onCompositionEnd={() => setComposing(false)}
             onKeyDown={handleKeyDown}
             classList={{
               "select-text": true,
-              "w-full p-3 pr-12 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
+              "relative z-10 w-full p-3 pr-12 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
               "[&_[data-type=file]]:text-syntax-property": true,
               "[&_[data-type=agent]]:text-syntax-type": true,
               "font-mono!": store.mode === "shell",
             }}
           />
           <Show when={!prompt.dirty()}>
-            <div class="absolute top-0 inset-x-0 p-3 pr-12 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate">
+            <div class="absolute z-0 top-0 inset-x-0 p-3 pr-12 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate">
               {placeholder()}
             </div>
           </Show>

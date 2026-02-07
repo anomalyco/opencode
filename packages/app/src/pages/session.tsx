@@ -1654,6 +1654,7 @@ export default function Page() {
             inputRef={(el) => {
               inputRef = el
             }}
+            focusKey={sessionKey()}
             newSessionWorktree={newSessionWorktree()}
             onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
             onSubmit={() => {

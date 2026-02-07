@@ -18,6 +18,7 @@ export function SessionPromptDock(props: {
   responding: boolean
   onDecide: (response: "once" | "always" | "reject") => void
   inputRef: (el: HTMLDivElement) => void
+  focusKey: string
   newSessionWorktree: string
   onNewSessionWorktreeReset: () => void
   onSubmit: () => void
@@ -125,6 +126,7 @@ export function SessionPromptDock(props: {
           >
             <PromptInput
               ref={props.inputRef}
+              focusKey={props.focusKey}
               newSessionWorktree={props.newSessionWorktree}
               onNewSessionWorktreeReset={props.onNewSessionWorktreeReset}
               onSubmit={props.onSubmit}
