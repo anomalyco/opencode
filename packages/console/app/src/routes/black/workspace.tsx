@@ -220,13 +220,13 @@ export default function BlackWorkspace() {
           <a href={config.github.repoUrl} target="_blank">
             {i18n.t("nav.github")} <span data-slot="github-stars">[{starCount()}]</span>
           </a>
-          <a href="/docs">{i18n.t("nav.docs")}</a>
+          <a href={language.route("/docs")}>{i18n.t("nav.docs")}</a>
           <LanguagePicker align="right" />
           <span>
-            <A href="/legal/privacy-policy">{i18n.t("legal.privacy")}</A>
+            <A href={language.route("/legal/privacy-policy")}>{i18n.t("legal.privacy")}</A>
           </span>
           <span>
-            <A href="/legal/terms-of-service">{i18n.t("legal.terms")}</A>
+            <A href={language.route("/legal/terms-of-service")}>{i18n.t("legal.terms")}</A>
           </span>
         </div>
         <span data-slot="anomaly-alt">

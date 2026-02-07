@@ -72,12 +72,27 @@ export function unquoteGitPath(input: string) {
   return new TextDecoder().decode(new Uint8Array(bytes))
 }
 
+export function decodeFilePath(input: string) {
+  try {
+    return decodeURIComponent(input)
+  } catch {
+    return input
+  }
+}
+
+export function encodeFilePath(filepath: string): string {
+  return filepath
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/")
+}
+
 export function createPathHelpers(scope: () => string) {
   const normalize = (input: string) => {
     const root = scope()
     const prefix = root.endsWith("/") ? root : root + "/"
 
-    let path = unquoteGitPath(stripQueryAndHash(stripFileProtocol(input)))
+    let path = unquoteGitPath(decodeFilePath(stripQueryAndHash(stripFileProtocol(input))))
 
     if (path.startsWith(prefix)) {
       path = path.slice(prefix.length)
@@ -100,7 +115,7 @@ export function createPathHelpers(scope: () => string) {
 
   const tab = (input: string) => {
     const path = normalize(input)
-    return `file://${path}`
+    return `file://${encodeFilePath(path)}`
   }
 
   const pathFromTab = (tabValue: string) => {
