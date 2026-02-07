@@ -50,6 +50,7 @@ export const dict = {
   "command.file.open": "파일 열기",
   "command.context.addSelection": "선택 영역을 컨텍스트에 추가",
   "command.context.addSelection.description": "현재 파일에서 선택한 줄을 추가",
+  "command.input.focus": "입력창 포커스",
   "command.terminal.toggle": "터미널 토글",
   "command.fileTree.toggle": "파일 트리 토글",
   "command.review.toggle": "검토 토글",

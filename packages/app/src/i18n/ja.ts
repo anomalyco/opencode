@@ -46,6 +46,7 @@ export const dict = {
   "command.file.open": "ファイルを開く",
   "command.context.addSelection": "選択範囲をコンテキストに追加",
   "command.context.addSelection.description": "現在のファイルから選択した行を追加",
+  "command.input.focus": "入力欄にフォーカス",
   "command.terminal.toggle": "ターミナルの切り替え",
   "command.fileTree.toggle": "ファイルツリーを切り替え",
   "command.review.toggle": "レビューの切り替え",

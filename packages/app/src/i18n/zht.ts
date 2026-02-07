@@ -50,6 +50,7 @@ export const dict = {
   "command.file.open": "開啟檔案",
   "command.context.addSelection": "將選取內容加入上下文",
   "command.context.addSelection.description": "加入目前檔案中選取的行",
+  "command.input.focus": "聚焦輸入框",
   "command.terminal.toggle": "切換終端機",
   "command.fileTree.toggle": "切換檔案樹",
   "command.review.toggle": "切換審查",
