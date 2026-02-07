@@ -136,3 +136,42 @@ export function moveBigWordEnd(textarea: TextareaRenderable) {
   const text = textarea.plainText
   textarea.cursorOffset = wordEnd(text, textarea.cursorOffset, true)
 }
+
+function firstNonWhitespace(text: string, offset: number) {
+  const start = lineStart(text, offset)
+  const end = lineEnd(text, offset)
+  let pos = start
+  while (pos < end && /\s/.test(text[pos])) pos++
+  return pos
+}
+
+export function appendAfterCursor(textarea: TextareaRenderable) {
+  const text = textarea.plainText
+  const end = lineEnd(text, textarea.cursorOffset)
+  textarea.cursorOffset = Math.min(textarea.cursorOffset + 1, end)
+}
+
+export function appendLineEnd(textarea: TextareaRenderable) {
+  const text = textarea.plainText
+  textarea.cursorOffset = lineEnd(text, textarea.cursorOffset)
+}
+
+export function insertLineStart(textarea: TextareaRenderable) {
+  const text = textarea.plainText
+  textarea.cursorOffset = firstNonWhitespace(text, textarea.cursorOffset)
+}
+
+export function openLineBelow(textarea: TextareaRenderable) {
+  const text = textarea.plainText
+  const end = lineEnd(text, textarea.cursorOffset)
+  textarea.cursorOffset = end
+  textarea.insertText("\n")
+}
+
+export function openLineAbove(textarea: TextareaRenderable) {
+  const text = textarea.plainText
+  const start = lineStart(text, textarea.cursorOffset)
+  textarea.cursorOffset = start
+  textarea.insertText("\n")
+  textarea.cursorOffset = start
+}

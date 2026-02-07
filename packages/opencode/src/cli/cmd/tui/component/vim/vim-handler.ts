@@ -2,6 +2,9 @@ import type { Accessor } from "solid-js"
 import type { createVimState } from "./vim-state"
 import type { TextareaRenderable } from "@opentui/core"
 import {
+  appendAfterCursor,
+  appendLineEnd,
+  insertLineStart,
   moveBigWordEnd,
   moveBigWordNext,
   moveBigWordPrev,
@@ -12,6 +15,8 @@ import {
   moveWordEnd,
   moveWordNext,
   moveWordPrev,
+  openLineAbove,
+  openLineBelow,
 } from "./vim-motions"
 
 export type VimEvent = {
@@ -60,6 +65,41 @@ export function createVimHandler(input: {
       }
 
       if (key === "i" && !event.shift && !hasModifier(event)) {
+        input.state.setMode("insert")
+        event.preventDefault()
+        return true
+      }
+
+      if (isShifted(event, "i") && !hasModifier(event)) {
+        insertLineStart(input.textarea())
+        input.state.setMode("insert")
+        event.preventDefault()
+        return true
+      }
+
+      if (key === "a" && !event.shift && !hasModifier(event)) {
+        appendAfterCursor(input.textarea())
+        input.state.setMode("insert")
+        event.preventDefault()
+        return true
+      }
+
+      if (isShifted(event, "a") && !hasModifier(event)) {
+        appendLineEnd(input.textarea())
+        input.state.setMode("insert")
+        event.preventDefault()
+        return true
+      }
+
+      if (key === "o" && !event.shift && !hasModifier(event)) {
+        openLineBelow(input.textarea())
+        input.state.setMode("insert")
+        event.preventDefault()
+        return true
+      }
+
+      if (isShifted(event, "o") && !hasModifier(event)) {
+        openLineAbove(input.textarea())
         input.state.setMode("insert")
         event.preventDefault()
         return true
