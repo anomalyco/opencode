@@ -475,7 +475,7 @@ export function Prompt(props: PromptProps) {
       value: "mode.list",
       category: "Session",
       onSelect: () => {
-        dialog.replace(() => <DialogExecutionMode />)
+        dialog.replace(() => <DialogExecutionMode setMode={executionMode.setMode} />)
       },
     },
     {

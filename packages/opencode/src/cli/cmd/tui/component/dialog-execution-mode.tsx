@@ -1,7 +1,6 @@
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
-import { useExecutionMode } from "@tui-integration"
-import { ExecutionMode, getModeDisplay } from "@shell-mode"
+import { ExecutionMode, getModeController, getModeDisplay } from "@shell-mode"
 
 const modes = [ExecutionMode.Auto, ExecutionMode.Shell, ExecutionMode.Agent]
 
@@ -11,9 +10,9 @@ const descriptions: Record<ExecutionMode, string> = {
   [ExecutionMode.Agent]: "Send messages to AI agent",
 }
 
-export function DialogExecutionMode() {
-  const executionMode = useExecutionMode()
+export function DialogExecutionMode(props: { setMode: (mode: ExecutionMode) => void }) {
   const dialog = useDialog()
+  const current = getModeController().getMode()
 
   const options = modes.map((mode) => {
     const display = getModeDisplay(mode)
@@ -22,11 +21,11 @@ export function DialogExecutionMode() {
       value: mode,
       description: descriptions[mode],
       onSelect: () => {
-        executionMode.setMode(mode)
+        props.setMode(mode)
         dialog.clear()
       },
     }
   })
 
-  return <DialogSelect title="Execution mode" options={options} current={executionMode.mode()} />
+  return <DialogSelect title="Execution mode" options={options} current={current} />
 }
