@@ -67,8 +67,38 @@ export function SessionHeader() {
     "xcode",
     "android-studio",
     "powershell",
+    "sublime-text",
   ] as const
   type OpenApp = (typeof OPEN_APPS)[number]
+
+  const MAC_APPS = [
+    { id: "vscode", label: "VS Code", icon: "vscode", openWith: "Visual Studio Code" },
+    { id: "cursor", label: "Cursor", icon: "cursor", openWith: "Cursor" },
+    { id: "zed", label: "Zed", icon: "zed", openWith: "Zed" },
+    { id: "textmate", label: "TextMate", icon: "textmate", openWith: "TextMate" },
+    { id: "antigravity", label: "Antigravity", icon: "antigravity", openWith: "Antigravity" },
+    { id: "terminal", label: "Terminal", icon: "terminal", openWith: "Terminal" },
+    { id: "iterm2", label: "iTerm2", icon: "iterm2", openWith: "iTerm" },
+    { id: "ghostty", label: "Ghostty", icon: "ghostty", openWith: "Ghostty" },
+    { id: "xcode", label: "Xcode", icon: "xcode", openWith: "Xcode" },
+    { id: "android-studio", label: "Android Studio", icon: "android-studio", openWith: "Android Studio" },
+    { id: "sublime-text", label: "Sublime Text", icon: "sublime-text", openWith: "Sublime Text" },
+  ] as const
+
+  const WINDOWS_APPS = [
+    { id: "vscode", label: "VS Code", icon: "vscode", openWith: "code" },
+    { id: "cursor", label: "Cursor", icon: "cursor", openWith: "cursor" },
+    { id: "zed", label: "Zed", icon: "zed", openWith: "zed" },
+    { id: "powershell", label: "PowerShell", icon: "powershell", openWith: "powershell" },
+    { id: "sublime-text", label: "Sublime Text", icon: "sublime-text", openWith: "Sublime Text" },
+  ] as const
+
+  const LINUX_APPS = [
+    { id: "vscode", label: "VS Code", icon: "vscode", openWith: "code" },
+    { id: "cursor", label: "Cursor", icon: "cursor", openWith: "cursor" },
+    { id: "zed", label: "Zed", icon: "zed", openWith: "zed" },
+    { id: "sublime-text", label: "Sublime Text", icon: "sublime-text", openWith: "Sublime Text" },
+  ] as const
 
   const os = createMemo<"macos" | "windows" | "linux" | "unknown">(() => {
     if (platform.platform === "desktop" && platform.os) return platform.os
@@ -80,38 +110,44 @@ export function SessionHeader() {
     return "unknown"
   })
 
+  const [exists, setExists] = createStore<Partial<Record<OpenApp, boolean>>>({ finder: true })
+
+  createEffect(() => {
+    if (platform.platform !== "desktop") return
+    if (!platform.checkAppExists) return
+
+    const list = os()
+    const apps = list === "macos" ? MAC_APPS : list === "windows" ? WINDOWS_APPS : list === "linux" ? LINUX_APPS : []
+    if (apps.length === 0) return
+
+    void Promise.all(
+      apps.map((app) =>
+        Promise.resolve(platform.checkAppExists?.(app.openWith)).then((value) => {
+          const ok = Boolean(value)
+          console.debug(`[session-header] App "${app.label}" (${app.openWith}): ${ok ? "exists" : "does not exist"}`)
+          return [app.id, ok] as const
+        }),
+      ),
+    ).then((entries) => {
+      setExists(Object.fromEntries(entries) as Partial<Record<OpenApp, boolean>>)
+    })
+  })
+
   const options = createMemo(() => {
     if (os() === "macos") {
-      return [
-        { id: "vscode", label: "VS Code", icon: "vscode", openWith: "Visual Studio Code" },
-        { id: "cursor", label: "Cursor", icon: "cursor", openWith: "Cursor" },
-        { id: "zed", label: "Zed", icon: "zed", openWith: "Zed" },
-        { id: "textmate", label: "TextMate", icon: "textmate", openWith: "TextMate" },
-        { id: "antigravity", label: "Antigravity", icon: "antigravity", openWith: "Antigravity" },
-        { id: "finder", label: "Finder", icon: "finder" },
-        { id: "terminal", label: "Terminal", icon: "terminal", openWith: "Terminal" },
-        { id: "iterm2", label: "iTerm2", icon: "iterm2", openWith: "iTerm" },
-        { id: "ghostty", label: "Ghostty", icon: "ghostty", openWith: "Ghostty" },
-        { id: "xcode", label: "Xcode", icon: "xcode", openWith: "Xcode" },
-        { id: "android-studio", label: "Android Studio", icon: "android-studio", openWith: "Android Studio" },
-      ] as const
+      return [{ id: "finder", label: "Finder", icon: "finder" }, ...MAC_APPS.filter((app) => exists[app.id])] as const
     }
 
     if (os() === "windows") {
       return [
-        { id: "vscode", label: "VS Code", icon: "vscode", openWith: "code" },
-        { id: "cursor", label: "Cursor", icon: "cursor", openWith: "cursor" },
-        { id: "zed", label: "Zed", icon: "zed", openWith: "zed" },
         { id: "finder", label: "File Explorer", icon: "file-explorer" },
-        { id: "powershell", label: "PowerShell", icon: "powershell", openWith: "powershell" },
+        ...WINDOWS_APPS.filter((app) => exists[app.id]),
       ] as const
     }
 
     return [
-      { id: "vscode", label: "VS Code", icon: "vscode", openWith: "code" },
-      { id: "cursor", label: "Cursor", icon: "cursor", openWith: "cursor" },
-      { id: "zed", label: "Zed", icon: "zed", openWith: "zed" },
       { id: "finder", label: "File Manager", icon: "finder" },
+      ...LINUX_APPS.filter((app) => exists[app.id]),
     ] as const
   })
 
