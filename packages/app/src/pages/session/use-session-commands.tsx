@@ -139,11 +139,8 @@ export const useSessionCommands = (input: {
       title: input.language.t("command.fileTree.toggle"),
       description: "",
       category: input.language.t("command.category.view"),
-      onSelect: () => {
-        const opening = !input.layout.fileTree.opened()
-        if (opening && !input.view().reviewPanel.opened()) input.view().reviewPanel.open()
-        input.layout.fileTree.toggle()
-      },
+      keybind: "mod+\\",
+      onSelect: () => input.layout.fileTree.toggle(),
     },
     {
       id: "terminal.new",
