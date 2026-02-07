@@ -596,6 +596,17 @@ export namespace Server {
     const server = opts.port === 0 ? (tryServe(4096) ?? tryServe(0)) : tryServe(opts.port)
     if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
 
+    const memoryUsageInterval = setInterval(() => {
+      const usage = process.memoryUsage()
+      log.info("memory usage", {
+        rssBytes: usage.rss,
+        rssMB: Math.round(usage.rss / 1024 / 1024),
+        heapUsedBytes: usage.heapUsed,
+        heapUsedMB: Math.round(usage.heapUsed / 1024 / 1024),
+      })
+    }, 60_000)
+    memoryUsageInterval.unref()
+
     _url = server.url
 
     const shouldPublishMDNS =
@@ -612,6 +623,7 @@ export namespace Server {
 
     const originalStop = server.stop.bind(server)
     server.stop = async (closeActiveConnections?: boolean) => {
+      clearInterval(memoryUsageInterval)
       if (shouldPublishMDNS) MDNS.unpublish()
       return originalStop(closeActiveConnections)
     }
