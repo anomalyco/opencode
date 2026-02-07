@@ -8,9 +8,6 @@ on:
         description: 'Version to release (e.g., v1.1.51-test). Leave empty to skip release creation.'
         required: false
         type: string
-  push:
-    tags:
-      - "v*"
 
 permissions:
   contents: write

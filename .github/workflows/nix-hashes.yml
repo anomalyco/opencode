@@ -5,14 +5,6 @@ permissions:
 
 on:
   workflow_dispatch:
-  push:
-    branches: [dev]
-    paths:
-      - "bun.lock"
-      - "package.json"
-      - "packages/*/package.json"
-      - "flake.lock"
-      - ".github/workflows/nix-hashes.yml"
 
 jobs:
   # Native runners required: bun install cross-compilation flags (--os/--cpu)
