@@ -76,9 +76,7 @@ jobs:
             }
 
             // Author is denounced — close the issue
-            const reasonText = reason ? `\n\n**Reason:** ${reason}` : '';
-
-            const body = `This issue has been automatically closed because the author (\`@${author}\`) has been [denounced](https://github.com/mitchellh/vouch) by this project's maintainers.${reasonText}\n\nIf you believe this is an error, please reach out to the maintainers through other channels.`;
+            const body = 'This issue has been automatically closed.';
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,
