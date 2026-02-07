@@ -910,6 +910,18 @@ export default function Page() {
       .filter((tab) => tab !== "context" && tab !== "review"),
   )
 
+  const closeOtherTabs = (currentTab: string) => {
+    const others = openedTabs().filter((tab) => tab !== currentTab)
+    for (const tab of others) {
+      tabs().close(tab)
+    }
+  }
+
+  const mentionTab = (tab: string) => {
+    const path = file.pathFromTab(tab)
+    if (path) mentionFile(path)
+  }
+
   const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
   const reviewTab = createMemo(() => isDesktop() && !layout.fileTree.opened())
 
@@ -1747,6 +1759,8 @@ export default function Page() {
           activeDiff={tree.activeDiff}
           focusReviewDiff={focusReviewDiff}
           onFileMention={mentionFile}
+          onCloseOthers={closeOtherTabs}
+          onMention={mentionTab}
         />
       </div>
 

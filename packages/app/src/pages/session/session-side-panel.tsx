@@ -67,6 +67,8 @@ export function SessionSidePanel(props: {
   activeDiff?: string
   focusReviewDiff: (path: string) => void
   onFileMention?: (path: string) => void
+  onCloseOthers?: (tab: string) => void
+  onMention?: (tab: string) => void
 }) {
   return (
     <Show when={props.open}>
@@ -132,7 +134,7 @@ export function SessionSidePanel(props: {
                       </Show>
                       <SortableProvider ids={props.openedTabs()}>
                         <For each={props.openedTabs()}>
-                          {(tab) => <SortableTab tab={tab} onTabClose={props.tabs().close} />}
+                          {(tab) => <SortableTab tab={tab} onTabClose={props.tabs().close} onClick={() => props.openTab(tab)} onCloseOthers={props.onCloseOthers} onMention={props.onMention} />}
                         </For>
                       </SortableProvider>
                       <StickyAddButton>
