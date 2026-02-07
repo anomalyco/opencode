@@ -20,6 +20,31 @@ export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
   const log = Log.create({ service: "session.processor" })
 
+  /**
+   * Extract a clean, human-readable error message from any error type.
+   * Prevents raw object dumps (e.g., DOMException with all DOM constants)
+   * from reaching the TUI display layer.
+   */
+  function formatErrorMessage(error: unknown): string {
+    // DOMException (e.g., AbortError from fetch abort) includes dozens of
+    // DOM constant properties that pollute .toString() in some runtimes.
+    if (error instanceof DOMException) {
+      if (error.name === "AbortError") return "Tool execution aborted"
+      return error.message || error.name
+    }
+    // Standard Error objects — use .message to avoid name duplication
+    if (error instanceof Error) {
+      return error.message || error.name || "Unknown error"
+    }
+    // Plain string errors pass through
+    if (typeof error === "string") return error
+    // Objects with a message property (e.g., serialized NamedError)
+    if (error && typeof error === "object" && "message" in error) {
+      return String((error as any).message)
+    }
+    return String(error)
+  }
+
   export type Info = Awaited<ReturnType<typeof create>>
   export type Result = Awaited<ReturnType<Info["process"]>>
 
@@ -209,7 +234,7 @@ export namespace SessionProcessor {
                       state: {
                         status: "error",
                         input: value.input ?? match.state.input,
-                        error: (value.error as any).toString(),
+                        error: formatErrorMessage(value.error),
                         time: {
                           start: match.state.time.start,
                           end: Date.now(),

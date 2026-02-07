@@ -41,8 +41,22 @@ export function FormatError(input: unknown) {
 }
 
 export function FormatUnknownError(input: unknown): string {
+  // DOMException objects include dozens of DOM constant properties that
+  // produce garbage when serialized. Extract just the meaningful parts.
+  if (input instanceof DOMException) {
+    if (input.name === "AbortError") return "Operation cancelled"
+    return `${input.name}: ${input.message}`
+  }
+
   if (input instanceof Error) {
     return input.stack ?? `${input.name}: ${input.message}`
+  }
+
+  // Handle serialized NamedError objects from the server (e.g., NotFoundError)
+  if (typeof input === "object" && input !== null && "name" in input && "data" in input) {
+    const named = input as { name: string; data: { message?: string } }
+    if (named.data?.message) return `${named.name}: ${named.data.message}`
+    return named.name
   }
 
   if (typeof input === "object" && input !== null) {

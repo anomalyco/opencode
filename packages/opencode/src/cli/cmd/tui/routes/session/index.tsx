@@ -182,7 +182,6 @@ export function Session() {
         if (scroll) scroll.scrollBy(100_000)
       })
       .catch((e) => {
-        console.error(e)
         toast.show({
           message: `Session not found: ${route.sessionID}`,
           variant: "error",
@@ -1543,13 +1542,14 @@ function InlineTool(props: {
     return theme.text
   })
 
-  const error = createMemo(() => (props.part.state.status === "error" ? props.part.state.error : undefined))
+  const rawError = createMemo(() => (props.part.state.status === "error" ? props.part.state.error : undefined))
+  const error = createMemo(() => formatErrorDisplay(rawError()))
 
   const denied = createMemo(
     () =>
-      error()?.includes("rejected permission") ||
-      error()?.includes("specified a rule") ||
-      error()?.includes("user dismissed"),
+      rawError()?.includes("rejected permission") ||
+      rawError()?.includes("specified a rule") ||
+      rawError()?.includes("user dismissed"),
   )
 
   return (
@@ -1601,7 +1601,7 @@ function BlockTool(props: {
   const { theme } = useTheme()
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
-  const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error : undefined))
+  const error = createMemo(() => formatErrorDisplay(props.part?.state.status === "error" ? props.part.state.error : undefined))
   return (
     <box
       border={["left"]}
@@ -2111,6 +2111,25 @@ function Skill(props: ToolProps<typeof SkillTool>) {
       Skill "{props.input.name}"
     </InlineTool>
   )
+}
+
+/**
+ * Sanitize error strings for TUI display. Catches cases where raw error
+ * objects (e.g., DOMException with all DOM constants) were serialized
+ * into the error string before the upstream fix.
+ */
+function formatErrorDisplay(error: string | undefined): string | undefined {
+  if (!error) return error
+  // Detect DOMException dumps that include DOM constant properties
+  if (error.includes("DOMSTRING_SIZE_ERR") || error.includes("HIERARCHY_REQUEST_ERR")) {
+    // Try to extract the meaningful name/message
+    const nameMatch = error.match(/name:\s*"([^"]+)"/)
+    const name = nameMatch?.[1]
+    if (name === "AbortError") return "Operation cancelled"
+    if (name) return name
+    return "Operation failed"
+  }
+  return error
 }
 
 function normalizePath(input?: string) {

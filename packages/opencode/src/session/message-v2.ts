@@ -866,8 +866,20 @@ export namespace MessageV2 {
           },
           { cause: e },
         ).toObject()
+      case e instanceof DOMException:
+        // DOMException.toString() can dump dozens of DOM constant properties
+        // in some runtimes. Extract just the meaningful message.
+        return new NamedError.Unknown(
+          { message: e.message || e.name || "Unknown DOM error" },
+          { cause: e },
+        ).toObject()
       case e instanceof Error:
-        return new NamedError.Unknown({ message: e.toString() }, { cause: e }).toObject()
+        // Use .message instead of .toString() to avoid dumping raw object
+        // properties for non-standard Error subclasses.
+        return new NamedError.Unknown(
+          { message: e.message || e.name || "Unknown error" },
+          { cause: e },
+        ).toObject()
       default:
         try {
           const parsed = ProviderError.parseStreamError(e)
