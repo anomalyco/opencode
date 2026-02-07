@@ -257,6 +257,7 @@ test("GitLab Duo: has multiple agentic chat models available", async () => {
       expect(models).toContain("duo-chat-haiku-4-5")
       expect(models).toContain("duo-chat-sonnet-4-5")
       expect(models).toContain("duo-chat-opus-4-5")
+      expect(models).toContain("duo-chat-opus-4-6")
     },
   })
 })
