@@ -4,10 +4,8 @@ import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { popularProviders } from "@/hooks/use-providers"
-import { Button } from "@opencode-ai/ui/button"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tag } from "@opencode-ai/ui/tag"
-import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { DialogSelectProvider } from "./dialog-select-provider"
@@ -94,6 +92,8 @@ export function ModelSelectorPopover(props: {
   children?: JSX.Element
   triggerAs?: ValidComponent
   triggerProps?: ModelSelectorTriggerProps
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }) {
   const [store, setStore] = createStore<{
     open: boolean
@@ -107,20 +107,30 @@ export function ModelSelectorPopover(props: {
     content: undefined,
   })
   const dialog = useDialog()
+  const open = () => (props.open === undefined ? store.open : props.open)
+  const setOpen = (value: boolean) => {
+    if (props.open === undefined) setStore("open", value)
+    props.onOpenChange?.(value)
+  }
 
   const handleManage = () => {
-    setStore("open", false)
+    setOpen(false)
     dialog.show(() => <DialogManageModels />)
   }
 
   const handleConnectProvider = () => {
-    setStore("open", false)
+    setOpen(false)
     dialog.show(() => <DialogSelectProvider />)
   }
   const language = useLanguage()
 
   createEffect(() => {
-    if (!store.open) return
+    if (props.open !== true) return
+    setStore("dismiss", null)
+  })
+
+  createEffect(() => {
+    if (!open()) return
 
     const inside = (node: Node | null | undefined) => {
       if (!node) return false
@@ -134,7 +144,7 @@ export function ModelSelectorPopover(props: {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return
       setStore("dismiss", "escape")
-      setStore("open", false)
+      setOpen(false)
       event.preventDefault()
       event.stopPropagation()
     }
@@ -144,7 +154,7 @@ export function ModelSelectorPopover(props: {
       if (!(target instanceof Node)) return
       if (inside(target)) return
       setStore("dismiss", "outside")
-      setStore("open", false)
+      setOpen(false)
     }
 
     const onFocusIn = (event: FocusEvent) => {
@@ -153,7 +163,7 @@ export function ModelSelectorPopover(props: {
       if (!(target instanceof Node)) return
       if (inside(target)) return
       setStore("dismiss", "outside")
-      setStore("open", false)
+      setOpen(false)
     }
 
     window.addEventListener("keydown", onKeyDown, true)
@@ -169,10 +179,10 @@ export function ModelSelectorPopover(props: {
 
   return (
     <Kobalte
-      open={store.open}
+      open={open()}
       onOpenChange={(next) => {
         if (next) setStore("dismiss", null)
-        setStore("open", next)
+        setOpen(next)
       }}
       modal={false}
       placement="top-start"
@@ -183,21 +193,22 @@ export function ModelSelectorPopover(props: {
       </Kobalte.Trigger>
       <Kobalte.Portal>
         <Kobalte.Content
+          data-component="model-selector"
           ref={(el) => setStore("content", el)}
           class="w-72 h-80 flex flex-col p-2 rounded-md border border-border-base bg-surface-raised-stronger-non-alpha shadow-md z-50 outline-none overflow-hidden"
           onEscapeKeyDown={(event) => {
             setStore("dismiss", "escape")
-            setStore("open", false)
+            setOpen(false)
             event.preventDefault()
             event.stopPropagation()
           }}
           onPointerDownOutside={() => {
             setStore("dismiss", "outside")
-            setStore("open", false)
+            setOpen(false)
           }}
           onFocusOutside={() => {
             setStore("dismiss", "outside")
-            setStore("open", false)
+            setOpen(false)
           }}
           onCloseAutoFocus={(event) => {
             if (store.dismiss === "outside") event.preventDefault()
@@ -207,7 +218,7 @@ export function ModelSelectorPopover(props: {
           <Kobalte.Title class="sr-only">{language.t("dialog.model.select.title")}</Kobalte.Title>
           <ModelList
             provider={props.provider}
-            onSelect={() => setStore("open", false)}
+            onSelect={() => setOpen(false)}
             class="p-1"
             action={
               <div class="flex items-center gap-1">
@@ -237,35 +248,5 @@ export function ModelSelectorPopover(props: {
         </Kobalte.Content>
       </Kobalte.Portal>
     </Kobalte>
-  )
-}
-
-export const DialogSelectModel: Component<{ provider?: string }> = (props) => {
-  const dialog = useDialog()
-  const language = useLanguage()
-
-  return (
-    <Dialog
-      title={language.t("dialog.model.select.title")}
-      action={
-        <Button
-          class="h-7 -my-1 text-14-medium"
-          icon="plus-small"
-          tabIndex={-1}
-          onClick={() => dialog.show(() => <DialogSelectProvider />)}
-        >
-          {language.t("command.provider.connect")}
-        </Button>
-      }
-    >
-      <ModelList provider={props.provider} onSelect={() => dialog.close()} />
-      <Button
-        variant="ghost"
-        class="ml-3 mt-5 mb-6 text-text-base self-start"
-        onClick={() => dialog.show(() => <DialogManageModels />)}
-      >
-        {language.t("dialog.model.manage")}
-      </Button>
-    </Dialog>
   )
 }

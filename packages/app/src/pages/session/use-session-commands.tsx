@@ -12,7 +12,6 @@ import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { DialogSelectFile } from "@/components/dialog-select-file"
-import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectMcp } from "@/components/dialog-select-mcp"
 import { DialogFork } from "@/components/dialog-fork"
 import { showToast } from "@opencode-ai/ui/toast"
@@ -48,6 +47,7 @@ export const useSessionCommands = (input: {
   setExpanded: (id: string, fn: (open: boolean | undefined) => boolean) => void
   setActiveMessage: (message: UserMessage | undefined) => void
   addSelectionToContext: (path: string, selection: FileSelection) => void
+  openModelSelector: () => void
 }) => {
   const sessionCommands = createMemo(() => [
     {
@@ -201,7 +201,7 @@ export const useSessionCommands = (input: {
       category: input.language.t("command.category.model"),
       keybind: "mod+'",
       slash: "model",
-      onSelect: () => input.dialog.show(() => <DialogSelectModel />),
+      onSelect: () => input.openModelSelector(),
     },
     {
       id: "mcp.toggle",

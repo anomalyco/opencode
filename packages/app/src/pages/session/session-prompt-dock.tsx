@@ -22,6 +22,8 @@ export function SessionPromptDock(props: {
   onNewSessionWorktreeReset: () => void
   onSubmit: () => void
   setPromptDockRef: (el: HTMLDivElement) => void
+  modelSelectorOpen: boolean
+  onModelSelectorOpenChange: (open: boolean) => void
 }) {
   return (
     <div
@@ -128,6 +130,8 @@ export function SessionPromptDock(props: {
               newSessionWorktree={props.newSessionWorktree}
               onNewSessionWorktreeReset={props.onNewSessionWorktreeReset}
               onSubmit={props.onSubmit}
+              modelSelectorOpen={props.modelSelectorOpen}
+              onModelSelectorOpenChange={props.onModelSelectorOpenChange}
             />
           </Show>
         </Show>

@@ -13,7 +13,7 @@ test("hiding a model removes it from the model picker", async ({ page, gotoSessi
   await command.hover()
   await page.keyboard.press("Enter")
 
-  const picker = page.getByRole("dialog")
+  const picker = page.locator('[data-component="model-selector"]').first()
   await expect(picker).toBeVisible()
 
   const target = picker.locator('[data-slot="list-item"]').first()
@@ -26,7 +26,7 @@ test("hiding a model removes it from the model picker", async ({ page, gotoSessi
   if (!name) throw new Error("Failed to resolve model name from list item")
 
   await page.keyboard.press("Escape")
-  await expect(picker).toHaveCount(0)
+  await expect(picker).not.toBeVisible()
 
   const settings = await openSettings(page)
 
@@ -50,14 +50,14 @@ test("hiding a model removes it from the model picker", async ({ page, gotoSessi
   await command.hover()
   await page.keyboard.press("Enter")
 
-  const pickerAgain = page.getByRole("dialog")
+  const pickerAgain = page.locator('[data-component="model-selector"]').first()
   await expect(pickerAgain).toBeVisible()
   await expect(pickerAgain.locator('[data-slot="list-item"]').first()).toBeVisible()
 
   await expect(pickerAgain.locator(`[data-slot="list-item"][data-key="${key}"]`)).toHaveCount(0)
 
   await page.keyboard.press("Escape")
-  await expect(pickerAgain).toHaveCount(0)
+  await expect(pickerAgain).not.toBeVisible()
 })
 
 test("showing a hidden model restores it to the model picker", async ({ page, gotoSession }) => {
@@ -71,7 +71,7 @@ test("showing a hidden model restores it to the model picker", async ({ page, go
   await command.hover()
   await page.keyboard.press("Enter")
 
-  const picker = page.getByRole("dialog")
+  const picker = page.locator('[data-component="model-selector"]').first()
   await expect(picker).toBeVisible()
 
   const target = picker.locator('[data-slot="list-item"]').first()
@@ -84,7 +84,7 @@ test("showing a hidden model restores it to the model picker", async ({ page, go
   if (!name) throw new Error("Failed to resolve model name from list item")
 
   await page.keyboard.press("Escape")
-  await expect(picker).toHaveCount(0)
+  await expect(picker).not.toBeVisible()
 
   const settings = await openSettings(page)
 
@@ -112,11 +112,11 @@ test("showing a hidden model restores it to the model picker", async ({ page, go
   await command.hover()
   await page.keyboard.press("Enter")
 
-  const pickerAgain = page.getByRole("dialog")
+  const pickerAgain = page.locator('[data-component="model-selector"]').first()
   await expect(pickerAgain).toBeVisible()
 
   await expect(pickerAgain.locator(`[data-slot="list-item"][data-key="${key}"]`)).toBeVisible()
 
   await page.keyboard.press("Escape")
-  await expect(pickerAgain).toHaveCount(0)
+  await expect(pickerAgain).not.toBeVisible()
 })

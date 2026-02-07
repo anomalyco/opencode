@@ -555,6 +555,7 @@ export default function Page() {
     changes: "session" as "session" | "turn",
     newSessionWorktree: "main",
     promptHeight: 0,
+    modelSelectorOpen: false,
   })
 
   const turnDiffs = createMemo(() => lastUserMessage()?.summary?.diffs ?? [])
@@ -728,6 +729,7 @@ export default function Page() {
         setStore("messageId", undefined)
         setStore("expanded", {})
         setStore("changes", "session")
+        setStore("modelSelectorOpen", false)
         setUi("autoCreated", false)
       },
       { defer: true },
@@ -929,6 +931,10 @@ export default function Page() {
     setExpanded: (id, fn) => setStore("expanded", id, fn),
     setActiveMessage,
     addSelectionToContext,
+    openModelSelector: () => {
+      if (blocked()) return
+      setStore("modelSelectorOpen", true)
+    },
   })
 
   const openReviewFile = createOpenReviewFile({
@@ -1660,6 +1666,8 @@ export default function Page() {
               comments.clear()
               resumeScroll()
             }}
+            modelSelectorOpen={store.modelSelectorOpen}
+            onModelSelectorOpenChange={(open) => setStore("modelSelectorOpen", open)}
             setPromptDockRef={(el) => (promptDock = el)}
           />
 
