@@ -239,6 +239,10 @@ export function Prompt(props: PromptProps) {
       if (action === "page-down") command.trigger("session.page.down")
       if (action === "page-up") command.trigger("session.page.up")
     },
+    jump(action) {
+      if (action === "top") command.trigger("session.first")
+      if (action === "bottom") command.trigger("session.last")
+    },
   })
 
   createEffect(

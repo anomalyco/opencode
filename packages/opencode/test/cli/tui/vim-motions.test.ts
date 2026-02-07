@@ -5,6 +5,7 @@ import { createVimHandler } from "../../../src/cli/cmd/tui/component/vim/vim-han
 import { createVimState } from "../../../src/cli/cmd/tui/component/vim/vim-state"
 import type { VimScroll } from "../../../src/cli/cmd/tui/component/vim/vim-scroll"
 import { vimScroll } from "../../../src/cli/cmd/tui/component/vim/vim-scroll"
+import type { VimJump } from "../../../src/cli/cmd/tui/component/vim/vim-motion-jump"
 
 function rowColToOffset(text: string, row: number, col: number) {
   let index = 0
@@ -85,8 +86,9 @@ function createHandler(
   const textarea = createTextarea(text)
   const [enabled] = createSignal(options?.enabled ?? true)
   const [mode, setMode] = createSignal<"normal" | "insert">(options?.mode ?? "normal")
-  const [pending, setPending] = createSignal<"" | "d">("")
+  const [pending, setPending] = createSignal<"" | "d" | "g">("")
   const scrollCalls: VimScroll[] = []
+  const jumpCalls: VimJump[] = []
 
   function clearPending() {
     setPending("")
@@ -120,9 +122,12 @@ function createHandler(
     scroll(action) {
       scrollCalls.push(action)
     },
+    jump(action) {
+      jumpCalls.push(action)
+    },
   })
 
-  return { textarea, handler, state, scrollCalls }
+  return { textarea, handler, state, scrollCalls, jumpCalls }
 }
 
 describe("vim motion handler", () => {
@@ -352,6 +357,66 @@ describe("vim motion handler", () => {
     expect(ctx.handler.handleKey(evt.event)).toBe(false)
     expect(evt.prevented()).toBe(false)
     expect(ctx.scrollCalls.length).toBe(0)
+  })
+
+  test("g and G jump to top or bottom", () => {
+    const ctx = createHandler("abc")
+
+    const g = createEvent("g")
+    expect(ctx.handler.handleKey(g.event)).toBe(true)
+    expect(g.prevented()).toBe(true)
+    expect(ctx.jumpCalls.length).toBe(0)
+    expect(ctx.state.pending()).toBe("g")
+
+    const g2 = createEvent("g")
+    expect(ctx.handler.handleKey(g2.event)).toBe(true)
+    expect(g2.prevented()).toBe(true)
+    expect(ctx.jumpCalls.at(-1)).toBe("top")
+    expect(ctx.state.pending()).toBe("")
+
+    const G = createEvent("G")
+    expect(ctx.handler.handleKey(G.event)).toBe(true)
+    expect(G.prevented()).toBe(true)
+    expect(ctx.jumpCalls.at(-1)).toBe("bottom")
+  })
+
+  test("pending g cancels on other keys", () => {
+    const ctx = createHandler("abc")
+    expect(ctx.handler.handleKey(createEvent("g").event)).toBe(true)
+    expect(ctx.state.pending()).toBe("g")
+
+    const w = createEvent("w")
+    expect(ctx.handler.handleKey(w.event)).toBe(true)
+    expect(w.prevented()).toBe(true)
+    expect(ctx.state.pending()).toBe("")
+  })
+
+  test("pending d then G clears and jumps", () => {
+    const ctx = createHandler("abc")
+    expect(ctx.handler.handleKey(createEvent("d").event)).toBe(true)
+    expect(ctx.state.pending()).toBe("d")
+
+    const G = createEvent("G")
+    expect(ctx.handler.handleKey(G.event)).toBe(true)
+    expect(G.prevented()).toBe(true)
+    expect(ctx.jumpCalls.at(-1)).toBe("bottom")
+    expect(ctx.state.pending()).toBe("")
+  })
+
+  test("g not handled in insert mode", () => {
+    const ctx = createHandler("abc", { mode: "insert" })
+    const g = createEvent("g")
+    expect(ctx.handler.handleKey(g.event)).toBe(false)
+    expect(g.prevented()).toBe(false)
+    expect(ctx.jumpCalls.length).toBe(0)
+  })
+
+  test("g not handled when vim disabled", () => {
+    const ctx = createHandler("abc", { enabled: false })
+    const g = createEvent("g")
+    expect(ctx.handler.handleKey(g.event)).toBe(false)
+    expect(g.prevented()).toBe(false)
+    expect(ctx.jumpCalls.length).toBe(0)
   })
 })
 
