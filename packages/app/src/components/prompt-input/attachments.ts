@@ -11,7 +11,7 @@ type PromptAttachmentsInput = {
   editor: () => HTMLDivElement | undefined
   isFocused: () => boolean
   isDialogActive: () => boolean
-  setDraggingType: (type: "image" | "file" | null) => void
+  setDraggingType: (type: "image" | "@mention" | null) => void
   focusEditor: () => void
   addPart: (part: ContentPart) => void
 }
@@ -89,7 +89,7 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     if (hasFiles) {
       input.setDraggingType("image")
     } else if (hasText) {
-      input.setDraggingType("file")
+      input.setDraggingType("@mention")
     }
   }
 

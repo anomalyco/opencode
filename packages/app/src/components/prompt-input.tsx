@@ -205,7 +205,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     historyIndex: number
     savedPrompt: Prompt | null
     placeholder: number
-    draggingType: "image" | "file" | null
+    draggingType: "image" | "@mention" | null
     mode: "normal" | "shell"
     applyingHistory: boolean
   }>({
@@ -956,7 +956,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       >
         <PromptDragOverlay
           type={store.draggingType}
-          label={language.t(store.draggingType === "file" ? "prompt.dropzone.file.label" : "prompt.dropzone.label")}
+          label={language.t(store.draggingType === "@mention" ? "prompt.dropzone.file.label" : "prompt.dropzone.label")}
         />
         <PromptContextItems
           items={prompt.context.items()}
