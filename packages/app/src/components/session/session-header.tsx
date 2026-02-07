@@ -6,6 +6,7 @@ import { useLayout } from "@/context/layout"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
+import { useSettings } from "@/context/settings"
 import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { useGlobalSDK } from "@/context/global-sdk"
@@ -31,6 +32,7 @@ export function SessionHeader() {
   const params = useParams()
   const command = useCommand()
   const server = useServer()
+  const settings = useSettings()
   const sync = useSync()
   const platform = usePlatform()
   const language = useLanguage()
@@ -53,6 +55,9 @@ export function SessionHeader() {
   const showShare = createMemo(() => shareEnabled() && !!currentSession())
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const view = createMemo(() => layout.view(sessionKey))
+  const appIconStyle = createMemo(() =>
+    settings.appearance.transparentAppIcons() ? { padding: "0", background: "transparent", border: "none" } : undefined,
+  )
 
   const OPEN_APPS = [
     "vscode",
@@ -315,9 +320,7 @@ export function SessionHeader() {
                         aria-label={language.t("session.header.open.copyPath")}
                       >
                         <Icon name="copy" size="small" class="text-icon-base" />
-                        <span class="text-12-regular text-text-strong">
-                          {language.t("session.header.open.copyPath")}
-                        </span>
+                        <span class="text-12-regular text-text-strong">{language.t("session.header.open.copyPath")}</span>
                       </Button>
                     }
                   >
@@ -328,7 +331,7 @@ export function SessionHeader() {
                         onClick={() => openDir(current().id)}
                         aria-label={language.t("session.header.open.ariaLabel", { app: current().label })}
                       >
-                        <AppIcon id={current().icon} class="size-5" />
+                        <AppIcon id={current().icon} class="size-5" style={appIconStyle()} />
                         <span class="text-12-regular text-text-strong">
                           {language.t("session.header.open.action", { app: current().label })}
                         </span>
@@ -354,7 +357,7 @@ export function SessionHeader() {
                               >
                                 {options().map((o) => (
                                   <DropdownMenu.RadioItem value={o.id} onSelect={() => openDir(o.id)}>
-                                    <AppIcon id={o.icon} class="size-5" />
+                                    <AppIcon id={o.icon} class="size-5" style={appIconStyle()} />
                                     <DropdownMenu.ItemLabel>{o.label}</DropdownMenu.ItemLabel>
                                     <DropdownMenu.ItemIndicator>
                                       <Icon name="check-small" size="small" class="text-icon-weak" />
