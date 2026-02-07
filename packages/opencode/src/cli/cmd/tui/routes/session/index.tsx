@@ -13,6 +13,7 @@ import {
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import path from "path"
+import { coerceFsPath } from "@/util/coerce-path"
 import { useRoute, useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { SplitBorder } from "@tui/component/border"
@@ -2100,12 +2101,13 @@ function Skill(props: ToolProps<typeof SkillTool>) {
   )
 }
 
-function normalizePath(input?: string) {
-  if (!input) return ""
-  if (path.isAbsolute(input)) {
-    return path.relative(process.cwd(), input) || "."
+function normalizePath(input?: unknown): string {
+  const p = coerceFsPath(input, "session route normalizePath")
+  if (!p) return ""
+  if (path.isAbsolute(p)) {
+    return path.relative(process.cwd(), p) || "."
   }
-  return input
+  return p
 }
 
 function input(input: Record<string, any>, omit?: string[]): string {

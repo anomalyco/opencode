@@ -15,15 +15,17 @@ import { Keybind } from "@/util/keybind"
 import { Locale } from "@/util/locale"
 import { Global } from "@/global"
 import { useDialog } from "../../ui/dialog"
+import { coerceFsPath } from "@/util/coerce-path"
 
 type PermissionStage = "permission" | "always" | "reject"
 
-function normalizePath(input?: string) {
-  if (!input) return ""
+function normalizePath(input?: unknown): string {
+  const p = coerceFsPath(input, "permission route normalizePath")
+  if (!p) return ""
 
   const cwd = process.cwd()
   const home = Global.Path.home
-  const absolute = path.isAbsolute(input) ? input : path.resolve(cwd, input)
+  const absolute = path.isAbsolute(p) ? p : path.resolve(cwd, p)
   const relative = path.relative(cwd, absolute)
 
   if (!relative) return "."
