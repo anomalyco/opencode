@@ -32984,7 +32984,7 @@
         "modalities": { "input": ["text", "image", "pdf"], "output": ["text"] },
         "open_weights": false,
         "cost": { "input": 0, "output": 0, "cache_read": 0, "cache_write": 0 },
-        "limit": { "context": 200000, "output": 64000 }
+        "limit": { "context": 200000, "output": 128000 }
       },
       "duo-chat-sonnet-4-5": {
         "id": "duo-chat-sonnet-4-5",
