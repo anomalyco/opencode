@@ -46,9 +46,9 @@ export class ModeController {
 export function getModeDisplay(mode: ExecutionMode): ModeDisplay {
   switch (mode) {
     case ExecutionMode.Shell:
-      return { name: "Shell", icon: ">", color: "syntaxOperator" }
+      return { name: "Shell", icon: ">", color: "success" }
     case ExecutionMode.Agent:
-      return { name: "Agent", icon: "◆", color: "syntaxType" }
+      return { name: "Agent", icon: "◆", color: "secondary" }
     case ExecutionMode.Auto:
       return { name: "Auto ", icon: "∞", color: "diffAdded" }
   }

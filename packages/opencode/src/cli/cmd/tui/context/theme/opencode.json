@@ -20,6 +20,7 @@
     "darkGreen": "#7fd88f",
     "darkCyan": "#56b6c2",
     "darkYellow": "#e5c07b",
+    "darkPink": "#ff7eb6",
     "lightStep1": "#ffffff",
     "lightStep2": "#fafafa",
     "lightStep3": "#f5f5f5",
@@ -38,7 +39,8 @@
     "lightOrange": "#d68c27",
     "lightGreen": "#3d9a57",
     "lightCyan": "#318795",
-    "lightYellow": "#b0851f"
+    "lightYellow": "#b0851f",
+    "lightPink": "#e55c9a"
   },
   "theme": {
     "primary": {

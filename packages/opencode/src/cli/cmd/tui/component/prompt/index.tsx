@@ -820,7 +820,7 @@ export function Prompt(props: PromptProps) {
       <box ref={(r) => (anchor = r)} visible={props.visible !== false}>
         <box
           border={["left"]}
-          borderColor={highlight()}
+          borderColor={modePrefixColor()}
           customBorderChars={{
             ...EmptyBorder,
             vertical: "┃",
@@ -828,283 +828,293 @@ export function Prompt(props: PromptProps) {
           }}
         >
           <box
-            paddingLeft={2}
-            paddingRight={2}
-            paddingTop={1}
-            flexShrink={0}
-            backgroundColor={theme.backgroundElement}
-            flexGrow={1}
+            border={["left"]}
+            borderColor={highlight()}
+            customBorderChars={{
+              ...EmptyBorder,
+              vertical: "┃",
+              bottomLeft: "╹",
+            }}
           >
-            <box flexDirection="row" alignItems="flex-start">
-              <text fg={modePrefixColor()}>{executionMode.getModeDisplay().icon} </text>
-              <box flexGrow={1}>
-                <textarea
-                  placeholder={props.sessionID ? undefined : `Ask anything... "${PLACEHOLDERS[store.placeholder]}"`}
-                  textColor={keybind.leader ? theme.textMuted : theme.text}
-                  focusedTextColor={keybind.leader ? theme.textMuted : theme.text}
-                  minHeight={1}
-                  maxHeight={6}
-                  onContentChange={() => {
-                    const value = input.plainText
-                    setStore("prompt", "input", value)
-                    autocomplete.onInput(value)
-                    syncExtmarksWithPromptParts()
-                  }}
-                  keyBindings={textareaKeybindings()}
-                  onKeyDown={async (e) => {
-                    if (props.disabled) {
-                      e.preventDefault()
-                      return
-                    }
-                    // Handle clipboard paste (Ctrl+V) - check for images first on Windows
-                    // This is needed because Windows terminal doesn't properly send image data
-                    // through bracketed paste, so we need to intercept the keypress and
-                    // directly read from clipboard before the terminal handles it
-                    if (keybind.match("input_paste", e)) {
-                      const content = await Clipboard.read()
-                      if (content?.mime.startsWith("image/")) {
-                        e.preventDefault()
-                        await pasteImage({
-                          filename: "clipboard",
-                          mime: content.mime,
-                          content: content.data,
-                        })
-                        return
-                      }
-                      // If no image, let the default paste behavior continue
-                    }
-                    // Handle Ctrl+Space to toggle execution mode
-                    if (handleModeToggleKey(e, { setMode: executionMode.setMode }, keybind)) {
-                      e.preventDefault()
-                      return
-                    }
-                    // Handle tab for shell completion in shell/auto mode
-                    if (e.name === "tab" && shouldUseShellCompletion(store.mode, executionMode.mode())) {
-                      e.preventDefault()
-
-                      // Check if we're already cycling through completions
-                      if (store.completionCycle) {
-                        // Cycle to next completion
-                        const cycle = store.completionCycle
-                        const nextIndex = (cycle.currentIndex + 1) % cycle.completions.length
-                        const { newInput, newCursorPosition } = applyCompletionAtIndex(cycle, nextIndex)
-
-                        input.setText(newInput)
-                        input.cursorOffset = newCursorPosition
-                        setStore("prompt", "input", newInput)
-                        setStore("completionCycle", "currentIndex", nextIndex)
-
-                        // Show current position in toast
-                        toast.show({
-                          variant: "info",
-                          message: `(${nextIndex + 1}/${cycle.completions.length}) ${cycle.completions[nextIndex]}`,
-                          duration: 1500,
-                        })
-                        return
-                      }
-
-                      // Start new completion
-                      const result = await handleShellTabCompletion({
-                        input: store.prompt.input,
-                        cursorPosition: input.cursorOffset,
-                        cwd: sync.data.path.cwd || sync.data.path.directory,
-                      })
-
-                      if (result.applied) {
-                        input.setText(result.newInput)
-                        input.cursorOffset = result.newCursorPosition
-                        setStore("prompt", "input", result.newInput)
-                        // Clear any previous cycle state since we applied a completion
-                        setStore("completionCycle", null)
-                      } else if (result.completions.length > 1) {
-                        // Multiple completions with no common prefix - start cycling
-                        // Apply the first completion immediately
-                        const cycleState: CompletionCycleState = {
-                          originalInput: store.prompt.input,
-                          originalCursor: input.cursorOffset,
-                          completions: result.completions,
-                          currentIndex: 0,
-                          replaceFrom: result.replaceFrom,
-                          replaceTo: result.replaceTo,
-                        }
-
-                        const { newInput, newCursorPosition } = applyCompletionAtIndex(cycleState, 0)
-                        input.setText(newInput)
-                        input.cursorOffset = newCursorPosition
-                        setStore("prompt", "input", newInput)
-                        setStore("completionCycle", cycleState)
-
-                        // Show current position in toast
-                        toast.show({
-                          variant: "info",
-                          message: `(1/${result.completions.length}) ${result.completions[0]}`,
-                          duration: 1500,
-                        })
-                      }
-                      return
-                    }
-
-                    // Reset completion cycle on any other key press
-                    if (store.completionCycle && e.name !== "tab") {
-                      setStore("completionCycle", null)
-                    }
-                    if (keybind.match("input_clear", e) && store.prompt.input !== "") {
-                      input.clear()
-                      input.extmarks.clear()
-                      setStore("prompt", {
-                        input: "",
-                        parts: [],
-                      })
-                      setStore("extmarkToPartIndex", new Map())
-                      return
-                    }
-                    if (keybind.match("app_exit", e)) {
-                      if (store.prompt.input === "") {
-                        await exit()
-                        // Don't preventDefault - let textarea potentially handle the event
+            <box
+              paddingLeft={2}
+              paddingRight={2}
+              paddingTop={1}
+              flexShrink={0}
+              backgroundColor={theme.backgroundElement}
+              flexGrow={1}
+            >
+              <box flexDirection="row" alignItems="flex-start">
+                <text fg={modePrefixColor()}>{executionMode.getModeDisplay().icon} </text>
+                <box flexGrow={1}>
+                  <textarea
+                    placeholder={props.sessionID ? undefined : `Ask anything... "${PLACEHOLDERS[store.placeholder]}"`}
+                    textColor={keybind.leader ? theme.textMuted : theme.text}
+                    focusedTextColor={keybind.leader ? theme.textMuted : theme.text}
+                    minHeight={1}
+                    maxHeight={6}
+                    onContentChange={() => {
+                      const value = input.plainText
+                      setStore("prompt", "input", value)
+                      autocomplete.onInput(value)
+                      syncExtmarksWithPromptParts()
+                    }}
+                    keyBindings={textareaKeybindings()}
+                    onKeyDown={async (e) => {
+                      if (props.disabled) {
                         e.preventDefault()
                         return
                       }
-                    }
-
-                    if (store.mode === "normal") autocomplete.onKeyDown(e)
-                    if (!autocomplete.visible) {
-                      if (
-                        (keybind.match("history_previous", e) && input.cursorOffset === 0) ||
-                        (keybind.match("history_next", e) && input.cursorOffset === input.plainText.length)
-                      ) {
-                        const direction = keybind.match("history_previous", e) ? -1 : 1
-                        const item = history.move(direction, input.plainText)
-
-                        if (item) {
-                          input.setText(item.input)
-                          setStore("prompt", item)
-                          setStore("mode", item.mode ?? "normal")
-                          restoreExtmarksFromParts(item.parts)
+                      // Handle clipboard paste (Ctrl+V) - check for images first on Windows
+                      // This is needed because Windows terminal doesn't properly send image data
+                      // through bracketed paste, so we need to intercept the keypress and
+                      // directly read from clipboard before the terminal handles it
+                      if (keybind.match("input_paste", e)) {
+                        const content = await Clipboard.read()
+                        if (content?.mime.startsWith("image/")) {
                           e.preventDefault()
-                          if (direction === -1) input.cursorOffset = 0
-                          if (direction === 1) input.cursorOffset = input.plainText.length
+                          await pasteImage({
+                            filename: "clipboard",
+                            mime: content.mime,
+                            content: content.data,
+                          })
+                          return
+                        }
+                        // If no image, let the default paste behavior continue
+                      }
+                      // Handle Ctrl+Space to toggle execution mode
+                      if (handleModeToggleKey(e, { setMode: executionMode.setMode }, keybind)) {
+                        e.preventDefault()
+                        return
+                      }
+                      // Handle tab for shell completion in shell/auto mode
+                      if (e.name === "tab" && shouldUseShellCompletion(store.mode, executionMode.mode())) {
+                        e.preventDefault()
+
+                        // Check if we're already cycling through completions
+                        if (store.completionCycle) {
+                          // Cycle to next completion
+                          const cycle = store.completionCycle
+                          const nextIndex = (cycle.currentIndex + 1) % cycle.completions.length
+                          const { newInput, newCursorPosition } = applyCompletionAtIndex(cycle, nextIndex)
+
+                          input.setText(newInput)
+                          input.cursorOffset = newCursorPosition
+                          setStore("prompt", "input", newInput)
+                          setStore("completionCycle", "currentIndex", nextIndex)
+
+                          // Show current position in toast
+                          toast.show({
+                            variant: "info",
+                            message: `(${nextIndex + 1}/${cycle.completions.length}) ${cycle.completions[nextIndex]}`,
+                            duration: 1500,
+                          })
+                          return
+                        }
+
+                        // Start new completion
+                        const result = await handleShellTabCompletion({
+                          input: store.prompt.input,
+                          cursorPosition: input.cursorOffset,
+                          cwd: sync.data.path.cwd || sync.data.path.directory,
+                        })
+
+                        if (result.applied) {
+                          input.setText(result.newInput)
+                          input.cursorOffset = result.newCursorPosition
+                          setStore("prompt", "input", result.newInput)
+                          // Clear any previous cycle state since we applied a completion
+                          setStore("completionCycle", null)
+                        } else if (result.completions.length > 1) {
+                          // Multiple completions with no common prefix - start cycling
+                          // Apply the first completion immediately
+                          const cycleState: CompletionCycleState = {
+                            originalInput: store.prompt.input,
+                            originalCursor: input.cursorOffset,
+                            completions: result.completions,
+                            currentIndex: 0,
+                            replaceFrom: result.replaceFrom,
+                            replaceTo: result.replaceTo,
+                          }
+
+                          const { newInput, newCursorPosition } = applyCompletionAtIndex(cycleState, 0)
+                          input.setText(newInput)
+                          input.cursorOffset = newCursorPosition
+                          setStore("prompt", "input", newInput)
+                          setStore("completionCycle", cycleState)
+
+                          // Show current position in toast
+                          toast.show({
+                            variant: "info",
+                            message: `(1/${result.completions.length}) ${result.completions[0]}`,
+                            duration: 1500,
+                          })
                         }
                         return
                       }
 
-                      if (keybind.match("history_previous", e) && input.visualCursor.visualRow === 0)
-                        input.cursorOffset = 0
-                      if (keybind.match("history_next", e) && input.visualCursor.visualRow === input.height - 1)
-                        input.cursorOffset = input.plainText.length
-                    }
-                  }}
-                  onSubmit={submit}
-                  onPaste={async (event: PasteEvent) => {
-                    if (props.disabled) {
-                      event.preventDefault()
-                      return
-                    }
-
-                    // Normalize line endings at the boundary
-                    // Windows ConPTY/Terminal often sends CR-only newlines in bracketed paste
-                    // Replace CRLF first, then any remaining CR
-                    const normalizedText = event.text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
-                    const pastedContent = normalizedText.trim()
-                    if (!pastedContent) {
-                      command.trigger("prompt.paste")
-                      return
-                    }
-
-                    // trim ' from the beginning and end of the pasted content. just
-                    // ' and nothing else
-                    const filepath = pastedContent.replace(/^'+|'+$/g, "").replace(/\\ /g, " ")
-                    const isUrl = /^(https?):\/\//.test(filepath)
-                    if (!isUrl) {
-                      try {
-                        const file = Bun.file(filepath)
-                        // Handle SVG as raw text content, not as base64 image
-                        if (file.type === "image/svg+xml") {
-                          event.preventDefault()
-                          const content = await file.text().catch(() => {})
-                          if (content) {
-                            pasteText(content, `[SVG: ${file.name ?? "image"}]`)
-                            return
-                          }
+                      // Reset completion cycle on any other key press
+                      if (store.completionCycle && e.name !== "tab") {
+                        setStore("completionCycle", null)
+                      }
+                      if (keybind.match("input_clear", e) && store.prompt.input !== "") {
+                        input.clear()
+                        input.extmarks.clear()
+                        setStore("prompt", {
+                          input: "",
+                          parts: [],
+                        })
+                        setStore("extmarkToPartIndex", new Map())
+                        return
+                      }
+                      if (keybind.match("app_exit", e)) {
+                        if (store.prompt.input === "") {
+                          await exit()
+                          // Don't preventDefault - let textarea potentially handle the event
+                          e.preventDefault()
+                          return
                         }
-                        if (file.type.startsWith("image/")) {
-                          event.preventDefault()
-                          const content = await file
-                            .arrayBuffer()
-                            .then((buffer) => Buffer.from(buffer).toString("base64"))
-                            .catch(() => {})
-                          if (content) {
-                            await pasteImage({
-                              filename: file.name,
-                              mime: file.type,
-                              content,
-                            })
-                            return
+                      }
+
+                      if (store.mode === "normal") autocomplete.onKeyDown(e)
+                      if (!autocomplete.visible) {
+                        if (
+                          (keybind.match("history_previous", e) && input.cursorOffset === 0) ||
+                          (keybind.match("history_next", e) && input.cursorOffset === input.plainText.length)
+                        ) {
+                          const direction = keybind.match("history_previous", e) ? -1 : 1
+                          const item = history.move(direction, input.plainText)
+
+                          if (item) {
+                            input.setText(item.input)
+                            setStore("prompt", item)
+                            setStore("mode", item.mode ?? "normal")
+                            restoreExtmarksFromParts(item.parts)
+                            e.preventDefault()
+                            if (direction === -1) input.cursorOffset = 0
+                            if (direction === 1) input.cursorOffset = input.plainText.length
                           }
+                          return
                         }
-                      } catch {}
-                    }
 
-                    const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
-                    if (
-                      (lineCount >= 3 || pastedContent.length > 150) &&
-                      !sync.data.config.experimental?.disable_paste_summary
-                    ) {
-                      event.preventDefault()
-                      pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
-                      return
-                    }
+                        if (keybind.match("history_previous", e) && input.visualCursor.visualRow === 0)
+                          input.cursorOffset = 0
+                        if (keybind.match("history_next", e) && input.visualCursor.visualRow === input.height - 1)
+                          input.cursorOffset = input.plainText.length
+                      }
+                    }}
+                    onSubmit={submit}
+                    onPaste={async (event: PasteEvent) => {
+                      if (props.disabled) {
+                        event.preventDefault()
+                        return
+                      }
 
-                    // Force layout update and render for the pasted content
-                    setTimeout(() => {
-                      // setTimeout is a workaround and needs to be addressed properly
-                      if (!input || input.isDestroyed) return
-                      input.getLayoutNode().markDirty()
-                      renderer.requestRender()
-                    }, 0)
-                  }}
-                  ref={(r: TextareaRenderable) => {
-                    input = r
-                    if (promptPartTypeId === 0) {
-                      promptPartTypeId = input.extmarks.registerType("prompt-part")
-                    }
-                    props.ref?.(ref)
-                    setTimeout(() => {
-                      // setTimeout is a workaround and needs to be addressed properly
-                      if (!input || input.isDestroyed) return
-                      input.cursorColor = theme.text
-                    }, 0)
-                  }}
-                  onMouseDown={(r: MouseEvent) => r.target?.focus()}
-                  focusedBackgroundColor={theme.backgroundElement}
-                  cursorColor={theme.text}
-                  syntaxStyle={syntax()}
-                />
-              </box>
-            </box>
-            <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
-              <text fg={highlight()}>{Locale.titlecase(local.agent.current().name)} </text>
-              <Show when={store.mode === "normal"}>
-                <box flexDirection="row" gap={1}>
-                  <text flexShrink={0} fg={keybind.leader ? theme.textMuted : theme.text}>
-                    {local.model.parsed().model}
-                  </text>
-                  <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
-                  <Show when={showVariant()}>
-                    <text fg={theme.textMuted}>·</text>
-                    <text>
-                      <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
-                    </text>
-                  </Show>
+                      // Normalize line endings at the boundary
+                      // Windows ConPTY/Terminal often sends CR-only newlines in bracketed paste
+                      // Replace CRLF first, then any remaining CR
+                      const normalizedText = event.text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+                      const pastedContent = normalizedText.trim()
+                      if (!pastedContent) {
+                        command.trigger("prompt.paste")
+                        return
+                      }
+
+                      // trim ' from the beginning and end of the pasted content. just
+                      // ' and nothing else
+                      const filepath = pastedContent.replace(/^'+|'+$/g, "").replace(/\\ /g, " ")
+                      const isUrl = /^(https?):\/\//.test(filepath)
+                      if (!isUrl) {
+                        try {
+                          const file = Bun.file(filepath)
+                          // Handle SVG as raw text content, not as base64 image
+                          if (file.type === "image/svg+xml") {
+                            event.preventDefault()
+                            const content = await file.text().catch(() => {})
+                            if (content) {
+                              pasteText(content, `[SVG: ${file.name ?? "image"}]`)
+                              return
+                            }
+                          }
+                          if (file.type.startsWith("image/")) {
+                            event.preventDefault()
+                            const content = await file
+                              .arrayBuffer()
+                              .then((buffer) => Buffer.from(buffer).toString("base64"))
+                              .catch(() => {})
+                            if (content) {
+                              await pasteImage({
+                                filename: file.name,
+                                mime: file.type,
+                                content,
+                              })
+                              return
+                            }
+                          }
+                        } catch {}
+                      }
+
+                      const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
+                      if (
+                        (lineCount >= 3 || pastedContent.length > 150) &&
+                        !sync.data.config.experimental?.disable_paste_summary
+                      ) {
+                        event.preventDefault()
+                        pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
+                        return
+                      }
+
+                      // Force layout update and render for the pasted content
+                      setTimeout(() => {
+                        // setTimeout is a workaround and needs to be addressed properly
+                        if (!input || input.isDestroyed) return
+                        input.getLayoutNode().markDirty()
+                        renderer.requestRender()
+                      }, 0)
+                    }}
+                    ref={(r: TextareaRenderable) => {
+                      input = r
+                      if (promptPartTypeId === 0) {
+                        promptPartTypeId = input.extmarks.registerType("prompt-part")
+                      }
+                      props.ref?.(ref)
+                      setTimeout(() => {
+                        // setTimeout is a workaround and needs to be addressed properly
+                        if (!input || input.isDestroyed) return
+                        input.cursorColor = theme.text
+                      }, 0)
+                    }}
+                    onMouseDown={(r: MouseEvent) => r.target?.focus()}
+                    focusedBackgroundColor={theme.backgroundElement}
+                    cursorColor={theme.text}
+                    syntaxStyle={syntax()}
+                  />
                 </box>
-              </Show>
+              </box>
+              <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
+                <text fg={highlight()}>{Locale.titlecase(local.agent.current().name)} </text>
+                <Show when={store.mode === "normal"}>
+                  <box flexDirection="row" gap={1}>
+                    <text flexShrink={0} fg={keybind.leader ? theme.textMuted : theme.text}>
+                      {local.model.parsed().model}
+                    </text>
+                    <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
+                    <Show when={showVariant()}>
+                      <text fg={theme.textMuted}>·</text>
+                      <text>
+                        <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
+                      </text>
+                    </Show>
+                  </box>
+                </Show>
+              </box>
             </box>
           </box>
         </box>
         <box
           height={1}
           border={["left"]}
-          borderColor={highlight()}
+          borderColor={modePrefixColor()}
           customBorderChars={{
             ...EmptyBorder,
             vertical: theme.backgroundElement.a !== 0 ? "╹" : " ",
@@ -1112,20 +1122,30 @@ export function Prompt(props: PromptProps) {
         >
           <box
             height={1}
-            border={["bottom"]}
-            borderColor={theme.backgroundElement}
-            customBorderChars={
-              theme.backgroundElement.a !== 0
-                ? {
-                    ...EmptyBorder,
-                    horizontal: "▀",
-                  }
-                : {
-                    ...EmptyBorder,
-                    horizontal: " ",
-                  }
-            }
-          />
+            border={["left"]}
+            borderColor={highlight()}
+            customBorderChars={{
+              ...EmptyBorder,
+              vertical: theme.backgroundElement.a !== 0 ? "╹" : " ",
+            }}
+          >
+            <box
+              height={1}
+              border={["bottom"]}
+              borderColor={theme.backgroundElement}
+              customBorderChars={
+                theme.backgroundElement.a !== 0
+                  ? {
+                      ...EmptyBorder,
+                      horizontal: "▀",
+                    }
+                  : {
+                      ...EmptyBorder,
+                      horizontal: " ",
+                    }
+              }
+            />
+          </box>
         </box>
         <box flexDirection="row" justifyContent="space-between">
           <Show
