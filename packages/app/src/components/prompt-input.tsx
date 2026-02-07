@@ -1025,8 +1025,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               "[&_.prompt-pill--code]:cursor-pointer": true,
               "[&_.prompt-pill--code]:rounded": true,
               "[&_.prompt-pill--code]:px-1": true,
-              "[&_.prompt-pill--code]:bg-violet-500/10": true,
-              "[&_.prompt-pill--code]:hover:bg-violet-500/25": true,
+              "[&_.prompt-pill--code]:hover:text-syntax-property/70": true,
               "[&_.prompt-pill--code]:transition-colors": true,
             }}
           />
