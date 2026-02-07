@@ -974,7 +974,20 @@ export namespace SessionPrompt {
               log.info("file", { mime: part.mime })
               // have to normalize, symbol search returns absolute paths
               // Decode the pathname since URL constructor doesn't automatically decode it
-              const filepath = fileURLToPath(part.url)
+              let filepath: string | undefined
+              try {
+                filepath = fileURLToPath(part.url)
+              } catch (error) {
+                log.warn("non-file url in file part", { url: part.url, error })
+                return [
+                  {
+                    id: part.id ?? Identifier.ascending("part"),
+                    messageID: info.id,
+                    sessionID: input.sessionID,
+                    ...part,
+                  },
+                ]
+              }
               const stat = await Bun.file(filepath)
                 .stat()
                 .catch(() => undefined)
