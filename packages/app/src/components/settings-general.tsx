@@ -236,17 +236,19 @@ export const SettingsGeneral: Component = () => {
               </Select>
             </SettingsRow>
 
-            <SettingsRow
-              title={language.t("settings.general.row.transparentAppIcons.title")}
-              description={language.t("settings.general.row.transparentAppIcons.description")}
-            >
-              <div data-action="settings-transparent-app-icons">
-                <Switch
-                  checked={settings.appearance.transparentAppIcons()}
-                  onChange={(checked) => settings.appearance.setTransparentAppIcons(checked)}
-                />
-              </div>
-            </SettingsRow>
+            {platform.platform === "desktop" && (
+              <SettingsRow
+                title={language.t("settings.general.row.transparentAppIcons.title")}
+                description={language.t("settings.general.row.transparentAppIcons.description")}
+              >
+                <div data-action="settings-transparent-app-icons">
+                  <Switch
+                    checked={settings.appearance.transparentAppIcons()}
+                    onChange={(checked) => settings.appearance.setTransparentAppIcons(checked)}
+                  />
+                </div>
+              </SettingsRow>
+            )}
           </div>
         </div>
 

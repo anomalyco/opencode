@@ -500,6 +500,9 @@ export const dict = {
   "session.messages.loadEarlier": "Load earlier messages",
   "session.messages.loading": "Loading messages...",
   "session.messages.jumpToLatest": "Jump to latest",
+  "session.messages.reverted.single": "1 message reverted",
+  "session.messages.reverted.multiple": "{{count}} messages reverted",
+  "session.messages.reverted.restore": "to restore",
 
   "session.context.addToContext": "Add {{selection}} to context",
 
