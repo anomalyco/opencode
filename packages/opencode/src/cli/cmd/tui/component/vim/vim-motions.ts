@@ -175,3 +175,17 @@ export function openLineAbove(textarea: TextareaRenderable) {
   textarea.insertText("\n")
   textarea.cursorOffset = start
 }
+
+export function deleteUnderCursor(textarea: TextareaRenderable) {
+  const text = textarea.plainText
+  const startOffset = textarea.cursorOffset
+  const end = lineEnd(text, startOffset)
+  if (startOffset >= end) return
+
+  textarea.cursorOffset = startOffset
+  const start = textarea.logicalCursor
+  textarea.cursorOffset = startOffset + 1
+  const next = textarea.logicalCursor
+  textarea.deleteRange(start.row, start.col, next.row, next.col)
+  textarea.cursorOffset = startOffset
+}

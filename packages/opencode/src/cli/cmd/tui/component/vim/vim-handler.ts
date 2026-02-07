@@ -4,6 +4,7 @@ import type { TextareaRenderable } from "@opentui/core"
 import {
   appendAfterCursor,
   appendLineEnd,
+  deleteUnderCursor,
   insertLineStart,
   moveBigWordEnd,
   moveBigWordNext,
@@ -125,6 +126,12 @@ export function createVimHandler(input: {
 
       if (key === "k" && !event.shift && !hasModifier(event)) {
         moveLineUp(input.textarea())
+        event.preventDefault()
+        return true
+      }
+
+      if (key === "x" && !event.shift && !hasModifier(event)) {
+        deleteUnderCursor(input.textarea())
         event.preventDefault()
         return true
       }
