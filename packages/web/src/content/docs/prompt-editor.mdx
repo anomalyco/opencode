@@ -1,0 +1,78 @@
+---
+title: Prompt Editor
+description: Use mentions, slash commands, and templates in prompts.
+---
+
+The prompt editor powers rich prompt composition across OpenCode. It lets you insert file and agent references, pick slash commands, and drop in templates without leaving the keyboard.
+
+---
+
+## Tokens
+
+### File references
+
+Type `@` to open file suggestions and insert a file reference.
+
+```text
+Review @packages/opencode/src/server/routes/automation.ts and summarize the API.
+```
+
+The editor inserts a file pill that stays linked to the file path and renders as part of the prompt.
+
+---
+
+### Agent references
+
+Type `@` and select an agent to insert an agent reference.
+
+```text
+@plan Draft a rollout plan for automations.
+```
+
+Agents are shown alongside file results, and selecting one inserts an agent pill.
+
+---
+
+### Slash commands
+
+Type `/` at the start of an empty prompt to open slash command suggestions.
+
+```text
+/help
+```
+
+Selecting a command inserts `/<command> ` so you can continue typing arguments.
+
+---
+
+### Templates
+
+Type `{{` to open template suggestions and insert a template token.
+
+```text
+Create a summary for {{project.name}} on {{date}}.
+```
+
+Templates are inserted at the cursor and replace the `{{` fragment you were typing.
+
+---
+
+## Keyboard interaction
+
+- Use `ArrowUp` and `ArrowDown` or `ctrl+n` / `ctrl+p` to navigate popovers.
+- Press `Tab` or `Enter` to accept the highlighted suggestion.
+- Press `Esc` (or `ctrl+g`) to close an open popover.
+- Press `Shift+Enter` to insert a newline in the editor.
+
+---
+
+## Paste behavior
+
+The editor pastes plain text by default (formatting is stripped). If a parent handler overrides `onPaste`, it can replace or augment this behavior.
+
+---
+
+## Rendering and modes
+
+- The editor uses a structured `Prompt` model and preserves cursor position on updates.
+- When `mode="shell"` is enabled, the editor switches to a monospace appearance and disables popover suggestions.
