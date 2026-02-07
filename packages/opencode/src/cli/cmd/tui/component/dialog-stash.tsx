@@ -73,6 +73,7 @@ export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
           keybind: keybind.all.stash_delete?.[0],
           title: "delete",
           onTrigger: (option) => {
+            if (!option) return
             if (toDelete() === option.value) {
               stash.remove(option.value)
               setToDelete(undefined)

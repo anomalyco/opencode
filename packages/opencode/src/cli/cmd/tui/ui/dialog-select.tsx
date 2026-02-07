@@ -24,12 +24,13 @@ export interface DialogSelectProps<T> {
     keybind?: Keybind.Info
     title: string
     disabled?: boolean
-    onTrigger: (option: DialogSelectOption<T>) => void
+    requiresSelection?: boolean
+    onTrigger: (option?: DialogSelectOption<T>) => void
   }[]
   current?: T
 }
 
-export interface DialogSelectOption<T = any> {
+export interface DialogSelectOption<T = unknown> {
   title: string
   value: T
   description?: string
@@ -54,6 +55,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     selected: 0,
     filter: "",
     input: "keyboard" as "keyboard" | "mouse",
+    keybindPage: 0,
   })
 
   createEffect(
@@ -105,7 +107,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     const result = pipe(
       filtered(),
       groupBy((x) => x.category ?? ""),
-      // mapValues((x) => x.sort((a, b) => a.title.localeCompare(b.title))),
       entries(),
     )
     return result
@@ -178,6 +179,21 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   useKeyboard((evt) => {
     setStore("input", "keyboard")
 
+    const typing = typeof evt.name === "string" && evt.name.length === 1 && !evt.ctrl && !evt.meta && !evt.shift
+
+    if (!typing) {
+      for (const item of props.keybind ?? []) {
+        if (item.disabled || !item.keybind) continue
+        if (!Keybind.match(item.keybind, keybind.parse(evt))) continue
+        const s = selected()
+        if (!s && item.requiresSelection !== false) continue
+        evt.preventDefault()
+        evt.stopPropagation()
+        item.onTrigger(s)
+        return
+      }
+    }
+
     if (evt.name === "up" || (evt.ctrl && evt.name === "p")) move(-1)
     if (evt.name === "down" || (evt.ctrl && evt.name === "n")) move(1)
     if (evt.name === "pageup") move(-10)
@@ -195,15 +211,11 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       }
     }
 
-    for (const item of props.keybind ?? []) {
-      if (item.disabled || !item.keybind) continue
-      if (Keybind.match(item.keybind, keybind.parse(evt))) {
-        const s = selected()
-        if (s) {
-          evt.preventDefault()
-          item.onTrigger(s)
-        }
-      }
+    if (evt.name === "tab" && keybindPageCount() > 1) {
+      evt.preventDefault()
+      evt.stopPropagation()
+      moveKeybindPage(evt.shift ? -1 : 1)
+      return
     }
   })
 
@@ -219,6 +231,33 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   props.ref?.(ref)
 
   const keybinds = createMemo(() => props.keybind?.filter((x) => !x.disabled && x.keybind) ?? [])
+  const keybindPageSize = 4
+  const keybindPageCount = createMemo(() => {
+    const size = keybindPageSize
+    if (size <= 0) return 1
+    return Math.max(1, Math.ceil(keybinds().length / size))
+  })
+  const keybindPage = createMemo(() => Math.min(store.keybindPage, keybindPageCount() - 1))
+  const pagedKeybinds = createMemo(() => {
+    const size = keybindPageSize
+    const start = keybindPage() * size
+    return keybinds().slice(start, start + size)
+  })
+
+  const moveKeybindPage = (direction: number) => {
+    if (keybindPageCount() <= 1) return
+    const total = keybindPageCount()
+    let next = keybindPage() + direction
+    if (next < 0) next = total - 1
+    if (next >= total) next = 0
+    setStore("keybindPage", next)
+  }
+
+  createEffect(() => {
+    if (store.keybindPage >= keybindPageCount()) {
+      setStore("keybindPage", Math.max(0, keybindPageCount() - 1))
+    }
+  })
 
   return (
     <box gap={1} paddingBottom={1}>
@@ -335,17 +374,24 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         </scrollbox>
       </Show>
       <Show when={keybinds().length} fallback={<box flexShrink={0} />}>
-        <box paddingRight={2} paddingLeft={4} flexDirection="row" gap={2} flexShrink={0} paddingTop={1}>
-          <For each={keybinds()}>
-            {(item) => (
-              <text>
-                <span style={{ fg: theme.text }}>
-                  <b>{item.title}</b>{" "}
-                </span>
-                <span style={{ fg: theme.textMuted }}>{Keybind.toString(item.keybind)}</span>
-              </text>
-            )}
-          </For>
+        <box paddingRight={2} paddingLeft={4} flexShrink={0} paddingTop={1} gap={1}>
+          <box flexDirection="row" gap={2}>
+            <For each={pagedKeybinds()}>
+              {(item) => (
+                <text>
+                  <span style={{ fg: theme.text }}>
+                    <b>{item.title}</b>{" "}
+                  </span>
+                  <span style={{ fg: theme.textMuted }}>{Keybind.toString(item.keybind)}</span>
+                </text>
+              )}
+            </For>
+          </box>
+          <Show when={keybindPageCount() > 1}>
+            <text fg={theme.textMuted}>
+              tab {keybindPage() + 1}/{keybindPageCount()}
+            </text>
+          </Show>
         </box>
       </Show>
     </box>

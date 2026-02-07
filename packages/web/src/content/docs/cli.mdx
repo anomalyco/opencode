@@ -400,6 +400,114 @@ opencode session list
 
 ---
 
+### automation
+
+Manage automations from the CLI.
+
+```bash
+opencode automation [command]
+```
+
+#### list
+
+List automations.
+
+```bash
+opencode automation list
+```
+
+##### Flags
+
+| Flag          | Short | Description                          |
+| ------------- | ----- | ------------------------------------ |
+| `--max-count` | `-n`  | Limit to N most recent automations   |
+| `--format`    |       | Output format: table or json (table) |
+
+#### create
+
+Create an automation.
+
+```bash
+opencode automation create --name "Daily summary" --prompt "Summarize changes" --project /path/to/project --schedule "0 9 * * 1-5"
+```
+
+##### Flags
+
+| Flag         | Description                |
+| ------------ | -------------------------- |
+| `--name`     | Automation name            |
+| `--prompt`   | Prompt template            |
+| `--project`  | Project directory (repeat) |
+| `--schedule` | Cron schedule (optional)   |
+| `--enabled`  | Enable schedule            |
+
+#### update
+
+Update an automation.
+
+```bash
+opencode automation update <id> --name "Weekly review"
+```
+
+#### remove
+
+Remove an automation.
+
+```bash
+opencode automation remove <id>
+```
+
+#### run
+
+Run an automation immediately.
+
+```bash
+opencode automation run <id>
+```
+
+#### history
+
+Show run history for an automation.
+
+```bash
+opencode automation history <id>
+```
+
+#### export
+
+Export automations to JSON.
+
+```bash
+opencode automation export --all
+opencode automation export <id>
+```
+
+##### Flags
+
+| Flag        | Description                                |
+| ----------- | ------------------------------------------ |
+| `--all`     | Export all automations                     |
+| `--dir`     | Export to a directory                      |
+| `--project` | Export to .opencode/automations in project |
+
+#### import
+
+Import automations from JSON.
+
+```bash
+opencode automation import automations.json
+opencode automation import --dir .opencode/automations
+```
+
+##### Flags
+
+| Flag        | Description                                  |
+| ----------- | -------------------------------------------- |
+| `--dir`     | Import all JSON files from a directory       |
+| `--project` | Import from .opencode/automations in project |
+
+---
+
 ### stats
 
 Show token usage and cost statistics for your OpenCode sessions.

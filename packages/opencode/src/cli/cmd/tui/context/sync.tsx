@@ -17,6 +17,7 @@ import type {
   ProviderListResponse,
   ProviderAuthMethod,
   VcsInfo,
+  Automation,
 } from "@opencode-ai/sdk/v2"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
@@ -73,6 +74,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       formatter: FormatterStatus[]
       vcs: VcsInfo | undefined
       path: Path
+      automation: Automation[]
     }>({
       provider_next: {
         all: [],
@@ -100,6 +102,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       formatter: [],
       vcs: undefined,
       path: { state: "", config: "", worktree: "", directory: "" },
+      automation: [],
     })
 
     const sdk = useSDK()
@@ -322,6 +325,34 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           setStore("vcs", { branch: event.properties.branch })
           break
         }
+        case "automation.created":
+        case "automation.updated": {
+          const result = Binary.search(store.automation, event.properties.id, (s) => s.id)
+          if (result.found) {
+            setStore("automation", result.index, reconcile(event.properties))
+            break
+          }
+
+          setStore(
+            "automation",
+            produce((draft) => {
+              draft.splice(result.index, 0, event.properties)
+            }),
+          )
+          break
+        }
+        case "automation.deleted": {
+          const result = Binary.search(store.automation, event.properties.id, (s) => s.id)
+          if (!result.found) break
+
+          setStore(
+            "automation",
+            produce((draft) => {
+              draft.splice(result.index, 1)
+            }),
+          )
+          break
+        }
       }
     })
 
@@ -391,6 +422,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.formatter.status().then((x) => setStore("formatter", reconcile(x.data!))),
             sdk.client.session.status().then((x) => {
               setStore("session_status", reconcile(x.data!))
+            }),
+            sdk.client.automation.list().then((x) => {
+              const list = (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id))
+              setStore("automation", reconcile(list))
             }),
             sdk.client.provider.auth().then((x) => setStore("provider_auth", reconcile(x.data ?? {}))),
             sdk.client.vcs.get().then((x) => setStore("vcs", reconcile(x.data))),

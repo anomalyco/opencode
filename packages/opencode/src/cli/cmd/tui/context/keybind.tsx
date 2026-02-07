@@ -72,9 +72,33 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
         return store.leader
       },
       parse(evt: ParsedKey): Keybind.Info {
+        if (typeof evt.name === "string" && evt.name.length === 1) {
+          const code = evt.name.charCodeAt(0)
+          if (code >= 1 && code <= 26) {
+            return Keybind.fromParsedKey(
+              {
+                ...evt,
+                name: String.fromCharCode(code + 96),
+                ctrl: true,
+              },
+              store.leader,
+            )
+          }
+        }
+
         // Handle special case for Ctrl+Underscore (represented as \x1F)
         if (evt.name === "\x1F") {
           return Keybind.fromParsedKey({ ...evt, name: "_", ctrl: true }, store.leader)
+        }
+
+        if (typeof evt.name === "string" && evt.name.length === 1) {
+          return Keybind.fromParsedKey(
+            {
+              ...evt,
+              name: evt.name.toLowerCase(),
+            },
+            store.leader,
+          )
         }
         return Keybind.fromParsedKey(evt, store.leader)
       },
