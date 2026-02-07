@@ -9,6 +9,12 @@ type PackageManifest = {
 const root = process.cwd()
 const bunRoot = join(root, "node_modules/.bun")
 const bunEntries = (await safeReadDir(bunRoot)).sort()
+
+if (bunEntries.length === 0) {
+  console.log("[normalize-bun-binaries] no .bun directory, skipping")
+  process.exit(0)
+}
+
 let rewritten = 0
 
 for (const entry of bunEntries) {
@@ -45,7 +51,7 @@ for (const entry of bunEntries) {
   }
 }
 
-console.log(`[normalize-bun-binaries] rewrote ${rewritten} links`)
+console.log(`[normalize-bun-binaries] rebuilt ${rewritten} links`)
 
 async function collectPackages(modulesRoot: string) {
   const found: string[] = []
