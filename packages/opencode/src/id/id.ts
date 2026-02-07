@@ -11,6 +11,8 @@ export namespace Identifier {
     part: "prt",
     pty: "pty",
     tool: "tool",
+    automation: "aut",
+    automation_run: "atr",
   } as const
 
   export function schema(prefix: keyof typeof prefixes) {
@@ -79,5 +81,15 @@ export namespace Identifier {
     const hex = id.slice(prefix.length + 1, prefix.length + 13)
     const encoded = BigInt("0x" + hex)
     return Number(encoded / BigInt(0x1000))
+  }
+
+  /** Extract timestamp from a descending ID. */
+  export function timestampDescending(id: string): number {
+    const prefix = id.split("_")[0]
+    const hex = id.slice(prefix.length + 1, prefix.length + 13)
+    const encoded = BigInt("0x" + hex)
+    const mask = (BigInt(1) << BigInt(48)) - BigInt(1)
+    const restored = ~encoded & mask
+    return Number(restored / BigInt(0x1000))
   }
 }

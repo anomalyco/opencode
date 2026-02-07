@@ -168,6 +168,28 @@ The opencode server exposes the following APIs.
 
 ---
 
+### Automations
+
+Automations are scheduled or on-demand prompts that run across one or more projects. Runs are executed by the server scheduler and recorded in the automation history store.
+
+Storage layout:
+
+- `~/.local/share/opencode/storage/automation/<id>.json` for automation definitions
+- `~/.local/share/opencode/storage/automation/<id>/run/<run-id>.json` for run history
+
+| Method   | Path                      | Description                       | Response                                                   |
+| -------- | ------------------------- | --------------------------------- | ---------------------------------------------------------- |
+| `GET`    | `/automation`             | List automations                  | <a href={typesUrl}><code>Automation[]</code></a>           |
+| `POST`   | `/automation`             | Create automation                 | <a href={typesUrl}><code>Automation</code></a>             |
+| `PATCH`  | `/automation/:id`         | Update automation                 | <a href={typesUrl}><code>Automation</code></a>             |
+| `DELETE` | `/automation/:id`         | Delete automation                 | <a href={typesUrl}><code>Automation</code></a>             |
+| `POST`   | `/automation/:id/run`     | Run automation immediately        | <a href={typesUrl}><code>Automation</code></a>             |
+| `GET`    | `/automation/:id/history` | List automation run history       | <a href={typesUrl}><code>AutomationRun[]</code></a>        |
+| `DELETE` | `/automation/history`     | Clear automation run history      | <a href={typesUrl}><code>AutomationHistoryClear</code></a> |
+| `POST`   | `/automation/preview`     | Validate schedule + next run time | <a href={typesUrl}><code>AutomationPreview</code></a>      |
+
+---
+
 ### Messages
 
 | Method | Path                              | Description                             | Notes                                                                                                                                                                 |
