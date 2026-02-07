@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, afterEach } from "bun:test"
+import { describe, test, expect, beforeEach, afterEach, spyOn } from "bun:test"
 import path from "path"
 import fs from "fs"
 import os from "os"
@@ -84,6 +84,78 @@ describe("instance cache eviction", () => {
     // The first dirs should have been evicted
     // Accessing an evicted dir should create a new instance (cache miss)
     expect(Instance.cacheSize).toBeLessThanOrEqual(MAX + 1) // +1 for the re-access
+  }, 30000)
+
+  test("evicts idle instances past TTL before creating a new one", async () => {
+    const nowSpy = spyOn(Date, "now")
+    let now = 1_000_000
+    nowSpy.mockImplementation(() => now)
+
+    try {
+      const stale = makeTmpDir("ttl-stale")
+      await Instance.provide({
+        directory: stale,
+        fn: async () => {},
+      })
+
+      now += 30 * 60 * 1000 + 1
+
+      const fresh = makeTmpDir("ttl-fresh")
+      await Instance.provide({
+        directory: fresh,
+        fn: async () => {},
+      })
+
+      expect(Instance.cacheSize).toBe(1)
+    } finally {
+      nowSpy.mockRestore()
+    }
+  }, 30000)
+
+  test("does not evict active instances while enforcing max cache size", async () => {
+    const holdDir = makeTmpDir("active-hold")
+
+    let resolveHold: (() => void) | undefined
+    const hold = new Promise<void>((resolve) => {
+      resolveHold = resolve
+    })
+
+    let markStarted: (() => void) | undefined
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve
+    })
+
+    let disposedWhileActive = false
+    const activeProvide = Instance.provide({
+      directory: holdDir,
+      fn: async () => {
+        const marker = Instance.state(
+          () => ({ alive: true }),
+          async () => {
+            disposedWhileActive = true
+          },
+        )
+        marker()
+        markStarted?.()
+        await hold
+      },
+    })
+
+    await started
+
+    const overLimit = 25
+    for (let i = 0; i < overLimit; i++) {
+      const dir = makeTmpDir(`active-fill-${i}`)
+      await Instance.provide({
+        directory: dir,
+        fn: async () => {},
+      })
+    }
+
+    expect(disposedWhileActive).toBe(false)
+
+    resolveHold?.()
+    await activeProvide
   }, 30000)
 
   test("RSS stays bounded after 50+ unique instances", async () => {

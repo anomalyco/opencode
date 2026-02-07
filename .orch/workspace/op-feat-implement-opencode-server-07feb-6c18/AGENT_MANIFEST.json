@@ -1,0 +1,11 @@
+{
+  "workspace_name": "op-feat-implement-opencode-server-07feb-6c18",
+  "skill": "feature-impl",
+  "beads_id": "opencode-untracked-1770494522",
+  "project_dir": "/Users/dylanconlin/Documents/personal/opencode",
+  "git_baseline": "c9c2796efcfd4ef9b6ca5ab02e235dd372262596",
+  "spawn_time": "2026-02-07T12:02:07-08:00",
+  "tier": "light",
+  "spawn_mode": "opencode",
+  "model": "openai/gpt-5.3-codex"
+}

@@ -1,0 +1,10 @@
+{
+  "workspace_name": "op-inv-verify-opencode-oauth-29jan-30d6",
+  "skill": "investigation",
+  "beads_id": "opencode-untracked-1769714652",
+  "project_dir": "/Users/dylanconlin/Documents/personal/opencode",
+  "git_baseline": "8ebe19a4fd7e1ca7b13a89b1b9dd57dad917bc2f",
+  "spawn_time": "2026-01-29T11:24:13-08:00",
+  "tier": "full",
+  "spawn_mode": "claude"
+}

@@ -523,13 +523,17 @@ export namespace Server {
                 resolveStream?.()
               }
 
+              const closeStream = () => {
+                cleanup()
+                stream.close()
+              }
+
               unsub = Bus.subscribeAll(async (event) => {
                 await stream.writeSSE({
                   data: JSON.stringify(event),
                 })
                 if (event.type === Bus.InstanceDisposed.type) {
-                  cleanup()
-                  stream.close()
+                  closeStream()
                 }
               })
 

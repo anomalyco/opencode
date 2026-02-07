@@ -1,0 +1,11 @@
+{
+  "workspace_name": "op-feat-rebase-opencode-fork-05feb-673d",
+  "skill": "feature-impl",
+  "beads_id": "opencode-untracked-1770328313",
+  "project_dir": "/Users/dylanconlin/Documents/personal/opencode",
+  "git_baseline": "0ed6b11282cc598116d3da37aa0d7f866c89dab6",
+  "spawn_time": "2026-02-05T13:51:58-08:00",
+  "tier": "light",
+  "spawn_mode": "claude",
+  "model": "anthropic/claude-opus-4-5-20251101"
+}

@@ -216,8 +216,8 @@ export const createSseClient = <TData = unknown>({
           signal.removeEventListener("abort", abortHandler)
           reader.releaseLock()
         }
-
-        break // exit loop on normal completion
+        // Only exit retry loop if explicitly aborted, otherwise reconnect
+        if (signal.aborted) break
       } catch (error) {
         // connection failed or aborted; retry after delay
         onSseError?.(error)

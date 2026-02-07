@@ -1,0 +1,11 @@
+{
+  "workspace_name": "op-debug-fix-notfounderror-crash-07feb-830f",
+  "skill": "systematic-debugging",
+  "beads_id": "opencode-untracked-1770455197",
+  "project_dir": "/Users/dylanconlin/Documents/personal/opencode",
+  "git_baseline": "87e92125a402dde305465e20f459951f35d49808",
+  "spawn_time": "2026-02-07T01:06:42-08:00",
+  "tier": "light",
+  "spawn_mode": "opencode",
+  "model": "anthropic/claude-opus-4-6"
+}
