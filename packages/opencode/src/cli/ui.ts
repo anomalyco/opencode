@@ -43,6 +43,7 @@ export namespace UI {
   export function logo(pad?: string) {
     const result: string[] = []
     const reset = "\x1b[0m"
+    const cursorIndent = !pad
     const left = {
       fg: Bun.color("gray", "ansi") ?? "",
       shadow: "\x1b[38;5;235m",
@@ -55,8 +56,12 @@ export namespace UI {
     }
     const gap = " "
     const draw = (line: string, fg: string, shadow: string, bg: string) => {
+      let lead = 0
+      if (cursorIndent) {
+        while (line[lead] === " ") lead++
+      }
       const parts: string[] = []
-      for (const char of line) {
+      for (const char of line.slice(lead)) {
         if (char === "_") {
           parts.push(bg, " ", reset)
           continue
@@ -75,14 +80,15 @@ export namespace UI {
         }
         parts.push(fg, char, reset)
       }
-      return parts.join("")
+      return (cursorIndent && lead ? `\x1b[${lead}C` : "") + parts.join("")
     }
     glyphs.left.forEach((row, index) => {
       if (pad) result.push(pad)
       result.push(draw(row, left.fg, left.shadow, left.bg))
       result.push(gap)
       const other = glyphs.right[index] ?? ""
-      result.push(draw(other, right.fg, right.shadow, right.bg))
+      const shifted = !cursorIndent && index === 0 && other.includes("▄") ? other.slice(1) : other
+      result.push(draw(shifted, right.fg, right.shadow, right.bg))
       result.push(EOL)
     })
     return result.join("").trimEnd()
