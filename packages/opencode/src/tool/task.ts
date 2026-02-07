@@ -62,6 +62,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       if (!agent) throw new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`)
 
       const hasTaskPermission = agent.permission.some((rule) => rule.permission === "task")
+      const callingAgent = ctx.agent ? await Agent.get(ctx.agent) : undefined
 
       const session = await iife(async () => {
         if (params.task_id) {
@@ -73,6 +74,11 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           parentID: ctx.sessionID,
           title: params.description + ` (@${agent.name} subagent)`,
           permission: [
+            // Inherit the calling agent's permission rules so subagents
+            // respect the parent's permission configuration (e.g. "allow all"
+            // for autonomous/unattended agents). These come first so the
+            // hard-coded denies below can still override via findLast.
+            ...(callingAgent?.permission ?? []),
             {
               permission: "todowrite",
               pattern: "*",
