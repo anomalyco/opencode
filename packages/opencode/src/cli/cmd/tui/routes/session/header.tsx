@@ -63,7 +63,7 @@ export function Header() {
   const { theme } = useTheme()
   const keybind = useKeybind()
   const command = useCommandDialog()
-  const [hover, setHover] = createSignal<"parent" | "prev" | "next" | null>(null)
+  const [hover, setHover] = createSignal<"parent" | "prev" | "next" | "fork" | null>(null)
   const dimensions = useTerminalDimensions()
   const narrow = createMemo(() => dimensions().width < 80)
 
@@ -130,6 +130,16 @@ export function Header() {
             <box flexDirection={narrow() ? "column" : "row"} justifyContent="space-between" gap={1}>
               <Title session={session} />
               <box flexDirection="row" gap={1} flexShrink={0}>
+                <box
+                  onMouseOver={() => setHover("fork")}
+                  onMouseOut={() => setHover(null)}
+                  onMouseUp={() => command.trigger("session.fork")}
+                  backgroundColor={hover() === "fork" ? theme.backgroundElement : theme.backgroundPanel}
+                >
+                  <text fg={theme.text}>
+                    Fork <span style={{ fg: theme.textMuted }}>{keybind.print("session_fork")}</span>
+                  </text>
+                </box>
                 <ContextInfo context={context} cost={cost} />
                 <text fg={theme.textMuted}>v{Installation.VERSION}</text>
               </box>

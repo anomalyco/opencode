@@ -5,6 +5,7 @@ import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
 import { Clipboard } from "@tui/util/clipboard"
 import type { PromptInfo } from "@tui/component/prompt/history"
+import { useToast } from "../../ui/toast"
 
 export function DialogMessage(props: {
   messageID: string
@@ -15,6 +16,7 @@ export function DialogMessage(props: {
   const sdk = useSDK()
   const message = createMemo(() => sync.data.message[props.sessionID]?.find((x) => x.id === props.messageID))
   const route = useRoute()
+  const toast = useToast()
 
   return (
     <DialogSelect
@@ -76,10 +78,16 @@ export function DialogMessage(props: {
           value: "session.fork",
           description: "create a new session",
           onSelect: async (dialog) => {
-            const result = await sdk.client.session.fork({
-              sessionID: props.sessionID,
-              messageID: props.messageID,
-            })
+            dialog.clear()
+            const result = await sdk.client.session
+              .fork({
+                sessionID: props.sessionID,
+                messageID: props.messageID,
+              })
+              .catch(() => {
+                toast.show({ message: "Failed to fork session", variant: "error" })
+              })
+            if (!result?.data?.id) return
             const initialPrompt = (() => {
               const msg = message()
               if (!msg) return undefined
@@ -95,12 +103,12 @@ export function DialogMessage(props: {
                 { input: "", parts: [] as PromptInfo["parts"] },
               )
             })()
+            toast.show({ message: `Created new session: ${result.data.title}`, variant: "success" })
             route.navigate({
-              sessionID: result.data!.id,
+              sessionID: result.data.id,
               type: "session",
               initialPrompt,
             })
-            dialog.clear()
           },
         },
       ]}

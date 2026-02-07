@@ -6,6 +6,7 @@ import { Locale } from "@/util/locale"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
 import { useDialog } from "../../ui/dialog"
+import { useToast } from "../../ui/toast"
 import type { PromptInfo } from "@tui/component/prompt/history"
 
 export function DialogForkFromTimeline(props: { sessionID: string; onMove: (messageID: string) => void }) {
@@ -13,6 +14,9 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
   const dialog = useDialog()
   const sdk = useSDK()
   const route = useRoute()
+  const toast = useToast()
+
+  const forkCurrentValue = "__fork_current__"
 
   onMount(() => {
     dialog.setSize("large")
@@ -32,10 +36,16 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
         value: message.id,
         footer: Locale.time(message.time.created),
         onSelect: async (dialog) => {
-          const forked = await sdk.client.session.fork({
-            sessionID: props.sessionID,
-            messageID: message.id,
-          })
+          dialog.clear()
+          const forked = await sdk.client.session
+            .fork({
+              sessionID: props.sessionID,
+              messageID: message.id,
+            })
+            .catch(() => {
+              toast.show({ message: "Failed to fork session", variant: "error" })
+            })
+          if (!forked?.data?.id) return
           const parts = sync.data.part[message.id] ?? []
           const initialPrompt = parts.reduce(
             (agg, part) => {
@@ -47,18 +57,53 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
             },
             { input: "", parts: [] as PromptInfo["parts"] },
           )
+          toast.show({ message: `Created new session: ${forked.data.title}`, variant: "success" })
           route.navigate({
-            sessionID: forked.data!.id,
+            sessionID: forked.data.id,
             type: "session",
             initialPrompt,
           })
-          dialog.clear()
         },
       })
     }
+
+    // Quick option to fork the current session state (no message selection).
+    result.push({
+      title: "Fork current session",
+      value: forkCurrentValue,
+      footer: "Current",
+      onSelect: async (dialog) => {
+        dialog.clear()
+        const forked = await sdk.client.session
+          .fork({
+            sessionID: props.sessionID,
+          })
+          .catch(() => {
+            toast.show({ message: "Failed to fork session", variant: "error" })
+          })
+        if (!forked?.data?.id) return
+        toast.show({ message: `Created new session: ${forked.data.title}`, variant: "success" })
+        route.navigate({
+          sessionID: forked.data.id,
+          type: "session",
+        })
+      },
+    })
+
     result.reverse()
     return result
   })
 
-  return <DialogSelect onMove={(option) => props.onMove(option.value)} title="Fork from message" options={options()} />
+  const move = (value: string) => {
+    if (value !== forkCurrentValue) {
+      props.onMove(value)
+      return
+    }
+
+    const latest = (sync.data.message[props.sessionID] ?? []).findLast((x) => x.role === "user")?.id
+    if (!latest) return
+    props.onMove(latest)
+  }
+
+  return <DialogSelect onMove={(option) => move(option.value)} title="Fork from message" options={options()} />
 }
