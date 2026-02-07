@@ -1,8 +1,20 @@
 import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
-import { RouteProvider, useRoute } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
+import { RouteProvider, RouteDriverContext, useRoute } from "@tui/context/route"
+import {
+  Switch,
+  Match,
+  createEffect,
+  untrack,
+  ErrorBoundary,
+  createSignal,
+  onMount,
+  batch,
+  Show,
+  on,
+  type ParentProps,
+} from "solid-js"
 import { Installation } from "@/installation"
 import { Flag } from "@/flag/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
@@ -36,6 +48,10 @@ import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
+import { TabProvider, useTab } from "@tui/context/tab"
+import { TabBar } from "@tui/component/tab-bar"
+import { DialogTabList } from "@tui/component/dialog-tab-list"
+import type { KeybindsConfig } from "@opencode-ai/sdk/v2"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -99,6 +115,24 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
 
 import type { EventSource } from "./context/sdk"
 
+function TabRouteDriver(props: ParentProps) {
+  const tab = useTab()
+  return (
+    <RouteDriverContext.Provider
+      value={{
+        get data() {
+          return tab.active.route
+        },
+        navigate(route) {
+          tab.navigate(route)
+        },
+      }}
+    >
+      {props.children}
+    </RouteDriverContext.Provider>
+  )
+}
+
 export function tui(input: {
   url: string
   args: Args
@@ -126,37 +160,41 @@ export function tui(input: {
               <ExitProvider onExit={onExit}>
                 <KVProvider>
                   <ToastProvider>
-                    <RouteProvider>
-                      <SDKProvider
-                        url={input.url}
-                        directory={input.directory}
-                        fetch={input.fetch}
-                        headers={input.headers}
-                        events={input.events}
-                      >
-                        <SyncProvider>
-                          <ThemeProvider mode={mode}>
-                            <LocalProvider>
-                              <KeybindProvider>
-                                <PromptStashProvider>
-                                  <DialogProvider>
-                                    <CommandProvider>
-                                      <FrecencyProvider>
-                                        <PromptHistoryProvider>
-                                          <PromptRefProvider>
-                                            <App />
-                                          </PromptRefProvider>
-                                        </PromptHistoryProvider>
-                                      </FrecencyProvider>
-                                    </CommandProvider>
-                                  </DialogProvider>
-                                </PromptStashProvider>
-                              </KeybindProvider>
-                            </LocalProvider>
-                          </ThemeProvider>
-                        </SyncProvider>
-                      </SDKProvider>
-                    </RouteProvider>
+                    <TabProvider>
+                      <TabRouteDriver>
+                        <RouteProvider>
+                          <SDKProvider
+                            url={input.url}
+                            directory={input.directory}
+                            fetch={input.fetch}
+                            headers={input.headers}
+                            events={input.events}
+                          >
+                            <SyncProvider>
+                              <ThemeProvider mode={mode}>
+                                <LocalProvider>
+                                  <KeybindProvider>
+                                    <PromptStashProvider>
+                                      <DialogProvider>
+                                        <CommandProvider>
+                                          <FrecencyProvider>
+                                            <PromptHistoryProvider>
+                                              <PromptRefProvider>
+                                                <App />
+                                              </PromptRefProvider>
+                                            </PromptHistoryProvider>
+                                          </FrecencyProvider>
+                                        </CommandProvider>
+                                      </DialogProvider>
+                                    </PromptStashProvider>
+                                  </KeybindProvider>
+                                </LocalProvider>
+                              </ThemeProvider>
+                            </SyncProvider>
+                          </SDKProvider>
+                        </RouteProvider>
+                      </TabRouteDriver>
+                    </TabProvider>
                   </ToastProvider>
                 </KVProvider>
               </ExitProvider>
@@ -687,6 +725,90 @@ function App() {
     })
   })
 
+  const tab = useTab()
+
+  command.register(() => [
+    {
+      title: "List tabs",
+      value: "tab.list",
+      keybind: "tab_list",
+      category: "Tab",
+      suggested: tab.tabs.length > 1,
+      slash: {
+        name: "tabs",
+      },
+      onSelect: () => {
+        dialog.replace(() => <DialogTabList />)
+      },
+    },
+    {
+      title: "New tab",
+      value: "tab.new",
+      keybind: "tab_new",
+      category: "Tab",
+      slash: {
+        name: "tab",
+      },
+      onSelect: (dialog) => {
+        tab.create()
+        dialog.clear()
+      },
+    },
+    {
+      title: "Close tab",
+      value: "tab.close",
+      keybind: "tab_close",
+      category: "Tab",
+      enabled: tab.tabs.length > 1,
+      onSelect: (dialog) => {
+        tab.close()
+        dialog.clear()
+      },
+    },
+    {
+      title: "Next tab",
+      value: "tab.next",
+      keybind: "tab_next",
+      category: "Tab",
+      hidden: true,
+      onSelect: (dialog) => {
+        tab.next()
+        dialog.clear()
+      },
+    },
+    {
+      title: "Previous tab",
+      value: "tab.prev",
+      keybind: "tab_prev",
+      category: "Tab",
+      hidden: true,
+      onSelect: (dialog) => {
+        tab.prev()
+        dialog.clear()
+      },
+    },
+    {
+      title: kv.get("tab_bar_visible", true) ? "Hide tab bar" : "Always show tab bar",
+      value: "tab.toggle_bar",
+      category: "Tab",
+      onSelect: (dialog) => {
+        kv.set("tab_bar_visible", !kv.get("tab_bar_visible", true))
+        dialog.clear()
+      },
+    },
+    ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ({
+      title: `Go to tab ${n}`,
+      value: `tab.${n}`,
+      keybind: `tab_${n}` as keyof KeybindsConfig,
+      category: "Tab" as const,
+      hidden: true,
+      onSelect: (dialog: ReturnType<typeof useDialog>) => {
+        tab.selectIndex(n - 1)
+        dialog.clear()
+      },
+    })),
+  ])
+
   return (
     <box
       width={dimensions().width}
@@ -706,6 +828,7 @@ function App() {
         }
       }}
     >
+      <TabBar />
       <Switch>
         <Match when={route.data.type === "home"}>
           <Home />

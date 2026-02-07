@@ -1,3 +1,4 @@
+import { createContext, useContext } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import type { PromptInfo } from "../component/prompt/history"
@@ -15,9 +16,22 @@ export type SessionRoute = {
 
 export type Route = HomeRoute | SessionRoute
 
+const DriverCtx = createContext<{
+  data: Route
+  navigate: (route: Route) => void
+}>()
+
+export function useRouteDriver() {
+  return useContext(DriverCtx)
+}
+
+export { DriverCtx as RouteDriverContext }
+
 export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
   name: "Route",
   init: () => {
+    const driver = useContext(DriverCtx)
+
     const [store, setStore] = createStore<Route>(
       process.env["OPENCODE_ROUTE"]
         ? JSON.parse(process.env["OPENCODE_ROUTE"])
@@ -25,6 +39,18 @@ export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
             type: "home",
           },
     )
+
+    if (driver) {
+      return {
+        get data() {
+          return driver.data
+        },
+        navigate(route: Route) {
+          console.log("navigate", route)
+          driver.navigate(route)
+        },
+      }
+    }
 
     return {
       get data() {

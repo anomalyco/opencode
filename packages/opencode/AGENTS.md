@@ -25,3 +25,13 @@
 - **Logging**: Use `Log.create({ service: "name" })` pattern
 - **Storage**: Use `Storage` namespace for persistence
 - **API Client**: The TypeScript TUI (built with SolidJS + OpenTUI) communicates with the OpenCode server using `@opencode-ai/sdk`. When adding/modifying server endpoints in `packages/opencode/src/server/server.ts`, run `./script/generate.ts` to regenerate the SDK and related files.
+
+## Build & Install
+
+- `bun run build --single` builds a binary for the current platform only. Output: `dist/opencode-{os}-{arch}/bin/opencode`.
+- The installed binary lives at `~/.opencode/bin/opencode`. You cannot overwrite it while opencode is running (`Text file busy`); use rename-swap: copy to `.new`, rename old to `.old`, rename `.new` to target, then delete `.old`.
+- LSP shows many false errors for `@opentui/solid`, `solid-js/store`, `@opencode-ai/sdk/v2` due to Bun's `--conditions=browser` module resolution. `bun run typecheck` (tsgo) is the source of truth — ignore LSP module-resolution errors on these imports.
+
+## Config Schema ↔ SDK Coupling
+
+- Adding keybinds or config fields in `src/config/config.ts` requires running `./script/generate.ts` from repo root to regenerate `packages/sdk/js/src/v2/gen/types.gen.ts` and `packages/sdk/openapi.json`. All three files must change together.

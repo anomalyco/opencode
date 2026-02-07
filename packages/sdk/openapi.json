@@ -8891,6 +8891,76 @@
             "description": "Toggle thinking blocks visibility",
             "default": "none",
             "type": "string"
+          },
+          "tab_list": {
+            "description": "List all open tabs",
+            "default": "none",
+            "type": "string"
+          },
+          "tab_new": {
+            "description": "Open a new tab",
+            "default": "<leader>t",
+            "type": "string"
+          },
+          "tab_close": {
+            "description": "Close the current tab",
+            "default": "<leader>w",
+            "type": "string"
+          },
+          "tab_next": {
+            "description": "Switch to the next tab",
+            "default": "<leader>]",
+            "type": "string"
+          },
+          "tab_prev": {
+            "description": "Switch to the previous tab",
+            "default": "<leader>[",
+            "type": "string"
+          },
+          "tab_1": {
+            "description": "Go to tab 1",
+            "default": "alt+1",
+            "type": "string"
+          },
+          "tab_2": {
+            "description": "Go to tab 2",
+            "default": "alt+2",
+            "type": "string"
+          },
+          "tab_3": {
+            "description": "Go to tab 3",
+            "default": "alt+3",
+            "type": "string"
+          },
+          "tab_4": {
+            "description": "Go to tab 4",
+            "default": "alt+4",
+            "type": "string"
+          },
+          "tab_5": {
+            "description": "Go to tab 5",
+            "default": "alt+5",
+            "type": "string"
+          },
+          "tab_6": {
+            "description": "Go to tab 6",
+            "default": "alt+6",
+            "type": "string"
+          },
+          "tab_7": {
+            "description": "Go to tab 7",
+            "default": "alt+7",
+            "type": "string"
+          },
+          "tab_8": {
+            "description": "Go to tab 8",
+            "default": "alt+8",
+            "type": "string"
+          },
+          "tab_9": {
+            "description": "Go to tab 9",
+            "default": "alt+9",
+            "type": "string"
           }
         },
         "additionalProperties": false
