@@ -10,6 +10,8 @@ import { withActor } from "~/context/auth.withActor"
 import { queryBillingInfo } from "../../common"
 import styles from "./black-section.module.css"
 import waitlistStyles from "./black-waitlist-section.module.css"
+import { useI18n } from "~/context/i18n"
+import { formError } from "~/lib/form-error"
 
 const querySubscription = query(async (workspaceID: string) => {
   "use server"
@@ -47,17 +49,18 @@ const querySubscription = query(async (workspaceID: string) => {
   }, workspaceID)
 }, "subscription.get")
 
-function formatResetTime(seconds: number) {
+function formatResetTime(seconds: number, i18n: ReturnType<typeof useI18n>) {
   const days = Math.floor(seconds / 86400)
   if (days >= 1) {
     const hours = Math.floor((seconds % 86400) / 3600)
-    return `${days} ${days === 1 ? "day" : "days"} ${hours} ${hours === 1 ? "hour" : "hours"}`
+    return `${days} ${days === 1 ? i18n.t("workspace.black.time.day") : i18n.t("workspace.black.time.days")} ${hours} ${hours === 1 ? i18n.t("workspace.black.time.hour") : i18n.t("workspace.black.time.hours")}`
   }
   const hours = Math.floor(seconds / 3600)
   const minutes = Math.floor((seconds % 3600) / 60)
-  if (hours >= 1) return `${hours} ${hours === 1 ? "hour" : "hours"} ${minutes} ${minutes === 1 ? "minute" : "minutes"}`
-  if (minutes === 0) return "a few seconds"
-  return `${minutes} ${minutes === 1 ? "minute" : "minutes"}`
+  if (hours >= 1)
+    return `${hours} ${hours === 1 ? i18n.t("workspace.black.time.hour") : i18n.t("workspace.black.time.hours")} ${minutes} ${minutes === 1 ? i18n.t("workspace.black.time.minute") : i18n.t("workspace.black.time.minutes")}`
+  if (minutes === 0) return i18n.t("workspace.black.time.fewSeconds")
+  return `${minutes} ${minutes === 1 ? i18n.t("workspace.black.time.minute") : i18n.t("workspace.black.time.minutes")}`
 }
 
 const cancelWaitlist = action(async (workspaceID: string) => {
@@ -111,7 +114,7 @@ const createSessionUrl = action(async (workspaceID: string, returnUrl: string) =
 const setUseBalance = action(async (form: FormData) => {
   "use server"
   const workspaceID = form.get("workspaceID")?.toString()
-  if (!workspaceID) return { error: "Workspace ID is required" }
+  if (!workspaceID) return { error: formError.workspaceRequired }
   const useBalance = form.get("useBalance")?.toString() === "true"
 
   return json(
@@ -134,6 +137,7 @@ const setUseBalance = action(async (form: FormData) => {
 
 export function BlackSection() {
   const params = useParams()
+  const i18n = useI18n()
   const billing = createAsync(() => queryBillingInfo(params.id!))
   const subscription = createAsync(() => querySubscription(params.id!))
   const sessionAction = useAction(createSessionUrl)
@@ -177,42 +181,50 @@ export function BlackSection() {
         {(sub) => (
           <section class={styles.root}>
             <div data-slot="section-title">
-              <h2>Subscription</h2>
+              <h2>{i18n.t("workspace.black.subscription.title")}</h2>
               <div data-slot="title-row">
-                <p>You are subscribed to OpenCode Black for ${sub().plan} per month.</p>
+                <p>{i18n.t("workspace.black.subscription.message", { plan: sub().plan })}</p>
                 <button
                   data-color="primary"
                   disabled={sessionSubmission.pending || store.sessionRedirecting}
                   onClick={onClickSession}
                 >
-                  {sessionSubmission.pending || store.sessionRedirecting ? "Loading..." : "Manage Subscription"}
+                  {sessionSubmission.pending || store.sessionRedirecting
+                    ? i18n.t("workspace.black.loading")
+                    : i18n.t("workspace.black.subscription.manage")}
                 </button>
               </div>
             </div>
             <div data-slot="usage">
               <div data-slot="usage-item">
                 <div data-slot="usage-header">
-                  <span data-slot="usage-label">5-hour Usage</span>
+                  <span data-slot="usage-label">{i18n.t("workspace.black.subscription.rollingUsage")}</span>
                   <span data-slot="usage-value">{sub().rollingUsage.usagePercent}%</span>
                 </div>
                 <div data-slot="progress">
                   <div data-slot="progress-bar" style={{ width: `${sub().rollingUsage.usagePercent}%` }} />
                 </div>
-                <span data-slot="reset-time">Resets in {formatResetTime(sub().rollingUsage.resetInSec)}</span>
+                <span data-slot="reset-time">
+                  {i18n.t("workspace.black.subscription.resetsIn")}{" "}
+                  {formatResetTime(sub().rollingUsage.resetInSec, i18n)}
+                </span>
               </div>
               <div data-slot="usage-item">
                 <div data-slot="usage-header">
-                  <span data-slot="usage-label">Weekly Usage</span>
+                  <span data-slot="usage-label">{i18n.t("workspace.black.subscription.weeklyUsage")}</span>
                   <span data-slot="usage-value">{sub().weeklyUsage.usagePercent}%</span>
                 </div>
                 <div data-slot="progress">
                   <div data-slot="progress-bar" style={{ width: `${sub().weeklyUsage.usagePercent}%` }} />
                 </div>
-                <span data-slot="reset-time">Resets in {formatResetTime(sub().weeklyUsage.resetInSec)}</span>
+                <span data-slot="reset-time">
+                  {i18n.t("workspace.black.subscription.resetsIn")}{" "}
+                  {formatResetTime(sub().weeklyUsage.resetInSec, i18n)}
+                </span>
               </div>
             </div>
             <form action={setUseBalance} method="post" data-slot="setting-row">
-              <p>Use your available balance after reaching the usage limits</p>
+              <p>{i18n.t("workspace.black.subscription.useBalance")}</p>
               <input type="hidden" name="workspaceID" value={params.id} />
               <input type="hidden" name="useBalance" value={sub().useBalance ? "false" : "true"} />
               <label data-slot="toggle-label">
@@ -231,19 +243,23 @@ export function BlackSection() {
       <Show when={billing()?.timeSubscriptionBooked}>
         <section class={waitlistStyles.root}>
           <div data-slot="section-title">
-            <h2>Waitlist</h2>
+            <h2>{i18n.t("workspace.black.waitlist.title")}</h2>
             <div data-slot="title-row">
               <p>
                 {billing()?.timeSubscriptionSelected
-                  ? `We're ready to enroll you into the $${billing()?.subscriptionPlan} per month OpenCode Black plan.`
-                  : `You are on the waitlist for the $${billing()?.subscriptionPlan} per month OpenCode Black plan.`}
+                  ? i18n.t("workspace.black.waitlist.ready", { plan: billing()?.subscriptionPlan ?? "" })
+                  : i18n.t("workspace.black.waitlist.joined", { plan: billing()?.subscriptionPlan ?? "" })}
               </p>
               <button
                 data-color="danger"
                 disabled={cancelSubmission.pending || store.cancelled}
                 onClick={onClickCancel}
               >
-                {cancelSubmission.pending ? "Leaving..." : store.cancelled ? "Left" : "Leave Waitlist"}
+                {cancelSubmission.pending
+                  ? i18n.t("workspace.black.waitlist.leaving")
+                  : store.cancelled
+                    ? i18n.t("workspace.black.waitlist.left")
+                    : i18n.t("workspace.black.waitlist.leave")}
               </button>
             </div>
           </div>
@@ -255,11 +271,13 @@ export function BlackSection() {
                 disabled={enrollSubmission.pending || store.enrolled}
                 onClick={onClickEnroll}
               >
-                {enrollSubmission.pending ? "Enrolling..." : store.enrolled ? "Enrolled" : "Enroll"}
+                {enrollSubmission.pending
+                  ? i18n.t("workspace.black.waitlist.enrolling")
+                  : store.enrolled
+                    ? i18n.t("workspace.black.waitlist.enrolled")
+                    : i18n.t("workspace.black.waitlist.enroll")}
               </button>
-              <p data-slot="enroll-note">
-                When you click Enroll, your subscription starts immediately and your card will be charged.
-              </p>
+              <p data-slot="enroll-note">{i18n.t("workspace.black.waitlist.enrollNote")}</p>
             </div>
           </Show>
         </section>
