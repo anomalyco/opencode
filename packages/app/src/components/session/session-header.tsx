@@ -24,6 +24,7 @@ import { TextField } from "@opencode-ai/ui/text-field"
 import { Keybind } from "@opencode-ai/ui/keybind"
 import { showToast } from "@opencode-ai/ui/toast"
 import { StatusPopover } from "../status-popover"
+import { SessionHeaderActions } from "@/overrides/session-header-actions"
 
 export function SessionHeader() {
   const globalSDK = useGlobalSDK()
@@ -378,6 +379,7 @@ export function SessionHeader() {
                 </div>
               </Show>
               <StatusPopover />
+              <SessionHeaderActions />
               <Show when={showShare()}>
                 <div class="flex items-center">
                   <Popover

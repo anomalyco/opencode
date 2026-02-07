@@ -92,44 +92,66 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
     })
   })
 
+  const nextNumber = () => {
+    const existingTitleNumbers = new Set(
+      store.all.flatMap((pty) => {
+        const direct = Number.isFinite(pty.titleNumber) && pty.titleNumber > 0 ? pty.titleNumber : undefined
+        if (direct !== undefined) return [direct]
+        const parsed = numberFromTitle(pty.title)
+        if (parsed === undefined) return []
+        return [parsed]
+      }),
+    )
+
+    return (
+      Array.from({ length: existingTitleNumbers.size + 1 }, (_, index) => index + 1).find(
+        (number) => !existingTitleNumbers.has(number),
+      ) ?? 1
+    )
+  }
+
+  const add = (info: { id: string; title?: string }, number: number) => {
+    const entry = {
+      id: info.id,
+      title: info.title ?? "Terminal",
+      titleNumber: number,
+    }
+    setStore("all", (all) => [...all, entry])
+    setStore("active", info.id)
+  }
+
   return {
     ready,
     all: createMemo(() => Object.values(store.all)),
     active: createMemo(() => store.active),
     new() {
-      const existingTitleNumbers = new Set(
-        store.all.flatMap((pty) => {
-          const direct = Number.isFinite(pty.titleNumber) && pty.titleNumber > 0 ? pty.titleNumber : undefined
-          if (direct !== undefined) return [direct]
-          const parsed = numberFromTitle(pty.title)
-          if (parsed === undefined) return []
-          return [parsed]
-        }),
-      )
-
-      const nextNumber =
-        Array.from({ length: existingTitleNumbers.size + 1 }, (_, index) => index + 1).find(
-          (number) => !existingTitleNumbers.has(number),
-        ) ?? 1
-
+      const number = nextNumber()
       sdk.client.pty
-        .create({ title: `Terminal ${nextNumber}` })
+        .create({ title: `Terminal ${number}` })
         .then((pty) => {
-          const id = pty.data?.id
-          if (!id) return
-          const newTerminal = {
-            id,
-            title: pty.data?.title ?? "Terminal",
-            titleNumber: nextNumber,
-          }
-          setStore("all", (all) => {
-            const newAll = [...all, newTerminal]
-            return newAll
-          })
-          setStore("active", id)
+          if (!pty.data?.id) return
+          add(pty.data, number)
         })
         .catch((e) => {
           console.error("Failed to create terminal", e)
+        })
+    },
+    run(input: { command: string; args?: string[]; title?: string; cwd?: string; env?: Record<string, string> }) {
+      const number = nextNumber()
+      sdk.client.pty
+        .create({
+          command: input.command,
+          args: input.args,
+          title: input.title ?? `Terminal ${number}`,
+          cwd: input.cwd ?? dir,
+          env: input.env,
+        })
+        .then((pty) => {
+          if (!pty.data?.id) return
+          add(pty.data, number)
+        })
+        .catch((e) => {
+          console.error("Failed to run terminal command", e)
         })
     },
     update(pty: Partial<LocalPTY> & { id: string }) {
@@ -271,6 +293,8 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       all: () => workspace().all(),
       active: () => workspace().active(),
       new: () => workspace().new(),
+      run: (input: { command: string; args?: string[]; title?: string; cwd?: string; env?: Record<string, string> }) =>
+        workspace().run(input),
       update: (pty: Partial<LocalPTY> & { id: string }) => workspace().update(pty),
       clone: (id: string) => workspace().clone(id),
       open: (id: string) => workspace().open(id),
