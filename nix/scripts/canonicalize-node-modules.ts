@@ -28,6 +28,12 @@ const root = process.cwd()
 const bunRoot = join(root, "node_modules/.bun")
 const linkRoot = join(bunRoot, "node_modules")
 const directories = (await safeReadDir(bunRoot)).sort()
+
+if (directories.length === 0) {
+  console.log("[canonicalize-node-modules] no .bun directory, skipping")
+  process.exit(0)
+}
+
 const versions = new Map<string, Entry[]>()
 
 for (const entry of directories) {
