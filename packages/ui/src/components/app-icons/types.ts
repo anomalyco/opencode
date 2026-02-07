@@ -5,6 +5,7 @@ export const iconNames = [
   "cursor",
   "zed",
   "file-explorer",
+  "file-manager",
   "finder",
   "terminal",
   "iterm2",

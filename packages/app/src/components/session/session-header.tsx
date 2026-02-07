@@ -146,7 +146,7 @@ export function SessionHeader() {
     }
 
     return [
-      { id: "finder", label: "File Manager", icon: "finder" },
+      { id: "finder", label: "File Manager", icon: "file-manager" },
       ...LINUX_APPS.filter((app) => exists[app.id]),
     ] as const
   })
