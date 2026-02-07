@@ -3,6 +3,8 @@ import type { TextareaRenderable } from "@opentui/core"
 import { createSignal } from "solid-js"
 import { createVimHandler } from "../../../src/cli/cmd/tui/component/vim/vim-handler"
 import { createVimState } from "../../../src/cli/cmd/tui/component/vim/vim-state"
+import type { VimScroll } from "../../../src/cli/cmd/tui/component/vim/vim-scroll"
+import { vimScroll } from "../../../src/cli/cmd/tui/component/vim/vim-scroll"
 
 function rowColToOffset(text: string, row: number, col: number) {
   let index = 0
@@ -73,11 +75,18 @@ function createEvent(name: string, options?: { shift?: boolean; ctrl?: boolean; 
   }
 }
 
-function createHandler(text: string) {
+function createHandler(
+  text: string,
+  options?: {
+    enabled?: boolean
+    mode?: "normal" | "insert"
+  },
+) {
   const textarea = createTextarea(text)
-  const [enabled] = createSignal(true)
-  const [mode, setMode] = createSignal<"normal" | "insert">("normal")
+  const [enabled] = createSignal(options?.enabled ?? true)
+  const [mode, setMode] = createSignal<"normal" | "insert">(options?.mode ?? "normal")
   const [pending, setPending] = createSignal<"" | "d">("")
+  const scrollCalls: VimScroll[] = []
 
   function clearPending() {
     setPending("")
@@ -108,9 +117,12 @@ function createHandler(text: string) {
     state,
     textarea: () => textarea,
     submit() {},
+    scroll(action) {
+      scrollCalls.push(action)
+    },
   })
 
-  return { textarea, handler, state }
+  return { textarea, handler, state, scrollCalls }
 }
 
 describe("vim motion handler", () => {
@@ -202,8 +214,7 @@ describe("vim motion handler", () => {
   })
 
   test("insert mode only handles escape", () => {
-    const ctx = createHandler("abc")
-    ctx.state.setMode("insert")
+    const ctx = createHandler("abc", { mode: "insert" })
 
     const w = createEvent("w")
     expect(ctx.handler.handleKey(w.event)).toBe(false)
@@ -294,5 +305,65 @@ describe("vim motion handler", () => {
     expect(ctx.handler.handleKey(mod.event)).toBe(false)
     expect(mod.prevented()).toBe(false)
     expect(ctx.state.pending()).toBe("")
+  })
+
+  test("ctrl scroll keys trigger actions", () => {
+    const ctx = createHandler("abc")
+    const keys: Array<[string, VimScroll]> = [
+      ["e", "line-down"],
+      ["y", "line-up"],
+      ["d", "half-down"],
+      ["u", "half-up"],
+      ["f", "page-down"],
+      ["b", "page-up"],
+    ]
+
+    for (const [key, action] of keys) {
+      const evt = createEvent(key, { ctrl: true })
+      expect(ctx.handler.handleKey(evt.event)).toBe(true)
+      expect(evt.prevented()).toBe(true)
+      expect(ctx.scrollCalls.at(-1)).toBe(action)
+    }
+  })
+
+  test("ctrl scroll clears pending operator", () => {
+    const ctx = createHandler("abc")
+    expect(ctx.handler.handleKey(createEvent("d").event)).toBe(true)
+    expect(ctx.state.pending()).toBe("d")
+
+    const evt = createEvent("d", { ctrl: true })
+    expect(ctx.handler.handleKey(evt.event)).toBe(true)
+    expect(evt.prevented()).toBe(true)
+    expect(ctx.scrollCalls.at(-1)).toBe("half-down")
+    expect(ctx.state.pending()).toBe("")
+  })
+
+  test("ctrl scroll not handled in insert mode", () => {
+    const ctx = createHandler("abc", { mode: "insert" })
+    const evt = createEvent("e", { ctrl: true })
+    expect(ctx.handler.handleKey(evt.event)).toBe(false)
+    expect(evt.prevented()).toBe(false)
+    expect(ctx.scrollCalls.length).toBe(0)
+  })
+
+  test("ctrl scroll not handled when vim disabled", () => {
+    const ctx = createHandler("abc", { enabled: false })
+    const evt = createEvent("e", { ctrl: true })
+    expect(ctx.handler.handleKey(evt.event)).toBe(false)
+    expect(evt.prevented()).toBe(false)
+    expect(ctx.scrollCalls.length).toBe(0)
+  })
+})
+
+describe("vim scroll mapping", () => {
+  test("vimScroll maps ctrl keys to actions", () => {
+    expect(vimScroll(createEvent("e", { ctrl: true }).event)).toBe("line-down")
+    expect(vimScroll(createEvent("y", { ctrl: true }).event)).toBe("line-up")
+    expect(vimScroll(createEvent("d", { ctrl: true }).event)).toBe("half-down")
+    expect(vimScroll(createEvent("u", { ctrl: true }).event)).toBe("half-up")
+    expect(vimScroll(createEvent("f", { ctrl: true }).event)).toBe("page-down")
+    expect(vimScroll(createEvent("b", { ctrl: true }).event)).toBe("page-up")
+    expect(vimScroll(createEvent("b", { ctrl: true, meta: true }).event)).toBe(undefined)
+    expect(vimScroll(createEvent("b", { ctrl: false }).event)).toBe(undefined)
   })
 })

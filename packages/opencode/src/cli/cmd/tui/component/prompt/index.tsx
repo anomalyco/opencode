@@ -46,6 +46,7 @@ import { useArgs } from "@tui/context/args"
 import { useVimEnabled } from "../vim"
 import { createVimState } from "../vim/vim-state"
 import { createVimHandler } from "../vim/vim-handler"
+import { vimScroll } from "../vim/vim-scroll"
 
 export type PromptProps = {
   sessionID?: string
@@ -230,6 +231,14 @@ export function Prompt(props: PromptProps) {
     state: vimState,
     textarea: () => input,
     submit,
+    scroll(action) {
+      if (action === "line-down") command.trigger("session.line.down")
+      if (action === "line-up") command.trigger("session.line.up")
+      if (action === "half-down") command.trigger("session.half.page.down")
+      if (action === "half-up") command.trigger("session.half.page.up")
+      if (action === "page-down") command.trigger("session.page.down")
+      if (action === "page-up") command.trigger("session.page.up")
+    },
   })
 
   createEffect(
@@ -1118,7 +1127,9 @@ export function Prompt(props: PromptProps) {
                   setStore("extmarkToPartIndex", new Map())
                   return
                 }
-                if (keybind.match("app_exit", e)) {
+                if (vimEnabled() && store.mode === "normal" && vimState.mode() === "normal" && vimScroll(e)) {
+                  // Allow vim scroll keys to override app exit in normal mode
+                } else if (keybind.match("app_exit", e)) {
                   if (store.prompt.input === "") {
                     await exit()
                     // Don't preventDefault - let textarea potentially handle the event

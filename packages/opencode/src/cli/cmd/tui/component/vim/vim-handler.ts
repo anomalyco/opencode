@@ -1,6 +1,7 @@
 import type { Accessor } from "solid-js"
 import type { createVimState } from "./vim-state"
 import type { TextareaRenderable } from "@opentui/core"
+import { vimScroll, type VimScroll } from "./vim-scroll"
 import {
   appendAfterCursor,
   appendLineEnd,
@@ -36,6 +37,7 @@ export function createVimHandler(input: {
   state: ReturnType<typeof createVimState>
   textarea: Accessor<TextareaRenderable>
   submit: () => void
+  scroll: (action: VimScroll) => void
 }) {
   function hasModifier(event: VimEvent) {
     return !!event.ctrl || !!event.meta || !!event.super
@@ -61,6 +63,14 @@ export function createVimHandler(input: {
       }
 
       const key = event.name ?? ""
+
+      const scroll = vimScroll(event)
+      if (scroll) {
+        input.state.clearPending()
+        input.scroll(scroll)
+        event.preventDefault()
+        return true
+      }
 
       if (key === "escape") {
         if (!input.state.pending()) return false
