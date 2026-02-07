@@ -21,6 +21,8 @@ export namespace ZenData {
   const RateLimitSchema = z.object({
     period: z.enum(["day", "rolling"]),
     value: z.number().int(),
+    checkHeader: z.string().optional(),
+    fallbackValue: z.number().int().optional(),
   })
   export type Format = z.infer<typeof FormatSchema>
   export type Trial = z.infer<typeof TrialSchema>
@@ -51,6 +53,7 @@ export namespace ZenData {
         weight: z.number().optional(),
         disabled: z.boolean().optional(),
         storeModel: z.string().optional(),
+        headerMappings: z.record(z.string(), z.string()).optional(),
       }),
     ),
   })
