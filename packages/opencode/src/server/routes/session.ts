@@ -4,6 +4,7 @@ import { describeRoute, validator, resolver } from "hono-openapi"
 import z from "zod"
 import { Session } from "../../session"
 import { MessageV2 } from "../../session/message-v2"
+import { Identifier } from "../../id/id"
 import { SessionPrompt } from "../../session/prompt"
 import { SessionCompaction } from "../../session/compaction"
 import { SessionRevert } from "../../session/revert"
@@ -567,16 +568,107 @@ export const SessionRoutes = lazy(() =>
       validator(
         "query",
         z.object({
-          limit: z.coerce.number().optional(),
+          limit: z.coerce.number().int().min(0).optional(),
+          before: Identifier.schema("message").optional(),
+          after: Identifier.schema("message").optional(),
+          oldest: z
+            .string()
+            .optional()
+            .transform((value) => {
+              if (value === undefined) return undefined
+              if (value === "true") return true
+              if (value === "false") return false
+              return value
+            })
+            .pipe(z.boolean().optional()),
         }),
       ),
       async (c) => {
         const query = c.req.valid("query")
-        const messages = await Session.messages({
-          sessionID: c.req.valid("param").sessionID,
-          limit: query.limit,
+        if (query.before && query.after) {
+          return c.json({ error: "Cannot specify both 'before' and 'after'" }, 400)
+        }
+        if (query.oldest && (query.before || query.after)) {
+          return c.json({ error: "Cannot use 'oldest' with 'before' or 'after'" }, 400)
+        }
+
+        if (query.limit === 0) return c.json([])
+        const rawLimit = query.limit
+        const sessionID = c.req.valid("param").sessionID
+
+        const usesCursor = !!(query.oldest || query.after || query.before)
+
+        if (!usesCursor && rawLimit === undefined) {
+          const messages = await Session.messages({ sessionID })
+          return c.json(messages)
+        }
+
+        const pageLimit = usesCursor ? (rawLimit ? Math.min(rawLimit, 100) : 100) : (rawLimit ?? 100)
+
+        if (query.oldest) {
+          const page = await Session.messages({
+            sessionID,
+            limit: pageLimit + 1,
+            oldest: true,
+          })
+
+          if (page.length > pageLimit) {
+            const messages = page.slice(0, -1)
+            const last = messages.at(-1)
+            if (last) {
+              const url = new URL(c.req.url)
+              url.searchParams.delete("oldest")
+              url.searchParams.set("limit", pageLimit.toString())
+              url.searchParams.set("after", last.info.id)
+              c.header("Link", `<${url.toString()}>; rel=\"next\"`)
+            }
+            return c.json(messages)
+          }
+
+          return c.json(page)
+        }
+
+        if (query.after) {
+          const page = await Session.messages({
+            sessionID,
+            limit: pageLimit + 1,
+            after: query.after,
+          })
+
+          if (page.length > pageLimit) {
+            const messages = page.slice(0, -1)
+            const last = messages.at(-1)
+            if (last) {
+              const url = new URL(c.req.url)
+              url.searchParams.set("limit", pageLimit.toString())
+              url.searchParams.set("after", last.info.id)
+              c.header("Link", `<${url.toString()}>; rel=\"next\"`)
+            }
+            return c.json(messages)
+          }
+
+          return c.json(page)
+        }
+
+        const page = await Session.messages({
+          sessionID,
+          limit: pageLimit + 1,
+          before: query.before,
         })
-        return c.json(messages)
+
+        if (page.length > pageLimit) {
+          const messages = page.slice(1)
+          const first = messages.at(0)
+          if (first) {
+            const url = new URL(c.req.url)
+            url.searchParams.set("limit", pageLimit.toString())
+            url.searchParams.set("before", first.info.id)
+            c.header("Link", `<${url.toString()}>; rel=\"prev\"`)
+          }
+          return c.json(messages)
+        }
+
+        return c.json(page)
       },
     )
     .get(

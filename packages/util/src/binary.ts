@@ -38,4 +38,19 @@ export namespace Binary {
     array.splice(left, 0, item)
     return array
   }
+
+  /**
+   * Find the first index where array[index] >= target (lower bound).
+   * For string arrays ordered lexicographically (e.g., ULIDs).
+   */
+  export function lowerBound(array: string[], target: string): number {
+    let left = 0
+    let right = array.length
+    while (left < right) {
+      const mid = (left + right) >>> 1
+      if (array[mid] < target) left = mid + 1
+      else right = mid
+    }
+    return left
+  }
 }

@@ -6,7 +6,7 @@ import { Identifier } from "../id/id"
 import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"
 import { fn } from "@/util/fn"
-import { Database, eq, desc, inArray } from "@/storage/db"
+import { Database, eq, desc, inArray, asc, and, gt, lt } from "@/storage/db"
 import { MessageTable, PartTable } from "./session.sql"
 import { ProviderTransform } from "@/provider/transform"
 import { STATUS_CODES } from "http"
@@ -713,58 +713,75 @@ export namespace MessageV2 {
     )
   }
 
-  export const stream = fn(Identifier.schema("session"), async function* (sessionID) {
-    const size = 50
-    let offset = 0
-    while (true) {
-      const rows = Database.use((db) =>
-        db
-          .select()
-          .from(MessageTable)
-          .where(eq(MessageTable.session_id, sessionID))
-          .orderBy(desc(MessageTable.time_created))
-          .limit(size)
-          .offset(offset)
-          .all(),
-      )
-      if (rows.length === 0) break
+  export const stream = fn(
+    z.union([
+      Identifier.schema("session"),
+      z.object({
+        sessionID: Identifier.schema("session"),
+        ascending: z.boolean().optional(),
+      }),
+    ]),
+    async function* (input) {
+      const sessionID = typeof input === "string" ? input : input.sessionID
+      const ascending = typeof input === "object" && input.ascending
 
-      const ids = rows.map((row) => row.id)
-      const partsByMessage = new Map<string, MessageV2.Part[]>()
-      if (ids.length > 0) {
-        const partRows = Database.use((db) =>
-          db
-            .select()
-            .from(PartTable)
-            .where(inArray(PartTable.message_id, ids))
-            .orderBy(PartTable.message_id, PartTable.id)
-            .all(),
-        )
-        for (const row of partRows) {
-          const part = {
-            ...row.data,
-            id: row.id,
-            sessionID: row.session_id,
-            messageID: row.message_id,
-          } as MessageV2.Part
-          const list = partsByMessage.get(row.message_id)
-          if (list) list.push(part)
-          else partsByMessage.set(row.message_id, [part])
+      const limit = 50
+      const order = ascending ? asc(MessageTable.id) : desc(MessageTable.id)
+      const descending = !ascending
+      let cursor: { id: string } | undefined
+
+      while (true) {
+        const rows = Database.use((db) => {
+          const range = cursor
+            ? and(
+                eq(MessageTable.session_id, sessionID),
+                descending ? lt(MessageTable.id, cursor.id) : gt(MessageTable.id, cursor.id),
+              )
+            : eq(MessageTable.session_id, sessionID)
+
+          return db.select().from(MessageTable).where(range).orderBy(order).limit(limit).all()
+        })
+        if (rows.length === 0) break
+
+        const ids = rows.map((row) => row.id)
+        const partsByMessage = new Map<string, MessageV2.Part[]>()
+        if (ids.length > 0) {
+          const partRows = Database.use((db) =>
+            db
+              .select()
+              .from(PartTable)
+              .where(inArray(PartTable.message_id, ids))
+              .orderBy(PartTable.message_id, PartTable.id)
+              .all(),
+          )
+          for (const row of partRows) {
+            const part = {
+              ...row.data,
+              id: row.id,
+              sessionID: row.session_id,
+              messageID: row.message_id,
+            } as MessageV2.Part
+            const list = partsByMessage.get(row.message_id)
+            if (list) list.push(part)
+            else partsByMessage.set(row.message_id, [part])
+          }
         }
-      }
 
-      for (const row of rows) {
-        const info = { ...row.data, id: row.id, sessionID: row.session_id } as MessageV2.Info
-        yield {
-          info,
-          parts: partsByMessage.get(row.id) ?? [],
+        for (const row of rows) {
+          const info = { ...row.data, id: row.id, sessionID: row.session_id } as MessageV2.Info
+          yield {
+            info,
+            parts: partsByMessage.get(row.id) ?? [],
+          }
         }
-      }
 
-      offset += rows.length
-      if (rows.length < size) break
-    }
-  })
+        const last = rows.at(-1)
+        if (!last) break
+        cursor = { id: last.id }
+        if (rows.length < limit) break
+      }
+    },
+  )
 
   export const parts = fn(Identifier.schema("message"), async (message_id) => {
     const rows = Database.use((db) =>

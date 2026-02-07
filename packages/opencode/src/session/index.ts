@@ -9,8 +9,7 @@ import { Config } from "../config/config"
 import { Flag } from "../flag/flag"
 import { Identifier } from "../id/id"
 import { Installation } from "../installation"
-
-import { Database, NotFoundError, eq, and, or, gte, isNull, desc, like, inArray, lt } from "../storage/db"
+import { Database, NotFoundError, eq, and, or, gte, isNull, desc, like, inArray, lt, asc, gt } from "../storage/db"
 import type { SQL } from "../storage/db"
 import { SessionTable, MessageTable, PartTable } from "./session.sql"
 import { ProjectTable } from "../project/project.sql"
@@ -22,7 +21,6 @@ import { SessionPrompt } from "./prompt"
 import { fn } from "@/util/fn"
 import { Command } from "../command"
 import { Snapshot } from "@/snapshot"
-
 import type { Provider } from "@/provider/provider"
 import { PermissionNext } from "@/permission/next"
 import { Global } from "@/global"
@@ -513,15 +511,82 @@ export namespace Session {
     z.object({
       sessionID: Identifier.schema("session"),
       limit: z.number().optional(),
+      before: Identifier.schema("message").optional(),
+      after: Identifier.schema("message").optional(),
+      oldest: z.boolean().optional(),
     }),
     async (input) => {
-      const result = [] as MessageV2.WithParts[]
-      for await (const msg of MessageV2.stream(input.sessionID)) {
-        if (input.limit && result.length >= input.limit) break
-        result.push(msg)
+      // Mutual exclusion validation (fail-fast before I/O)
+      if (input.before && input.after) {
+        throw new Error("Cannot specify both 'before' and 'after' cursors")
       }
-      result.reverse()
-      return result
+      if (input.oldest && (input.before || input.after)) {
+        throw new Error("Cannot use 'oldest' with 'before' or 'after' cursors")
+      }
+
+      if (input.limit === 0) return []
+
+      const limit = input.limit
+      const hasCursor = !!(input.oldest || input.after || input.before)
+      const pageLimit = hasCursor ? (limit ?? 100) : limit
+
+      const orderBy = input.oldest || input.after ? asc(MessageTable.id) : desc(MessageTable.id)
+      const cursorFilter = (() => {
+        if (input.after) return gt(MessageTable.id, input.after)
+        if (input.before) return lt(MessageTable.id, input.before)
+        return undefined
+      })()
+
+      const rows = Database.use((db) => {
+        const where = cursorFilter
+          ? and(eq(MessageTable.session_id, input.sessionID), cursorFilter)
+          : eq(MessageTable.session_id, input.sessionID)
+
+        const query = db.select().from(MessageTable).where(where).orderBy(orderBy)
+        if (pageLimit !== undefined) return query.limit(pageLimit).all()
+        return query.all()
+      })
+
+      if (rows.length === 0) return []
+
+      const ids = rows.map((row) => row.id)
+      const partsByMessage = new Map<string, MessageV2.Part[]>()
+
+      const chunkSize = 400
+      for (let i = 0; i < ids.length; i += chunkSize) {
+        const chunk = ids.slice(i, i + chunkSize)
+        const partRows = Database.use((db) =>
+          db
+            .select()
+            .from(PartTable)
+            .where(inArray(PartTable.message_id, chunk))
+            .orderBy(PartTable.message_id, PartTable.id)
+            .all(),
+        )
+
+        for (const row of partRows) {
+          const part = {
+            ...row.data,
+            id: row.id,
+            sessionID: row.session_id,
+            messageID: row.message_id,
+          } as MessageV2.Part
+          const list = partsByMessage.get(row.message_id)
+          if (list) list.push(part)
+          else partsByMessage.set(row.message_id, [part])
+        }
+      }
+
+      const messages = rows.map(
+        (row) =>
+          ({
+            info: { ...row.data, id: row.id, sessionID: row.session_id } as MessageV2.Info,
+            parts: partsByMessage.get(row.id) ?? [],
+          }) satisfies MessageV2.WithParts,
+      )
+
+      if (input.oldest || input.after) return messages
+      return messages.toReversed()
     },
   )
 

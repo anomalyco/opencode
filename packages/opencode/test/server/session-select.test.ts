@@ -8,6 +8,20 @@ import { Server } from "../../src/server/server"
 const projectRoot = path.join(__dirname, "../..")
 Log.init({ print: false })
 
+const password = process.env.OPENCODE_SERVER_PASSWORD
+const username = process.env.OPENCODE_SERVER_USERNAME ?? "opencode"
+const auth = password ? "Basic " + Buffer.from(`${username}:${password}`).toString("base64") : undefined
+
+const request = (app: ReturnType<typeof Server.App>, url: string, body: Record<string, unknown>) => {
+  const headers: Record<string, string> = { "Content-Type": "application/json" }
+  if (auth) headers.Authorization = auth
+  return app.request(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  })
+}
+
 describe("tui.selectSession endpoint", () => {
   test("should return 200 when called with valid session", async () => {
     await Instance.provide({
@@ -18,11 +32,7 @@ describe("tui.selectSession endpoint", () => {
 
         // #when
         const app = Server.App()
-        const response = await app.request("/tui/select-session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionID: session.id }),
-        })
+        const response = await request(app, "/tui/select-session", { sessionID: session.id })
 
         // #then
         expect(response.status).toBe(200)
@@ -43,11 +53,7 @@ describe("tui.selectSession endpoint", () => {
 
         // #when
         const app = Server.App()
-        const response = await app.request("/tui/select-session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionID: nonExistentSessionID }),
-        })
+        const response = await request(app, "/tui/select-session", { sessionID: nonExistentSessionID })
 
         // #then
         expect(response.status).toBe(404)
@@ -64,11 +70,7 @@ describe("tui.selectSession endpoint", () => {
 
         // #when
         const app = Server.App()
-        const response = await app.request("/tui/select-session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionID: invalidSessionID }),
-        })
+        const response = await request(app, "/tui/select-session", { sessionID: invalidSessionID })
 
         // #then
         expect(response.status).toBe(400)

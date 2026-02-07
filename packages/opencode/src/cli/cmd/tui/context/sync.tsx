@@ -28,6 +28,11 @@ import { useArgs } from "./args"
 import { batch, onMount } from "solid-js"
 import { Log } from "@/util/log"
 import type { Path } from "@opencode-ai/sdk"
+import { parseLinkHeader } from "@/util/link-header"
+import { evictFromEnd, evictFromStart, paginationError, windowNewest, windowOldest } from "@tui/util/pagination"
+
+/** Maximum messages kept in memory per session */
+const MAX_LOADED_MESSAGES = 500
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
@@ -48,6 +53,17 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       }
       config: Config
       session: Session[]
+      message_page: {
+        [sessionID: string]: {
+          hasOlder: boolean
+          hasNewer: boolean
+          loading: boolean
+          loadingDirection?: "older" | "newer"
+          oldest?: string
+          newest?: string
+          error?: string
+        }
+      }
       session_status: {
         [sessionID: string]: SessionStatus
       }
@@ -89,6 +105,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       provider: [],
       provider_default: {},
       session: [],
+      message_page: {},
       session_status: {},
       session_diff: {},
       todo: {},
@@ -103,6 +120,12 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     })
 
     const sdk = useSDK()
+
+    const getRevertMarker = (sessionID: string) => {
+      const match = Binary.search(store.session, sessionID, (s) => s.id)
+      if (!match.found) return undefined
+      return store.session[match.index].revert?.messageID
+    }
 
     sdk.event.listen((e) => {
       const event = e.details
@@ -226,40 +249,74 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         }
 
         case "message.updated": {
-          const messages = store.message[event.properties.info.sessionID]
+          const sessionID = event.properties.info.sessionID
+          const page = store.message_page[sessionID]
+          const messages = store.message[sessionID]
+          const pinned = getRevertMarker(sessionID)
           if (!messages) {
-            setStore("message", event.properties.info.sessionID, [event.properties.info])
+            setStore("message", sessionID, [event.properties.info])
             break
           }
           const result = Binary.search(messages, event.properties.info.id, (m) => m.id)
           if (result.found) {
-            setStore("message", event.properties.info.sessionID, result.index, reconcile(event.properties.info))
+            setStore("message", sessionID, result.index, reconcile(event.properties.info))
+            break
+          }
+          const loadingNewer = page?.loading && page.loadingDirection === "newer"
+          const loadingOlder = page?.loading && page.loadingDirection === "older"
+          if (page?.hasNewer && !loadingNewer) {
+            break
+          }
+          if (page?.oldest && event.properties.info.id < page.oldest && !loadingOlder) {
             break
           }
           setStore(
             "message",
-            event.properties.info.sessionID,
+            sessionID,
             produce((draft) => {
               draft.splice(result.index, 0, event.properties.info)
             }),
           )
           const updated = store.message[event.properties.info.sessionID]
-          if (updated.length > 100) {
-            const oldest = updated[0]
+          if (page) {
+            const nextOldest = windowOldest(updated, pinned) ?? page.oldest
+            const nextNewest = windowNewest(updated, pinned) ?? page.newest
+            setStore("message_page", event.properties.info.sessionID, {
+              ...page,
+              newest: nextNewest,
+              oldest: nextOldest,
+            })
+          }
+          if (updated.length > MAX_LOADED_MESSAGES) {
+            const evictCount = updated.length - MAX_LOADED_MESSAGES
+            const preview = [...updated]
+            const evicted = evictFromStart(preview, evictCount, pinned)
+            const nextOldest = windowOldest(preview, pinned) ?? page?.oldest
+            const nextNewest = windowNewest(preview, pinned) ?? page?.newest
             batch(() => {
               setStore(
                 "message",
                 event.properties.info.sessionID,
                 produce((draft) => {
-                  draft.shift()
+                  evictFromStart(draft, evictCount, pinned)
                 }),
               )
               setStore(
                 "part",
                 produce((draft) => {
-                  delete draft[oldest.id]
+                  for (const msg of evicted) {
+                    delete draft[msg.id]
+                  }
                 }),
               )
+              if (page) {
+                setStore("message_page", event.properties.info.sessionID, {
+                  ...page,
+                  hasOlder: true,
+                  oldest: nextOldest,
+                  newest: nextNewest,
+                })
+              }
             })
           }
           break
@@ -279,6 +336,14 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           break
         }
         case "message.part.updated": {
+          const sessionID = event.properties.part.sessionID
+          const page = store.message_page[sessionID]
+          const messages = store.message[sessionID]
+          const messageExists = messages?.some((m) => m.id === event.properties.part.messageID)
+          const loadingNewer = page?.loading && page.loadingDirection === "newer"
+          if (!messageExists && !loadingNewer) {
+            break
+          }
           const parts = store.part[event.properties.part.messageID]
           if (!parts) {
             setStore("part", event.properties.part.messageID, [event.properties.part])
@@ -419,7 +484,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         })
         .catch(async (e) => {
           Log.Default.error("tui bootstrap failed", {
-            error: e instanceof Error ? e.message : String(e),
+            error: paginationError(e),
             name: e instanceof Error ? e.name : undefined,
             stack: e instanceof Error ? e.stack : undefined,
           })
@@ -433,6 +498,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
     const fullSyncedSessions = new Set<string>()
     const treeSyncedRoots = new Set<string>()
+    const loadingGuard = new Set<string>()
     const result = {
       data: store,
       set: setStore,
@@ -466,17 +532,50 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             sdk.client.session.todo({ sessionID }),
             sdk.client.session.diff({ sessionID }),
           ])
+          const link = messages.response.headers.get("link") ?? ""
+          const hasOlder = parseLinkHeader(link).prev !== undefined
+          const pageMessages = messages.data ?? []
+          const oldest = pageMessages.at(0)?.info.id
+          const newest = pageMessages.at(-1)?.info.id
+          const revertMessageID = session.data?.revert?.messageID
+          const mergedMessages = await (async () => {
+            if (!revertMessageID) return pageMessages
+            if (pageMessages.some((m) => m.info.id === revertMessageID)) return pageMessages
+            try {
+              const revertResult = await sdk.client.session.message(
+                { sessionID, messageID: revertMessageID },
+                { throwOnError: true },
+              )
+              if (revertResult.data) return [revertResult.data, ...pageMessages]
+            } catch (e) {
+              Log.Default.info("Revert marker fetch failed during sync", {
+                messageID: revertMessageID,
+                error: e,
+              })
+            }
+            return pageMessages
+          })()
+          const nextOldest = oldest ?? mergedMessages.at(0)?.info.id
+          const nextNewest = newest ?? mergedMessages.at(-1)?.info.id
           setStore(
             produce((draft) => {
               const match = Binary.search(draft.session, sessionID, (s) => s.id)
               if (match.found) draft.session[match.index] = session.data!
               if (!match.found) draft.session.splice(match.index, 0, session.data!)
               draft.todo[sessionID] = todo.data ?? []
-              draft.message[sessionID] = messages.data!.map((x) => x.info)
-              for (const message of messages.data!) {
+              draft.message[sessionID] = mergedMessages.map((x) => x.info)
+              for (const message of mergedMessages) {
                 draft.part[message.info.id] = message.parts
               }
               draft.session_diff[sessionID] = diff.data ?? []
+              draft.message_page[sessionID] = {
+                hasOlder,
+                hasNewer: false,
+                loading: false,
+                oldest: nextOldest,
+                newest: nextNewest,
+                error: undefined,
+              }
             }),
           )
           fullSyncedSessions.add(sessionID)
@@ -533,6 +632,324 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             for (const child of all) {
               queue.push(child.id)
             }
+          }
+        },
+        async loadOlder(sessionID: string) {
+          const page = store.message_page[sessionID]
+          if (page?.loading || !page?.hasOlder) return
+          const messages = store.message[sessionID] ?? []
+          const cursor = page?.oldest ?? messages.at(0)?.id
+          if (!cursor) return
+          if (loadingGuard.has(sessionID)) return
+          loadingGuard.add(sessionID)
+          const pinned = getRevertMarker(sessionID)
+          try {
+            setStore("message_page", sessionID, { ...page, loading: true, loadingDirection: "older", error: undefined })
+
+            const res = await sdk.client.session.messages(
+              { sessionID, before: cursor, limit: 100 },
+              { throwOnError: true },
+            )
+            const link = res.response.headers.get("link") ?? ""
+            const hasOlder = parseLinkHeader(link).prev !== undefined
+            setStore(
+              produce((draft) => {
+                const existing = draft.message[sessionID] ?? []
+                const pageOldest = res.data?.at(0)?.info.id
+                for (const msg of res.data ?? []) {
+                  const match = Binary.search(existing, msg.info.id, (m) => m.id)
+                  if (!match.found) {
+                    existing.splice(match.index, 0, msg.info)
+                    draft.part[msg.info.id] = msg.parts
+                  }
+                }
+                const nextOldest = pageOldest ?? draft.message_page[sessionID]?.oldest
+                if (existing.length > MAX_LOADED_MESSAGES) {
+                  const evictCount = existing.length - MAX_LOADED_MESSAGES
+                  const evicted = evictFromEnd(existing, evictCount, pinned)
+                  for (const msg of evicted) delete draft.part[msg.id]
+                  const nextNewest = windowNewest(existing, pinned) ?? draft.message_page[sessionID]?.newest
+                  draft.message_page[sessionID] = {
+                    hasOlder,
+                    hasNewer: true,
+                    loading: false,
+                    oldest: nextOldest,
+                    newest: nextNewest,
+                    error: undefined,
+                  }
+                } else {
+                  const nextNewest = windowNewest(existing, pinned) ?? draft.message_page[sessionID]?.newest
+                  draft.message_page[sessionID] = {
+                    hasOlder,
+                    hasNewer: draft.message_page[sessionID]?.hasNewer ?? false,
+                    loading: false,
+                    oldest: nextOldest,
+                    newest: nextNewest,
+                    error: undefined,
+                  }
+                }
+              }),
+            )
+          } catch (e) {
+            const page = store.message_page[sessionID]
+            setStore("message_page", sessionID, {
+              hasOlder: page?.hasOlder ?? false,
+              hasNewer: page?.hasNewer ?? false,
+              loading: false,
+              oldest: page?.oldest,
+              newest: page?.newest,
+              error: paginationError(e),
+            })
+          } finally {
+            loadingGuard.delete(sessionID)
+          }
+        },
+        async loadNewer(sessionID: string) {
+          const page = store.message_page[sessionID]
+          if (page?.loading || !page?.hasNewer) return
+          const messages = store.message[sessionID] ?? []
+          const cursor = page?.newest ?? messages.at(-1)?.id
+          if (!cursor) return
+          if (loadingGuard.has(sessionID)) return
+          loadingGuard.add(sessionID)
+          const pinned = getRevertMarker(sessionID)
+          try {
+            setStore("message_page", sessionID, { ...page, loading: true, loadingDirection: "newer", error: undefined })
+            const res = await sdk.client.session.messages(
+              { sessionID, after: cursor, limit: 100 },
+              { throwOnError: true },
+            )
+            const link = res.response.headers.get("link") ?? ""
+            const hasNewer = parseLinkHeader(link).next !== undefined
+            setStore(
+              produce((draft) => {
+                const existing = draft.message[sessionID] ?? []
+                const pageNewest = res.data?.at(-1)?.info.id
+                for (const msg of res.data ?? []) {
+                  const match = Binary.search(existing, msg.info.id, (m) => m.id)
+                  if (!match.found) {
+                    existing.splice(match.index, 0, msg.info)
+                    draft.part[msg.info.id] = msg.parts
+                  }
+                }
+                const nextNewest = pageNewest ?? draft.message_page[sessionID]?.newest
+                if (existing.length > MAX_LOADED_MESSAGES) {
+                  const evictCount = existing.length - MAX_LOADED_MESSAGES
+                  const evicted = evictFromStart(existing, evictCount, pinned)
+                  for (const msg of evicted) delete draft.part[msg.id]
+                  const nextOldest = windowOldest(existing, pinned) ?? draft.message_page[sessionID]?.oldest
+                  draft.message_page[sessionID] = {
+                    hasOlder: true,
+                    hasNewer,
+                    loading: false,
+                    oldest: nextOldest,
+                    newest: nextNewest,
+                    error: undefined,
+                  }
+                } else {
+                  const nextOldest = windowOldest(existing, pinned) ?? draft.message_page[sessionID]?.oldest
+                  draft.message_page[sessionID] = {
+                    hasOlder: draft.message_page[sessionID]?.hasOlder ?? false,
+                    hasNewer,
+                    loading: false,
+                    oldest: nextOldest,
+                    newest: nextNewest,
+                    error: undefined,
+                  }
+                }
+              }),
+            )
+          } catch (e) {
+            const page = store.message_page[sessionID]
+            setStore("message_page", sessionID, {
+              hasOlder: page?.hasOlder ?? false,
+              hasNewer: page?.hasNewer ?? false,
+              loading: false,
+              oldest: page?.oldest,
+              newest: page?.newest,
+              error: paginationError(e),
+            })
+          } finally {
+            loadingGuard.delete(sessionID)
+          }
+        },
+        async jumpToLatest(sessionID: string) {
+          const page = store.message_page[sessionID]
+          if (page?.loading || !page?.hasNewer) return
+          if (loadingGuard.has(sessionID)) return
+          loadingGuard.add(sessionID)
+
+          try {
+            // Check for revert state
+            const session = store.session.find((s) => s.id === sessionID)
+            const revertMessageID = session?.revert?.messageID
+
+            setStore("message_page", sessionID, {
+              ...page,
+              loading: true,
+              loadingDirection: "newer",
+              error: undefined,
+            })
+
+            // Fetch newest page (no cursor = newest)
+            const res = await sdk.client.session.messages({ sessionID, limit: 100 }, { throwOnError: true })
+
+            let messages = res.data ?? []
+            const pageOldest = messages.at(0)?.info.id
+            const pageNewest = messages.at(-1)?.info.id
+            const link = res.response.headers.get("link") ?? ""
+            const hasOlder = parseLinkHeader(link).prev !== undefined
+
+            // Revert-aware: If in revert state and marker not in results, fetch it
+            if (revertMessageID && !messages.some((m) => m.info.id === revertMessageID)) {
+              try {
+                const revertResult = await sdk.client.session.message(
+                  { sessionID, messageID: revertMessageID },
+                  { throwOnError: true },
+                )
+                if (revertResult.data) {
+                  // Prepend revert message (it's older than newest page)
+                  messages = [revertResult.data, ...messages]
+                }
+              } catch (e) {
+                // Revert message may have been deleted, continue without it
+                Log.Default.info("Revert marker fetch failed (may be deleted)", {
+                  messageID: revertMessageID,
+                  error: e,
+                })
+              }
+            }
+
+            const nextOldest = pageOldest ?? messages.at(0)?.info.id
+            const nextNewest = pageNewest ?? messages.at(-1)?.info.id
+
+            setStore(
+              produce((draft) => {
+                // Clean up parts only for messages not in new results
+                const oldMessages = draft.message[sessionID] ?? []
+                const newIds = new Set(messages.map((m) => m.info.id))
+                for (const msg of oldMessages) {
+                  if (!newIds.has(msg.id)) {
+                    delete draft.part[msg.id]
+                  }
+                }
+
+                // Store new messages
+                draft.message[sessionID] = messages.map((m) => m.info)
+                for (const msg of messages) {
+                  draft.part[msg.info.id] = msg.parts
+                }
+                draft.message_page[sessionID] = {
+                  hasOlder,
+                  hasNewer: false,
+                  loading: false,
+                  oldest: nextOldest,
+                  newest: nextNewest,
+                  error: undefined,
+                }
+              }),
+            )
+          } catch (e) {
+            setStore(
+              produce((draft) => {
+                const p = draft.message_page[sessionID]
+                if (p) {
+                  p.loading = false
+                  p.error = paginationError(e)
+                }
+              }),
+            )
+          } finally {
+            loadingGuard.delete(sessionID)
+          }
+        },
+        async jumpToOldest(sessionID: string) {
+          const page = store.message_page[sessionID]
+          if (page?.loading || !page?.hasOlder) return
+          if (loadingGuard.has(sessionID)) return
+          loadingGuard.add(sessionID)
+
+          try {
+            setStore("message_page", sessionID, {
+              ...page,
+              loading: true,
+              loadingDirection: "older",
+              error: undefined,
+            })
+
+            const res = await sdk.client.session.messages(
+              { sessionID, oldest: "true", limit: 100 },
+              { throwOnError: true },
+            )
+
+            const session = store.session.find((s) => s.id === sessionID)
+            const revertMessageID = session?.revert?.messageID
+
+            let messages = res.data ?? []
+            const pageOldest = messages.at(0)?.info.id
+            const pageNewest = messages.at(-1)?.info.id
+            const link = res.response.headers.get("link") ?? ""
+            const hasNewer = parseLinkHeader(link).next !== undefined
+
+            if (revertMessageID && !messages.some((m) => m.info.id === revertMessageID)) {
+              try {
+                const revertResult = await sdk.client.session.message(
+                  { sessionID, messageID: revertMessageID },
+                  { throwOnError: true },
+                )
+                if (revertResult.data) {
+                  const index = Binary.search(messages, revertResult.data.info.id, (m) => m.info.id)
+                  if (!index.found) messages.splice(index.index, 0, revertResult.data)
+                }
+              } catch (e) {
+                Log.Default.info("Revert marker fetch failed during jumpToOldest", {
+                  messageID: revertMessageID,
+                  error: e,
+                })
+              }
+            }
+
+            const nextOldest = pageOldest ?? messages.at(0)?.info.id
+            const nextNewest = pageNewest ?? messages.at(-1)?.info.id
+
+            setStore(
+              produce((draft) => {
+                // Clean up parts only for messages not in new results
+                const oldMessages = draft.message[sessionID] ?? []
+                const newIds = new Set(messages.map((m) => m.info.id))
+                for (const msg of oldMessages) {
+                  if (!newIds.has(msg.id)) {
+                    delete draft.part[msg.id]
+                  }
+                }
+
+                // Store new messages
+                draft.message[sessionID] = messages.map((m) => m.info)
+                for (const msg of messages) {
+                  draft.part[msg.info.id] = msg.parts
+                }
+                draft.message_page[sessionID] = {
+                  hasOlder: false,
+                  hasNewer,
+                  loading: false,
+                  oldest: nextOldest,
+                  newest: nextNewest,
+                  error: undefined,
+                }
+              }),
+            )
+          } catch (e) {
+            setStore(
+              produce((draft) => {
+                const p = draft.message_page[sessionID]
+                if (p) {
+                  p.loading = false
+                  p.error = paginationError(e)
+                }
+              }),
+            )
+          } finally {
+            loadingGuard.delete(sessionID)
           }
         },
       },
