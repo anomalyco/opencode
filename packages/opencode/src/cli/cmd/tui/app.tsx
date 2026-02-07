@@ -63,6 +63,7 @@ import { createTuiApi } from "@/cli/cmd/tui/plugin/api"
 import { TuiPluginRuntime } from "@/cli/cmd/tui/plugin/runtime"
 import type { RouteMap } from "@/cli/cmd/tui/plugin/api"
 import { FormatError, FormatUnknownError } from "@/cli/error"
+import { useVimEnabled } from "./component/vim"
 
 import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
@@ -254,6 +255,7 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
     .finally(() => {
       setReady(true)
     })
+  const vim = useVimEnabled()
 
   useKeyboard((evt) => {
     if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
@@ -715,6 +717,15 @@ function App(props: { onSnapshot?: () => Promise<string[]> }) {
           if (!next) renderer.setTerminalTitle("")
           return next
         })
+        dialog.clear()
+      },
+    },
+    {
+      title: vim() ? "Disable vim input" : "Enable vim input",
+      value: "input.vim.toggle",
+      category: "Settings",
+      onSelect: (dialog) => {
+        kv.set("input_vim_mode", !vim())
         dialog.clear()
       },
     },

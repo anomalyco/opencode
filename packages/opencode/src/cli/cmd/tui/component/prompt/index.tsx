@@ -43,6 +43,9 @@ import { DialogSkill } from "../dialog-skill"
 import { DialogWorkspaceCreate, restoreWorkspaceSession } from "../dialog-workspace-create"
 import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
 import { useArgs } from "@tui/context/args"
+import { useVimEnabled } from "../vim"
+import { createVimState } from "../vim/vim-state"
+import { createVimHandler } from "../vim/vim-handler"
 
 export type PromptProps = {
   sessionID?: string
@@ -138,6 +141,7 @@ export function Prompt(props: PromptProps) {
   const [auto, setAuto] = createSignal<AutocompleteRef>()
   const currentProviderLabel = createMemo(() => local.model.parsed().provider)
   const hasRightContent = createMemo(() => Boolean(props.right))
+  const vimEnabled = useVimEnabled()
 
   function promptModelWarning() {
     toast.show({
@@ -217,6 +221,15 @@ export function Prompt(props: PromptProps) {
     extmarkToPartIndex: new Map(),
     interrupt: 0,
   })
+  const vimState = createVimState({
+    enabled: vimEnabled,
+    active: () => store.mode === "normal" && props.visible !== false && !props.disabled,
+  })
+  const vim = createVimHandler({
+    enabled: vimEnabled,
+    state: vimState,
+    submit,
+  })
 
   createEffect(
     on(
@@ -268,7 +281,6 @@ export function Prompt(props: PromptProps) {
       {
         title: "Submit prompt",
         value: "prompt.submit",
-        keybind: "input_submit",
         category: "Prompt",
         hidden: true,
         onSelect: async (dialog) => {
@@ -309,6 +321,7 @@ export function Prompt(props: PromptProps) {
           // TODO: this should be its own command
           if (store.mode === "shell") {
             setStore("mode", "normal")
+            vimState.reset()
             return
           }
           if (!props.sessionID) return
@@ -496,6 +509,7 @@ export function Prompt(props: PromptProps) {
     if (!input || input.isDestroyed) return
     if (props.visible === false || dialog.stack.length > 0) {
       if (input.focused) input.blur()
+      if (props.visible === false) vimState.reset()
       return
     }
 
@@ -518,6 +532,18 @@ export function Prompt(props: PromptProps) {
       status: store.mode === "shell" ? "SHELL" : undefined,
     }
   })
+
+  function submitFromTextarea() {
+    if (store.mode !== "normal") {
+      setTimeout(() => setTimeout(() => void submit(), 0), 0)
+      return
+    }
+    if (vimEnabled() && vimState.isInsert()) {
+      input.insertText("\n")
+      return
+    }
+    setTimeout(() => setTimeout(() => void submit(), 0), 0)
+  }
 
   function restoreExtmarksFromParts(parts: PromptInfo["parts"]) {
     input.extmarks.clear()
@@ -1108,11 +1134,14 @@ export function Prompt(props: PromptProps) {
                 if (store.mode === "shell") {
                   if ((e.name === "backspace" && input.visualCursor.offset === 0) || e.name === "escape") {
                     setStore("mode", "normal")
+                    vimState.reset()
                     e.preventDefault()
                     return
                   }
                 }
                 if (store.mode === "normal") autocomplete.onKeyDown(e)
+                if (e.defaultPrevented) return
+                if (store.mode === "normal" && vim.handleKey(e)) return
                 if (!autocomplete.visible) {
                   if (
                     (keybind.match("history_previous", e) && input.cursorOffset === 0) ||
@@ -1138,11 +1167,7 @@ export function Prompt(props: PromptProps) {
                     input.cursorOffset = input.plainText.length
                 }
               }}
-              onSubmit={() => {
-                // IME: double-defer so the last composed character (e.g. Korean
-                // hangul) is flushed to plainText before we read it for submission.
-                setTimeout(() => setTimeout(() => submit(), 0), 0)
-              }}
+              onSubmit={submitFromTextarea}
               onPaste={async (event: PasteEvent) => {
                 if (props.disabled) {
                   event.preventDefault()
