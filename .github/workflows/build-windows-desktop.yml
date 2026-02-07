@@ -8,9 +8,6 @@ on:
         description: 'Version to release (e.g., v1.1.51). Leave empty to skip release creation.'
         required: false
         type: string
-  push:
-    branches:
-      - build-windows
 
 permissions:
   contents: write
