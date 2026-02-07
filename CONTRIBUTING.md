@@ -258,3 +258,30 @@ These are not strictly enforced, they are just general guidelines:
 ## Feature Requests
 
 For net-new functionality, start with a design conversation. Open an issue describing the problem, your proposed approach (optional), and why it belongs in OpenCode. The core team will help decide whether it should move forward; please wait for that approval instead of opening a feature PR directly.
+
+## Trust & Vouch System
+
+This project uses [vouch](https://github.com/mitchellh/vouch) to manage contributor trust. The vouch list is maintained in [`.github/VOUCHED.td`](.github/VOUCHED.td).
+
+### How it works
+
+- **Vouched users** are explicitly trusted contributors.
+- **Denounced users** are explicitly blocked. Issues from denounced users are automatically closed.
+- **Everyone else** can participate normally — you don't need to be vouched to open issues or PRs.
+
+### For maintainers
+
+Collaborators with write access can manage the vouch list by commenting on any issue or discussion:
+
+- `vouch` — vouch for the issue/discussion author
+- `vouch @username` — vouch for a specific user
+- `denounce` — denounce the issue/discussion author
+- `denounce @username` — denounce a specific user
+- `denounce @username <reason>` — denounce with a reason
+- `unvouch` / `unvouch @username` — remove someone from the list
+
+Changes are committed automatically to `.github/VOUCHED.td`.
+
+### Denouncement policy
+
+Denouncement is reserved for users who repeatedly submit low-quality AI-generated contributions, spam, or otherwise act in bad faith. It is not used for disagreements or honest mistakes.
