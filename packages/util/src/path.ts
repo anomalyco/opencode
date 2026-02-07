@@ -35,3 +35,37 @@ export function truncateMiddle(text: string, maxLength: number = 20) {
   const end = Math.floor(available / 2)
   return text.slice(0, start) + "…" + text.slice(-end)
 }
+
+const MEDIA_EXTENSIONS = new Set([
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "svg",
+  "bmp",
+  "ico",
+  "mp4",
+  "mov",
+  "avi",
+  "webm",
+  "mp3",
+  "wav",
+  "ogg",
+  "pdf",
+  "zip",
+  "tar",
+  "gz",
+  "rar",
+  "7z",
+  "exe",
+  "dll",
+  "so",
+  "dylib",
+])
+
+export const isCodeFile = (path: string) => {
+  const ext = path.split(".").pop()?.toLowerCase()
+  if (!ext) return false
+  return !MEDIA_EXTENSIONS.has(ext)
+}
