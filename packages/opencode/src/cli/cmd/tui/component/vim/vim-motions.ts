@@ -70,3 +70,69 @@ export function moveLineDown(textarea: TextareaRenderable) {
   const text = textarea.plainText
   textarea.cursorOffset = moveDown(text, textarea.cursorOffset)
 }
+
+function isWord(char: string) {
+  return /[A-Za-z0-9_]/.test(char)
+}
+
+function isBigWord(char: string) {
+  return !/\s/.test(char)
+}
+
+function nextWordStart(text: string, offset: number, big: boolean) {
+  const match = big ? isBigWord : isWord
+  let pos = offset
+  if (pos < text.length && match(text[pos])) {
+    while (pos < text.length && match(text[pos])) pos++
+  }
+  while (pos < text.length && !match(text[pos])) pos++
+  return pos
+}
+
+function prevWordStart(text: string, offset: number, big: boolean) {
+  const match = big ? isBigWord : isWord
+  let pos = offset
+  while (pos > 0 && !match(text[pos - 1])) pos--
+  while (pos > 0 && match(text[pos - 1])) pos--
+  return pos
+}
+
+function wordEnd(text: string, offset: number, big: boolean) {
+  const match = big ? isBigWord : isWord
+  let pos = offset
+  if (pos < text.length) pos++
+  while (pos < text.length && !match(text[pos])) pos++
+  while (pos < text.length && match(text[pos])) pos++
+  if (pos > offset + 1) pos--
+  return pos
+}
+
+export function moveWordNext(textarea: TextareaRenderable) {
+  const text = textarea.plainText
+  textarea.cursorOffset = nextWordStart(text, textarea.cursorOffset, false)
+}
+
+export function moveWordPrev(textarea: TextareaRenderable) {
+  const text = textarea.plainText
+  textarea.cursorOffset = prevWordStart(text, textarea.cursorOffset, false)
+}
+
+export function moveWordEnd(textarea: TextareaRenderable) {
+  const text = textarea.plainText
+  textarea.cursorOffset = wordEnd(text, textarea.cursorOffset, false)
+}
+
+export function moveBigWordNext(textarea: TextareaRenderable) {
+  const text = textarea.plainText
+  textarea.cursorOffset = nextWordStart(text, textarea.cursorOffset, true)
+}
+
+export function moveBigWordPrev(textarea: TextareaRenderable) {
+  const text = textarea.plainText
+  textarea.cursorOffset = prevWordStart(text, textarea.cursorOffset, true)
+}
+
+export function moveBigWordEnd(textarea: TextareaRenderable) {
+  const text = textarea.plainText
+  textarea.cursorOffset = wordEnd(text, textarea.cursorOffset, true)
+}

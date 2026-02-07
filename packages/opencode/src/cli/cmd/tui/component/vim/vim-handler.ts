@@ -1,7 +1,18 @@
 import type { Accessor } from "solid-js"
 import type { createVimState } from "./vim-state"
 import type { TextareaRenderable } from "@opentui/core"
-import { moveLeft, moveLineDown, moveLineUp, moveRight } from "./vim-motions"
+import {
+  moveBigWordEnd,
+  moveBigWordNext,
+  moveBigWordPrev,
+  moveLeft,
+  moveLineDown,
+  moveLineUp,
+  moveRight,
+  moveWordEnd,
+  moveWordNext,
+  moveWordPrev,
+} from "./vim-motions"
 
 export type VimEvent = {
   name?: string
@@ -24,6 +35,10 @@ export function createVimHandler(input: {
 
   function isPrintable(event: VimEvent) {
     return !!event.name && event.name.length === 1
+  }
+
+  function isShifted(event: VimEvent, key: string) {
+    return event.name === key.toUpperCase() || (event.name === key && !!event.shift)
   }
 
   return {
@@ -70,6 +85,42 @@ export function createVimHandler(input: {
 
       if (key === "k" && !event.shift && !hasModifier(event)) {
         moveLineUp(input.textarea())
+        event.preventDefault()
+        return true
+      }
+
+      if (key === "w" && !event.shift && !hasModifier(event)) {
+        moveWordNext(input.textarea())
+        event.preventDefault()
+        return true
+      }
+
+      if (key === "b" && !event.shift && !hasModifier(event)) {
+        moveWordPrev(input.textarea())
+        event.preventDefault()
+        return true
+      }
+
+      if (key === "e" && !event.shift && !hasModifier(event)) {
+        moveWordEnd(input.textarea())
+        event.preventDefault()
+        return true
+      }
+
+      if (isShifted(event, "w") && !hasModifier(event)) {
+        moveBigWordNext(input.textarea())
+        event.preventDefault()
+        return true
+      }
+
+      if (isShifted(event, "b") && !hasModifier(event)) {
+        moveBigWordPrev(input.textarea())
+        event.preventDefault()
+        return true
+      }
+
+      if (isShifted(event, "e") && !hasModifier(event)) {
+        moveBigWordEnd(input.textarea())
         event.preventDefault()
         return true
       }
