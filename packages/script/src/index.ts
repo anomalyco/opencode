@@ -37,6 +37,7 @@ const VERSION = await (async () => {
   if (IS_PREVIEW) return `0.0.0-${CHANNEL}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
   const version = await fetch("https://registry.npmjs.org/lashcode/latest")
     .then((res) => {
+      if (res.status === 404) return { version: "0.0.0" }
       if (!res.ok) throw new Error(res.statusText)
       return res.json()
     })
