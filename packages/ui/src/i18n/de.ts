@@ -4,11 +4,21 @@ type Keys = keyof typeof en
 
 export const dict = {
   "ui.sessionReview.title": "Sitzungsänderungen",
+  "ui.sessionReview.title.lastTurn": "Änderungen der letzten Runde",
   "ui.sessionReview.diffStyle.unified": "Vereinheitlicht",
   "ui.sessionReview.diffStyle.split": "Geteilt",
   "ui.sessionReview.expandAll": "Alle erweitern",
   "ui.sessionReview.collapseAll": "Alle reduzieren",
 
+  "ui.sessionReview.change.added": "Hinzugefügt",
+  "ui.sessionReview.change.removed": "Entfernt",
+  "ui.sessionReview.change.modified": "Geändert",
+  "ui.lineComment.label.prefix": "Kommentar zu ",
+  "ui.lineComment.label.suffix": "",
+  "ui.lineComment.editorLabel.prefix": "Kommentiere ",
+  "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.placeholder": "Kommentar hinzufügen",
+  "ui.lineComment.submit": "Kommentieren",
   "ui.sessionTurn.steps.show": "Schritte anzeigen",
   "ui.sessionTurn.steps.hide": "Schritte ausblenden",
   "ui.sessionTurn.summary.response": "Antwort",
@@ -44,11 +54,13 @@ export const dict = {
   "ui.messageNav.newMessage": "Neue Nachricht",
 
   "ui.textField.copyToClipboard": "In die Zwischenablage kopieren",
+  "ui.textField.copyLink": "Link kopieren",
   "ui.textField.copied": "Kopiert",
 
   "ui.imagePreview.alt": "Bildvorschau",
 
   "ui.tool.read": "Lesen",
+  "ui.tool.loaded": "Geladen",
   "ui.tool.list": "Auflisten",
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",

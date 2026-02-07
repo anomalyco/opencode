@@ -1,4 +1,4 @@
-name: Daily PR Recap
+name: daily-pr-recap
 
 on:
   schedule:

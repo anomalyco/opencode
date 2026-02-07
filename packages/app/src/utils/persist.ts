@@ -18,7 +18,52 @@ const LEGACY_STORAGE = "default.dat"
 const GLOBAL_STORAGE = "opencode.global.dat"
 const LOCAL_PREFIX = "opencode."
 const fallback = { disabled: false }
-const cache = new Map<string, string>()
+
+const CACHE_MAX_ENTRIES = 500
+const CACHE_MAX_BYTES = 8 * 1024 * 1024
+
+type CacheEntry = { value: string; bytes: number }
+const cache = new Map<string, CacheEntry>()
+const cacheTotal = { bytes: 0 }
+
+function cacheDelete(key: string) {
+  const entry = cache.get(key)
+  if (!entry) return
+  cacheTotal.bytes -= entry.bytes
+  cache.delete(key)
+}
+
+function cachePrune() {
+  for (;;) {
+    if (cache.size <= CACHE_MAX_ENTRIES && cacheTotal.bytes <= CACHE_MAX_BYTES) return
+    const oldest = cache.keys().next().value as string | undefined
+    if (!oldest) return
+    cacheDelete(oldest)
+  }
+}
+
+function cacheSet(key: string, value: string) {
+  const bytes = value.length * 2
+  if (bytes > CACHE_MAX_BYTES) {
+    cacheDelete(key)
+    return
+  }
+
+  const entry = cache.get(key)
+  if (entry) cacheTotal.bytes -= entry.bytes
+  cache.delete(key)
+  cache.set(key, { value, bytes })
+  cacheTotal.bytes += bytes
+  cachePrune()
+}
+
+function cacheGet(key: string) {
+  const entry = cache.get(key)
+  if (!entry) return
+  cache.delete(key)
+  cache.set(key, entry)
+  return entry.value
+}
 
 function quota(error: unknown) {
   if (error instanceof DOMException) {
@@ -63,9 +108,11 @@ function evict(storage: Storage, keep: string, value: string) {
 
   for (const item of items) {
     storage.removeItem(item.key)
+    cacheDelete(item.key)
 
     try {
       storage.setItem(keep, value)
+      cacheSet(keep, value)
       return true
     } catch (error) {
       if (!quota(error)) throw error
@@ -78,6 +125,7 @@ function evict(storage: Storage, keep: string, value: string) {
 function write(storage: Storage, key: string, value: string) {
   try {
     storage.setItem(key, value)
+    cacheSet(key, value)
     return true
   } catch (error) {
     if (!quota(error)) throw error
@@ -85,13 +133,17 @@ function write(storage: Storage, key: string, value: string) {
 
   try {
     storage.removeItem(key)
+    cacheDelete(key)
     storage.setItem(key, value)
+    cacheSet(key, value)
     return true
   } catch (error) {
     if (!quota(error)) throw error
   }
 
-  return evict(storage, key, value)
+  const ok = evict(storage, key, value)
+  if (!ok) cacheSet(key, value)
+  return ok
 }
 
 function snapshot(value: unknown) {
@@ -148,17 +200,24 @@ function localStorageWithPrefix(prefix: string): SyncStorage {
   return {
     getItem: (key) => {
       const name = item(key)
-      const cached = cache.get(name)
+      const cached = cacheGet(name)
       if (fallback.disabled && cached !== undefined) return cached
 
-      const stored = localStorage.getItem(name)
+      const stored = (() => {
+        try {
+          return localStorage.getItem(name)
+        } catch {
+          fallback.disabled = true
+          return null
+        }
+      })()
       if (stored === null) return cached ?? null
-      cache.set(name, stored)
+      cacheSet(name, stored)
       return stored
     },
     setItem: (key, value) => {
       const name = item(key)
-      cache.set(name, value)
+      cacheSet(name, value)
       if (fallback.disabled) return
       try {
         if (write(localStorage, name, value)) return
@@ -170,9 +229,13 @@ function localStorageWithPrefix(prefix: string): SyncStorage {
     },
     removeItem: (key) => {
       const name = item(key)
-      cache.delete(name)
+      cacheDelete(name)
       if (fallback.disabled) return
-      localStorage.removeItem(name)
+      try {
+        localStorage.removeItem(name)
+      } catch {
+        fallback.disabled = true
+      }
     },
   }
 }
@@ -180,16 +243,23 @@ function localStorageWithPrefix(prefix: string): SyncStorage {
 function localStorageDirect(): SyncStorage {
   return {
     getItem: (key) => {
-      const cached = cache.get(key)
+      const cached = cacheGet(key)
       if (fallback.disabled && cached !== undefined) return cached
 
-      const stored = localStorage.getItem(key)
+      const stored = (() => {
+        try {
+          return localStorage.getItem(key)
+        } catch {
+          fallback.disabled = true
+          return null
+        }
+      })()
       if (stored === null) return cached ?? null
-      cache.set(key, stored)
+      cacheSet(key, stored)
       return stored
     },
     setItem: (key, value) => {
-      cache.set(key, value)
+      cacheSet(key, value)
       if (fallback.disabled) return
       try {
         if (write(localStorage, key, value)) return
@@ -200,9 +270,13 @@ function localStorageDirect(): SyncStorage {
       fallback.disabled = true
     },
     removeItem: (key) => {
-      cache.delete(key)
+      cacheDelete(key)
       if (fallback.disabled) return
-      localStorage.removeItem(key)
+      try {
+        localStorage.removeItem(key)
+      } catch {
+        fallback.disabled = true
+      }
     },
   }
 }

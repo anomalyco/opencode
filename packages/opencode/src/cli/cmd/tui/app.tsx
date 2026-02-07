@@ -104,6 +104,7 @@ export function tui(input: {
   args: Args
   directory?: string
   fetch?: typeof fetch
+  headers?: RequestInit["headers"]
   events?: EventSource
   onExit?: () => Promise<void>
 }) {
@@ -130,6 +131,7 @@ export function tui(input: {
                         url={input.url}
                         directory={input.directory}
                         fetch={input.fetch}
+                        headers={input.headers}
                         events={input.events}
                       >
                         <SyncProvider>
@@ -167,6 +169,7 @@ export function tui(input: {
         gatherStats: false,
         exitOnCtrlC: false,
         useKittyKeyboard: {},
+        autoFocus: false,
         consoleOptions: {
           keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
           onCopySelection: (text) => {
@@ -247,7 +250,8 @@ function App() {
           })
         local.model.set({ providerID, modelID }, { recent: true })
       }
-      if (args.sessionID) {
+      // Handle --session without --fork immediately (fork is handled in createEffect below)
+      if (args.sessionID && !args.fork) {
         route.navigate({
           type: "session",
           sessionID: args.sessionID,
@@ -265,8 +269,34 @@ function App() {
       .find((x) => x.parentID === undefined)?.id
     if (match) {
       continued = true
-      route.navigate({ type: "session", sessionID: match })
+      if (args.fork) {
+        sdk.client.session.fork({ sessionID: match }).then((result) => {
+          if (result.data?.id) {
+            route.navigate({ type: "session", sessionID: result.data.id })
+          } else {
+            toast.show({ message: "Failed to fork session", variant: "error" })
+          }
+        })
+      } else {
+        route.navigate({ type: "session", sessionID: match })
+      }
     }
+  })
+
+  // Handle --session with --fork: wait for sync to be fully complete before forking
+  // (session list loads in non-blocking phase for --session, so we must wait for "complete"
+  // to avoid a race where reconcile overwrites the newly forked session)
+  let forked = false
+  createEffect(() => {
+    if (forked || sync.status !== "complete" || !args.sessionID || !args.fork) return
+    forked = true
+    sdk.client.session.fork({ sessionID: args.sessionID }).then((result) => {
+      if (result.data?.id) {
+        route.navigate({ type: "session", sessionID: result.data.id })
+      } else {
+        toast.show({ message: "Failed to fork session", variant: "error" })
+      }
+    })
   })
 
   createEffect(
@@ -489,15 +519,6 @@ function App() {
       category: "System",
     },
     {
-      title: "Open WebUI",
-      value: "webui.open",
-      onSelect: () => {
-        open(sdk.url).catch(() => {})
-        dialog.clear()
-      },
-      category: "System",
-    },
-    {
       title: "Exit the app",
       value: "app.exit",
       slash: {
@@ -567,6 +588,25 @@ function App() {
           if (!next) renderer.setTerminalTitle("")
           return next
         })
+        dialog.clear()
+      },
+    },
+    {
+      title: kv.get("animations_enabled", true) ? "Disable animations" : "Enable animations",
+      value: "app.toggle.animations",
+      category: "System",
+      onSelect: (dialog) => {
+        kv.set("animations_enabled", !kv.get("animations_enabled", true))
+        dialog.clear()
+      },
+    },
+    {
+      title: kv.get("diff_wrap_mode", "word") === "word" ? "Disable diff wrapping" : "Enable diff wrapping",
+      value: "app.toggle.diffwrap",
+      category: "System",
+      onSelect: (dialog) => {
+        const current = kv.get("diff_wrap_mode", "word")
+        kv.set("diff_wrap_mode", current === "word" ? "none" : "word")
         dialog.clear()
       },
     },

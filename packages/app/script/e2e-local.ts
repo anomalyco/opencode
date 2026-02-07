@@ -45,7 +45,6 @@ async function waitForHealth(url: string) {
 const appDir = process.cwd()
 const repoDir = path.resolve(appDir, "../..")
 const opencodeDir = path.join(repoDir, "packages", "opencode")
-const modelsJson = path.join(opencodeDir, "test", "tool", "fixtures", "models-api.json")
 
 const extraArgs = (() => {
   const args = process.argv.slice(2)
@@ -59,9 +58,7 @@ const sandbox = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-e2e-"))
 
 const serverEnv = {
   ...process.env,
-  MODELS_DEV_API_JSON: modelsJson,
-  OPENCODE_DISABLE_MODELS_FETCH: "true",
-  OPENCODE_DISABLE_SHARE: "true",
+  OPENCODE_DISABLE_SHARE: process.env.OPENCODE_DISABLE_SHARE ?? "true",
   OPENCODE_DISABLE_LSP_DOWNLOAD: "true",
   OPENCODE_DISABLE_DEFAULT_PLUGINS: "true",
   OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: "true",
