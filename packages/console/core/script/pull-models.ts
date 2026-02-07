@@ -29,5 +29,5 @@ ZenData.validate(JSON.parse(values.join("")))
 
 // update the secret
 const envFile = Bun.file(path.join(os.tmpdir(), `models-${Date.now()}.env`))
-await envFile.write(values.map((v, i) => `ZEN_MODELS${i + 1}=${v}`).join("\n"))
+await envFile.write(values.map((v, i) => `ZEN_MODELS${i + 1}="${v.replace(/"/g, '\\"')}"`).join("\n"))
 await $`bun sst secret load ${envFile.name}`.cwd(root)
