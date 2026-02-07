@@ -46,6 +46,7 @@ export const dict = {
   "command.file.open": "فتح ملف",
   "command.context.addSelection": "إضافة التحديد إلى السياق",
   "command.context.addSelection.description": "إضافة الأسطر المحددة من الملف الحالي",
+  "command.input.focus": "التركيز على حقل الإدخال",
   "command.terminal.toggle": "تبديل المحطة الطرفية",
   "command.fileTree.toggle": "تبديل شجرة الملفات",
   "command.review.toggle": "تبديل المراجعة",

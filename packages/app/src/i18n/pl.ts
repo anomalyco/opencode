@@ -46,6 +46,7 @@ export const dict = {
   "command.file.open": "Otwórz plik",
   "command.context.addSelection": "Dodaj zaznaczenie do kontekstu",
   "command.context.addSelection.description": "Dodaj zaznaczone linie z bieżącego pliku",
+  "command.input.focus": "Fokus na pole wejściowe",
   "command.terminal.toggle": "Przełącz terminal",
   "command.fileTree.toggle": "Przełącz drzewo plików",
   "command.review.toggle": "Przełącz przegląd",

@@ -917,6 +917,8 @@ export default function Page() {
     setFileTreeTab("all")
   }
 
+  const focusInput = () => inputRef?.focus()
+
   useSessionCommands({
     command,
     dialog,
@@ -943,6 +945,7 @@ export default function Page() {
     setExpanded: (id, fn) => setStore("expanded", id, fn),
     setActiveMessage,
     addSelectionToContext,
+    focusInput,
   })
 
   const openReviewFile = createOpenReviewFile({

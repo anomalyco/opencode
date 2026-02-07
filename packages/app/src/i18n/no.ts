@@ -49,6 +49,7 @@ export const dict = {
   "command.file.open": "Åpne fil",
   "command.context.addSelection": "Legg til markering i kontekst",
   "command.context.addSelection.description": "Legg til valgte linjer fra gjeldende fil",
+  "command.input.focus": "Fokuser inndata",
   "command.terminal.toggle": "Veksle terminal",
   "command.fileTree.toggle": "Veksle filtre",
   "command.review.toggle": "Veksle gjennomgang",
