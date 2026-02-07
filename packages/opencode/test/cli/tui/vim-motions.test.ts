@@ -77,10 +77,28 @@ function createHandler(text: string) {
   const textarea = createTextarea(text)
   const [enabled] = createSignal(true)
   const [mode, setMode] = createSignal<"normal" | "insert">("normal")
-  const state: Pick<ReturnType<typeof createVimState>, "mode" | "setMode" | "reset" | "isInsert"> = {
+  const [pending, setPending] = createSignal<"" | "d">("")
+
+  function clearPending() {
+    setPending("")
+  }
+
+  function changeMode(next: "normal" | "insert") {
+    clearPending()
+    setMode(next)
+  }
+
+  const state: Pick<
+    ReturnType<typeof createVimState>,
+    "mode" | "setMode" | "reset" | "isInsert" | "pending" | "setPending" | "clearPending"
+  > = {
     mode,
-    setMode,
+    setMode: changeMode,
+    pending,
+    setPending,
+    clearPending,
     reset() {
+      clearPending()
       setMode("insert")
     },
     isInsert: () => mode() === "insert",
@@ -195,5 +213,86 @@ describe("vim motion handler", () => {
     expect(ctx.handler.handleKey(esc.event)).toBe(true)
     expect(esc.prevented()).toBe(true)
     expect(ctx.state.mode()).toBe("normal")
+  })
+
+  test("dd deletes current line", () => {
+    const ctx = createHandler("one\ntwo\nthree")
+    ctx.textarea.cursorOffset = 5
+
+    const d1 = createEvent("d")
+    expect(ctx.handler.handleKey(d1.event)).toBe(true)
+    expect(d1.prevented()).toBe(true)
+    expect(ctx.state.pending()).toBe("d")
+
+    const d2 = createEvent("d")
+    expect(ctx.handler.handleKey(d2.event)).toBe(true)
+    expect(d2.prevented()).toBe(true)
+    expect(ctx.textarea.plainText).toBe("one\nthree")
+    expect(ctx.textarea.cursorOffset).toBe(4)
+    expect(ctx.state.pending()).toBe("")
+  })
+
+  test("dd on last line lands at resulting line start", () => {
+    const ctx = createHandler("one\ntwo")
+    ctx.textarea.cursorOffset = 5
+
+    expect(ctx.handler.handleKey(createEvent("d").event)).toBe(true)
+    expect(ctx.handler.handleKey(createEvent("d").event)).toBe(true)
+    expect(ctx.textarea.plainText).toBe("one")
+    expect(ctx.textarea.cursorOffset).toBe(0)
+  })
+
+  test("dw deletes to next word and clears pending", () => {
+    const ctx = createHandler("hello world test")
+    ctx.textarea.cursorOffset = 0
+
+    const d = createEvent("d")
+    expect(ctx.handler.handleKey(d.event)).toBe(true)
+    expect(ctx.state.pending()).toBe("d")
+
+    const w = createEvent("w")
+    expect(ctx.handler.handleKey(w.event)).toBe(true)
+    expect(w.prevented()).toBe(true)
+    expect(ctx.textarea.plainText).toBe("world test")
+    expect(ctx.textarea.cursorOffset).toBe(0)
+    expect(ctx.state.pending()).toBe("")
+  })
+
+  test("pending d clears on escape", () => {
+    const ctx = createHandler("hello world")
+
+    expect(ctx.handler.handleKey(createEvent("d").event)).toBe(true)
+    expect(ctx.state.pending()).toBe("d")
+
+    const esc = createEvent("escape")
+    expect(ctx.handler.handleKey(esc.event)).toBe(true)
+    expect(esc.prevented()).toBe(true)
+    expect(ctx.state.pending()).toBe("")
+    expect(ctx.textarea.plainText).toBe("hello world")
+  })
+
+  test("pending d clears on invalid key and key is handled normally", () => {
+    const ctx = createHandler("abc")
+
+    expect(ctx.handler.handleKey(createEvent("d").event)).toBe(true)
+    expect(ctx.state.pending()).toBe("d")
+
+    const i = createEvent("i")
+    expect(ctx.handler.handleKey(i.event)).toBe(true)
+    expect(i.prevented()).toBe(true)
+    expect(ctx.state.pending()).toBe("")
+    expect(ctx.state.mode()).toBe("insert")
+  })
+
+  test("pending d clears on modifier key and event is not consumed", () => {
+    const ctx = createHandler("abc")
+
+    expect(ctx.handler.handleKey(createEvent("d").event)).toBe(true)
+    expect(ctx.state.pending()).toBe("d")
+
+    const mod = createEvent("j", { ctrl: true })
+    expect(ctx.handler.handleKey(mod.event)).toBe(false)
+    expect(mod.prevented()).toBe(false)
+    expect(ctx.state.pending()).toBe("")
   })
 })

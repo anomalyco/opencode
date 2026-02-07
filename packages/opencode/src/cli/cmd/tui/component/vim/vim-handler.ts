@@ -4,7 +4,9 @@ import type { TextareaRenderable } from "@opentui/core"
 import {
   appendAfterCursor,
   appendLineEnd,
+  deleteLine,
   deleteUnderCursor,
+  deleteWord,
   insertLineStart,
   moveBigWordEnd,
   moveBigWordNext,
@@ -59,8 +61,45 @@ export function createVimHandler(input: {
       }
 
       const key = event.name ?? ""
+
+      if (key === "escape") {
+        if (!input.state.pending()) return false
+        input.state.clearPending()
+        event.preventDefault()
+        return true
+      }
+
+      if (input.state.pending() === "d") {
+        if (key === "d" && !event.shift && !hasModifier(event)) {
+          deleteLine(input.textarea())
+          input.state.clearPending()
+          event.preventDefault()
+          return true
+        }
+
+        if (key === "w" && !event.shift && !hasModifier(event)) {
+          deleteWord(input.textarea())
+          input.state.clearPending()
+          event.preventDefault()
+          return true
+        }
+
+        if (hasModifier(event)) {
+          input.state.clearPending()
+          return false
+        }
+
+        input.state.clearPending()
+      }
+
       if (key === "return" && !hasModifier(event)) {
         input.submit()
+        event.preventDefault()
+        return true
+      }
+
+      if (key === "d" && !event.shift && !hasModifier(event)) {
+        input.state.setPending("d")
         event.preventDefault()
         return true
       }

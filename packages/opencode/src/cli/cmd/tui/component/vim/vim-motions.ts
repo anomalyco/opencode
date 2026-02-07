@@ -107,6 +107,16 @@ function wordEnd(text: string, offset: number, big: boolean) {
   return pos
 }
 
+function deleteOffsets(textarea: TextareaRenderable, startOffset: number, endOffset: number) {
+  if (endOffset <= startOffset) return
+  textarea.cursorOffset = startOffset
+  const start = textarea.logicalCursor
+  textarea.cursorOffset = endOffset
+  const end = textarea.logicalCursor
+  textarea.deleteRange(start.row, start.col, end.row, end.col)
+  textarea.cursorOffset = startOffset
+}
+
 export function moveWordNext(textarea: TextareaRenderable) {
   const text = textarea.plainText
   textarea.cursorOffset = nextWordStart(text, textarea.cursorOffset, false)
@@ -181,11 +191,34 @@ export function deleteUnderCursor(textarea: TextareaRenderable) {
   const startOffset = textarea.cursorOffset
   const end = lineEnd(text, startOffset)
   if (startOffset >= end) return
+  deleteOffsets(textarea, startOffset, startOffset + 1)
+}
 
-  textarea.cursorOffset = startOffset
-  const start = textarea.logicalCursor
-  textarea.cursorOffset = startOffset + 1
-  const next = textarea.logicalCursor
-  textarea.deleteRange(start.row, start.col, next.row, next.col)
-  textarea.cursorOffset = startOffset
+export function deleteWord(textarea: TextareaRenderable) {
+  const text = textarea.plainText
+  const startOffset = textarea.cursorOffset
+  const endOffset = nextWordStart(text, startOffset, false)
+  deleteOffsets(textarea, startOffset, endOffset)
+}
+
+export function deleteLine(textarea: TextareaRenderable) {
+  const text = textarea.plainText
+  if (!text.length) return
+
+  const offset = textarea.cursorOffset
+  const start = lineStart(text, offset)
+  const end = lineEnd(text, offset)
+
+  if (end < text.length) {
+    deleteOffsets(textarea, start, end + 1)
+    return
+  }
+
+  if (start > 0) {
+    deleteOffsets(textarea, start - 1, end)
+    textarea.cursorOffset = lineStart(textarea.plainText, textarea.cursorOffset)
+    return
+  }
+
+  deleteOffsets(textarea, start, end)
 }
