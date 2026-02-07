@@ -253,6 +253,7 @@ export const dict = {
   "prompt.popover.emptyResults": "Keine passenden Ergebnisse",
   "prompt.popover.emptyCommands": "Keine passenden Befehle",
   "prompt.dropzone.label": "Bilder oder PDFs hier ablegen",
+  "prompt.dropzone.file.label": "Ablegen zum @Erwähnen der Datei",
   "prompt.slash.badge.custom": "benutzerdefiniert",
   "prompt.slash.badge.skill": "skill",
   "prompt.slash.badge.mcp": "mcp",

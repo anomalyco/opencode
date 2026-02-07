@@ -211,6 +211,7 @@ export const dict = {
   "prompt.popover.emptyResults": "لا توجد نتائج مطابقة",
   "prompt.popover.emptyCommands": "لا توجد أوامر مطابقة",
   "prompt.dropzone.label": "أفلت الصور أو ملفات PDF هنا",
+  "prompt.dropzone.file.label": "أفلت لإشارة @ للملف",
   "prompt.slash.badge.custom": "مخصص",
   "prompt.slash.badge.skill": "مهارة",
   "prompt.slash.badge.mcp": "mcp",
