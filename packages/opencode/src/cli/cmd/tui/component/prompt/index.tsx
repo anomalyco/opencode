@@ -47,6 +47,7 @@ import { useVimEnabled } from "../vim"
 import { createVimState } from "../vim/vim-state"
 import { createVimHandler } from "../vim/vim-handler"
 import { vimScroll } from "../vim/vim-scroll"
+import { useVimIndicator } from "../vim/vim-indicator"
 
 export type PromptProps = {
   sessionID?: string
@@ -180,6 +181,19 @@ export function Prompt(props: PromptProps) {
     if (!props.disabled) input.cursorColor = theme.text
   })
 
+  createEffect(() => {
+    if (!input || input.isDestroyed) return
+    if (vimEnabled() && store.mode === "normal") {
+      if (vimState.isInsert()) {
+        input.cursorStyle = { style: "line", blinking: true }
+        return
+      }
+      input.cursorStyle = { style: "block", blinking: false }
+      return
+    }
+    input.cursorStyle = { style: "block", blinking: true }
+  })
+
   const lastUserMessage = createMemo(() => {
     if (!props.sessionID) return undefined
     const messages = sync.data.message[props.sessionID]
@@ -225,6 +239,11 @@ export function Prompt(props: PromptProps) {
   const vimState = createVimState({
     enabled: vimEnabled,
     active: () => store.mode === "normal" && props.visible !== false && !props.disabled,
+  })
+  const vimIndicator = useVimIndicator({
+    enabled: vimEnabled,
+    active: () => store.mode === "normal",
+    state: vimState,
   })
   const vim = createVimHandler({
     enabled: vimEnabled,
@@ -1356,7 +1375,15 @@ export function Prompt(props: PromptProps) {
           />
         </box>
         <box width="100%" flexDirection="row" justifyContent="space-between">
-          <Show when={status().type !== "idle"} fallback={props.hint ?? <text />}>
+          <box flexDirection="row" gap={1} flexGrow={1}>
+            <Show when={vimIndicator()}>
+              {(indicator) => (
+                <text fg={indicator() === "INSERT" ? local.agent.color(local.agent.current().name) : theme.textMuted}>
+                  {indicator()}
+                </text>
+              )}
+            </Show>
+            <Show when={status().type !== "idle"} fallback={props.hint ?? <text />}>
             <box
               flexDirection="row"
               gap={1}
@@ -1435,7 +1462,8 @@ export function Prompt(props: PromptProps) {
                 </span>
               </text>
             </box>
-          </Show>
+            </Show>
+          </box>
           <Show when={status().type !== "retry"}>
             <box gap={2} flexDirection="row">
               <Show when={editorFileLabelDisplay()}>{(file) => <text fg={theme.secondary}>{file()}</text>}</Show>

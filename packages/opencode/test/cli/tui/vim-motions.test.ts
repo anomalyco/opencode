@@ -231,6 +231,25 @@ describe("vim motion handler", () => {
     expect(ctx.state.mode()).toBe("normal")
   })
 
+  test("vim disabled does not intercept keys", () => {
+    const ctx = createHandler("abc", { enabled: false })
+    const keys = [
+      createEvent("h"),
+      createEvent("x"),
+      createEvent("d"),
+      createEvent("g"),
+      createEvent("d", { ctrl: true }),
+    ]
+
+    for (const key of keys) {
+      expect(ctx.handler.handleKey(key.event)).toBe(false)
+      expect(key.prevented()).toBe(false)
+    }
+
+    expect(ctx.scrollCalls.length).toBe(0)
+    expect(ctx.jumpCalls.length).toBe(0)
+  })
+
   test("dd deletes current line", () => {
     const ctx = createHandler("one\ntwo\nthree")
     ctx.textarea.cursorOffset = 5
@@ -298,6 +317,24 @@ describe("vim motion handler", () => {
     expect(i.prevented()).toBe(true)
     expect(ctx.state.pending()).toBe("")
     expect(ctx.state.mode()).toBe("insert")
+  })
+
+  test("mode switch clears pending state", () => {
+    const ctx = createHandler("abc")
+    expect(ctx.handler.handleKey(createEvent("d").event)).toBe(true)
+    expect(ctx.state.pending()).toBe("d")
+
+    expect(ctx.handler.handleKey(createEvent("i").event)).toBe(true)
+    expect(ctx.state.mode()).toBe("insert")
+    expect(ctx.state.pending()).toBe("")
+
+    expect(ctx.handler.handleKey(createEvent("escape").event)).toBe(true)
+    expect(ctx.state.mode()).toBe("normal")
+    expect(ctx.state.pending()).toBe("")
+
+    const h = createEvent("h")
+    expect(ctx.handler.handleKey(h.event)).toBe(true)
+    expect(h.prevented()).toBe(true)
   })
 
   test("pending d clears on modifier key and event is not consumed", () => {
@@ -391,6 +428,24 @@ describe("vim motion handler", () => {
     expect(ctx.state.pending()).toBe("")
   })
 
+  test("pending transition d to g", () => {
+    const ctx = createHandler("abc")
+    expect(ctx.handler.handleKey(createEvent("d").event)).toBe(true)
+    expect(ctx.state.pending()).toBe("d")
+
+    const g = createEvent("g")
+    expect(ctx.handler.handleKey(g.event)).toBe(true)
+    expect(g.prevented()).toBe(true)
+    expect(ctx.state.pending()).toBe("g")
+
+    const g2 = createEvent("g")
+    expect(ctx.handler.handleKey(g2.event)).toBe(true)
+    expect(g2.prevented()).toBe(true)
+    expect(ctx.jumpCalls.at(-1)).toBe("top")
+    expect(ctx.scrollCalls.length).toBe(0)
+    expect(ctx.state.pending()).toBe("")
+  })
+
   test("pending d then G clears and jumps", () => {
     const ctx = createHandler("abc")
     expect(ctx.handler.handleKey(createEvent("d").event)).toBe(true)
@@ -417,6 +472,40 @@ describe("vim motion handler", () => {
     expect(ctx.handler.handleKey(g.event)).toBe(false)
     expect(g.prevented()).toBe(false)
     expect(ctx.jumpCalls.length).toBe(0)
+  })
+
+  test("repeated ctrl scroll keeps pending clear", () => {
+    const ctx = createHandler("abc")
+    expect(ctx.handler.handleKey(createEvent("d").event)).toBe(true)
+    expect(ctx.state.pending()).toBe("d")
+
+    const first = createEvent("d", { ctrl: true })
+    expect(ctx.handler.handleKey(first.event)).toBe(true)
+    expect(first.prevented()).toBe(true)
+    expect(ctx.state.pending()).toBe("")
+
+    const second = createEvent("d", { ctrl: true })
+    expect(ctx.handler.handleKey(second.event)).toBe(true)
+    expect(second.prevented()).toBe(true)
+    expect(ctx.state.pending()).toBe("")
+
+    expect(ctx.scrollCalls).toEqual(["half-down", "half-down"])
+  })
+
+  test("repeated G does not create pending", () => {
+    const ctx = createHandler("abc")
+
+    const first = createEvent("G")
+    expect(ctx.handler.handleKey(first.event)).toBe(true)
+    expect(first.prevented()).toBe(true)
+    expect(ctx.state.pending()).toBe("")
+
+    const second = createEvent("G")
+    expect(ctx.handler.handleKey(second.event)).toBe(true)
+    expect(second.prevented()).toBe(true)
+    expect(ctx.state.pending()).toBe("")
+
+    expect(ctx.jumpCalls).toEqual(["bottom", "bottom"])
   })
 })
 
