@@ -19,3 +19,6 @@ jobs:
 
       - name: Run typecheck
         run: bun typecheck
+
+      - name: Run docs i18n checks
+        run: bun run --cwd=packages/web i18n:check

@@ -9,7 +9,13 @@
     "start": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "i18n:scaffold": "bun scripts/i18n-scaffold-pages.ts",
+    "i18n:check": "bun scripts/i18n-verify.ts",
+    "i18n:check:keys": "bun scripts/i18n-check-keys.ts",
+    "i18n:check:pages": "bun scripts/i18n-check-pages.ts",
+    "i18n:check:links": "bun scripts/i18n-check-links.ts",
+    "i18n:check:ui": "bun scripts/i18n-check-ui-strings.ts"
   },
   "dependencies": {
     "@astrojs/cloudflare": "12.6.3",
@@ -17,7 +23,7 @@
     "@astrojs/solid-js": "5.1.0",
     "@astrojs/starlight": "0.34.3",
     "@fontsource/ibm-plex-mono": "5.2.5",
-    "@shikijs/transformers": "3.4.2",
+    "@shikijs/transformers": "3.20.0",
     "@types/luxon": "catalog:",
     "ai": "catalog:",
     "astro": "5.7.13",
@@ -31,11 +37,13 @@
     "remeda": "catalog:",
     "shiki": "catalog:",
     "solid-js": "catalog:",
-    "toolbeam-docs-theme": "0.4.8"
+    "toolbeam-docs-theme": "0.4.8",
+    "vscode-languageserver-types": "3.17.5"
   },
   "devDependencies": {
     "opencode": "workspace:*",
     "@types/node": "catalog:",
+    "@astrojs/check": "0.9.6",
     "typescript": "catalog:"
   }
 }

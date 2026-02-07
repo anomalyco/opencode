@@ -175,7 +175,7 @@ Available options:
 - `scroll_speed` - Custom scroll speed multiplier (default: `3`, minimum: `1`). Ignored if `scroll_acceleration.enabled` is `true`.
 - `diff_style` - Control diff rendering. `"auto"` adapts to terminal width, `"stacked"` always shows single column.
 
-[Learn more about using the TUI here](/docs/tui).
+[Learn more about using the TUI here](./tui).
 
 ---
 
@@ -204,7 +204,7 @@ Available options:
 - `mdnsDomain` - Custom domain name for mDNS service. Defaults to `opencode.local`. Useful for running multiple instances on the same network.
 - `cors` - Additional origins to allow for CORS when using the HTTP server from a browser-based client. Values must be full origins (scheme + host + optional port), eg `https://app.example.com`.
 
-[Learn more about the server here](/docs/server).
+[Learn more about the server here](./server).
 
 ---
 
@@ -222,7 +222,7 @@ You can manage the tools an LLM can use through the `tools` option.
 }
 ```
 
-[Learn more about tools here](/docs/tools).
+[Learn more about tools here](./tools).
 
 ---
 
@@ -260,7 +260,7 @@ Provider options can include `timeout` and `setCacheKey`:
 - `timeout` - Request timeout in milliseconds (default: 300000). Set to `false` to disable.
 - `setCacheKey` - Ensure a cache key is always set for designated provider.
 
-You can also configure [local models](/docs/models#local). [Learn more](/docs/models).
+You can also configure [local models](./models#local). [Learn more](./models).
 
 ---
 
@@ -292,10 +292,10 @@ Amazon Bedrock supports AWS-specific configuration:
 - `endpoint` - Custom endpoint URL for VPC endpoints. This is an alias for the generic `baseURL` option using AWS-specific terminology. If both are specified, `endpoint` takes precedence.
 
 :::note
-Bearer tokens (`AWS_BEARER_TOKEN_BEDROCK` or `/connect`) take precedence over profile-based authentication. See [authentication precedence](/docs/providers#authentication-precedence) for details.
+Bearer tokens (`AWS_BEARER_TOKEN_BEDROCK` or `/connect`) take precedence over profile-based authentication. See [authentication precedence](./providers#authentication-precedence) for details.
 :::
 
-[Learn more about Amazon Bedrock configuration](/docs/providers#amazon-bedrock).
+[Learn more about Amazon Bedrock configuration](./providers#amazon-bedrock).
 
 ---
 
@@ -310,7 +310,7 @@ You can configure the theme you want to use in your OpenCode config through the 
 }
 ```
 
-[Learn more here](/docs/themes).
+[Learn more here](./themes).
 
 ---
 
@@ -336,7 +336,7 @@ You can configure specialized agents for specific tasks through the `agent` opti
 }
 ```
 
-You can also define agents using markdown files in `~/.config/opencode/agents/` or `.opencode/agents/`. [Learn more here](/docs/agents).
+You can also define agents using markdown files in `~/.config/opencode/agents/` or `.opencode/agents/`. [Learn more here](./agents).
 
 ---
 
@@ -351,7 +351,7 @@ You can set the default agent using the `default_agent` option. This determines 
 }
 ```
 
-The default agent must be a primary agent (not a subagent). This can be a built-in agent like `"build"` or `"plan"`, or a [custom agent](/docs/agents) you've defined. If the specified agent doesn't exist or is a subagent, OpenCode will fall back to `"build"` with a warning.
+The default agent must be a primary agent (not a subagent). This can be a built-in agent like `"build"` or `"plan"`, or a [custom agent](./agents) you've defined. If the specified agent doesn't exist or is a subagent, OpenCode will fall back to `"build"` with a warning.
 
 This setting applies across all interfaces: TUI, CLI (`opencode run`), desktop app, and GitHub Action.
 
@@ -359,7 +359,7 @@ This setting applies across all interfaces: TUI, CLI (`opencode run`), desktop a
 
 ### Sharing
 
-You can configure the [share](/docs/share) feature through the `share` option.
+You can configure the [share](./share) feature through the `share` option.
 
 ```json title="opencode.json"
 {
@@ -400,7 +400,7 @@ You can configure custom commands for repetitive tasks through the `command` opt
 }
 ```
 
-You can also define commands using markdown files in `~/.config/opencode/commands/` or `.opencode/commands/`. [Learn more here](/docs/commands).
+You can also define commands using markdown files in `~/.config/opencode/commands/` or `.opencode/commands/`. [Learn more here](./commands).
 
 ---
 
@@ -415,7 +415,7 @@ You can customize your keybinds through the `keybinds` option.
 }
 ```
 
-[Learn more here](/docs/keybinds).
+[Learn more here](./keybinds).
 
 ---
 
@@ -457,7 +457,7 @@ You can configure code formatters through the `formatter` option.
 }
 ```
 
-[Learn more about formatters here](/docs/formatters).
+[Learn more about formatters here](./formatters).
 
 ---
 
@@ -477,7 +477,7 @@ For example, to ensure that the `edit` and `bash` tools require user approval:
 }
 ```
 
-[Learn more about permissions here](/docs/permissions).
+[Learn more about permissions here](./permissions).
 
 ---
 
@@ -528,13 +528,13 @@ You can configure MCP servers you want to use through the `mcp` option.
 }
 ```
 
-[Learn more here](/docs/mcp-servers).
+[Learn more here](./mcp-servers).
 
 ---
 
 ### Plugins
 
-[Plugins](/docs/plugins) extend OpenCode with custom tools, hooks, and integrations.
+[Plugins](./plugins) extend OpenCode with custom tools, hooks, and integrations.
 
 Place plugin files in `.opencode/plugins/` or `~/.config/opencode/plugins/`. You can also load plugins from npm through the `plugin` option.
 
@@ -545,7 +545,7 @@ Place plugin files in `.opencode/plugins/` or `~/.config/opencode/plugins/`. You
 }
 ```
 
-[Learn more here](/docs/plugins).
+[Learn more here](./plugins).
 
 ---
 
@@ -561,7 +561,7 @@ You can configure the instructions for the model you're using through the `instr
 ```
 
 This takes an array of paths and glob patterns to instruction files. [Learn more
-about rules here](/docs/rules).
+about rules here](./rules).
 
 ---
 

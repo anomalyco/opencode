@@ -48,7 +48,7 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve
 
 When you run `opencode` it starts a TUI and a server. Where the TUI is the
 client that talks to the server. The server exposes an OpenAPI 3.1 spec
-endpoint. This endpoint is also used to generate an [SDK](/docs/sdk).
+endpoint. This endpoint is also used to generate an [SDK](./sdk).
 
 :::tip
 Use the opencode server to interact with opencode programmatically.
@@ -63,9 +63,9 @@ opencode TUI running, `opencode serve` will start a new server.
 
 #### Connect to an existing server
 
-When you start the TUI it randomly assigns a port and hostname. You can instead pass in the `--hostname` and `--port` [flags](/docs/cli). Then use this to connect to its server.
+When you start the TUI it randomly assigns a port and hostname. You can instead pass in the `--hostname` and `--port` [flags](./cli). Then use this to connect to its server.
 
-The [`/tui`](#tui) endpoint can be used to drive the TUI through the server. For example, you can prefill or run a prompt. This setup is used by the OpenCode [IDE](/docs/ide) plugins.
+The [`/tui`](#tui) endpoint can be used to drive the TUI through the server. For example, you can prefill or run a prompt. This setup is used by the OpenCode [IDE](./ide) plugins.
 
 ---
 
