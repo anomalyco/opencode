@@ -15,6 +15,9 @@ export type Platform = {
   /** Open a URL in the default browser */
   openLink(url: string): void
 
+  /** Open a local path in a local app (desktop only) */
+  openPath?(path: string, app?: string): Promise<void>
+
   /** Restart the app  */
   restart(): Promise<void>
 
@@ -59,6 +62,9 @@ export type Platform = {
 
   /** Webview zoom level (desktop only) */
   webviewZoom?: Accessor<number>
+
+  /** Check if an editor app exists (desktop only) */
+  checkAppExists?(appName: string): Promise<boolean>
 }
 
 export const { use: usePlatform, provider: PlatformProvider } = createSimpleContext({

@@ -6,6 +6,8 @@ import { withActor } from "~/context/auth.withActor"
 import { IconCreditCard, IconStripe } from "~/component/icon"
 import styles from "./billing-section.module.css"
 import { createCheckoutUrl, formatBalance, queryBillingInfo } from "../../common"
+import { useI18n } from "~/context/i18n"
+import { localizeError } from "~/lib/form-error"
 
 const createSessionUrl = action(async (workspaceID: string, returnUrl: string) => {
   "use server"
@@ -26,6 +28,7 @@ const createSessionUrl = action(async (workspaceID: string, returnUrl: string) =
 
 export function BillingSection() {
   const params = useParams()
+  const i18n = useI18n()
   // ORIGINAL CODE - COMMENTED OUT FOR TESTING
   const billingInfo = createAsync(() => queryBillingInfo(params.id!))
   const checkoutAction = useAction(createCheckoutUrl)
@@ -137,16 +140,18 @@ export function BillingSection() {
   return (
     <section class={styles.root}>
       <div data-slot="section-title">
-        <h2>Billing</h2>
+        <h2>{i18n.t("workspace.billing.title")}</h2>
         <p>
-          Manage payments methods. <a href="mailto:contact@anoma.ly">Contact us</a> if you have any questions.
+          {i18n.t("workspace.billing.subtitle.beforeLink")}{" "}
+          <a href="mailto:contact@anoma.ly">{i18n.t("workspace.billing.contactUs")}</a>{" "}
+          {i18n.t("workspace.billing.subtitle.afterLink")}
         </p>
       </div>
       <div data-slot="section-content">
         <div data-slot="balance-display">
           <div data-slot="balance-amount">
             <span data-slot="balance-value">${balance()}</span>
-            <span data-slot="balance-label">Current Balance</span>
+            <span data-slot="balance-label">{i18n.t("workspace.billing.currentBalance")}</span>
           </div>
           <Show when={billingInfo()?.customerID}>
             <div data-slot="balance-right-section">
@@ -155,7 +160,7 @@ export function BillingSection() {
                 fallback={
                   <div data-slot="add-balance-form-container">
                     <div data-slot="add-balance-form">
-                      <label>Add $</label>
+                      <label>{i18n.t("workspace.billing.add")}</label>
                       <input
                         data-component="input"
                         type="number"
@@ -166,11 +171,11 @@ export function BillingSection() {
                           setStore("addBalanceAmount", e.currentTarget.value)
                           checkoutSubmission.clear()
                         }}
-                        placeholder="Enter amount"
+                        placeholder={i18n.t("workspace.billing.enterAmount")}
                       />
                       <div data-slot="form-actions">
                         <button data-color="ghost" type="button" onClick={() => hideAddBalanceForm()}>
-                          Cancel
+                          {i18n.t("common.cancel")}
                         </button>
                         <button
                           data-color="primary"
@@ -178,18 +183,20 @@ export function BillingSection() {
                           disabled={!store.addBalanceAmount || checkoutSubmission.pending || store.checkoutRedirecting}
                           onClick={onClickCheckout}
                         >
-                          {checkoutSubmission.pending || store.checkoutRedirecting ? "Loading..." : "Add"}
+                          {checkoutSubmission.pending || store.checkoutRedirecting
+                            ? i18n.t("workspace.billing.loading")
+                            : i18n.t("workspace.billing.addAction")}
                         </button>
                       </div>
                     </div>
                     <Show when={checkoutSubmission.result && (checkoutSubmission.result as any).error}>
-                      {(err: any) => <div data-slot="form-error">{err()}</div>}
+                      {(err: any) => <div data-slot="form-error">{localizeError(i18n.t, err())}</div>}
                     </Show>
                   </div>
                 }
               >
                 <button data-color="primary" onClick={() => showAddBalanceForm()}>
-                  Add Balance
+                  {i18n.t("workspace.billing.addBalance")}
                 </button>
               </Show>
               <div data-slot="credit-card">
@@ -209,7 +216,7 @@ export function BillingSection() {
                       </Show>
                     </Match>
                     <Match when={billingInfo()?.paymentMethodType === "link"}>
-                      <span data-slot="type">Linked to Stripe</span>
+                      <span data-slot="type">{i18n.t("workspace.billing.linkedToStripe")}</span>
                     </Match>
                   </Switch>
                 </div>
@@ -218,7 +225,9 @@ export function BillingSection() {
                   disabled={sessionSubmission.pending || store.sessionRedirecting}
                   onClick={onClickSession}
                 >
-                  {sessionSubmission.pending || store.sessionRedirecting ? "Loading..." : "Manage"}
+                  {sessionSubmission.pending || store.sessionRedirecting
+                    ? i18n.t("workspace.billing.loading")
+                    : i18n.t("workspace.billing.manage")}
                 </button>
               </div>
             </div>
@@ -231,7 +240,9 @@ export function BillingSection() {
             disabled={checkoutSubmission.pending || store.checkoutRedirecting}
             onClick={onClickCheckout}
           >
-            {checkoutSubmission.pending || store.checkoutRedirecting ? "Loading..." : "Enable Billing"}
+            {checkoutSubmission.pending || store.checkoutRedirecting
+              ? i18n.t("workspace.billing.loading")
+              : i18n.t("workspace.billing.enable")}
           </button>
         </Show>
       </div>
