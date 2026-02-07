@@ -6431,6 +6431,9 @@
             },
             "required": ["input", "output", "reasoning", "cache"]
           },
+          "variant": {
+            "type": "string"
+          },
           "finish": {
             "type": "string"
           }

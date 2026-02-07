@@ -201,6 +201,7 @@ export type AssistantMessage = {
       write: number
     }
   }
+  variant?: string
   finish?: string
 }
 
