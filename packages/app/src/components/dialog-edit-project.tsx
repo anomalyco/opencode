@@ -223,7 +223,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
             value={store.startup}
             onChange={(v) => setStore("startup", v)}
             spellcheck={false}
-            class="max-h-40 w-full font-mono text-xs no-scrollbar"
+            class="max-h-14 w-full overflow-y-auto font-mono text-xs"
           />
         </div>
 

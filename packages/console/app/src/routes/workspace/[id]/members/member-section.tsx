@@ -8,6 +8,7 @@ import { Actor } from "@opencode-ai/console-core/actor.js"
 import { User } from "@opencode-ai/console-core/user.js"
 import { RoleDropdown } from "./role-dropdown"
 import { useI18n } from "~/context/i18n"
+import { useLanguage } from "~/context/language"
 import { formError, localizeError } from "~/lib/form-error"
 
 const listMembers = query(async (workspaceID: string) => {
@@ -218,6 +219,7 @@ function MemberRow(props: {
 export function MemberSection() {
   const params = useParams()
   const i18n = useI18n()
+  const language = useLanguage()
   const data = createAsync(() => listMembers(params.id!))
   const submission = useSubmission(inviteMember)
   const [store, setStore] = createStore({
@@ -277,7 +279,7 @@ export function MemberSection() {
       </div>
       <div data-slot="beta-notice">
         {i18n.t("workspace.members.beta.beforeLink")}{" "}
-        <a href="/docs/zen/#for-teams" target="_blank" rel="noopener noreferrer">
+        <a href={language.route("/docs/zen/#for-teams")} target="_blank" rel="noopener noreferrer">
           {i18n.t("common.learnMore")}
         </a>
         .
