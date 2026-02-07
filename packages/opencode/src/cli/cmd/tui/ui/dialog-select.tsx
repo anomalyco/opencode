@@ -70,7 +70,15 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     ),
   )
 
-  let input: InputRenderable
+  let input: InputRenderable | undefined
+
+  function query(value: string) {
+    if (value === store.filter) return
+    batch(() => {
+      setStore("filter", value)
+      props.onFilter?.(value)
+    })
+  }
 
   const filtered = createMemo(() => {
     if (props.skipFilter) return props.options.filter((x) => x.disabled !== true)
@@ -241,10 +249,11 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         <box paddingTop={1}>
           <input
             onInput={(e) => {
-              batch(() => {
-                setStore("filter", e)
-                props.onFilter?.(e)
-              })
+              query(e)
+            }}
+            onContentChange={() => {
+              if (!input || input.isDestroyed) return
+              query(input.value)
             }}
             focusedBackgroundColor={theme.backgroundPanel}
             cursorColor={theme.primary}
