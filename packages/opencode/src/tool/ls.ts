@@ -56,7 +56,7 @@ export const ListTool = Tool.define("list", {
 
     const ignoreGlobs = IGNORE_PATTERNS.map((p) => `!${p}*`).concat(params.ignore?.map((p) => `!${p}`) || [])
     const files = []
-    for await (const file of Ripgrep.files({ cwd: searchPath, glob: ignoreGlobs })) {
+    for await (const file of Ripgrep.files({ cwd: searchPath, glob: ignoreGlobs, signal: ctx.abort })) {
       files.push(file)
       if (files.length >= LIMIT) break
     }

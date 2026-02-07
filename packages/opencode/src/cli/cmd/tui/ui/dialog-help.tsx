@@ -3,11 +3,13 @@ import { useTheme } from "@tui/context/theme"
 import { useDialog } from "./dialog"
 import { useKeyboard } from "@opentui/solid"
 import { useKeybind } from "@tui/context/keybind"
+import { createSignal } from "solid-js"
 
 export function DialogHelp() {
   const dialog = useDialog()
   const { theme } = useTheme()
   const keybind = useKeybind()
+  const [hover, setHover] = createSignal(false)
 
   useKeyboard((evt) => {
     if (evt.name === "return" || evt.name === "escape") {
@@ -21,7 +23,16 @@ export function DialogHelp() {
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
           Help
         </text>
-        <text fg={theme.textMuted}>esc/enter</text>
+        <box
+          paddingLeft={1}
+          paddingRight={1}
+          backgroundColor={hover() ? theme.primary : undefined}
+          onMouseOver={() => setHover(true)}
+          onMouseOut={() => setHover(false)}
+          onMouseUp={() => dialog.clear()}
+        >
+          <text fg={hover() ? theme.selectedListItemText : theme.textMuted}>esc/enter</text>
+        </box>
       </box>
       <box paddingBottom={1}>
         <text fg={theme.textMuted}>

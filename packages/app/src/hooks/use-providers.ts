@@ -1,5 +1,5 @@
 import { useGlobalSync } from "@/context/global-sync"
-import { base64Decode } from "@opencode-ai/util/encode"
+import { decode64 } from "@/utils/base64"
 import { useParams } from "@solidjs/router"
 import { createMemo } from "solid-js"
 
@@ -8,7 +8,7 @@ export const popularProviders = ["opencode", "anthropic", "github-copilot", "ope
 export function useProviders() {
   const globalSync = useGlobalSync()
   const params = useParams()
-  const currentDirectory = createMemo(() => base64Decode(params.dir ?? ""))
+  const currentDirectory = createMemo(() => decode64(params.dir) ?? "")
   const providers = createMemo(() => {
     if (currentDirectory()) {
       const [projectStore] = globalSync.child(currentDirectory())

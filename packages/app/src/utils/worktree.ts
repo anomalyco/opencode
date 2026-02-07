@@ -13,7 +13,21 @@ type State =
     }
 
 const state = new Map<string, State>()
-const waiters = new Map<string, Array<(state: State) => void>>()
+const waiters = new Map<
+  string,
+  {
+    promise: Promise<State>
+    resolve: (state: State) => void
+  }
+>()
+
+function deferred() {
+  const box = { resolve: (_: State) => {} }
+  const promise = new Promise<State>((resolve) => {
+    box.resolve = resolve
+  })
+  return { promise, resolve: box.resolve }
+}
 
 export const Worktree = {
   get(directory: string) {
@@ -27,32 +41,33 @@ export const Worktree = {
   },
   ready(directory: string) {
     const key = normalize(directory)
-    state.set(key, { status: "ready" })
-    const list = waiters.get(key)
-    if (!list) return
+    const next = { status: "ready" } as const
+    state.set(key, next)
+    const waiter = waiters.get(key)
+    if (!waiter) return
     waiters.delete(key)
-    for (const fn of list) fn({ status: "ready" })
+    waiter.resolve(next)
   },
   failed(directory: string, message: string) {
     const key = normalize(directory)
-    state.set(key, { status: "failed", message })
-    const list = waiters.get(key)
-    if (!list) return
+    const next = { status: "failed", message } as const
+    state.set(key, next)
+    const waiter = waiters.get(key)
+    if (!waiter) return
     waiters.delete(key)
-    for (const fn of list) fn({ status: "failed", message })
+    waiter.resolve(next)
   },
   wait(directory: string) {
     const key = normalize(directory)
     const current = state.get(key)
     if (current && current.status !== "pending") return Promise.resolve(current)
 
-    return new Promise<State>((resolve) => {
-      const list = waiters.get(key)
-      if (!list) {
-        waiters.set(key, [resolve])
-        return
-      }
-      list.push(resolve)
-    })
+    const existing = waiters.get(key)
+    if (existing) return existing.promise
+
+    const waiter = deferred()
+
+    waiters.set(key, waiter)
+    return waiter.promise
   },
 }

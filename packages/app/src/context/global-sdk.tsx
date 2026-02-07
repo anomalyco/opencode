@@ -24,6 +24,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     type Queued = { directory: string; payload: Event }
 
     let queue: Array<Queued | undefined> = []
+    let buffer: Array<Queued | undefined> = []
     const coalesced = new Map<string, number>()
     let timer: ReturnType<typeof setTimeout> | undefined
     let last = 0
@@ -41,10 +42,13 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       if (timer) clearTimeout(timer)
       timer = undefined
 
+      if (queue.length === 0) return
+
       const events = queue
-      queue = []
+      queue = buffer
+      buffer = events
+      queue.length = 0
       coalesced.clear()
-      if (events.length === 0) return
 
       last = Date.now()
       batch(() => {
@@ -53,16 +57,14 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
           emitter.emit(event.directory, event.payload)
         }
       })
+
+      buffer.length = 0
     }
 
     const schedule = () => {
       if (timer) return
       const elapsed = Date.now() - last
       timer = setTimeout(flush, Math.max(0, 16 - elapsed))
-    }
-
-    const stop = () => {
-      flush()
     }
 
     void (async () => {
@@ -87,12 +89,12 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
         await new Promise<void>((resolve) => setTimeout(resolve, 0))
       }
     })()
-      .finally(stop)
+      .finally(flush)
       .catch(() => undefined)
 
     onCleanup(() => {
       abort.abort()
-      stop()
+      flush()
     })
 
     const sdk = createOpencodeClient({
