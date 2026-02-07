@@ -259,7 +259,6 @@ export const BashTool = Tool.define("bash", async () => {
           output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
           exit: proc.exitCode,
           description: params.description,
-          hint: undefined as string | undefined,
         },
         output,
       }

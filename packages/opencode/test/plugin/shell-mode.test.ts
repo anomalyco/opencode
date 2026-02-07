@@ -23,6 +23,30 @@ describe("shouldRouteToShell", () => {
     expect(await shouldRouteToShell("select all users")).toBe(false)
   })
 
+  test("does not route common English words to shell", async () => {
+    // single-word conversational inputs
+    expect(await shouldRouteToShell("perfect")).toBe(false)
+    expect(await shouldRouteToShell("yes")).toBe(false)
+    expect(await shouldRouteToShell("sure")).toBe(false)
+    expect(await shouldRouteToShell("thanks")).toBe(false)
+    expect(await shouldRouteToShell("great")).toBe(false)
+    expect(await shouldRouteToShell("ok")).toBe(false)
+    expect(await shouldRouteToShell("cool")).toBe(false)
+    expect(await shouldRouteToShell("awesome")).toBe(false)
+    expect(await shouldRouteToShell("nice")).toBe(false)
+    expect(await shouldRouteToShell("stop")).toBe(false)
+    expect(await shouldRouteToShell("why")).toBe(false)
+    expect(await shouldRouteToShell("how")).toBe(false)
+    expect(await shouldRouteToShell("lgtm")).toBe(false)
+    // multi-word with agent word as first word
+    expect(await shouldRouteToShell("perfect let's move on")).toBe(false)
+    expect(await shouldRouteToShell("thanks for the help")).toBe(false)
+    expect(await shouldRouteToShell("sure go ahead")).toBe(false)
+    // case insensitive
+    expect(await shouldRouteToShell("Perfect")).toBe(false)
+    expect(await shouldRouteToShell("YES")).toBe(false)
+  })
+
   test("does not route empty input to shell", async () => {
     expect(await shouldRouteToShell("")).toBe(false)
     expect(await shouldRouteToShell("  ")).toBe(false)
@@ -43,86 +67,102 @@ describe("detectNaturalLanguage", () => {
     expect(detectNaturalLanguage("ls -la", "error", null)).toBeUndefined()
   })
 
-  test("returns undefined for short inputs even with errors", () => {
+  test("returns undefined when second word is not an NL marker", () => {
     expect(detectNaturalLanguage("ls foo", "no such file or directory", 1)).toBeUndefined()
   })
 
+  test("returns undefined for single-word inputs", () => {
+    expect(detectNaturalLanguage("ls", "command failed", 1)).toBeUndefined()
+  })
+
   test("detects natural language with parse errors", () => {
-    const hint = detectNaturalLanguage(
-      "do We already have an easy way to uninstall lacy like lacy uninstall command?",
-      "(eval):1: parse error near `do'",
-      1,
-    )
-    expect(hint).toBeDefined()
-    expect(hint).toContain("agent")
+    expect(
+      detectNaturalLanguage(
+        "do We already have an easy way to uninstall lacy like lacy uninstall command?",
+        "(eval):1: parse error near `do'",
+        1,
+      ),
+    ).toBe(true)
   })
 
   test("detects natural language with command not found", () => {
-    const hint = detectNaturalLanguage(
-      "find out how the auth system works",
-      "find: out: unknown primary or operator",
-      1,
-    )
-    expect(hint).toBeDefined()
-    expect(hint).toContain("agent")
+    expect(
+      detectNaturalLanguage("find out how the auth system works", "find: out: unknown primary or operator", 1),
+    ).toBe(true)
   })
 
   test("detects natural language with make errors", () => {
-    const hint = detectNaturalLanguage(
-      "make sure the tests pass before merging",
-      "make: *** No rule to make target 'sure'.  Stop.",
-      2,
-    )
-    expect(hint).toBeDefined()
-    expect(hint).toContain("agent")
+    expect(
+      detectNaturalLanguage(
+        "make sure the tests pass before merging",
+        "make: *** No rule to make target 'sure'.  Stop.",
+        2,
+      ),
+    ).toBe(true)
   })
 
   test("detects natural language starting with git", () => {
-    const hint = detectNaturalLanguage(
-      "git me the latest changes from the repo",
-      "git: 'me' is not a git command. See 'git --help'.",
-      1,
-    )
-    expect(hint).toBeDefined()
-    expect(hint).toContain("agent")
+    expect(
+      detectNaturalLanguage(
+        "git me the latest changes from the repo",
+        "git: 'me' is not a git command. See 'git --help'.",
+        1,
+      ),
+    ).toBe(true)
   })
 
   test("detects natural language with syntax errors and many words", () => {
-    const hint = detectNaturalLanguage(
-      "while you are at it can you also fix the tests",
-      "bash: syntax error near unexpected token `you'",
-      2,
-    )
-    expect(hint).toBeDefined()
-    expect(hint).toContain("agent")
+    expect(
+      detectNaturalLanguage(
+        "while you are at it can you also fix the tests",
+        "bash: syntax error near unexpected token `you'",
+        2,
+      ),
+    ).toBe(true)
   })
 
   test("detects natural language with go subcommand errors", () => {
-    const hint = detectNaturalLanguage(
-      "go ahead and fix the tests",
-      "go ahead: unknown command\nRun 'go help' for usage.",
-      2,
-    )
-    expect(hint).toBeDefined()
-    expect(hint).toContain("agent")
+    expect(
+      detectNaturalLanguage("go ahead and fix the tests", "go ahead: unknown command\nRun 'go help' for usage.", 2),
+    ).toBe(true)
   })
 
   test("detects natural language with go for", () => {
-    const hint = detectNaturalLanguage("go for it and deploy", "go for: unknown command\nRun 'go help' for usage.", 2)
-    expect(hint).toBeDefined()
-    expect(hint).toContain("agent")
+    expect(detectNaturalLanguage("go for it and deploy", "go for: unknown command\nRun 'go help' for usage.", 2)).toBe(
+      true,
+    )
   })
 
   test("detects natural language with cargo errors", () => {
-    const hint = detectNaturalLanguage("cargo ahead with the release", "error: no such command: `ahead`", 101)
-    expect(hint).toBeDefined()
-    expect(hint).toContain("agent")
+    expect(detectNaturalLanguage("cargo ahead with the release", "error: no such command: `ahead`", 101)).toBe(true)
   })
 
   test("detects natural language with docker errors", () => {
-    const hint = detectNaturalLanguage("docker is not working properly", "docker: unknown command: docker is", 1)
-    expect(hint).toBeDefined()
-    expect(hint).toContain("agent")
+    expect(detectNaturalLanguage("docker is not working properly", "docker: unknown command: docker is", 1)).toBe(true)
+  })
+
+  test("detects 'find the file' with no such file error", () => {
+    expect(
+      detectNaturalLanguage(
+        "find the file",
+        "find: the: No such file or directory\nfind: file: No such file or directory",
+        1,
+      ),
+    ).toBe(true)
+  })
+
+  test("detects 'go ahead' (2 words) with unknown command error", () => {
+    expect(detectNaturalLanguage("go ahead", "go ahead: unknown command\nRun 'go help' for usage.", 2)).toBe(true)
+  })
+
+  test("detects 'what a catch' with no such file error", () => {
+    expect(
+      detectNaturalLanguage(
+        "what a catch",
+        "what: a: No such file or directory\nwhat: catch: No such file or directory",
+        1,
+      ),
+    ).toBe(true)
   })
 
   test("returns undefined for real command errors", () => {

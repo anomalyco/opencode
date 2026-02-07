@@ -29,6 +29,180 @@ const SHELL_RESERVED_WORDS = new Set([
 ])
 
 /**
+ * Common English words that always route to agent. These are conversational
+ * responses, affirmations, and casual words that users type when talking to
+ * an AI assistant. Some of these (yes, nice, cancel) exist as real commands
+ * but are almost never used standalone intentionally.
+ *
+ * Kept in sync with lacyshell lib/core/constants.sh LACY_AGENT_WORDS.
+ */
+const AGENT_WORDS = new Set([
+  // affirmations
+  "yes",
+  "yeah",
+  "yep",
+  "yup",
+  "sure",
+  "ok",
+  "okay",
+  "alright",
+  "absolutely",
+  "definitely",
+  "certainly",
+  "indeed",
+  "correct",
+  "right",
+  "exactly",
+  "perfect",
+  "agreed",
+  "affirmative",
+  "totally",
+  "clearly",
+  "obviously",
+  "lgtm",
+  // negations
+  "no",
+  "nope",
+  "nah",
+  "never",
+  "wrong",
+  "disagree",
+  // gratitude
+  "thanks",
+  "thank",
+  "thx",
+  "ty",
+  "cheers",
+  "appreciated",
+  // reactions
+  "great",
+  "good",
+  "nice",
+  "cool",
+  "awesome",
+  "amazing",
+  "wonderful",
+  "brilliant",
+  "excellent",
+  "fantastic",
+  "sweet",
+  "neat",
+  "beautiful",
+  "gorgeous",
+  "impressive",
+  "incredible",
+  "outstanding",
+  "superb",
+  "marvelous",
+  "magnificent",
+  "stellar",
+  "phenomenal",
+  "terrific",
+  "splendid",
+  "fine",
+  "solid",
+  "dope",
+  "sick",
+  "fire",
+  "lit",
+  "rad",
+  "legit",
+  // greetings/closings
+  "hey",
+  "hi",
+  "hello",
+  "howdy",
+  "sup",
+  "yo",
+  "bye",
+  "goodbye",
+  "cya",
+  "later",
+  // conversational
+  "please",
+  "sorry",
+  "pardon",
+  "hmm",
+  "huh",
+  "wow",
+  "whoa",
+  "oops",
+  "ugh",
+  "yikes",
+  "damn",
+  "dang",
+  "shoot",
+  "welp",
+  "well",
+  "anyway",
+  "anyways",
+  "regardless",
+  "meanwhile",
+  "honestly",
+  "basically",
+  "literally",
+  "actually",
+  "really",
+  "seriously",
+  "obviously",
+  "hopefully",
+  "unfortunately",
+  "apparently",
+  "supposedly",
+  "probably",
+  "maybe",
+  "perhaps",
+  "possibly",
+  // action/intent
+  "stop",
+  "hold",
+  "pause",
+  "cancel",
+  "abort",
+  "skip",
+  "continue",
+  "proceed",
+  "next",
+  "again",
+  "redo",
+  "undo",
+  "retry",
+  "explain",
+  "elaborate",
+  "clarify",
+  "summarize",
+  "describe",
+  "show",
+  "tell",
+  "why",
+  "how",
+  "what",
+  "when",
+  "where",
+  "who",
+  "which",
+  // question words
+  "can",
+  "could",
+  "would",
+  "should",
+  "will",
+  "shall",
+  "may",
+  "might",
+  "must",
+  "does",
+  "did",
+  "is",
+  "are",
+  "was",
+  "were",
+  "has",
+  "have",
+  "had",
+])
+
+/**
  * Check if input should be routed to shell based on first token being a valid command.
  * Used in Auto mode to intelligently route between shell and agent.
  */
@@ -39,8 +213,13 @@ export async function shouldRouteToShell(input: string): Promise<boolean> {
   const firstToken = extractFirstToken(trimmed)
   if (!firstToken) return false
 
+  const lower = firstToken.toLowerCase()
+
   // Reserved words pass `command -v` but are never valid standalone commands
-  if (SHELL_RESERVED_WORDS.has(firstToken)) return false
+  if (SHELL_RESERVED_WORDS.has(lower)) return false
+
+  // Common English words always route to agent
+  if (AGENT_WORDS.has(lower)) return false
 
   return commandExists(firstToken)
 }

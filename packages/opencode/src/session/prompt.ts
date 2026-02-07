@@ -1371,7 +1371,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     if (!abort) {
       throw new Session.BusyError(input.sessionID)
     }
-    using _ = defer(() => cancel(input.sessionID))
+    let handedOff = false
+    using _ = defer(() => {
+      if (!handedOff) cancel(input.sessionID)
+    })
 
     const session = await Session.get(input.sessionID)
     if (session.revert) {
@@ -1457,11 +1460,12 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     const invocations: Record<string, { args: string[]; wrapCommand: (cmd: string) => string }> = {
       nu: {
         args: ["-c"],
-        wrapCommand: (cmd) => `${cmd}; print $"${cwdSentinel}(pwd)"`,
+        wrapCommand: (cmd) =>
+          `try { ${cmd} }; let __oc_exit = $env.LAST_EXIT_CODE; print $"${cwdSentinel}($__oc_exit):(pwd)"; exit $__oc_exit`,
       },
       fish: {
         args: ["-c"],
-        wrapCommand: (cmd) => `${cmd}; echo "${cwdSentinel}"(pwd)`,
+        wrapCommand: (cmd) => `${cmd}; set __oc_exit $status; echo "${cwdSentinel}$__oc_exit:"(pwd); exit $__oc_exit`,
       },
       zsh: {
         args: ["-c", "-l"],
@@ -1469,7 +1473,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             [[ -f ~/.zshenv ]] && source ~/.zshenv >/dev/null 2>&1 || true
             [[ -f "\${ZDOTDIR:-$HOME}/.zshrc" ]] && source "\${ZDOTDIR:-$HOME}/.zshrc" >/dev/null 2>&1 || true
             eval ${JSON.stringify(cmd)}
-            echo "${cwdSentinel}$(pwd -P 2>/dev/null || pwd)"
+            __oc_exit=$?
+            echo "${cwdSentinel}$__oc_exit:$(pwd -P 2>/dev/null || pwd)"
+            exit $__oc_exit
           `,
       },
       bash: {
@@ -1478,27 +1484,32 @@ NOTE: At any point in time through this workflow you should feel free to ask the
             shopt -s expand_aliases
             [[ -f ~/.bashrc ]] && source ~/.bashrc >/dev/null 2>&1 || true
             eval ${JSON.stringify(cmd)}
-            echo "${cwdSentinel}$(pwd -P 2>/dev/null || pwd)"
+            __oc_exit=$?
+            echo "${cwdSentinel}$__oc_exit:$(pwd -P 2>/dev/null || pwd)"
+            exit $__oc_exit
           `,
       },
       // Windows cmd
       cmd: {
         args: ["/c"],
-        wrapCommand: (cmd) => `${cmd} & echo ${cwdSentinel}%CD%`,
+        wrapCommand: (cmd) => `${cmd} & echo ${cwdSentinel}%ERRORLEVEL%:%CD%`,
       },
       // Windows PowerShell
       powershell: {
         args: ["-NoProfile", "-Command"],
-        wrapCommand: (cmd) => `${cmd}; Write-Host "${cwdSentinel}$(Get-Location)"`,
+        wrapCommand: (cmd) =>
+          `${cmd}; $$__oc_exit = $$LASTEXITCODE; Write-Host "${cwdSentinel}$$__oc_exit:$$(Get-Location)"; exit $$__oc_exit`,
       },
       pwsh: {
         args: ["-NoProfile", "-Command"],
-        wrapCommand: (cmd) => `${cmd}; Write-Host "${cwdSentinel}$(Get-Location)"`,
+        wrapCommand: (cmd) =>
+          `${cmd}; $$__oc_exit = $$LASTEXITCODE; Write-Host "${cwdSentinel}$$__oc_exit:$$(Get-Location)"; exit $$__oc_exit`,
       },
       // Fallback: any shell that doesn't match those above (POSIX compatible)
       "": {
         args: ["-c"],
-        wrapCommand: (cmd) => `${cmd}; echo "${cwdSentinel}$(pwd -P 2>/dev/null || pwd)"`,
+        wrapCommand: (cmd) =>
+          `${cmd}; __oc_exit=$?; echo "${cwdSentinel}$__oc_exit:$(pwd -P 2>/dev/null || pwd)"; exit $__oc_exit`,
       },
     }
 
@@ -1583,19 +1594,27 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
     }
 
-    // Extract and update the working directory from the sentinel
+    // Extract the working directory and command exit code from the sentinel.
+    // Sentinel format: SENTINEL:<exitCode>:<cwd>
     const sentinelIndex = output.lastIndexOf(cwdSentinel)
     let cleanOutput = output
+    let commandExitCode: number | null = exitCode
     if (sentinelIndex !== -1) {
-      // Extract the cwd from after the sentinel
       const afterSentinel = output.slice(sentinelIndex + cwdSentinel.length)
       const newlineIndex = afterSentinel.indexOf("\n")
-      const newCwd = (newlineIndex !== -1 ? afterSentinel.slice(0, newlineIndex) : afterSentinel).trim()
-      if (newCwd) {
-        setCwd(newCwd)
+      const payload = (newlineIndex !== -1 ? afterSentinel.slice(0, newlineIndex) : afterSentinel).trim()
+      // Parse exitCode:cwd from payload
+      const colonIndex = payload.indexOf(":")
+      if (colonIndex !== -1) {
+        const code = parseInt(payload.slice(0, colonIndex), 10)
+        if (!isNaN(code)) commandExitCode = code
+        const newCwd = payload.slice(colonIndex + 1).trim()
+        if (newCwd) setCwd(newCwd)
+      } else if (payload) {
+        // Fallback: old format without exit code — treat entire payload as cwd
+        setCwd(payload)
       }
       // Strip the sentinel line from the output
-      // Find the start of the line containing the sentinel
       let lineStart = sentinelIndex
       while (lineStart > 0 && output[lineStart - 1] !== "\n") {
         lineStart--
@@ -1603,8 +1622,10 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       cleanOutput = output.slice(0, lineStart).trimEnd()
     }
 
-    // Detect if the user likely typed natural language instead of a shell command
-    const hint = detectNaturalLanguage(input.command, cleanOutput, exitCode)
+    // Detect if the user likely typed natural language instead of a shell command.
+    // Use commandExitCode (the eval'd command's exit code) rather than exitCode
+    // (the wrapper shell's exit code, which is always 0 due to the sentinel echo).
+    const hint = detectNaturalLanguage(input.command, cleanOutput, commandExitCode)
 
     msg.time.completed = Date.now()
     msg.finish = hint ? "tool-calls" : undefined
@@ -1620,19 +1641,22 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         title: "",
         metadata: {
           output: cleanOutput,
-          exit: exitCode,
+          exit: commandExitCode,
           description: "",
-          ...(hint ? { hint } : {}),
         },
         output: cleanOutput,
       }
       await Session.updatePart(part)
     }
 
-    // When natural language is detected, re-prompt the agent with the original input
+    // When natural language is detected, automatically route to the agent.
+    // Create a follow-up user message with the original input, then hand off
+    // to the normal agent loop. We must release the session mutex before
+    // calling loop() so it can acquire a fresh one.
     if (hint) {
-      const agent = await Agent.get(input.agent)
-      const model = input.model ?? agent.model ?? (await lastModel(input.sessionID))
+      log.info("shell nl reroute", { sessionID: input.sessionID, command: input.command })
+      const nlAgent = await Agent.get(input.agent)
+      const nlModel = input.model ?? nlAgent.model ?? (await lastModel(input.sessionID))
       const followUp: MessageV2.User = {
         id: Identifier.ascending("message"),
         sessionID: input.sessionID,
@@ -1640,8 +1664,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         time: { created: Date.now() },
         agent: input.agent,
         model: {
-          providerID: model.providerID,
-          modelID: model.modelID,
+          providerID: nlModel.providerID,
+          modelID: nlModel.modelID,
         },
       }
       await Session.updateMessage(followUp)
@@ -1652,6 +1676,8 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         type: "text",
         text: input.command,
       })
+      cancel(input.sessionID)
+      handedOff = true
       return loop(input.sessionID)
     }
 
