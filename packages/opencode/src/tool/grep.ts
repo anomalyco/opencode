@@ -6,6 +6,7 @@ import DESCRIPTION from "./grep.txt"
 import { Instance } from "../project/instance"
 import path from "path"
 import { assertExternalDirectory } from "./external-directory"
+import { getCwd } from "@shell-mode"
 
 const MAX_LINE_LENGTH = 2000
 
@@ -32,7 +33,7 @@ export const GrepTool = Tool.define("grep", {
       },
     })
 
-    const cwd = ctx.cwd || Instance.directory
+    const cwd = ctx.cwd || getCwd()
     let searchPath = params.path ?? cwd
     searchPath = path.isAbsolute(searchPath) ? searchPath : path.resolve(cwd, searchPath)
     await assertExternalDirectory(ctx, searchPath, { kind: "directory" })

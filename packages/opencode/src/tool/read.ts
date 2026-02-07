@@ -9,6 +9,7 @@ import { Instance } from "../project/instance"
 import { Identifier } from "../id/id"
 import { assertExternalDirectory } from "./external-directory"
 import { InstructionPrompt } from "../session/instruction"
+import { getCwd } from "@shell-mode"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -24,7 +25,7 @@ export const ReadTool = Tool.define("read", {
   async execute(params, ctx) {
     let filepath = params.filePath
     if (!path.isAbsolute(filepath)) {
-      filepath = path.resolve(Instance.directory, filepath)
+      filepath = path.resolve(getCwd(), filepath)
     }
     const title = path.relative(Instance.worktree, filepath)
 

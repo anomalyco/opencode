@@ -13,6 +13,7 @@ import { useKeybind } from "@tui/context/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { usePromptStash } from "./stash"
 import { DialogStash } from "../dialog-stash"
+import { DialogExecutionMode } from "../dialog-execution-mode"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useCommandDialog } from "../dialog-command"
 import { useRenderer } from "@opentui/solid"
@@ -31,7 +32,15 @@ import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
-import { useExecutionMode, handleModeToggleKey, determineRouting, handleShellTabCompletion, shouldUseShellCompletion, applyCompletionAtIndex, type CompletionCycleState } from "@tui-integration"
+import {
+  useExecutionMode,
+  handleModeToggleKey,
+  determineRouting,
+  handleShellTabCompletion,
+  shouldUseShellCompletion,
+  applyCompletionAtIndex,
+  type CompletionCycleState,
+} from "@tui-integration"
 import { ExecutionMode } from "@shell-mode"
 import { DialogSkill } from "../dialog-skill"
 
@@ -462,12 +471,11 @@ export function Prompt(props: PromptProps) {
 
   command.register(() => [
     {
-      title: `Toggle execution mode (${executionMode.getModeDisplay().name})`,
-      value: "mode.toggle",
+      title: `Switch execution mode (${executionMode.getModeDisplay().name.trim()})`,
+      value: "mode.list",
       category: "Session",
-      onSelect: (dialog) => {
-        executionMode.toggleMode()
-        dialog.clear()
+      onSelect: () => {
+        dialog.replace(() => <DialogExecutionMode />)
       },
     },
     {
@@ -541,9 +549,9 @@ export function Prompt(props: PromptProps) {
     const sessionID = props.sessionID
       ? props.sessionID
       : await (async () => {
-        const sessionID = await sdk.client.session.create({}).then((x) => x.data!.id)
-        return sessionID
-      })()
+          const sessionID = await sdk.client.session.create({}).then((x) => x.data!.id)
+          return sessionID
+        })()
     const messageID = Identifier.ascending("message")
     let inputText = store.prompt.input
 
@@ -635,7 +643,7 @@ export function Prompt(props: PromptProps) {
             })),
           ],
         })
-        .catch(() => { })
+        .catch(() => {})
     }
     history.append({
       ...store.prompt,
@@ -980,7 +988,8 @@ export function Prompt(props: PromptProps) {
                         return
                       }
 
-                      if (keybind.match("history_previous", e) && input.visualCursor.visualRow === 0) input.cursorOffset = 0
+                      if (keybind.match("history_previous", e) && input.visualCursor.visualRow === 0)
+                        input.cursorOffset = 0
                       if (keybind.match("history_next", e) && input.visualCursor.visualRow === input.height - 1)
                         input.cursorOffset = input.plainText.length
                     }
@@ -1012,7 +1021,7 @@ export function Prompt(props: PromptProps) {
                         // Handle SVG as raw text content, not as base64 image
                         if (file.type === "image/svg+xml") {
                           event.preventDefault()
-                          const content = await file.text().catch(() => { })
+                          const content = await file.text().catch(() => {})
                           if (content) {
                             pasteText(content, `[SVG: ${file.name ?? "image"}]`)
                             return
@@ -1023,7 +1032,7 @@ export function Prompt(props: PromptProps) {
                           const content = await file
                             .arrayBuffer()
                             .then((buffer) => Buffer.from(buffer).toString("base64"))
-                            .catch(() => { })
+                            .catch(() => {})
                           if (content) {
                             await pasteImage({
                               filename: file.name,
@@ -1033,7 +1042,7 @@ export function Prompt(props: PromptProps) {
                             return
                           }
                         }
-                      } catch { }
+                      } catch {}
                     }
 
                     const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
@@ -1074,9 +1083,7 @@ export function Prompt(props: PromptProps) {
               </box>
             </box>
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
-              <text fg={highlight()}>
-                {Locale.titlecase(local.agent.current().name)}{" "}
-              </text>
+              <text fg={highlight()}>{Locale.titlecase(local.agent.current().name)} </text>
               <Show when={store.mode === "normal"}>
                 <box flexDirection="row" gap={1}>
                   <text flexShrink={0} fg={keybind.leader ? theme.textMuted : theme.text}>
@@ -1110,18 +1117,27 @@ export function Prompt(props: PromptProps) {
             customBorderChars={
               theme.backgroundElement.a !== 0
                 ? {
-                  ...EmptyBorder,
-                  horizontal: "▀",
-                }
+                    ...EmptyBorder,
+                    horizontal: "▀",
+                  }
                 : {
-                  ...EmptyBorder,
-                  horizontal: " ",
-                }
+                    ...EmptyBorder,
+                    horizontal: " ",
+                  }
             }
           />
         </box>
         <box flexDirection="row" justifyContent="space-between">
-          <Show when={status().type !== "idle"} fallback={props.showWorkingDirectory !== false && <text fg={theme.textMuted} marginLeft={1}>{shortenedWorkingDir()}</text>}>
+          <Show
+            when={status().type !== "idle"}
+            fallback={
+              props.showWorkingDirectory !== false && (
+                <text fg={theme.textMuted} marginLeft={1}>
+                  {shortenedWorkingDir()}
+                </text>
+              )
+            }
+          >
             <box
               flexDirection="row"
               gap={1}
@@ -1204,7 +1220,8 @@ export function Prompt(props: PromptProps) {
           <Show when={status().type !== "retry"}>
             <box gap={2} flexDirection="row">
               <text fg={theme.text}>
-                {keybind.print("mode_toggle")} <span style={{ fg: modePrefixColor() }}>{executionMode.getModeDisplay().name}</span>
+                {keybind.print("mode_toggle")}{" "}
+                <span style={{ fg: modePrefixColor() }}>{executionMode.getModeDisplay().name}</span>
               </text>
               <Show when={lastUserMessage() === undefined}>
                 <Show when={local.model.variant.list().length > 0}>

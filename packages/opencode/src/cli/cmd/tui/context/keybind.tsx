@@ -76,6 +76,10 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
         if (evt.name === "\x1F") {
           return Keybind.fromParsedKey({ ...evt, name: "_", ctrl: true }, store.leader)
         }
+        // Normalize space character to "space" name (Kitty protocol sends " " instead of "space")
+        if (evt.name === " ") {
+          return Keybind.fromParsedKey({ ...evt, name: "space" }, store.leader)
+        }
         return Keybind.fromParsedKey(evt, store.leader)
       },
       match(key: keyof KeybindsConfig, evt: ParsedKey) {

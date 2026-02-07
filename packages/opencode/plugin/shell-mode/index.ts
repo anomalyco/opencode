@@ -5,7 +5,7 @@
  * Auto mode uses `command -v` to intelligently route input.
  */
 
-export { ExecutionMode, ModeController, getModeController, type ModeDisplay } from "./mode"
+export { ExecutionMode, ModeController, getModeController, getModeDisplay, type ModeDisplay } from "./mode"
 export { shouldRouteToShell } from "./command-check"
 export { getCwd, setCwd, resetCwd, CwdEvent } from "./cwd"
 export {
@@ -15,9 +15,4 @@ export {
   type ExecOptions,
   type ExecResult,
 } from "./session-shell"
-export {
-  getCompletions,
-  applyCompletion,
-  findCommonPrefix,
-  type CompletionResult,
-} from "./completion"
+export { getCompletions, applyCompletion, findCommonPrefix, type CompletionResult } from "./completion"

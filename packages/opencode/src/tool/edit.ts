@@ -17,6 +17,7 @@ import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
 import { Snapshot } from "@/snapshot"
 import { assertExternalDirectory } from "./external-directory"
+import { getCwd } from "@shell-mode"
 
 const MAX_DIAGNOSTICS_PER_FILE = 20
 
@@ -41,7 +42,7 @@ export const EditTool = Tool.define("edit", {
       throw new Error("oldString and newString must be different")
     }
 
-    const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(Instance.directory, params.filePath)
+    const filePath = path.isAbsolute(params.filePath) ? params.filePath : path.join(getCwd(), params.filePath)
     await assertExternalDirectory(ctx, filePath)
 
     let diff = ""
