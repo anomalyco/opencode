@@ -1,0 +1,72 @@
+import type { TextareaRenderable } from "@opentui/core"
+
+function lineStart(text: string, offset: number) {
+  const index = text.lastIndexOf("\n", Math.max(0, offset - 1))
+  if (index === -1) return 0
+  return index + 1
+}
+
+function lineEnd(text: string, offset: number) {
+  const index = text.indexOf("\n", offset)
+  if (index === -1) return text.length
+  return index
+}
+
+function lineLast(text: string, offset: number) {
+  const start = lineStart(text, offset)
+  const end = lineEnd(text, offset)
+  if (end > start) return end - 1
+  return start
+}
+
+function prevLineStart(text: string, offset: number) {
+  const start = lineStart(text, offset)
+  if (start === 0) return undefined
+  return lineStart(text, start - 1)
+}
+
+function nextLineStart(text: string, offset: number) {
+  const end = lineEnd(text, offset)
+  if (end >= text.length) return undefined
+  return end + 1
+}
+
+function moveUp(text: string, offset: number) {
+  const currentStart = lineStart(text, offset)
+  const targetStart = prevLineStart(text, offset)
+  if (targetStart === undefined) return offset
+  const targetLast = lineLast(text, targetStart)
+  const col = offset - currentStart
+  return Math.min(targetStart + col, targetLast)
+}
+
+function moveDown(text: string, offset: number) {
+  const currentStart = lineStart(text, offset)
+  const targetStart = nextLineStart(text, offset)
+  if (targetStart === undefined) return offset
+  const targetLast = lineLast(text, targetStart)
+  const col = offset - currentStart
+  return Math.min(targetStart + col, targetLast)
+}
+
+export function moveLeft(textarea: TextareaRenderable) {
+  const text = textarea.plainText
+  const start = lineStart(text, textarea.cursorOffset)
+  textarea.cursorOffset = Math.max(start, textarea.cursorOffset - 1)
+}
+
+export function moveRight(textarea: TextareaRenderable) {
+  const text = textarea.plainText
+  const last = lineLast(text, textarea.cursorOffset)
+  textarea.cursorOffset = Math.min(last, textarea.cursorOffset + 1)
+}
+
+export function moveLineUp(textarea: TextareaRenderable) {
+  const text = textarea.plainText
+  textarea.cursorOffset = moveUp(text, textarea.cursorOffset)
+}
+
+export function moveLineDown(textarea: TextareaRenderable) {
+  const text = textarea.plainText
+  textarea.cursorOffset = moveDown(text, textarea.cursorOffset)
+}

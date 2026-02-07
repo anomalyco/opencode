@@ -1,5 +1,7 @@
 import type { Accessor } from "solid-js"
 import type { createVimState } from "./vim-state"
+import type { TextareaRenderable } from "@opentui/core"
+import { moveLeft, moveLineDown, moveLineUp, moveRight } from "./vim-motions"
 
 export type VimEvent = {
   name?: string
@@ -13,6 +15,7 @@ export type VimEvent = {
 export function createVimHandler(input: {
   enabled: Accessor<boolean>
   state: ReturnType<typeof createVimState>
+  textarea: Accessor<TextareaRenderable>
   submit: () => void
 }) {
   function hasModifier(event: VimEvent) {
@@ -43,6 +46,30 @@ export function createVimHandler(input: {
 
       if (key === "i" && !event.shift && !hasModifier(event)) {
         input.state.setMode("insert")
+        event.preventDefault()
+        return true
+      }
+
+      if (key === "h" && !event.shift && !hasModifier(event)) {
+        moveLeft(input.textarea())
+        event.preventDefault()
+        return true
+      }
+
+      if (key === "l" && !event.shift && !hasModifier(event)) {
+        moveRight(input.textarea())
+        event.preventDefault()
+        return true
+      }
+
+      if (key === "j" && !event.shift && !hasModifier(event)) {
+        moveLineDown(input.textarea())
+        event.preventDefault()
+        return true
+      }
+
+      if (key === "k" && !event.shift && !hasModifier(event)) {
+        moveLineUp(input.textarea())
         event.preventDefault()
         return true
       }
