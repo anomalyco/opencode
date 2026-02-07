@@ -152,7 +152,9 @@ export function SessionSidePanel(props: {
                               variant="ghost"
                               iconSize="large"
                               onClick={() =>
-                                props.dialog.show(() => <DialogSelectFile mode="files" onOpenFile={props.showAllFiles} />)
+                                props.dialog.show(() => (
+                                  <DialogSelectFile mode="files" onOpenFile={props.showAllFiles} />
+                                ))
                               }
                               aria-label={props.language.t("command.file.open")}
                             />
