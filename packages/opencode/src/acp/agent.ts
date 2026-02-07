@@ -43,7 +43,7 @@ import { LoadAPIKeyError } from "ai"
 import type { AssistantMessage, Event, OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
 import { applyPatch } from "diff"
 
-type ModeOption = { id: string; name: string; description?: string }
+type ModeOption = { id: string; name: string; description?: string; mode?: string }
 type ModelOption = { modelId: string; name: string }
 
 const DEFAULT_VARIANT_VALUE = "default"
@@ -1052,11 +1052,12 @@ export namespace ACP {
         .then((resp) => resp.data!)
 
       return agents
-        .filter((agent) => agent.mode !== "subagent" && !agent.hidden)
+        .filter((agent) => !agent.hidden)
         .map((agent) => ({
           id: agent.name,
           name: agent.name,
           description: agent.description,
+          mode: agent.mode,
         }))
     }
 
