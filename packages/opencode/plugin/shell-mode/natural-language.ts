@@ -158,9 +158,10 @@ const NATURAL_LANGUAGE_WORDS = new Set([
 
 /**
  * Minimum word count for the input to be considered potentially natural language.
- * Single-word or two-word inputs are usually real commands.
+ * Single-word inputs are usually real commands (`ls`, `git`), but two-word inputs
+ * like "go ahead" or "make sure" are often natural language when the command errors.
  */
-const MIN_WORD_COUNT = 3
+const MIN_WORD_COUNT = 2
 
 /**
  * Detect if a failed shell command was likely natural language.
@@ -187,9 +188,9 @@ export function detectNaturalLanguage(input: string, output: string, exitCode: n
     return "This looks like a question for the agent. Try again without shell mode, or press Ctrl+Space to switch to Agent mode."
   }
 
-  // Even without a natural language second word, if we have enough words
+  // Even without a natural language second word, if we have many words
   // and a parse/syntax error, it's likely natural language
-  if (words.length >= 5 && /parse error|syntax error|unexpected token/i.test(output)) {
+  if (words.length >= 4 && /parse error|syntax error|unexpected token/i.test(output)) {
     return "This looks like a question for the agent. Try again without shell mode, or press Ctrl+Space to switch to Agent mode."
   }
 

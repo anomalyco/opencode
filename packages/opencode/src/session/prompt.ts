@@ -1607,6 +1607,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     const hint = detectNaturalLanguage(input.command, cleanOutput, exitCode)
 
     msg.time.completed = Date.now()
+    msg.finish = hint ? "tool-calls" : undefined
     await Session.updateMessage(msg)
     if (part.state.status === "running") {
       part.state = {
@@ -1627,6 +1628,33 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       }
       await Session.updatePart(part)
     }
+
+    // When natural language is detected, re-prompt the agent with the original input
+    if (hint) {
+      const agent = await Agent.get(input.agent)
+      const model = input.model ?? agent.model ?? (await lastModel(input.sessionID))
+      const followUp: MessageV2.User = {
+        id: Identifier.ascending("message"),
+        sessionID: input.sessionID,
+        role: "user",
+        time: { created: Date.now() },
+        agent: input.agent,
+        model: {
+          providerID: model.providerID,
+          modelID: model.modelID,
+        },
+      }
+      await Session.updateMessage(followUp)
+      await Session.updatePart({
+        id: Identifier.ascending("part"),
+        messageID: followUp.id,
+        sessionID: input.sessionID,
+        type: "text",
+        text: input.command,
+      })
+      return loop(input.sessionID)
+    }
+
     return { info: msg, parts: [part] }
   }
 
