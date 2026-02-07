@@ -271,11 +271,11 @@ This project uses [vouch](https://github.com/mitchellh/vouch) to manage contribu
 
 ### For maintainers
 
-Collaborators with write access can manage the vouch list by commenting on any issue or discussion:
+Collaborators with write access can manage the vouch list by commenting on any issue:
 
-- `vouch` — vouch for the issue/discussion author
+- `vouch` — vouch for the issue author
 - `vouch @username` — vouch for a specific user
-- `denounce` — denounce the issue/discussion author
+- `denounce` — denounce the issue author
 - `denounce @username` — denounce a specific user
 - `denounce @username <reason>` — denounce with a reason
 - `unvouch` / `unvouch @username` — remove someone from the list
