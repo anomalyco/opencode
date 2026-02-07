@@ -216,6 +216,7 @@ export const dict = {
   "prompt.popover.emptyResults": "ไม่พบผลลัพธ์ที่ตรงกัน",
   "prompt.popover.emptyCommands": "ไม่พบคำสั่งที่ตรงกัน",
   "prompt.dropzone.label": "วางรูปภาพหรือ PDF ที่นี่",
+  "prompt.dropzone.file.label": "วางเพื่อ @กล่าวถึงไฟล์",
   "prompt.slash.badge.custom": "กำหนดเอง",
   "prompt.slash.badge.skill": "skill",
   "prompt.slash.badge.mcp": "mcp",

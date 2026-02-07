@@ -210,6 +210,7 @@ export const dict = {
   "prompt.popover.emptyResults": "一致する結果がありません",
   "prompt.popover.emptyCommands": "一致するコマンドがありません",
   "prompt.dropzone.label": "画像またはPDFをここにドロップ",
+  "prompt.dropzone.file.label": "ドロップして@メンションファイルを追加",
   "prompt.slash.badge.custom": "カスタム",
   "prompt.slash.badge.skill": "スキル",
   "prompt.slash.badge.mcp": "mcp",

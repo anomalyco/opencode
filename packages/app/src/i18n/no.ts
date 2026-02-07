@@ -214,6 +214,7 @@ export const dict = {
   "prompt.popover.emptyResults": "Ingen matchende resultater",
   "prompt.popover.emptyCommands": "Ingen matchende kommandoer",
   "prompt.dropzone.label": "Slipp bilder eller PDF-er her",
+  "prompt.dropzone.file.label": "Slipp for å @nevne fil",
   "prompt.slash.badge.custom": "egendefinert",
   "prompt.slash.badge.skill": "skill",
   "prompt.slash.badge.mcp": "mcp",

@@ -211,6 +211,7 @@ export const dict = {
   "prompt.popover.emptyResults": "Nenhum resultado correspondente",
   "prompt.popover.emptyCommands": "Nenhum comando correspondente",
   "prompt.dropzone.label": "Solte imagens ou PDFs aqui",
+  "prompt.dropzone.file.label": "Solte para @mencionar arquivo",
   "prompt.slash.badge.custom": "personalizado",
   "prompt.slash.badge.skill": "skill",
   "prompt.slash.badge.mcp": "mcp",
