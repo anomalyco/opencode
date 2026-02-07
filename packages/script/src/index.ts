@@ -35,7 +35,7 @@ const IS_PREVIEW = CHANNEL !== "latest"
 const VERSION = await (async () => {
   if (env.OPENCODE_VERSION) return env.OPENCODE_VERSION
   if (IS_PREVIEW) return `0.0.0-${CHANNEL}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
-  const version = await fetch("https://registry.npmjs.org/lash-cli/latest")
+  const version = await fetch("https://registry.npmjs.org/lashcode/latest")
     .then((res) => {
       if (!res.ok) throw new Error(res.statusText)
       return res.json()
@@ -48,9 +48,7 @@ const VERSION = await (async () => {
   patch++
 
   // Advance past any existing git tags to avoid conflicts
-  const existingTags = new Set(
-    await $`git tag -l`.text().then((t) => t.trim().split("\n")),
-  )
+  const existingTags = new Set(await $`git tag -l`.text().then((t) => t.trim().split("\n")))
   while (existingTags.has(`v${major}.${minor}.${patch}`)) {
     patch++
   }
