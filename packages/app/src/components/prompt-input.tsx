@@ -205,7 +205,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     historyIndex: number
     savedPrompt: Prompt | null
     placeholder: number
-    dragging: boolean
+    draggingType: "image" | "@mention" | null
     mode: "normal" | "shell"
     applyingHistory: boolean
   }>({
@@ -213,7 +213,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     historyIndex: -1,
     savedPrompt: null,
     placeholder: Math.floor(Math.random() * EXAMPLES.length),
-    dragging: false,
+    draggingType: null,
     mode: "normal",
     applyingHistory: false,
   })
@@ -760,7 +760,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     editor: () => editorRef,
     isFocused,
     isDialogActive: () => !!dialog.active,
-    setDragging: (value) => setStore("dragging", value),
+    setDraggingType: (type) => setStore("draggingType", type),
+    focusEditor: () => {
+      editorRef.focus()
+      setCursorPosition(editorRef, promptLength(prompt.current()))
+    },
     addPart,
   })
 
@@ -946,11 +950,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           "group/prompt-input": true,
           "bg-surface-raised-stronger-non-alpha shadow-xs-border relative": true,
           "rounded-[14px] overflow-clip focus-within:shadow-xs-border": true,
-          "border-icon-info-active border-dashed": store.dragging,
+          "border-icon-info-active border-dashed": store.draggingType !== null,
           [props.class ?? ""]: !!props.class,
         }}
       >
-        <PromptDragOverlay dragging={store.dragging} label={language.t("prompt.dropzone.label")} />
+        <PromptDragOverlay
+          type={store.draggingType}
+          label={language.t(store.draggingType === "@mention" ? "prompt.dropzone.file.label" : "prompt.dropzone.label")}
+        />
         <PromptContextItems
           items={prompt.context.items()}
           active={(item) => {
@@ -983,6 +990,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             aria-multiline="true"
             aria-label={placeholder()}
             contenteditable="true"
+            autocapitalize="off"
+            autocorrect="off"
+            spellcheck={false}
             onInput={handleInput}
             onPaste={handlePaste}
             onCompositionStart={() => setComposing(true)}
