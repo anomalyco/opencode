@@ -60,6 +60,7 @@ export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
   let anchor: BoxRenderable
   let autocomplete: AutocompleteRef
+  let clearInputTimer: ReturnType<typeof setTimeout> | undefined
 
   const keybind = useKeybind()
   const local = useLocal()
@@ -124,6 +125,7 @@ export function Prompt(props: PromptProps) {
     extmarkToPartIndex: Map<number, number>
     interrupt: number
     placeholder: number
+    clearCount: number
   }>({
     placeholder: Math.floor(Math.random() * PLACEHOLDERS.length),
     prompt: {
@@ -133,6 +135,7 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
+    clearCount: 0,
   })
 
   createEffect(
@@ -164,6 +167,18 @@ export function Prompt(props: PromptProps) {
         if (msg.variant) local.model.variant.set(msg.variant)
       }
     }
+  })
+
+  function scheduleClearReset() {
+    if (clearInputTimer) clearTimeout(clearInputTimer)
+    clearInputTimer = setTimeout(() => {
+      setStore("clearCount", 0)
+      clearInputTimer = undefined
+    }, 2000)
+  }
+
+  onCleanup(() => {
+    if (clearInputTimer) clearTimeout(clearInputTimer)
   })
 
   command.register(() => {
@@ -852,14 +867,21 @@ export function Prompt(props: PromptProps) {
                   // If no image, let the default paste behavior continue
                 }
                 if (keybind.match("input_clear", e) && store.prompt.input !== "") {
-                  input.clear()
-                  input.extmarks.clear()
-                  setStore("prompt", {
-                    input: "",
-                    parts: [],
-                  })
-                  setStore("extmarkToPartIndex", new Map())
-                  return
+                  setStore("clearCount", store.clearCount + 1)
+                  if (store.clearCount >= 2) {
+                    if (clearInputTimer) clearTimeout(clearInputTimer)
+                    clearInputTimer = undefined
+                    input.clear()
+                    input.extmarks.clear()
+                    setStore("prompt", {
+                      input: "",
+                      parts: [],
+                    })
+                    setStore("extmarkToPartIndex", new Map())
+                    setStore("clearCount", 0)
+                    return
+                  }
+                  scheduleClearReset()
                 }
                 if (keybind.match("app_exit", e)) {
                   if (store.prompt.input === "") {
@@ -1012,6 +1034,13 @@ export function Prompt(props: PromptProps) {
                   </Show>
                 </box>
               </Show>
+              <box marginLeft={"auto"} flexShrink={0} flexDirection="row">
+                <Show when={store.clearCount > 0}>
+                  <text fg={theme.textMuted}>
+                    <span style={{ fg: theme.text }}>{keybind.print("input_clear")}</span> again to clear
+                  </text>
+                </Show>
+              </box>
             </box>
           </box>
         </box>
