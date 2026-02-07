@@ -76,7 +76,77 @@ IMPORTANT:
 - Complete all necessary research and tool calls BEFORE calling this tool
 - This tool provides your final answer - no further actions are taken after calling it`
 
-const STRUCTURED_OUTPUT_SYSTEM_PROMPT = `IMPORTANT: The user has requested structured output. You MUST use the StructuredOutput tool to provide your final response. Do NOT respond with plain text - you MUST call the StructuredOutput tool with your answer formatted according to the schema.`
+  export const PromptInput = z.object({
+    sessionID: Identifier.schema("session"),
+    messageID: Identifier.schema("message").optional(),
+    model: z
+      .object({
+        providerID: z.string(),
+        modelID: z.string(),
+      })
+      .optional(),
+    agent: z.string().optional(),
+    noReply: z.boolean().optional(),
+    tools: z
+      .record(z.string(), z.boolean())
+      .optional()
+      .describe(
+        "@deprecated tools and permissions have been merged, you can set permissions on the session itself now",
+      ),
+    system: z.string().optional(),
+    variant: z.string().optional(),
+    command: z
+      .object({
+        name: z.string(),
+        source: z.enum(["command", "mcp", "skill"]).optional(),
+      })
+      .optional(),
+    parts: z.array(
+      z.discriminatedUnion("type", [
+        MessageV2.TextPart.omit({
+          messageID: true,
+          sessionID: true,
+        })
+          .partial({
+            id: true,
+          })
+          .meta({
+            ref: "TextPartInput",
+          }),
+        MessageV2.FilePart.omit({
+          messageID: true,
+          sessionID: true,
+        })
+          .partial({
+            id: true,
+          })
+          .meta({
+            ref: "FilePartInput",
+          }),
+        MessageV2.AgentPart.omit({
+          messageID: true,
+          sessionID: true,
+        })
+          .partial({
+            id: true,
+          })
+          .meta({
+            ref: "AgentPartInput",
+          }),
+        MessageV2.SubtaskPart.omit({
+          messageID: true,
+          sessionID: true,
+        })
+          .partial({
+            id: true,
+          })
+          .meta({
+            ref: "SubtaskPartInput",
+          }),
+      ]),
+    ),
+  })
+  export type PromptInput = z.infer<typeof PromptInput>
 
 const log = Log.create({ service: "session.prompt" })
 const elog = EffectLogger.create({ service: "session.prompt" })
@@ -729,28 +799,21 @@ export const layer = Layer.effect(
         format: input.format,
       }
 
-      if (current?.agent !== info.agent) {
-        yield* events.publish(SessionEvent.AgentSwitched, {
-          sessionID: input.sessionID,
-          timestamp: DateTime.makeUnsafe(info.time.created),
-          agent: info.agent,
-        })
-      }
-      if (
-        current?.model?.providerID !== info.model.providerID ||
-        current.model.id !== info.model.modelID ||
-        (current.model.variant === "default" ? undefined : current.model.variant) !== info.model.variant
-      ) {
-        yield* events.publish(SessionEvent.ModelSwitched, {
-          sessionID: input.sessionID,
-          timestamp: DateTime.makeUnsafe(info.time.created),
-          model: {
-            id: ModelV2.ID.make(info.model.modelID),
-            providerID: ProviderV2.ID.make(info.model.providerID),
-            variant: ModelV2.VariantID.make(info.model.variant ?? "default"),
-          },
-        })
-      }
+    const info: MessageV2.Info = {
+      id: input.messageID ?? Identifier.ascending("message"),
+      role: "user",
+      sessionID: input.sessionID,
+      time: {
+        created: Date.now(),
+      },
+      tools: input.tools,
+      agent: agent.name,
+      model,
+      system: input.system,
+      variant,
+      command: input.command,
+    }
+    using _ = defer(() => InstructionPrompt.clear(info.id))
 
       yield* Effect.addFinalizer(() => instruction.clear(info.id))
 
@@ -1566,20 +1629,180 @@ export const layer = Layer.effect(
         throw error
       }
 
-      const templateParts = yield* resolvePromptParts(template)
-      const isSubtask = (agent.mode === "subagent" && cmd.subtask !== false) || cmd.subtask === true
-      const parts = isSubtask
-        ? [
-            {
-              type: "subtask" as const,
-              agent: agent.name,
-              description: cmd.description ?? "",
-              command: input.command,
-              model: { providerID: taskModel.providerID, modelID: taskModel.modelID },
-              prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
-            },
-          ]
-        : [...templateParts, ...(input.parts ?? [])]
+  export const CommandInput = z.object({
+    messageID: Identifier.schema("message").optional(),
+    sessionID: Identifier.schema("session"),
+    agent: z.string().optional(),
+    model: z.string().optional(),
+    arguments: z.string(),
+    command: z.string(),
+    variant: z.string().optional(),
+    parts: z
+      .array(
+        z.discriminatedUnion("type", [
+          MessageV2.FilePart.omit({
+            messageID: true,
+            sessionID: true,
+          }).partial({
+            id: true,
+          }),
+        ]),
+      )
+      .optional(),
+  })
+  export type CommandInput = z.infer<typeof CommandInput>
+  const bashRegex = /!`([^`]+)`/g
+  // Match [Image N] as single token, quoted strings, or non-space sequences
+  const argsRegex = /(?:\[Image\s+\d+\]|"[^"]*"|'[^']*'|[^\s"']+)/gi
+  const placeholderRegex = /\$(\d+)/g
+  const quoteTrimRegex = /^["']|["']$/g
+  /**
+   * Regular expression to match @ file references in text
+   * Matches @ followed by file paths, excluding commas, periods at end of sentences, and backticks
+   * Does not match when preceded by word characters or backticks (to avoid email addresses and quoted references)
+   */
+
+  export async function command(input: CommandInput) {
+    log.info("command", input)
+    const command = await Command.get(input.command)
+    const agentName = command.agent ?? input.agent ?? (await Agent.defaultAgent())
+
+    const raw = input.arguments.match(argsRegex) ?? []
+    const args = raw.map((arg) => arg.replace(quoteTrimRegex, ""))
+
+    const templateCommand = await command.template
+    const isSkill = command.source === "skill"
+
+    let template: string
+    if (isSkill) {
+      // Skills don't use $N placeholders — skip substitution to avoid
+      // corrupting LaTeX / currency patterns like $1, $2 in SKILL.md content.
+      // User arguments are appended via ARGUMENTS footer below.
+      template = templateCommand
+      if (input.arguments.trim()) {
+        template = template + "\n\nARGUMENTS: " + input.arguments
+      }
+    } else {
+      const placeholders = templateCommand.match(placeholderRegex) ?? []
+      let last = 0
+      for (const item of placeholders) {
+        const value = Number(item.slice(1))
+        if (value > last) last = value
+      }
+
+      // Let the final placeholder swallow any extra arguments so prompts read naturally
+      const withArgs = templateCommand.replaceAll(placeholderRegex, (_, index) => {
+        const position = Number(index)
+        const argIndex = position - 1
+        if (argIndex >= args.length) return ""
+        if (position === last) return args.slice(argIndex).join(" ")
+        return args[argIndex]
+      })
+      const usesArgumentsPlaceholder = templateCommand.includes("$ARGUMENTS")
+      template = withArgs.replaceAll("$ARGUMENTS", input.arguments)
+
+      // If command doesn't explicitly handle arguments (no $N or $ARGUMENTS placeholders)
+      // but user provided arguments, append them to the template
+      if (placeholders.length === 0 && !usesArgumentsPlaceholder && input.arguments.trim()) {
+        template = template + "\n\n" + input.arguments
+      }
+    }
+
+    const shell = ConfigMarkdown.shell(template)
+    if (shell.length > 0) {
+      const results = await Promise.all(
+        shell.map(async ([, cmd]) => {
+          try {
+            return await $`${{ raw: cmd }}`.quiet().nothrow().text()
+          } catch (error) {
+            return `Error executing command: ${error instanceof Error ? error.message : String(error)}`
+          }
+        }),
+      )
+      let index = 0
+      template = template.replace(bashRegex, () => results[index++])
+    }
+    template = template.trim()
+
+    const taskModel = await (async () => {
+      if (command.model) {
+        return Provider.parseModel(command.model)
+      }
+      if (command.agent) {
+        const cmdAgent = await Agent.get(command.agent)
+        if (cmdAgent?.model) {
+          return cmdAgent.model
+        }
+      }
+      if (input.model) return Provider.parseModel(input.model)
+      return await lastModel(input.sessionID)
+    })()
+
+    try {
+      await Provider.getModel(taskModel.providerID, taskModel.modelID)
+    } catch (e) {
+      if (Provider.ModelNotFoundError.isInstance(e)) {
+        const { providerID, modelID, suggestions } = e.data
+        const hint = suggestions?.length ? ` Did you mean: ${suggestions.join(", ")}?` : ""
+        Bus.publish(Session.Event.Error, {
+          sessionID: input.sessionID,
+          error: new NamedError.Unknown({ message: `Model not found: ${providerID}/${modelID}.${hint}` }).toObject(),
+        })
+      }
+      throw e
+    }
+    const agent = await Agent.get(agentName)
+    if (!agent) {
+      const available = await Agent.list().then((agents) => agents.filter((a) => !a.hidden).map((a) => a.name))
+      const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
+      const error = new NamedError.Unknown({ message: `Agent not found: "${agentName}".${hint}` })
+      Bus.publish(Session.Event.Error, {
+        sessionID: input.sessionID,
+        error: error.toObject(),
+      })
+      throw error
+    }
+
+    const templateParts = await resolvePromptParts(template)
+    const isSubtask = (agent.mode === "subagent" && command.subtask !== false) || command.subtask === true
+    let parts: typeof templateParts
+    if (isSubtask) {
+      parts = [
+        {
+          type: "subtask" as const,
+          agent: agent.name,
+          description: command.description ?? "",
+          command: input.command,
+          model: {
+            providerID: taskModel.providerID,
+            modelID: taskModel.modelID,
+          },
+          // TODO: how can we make task tool accept a more complex input?
+          prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
+        },
+      ]
+    } else if (isSkill) {
+      // For skills: user arguments are displayed as the primary message,
+      // the full skill template is sent as synthetic (hidden from UI, visible to LLM).
+      const skillParts: typeof templateParts = []
+      if (input.arguments.trim()) {
+        skillParts.push({
+          type: "text" as const,
+          text: input.arguments,
+        })
+      }
+      // Mark all template parts as synthetic so they're hidden from the user message display
+      for (const part of templateParts) {
+        if (part.type === "text") {
+          skillParts.push({ ...part, synthetic: true })
+        } else {
+          skillParts.push(part)
+        }
+      }
+      parts = [...skillParts, ...(input.parts ?? [])]
+    } else {
+      parts = [...templateParts, ...(input.parts ?? [])]
+    }
 
       const userAgent = isSubtask ? (input.agent ?? (yield* agents.defaultInfo()).name) : agent.name
       const userModel = isSubtask
@@ -1606,9 +1829,28 @@ export const layer = Layer.effect(
         name: input.command,
         sessionID: input.sessionID,
         arguments: input.arguments,
-        messageID: result.info.id,
-      })
-      return result
+      },
+      { parts },
+    )
+
+    const result = (await prompt({
+      sessionID: input.sessionID,
+      messageID: input.messageID,
+      model: userModel,
+      agent: userAgent,
+      parts,
+      variant: input.variant,
+      command: {
+        name: input.command,
+        source: command.source,
+      },
+    })) as MessageV2.WithParts
+
+    Bus.publish(Command.Event.Executed, {
+      name: input.command,
+      sessionID: input.sessionID,
+      arguments: input.arguments,
+      messageID: result.info.id,
     })
 
     return Service.of({

@@ -425,6 +425,56 @@ export type UserMessage = {
   tools?: {
     [key: string]: boolean
   }
+  variant?: string
+  command?: {
+    name: string
+    source?: "command" | "mcp" | "skill"
+  }
+}
+
+export type ProviderAuthError = {
+  name: "ProviderAuthError"
+  data: {
+    providerID: string
+    message: string
+  }
+}
+
+export type UnknownError = {
+  name: "UnknownError"
+  data: {
+    message: string
+  }
+}
+
+export type MessageOutputLengthError = {
+  name: "MessageOutputLengthError"
+  data: {
+    [key: string]: unknown
+  }
+}
+
+export type MessageAbortedError = {
+  name: "MessageAbortedError"
+  data: {
+    message: string
+  }
+}
+
+export type ApiError = {
+  name: "APIError"
+  data: {
+    message: string
+    statusCode?: number
+    isRetryable: boolean
+    responseHeaders?: {
+      [key: string]: string
+    }
+    responseBody?: string
+    metadata?: {
+      [key: string]: string
+    }
+  }
 }
 
 export type AssistantMessage = {
@@ -6383,6 +6433,10 @@ export type SessionPromptData = {
     format?: OutputFormat
     system?: string
     variant?: string
+    command?: {
+      name: string
+      source?: "command" | "mcp" | "skill"
+    }
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
@@ -6730,6 +6784,10 @@ export type SessionPromptAsyncData = {
     format?: OutputFormat
     system?: string
     variant?: string
+    command?: {
+      name: string
+      source?: "command" | "mcp" | "skill"
+    }
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {

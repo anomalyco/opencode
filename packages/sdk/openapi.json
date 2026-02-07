@@ -1561,7 +1561,2648 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.resource.list({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.status({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}": {
+      "get": {
+        "operationId": "session.get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Get session",
+        "description": "Retrieve detailed information about a specific OpenCode session.",
+        "tags": ["Session"],
+        "responses": {
+          "200": {
+            "description": "Get session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.get({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "session.delete",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Delete session",
+        "description": "Delete a session and permanently remove all associated data, including messages and history.",
+        "responses": {
+          "200": {
+            "description": "Successfully deleted session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.delete({\n  ...\n})"
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "session.update",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Update session",
+        "description": "Update properties of an existing session, such as title or other metadata.",
+        "responses": {
+          "200": {
+            "description": "Successfully updated session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "time": {
+                    "type": "object",
+                    "properties": {
+                      "archived": {
+                        "type": "number"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.update({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/children": {
+      "get": {
+        "operationId": "session.children",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Get session children",
+        "tags": ["Session"],
+        "description": "Retrieve all child sessions that were forked from the specified parent session.",
+        "responses": {
+          "200": {
+            "description": "List of children",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Session"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.children({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/todo": {
+      "get": {
+        "operationId": "session.todo",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Session ID"
+          }
+        ],
+        "summary": "Get session todos",
+        "description": "Retrieve the todo list associated with a specific session, showing tasks and action items.",
+        "responses": {
+          "200": {
+            "description": "Todo list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Todo"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.todo({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/init": {
+      "post": {
+        "operationId": "session.init",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Session ID"
+          }
+        ],
+        "summary": "Initialize session",
+        "description": "Analyze the current application and create an AGENTS.md file with project-specific agent configurations.",
+        "responses": {
+          "200": {
+            "description": "200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "modelID": {
+                    "type": "string"
+                  },
+                  "providerID": {
+                    "type": "string"
+                  },
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg.*"
+                  }
+                },
+                "required": ["modelID", "providerID", "messageID"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.init({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/fork": {
+      "post": {
+        "operationId": "session.fork",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Fork session",
+        "description": "Create a new session by forking an existing session at a specific message point.",
+        "responses": {
+          "200": {
+            "description": "200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg.*"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.fork({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/abort": {
+      "post": {
+        "operationId": "session.abort",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Abort session",
+        "description": "Abort an active session and stop any ongoing AI processing or command execution.",
+        "responses": {
+          "200": {
+            "description": "Aborted session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.abort({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/share": {
+      "post": {
+        "operationId": "session.share",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Share session",
+        "description": "Create a shareable link for a session, allowing others to view the conversation.",
+        "responses": {
+          "200": {
+            "description": "Successfully shared session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.share({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "session.unshare",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Unshare session",
+        "description": "Remove the shareable link for a session, making it private again.",
+        "responses": {
+          "200": {
+            "description": "Successfully unshared session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.unshare({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/diff": {
+      "get": {
+        "operationId": "session.diff",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses.*"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "messageID",
+            "schema": {
+              "type": "string",
+              "pattern": "^msg.*"
+            }
+          }
+        ],
+        "summary": "Get message diff",
+        "description": "Get the file changes (diff) that resulted from a specific user message in the session.",
+        "responses": {
+          "200": {
+            "description": "Successfully retrieved diff",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FileDiff"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.diff({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/summarize": {
+      "post": {
+        "operationId": "session.summarize",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Session ID"
+          }
+        ],
+        "summary": "Summarize session",
+        "description": "Generate a concise summary of the session using AI compaction to preserve key information.",
+        "responses": {
+          "200": {
+            "description": "Summarized session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "providerID": {
+                    "type": "string"
+                  },
+                  "modelID": {
+                    "type": "string"
+                  },
+                  "auto": {
+                    "default": false,
+                    "type": "boolean"
+                  }
+                },
+                "required": ["providerID", "modelID"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.summarize({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/message": {
+      "get": {
+        "operationId": "session.messages",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Session ID"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "summary": "Get session messages",
+        "description": "Retrieve all messages in a session, including user prompts and AI responses.",
+        "responses": {
+          "200": {
+            "description": "List of messages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "info": {
+                        "$ref": "#/components/schemas/Message"
+                      },
+                      "parts": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/components/schemas/Part"
+                        }
+                      }
+                    },
+                    "required": ["info", "parts"]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.messages({\n  ...\n})"
+          }
+        ]
+      },
+      "post": {
+        "operationId": "session.prompt",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Session ID"
+          }
+        ],
+        "summary": "Send message",
+        "description": "Create and send a new message to a session, streaming the AI response.",
+        "responses": {
+          "200": {
+            "description": "Created message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "info": {
+                      "$ref": "#/components/schemas/AssistantMessage"
+                    },
+                    "parts": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Part"
+                      }
+                    }
+                  },
+                  "required": ["info", "parts"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg.*"
+                  },
+                  "model": {
+                    "type": "object",
+                    "properties": {
+                      "providerID": {
+                        "type": "string"
+                      },
+                      "modelID": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["providerID", "modelID"]
+                  },
+                  "agent": {
+                    "type": "string"
+                  },
+                  "noReply": {
+                    "type": "boolean"
+                  },
+                  "tools": {
+                    "description": "@deprecated tools and permissions have been merged, you can set permissions on the session itself now",
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "boolean"
+                    }
+                  },
+                  "system": {
+                    "type": "string"
+                  },
+                  "variant": {
+                    "type": "string"
+                  },
+                  "command": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "source": {
+                        "type": "string",
+                        "enum": ["command", "mcp", "skill"]
+                      }
+                    },
+                    "required": ["name"]
+                  },
+                  "parts": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/TextPartInput"
+                        },
+                        {
+                          "$ref": "#/components/schemas/FilePartInput"
+                        },
+                        {
+                          "$ref": "#/components/schemas/AgentPartInput"
+                        },
+                        {
+                          "$ref": "#/components/schemas/SubtaskPartInput"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "required": ["parts"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.prompt({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/message/{messageID}": {
+      "get": {
+        "operationId": "session.message",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Session ID"
+          },
+          {
+            "in": "path",
+            "name": "messageID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Message ID"
+          }
+        ],
+        "summary": "Get message",
+        "description": "Retrieve a specific message from a session by its message ID.",
+        "responses": {
+          "200": {
+            "description": "Message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "info": {
+                      "$ref": "#/components/schemas/Message"
+                    },
+                    "parts": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Part"
+                      }
+                    }
+                  },
+                  "required": ["info", "parts"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.message({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/message/{messageID}/part/{partID}": {
+      "delete": {
+        "operationId": "part.delete",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Session ID"
+          },
+          {
+            "in": "path",
+            "name": "messageID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Message ID"
+          },
+          {
+            "in": "path",
+            "name": "partID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Part ID"
+          }
+        ],
+        "description": "Delete a part from a message",
+        "responses": {
+          "200": {
+            "description": "Successfully deleted part",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.part.delete({\n  ...\n})"
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "part.update",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Session ID"
+          },
+          {
+            "in": "path",
+            "name": "messageID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Message ID"
+          },
+          {
+            "in": "path",
+            "name": "partID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Part ID"
+          }
+        ],
+        "description": "Update a part in a message",
+        "responses": {
+          "200": {
+            "description": "Successfully updated part",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Part"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Part"
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.part.update({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/prompt_async": {
+      "post": {
+        "operationId": "session.prompt_async",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Session ID"
+          }
+        ],
+        "summary": "Send async message",
+        "description": "Create and send a new message to a session asynchronously, starting the session if needed and returning immediately.",
+        "responses": {
+          "204": {
+            "description": "Prompt accepted"
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg.*"
+                  },
+                  "model": {
+                    "type": "object",
+                    "properties": {
+                      "providerID": {
+                        "type": "string"
+                      },
+                      "modelID": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["providerID", "modelID"]
+                  },
+                  "agent": {
+                    "type": "string"
+                  },
+                  "noReply": {
+                    "type": "boolean"
+                  },
+                  "tools": {
+                    "description": "@deprecated tools and permissions have been merged, you can set permissions on the session itself now",
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "boolean"
+                    }
+                  },
+                  "system": {
+                    "type": "string"
+                  },
+                  "variant": {
+                    "type": "string"
+                  },
+                  "command": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "source": {
+                        "type": "string",
+                        "enum": ["command", "mcp", "skill"]
+                      }
+                    },
+                    "required": ["name"]
+                  },
+                  "parts": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/TextPartInput"
+                        },
+                        {
+                          "$ref": "#/components/schemas/FilePartInput"
+                        },
+                        {
+                          "$ref": "#/components/schemas/AgentPartInput"
+                        },
+                        {
+                          "$ref": "#/components/schemas/SubtaskPartInput"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "required": ["parts"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.prompt_async({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/command": {
+      "post": {
+        "operationId": "session.command",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Session ID"
+          }
+        ],
+        "summary": "Send command",
+        "description": "Send a new command to a session for execution by the AI assistant.",
+        "responses": {
+          "200": {
+            "description": "Created message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "info": {
+                      "$ref": "#/components/schemas/AssistantMessage"
+                    },
+                    "parts": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Part"
+                      }
+                    }
+                  },
+                  "required": ["info", "parts"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg.*"
+                  },
+                  "agent": {
+                    "type": "string"
+                  },
+                  "model": {
+                    "type": "string"
+                  },
+                  "arguments": {
+                    "type": "string"
+                  },
+                  "command": {
+                    "type": "string"
+                  },
+                  "variant": {
+                    "type": "string"
+                  },
+                  "parts": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string",
+                              "const": "file"
+                            },
+                            "mime": {
+                              "type": "string"
+                            },
+                            "filename": {
+                              "type": "string"
+                            },
+                            "url": {
+                              "type": "string"
+                            },
+                            "source": {
+                              "$ref": "#/components/schemas/FilePartSource"
+                            }
+                          },
+                          "required": ["type", "mime", "url"]
+                        }
+                      ]
+                    }
+                  }
+                },
+                "required": ["arguments", "command"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.command({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/shell": {
+      "post": {
+        "operationId": "session.shell",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Session ID"
+          }
+        ],
+        "summary": "Run shell command",
+        "description": "Execute a shell command within the session context and return the AI's response.",
+        "responses": {
+          "200": {
+            "description": "Created message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantMessage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "agent": {
+                    "type": "string"
+                  },
+                  "model": {
+                    "type": "object",
+                    "properties": {
+                      "providerID": {
+                        "type": "string"
+                      },
+                      "modelID": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["providerID", "modelID"]
+                  },
+                  "command": {
+                    "type": "string"
+                  }
+                },
+                "required": ["agent", "command"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.shell({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/revert": {
+      "post": {
+        "operationId": "session.revert",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Revert message",
+        "description": "Revert a specific message in a session, undoing its effects and restoring the previous state.",
+        "responses": {
+          "200": {
+            "description": "Updated session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg.*"
+                  },
+                  "partID": {
+                    "type": "string",
+                    "pattern": "^prt.*"
+                  }
+                },
+                "required": ["messageID"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.revert({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/unrevert": {
+      "post": {
+        "operationId": "session.unrevert",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Restore reverted messages",
+        "description": "Restore all previously reverted messages in a session.",
+        "responses": {
+          "200": {
+            "description": "Updated session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.session.unrevert({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/{sessionID}/permissions/{permissionID}": {
+      "post": {
+        "operationId": "permission.respond",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sessionID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "in": "path",
+            "name": "permissionID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Respond to permission",
+        "deprecated": true,
+        "description": "Approve or deny a permission request from the AI assistant.",
+        "responses": {
+          "200": {
+            "description": "Permission processed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "response": {
+                    "type": "string",
+                    "enum": ["once", "always", "reject"]
+                  }
+                },
+                "required": ["response"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.permission.respond({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/permission/{requestID}/reply": {
+      "post": {
+        "operationId": "permission.reply",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "requestID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Respond to permission request",
+        "description": "Approve or deny a permission request from the AI assistant.",
+        "responses": {
+          "200": {
+            "description": "Permission processed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reply": {
+                    "type": "string",
+                    "enum": ["once", "always", "reject"]
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": ["reply"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.permission.reply({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/permission": {
+      "get": {
+        "operationId": "permission.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List pending permissions",
+        "description": "Get all pending permission requests across all sessions.",
+        "responses": {
+          "200": {
+            "description": "List of pending permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PermissionRequest"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.permission.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/question": {
+      "get": {
+        "operationId": "question.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List pending questions",
+        "description": "Get all pending question requests across all sessions.",
+        "responses": {
+          "200": {
+            "description": "List of pending questions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/QuestionRequest"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.question.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/question/{requestID}/reply": {
+      "post": {
+        "operationId": "question.reply",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "requestID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Reply to question request",
+        "description": "Provide answers to a question request from the AI assistant.",
+        "responses": {
+          "200": {
+            "description": "Question answered successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "answers": {
+                    "description": "User answers in order of questions (each answer is an array of selected labels)",
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/QuestionAnswer"
+                    }
+                  }
+                },
+                "required": ["answers"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.question.reply({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/question/{requestID}/reject": {
+      "post": {
+        "operationId": "question.reject",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "requestID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Reject question request",
+        "description": "Reject a question request from the AI assistant.",
+        "responses": {
+          "200": {
+            "description": "Question rejected successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.question.reject({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/provider": {
+      "get": {
+        "operationId": "provider.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List providers",
+        "description": "Get a list of all available AI providers, including both available and connected ones.",
+        "responses": {
+          "200": {
+            "description": "List of providers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "all": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "api": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "env": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "id": {
+                            "type": "string"
+                          },
+                          "npm": {
+                            "type": "string"
+                          },
+                          "models": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "family": {
+                                  "type": "string"
+                                },
+                                "release_date": {
+                                  "type": "string"
+                                },
+                                "attachment": {
+                                  "type": "boolean"
+                                },
+                                "reasoning": {
+                                  "type": "boolean"
+                                },
+                                "temperature": {
+                                  "type": "boolean"
+                                },
+                                "tool_call": {
+                                  "type": "boolean"
+                                },
+                                "interleaved": {
+                                  "anyOf": [
+                                    {
+                                      "type": "boolean",
+                                      "const": true
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "field": {
+                                          "type": "string",
+                                          "enum": ["reasoning_content", "reasoning_details"]
+                                        }
+                                      },
+                                      "required": ["field"],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                },
+                                "cost": {
+                                  "type": "object",
+                                  "properties": {
+                                    "input": {
+                                      "type": "number"
+                                    },
+                                    "output": {
+                                      "type": "number"
+                                    },
+                                    "cache_read": {
+                                      "type": "number"
+                                    },
+                                    "cache_write": {
+                                      "type": "number"
+                                    },
+                                    "context_over_200k": {
+                                      "type": "object",
+                                      "properties": {
+                                        "input": {
+                                          "type": "number"
+                                        },
+                                        "output": {
+                                          "type": "number"
+                                        },
+                                        "cache_read": {
+                                          "type": "number"
+                                        },
+                                        "cache_write": {
+                                          "type": "number"
+                                        }
+                                      },
+                                      "required": ["input", "output"]
+                                    }
+                                  },
+                                  "required": ["input", "output"]
+                                },
+                                "limit": {
+                                  "type": "object",
+                                  "properties": {
+                                    "context": {
+                                      "type": "number"
+                                    },
+                                    "input": {
+                                      "type": "number"
+                                    },
+                                    "output": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": ["context", "output"]
+                                },
+                                "modalities": {
+                                  "type": "object",
+                                  "properties": {
+                                    "input": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "enum": ["text", "audio", "image", "video", "pdf"]
+                                      }
+                                    },
+                                    "output": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "enum": ["text", "audio", "image", "video", "pdf"]
+                                      }
+                                    }
+                                  },
+                                  "required": ["input", "output"]
+                                },
+                                "experimental": {
+                                  "type": "boolean"
+                                },
+                                "status": {
+                                  "type": "string",
+                                  "enum": ["alpha", "beta", "deprecated"]
+                                },
+                                "options": {
+                                  "type": "object",
+                                  "propertyNames": {
+                                    "type": "string"
+                                  },
+                                  "additionalProperties": {}
+                                },
+                                "headers": {
+                                  "type": "object",
+                                  "propertyNames": {
+                                    "type": "string"
+                                  },
+                                  "additionalProperties": {
+                                    "type": "string"
+                                  }
+                                },
+                                "provider": {
+                                  "type": "object",
+                                  "properties": {
+                                    "npm": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["npm"]
+                                },
+                                "variants": {
+                                  "type": "object",
+                                  "propertyNames": {
+                                    "type": "string"
+                                  },
+                                  "additionalProperties": {
+                                    "type": "object",
+                                    "propertyNames": {
+                                      "type": "string"
+                                    },
+                                    "additionalProperties": {}
+                                  }
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "name",
+                                "release_date",
+                                "attachment",
+                                "reasoning",
+                                "temperature",
+                                "tool_call",
+                                "limit",
+                                "options"
+                              ]
+                            }
+                          }
+                        },
+                        "required": ["name", "env", "id", "models"]
+                      }
+                    },
+                    "default": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "connected": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": ["all", "default", "connected"]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.provider.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/provider/auth": {
+      "get": {
+        "operationId": "provider.auth",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Get provider auth methods",
+        "description": "Retrieve available authentication methods for all AI providers.",
+        "responses": {
+          "200": {
+            "description": "Provider auth methods",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/ProviderAuthMethod"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.provider.auth({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/provider/{providerID}/oauth/authorize": {
+      "post": {
+        "operationId": "provider.oauth.authorize",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "providerID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Provider ID"
+          }
+        ],
+        "summary": "OAuth authorize",
+        "description": "Initiate OAuth authorization for a specific AI provider to get an authorization URL.",
+        "responses": {
+          "200": {
+            "description": "Authorization URL and method",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderAuthAuthorization"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "method": {
+                    "description": "Auth method index",
+                    "type": "number"
+                  }
+                },
+                "required": ["method"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.provider.oauth.authorize({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/provider/{providerID}/oauth/callback": {
+      "post": {
+        "operationId": "provider.oauth.callback",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "providerID",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "Provider ID"
+          }
+        ],
+        "summary": "OAuth callback",
+        "description": "Handle the OAuth callback from a provider after user authorization.",
+        "responses": {
+          "200": {
+            "description": "OAuth callback processed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "method": {
+                    "description": "Auth method index",
+                    "type": "number"
+                  },
+                  "code": {
+                    "description": "OAuth authorization code",
+                    "type": "string"
+                  }
+                },
+                "required": ["method"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.provider.oauth.callback({\n  ...\n})"
           }
         ]
       }
@@ -11703,6 +14344,22 @@
             "additionalProperties": {
               "type": "boolean"
             }
+          },
+          "variant": {
+            "type": "string"
+          },
+          "command": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string",
+                "enum": ["command", "mcp", "skill"]
+              }
+            },
+            "required": ["name"]
           }
         },
         "required": ["id", "sessionID", "role", "time", "agent", "model"],
@@ -12892,416 +15549,484 @@
             "type": "string"
           },
           "payload": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Event.tui.prompt.append"
-              },
-              {
-                "$ref": "#/components/schemas/Event.tui.command.execute"
-              },
-              {
-                "$ref": "#/components/schemas/Event.tui.toast.show"
-              },
-              {
-                "$ref": "#/components/schemas/Event.tui.session.select"
-              },
-              {
-                "$ref": "#/components/schemas/EventServerConnected"
-              },
-              {
-                "$ref": "#/components/schemas/EventGlobalDisposed"
-              },
-              {
-                "$ref": "#/components/schemas/EventServerInstanceDisposed"
-              },
-              {
-                "$ref": "#/components/schemas/EventFileEdited"
-              },
-              {
-                "$ref": "#/components/schemas/EventFileWatcherUpdated"
-              },
-              {
-                "$ref": "#/components/schemas/EventLspClientDiagnostics"
-              },
-              {
-                "$ref": "#/components/schemas/EventLspUpdated"
-              },
-              {
-                "$ref": "#/components/schemas/EventMessagePartDelta"
-              },
-              {
-                "$ref": "#/components/schemas/EventPermissionAsked"
-              },
-              {
-                "$ref": "#/components/schemas/EventPermissionReplied"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionDiff"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionError"
-              },
-              {
-                "$ref": "#/components/schemas/EventQuestionAsked"
-              },
-              {
-                "$ref": "#/components/schemas/EventQuestionReplied"
-              },
-              {
-                "$ref": "#/components/schemas/EventQuestionRejected"
-              },
-              {
-                "$ref": "#/components/schemas/EventTodoUpdated"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionStatus"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionIdle"
-              },
-              {
-                "$ref": "#/components/schemas/EventMcpToolsChanged"
-              },
-              {
-                "$ref": "#/components/schemas/EventMcpBrowserOpenFailed"
-              },
-              {
-                "$ref": "#/components/schemas/EventCommandExecuted"
-              },
-              {
-                "$ref": "#/components/schemas/EventProjectUpdated"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionCompacted"
-              },
-              {
-                "$ref": "#/components/schemas/EventVcsBranchUpdated"
-              },
-              {
-                "$ref": "#/components/schemas/EventWorkspaceReady"
-              },
-              {
-                "$ref": "#/components/schemas/EventWorkspaceFailed"
-              },
-              {
-                "$ref": "#/components/schemas/EventWorkspaceStatus"
-              },
-              {
-                "$ref": "#/components/schemas/EventWorktreeReady"
-              },
-              {
-                "$ref": "#/components/schemas/EventWorktreeFailed"
-              },
-              {
-                "$ref": "#/components/schemas/EventPtyCreated"
-              },
-              {
-                "$ref": "#/components/schemas/EventPtyUpdated"
-              },
-              {
-                "$ref": "#/components/schemas/EventPtyExited"
-              },
-              {
-                "$ref": "#/components/schemas/EventPtyDeleted"
-              },
-              {
-                "$ref": "#/components/schemas/EventInstallationUpdated"
-              },
-              {
-                "$ref": "#/components/schemas/EventInstallationUpdate-available"
-              },
-              {
-                "$ref": "#/components/schemas/EventMessageUpdated"
-              },
-              {
-                "$ref": "#/components/schemas/EventMessageRemoved"
-              },
-              {
-                "$ref": "#/components/schemas/EventMessagePartUpdated"
-              },
-              {
-                "$ref": "#/components/schemas/EventMessagePartRemoved"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionCreated"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionUpdated"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionDeleted"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextAgentSwitched"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextModelSwitched"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextPrompted"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextSynthetic"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextShellStarted"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextShellEnded"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextStepStarted"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextStepEnded"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextStepFailed"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextTextStarted"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextTextDelta"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextTextEnded"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextReasoningStarted"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextReasoningDelta"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextReasoningEnded"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextToolInputStarted"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextToolInputDelta"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextToolInputEnded"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextToolCalled"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextToolProgress"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextToolSuccess"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextToolFailed"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextRetried"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextCompactionStarted"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextCompactionDelta"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextCompactionEnded"
-              },
-              {
-                "$ref": "#/components/schemas/EventCatalogModelUpdated"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextAgentSwitched"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextModelSwitched"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextPrompted"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextSynthetic"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextShellStarted"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextShellEnded"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextStepStarted"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextStepEnded"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextStepFailed"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextTextStarted"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextTextDelta"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextTextEnded"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextReasoningStarted"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextReasoningDelta"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextReasoningEnded"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextToolInputStarted"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextToolInputDelta"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextToolInputEnded"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextToolCalled"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextToolProgress"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextToolSuccess"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextToolFailed"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextRetried"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextCompactionStarted"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextCompactionDelta"
-              },
-              {
-                "$ref": "#/components/schemas/EventSessionNextCompactionEnded"
-              },
-              {
-                "$ref": "#/components/schemas/EventModels-devRefreshed"
-              },
-              {
-                "$ref": "#/components/schemas/EventAccountAdded"
-              },
-              {
-                "$ref": "#/components/schemas/EventAccountRemoved"
-              },
-              {
-                "$ref": "#/components/schemas/EventAccountSwitched"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventMessageUpdated"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventMessageRemoved"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventMessagePartUpdated"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventMessagePartRemoved"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionCreated"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionUpdated"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionDeleted"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextAgentSwitched"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextModelSwitched"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextPrompted"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextSynthetic"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextShellStarted"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextShellEnded"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextStepStarted"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextStepEnded"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextStepFailed"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextTextStarted"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextTextDelta"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextTextEnded"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextReasoningStarted"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextReasoningDelta"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextReasoningEnded"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextToolInputStarted"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextToolInputDelta"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextToolInputEnded"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextToolCalled"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextToolProgress"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextToolSuccess"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextToolFailed"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextRetried"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextCompactionStarted"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextCompactionDelta"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextCompactionEnded"
-              }
-            ]
+            "$ref": "#/components/schemas/Event"
+          }
+        },
+        "required": ["directory", "payload"]
+      },
+      "KeybindsConfig": {
+        "description": "Custom keybind configurations",
+        "type": "object",
+        "properties": {
+          "leader": {
+            "description": "Leader key for keybind combinations",
+            "default": "ctrl+x",
+            "type": "string"
+          },
+          "app_exit": {
+            "description": "Exit the application",
+            "default": "ctrl+c,ctrl+d,<leader>q",
+            "type": "string"
+          },
+          "editor_open": {
+            "description": "Open external editor",
+            "default": "<leader>e",
+            "type": "string"
+          },
+          "theme_list": {
+            "description": "List available themes",
+            "default": "<leader>t",
+            "type": "string"
+          },
+          "sidebar_toggle": {
+            "description": "Toggle sidebar",
+            "default": "<leader>b",
+            "type": "string"
+          },
+          "scrollbar_toggle": {
+            "description": "Toggle session scrollbar",
+            "default": "none",
+            "type": "string"
+          },
+          "username_toggle": {
+            "description": "Toggle username visibility",
+            "default": "none",
+            "type": "string"
+          },
+          "status_view": {
+            "description": "View status",
+            "default": "<leader>s",
+            "type": "string"
+          },
+          "session_export": {
+            "description": "Export session to editor",
+            "default": "<leader>x",
+            "type": "string"
+          },
+          "session_new": {
+            "description": "Create a new session",
+            "default": "<leader>n",
+            "type": "string"
+          },
+          "session_list": {
+            "description": "List all sessions",
+            "default": "<leader>l",
+            "type": "string"
+          },
+          "session_timeline": {
+            "description": "Show session timeline",
+            "default": "<leader>g",
+            "type": "string"
+          },
+          "session_fork": {
+            "description": "Fork session from message",
+            "default": "none",
+            "type": "string"
+          },
+          "session_rename": {
+            "description": "Rename session",
+            "default": "ctrl+r",
+            "type": "string"
+          },
+          "session_delete": {
+            "description": "Delete session",
+            "default": "ctrl+d",
+            "type": "string"
+          },
+          "stash_delete": {
+            "description": "Delete stash entry",
+            "default": "ctrl+d",
+            "type": "string"
+          },
+          "model_provider_list": {
+            "description": "Open provider list from model dialog",
+            "default": "ctrl+a",
+            "type": "string"
+          },
+          "model_favorite_toggle": {
+            "description": "Toggle model favorite status",
+            "default": "ctrl+f",
+            "type": "string"
+          },
+          "session_share": {
+            "description": "Share current session",
+            "default": "none",
+            "type": "string"
+          },
+          "session_unshare": {
+            "description": "Unshare current session",
+            "default": "none",
+            "type": "string"
+          },
+          "session_interrupt": {
+            "description": "Interrupt current session",
+            "default": "escape",
+            "type": "string"
+          },
+          "session_compact": {
+            "description": "Compact the session",
+            "default": "<leader>c",
+            "type": "string"
+          },
+          "messages_page_up": {
+            "description": "Scroll messages up by one page",
+            "default": "pageup,ctrl+alt+b",
+            "type": "string"
+          },
+          "messages_page_down": {
+            "description": "Scroll messages down by one page",
+            "default": "pagedown,ctrl+alt+f",
+            "type": "string"
+          },
+          "messages_line_up": {
+            "description": "Scroll messages up by one line",
+            "default": "ctrl+alt+y",
+            "type": "string"
+          },
+          "messages_line_down": {
+            "description": "Scroll messages down by one line",
+            "default": "ctrl+alt+e",
+            "type": "string"
+          },
+          "messages_half_page_up": {
+            "description": "Scroll messages up by half page",
+            "default": "ctrl+alt+u",
+            "type": "string"
+          },
+          "messages_half_page_down": {
+            "description": "Scroll messages down by half page",
+            "default": "ctrl+alt+d",
+            "type": "string"
+          },
+          "messages_first": {
+            "description": "Navigate to first message",
+            "default": "ctrl+g,home",
+            "type": "string"
+          },
+          "messages_last": {
+            "description": "Navigate to last message",
+            "default": "ctrl+alt+g,end",
+            "type": "string"
+          },
+          "messages_next": {
+            "description": "Navigate to next message",
+            "default": "none",
+            "type": "string"
+          },
+          "messages_previous": {
+            "description": "Navigate to previous message",
+            "default": "none",
+            "type": "string"
+          },
+          "messages_last_user": {
+            "description": "Navigate to last user message",
+            "default": "none",
+            "type": "string"
+          },
+          "messages_copy": {
+            "description": "Copy message",
+            "default": "<leader>y",
+            "type": "string"
+          },
+          "messages_undo": {
+            "description": "Undo message",
+            "default": "<leader>u",
+            "type": "string"
+          },
+          "messages_redo": {
+            "description": "Redo message",
+            "default": "<leader>r",
+            "type": "string"
+          },
+          "messages_toggle_conceal": {
+            "description": "Toggle code block concealment in messages",
+            "default": "<leader>h",
+            "type": "string"
+          },
+          "tool_details": {
+            "description": "Toggle tool details visibility",
+            "default": "none",
+            "type": "string"
+          },
+          "model_list": {
+            "description": "List available models",
+            "default": "<leader>m",
+            "type": "string"
+          },
+          "model_cycle_recent": {
+            "description": "Next recently used model",
+            "default": "f2",
+            "type": "string"
+          },
+          "model_cycle_recent_reverse": {
+            "description": "Previous recently used model",
+            "default": "shift+f2",
+            "type": "string"
+          },
+          "model_cycle_favorite": {
+            "description": "Next favorite model",
+            "default": "none",
+            "type": "string"
+          },
+          "model_cycle_favorite_reverse": {
+            "description": "Previous favorite model",
+            "default": "none",
+            "type": "string"
+          },
+          "command_list": {
+            "description": "List available commands",
+            "default": "ctrl+p",
+            "type": "string"
+          },
+          "agent_list": {
+            "description": "List agents",
+            "default": "<leader>a",
+            "type": "string"
+          },
+          "agent_cycle": {
+            "description": "Next agent",
+            "default": "tab",
+            "type": "string"
+          },
+          "agent_cycle_reverse": {
+            "description": "Previous agent",
+            "default": "shift+tab",
+            "type": "string"
+          },
+          "variant_cycle": {
+            "description": "Cycle model variants",
+            "default": "ctrl+t",
+            "type": "string"
+          },
+          "input_clear": {
+            "description": "Clear input field",
+            "default": "ctrl+c",
+            "type": "string"
+          },
+          "input_paste": {
+            "description": "Paste from clipboard",
+            "default": "ctrl+v",
+            "type": "string"
+          },
+          "input_submit": {
+            "description": "Submit input",
+            "default": "return",
+            "type": "string"
+          },
+          "input_newline": {
+            "description": "Insert newline in input",
+            "default": "shift+return,ctrl+return,alt+return,ctrl+j",
+            "type": "string"
+          },
+          "input_move_left": {
+            "description": "Move cursor left in input",
+            "default": "left,ctrl+b",
+            "type": "string"
+          },
+          "input_move_right": {
+            "description": "Move cursor right in input",
+            "default": "right,ctrl+f",
+            "type": "string"
+          },
+          "input_move_up": {
+            "description": "Move cursor up in input",
+            "default": "up",
+            "type": "string"
+          },
+          "input_move_down": {
+            "description": "Move cursor down in input",
+            "default": "down",
+            "type": "string"
+          },
+          "input_select_left": {
+            "description": "Select left in input",
+            "default": "shift+left",
+            "type": "string"
+          },
+          "input_select_right": {
+            "description": "Select right in input",
+            "default": "shift+right",
+            "type": "string"
+          },
+          "input_select_up": {
+            "description": "Select up in input",
+            "default": "shift+up",
+            "type": "string"
+          },
+          "input_select_down": {
+            "description": "Select down in input",
+            "default": "shift+down",
+            "type": "string"
+          },
+          "input_line_home": {
+            "description": "Move to start of line in input",
+            "default": "ctrl+a",
+            "type": "string"
+          },
+          "input_line_end": {
+            "description": "Move to end of line in input",
+            "default": "ctrl+e",
+            "type": "string"
+          },
+          "input_select_line_home": {
+            "description": "Select to start of line in input",
+            "default": "ctrl+shift+a",
+            "type": "string"
+          },
+          "input_select_line_end": {
+            "description": "Select to end of line in input",
+            "default": "ctrl+shift+e",
+            "type": "string"
+          },
+          "input_visual_line_home": {
+            "description": "Move to start of visual line in input",
+            "default": "alt+a",
+            "type": "string"
+          },
+          "input_visual_line_end": {
+            "description": "Move to end of visual line in input",
+            "default": "alt+e",
+            "type": "string"
+          },
+          "input_select_visual_line_home": {
+            "description": "Select to start of visual line in input",
+            "default": "alt+shift+a",
+            "type": "string"
+          },
+          "input_select_visual_line_end": {
+            "description": "Select to end of visual line in input",
+            "default": "alt+shift+e",
+            "type": "string"
+          },
+          "input_buffer_home": {
+            "description": "Move to start of buffer in input",
+            "default": "home",
+            "type": "string"
+          },
+          "input_buffer_end": {
+            "description": "Move to end of buffer in input",
+            "default": "end",
+            "type": "string"
+          },
+          "input_select_buffer_home": {
+            "description": "Select to start of buffer in input",
+            "default": "shift+home",
+            "type": "string"
+          },
+          "input_select_buffer_end": {
+            "description": "Select to end of buffer in input",
+            "default": "shift+end",
+            "type": "string"
+          },
+          "input_delete_line": {
+            "description": "Delete line in input",
+            "default": "ctrl+shift+d",
+            "type": "string"
+          },
+          "input_delete_to_line_end": {
+            "description": "Delete to end of line in input",
+            "default": "ctrl+k",
+            "type": "string"
+          },
+          "input_delete_to_line_start": {
+            "description": "Delete to start of line in input",
+            "default": "ctrl+u",
+            "type": "string"
+          },
+          "input_backspace": {
+            "description": "Backspace in input",
+            "default": "backspace,shift+backspace",
+            "type": "string"
+          },
+          "input_delete": {
+            "description": "Delete character in input",
+            "default": "ctrl+d,delete,shift+delete",
+            "type": "string"
+          },
+          "input_undo": {
+            "description": "Undo in input",
+            "default": "ctrl+-,super+z",
+            "type": "string"
+          },
+          "input_redo": {
+            "description": "Redo in input",
+            "default": "ctrl+.,super+shift+z",
+            "type": "string"
+          },
+          "input_word_forward": {
+            "description": "Move word forward in input",
+            "default": "alt+f,alt+right,ctrl+right",
+            "type": "string"
+          },
+          "input_word_backward": {
+            "description": "Move word backward in input",
+            "default": "alt+b,alt+left,ctrl+left",
+            "type": "string"
+          },
+          "input_select_word_forward": {
+            "description": "Select word forward in input",
+            "default": "alt+shift+f,alt+shift+right",
+            "type": "string"
+          },
+          "input_select_word_backward": {
+            "description": "Select word backward in input",
+            "default": "alt+shift+b,alt+shift+left",
+            "type": "string"
+          },
+          "input_delete_word_forward": {
+            "description": "Delete word forward in input",
+            "default": "alt+d,alt+delete,ctrl+delete",
+            "type": "string"
+          },
+          "input_delete_word_backward": {
+            "description": "Delete word backward in input",
+            "default": "ctrl+w,ctrl+backspace,alt+backspace",
+            "type": "string"
+          },
+          "history_previous": {
+            "description": "Previous history item",
+            "default": "ctrl+up",
+            "type": "string"
+          },
+          "history_next": {
+            "description": "Next history item",
+            "default": "ctrl+down",
+            "type": "string"
+          },
+          "session_child_cycle": {
+            "description": "Next child session",
+            "default": "<leader>right",
+            "type": "string"
+          },
+          "session_child_cycle_reverse": {
+            "description": "Previous child session",
+            "default": "<leader>left",
+            "type": "string"
+          },
+          "session_parent": {
+            "description": "Go to parent session",
+            "default": "<leader>up",
+            "type": "string"
+          },
+          "terminal_suspend": {
+            "description": "Suspend terminal",
+            "default": "ctrl+z",
+            "type": "string"
+          },
+          "terminal_title_toggle": {
+            "description": "Toggle terminal title",
+            "default": "none",
+            "type": "string"
+          },
+          "tips_toggle": {
+            "description": "Toggle tips on home screen",
+            "default": "<leader>h",
+            "type": "string"
+          },
+          "display_thinking": {
+            "description": "Toggle thinking blocks visibility",
+            "default": "none",
+            "type": "string"
           }
         },
         "required": ["directory", "payload"],

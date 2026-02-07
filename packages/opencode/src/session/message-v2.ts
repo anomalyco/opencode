@@ -404,10 +404,31 @@ export const TextPartInput = Schema.Struct({
       start: NonNegativeInt,
       end: Schema.optional(NonNegativeInt),
     }),
-  ),
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
-}).annotate({ identifier: "TextPartInput" })
-export type TextPartInput = Types.DeepMutable<Schema.Schema.Type<typeof TextPartInput>>
+    summary: z
+      .object({
+        title: z.string().optional(),
+        body: z.string().optional(),
+        diffs: Snapshot.FileDiff.array(),
+      })
+      .optional(),
+    agent: z.string(),
+    model: z.object({
+      providerID: z.string(),
+      modelID: z.string(),
+    }),
+    system: z.string().optional(),
+    tools: z.record(z.string(), z.boolean()).optional(),
+    variant: z.string().optional(),
+    command: z
+      .object({
+        name: z.string(),
+        source: z.enum(["command", "mcp", "skill"]).optional(),
+      })
+      .optional(),
+  }).meta({
+    ref: "UserMessage",
+  })
+  export type User = z.infer<typeof User>
 
 export const FilePartInput = Schema.Struct({
   id: Schema.optional(PartID),
