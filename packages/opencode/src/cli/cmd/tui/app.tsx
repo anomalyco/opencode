@@ -250,7 +250,8 @@ function App() {
           })
         local.model.set({ providerID, modelID }, { recent: true })
       }
-      if (args.sessionID) {
+      // Handle --session without --fork immediately (fork is handled in createEffect below)
+      if (args.sessionID && !args.fork) {
         route.navigate({
           type: "session",
           sessionID: args.sessionID,
@@ -268,8 +269,34 @@ function App() {
       .find((x) => x.parentID === undefined)?.id
     if (match) {
       continued = true
-      route.navigate({ type: "session", sessionID: match })
+      if (args.fork) {
+        sdk.client.session.fork({ sessionID: match }).then((result) => {
+          if (result.data?.id) {
+            route.navigate({ type: "session", sessionID: result.data.id })
+          } else {
+            toast.show({ message: "Failed to fork session", variant: "error" })
+          }
+        })
+      } else {
+        route.navigate({ type: "session", sessionID: match })
+      }
     }
+  })
+
+  // Handle --session with --fork: wait for sync to be fully complete before forking
+  // (session list loads in non-blocking phase for --session, so we must wait for "complete"
+  // to avoid a race where reconcile overwrites the newly forked session)
+  let forked = false
+  createEffect(() => {
+    if (forked || sync.status !== "complete" || !args.sessionID || !args.fork) return
+    forked = true
+    sdk.client.session.fork({ sessionID: args.sessionID }).then((result) => {
+      if (result.data?.id) {
+        route.navigate({ type: "session", sessionID: result.data.id })
+      } else {
+        toast.show({ message: "Failed to fork session", variant: "error" })
+      }
+    })
   })
 
   createEffect(
