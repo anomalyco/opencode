@@ -107,8 +107,9 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     input.setDraggingType(null)
 
     const plainText = event.dataTransfer?.getData("text/plain")
-    if (plainText?.startsWith("file:")) {
-      const filePath = plainText.slice(5)
+    const filePrefix = "file:"
+    if (plainText?.startsWith(filePrefix)) {
+      const filePath = plainText.slice(filePrefix.length)
       input.focusEditor()
       input.addPart({ type: "file", path: filePath, content: "@" + filePath, start: 0, end: 0 })
       return
