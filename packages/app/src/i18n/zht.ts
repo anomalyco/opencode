@@ -249,6 +249,7 @@ export const dict = {
   "prompt.popover.emptyResults": "沒有符合的結果",
   "prompt.popover.emptyCommands": "沒有符合的命令",
   "prompt.dropzone.label": "將圖片或 PDF 拖到這裡",
+  "prompt.dropzone.file.label": "拖放以 @提及檔案",
   "prompt.slash.badge.custom": "自訂",
   "prompt.slash.badge.skill": "技能",
   "prompt.slash.badge.mcp": "mcp",

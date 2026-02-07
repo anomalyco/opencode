@@ -211,6 +211,7 @@ export const dict = {
   "prompt.popover.emptyResults": "Нет совпадений",
   "prompt.popover.emptyCommands": "Нет совпадающих команд",
   "prompt.dropzone.label": "Перетащите изображения или PDF сюда",
+  "prompt.dropzone.file.label": "Отпустите для @упоминания файла",
   "prompt.slash.badge.custom": "своё",
   "prompt.slash.badge.skill": "навык",
   "prompt.slash.badge.mcp": "mcp",

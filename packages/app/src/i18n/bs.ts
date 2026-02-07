@@ -219,6 +219,7 @@ export const dict = {
   "prompt.popover.emptyResults": "Nema rezultata",
   "prompt.popover.emptyCommands": "Nema komandi",
   "prompt.dropzone.label": "Spusti slike ili PDF-ove ovdje",
+  "prompt.dropzone.file.label": "Spusti za @spominjanje datoteke",
   "prompt.slash.badge.custom": "prilagođeno",
   "prompt.slash.badge.skill": "skill",
   "prompt.slash.badge.mcp": "mcp",

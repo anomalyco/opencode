@@ -256,6 +256,7 @@ export const dict = {
   "prompt.popover.emptyResults": "No matching results",
   "prompt.popover.emptyCommands": "No matching commands",
   "prompt.dropzone.label": "Drop images or PDFs here",
+  "prompt.dropzone.file.label": "Drop to @mention file",
   "prompt.slash.badge.custom": "custom",
   "prompt.slash.badge.skill": "skill",
   "prompt.slash.badge.mcp": "mcp",
