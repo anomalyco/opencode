@@ -14,12 +14,14 @@ import { retry } from "@opencode-ai/util/retry"
 import { getFilename } from "@opencode-ai/util/path"
 import { showToast } from "@opencode-ai/ui/toast"
 import { cmp, normalizeProviderList } from "./utils"
+import type { Automation } from "@opencode-ai/sdk/v2/client"
 import type { State, VcsCache } from "./types"
 
 type GlobalStore = {
   ready: boolean
   path: Path
   project: Project[]
+  automation: Automation[]
   provider: ProviderListResponse
   provider_auth: ProviderAuthResponse
   config: Config
@@ -66,6 +68,14 @@ export async function bootstrapGlobal(input: {
           .slice()
           .sort((a, b) => cmp(a.id, b.id))
         input.setGlobalStore("project", projects)
+      }),
+    ),
+    retry(() =>
+      input.globalSDK.automation.list().then((x) => {
+        input.setGlobalStore(
+          "automation",
+          (x.data ?? []).slice().sort((a, b) => cmp(a.id, b.id)),
+        )
       }),
     ),
     retry(() =>

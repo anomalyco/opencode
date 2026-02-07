@@ -1,6 +1,6 @@
-import { Binary } from "@opencode-ai/util/binary"
 import { produce, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type {
+  Automation,
   FileDiff,
   Message,
   Part,
@@ -11,17 +11,71 @@ import type {
   SessionStatus,
   Todo,
 } from "@opencode-ai/sdk/v2/client"
+import { Binary } from "@opencode-ai/util/binary"
 import type { State, VcsCache } from "./types"
 import { trimSessions } from "./session-trim"
 
 export function applyGlobalEvent(input: {
   event: { type: string; properties?: unknown }
   project: Project[]
+  automations?: Automation[]
+  setAutomations?: (next: Automation[] | ((draft: Automation[]) => void)) => void
   setGlobalProject: (next: Project[] | ((draft: Project[]) => void)) => void
   refresh: () => void
 }) {
   if (input.event.type === "global.disposed") {
     input.refresh()
+    return
+  }
+
+  if (input.event.type === "automation.created" || input.event.type === "automation.updated") {
+    if (!input.automations || !input.setAutomations) return
+    const properties = input.event.properties as Automation
+    const result = Binary.search(input.automations, properties.id, (s) => s.id)
+    if (result.found) {
+      input.setAutomations((draft) => {
+        draft[result.index] = { ...draft[result.index], ...properties }
+      })
+      return
+    }
+    input.setAutomations((draft) => {
+      draft.splice(result.index, 0, properties)
+    })
+    return
+  }
+
+  if (input.event.type === "automation.deleted") {
+    if (!input.automations || !input.setAutomations) return
+    const properties = input.event.properties as Automation
+    const result = Binary.search(input.automations, properties.id, (s) => s.id)
+    if (!result.found) return
+    input.setAutomations((draft) => {
+      draft.splice(result.index, 1)
+    })
+    return
+  }
+
+  if (input.event.type === "automation.run") {
+    if (!input.automations || !input.setAutomations) return
+    const properties = input.event.properties as {
+      automationID: string
+      time: number
+      status: "success" | "failed"
+      sessionID?: string
+      directory: string
+    }
+    const result = Binary.search(input.automations, properties.automationID, (s) => s.id)
+    if (!result.found) return
+    input.setAutomations((draft) => {
+      draft[result.index] = {
+        ...draft[result.index],
+        lastRun: properties.time,
+        lastSession:
+          properties.status === "success" && properties.sessionID
+            ? { id: properties.sessionID, directory: properties.directory }
+            : draft[result.index]?.lastSession,
+      }
+    })
     return
   }
 

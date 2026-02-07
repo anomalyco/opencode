@@ -1,4 +1,5 @@
 import {
+  type Automation,
   type Config,
   type Path,
   type Project,
@@ -33,6 +34,7 @@ import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global
 import { applyDirectoryEvent, applyGlobalEvent } from "./global-sync/event-reducer"
 import { bootstrapDirectory, bootstrapGlobal } from "./global-sync/bootstrap"
 import { sanitizeProject } from "./global-sync/utils"
+import { Binary } from "@opencode-ai/util/binary"
 import type { ProjectMeta } from "./global-sync/types"
 import { SESSION_RECENT_LIMIT } from "./global-sync/types"
 
@@ -41,6 +43,7 @@ type GlobalStore = {
   error?: InitError
   path: Path
   project: Project[]
+  automation: Automation[]
   provider: ProviderListResponse
   provider_auth: ProviderAuthResponse
   config: Config
@@ -73,6 +76,7 @@ function createGlobalSync() {
     ready: false,
     path: { state: "", config: "", worktree: "", directory: "", home: "" },
     project: projectCache.value,
+    automation: [],
     provider: { all: [], connected: [], default: {} },
     provider_auth: {},
     config: {},
@@ -247,11 +251,20 @@ function createGlobalSync() {
   const unsub = globalSDK.event.listen((e) => {
     const directory = e.name
     const event = e.details
+    if (!event) return
 
     if (directory === "global") {
       applyGlobalEvent({
         event,
         project: globalStore.project,
+        automations: globalStore.automation,
+        setAutomations(next) {
+          if (typeof next === "function") {
+            setGlobalStore("automation", produce(next))
+            return
+          }
+          setGlobalStore("automation", next)
+        },
         refresh: queue.refresh,
         setGlobalProject(next) {
           if (typeof next === "function") {

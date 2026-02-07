@@ -26,6 +26,9 @@ export const SidebarContent = (props: {
   openProjectKeybind: Accessor<string | undefined>
   onOpenProject: () => void
   renderProjectOverlay: () => JSX.Element
+  automationsLabel?: Accessor<string>
+  automationsKeybind?: Accessor<string | undefined>
+  onOpenAutomations?: () => void
   settingsLabel: Accessor<string>
   settingsKeybind: Accessor<string | undefined>
   onOpenSettings: () => void
@@ -78,6 +81,21 @@ export const SidebarContent = (props: {
           </DragDropProvider>
         </div>
         <div class="shrink-0 w-full pt-3 pb-3 flex flex-col items-center gap-2">
+          <Show when={props.onOpenAutomations && props.automationsLabel}>
+            <TooltipKeybind
+              placement={props.mobile ? "bottom" : "right"}
+              title={props.automationsLabel?.() ?? ""}
+              keybind={props.automationsKeybind?.() ?? ""}
+            >
+              <IconButton
+                icon="automate"
+                variant="ghost"
+                size="large"
+                onClick={() => props.onOpenAutomations?.()}
+                aria-label={props.automationsLabel?.()}
+              />
+            </TooltipKeybind>
+          </Show>
           <TooltipKeybind
             placement={props.mobile ? "bottom" : "right"}
             title={props.settingsLabel()}

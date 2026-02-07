@@ -1,0 +1,71 @@
+---
+title: Automations
+description: Schedule and run prompts across projects.
+---
+
+Automations let you schedule or manually run prompts across one or more projects. Each run creates a new session and records history, so you can review results later.
+
+---
+
+## Create an automation
+
+1. Open **Automations** in the web or desktop app.
+2. Click **Create automation**.
+3. Fill in:
+   - **Name**
+   - **Projects** to target
+   - **Prompt** (supports templates)
+   - **Schedule** (optional)
+
+If you leave the schedule empty, the automation is manual-only.
+
+---
+
+## Schedule builder
+
+The schedule builder has two modes:
+
+- **Picker**: choose days of the week and one or more times.
+- **Cron**: enter a cron expression directly.
+
+When a schedule is valid, the UI shows the next run time. Invalid schedules show an error message until corrected.
+
+---
+
+## Templates
+
+Prompts support templates that are resolved at run time:
+
+- `{{date}}`
+- `{{project.name}}`
+- `{{session.latest}}`
+- `{{session.query:term}}`
+
+Use these to create dynamic prompts that adapt to the project and recent sessions.
+
+---
+
+## Run history
+
+Each automation keeps a run history with:
+
+- Run time
+- Project directory
+- Status (success/failed)
+- Session ID (when a session was created)
+
+You can clear run history from the Automations page.
+
+---
+
+## Import and export
+
+- **Export** a single automation or all automations as JSON.
+- **Import** automations from JSON to create them in the current workspace.
+
+---
+
+## Enable, disable, and delete
+
+- Toggle **Enabled** to stop scheduled runs without deleting the automation.
+- Delete automations to remove schedules and history.

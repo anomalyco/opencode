@@ -937,6 +937,12 @@ export default function Layout(props: ParentProps) {
         onSelect: () => openSettings(),
       },
       {
+        id: "automations.open",
+        title: language.t("command.automations.open"),
+        category: language.t("command.category.settings"),
+        onSelect: () => openAutomations(),
+      },
+      {
         id: "session.previous",
         title: language.t("command.session.previous"),
         category: language.t("command.category.session"),
@@ -1082,6 +1088,11 @@ export default function Layout(props: ParentProps) {
 
   function openSettings() {
     dialog.show(() => <DialogSettings />)
+  }
+
+  function openAutomations() {
+    navigate("/automations")
+    layout.mobileSidebar.hide()
   }
 
   function navigateToProject(directory: string | undefined) {
@@ -1918,6 +1929,9 @@ export default function Layout(props: ParentProps) {
               renderProjectOverlay={() => (
                 <ProjectDragOverlay projects={() => layout.projects.list()} activeProject={() => store.activeProject} />
               )}
+              automationsLabel={() => language.t("sidebar.automations")}
+              automationsKeybind={() => command.keybind("automations.open")}
+              onOpenAutomations={openAutomations}
               settingsLabel={() => language.t("sidebar.settings")}
               settingsKeybind={() => command.keybind("settings.open")}
               onOpenSettings={openSettings}
@@ -1981,6 +1995,9 @@ export default function Layout(props: ParentProps) {
               renderProjectOverlay={() => (
                 <ProjectDragOverlay projects={() => layout.projects.list()} activeProject={() => store.activeProject} />
               )}
+              automationsLabel={() => language.t("sidebar.automations")}
+              automationsKeybind={() => command.keybind("automations.open")}
+              onOpenAutomations={openAutomations}
               settingsLabel={() => language.t("sidebar.settings")}
               settingsKeybind={() => command.keybind("settings.open")}
               onOpenSettings={openSettings}
