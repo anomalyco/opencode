@@ -1,10 +1,12 @@
 import { Config } from "../config/config"
 import z from "zod"
 import { Provider } from "../provider/provider"
-import { generateObject, type ModelMessage } from "ai"
+import { generateObject, streamObject, type ModelMessage } from "ai"
 import { SystemPrompt } from "../session/system"
 import { Instance } from "../project/instance"
 import { Truncate } from "../tool/truncation"
+import { Auth } from "../auth"
+import { ProviderTransform } from "../provider/transform"
 
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
@@ -15,6 +17,8 @@ import { PermissionNext } from "@/permission/next"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@/global"
 import path from "path"
+import { Plugin } from "@/plugin"
+import { Skill } from "../skill"
 
 export namespace Agent {
   export const Info = z
@@ -34,6 +38,7 @@ export namespace Agent {
           providerID: z.string(),
         })
         .optional(),
+      variant: z.string().optional(),
       prompt: z.string().optional(),
       options: z.record(z.string(), z.any()),
       steps: z.number().int().positive().optional(),
@@ -46,13 +51,14 @@ export namespace Agent {
   const state = Instance.state(async () => {
     const cfg = await Config.get()
 
+    const skillDirs = await Skill.dirs()
     const defaults = PermissionNext.fromConfig({
       "*": "allow",
       doom_loop: "ask",
       external_directory: {
         "*": "ask",
-        [Truncate.DIR]: "allow",
         [Truncate.GLOB]: "allow",
+        ...Object.fromEntries(skillDirs.map((dir) => [path.join(dir, "*"), "allow"])),
       },
       question: "deny",
       plan_enter: "deny",
@@ -70,6 +76,7 @@ export namespace Agent {
     const result: Record<string, Info> = {
       build: {
         name: "build",
+        description: "The default agent. Executes tools based on configured permissions.",
         options: {},
         permission: PermissionNext.merge(
           defaults,
@@ -84,6 +91,7 @@ export namespace Agent {
       },
       plan: {
         name: "plan",
+        description: "Plan mode. Disallows all edit tools.",
         options: {},
         permission: PermissionNext.merge(
           defaults,
@@ -134,7 +142,6 @@ export namespace Agent {
             codesearch: "allow",
             read: "allow",
             external_directory: {
-              [Truncate.DIR]: "allow",
               [Truncate.GLOB]: "allow",
             },
           }),
@@ -209,6 +216,7 @@ export namespace Agent {
           native: false,
         }
       if (value.model) item.model = Provider.parseModel(value.model)
+      item.variant = value.variant ?? item.variant
       item.prompt = value.prompt ?? item.prompt
       item.description = value.description ?? item.description
       item.temperature = value.temperature ?? item.temperature
@@ -222,19 +230,19 @@ export namespace Agent {
       item.permission = PermissionNext.merge(item.permission, PermissionNext.fromConfig(value.permission ?? {}))
     }
 
-    // Ensure Truncate.DIR is allowed unless explicitly configured
+    // Ensure Truncate.GLOB is allowed unless explicitly configured
     for (const name in result) {
       const agent = result[name]
       const explicit = agent.permission.some((r) => {
         if (r.permission !== "external_directory") return false
         if (r.action !== "deny") return false
-        return r.pattern === Truncate.DIR || r.pattern === Truncate.GLOB
+        return r.pattern === Truncate.GLOB
       })
       if (explicit) continue
 
       result[name].permission = PermissionNext.merge(
         result[name].permission,
-        PermissionNext.fromConfig({ external_directory: { [Truncate.DIR]: "allow", [Truncate.GLOB]: "allow" } }),
+        PermissionNext.fromConfig({ external_directory: { [Truncate.GLOB]: "allow" } }),
       )
     }
 
@@ -276,10 +284,12 @@ export namespace Agent {
     const defaultModel = input.model ?? (await Provider.defaultModel())
     const model = await Provider.getModel(defaultModel.providerID, defaultModel.modelID)
     const language = await Provider.getLanguage(model)
-    const system = SystemPrompt.header(defaultModel.providerID)
-    system.push(PROMPT_GENERATE)
+
+    const system = [PROMPT_GENERATE]
+    await Plugin.trigger("experimental.chat.system.transform", { model }, { system })
     const existing = await list()
-    const result = await generateObject({
+
+    const params = {
       experimental_telemetry: {
         isEnabled: cfg.experimental?.openTelemetry,
         metadata: {
@@ -305,7 +315,24 @@ export namespace Agent {
         whenToUse: z.string(),
         systemPrompt: z.string(),
       }),
-    })
+    } satisfies Parameters<typeof generateObject>[0]
+
+    if (defaultModel.providerID === "openai" && (await Auth.get(defaultModel.providerID))?.type === "oauth") {
+      const result = streamObject({
+        ...params,
+        providerOptions: ProviderTransform.providerOptions(model, {
+          instructions: SystemPrompt.instructions(),
+          store: false,
+        }),
+        onError: () => {},
+      })
+      for await (const part of result.fullStream) {
+        if (part.type === "error") throw part.error
+      }
+      return result.object
+    }
+
+    const result = await generateObject(params)
     return result.object
   }
 }

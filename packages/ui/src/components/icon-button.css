@@ -90,8 +90,8 @@
       /*   color: var(--icon-hover); */
       /* } */
     }
-    &:focus:not(:disabled) {
-      background-color: var(--surface-focus);
+    &:focus-visible:not(:disabled) {
+      background-color: var(--surface-raised-base-hover);
     }
     &:active:not(:disabled) {
       background-color: var(--surface-raised-base-active);
@@ -120,15 +120,15 @@
     gap: calc(var(--spacing) * 0.5);
   }
 
+  &[data-size="small"] {
+    width: 20px;
+    height: 20px;
+  }
+
   &[data-size="large"] {
     height: 32px;
     /* padding: 0 8px 0 6px; */
     gap: 8px;
-
-    [data-slot="icon-svg"] {
-      height: 16px;
-      width: 16px;
-    }
 
     /* text-12-medium */
     font-family: var(--font-family-sans);

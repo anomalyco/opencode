@@ -124,10 +124,11 @@ function AutoMethod(props: AutoMethodProps) {
   const dialog = useDialog()
   const sync = useSync()
   const toast = useToast()
+  const [hover, setHover] = createSignal(false)
 
   useKeyboard((evt) => {
     if (evt.name === "c" && !evt.ctrl && !evt.meta) {
-      const code = props.authorization.instructions.match(/[A-Z0-9]{4}-[A-Z0-9]{4}/)?.[0] ?? props.authorization.url
+      const code = props.authorization.instructions.match(/[A-Z0-9]{4}-[A-Z0-9]{4,5}/)?.[0] ?? props.authorization.url
       Clipboard.copy(code)
         .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
         .catch(toast.error)
@@ -154,7 +155,16 @@ function AutoMethod(props: AutoMethodProps) {
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
           {props.title}
         </text>
-        <text fg={theme.textMuted}>esc</text>
+        <box
+          paddingLeft={1}
+          paddingRight={1}
+          backgroundColor={hover() ? theme.primary : undefined}
+          onMouseOver={() => setHover(true)}
+          onMouseOut={() => setHover(false)}
+          onMouseUp={() => dialog.clear()}
+        >
+          <text fg={hover() ? theme.selectedListItemText : theme.textMuted}>esc</text>
+        </box>
       </box>
       <box gap={1}>
         <Link href={props.authorization.url} fg={theme.primary} />

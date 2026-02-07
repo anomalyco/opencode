@@ -1,8 +1,13 @@
+function truthy(key: string) {
+  const value = process.env[key]?.toLowerCase()
+  return value === "true" || value === "1"
+}
+
 export namespace Flag {
   export const OPENCODE_AUTO_SHARE = truthy("OPENCODE_AUTO_SHARE")
   export const OPENCODE_GIT_BASH_PATH = process.env["OPENCODE_GIT_BASH_PATH"]
   export const OPENCODE_CONFIG = process.env["OPENCODE_CONFIG"]
-  export const OPENCODE_CONFIG_DIR = process.env["OPENCODE_CONFIG_DIR"]
+  export declare const OPENCODE_CONFIG_DIR: string | undefined
   export const OPENCODE_CONFIG_CONTENT = process.env["OPENCODE_CONFIG_CONTENT"]
   export const OPENCODE_DISABLE_AUTOUPDATE = truthy("OPENCODE_DISABLE_AUTOUPDATE")
   export const OPENCODE_DISABLE_PRUNE = truthy("OPENCODE_DISABLE_PRUNE")
@@ -18,8 +23,11 @@ export namespace Flag {
     OPENCODE_DISABLE_CLAUDE_CODE || truthy("OPENCODE_DISABLE_CLAUDE_CODE_PROMPT")
   export const OPENCODE_DISABLE_CLAUDE_CODE_SKILLS =
     OPENCODE_DISABLE_CLAUDE_CODE || truthy("OPENCODE_DISABLE_CLAUDE_CODE_SKILLS")
+  export const OPENCODE_DISABLE_EXTERNAL_SKILLS =
+    OPENCODE_DISABLE_CLAUDE_CODE_SKILLS || truthy("OPENCODE_DISABLE_EXTERNAL_SKILLS")
+  export declare const OPENCODE_DISABLE_PROJECT_CONFIG: boolean
   export const OPENCODE_FAKE_VCS = process.env["OPENCODE_FAKE_VCS"]
-  export const OPENCODE_CLIENT = process.env["OPENCODE_CLIENT"] ?? "cli"
+  export declare const OPENCODE_CLIENT: string
   export const OPENCODE_SERVER_PASSWORD = process.env["OPENCODE_SERVER_PASSWORD"]
   export const OPENCODE_SERVER_USERNAME = process.env["OPENCODE_SERVER_USERNAME"]
 
@@ -32,18 +40,16 @@ export namespace Flag {
   export const OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT = truthy("OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT")
   export const OPENCODE_ENABLE_EXA =
     truthy("OPENCODE_ENABLE_EXA") || OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_EXA")
-  export const OPENCODE_EXPERIMENTAL_BASH_MAX_OUTPUT_LENGTH = number("OPENCODE_EXPERIMENTAL_BASH_MAX_OUTPUT_LENGTH")
   export const OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS = number("OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS")
   export const OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX = number("OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX")
   export const OPENCODE_EXPERIMENTAL_OXFMT = OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_OXFMT")
   export const OPENCODE_EXPERIMENTAL_LSP_TY = truthy("OPENCODE_EXPERIMENTAL_LSP_TY")
   export const OPENCODE_EXPERIMENTAL_LSP_TOOL = OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_LSP_TOOL")
+  export const OPENCODE_DISABLE_FILETIME_CHECK = truthy("OPENCODE_DISABLE_FILETIME_CHECK")
   export const OPENCODE_EXPERIMENTAL_PLAN_MODE = OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_PLAN_MODE")
-
-  function truthy(key: string) {
-    const value = process.env[key]?.toLowerCase()
-    return value === "true" || value === "1"
-  }
+  export const OPENCODE_EXPERIMENTAL_MARKDOWN = truthy("OPENCODE_EXPERIMENTAL_MARKDOWN")
+  export const OPENCODE_MODELS_URL = process.env["OPENCODE_MODELS_URL"]
+  export const OPENCODE_MODELS_PATH = process.env["OPENCODE_MODELS_PATH"]
 
   function number(key: string) {
     const value = process.env[key]
@@ -52,3 +58,36 @@ export namespace Flag {
     return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
   }
 }
+
+// Dynamic getter for OPENCODE_DISABLE_PROJECT_CONFIG
+// This must be evaluated at access time, not module load time,
+// because external tooling may set this env var at runtime
+Object.defineProperty(Flag, "OPENCODE_DISABLE_PROJECT_CONFIG", {
+  get() {
+    return truthy("OPENCODE_DISABLE_PROJECT_CONFIG")
+  },
+  enumerable: true,
+  configurable: false,
+})
+
+// Dynamic getter for OPENCODE_CONFIG_DIR
+// This must be evaluated at access time, not module load time,
+// because external tooling may set this env var at runtime
+Object.defineProperty(Flag, "OPENCODE_CONFIG_DIR", {
+  get() {
+    return process.env["OPENCODE_CONFIG_DIR"]
+  },
+  enumerable: true,
+  configurable: false,
+})
+
+// Dynamic getter for OPENCODE_CLIENT
+// This must be evaluated at access time, not module load time,
+// because some commands override the client at runtime
+Object.defineProperty(Flag, "OPENCODE_CLIENT", {
+  get() {
+    return process.env["OPENCODE_CLIENT"] ?? "cli"
+  },
+  enumerable: true,
+  configurable: false,
+})

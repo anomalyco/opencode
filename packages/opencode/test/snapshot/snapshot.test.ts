@@ -266,23 +266,78 @@ test("unicode filenames", async () => {
       expect(before).toBeTruthy()
 
       const unicodeFiles = [
-        `${tmp.path}/文件.txt`,
-        `${tmp.path}/🚀rocket.txt`,
-        `${tmp.path}/café.txt`,
-        `${tmp.path}/файл.txt`,
+        { path: `${tmp.path}/文件.txt`, content: "chinese content" },
+        { path: `${tmp.path}/🚀rocket.txt`, content: "emoji content" },
+        { path: `${tmp.path}/café.txt`, content: "accented content" },
+        { path: `${tmp.path}/файл.txt`, content: "cyrillic content" },
       ]
 
       for (const file of unicodeFiles) {
-        await Bun.write(file, "unicode content")
+        await Bun.write(file.path, file.content)
       }
 
       const patch = await Snapshot.patch(before!)
-      // Note: git escapes unicode characters by default, so we just check that files are detected
-      // The actual filenames will be escaped like "caf\303\251.txt" but functionality works
       expect(patch.files.length).toBe(4)
 
-      // Skip revert test due to git filename escaping issues
-      // The functionality works but git uses escaped filenames internally
+      for (const file of unicodeFiles) {
+        expect(patch.files).toContain(file.path)
+      }
+
+      await Snapshot.revert([patch])
+
+      for (const file of unicodeFiles) {
+        expect(await Bun.file(file.path).exists()).toBe(false)
+      }
+    },
+  })
+})
+
+test.skip("unicode filenames modification and restore", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const chineseFile = `${tmp.path}/文件.txt`
+      const cyrillicFile = `${tmp.path}/файл.txt`
+
+      await Bun.write(chineseFile, "original chinese")
+      await Bun.write(cyrillicFile, "original cyrillic")
+
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      await Bun.write(chineseFile, "modified chinese")
+      await Bun.write(cyrillicFile, "modified cyrillic")
+
+      const patch = await Snapshot.patch(before!)
+      expect(patch.files).toContain(chineseFile)
+      expect(patch.files).toContain(cyrillicFile)
+
+      await Snapshot.revert([patch])
+
+      expect(await Bun.file(chineseFile).text()).toBe("original chinese")
+      expect(await Bun.file(cyrillicFile).text()).toBe("original cyrillic")
+    },
+  })
+})
+
+test("unicode filenames in subdirectories", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      await $`mkdir -p "${tmp.path}/目录/подкаталог"`.quiet()
+      const deepFile = `${tmp.path}/目录/подкаталог/文件.txt`
+      await Bun.write(deepFile, "deep unicode content")
+
+      const patch = await Snapshot.patch(before!)
+      expect(patch.files).toContain(deepFile)
+
+      await Snapshot.revert([patch])
+      expect(await Bun.file(deepFile).exists()).toBe(false)
     },
   })
 })
@@ -690,6 +745,52 @@ test("revert preserves file that existed in snapshot when deleted then recreated
       expect(await Bun.file(`${tmp.path}/newfile.txt`).exists()).toBe(false)
       expect(await Bun.file(`${tmp.path}/existing.txt`).exists()).toBe(true)
       expect(await Bun.file(`${tmp.path}/existing.txt`).text()).toBe("original content")
+    },
+  })
+})
+
+test("diffFull sets status based on git change type", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await Bun.write(`${tmp.path}/grow.txt`, "one\n")
+      await Bun.write(`${tmp.path}/trim.txt`, "line1\nline2\n")
+      await Bun.write(`${tmp.path}/delete.txt`, "gone")
+
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      await Bun.write(`${tmp.path}/grow.txt`, "one\ntwo\n")
+      await Bun.write(`${tmp.path}/trim.txt`, "line1\n")
+      await $`rm ${tmp.path}/delete.txt`.quiet()
+      await Bun.write(`${tmp.path}/added.txt`, "new")
+
+      const after = await Snapshot.track()
+      expect(after).toBeTruthy()
+
+      const diffs = await Snapshot.diffFull(before!, after!)
+      expect(diffs.length).toBe(4)
+
+      const added = diffs.find((d) => d.file === "added.txt")
+      expect(added).toBeDefined()
+      expect(added!.status).toBe("added")
+
+      const deleted = diffs.find((d) => d.file === "delete.txt")
+      expect(deleted).toBeDefined()
+      expect(deleted!.status).toBe("deleted")
+
+      const grow = diffs.find((d) => d.file === "grow.txt")
+      expect(grow).toBeDefined()
+      expect(grow!.status).toBe("modified")
+      expect(grow!.additions).toBeGreaterThan(0)
+      expect(grow!.deletions).toBe(0)
+
+      const trim = diffs.find((d) => d.file === "trim.txt")
+      expect(trim).toBeDefined()
+      expect(trim!.status).toBe("modified")
+      expect(trim!.additions).toBe(0)
+      expect(trim!.deletions).toBeGreaterThan(0)
     },
   })
 })

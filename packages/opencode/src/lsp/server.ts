@@ -732,7 +732,7 @@ export namespace LSPServer {
 
   export const CSharp: Info = {
     id: "csharp",
-    root: NearestRoot([".sln", ".csproj", "global.json"]),
+    root: NearestRoot([".slnx", ".sln", ".csproj", "global.json"]),
     extensions: [".cs"],
     async spawn(root) {
       let bin = Bun.which("csharp-ls", {
@@ -772,7 +772,7 @@ export namespace LSPServer {
 
   export const FSharp: Info = {
     id: "fsharp",
-    root: NearestRoot([".sln", ".fsproj", "global.json"]),
+    root: NearestRoot([".slnx", ".sln", ".fsproj", "global.json"]),
     extensions: [".fs", ".fsi", ".fsx", ".fsscript"],
     async spawn(root) {
       let bin = Bun.which("fsautocomplete", {
@@ -1157,10 +1157,24 @@ export namespace LSPServer {
         await fs.mkdir(distPath, { recursive: true })
         const releaseURL =
           "https://www.eclipse.org/downloads/download.php?file=/jdtls/snapshots/jdt-language-server-latest.tar.gz"
-        const archivePath = path.join(distPath, "release.tar.gz")
-        await $`curl -L -o '${archivePath}' '${releaseURL}'`.quiet().nothrow()
-        await $`tar -xzf ${archivePath}`.cwd(distPath).quiet().nothrow()
-        await fs.rm(archivePath, { force: true })
+        const archiveName = "release.tar.gz"
+
+        log.info("Downloading JDTLS archive", { url: releaseURL, dest: distPath })
+        const curlResult = await $`curl -L -o ${archiveName} '${releaseURL}'`.cwd(distPath).quiet().nothrow()
+        if (curlResult.exitCode !== 0) {
+          log.error("Failed to download JDTLS", { exitCode: curlResult.exitCode, stderr: curlResult.stderr.toString() })
+          return
+        }
+
+        log.info("Extracting JDTLS archive")
+        const tarResult = await $`tar -xzf ${archiveName}`.cwd(distPath).quiet().nothrow()
+        if (tarResult.exitCode !== 0) {
+          log.error("Failed to extract JDTLS", { exitCode: tarResult.exitCode, stderr: tarResult.stderr.toString() })
+          return
+        }
+
+        await fs.rm(path.join(distPath, archiveName), { force: true })
+        log.info("JDTLS download and extraction completed")
       }
       const jarFileName = await $`ls org.eclipse.equinox.launcher_*.jar`
         .cwd(launcherDir)

@@ -1,10 +1,11 @@
 {
   "name": "@opencode-ai/ui",
-  "version": "1.1.23",
+  "version": "1.1.53",
   "type": "module",
   "license": "MIT",
   "exports": {
     "./*": "./src/components/*.tsx",
+    "./i18n/*": "./src/i18n/*.ts",
     "./pierre": "./src/pierre/index.ts",
     "./pierre/*": "./src/pierre/*.ts",
     "./hooks": "./src/hooks/index.ts",
@@ -17,6 +18,7 @@
     "./theme/context": "./src/theme/context.tsx",
     "./icons/provider": "./src/components/provider-icons/types.ts",
     "./icons/file-type": "./src/components/file-icons/types.ts",
+    "./icons/app": "./src/components/app-icons/types.ts",
     "./fonts/*": "./src/assets/fonts/*",
     "./audio/*": "./src/assets/audio/*"
   },
@@ -55,10 +57,12 @@
     "marked": "catalog:",
     "marked-katex-extension": "5.1.6",
     "marked-shiki": "catalog:",
+    "morphdom": "2.7.8",
     "remeda": "catalog:",
     "shiki": "catalog:",
     "solid-js": "catalog:",
     "solid-list": "catalog:",
+    "strip-ansi": "7.1.2",
     "virtua": "catalog:"
   }
 }

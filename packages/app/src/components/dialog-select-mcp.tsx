@@ -4,10 +4,12 @@ import { useSDK } from "@/context/sdk"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { List } from "@opencode-ai/ui/list"
 import { Switch } from "@opencode-ai/ui/switch"
+import { useLanguage } from "@/context/language"
 
 export const DialogSelectMcp: Component = () => {
   const sync = useSync()
   const sdk = useSDK()
+  const language = useLanguage()
   const [loading, setLoading] = createSignal<string | null>(null)
 
   const items = createMemo(() =>
@@ -34,10 +36,13 @@ export const DialogSelectMcp: Component = () => {
   const totalCount = createMemo(() => items().length)
 
   return (
-    <Dialog title="MCPs" description={`${enabledCount()} of ${totalCount()} enabled`}>
+    <Dialog
+      title={language.t("dialog.mcp.title")}
+      description={language.t("dialog.mcp.description", { enabled: enabledCount(), total: totalCount() })}
+    >
       <List
-        search={{ placeholder: "Search", autofocus: true }}
-        emptyMessage="No MCPs configured"
+        search={{ placeholder: language.t("common.search.placeholder"), autofocus: true }}
+        emptyMessage={language.t("dialog.mcp.empty")}
         key={(x) => x?.name ?? ""}
         items={items}
         filterKeys={["name", "status"]}
@@ -60,19 +65,19 @@ export const DialogSelectMcp: Component = () => {
                 <div class="flex items-center gap-2">
                   <span class="truncate">{i.name}</span>
                   <Show when={status() === "connected"}>
-                    <span class="text-11-regular text-text-weaker">connected</span>
+                    <span class="text-11-regular text-text-weaker">{language.t("mcp.status.connected")}</span>
                   </Show>
                   <Show when={status() === "failed"}>
-                    <span class="text-11-regular text-text-weaker">failed</span>
+                    <span class="text-11-regular text-text-weaker">{language.t("mcp.status.failed")}</span>
                   </Show>
                   <Show when={status() === "needs_auth"}>
-                    <span class="text-11-regular text-text-weaker">needs auth</span>
+                    <span class="text-11-regular text-text-weaker">{language.t("mcp.status.needs_auth")}</span>
                   </Show>
                   <Show when={status() === "disabled"}>
-                    <span class="text-11-regular text-text-weaker">disabled</span>
+                    <span class="text-11-regular text-text-weaker">{language.t("mcp.status.disabled")}</span>
                   </Show>
                   <Show when={loading() === i.name}>
-                    <span class="text-11-regular text-text-weak">...</span>
+                    <span class="text-11-regular text-text-weak">{language.t("common.loading.ellipsis")}</span>
                   </Show>
                 </div>
                 <Show when={error()}>

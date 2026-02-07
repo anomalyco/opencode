@@ -11,6 +11,11 @@
   z-index: 50;
   transform-origin: var(--kb-menu-content-transform-origin);
 
+  &:focus,
+  &:focus-visible {
+    outline: none;
+  }
+
   &[data-closed] {
     animation: dropdown-menu-close 0.15s ease-out;
   }

@@ -108,6 +108,7 @@ export namespace SessionCompaction {
       sessionID: input.sessionID,
       mode: "compaction",
       agent: "compaction",
+      variant: userMessage.variant,
       summary: true,
       path: {
         cwd: Instance.directory,
@@ -149,7 +150,7 @@ export namespace SessionCompaction {
       tools: {},
       system: [],
       messages: [
-        ...MessageV2.toModelMessage(input.messages),
+        ...MessageV2.toModelMessages(input.messages, model),
         {
           role: "user",
           content: [
