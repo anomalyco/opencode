@@ -2,6 +2,7 @@ import {
   batch,
   createEffect,
   createMemo,
+  createSignal,
   For,
   on,
   onCleanup,
@@ -142,6 +143,7 @@ export default function Layout(props: ParentProps) {
   }
   const isBusy = (directory: string) => state.busyWorkspaces.has(workspaceKey(directory))
   const navLeave = { current: undefined as number | undefined }
+  const [resizing, setResizing] = createSignal(false)
 
   const aim = createAim({
     enabled: () => !layout.sidebar.opened(),
@@ -1881,6 +1883,7 @@ export default function Layout(props: ParentProps) {
           classList={{
             "hidden xl:block": true,
             "relative shrink-0": true,
+            "transition-[width] duration-200 ease-out": settings.appearance.animations() && !resizing(),
           }}
           style={{ width: layout.sidebar.opened() ? `${Math.max(layout.sidebar.width(), 244)}px` : "64px" }}
           ref={(el) => {
@@ -1942,13 +1945,16 @@ export default function Layout(props: ParentProps) {
               collapseThreshold={244}
               onResize={layout.sidebar.resize}
               onCollapse={layout.sidebar.close}
+              onResizeStart={() => setResizing(true)}
+              onResizeEnd={() => setResizing(false)}
             />
           </Show>
         </nav>
         <div class="xl:hidden">
           <div
             classList={{
-              "fixed inset-x-0 top-10 bottom-0 z-40 transition-opacity duration-200": true,
+              "fixed inset-x-0 top-10 bottom-0 z-40": true,
+              "transition-opacity duration-200": settings.appearance.animations(),
               "opacity-100 pointer-events-auto": layout.mobileSidebar.opened(),
               "opacity-0 pointer-events-none": !layout.mobileSidebar.opened(),
             }}
@@ -1960,7 +1966,8 @@ export default function Layout(props: ParentProps) {
             aria-label={language.t("sidebar.nav.projectsAndSessions")}
             data-component="sidebar-nav-mobile"
             classList={{
-              "@container fixed top-10 bottom-0 left-0 z-50 w-72 bg-background-base transition-transform duration-200 ease-out": true,
+              "@container fixed top-10 bottom-0 left-0 z-50 w-72 bg-background-base": true,
+              "transition-transform duration-200 ease-out": settings.appearance.animations(),
               "translate-x-0": layout.mobileSidebar.opened(),
               "-translate-x-full": !layout.mobileSidebar.opened(),
             }}

@@ -594,6 +594,8 @@ export const dict = {
   "settings.general.row.theme.description": "Customise how OpenCode is themed.",
   "settings.general.row.font.title": "Font",
   "settings.general.row.font.description": "Customise the mono font used in code blocks",
+  "settings.general.row.animations.title": "Animations",
+  "settings.general.row.animations.description": "Enable smooth transitions and animations throughout the app",
 
   "settings.general.row.releaseNotes.title": "Release notes",
   "settings.general.row.releaseNotes.description": "Show What's New popups after updates",

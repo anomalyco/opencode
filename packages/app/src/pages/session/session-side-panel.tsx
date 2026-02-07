@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createMemo, onCleanup, type JSX, type ValidComponent } from "solid-js"
+import { For, Match, Show, Switch, createMemo, createSignal, onCleanup, type JSX, type ValidComponent } from "solid-js"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
@@ -24,6 +24,7 @@ import { useSync } from "@/context/sync"
 
 export function SessionSidePanel(props: {
   open: boolean
+  animations: boolean
   language: ReturnType<typeof useLanguage>
   layout: ReturnType<typeof useLayout>
   command: ReturnType<typeof useCommand>
@@ -67,12 +68,17 @@ export function SessionSidePanel(props: {
   activeDiff?: string
   focusReviewDiff: (path: string) => void
 }) {
+  const [fileTreeResizing, setFileTreeResizing] = createSignal(false)
+
   return (
-    <Show when={props.open}>
       <aside
         id="review-panel"
         aria-label={props.language.t("session.panel.reviewAndFiles")}
-        class="relative flex-1 min-w-0 h-full border-l border-border-weak-base flex"
+        classList={{
+          "relative min-w-0 h-full flex overflow-hidden": true,
+          "flex-1 border-l border-border-weak-base": props.open,
+        }}
+        inert={!props.open || undefined}
       >
         <div class="flex-1 min-w-0 h-full">
           <Show
@@ -224,11 +230,14 @@ export function SessionSidePanel(props: {
           </Show>
         </div>
 
-        <Show when={props.layout.fileTree.opened()}>
           <div
             id="file-tree-panel"
-            class="relative shrink-0 h-full"
-            style={{ width: `${props.layout.fileTree.width()}px` }}
+            classList={{
+              "relative shrink-0 h-full overflow-hidden": true,
+              "transition-[width] duration-200 ease-out": props.animations && !fileTreeResizing(),
+            }}
+            style={{ width: props.layout.fileTree.opened() ? `${props.layout.fileTree.width()}px` : "0px" }}
+            inert={!props.layout.fileTree.opened() || undefined}
           >
             <div class="h-full border-l border-border-weak-base flex flex-col overflow-hidden group/filetree">
               <Tabs
@@ -297,10 +306,10 @@ export function SessionSidePanel(props: {
               collapseThreshold={160}
               onResize={props.layout.fileTree.resize}
               onCollapse={props.layout.fileTree.close}
+              onResizeStart={() => setFileTreeResizing(true)}
+              onResizeEnd={() => setFileTreeResizing(false)}
             />
           </div>
-        </Show>
       </aside>
-    </Show>
   )
 }

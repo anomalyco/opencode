@@ -1,4 +1,4 @@
-import { For, onCleanup, Show, Match, Switch, createMemo, createEffect, on } from "solid-js"
+import { For, onCleanup, Show, Match, Switch, createMemo, createSignal, createEffect, on } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Dynamic } from "solid-js/web"
@@ -29,6 +29,7 @@ import { DialogSelectFile } from "@/components/dialog-select-file"
 import FileTree from "@/components/file-tree"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
+import { useSettings } from "@/context/settings"
 import { useNavigate, useParams } from "@solidjs/router"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSDK } from "@/context/sdk"
@@ -96,6 +97,7 @@ export default function Page() {
   const codeComponent = useCodeComponent()
   const command = useCommand()
   const language = useLanguage()
+  const settings = useSettings()
   const params = useParams()
   const navigate = useNavigate()
   const sdk = useSDK()
@@ -234,6 +236,7 @@ export default function Page() {
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const centered = createMemo(() => isDesktop() && !view().reviewPanel.opened())
+  const [sessionResizing, setSessionResizing] = createSignal(false)
 
   function normalizeTab(tab: string) {
     if (!tab.startsWith("file://")) return tab
@@ -1533,7 +1536,8 @@ export default function Page() {
           classList={{
             "@container relative shrink-0 flex flex-col min-h-0 h-full bg-background-stronger": true,
             "flex-1 pt-2 md:pt-3": true,
-            "md:flex-none": view().reviewPanel.opened(),
+            "md:flex-none": true,
+            "md:transition-[width] md:duration-200 md:ease-out": settings.appearance.animations() && !sessionResizing(),
           }}
           style={{
             width: isDesktop() && view().reviewPanel.opened() ? `${layout.session.width()}px` : "100%",
@@ -1670,12 +1674,15 @@ export default function Page() {
               min={450}
               max={window.innerWidth * 0.45}
               onResize={layout.session.resize}
+              onResizeStart={() => setSessionResizing(true)}
+              onResizeEnd={() => setSessionResizing(false)}
             />
           </Show>
         </div>
 
         <SessionSidePanel
           open={isDesktop() && view().reviewPanel.opened()}
+          animations={settings.appearance.animations()}
           language={language}
           layout={layout}
           command={command}
@@ -1717,6 +1724,7 @@ export default function Page() {
 
       <TerminalPanel
         open={isDesktop() && view().terminal.opened()}
+        animations={settings.appearance.animations()}
         height={layout.terminal.height()}
         resize={layout.terminal.resize}
         close={view().terminal.close}

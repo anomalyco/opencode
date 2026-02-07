@@ -26,6 +26,7 @@ export interface Settings {
   appearance: {
     fontSize: number
     font: string
+    animations: boolean
   }
   keybinds: Record<string, string>
   permissions: {
@@ -46,6 +47,7 @@ const defaultSettings: Settings = {
   appearance: {
     fontSize: 14,
     font: "ibm-plex-mono",
+    animations: true,
   },
   keybinds: {},
   permissions: {
@@ -124,6 +126,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         font: createMemo(() => store.appearance?.font ?? defaultSettings.appearance.font),
         setFont(value: string) {
           setStore("appearance", "font", value)
+        },
+        animations: createMemo(() => store.appearance?.animations ?? defaultSettings.appearance.animations),
+        setAnimations(value: boolean) {
+          setStore("appearance", "animations", value)
         },
       },
       keybinds: {

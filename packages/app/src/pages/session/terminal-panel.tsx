@@ -1,4 +1,4 @@
-import { createMemo, For, Show } from "solid-js"
+import { createMemo, createSignal, For, Show } from "solid-js"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -15,6 +15,7 @@ import { terminalTabLabel } from "@/pages/session/terminal-label"
 
 export function TerminalPanel(props: {
   open: boolean
+  animations: boolean
   height: number
   resize: (value: number) => void
   close: () => void
@@ -28,14 +29,20 @@ export function TerminalPanel(props: {
   handleTerminalDragEnd: () => void
   onCloseTab: () => void
 }) {
+  const [resizing, setResizing] = createSignal(false)
+
   return (
-    <Show when={props.open}>
       <div
         id="terminal-panel"
         role="region"
         aria-label={props.language.t("terminal.title")}
-        class="relative w-full flex flex-col shrink-0 border-t border-border-weak-base"
-        style={{ height: `${props.height}px` }}
+        classList={{
+          "relative w-full flex flex-col shrink-0 overflow-hidden": true,
+          "border-t border-border-weak-base": props.open,
+          "transition-[height] duration-200 ease-out": props.animations && !resizing(),
+        }}
+        style={{ height: props.open ? `${props.height}px` : "0px" }}
+        inert={!props.open || undefined}
       >
         <ResizeHandle
           direction="vertical"
@@ -45,6 +52,8 @@ export function TerminalPanel(props: {
           collapseThreshold={50}
           onResize={props.resize}
           onCollapse={props.close}
+          onResizeStart={() => setResizing(true)}
+          onResizeEnd={() => setResizing(false)}
         />
         <Show
           when={props.terminal.ready()}
@@ -164,6 +173,5 @@ export function TerminalPanel(props: {
           </DragDropProvider>
         </Show>
       </div>
-    </Show>
   )
 }

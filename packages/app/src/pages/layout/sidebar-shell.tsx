@@ -103,7 +103,9 @@ export const SidebarContent = (props: {
         </div>
       </div>
 
-      <Show when={expanded()}>{props.renderPanel()}</Show>
+      <div class="min-w-0 min-h-0 flex" inert={!expanded() || undefined}>
+        {props.renderPanel()}
+      </div>
     </div>
   )
 }
