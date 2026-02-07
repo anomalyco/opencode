@@ -20,6 +20,32 @@ export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
   const log = Log.create({ service: "session.processor" })
 
+  const LOOP_WINDOW = 1024
+
+  const hashSnippet = (value: string) => {
+    let acc = 0
+    for (let i = 0; i < value.length; i++) {
+      acc = (acc * 31 + value.charCodeAt(i)) >>> 0
+    }
+    return acc
+  }
+
+  const trimWindow = (value: string) => value.trim().slice(-LOOP_WINDOW)
+
+  const snippetMatches = (value: string, snippet: string, signature: number) => {
+    const candidate = trimWindow(value)
+    return hashSnippet(candidate) === signature && candidate === snippet
+  }
+
+  export function detectRepeatSnippet(values: string[], current: string, threshold = DOOM_LOOP_THRESHOLD) {
+    if (values.length < threshold) return
+    const snippet = trimWindow(current)
+    const signature = hashSnippet(snippet)
+    if (values.slice(-threshold).every((value) => snippetMatches(value, snippet, signature))) {
+      return snippet
+    }
+  }
+
   export type Info = Awaited<ReturnType<typeof create>>
   export type Result = Awaited<ReturnType<Info["process"]>>
 
@@ -34,6 +60,15 @@ export namespace SessionProcessor {
     let blocked = false
     let attempt = 0
     let needsCompaction = false
+
+    const reasoningHistory: string[] = []
+    const outputHistory: string[] = []
+    const appendHistory = (history: string[], value: string) => {
+      history.push(value)
+      if (history.length > DOOM_LOOP_THRESHOLD * 2) {
+        history.shift()
+      }
+    }
 
     const result = {
       get message() {
@@ -97,6 +132,24 @@ export namespace SessionProcessor {
                     if (value.providerMetadata) part.metadata = value.providerMetadata
                     await Session.updatePart(part)
                     delete reasoningMap[value.id]
+                    appendHistory(reasoningHistory, part.text)
+                    const snippet = detectRepeatSnippet(reasoningHistory, part.text)
+                    if (snippet) {
+                      const agent = await Agent.get(input.assistantMessage.agent)
+                      await PermissionNext.ask({
+                        permission: "doom_loop",
+                        patterns: ["reasoning"],
+                        sessionID: input.assistantMessage.sessionID,
+                        metadata: {
+                          reasoning: {
+                            snippet,
+                          },
+                          threshold: DOOM_LOOP_THRESHOLD,
+                        },
+                        always: ["reasoning"],
+                        ruleset: agent.permission,
+                      })
+                    }
                   }
                   break
 
@@ -321,6 +374,24 @@ export namespace SessionProcessor {
                     }
                     if (value.providerMetadata) currentText.metadata = value.providerMetadata
                     await Session.updatePart(currentText)
+                    appendHistory(outputHistory, currentText.text)
+                    const snippet = detectRepeatSnippet(outputHistory, currentText.text)
+                    if (snippet) {
+                      const agent = await Agent.get(input.assistantMessage.agent)
+                      await PermissionNext.ask({
+                        permission: "doom_loop",
+                        patterns: ["output"],
+                        sessionID: input.assistantMessage.sessionID,
+                        metadata: {
+                          output: {
+                            snippet,
+                          },
+                          threshold: DOOM_LOOP_THRESHOLD,
+                        },
+                        always: ["output"],
+                        ruleset: agent.permission,
+                      })
+                    }
                   }
                   currentText = undefined
                   break
