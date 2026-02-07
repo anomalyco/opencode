@@ -1166,16 +1166,11 @@ export namespace SessionPrompt {
                 },
               ]
             default:
-<<<<<<< HEAD
-              // Handle unknown protocols gracefully to prevent crashes
-              log.warn("unsupported URL protocol", { protocol: url.protocol, url: part.url.slice(0, 100) })
-=======
               // Unknown protocol - log and return part unchanged to prevent crashes
               log.warn("unsupported URL protocol for file part", {
                 protocol: url.protocol,
                 url: part.url.slice(0, 100),
               })
->>>>>>> cfbf89264 (fix: handle non-text data URLs to prevent Windows clipboard paste crash)
               return [
                 {
                   ...part,
