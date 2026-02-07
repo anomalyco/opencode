@@ -1,5 +1,7 @@
 import { useFile } from "@/context/file"
+import { useLanguage } from "@/context/language"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
+import { ContextMenu } from "@opencode-ai/ui/context-menu"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
@@ -74,6 +76,7 @@ export default function FileTree(props: {
   draggable?: boolean
   tooltip?: boolean
   onFileClick?: (file: FileNode) => void
+  onFileMention?: (file: FileNode) => void
 
   _filter?: Filter
   _marks?: Set<string>
@@ -81,6 +84,7 @@ export default function FileTree(props: {
   _kinds?: ReadonlyMap<string, Kind>
 }) {
   const file = useFile()
+  const language = useLanguage()
   const level = props.level ?? 0
   const draggable = () => props.draggable ?? true
   const tooltip = () => props.tooltip ?? true
@@ -415,15 +419,26 @@ export default function FileTree(props: {
                   open={expanded()}
                   onOpenChange={(open) => (open ? file.tree.expand(node.path) : file.tree.collapse(node.path))}
                 >
-                  <Collapsible.Trigger>
-                    <Wrapper>
-                      <Node node={node}>
-                        <div class="size-4 flex items-center justify-center text-icon-weak">
-                          <Icon name={expanded() ? "chevron-down" : "chevron-right"} size="small" />
-                        </div>
-                      </Node>
-                    </Wrapper>
-                  </Collapsible.Trigger>
+                  <ContextMenu>
+                    <Collapsible.Trigger as={ContextMenu.Trigger}>
+                      <Wrapper>
+                        <Node node={node}>
+                          <div class="size-4 flex items-center justify-center text-icon-weak">
+                            <Icon name={expanded() ? "chevron-down" : "chevron-right"} size="small" />
+                          </div>
+                        </Node>
+                      </Wrapper>
+                    </Collapsible.Trigger>
+                    <ContextMenu.Portal>
+                      <ContextMenu.Content>
+                        <Show when={props.onFileMention}>
+                          <ContextMenu.Item onSelect={() => props.onFileMention?.(node)}>
+                            <ContextMenu.ItemLabel>{language.t("session.files.mention")}</ContextMenu.ItemLabel>
+                          </ContextMenu.Item>
+                        </Show>
+                      </ContextMenu.Content>
+                    </ContextMenu.Portal>
+                  </ContextMenu>
                   <Collapsible.Content class="relative pt-0.5">
                     <div
                       classList={{
@@ -443,6 +458,7 @@ export default function FileTree(props: {
                       draggable={props.draggable}
                       tooltip={props.tooltip}
                       onFileClick={props.onFileClick}
+                      onFileMention={props.onFileMention}
                       _filter={filter()}
                       _marks={marks()}
                       _deeps={deeps()}
@@ -452,12 +468,28 @@ export default function FileTree(props: {
                 </Collapsible>
               </Match>
               <Match when={node.type === "file"}>
-                <Wrapper>
-                  <Node node={node} as="button" type="button" onClick={() => props.onFileClick?.(node)}>
-                    <div class="w-4 shrink-0" />
-                    <FileIcon node={node} class="text-icon-weak size-4" />
-                  </Node>
-                </Wrapper>
+                <ContextMenu>
+                  <ContextMenu.Trigger as="div">
+                    <Wrapper>
+                      <Node node={node} as="button" type="button" onClick={() => props.onFileClick?.(node)}>
+                        <div class="w-4 shrink-0" />
+                        <FileIcon node={node} class="text-icon-weak size-4" />
+                      </Node>
+                    </Wrapper>
+                  </ContextMenu.Trigger>
+                  <ContextMenu.Portal>
+                    <ContextMenu.Content>
+                      <ContextMenu.Item onSelect={() => props.onFileClick?.(node)}>
+                        <ContextMenu.ItemLabel>{language.t("common.open")}</ContextMenu.ItemLabel>
+                      </ContextMenu.Item>
+                      <Show when={props.onFileMention}>
+                        <ContextMenu.Item onSelect={() => props.onFileMention?.(node)}>
+                          <ContextMenu.ItemLabel>{language.t("session.files.mention")}</ContextMenu.ItemLabel>
+                        </ContextMenu.Item>
+                      </Show>
+                    </ContextMenu.Content>
+                  </ContextMenu.Portal>
+                </ContextMenu>
               </Match>
             </Switch>
           )

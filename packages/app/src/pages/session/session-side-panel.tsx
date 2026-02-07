@@ -66,6 +66,7 @@ export function SessionSidePanel(props: {
   kinds: Map<string, "add" | "del" | "mix">
   activeDiff?: string
   focusReviewDiff: (path: string) => void
+  onFileMention?: (path: string) => void
 }) {
   return (
     <Show when={props.open}>
@@ -268,6 +269,7 @@ export function SessionSidePanel(props: {
                           draggable={false}
                           active={props.activeDiff}
                           onFileClick={(node) => props.focusReviewDiff(node.path)}
+                          onFileMention={props.onFileMention ? (node) => props.onFileMention!(node.path) : undefined}
                         />
                       </Show>
                     </Match>
@@ -284,6 +286,7 @@ export function SessionSidePanel(props: {
                     modified={props.diffFiles}
                     kinds={props.kinds}
                     onFileClick={(node) => props.openTab(props.file.tab(node.path))}
+                    onFileMention={props.onFileMention ? (node) => props.onFileMention!(node.path) : undefined}
                   />
                 </Tabs.Content>
               </Tabs>

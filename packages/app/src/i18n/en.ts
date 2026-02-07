@@ -492,6 +492,7 @@ export const dict = {
   "session.files.selectToOpen": "Select a file to open",
   "session.files.all": "All files",
   "session.files.binaryContent": "Binary file (content cannot be displayed)",
+  "session.files.mention": "Mention",
 
   "session.messages.renderEarlier": "Render earlier messages",
   "session.messages.loadingEarlier": "Loading earlier messages...",
@@ -558,6 +559,7 @@ export const dict = {
   "common.archive": "Archive",
   "common.delete": "Delete",
   "common.close": "Close",
+  "common.open": "Open",
   "common.edit": "Edit",
   "common.loadMore": "Load more",
   "common.key.esc": "ESC",

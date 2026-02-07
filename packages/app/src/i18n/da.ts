@@ -428,6 +428,7 @@ export const dict = {
   "session.files.selectToOpen": "Vælg en fil at åbne",
   "session.files.all": "Alle filer",
   "session.files.binaryContent": "Binær fil (indhold kan ikke vises)",
+  "session.files.mention": "Nævn",
   "session.messages.renderEarlier": "Vis tidligere beskeder",
   "session.messages.loadingEarlier": "Indlæser tidligere beskeder...",
   "session.messages.loadEarlier": "Indlæs tidligere beskeder",
@@ -487,6 +488,7 @@ export const dict = {
   "common.archive": "Arkivér",
   "common.delete": "Slet",
   "common.close": "Luk",
+  "common.open": "Åbn",
   "common.edit": "Rediger",
   "common.loadMore": "Indlæs flere",
 

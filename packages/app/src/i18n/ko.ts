@@ -429,6 +429,7 @@ export const dict = {
   "session.files.selectToOpen": "열 파일을 선택하세요",
   "session.files.all": "모든 파일",
   "session.files.binaryContent": "바이너리 파일 (내용을 표시할 수 없음)",
+  "session.files.mention": "멘션",
   "session.messages.renderEarlier": "이전 메시지 렌더링",
   "session.messages.loadingEarlier": "이전 메시지 로드 중...",
   "session.messages.loadEarlier": "이전 메시지 로드",
@@ -488,6 +489,7 @@ export const dict = {
   "common.archive": "보관",
   "common.delete": "삭제",
   "common.close": "닫기",
+  "common.open": "열기",
   "common.edit": "편집",
   "common.loadMore": "더 불러오기",
 

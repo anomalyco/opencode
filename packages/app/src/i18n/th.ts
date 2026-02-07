@@ -432,6 +432,7 @@ export const dict = {
   "session.files.selectToOpen": "เลือกไฟล์เพื่อเปิด",
   "session.files.all": "ไฟล์ทั้งหมด",
   "session.files.binaryContent": "ไฟล์ไบนารี (ไม่สามารถแสดงเนื้อหาได้)",
+  "session.files.mention": "กล่าวถึง",
 
   "session.messages.renderEarlier": "แสดงข้อความก่อนหน้า",
   "session.messages.loadingEarlier": "กำลังโหลดข้อความก่อนหน้า...",
@@ -490,6 +491,7 @@ export const dict = {
   "common.archive": "จัดเก็บ",
   "common.delete": "ลบ",
   "common.close": "ปิด",
+  "common.open": "เปิด",
   "common.edit": "แก้ไข",
   "common.loadMore": "โหลดเพิ่มเติม",
   "common.key.esc": "ESC",
