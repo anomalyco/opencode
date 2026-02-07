@@ -9,6 +9,45 @@ import type { Message, Part } from "@opencode-ai/sdk/v2/client"
 
 const keyFor = (directory: string, id: string) => `${directory}\n${id}`
 
+const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
+
+type OptimisticStore = {
+  message: Record<string, Message[] | undefined>
+  part: Record<string, Part[] | undefined>
+}
+
+type OptimisticAddInput = {
+  sessionID: string
+  message: Message
+  parts: Part[]
+}
+
+type OptimisticRemoveInput = {
+  sessionID: string
+  messageID: string
+}
+
+export function applyOptimisticAdd(draft: OptimisticStore, input: OptimisticAddInput) {
+  const messages = draft.message[input.sessionID]
+  if (!messages) {
+    draft.message[input.sessionID] = [input.message]
+  }
+  if (messages) {
+    const result = Binary.search(messages, input.message.id, (m) => m.id)
+    messages.splice(result.index, 0, input.message)
+  }
+  draft.part[input.message.id] = input.parts.filter((part) => !!part?.id).sort((a, b) => cmp(a.id, b.id))
+}
+
+export function applyOptimisticRemove(draft: OptimisticStore, input: OptimisticRemoveInput) {
+  const messages = draft.message[input.sessionID]
+  if (messages) {
+    const result = Binary.search(messages, input.messageID, (m) => m.id)
+    if (result.found) messages.splice(result.index, 1)
+  }
+  delete draft.part[input.messageID]
+}
+
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
   init: () => {
@@ -19,6 +58,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     type Setter = Child[1]
 
     const current = createMemo(() => globalSync.child(sdk.directory))
+    const target = (directory?: string) => {
+      if (!directory || directory === sdk.directory) return current()
+      return globalSync.child(directory)
+    }
     const absolute = (path: string) => (current()[0].path.directory + "/" + path).replace("//", "/")
     const chunk = 400
     const inflight = new Map<string, Promise<void>>()
@@ -59,7 +102,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           const next = items
             .map((x) => x.info)
             .filter((m) => !!m?.id)
-            .sort((a, b) => a.id.localeCompare(b.id))
+            .sort((a, b) => cmp(a.id, b.id))
 
           batch(() => {
             input.setStore("message", input.sessionID, reconcile(next, { key: "id" }))
@@ -69,7 +112,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
                 "part",
                 message.info.id,
                 reconcile(
-                  message.parts.filter((p) => !!p?.id).sort((a, b) => a.id.localeCompare(b.id)),
+                  message.parts.filter((p) => !!p?.id).sort((a, b) => cmp(a.id, b.id)),
                   { key: "id" },
                 ),
               )
@@ -105,6 +148,24 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       },
       session: {
         get: getSession,
+        optimistic: {
+          add(input: { directory?: string; sessionID: string; message: Message; parts: Part[] }) {
+            const [, setStore] = target(input.directory)
+            setStore(
+              produce((draft) => {
+                applyOptimisticAdd(draft as OptimisticStore, input)
+              }),
+            )
+          },
+          remove(input: { directory?: string; sessionID: string; messageID: string }) {
+            const [, setStore] = target(input.directory)
+            setStore(
+              produce((draft) => {
+                applyOptimisticRemove(draft as OptimisticStore, input)
+              }),
+            )
+          },
+        },
         addOptimisticMessage(input: {
           sessionID: string
           messageID: string
@@ -120,16 +181,14 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             agent: input.agent,
             model: input.model,
           }
-          current()[1](
+          const [, setStore] = target()
+          setStore(
             produce((draft) => {
-              const messages = draft.message[input.sessionID]
-              if (!messages) {
-                draft.message[input.sessionID] = [message]
-              } else {
-                const result = Binary.search(messages, input.messageID, (m) => m.id)
-                messages.splice(result.index, 0, message)
-              }
-              draft.part[input.messageID] = input.parts.filter((p) => !!p?.id).sort((a, b) => a.id.localeCompare(b.id))
+              applyOptimisticAdd(draft as OptimisticStore, {
+                sessionID: input.sessionID,
+                message,
+                parts: input.parts,
+              })
             }),
           )
         },
@@ -271,7 +330,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           await client.session.list().then((x) => {
             const sessions = (x.data ?? [])
               .filter((s) => !!s?.id)
-              .sort((a, b) => a.id.localeCompare(b.id))
+              .sort((a, b) => cmp(a.id, b.id))
               .slice(0, store.limit)
             setStore("session", reconcile(sessions, { key: "id" }))
           })

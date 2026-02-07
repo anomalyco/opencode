@@ -173,7 +173,9 @@ describe("tool.read truncation", () => {
   test("truncates large file by bytes and sets truncated metadata", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
-        const content = await Bun.file(path.join(FIXTURES_DIR, "models-api.json")).text()
+        const base = await Bun.file(path.join(FIXTURES_DIR, "models-api.json")).text()
+        const target = 60 * 1024
+        const content = base.length >= target ? base : base.repeat(Math.ceil(target / base.length))
         await Bun.write(path.join(dir, "large.json"), content)
       },
     })
