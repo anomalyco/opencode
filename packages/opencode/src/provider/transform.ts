@@ -734,14 +734,12 @@ export namespace ProviderTransform {
     const modelCap = modelLimit || globalLimit
     const standardLimit = Math.min(modelCap, globalLimit)
 
-    if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic" || npm === "@ai-sdk/openai-compatible") {
+    if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic") {
       const thinking = options?.["thinking"]
       const budgetTokens =
         typeof thinking?.["budgetTokens"] === "number"
           ? thinking["budgetTokens"]
-          : typeof thinking?.["budget_tokens"] === "number"
-            ? thinking["budget_tokens"]
-            : 0
+          : 0
       const enabled = thinking?.["type"] === "enabled"
       if (enabled && budgetTokens > 0) {
         // Return text tokens so that text + thinking <= model cap, preferring 32k text when possible.

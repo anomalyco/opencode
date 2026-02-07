@@ -268,67 +268,6 @@ describe("ProviderTransform.maxOutputTokens", () => {
     })
   })
 
-  describe("openai-compatible with thinking options (budget_tokens snake_case)", () => {
-    test("returns 32k when budget_tokens + 32k <= modelLimit", () => {
-      const modelLimit = 100000
-      const options = {
-        thinking: {
-          type: "enabled",
-          budget_tokens: 10000,
-        },
-      }
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/openai-compatible", options, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(OUTPUT_TOKEN_MAX)
-    })
-
-    test("returns modelLimit - budget_tokens when budget_tokens + 32k > modelLimit", () => {
-      const modelLimit = 50000
-      const options = {
-        thinking: {
-          type: "enabled",
-          budget_tokens: 30000,
-        },
-      }
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/openai-compatible", options, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(20000)
-    })
-
-    test("returns 32k when thinking type is not enabled", () => {
-      const modelLimit = 100000
-      const options = {
-        thinking: {
-          type: "disabled",
-          budget_tokens: 10000,
-        },
-      }
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/openai-compatible", options, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(OUTPUT_TOKEN_MAX)
-    })
-
-    test("returns 32k when budget_tokens is 0", () => {
-      const modelLimit = 100000
-      const options = {
-        thinking: {
-          type: "enabled",
-          budget_tokens: 0,
-        },
-      }
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/openai-compatible", options, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(OUTPUT_TOKEN_MAX)
-    })
-
-    test("handles budgetTokens camelCase for openai-compatible", () => {
-      const modelLimit = 100000
-      const options = {
-        thinking: {
-          type: "enabled",
-          budgetTokens: 10000,
-        },
-      }
-      const result = ProviderTransform.maxOutputTokens("@ai-sdk/openai-compatible", options, modelLimit, OUTPUT_TOKEN_MAX)
-      expect(result).toBe(OUTPUT_TOKEN_MAX)
-    })
-  })
 })
 
 describe("ProviderTransform.providerOptions - openai-compatible snake_case conversion", () => {
