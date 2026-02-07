@@ -16,3 +16,4 @@ export {
   type ExecResult,
 } from "./session-shell"
 export { getCompletions, applyCompletion, findCommonPrefix, type CompletionResult } from "./completion"
+export { detectNaturalLanguage } from "./natural-language"

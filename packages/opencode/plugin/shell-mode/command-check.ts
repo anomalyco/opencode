@@ -4,6 +4,31 @@
  */
 
 /**
+ * Shell reserved words that are valid shell syntax but never standalone commands.
+ * `command -v` reports these as found, but they only make sense inside compound
+ * constructs (if/then/fi, for/do/done, etc.) — never as the first token of a
+ * standalone invocation. When a user types "do we have X" or "if anyone knows",
+ * they mean natural language, not shell.
+ */
+const SHELL_RESERVED_WORDS = new Set([
+  "do",
+  "done",
+  "then",
+  "else",
+  "elif",
+  "fi",
+  "esac",
+  "in",
+  "select",
+  "function",
+  "coproc",
+  "{",
+  "}",
+  "!",
+  "[[",
+])
+
+/**
  * Check if input should be routed to shell based on first token being a valid command.
  * Used in Auto mode to intelligently route between shell and agent.
  */
@@ -13,6 +38,9 @@ export async function shouldRouteToShell(input: string): Promise<boolean> {
 
   const firstToken = extractFirstToken(trimmed)
   if (!firstToken) return false
+
+  // Reserved words pass `command -v` but are never valid standalone commands
+  if (SHELL_RESERVED_WORDS.has(firstToken)) return false
 
   return commandExists(firstToken)
 }

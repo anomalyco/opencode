@@ -10,6 +10,7 @@ plugin/
 │   ├── index.ts           # Exports
 │   ├── mode.ts            # ExecutionMode enum, ModeController
 │   ├── command-check.ts   # Command existence checking (command -v)
+│   ├── natural-language.ts # Natural language detection after shell errors
 │   ├── completion.ts      # Shell tab completion
 │   ├── cwd.ts             # Working directory state
 │   └── session-shell.ts   # Per-session shell process
@@ -49,11 +50,11 @@ import { useExecutionMode, handleModeToggleKey } from "@tui-integration"
 
 Some upstream files require direct modification because shimming would require code duplication:
 
-| File | Changes |
-|------|---------|
-| `src/cli/cmd/tui/app.tsx` | Import providers, wrap `<App />` |
-| `src/cli/cmd/tui/component/prompt/index.tsx` | Import hooks, mode integration |
-| `src/cli/cmd/tui/component/prompt/history.tsx` | Type extension |
+| File                                           | Changes                          |
+| ---------------------------------------------- | -------------------------------- |
+| `src/cli/cmd/tui/app.tsx`                      | Import providers, wrap `<App />` |
+| `src/cli/cmd/tui/component/prompt/index.tsx`   | Import hooks, mode integration   |
+| `src/cli/cmd/tui/component/prompt/history.tsx` | Type extension                   |
 
 ### Why Not Shims?
 

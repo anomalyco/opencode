@@ -45,7 +45,7 @@ import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
-import { getCwd, setCwd } from "@shell-mode"
+import { getCwd, setCwd, detectNaturalLanguage } from "@shell-mode"
 import { Truncate } from "@/tool/truncation"
 
 // @ts-ignore
@@ -612,11 +612,11 @@ export namespace SessionPrompt {
           ...MessageV2.toModelMessages(sessionMessages, model),
           ...(isLastStep
             ? [
-              {
-                role: "assistant" as const,
-                content: MAX_STEPS,
-              },
-            ]
+                {
+                  role: "assistant" as const,
+                  content: MAX_STEPS,
+                },
+              ]
             : []),
         ],
         tools,
@@ -1033,8 +1033,8 @@ export namespace SessionPrompt {
                       messageID: info.id,
                       extra: { bypassCwdCheck: true, model },
                       messages: [],
-                      metadata: async () => { },
-                      ask: async () => { },
+                      metadata: async () => {},
+                      ask: async () => {},
                     }
                     const result = await t.execute(args, readCtx)
                     pieces.push({
@@ -1095,8 +1095,8 @@ export namespace SessionPrompt {
                   messageID: info.id,
                   extra: { bypassCwdCheck: true },
                   messages: [],
-                  metadata: async () => { },
-                  ask: async () => { },
+                  metadata: async () => {},
+                  ask: async () => {},
                 }
                 const result = await ListTool.init().then((t) => t.execute(args, listCtx))
                 return [
@@ -1554,6 +1554,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
 
     let aborted = false
     let exited = false
+    let exitCode: number | null = null
 
     const kill = () => Shell.killTree(proc, { exited: () => exited })
 
@@ -1570,8 +1571,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     abort.addEventListener("abort", abortHandler, { once: true })
 
     await new Promise<void>((resolve) => {
-      proc.on("close", () => {
+      proc.on("close", (code) => {
         exited = true
+        exitCode = code
         abort.removeEventListener("abort", abortHandler)
         resolve()
       })
@@ -1601,6 +1603,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       cleanOutput = output.slice(0, lineStart).trimEnd()
     }
 
+    // Detect if the user likely typed natural language instead of a shell command
+    const hint = detectNaturalLanguage(input.command, cleanOutput, exitCode)
+
     msg.time.completed = Date.now()
     await Session.updateMessage(msg)
     if (part.state.status === "running") {
@@ -1614,7 +1619,9 @@ NOTE: At any point in time through this workflow you should feel free to ask the
         title: "",
         metadata: {
           output: cleanOutput,
+          exit: exitCode,
           description: "",
+          ...(hint ? { hint } : {}),
         },
         output: cleanOutput,
       }
@@ -1749,19 +1756,19 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     const isSubtask = (agent.mode === "subagent" && command.subtask !== false) || command.subtask === true
     const parts = isSubtask
       ? [
-        {
-          type: "subtask" as const,
-          agent: agent.name,
-          description: command.description ?? "",
-          command: input.command,
-          model: {
-            providerID: taskModel.providerID,
-            modelID: taskModel.modelID,
+          {
+            type: "subtask" as const,
+            agent: agent.name,
+            description: command.description ?? "",
+            command: input.command,
+            model: {
+              providerID: taskModel.providerID,
+              modelID: taskModel.modelID,
+            },
+            // TODO: how can we make task tool accept a more complex input?
+            prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
           },
-          // TODO: how can we make task tool accept a more complex input?
-          prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
-        },
-      ]
+        ]
       : [...templateParts, ...(input.parts ?? [])]
 
     const userAgent = isSubtask ? (input.agent ?? (await Agent.defaultAgent())) : agentName

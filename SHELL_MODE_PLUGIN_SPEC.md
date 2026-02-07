@@ -32,6 +32,7 @@ packages/opencode/
 │   │   ├── index.ts              # Plugin exports
 │   │   ├── mode.ts               # ExecutionMode enum and ModeController
 │   │   ├── command-check.ts      # Command existence checking
+│   │   ├── natural-language.ts   # Natural language detection after shell errors
 │   │   ├── completion.ts         # Shell tab completion
 │   │   ├── cwd.ts                # Working directory state
 │   │   └── session-shell.ts      # Per-session shell process
@@ -52,6 +53,7 @@ packages/opencode/
 Use TypeScript path aliases to import plugin code cleanly:
 
 **`tsconfig.json`:**
+
 ```json
 {
   "compilerOptions": {
@@ -69,6 +71,7 @@ Use TypeScript path aliases to import plugin code cleanly:
 ```
 
 This allows clean imports in upstream files:
+
 ```typescript
 import { ExecutionMode } from "@shell-mode"
 import { useExecutionMode, handleModeToggleKey } from "@tui-integration"
@@ -86,18 +89,20 @@ We initially considered using shims to avoid upstream modifications. The idea wa
 
 **Why this doesn't work for our use case:**
 
-| File | Change Type | Why Shimming Fails |
-|------|-------------|-------------------|
-| `app.tsx` | Wrap `<App />` with providers | Would need to duplicate entire provider tree JSX |
-| `prompt/index.tsx` | Integrated mode logic, keyboard handlers, completion | Logic is woven throughout component, not wrappable |
-| `prompt/history.tsx` | Type extension | Type changes embedded in file |
+| File                 | Change Type                                          | Why Shimming Fails                                 |
+| -------------------- | ---------------------------------------------------- | -------------------------------------------------- |
+| `app.tsx`            | Wrap `<App />` with providers                        | Would need to duplicate entire provider tree JSX   |
+| `prompt/index.tsx`   | Integrated mode logic, keyboard handlers, completion | Logic is woven throughout component, not wrappable |
+| `prompt/history.tsx` | Type extension                                       | Type changes embedded in file                      |
 
 **Shimming only works for:**
+
 - Wrapping function exports
 - Extending classes
 - Adding middleware to pipelines
 
 **Shimming fails for:**
+
 - JSX structure changes (provider wrapping)
 - Logic integrated throughout a component
 - Type definitions in the same file as code
@@ -111,6 +116,7 @@ These files MUST be modified directly. Keep changes minimal and well-documented.
 ### 1. `src/cli/cmd/tui/app.tsx`
 
 **Changes:**
+
 - Import providers from `@tui-integration`
 - Wrap `<App />` with `<ExecutionModeProvider>` and `<WorkingDirProvider>`
 
@@ -129,6 +135,7 @@ import { ExecutionModeProvider, WorkingDirProvider } from "@tui-integration"
 ### 2. `src/cli/cmd/tui/component/prompt/index.tsx`
 
 **Changes:**
+
 - Import hooks from `@tui-integration`
 - Import `ExecutionMode` from `@shell-mode`
 - Use `useExecutionMode()` hook
@@ -140,6 +147,7 @@ import { ExecutionModeProvider, WorkingDirProvider } from "@tui-integration"
 ### 3. `src/cli/cmd/tui/component/prompt/history.tsx`
 
 **Changes:**
+
 - Add `mode?: "normal" | "shell"` to `PromptInfo` type
 
 ---
@@ -149,9 +157,11 @@ import { ExecutionModeProvider, WorkingDirProvider } from "@tui-integration"
 ### Shell Mode Core (`plugin/shell-mode/`)
 
 **`index.ts` exports:**
+
 ```typescript
 export { ExecutionMode, ModeController, getModeController } from "./mode"
 export { shouldRouteToShell } from "./command-check"
+export { detectNaturalLanguage } from "./natural-language"
 export { getCompletions, applyCompletion, findCommonPrefix } from "./completion"
 export { getCwd, setCwd } from "./cwd"
 export { execute as SessionShellExecute } from "./session-shell"
@@ -160,6 +170,7 @@ export { execute as SessionShellExecute } from "./session-shell"
 ### TUI Integration (`plugin/tui-integration/`)
 
 **`index.ts` exports:**
+
 ```typescript
 export { ExecutionModeProvider, useExecutionMode } from "./execution-mode-provider"
 export { WorkingDirProvider, useWorkingDir } from "./working-dir-provider"
@@ -180,6 +191,7 @@ export {
 ### When Upstream Updates
 
 1. **Pull upstream changes:**
+
    ```bash
    git fetch upstream
    git merge upstream/dev
@@ -202,13 +214,14 @@ export {
 
 ## Summary
 
-| Component | Location | Approach |
-|-----------|----------|----------|
-| Feature logic | `plugin/shell-mode/` | Isolated, no upstream changes |
-| TUI providers & hooks | `plugin/tui-integration/` | Isolated, no upstream changes |
-| Provider wrapping | `src/cli/cmd/tui/app.tsx` | Direct modification (unavoidable) |
-| Prompt integration | `src/.../prompt/index.tsx` | Direct modification (unavoidable) |
-| Type extension | `src/.../prompt/history.tsx` | Direct modification (unavoidable) |
-| Import aliases | `tsconfig.json` | Clean plugin imports |
+| Component             | Location                                | Approach                          |
+| --------------------- | --------------------------------------- | --------------------------------- |
+| Feature logic         | `plugin/shell-mode/`                    | Isolated, no upstream changes     |
+| NL detection          | `plugin/shell-mode/natural-language.ts` | Post-execution error analysis     |
+| TUI providers & hooks | `plugin/tui-integration/`               | Isolated, no upstream changes     |
+| Provider wrapping     | `src/cli/cmd/tui/app.tsx`               | Direct modification (unavoidable) |
+| Prompt integration    | `src/.../prompt/index.tsx`              | Direct modification (unavoidable) |
+| Type extension        | `src/.../prompt/history.tsx`            | Direct modification (unavoidable) |
+| Import aliases        | `tsconfig.json`                         | Clean plugin imports              |
 
 **Key insight:** Shims are useful when you can wrap/extend exports. For structural JSX changes and integrated component logic, direct modification is cleaner than duplicating code.

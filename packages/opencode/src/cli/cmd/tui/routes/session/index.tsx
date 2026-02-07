@@ -1674,6 +1674,9 @@ function Bash(props: ToolProps<typeof BashTool>) {
             <Show when={overflow()}>
               <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
             </Show>
+            <Show when={props.metadata.hint}>
+              <text fg={theme.warning}>{props.metadata.hint}</text>
+            </Show>
           </box>
         </BlockTool>
       </Match>

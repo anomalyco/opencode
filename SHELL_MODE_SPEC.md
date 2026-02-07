@@ -26,6 +26,7 @@ packages/opencode/plugin/
 │   ├── index.ts              # Exports: ExecutionMode, ModeController, etc.
 │   ├── mode.ts               # ExecutionMode enum and ModeController class
 │   ├── command-check.ts      # Command existence checking (command -v)
+│   ├── natural-language.ts   # Natural language detection after shell errors
 │   ├── completion.ts         # Shell tab completion
 │   ├── cwd.ts                # Working directory management
 │   └── session-shell.ts      # Per-session shell process management
@@ -69,9 +70,9 @@ packages/opencode/src/cli/cmd/tui/
 
 ```typescript
 export enum ExecutionMode {
-  Shell = "Shell",   // Direct shell execution
-  Agent = "Agent",   // AI agent processing
-  Auto = "Auto"      // Intelligent routing (default)
+  Shell = "Shell", // Direct shell execution
+  Agent = "Agent", // AI agent processing
+  Auto = "Auto", // Intelligent routing (default)
 }
 ```
 
@@ -81,12 +82,12 @@ Singleton class that manages execution mode and provides routing logic.
 
 #### Methods
 
-| Method | Signature | Description |
-|--------|-----------|-------------|
-| `getMode()` | `() => ExecutionMode` | Get current mode |
-| `setMode()` | `(mode: ExecutionMode) => void` | Set current mode |
-| `toggleMode()` | `() => ExecutionMode` | Cycle: Shell → Agent → Auto → Shell |
-| `getModeDisplay()` | `() => { name, color, icon }` | UI display info |
+| Method             | Signature                       | Description                         |
+| ------------------ | ------------------------------- | ----------------------------------- |
+| `getMode()`        | `() => ExecutionMode`           | Get current mode                    |
+| `setMode()`        | `(mode: ExecutionMode) => void` | Set current mode                    |
+| `toggleMode()`     | `() => ExecutionMode`           | Cycle: Shell → Agent → Auto → Shell |
+| `getModeDisplay()` | `() => { name, color, icon }`   | UI display info                     |
 
 ### 3. Auto Mode Routing (`plugin/shell-mode/command-check.ts`)
 
@@ -97,38 +98,56 @@ export async function shouldRouteToShell(input: string): Promise<boolean>
 ```
 
 **Algorithm:**
+
 1. Extract the first token from input (the command name)
-2. Execute `command -v <first_token>` in a shell
-3. If exit code is 0 → command exists → route to **Shell**
-4. If exit code is non-zero → command doesn't exist → route to **Agent**
+2. If the first token is a shell reserved word → route to **Agent** (see below)
+3. Execute `command -v <first_token>` in a shell
+4. If exit code is 0 → command exists → route to **Shell**
+5. If exit code is non-zero → command doesn't exist → route to **Agent**
+
+**Shell reserved word filtering:** Shell reserved words like `do`, `done`, `then`, `else` pass `command -v` but are never valid standalone commands. These are filtered before the `command -v` check. See `specs/09-shell-natural-language-detection.md` for the complete list and rationale.
 
 **Routing behavior:**
 
-| Input | First Token | `command -v` Result | Route |
-|-------|-------------|---------------------|-------|
-| `ls -la` | `ls` | exits 0 (found in PATH) | Shell |
-| `cd ~/projects` | `cd` | exits 0 (builtin) | Shell |
-| `git status` | `git` | exits 0 (found in PATH) | Shell |
-| `what files are here?` | `what` | exits 1 (not found) | Agent |
-| `explain this code` | `explain` | exits 1 (not found) | Agent |
+| Input                            | First Token | `command -v` Result     | Route |
+| -------------------------------- | ----------- | ----------------------- | ----- |
+| `ls -la`                         | `ls`        | exits 0 (found in PATH) | Shell |
+| `cd ~/projects`                  | `cd`        | exits 0 (builtin)       | Shell |
+| `git status`                     | `git`       | exits 0 (found in PATH) | Shell |
+| `do we have a way to uninstall?` | `do`        | skipped (reserved word) | Agent |
+| `what files are here?`           | `what`      | exits 1 (not found)     | Agent |
+| `explain this code`              | `explain`   | exits 1 (not found)     | Agent |
+
+### 3a. Natural Language Detection (`plugin/shell-mode/natural-language.ts`)
+
+After a shell command executes with a non-zero exit code, the output is analyzed to detect if the user likely typed natural language. If detected, a hint is shown below the error output suggesting the user switch to Agent mode.
+
+**Algorithm:** Both criteria must be satisfied:
+
+1. **Error pattern match** — output contains a known shell error (parse error, syntax error, command not found, unknown command, no rule to make target, etc.)
+2. **Natural language signal** — the second word is a common English word (articles, pronouns, prepositions, etc.) OR the input has 5+ words with a parse/syntax error
+
+Inputs with fewer than 3 words are always treated as real commands.
+
+**Examples:**
+
+| Input                      | Error                           | Detection                       |
+| -------------------------- | ------------------------------- | ------------------------------- |
+| `find out how auth works`  | `unknown primary or operator`   | "out" is NL word → hint shown   |
+| `make sure the tests pass` | `No rule to make target 'sure'` | "sure" is NL word → hint shown  |
+| `go ahead and fix it`      | `unknown command`               | "ahead" is NL word → hint shown |
+| `grep -r foo`              | `recursive search of stdin`     | No NL signal → no hint          |
+
+See `specs/09-shell-natural-language-detection.md` for the full error patterns list, word list, and pseudocode.
 
 ### 4. Shell Tab Completion (`plugin/shell-mode/completion.ts`)
 
 Provides shell-style tab completion for file paths and commands:
 
 ```typescript
-export async function getCompletions(
-  input: string,
-  cursorPosition: number,
-  cwd?: string
-): Promise<CompletionResult>
+export async function getCompletions(input: string, cursorPosition: number, cwd?: string): Promise<CompletionResult>
 
-export function applyCompletion(
-  input: string,
-  completion: string,
-  replaceFrom: number,
-  replaceTo: number
-): string
+export function applyCompletion(input: string, completion: string, replaceFrom: number, replaceTo: number): string
 
 export function findCommonPrefix(completions: string[]): string
 ```
@@ -180,21 +199,21 @@ These are wrapped around `<App />` in `src/cli/cmd/tui/app.tsx`:
 
 ### 4. Visual Indicators
 
-| Mode | Input Prefix | Color | Status Text |
-|------|--------------|-------|-------------|
-| Shell | `>` | `theme.primary` (cyan) | "Shell" |
-| Agent | `◆` | `theme.secondary` (magenta) | "Agent" |
-| Auto | `☯` | `theme.success` (green) | "Auto" |
+| Mode  | Input Prefix | Color                       | Status Text |
+| ----- | ------------ | --------------------------- | ----------- |
+| Shell | `>`          | `theme.primary` (cyan)      | "Shell"     |
+| Agent | `◆`          | `theme.secondary` (magenta) | "Agent"     |
+| Auto  | `☯`         | `theme.success` (green)     | "Auto"      |
 
 ---
 
 ## Keyboard Shortcuts
 
-| Shortcut | Context | Action |
-|----------|---------|--------|
-| `Ctrl+Space` | Prompt | Toggle mode (Shell → Agent → Auto) |
-| `Tab` | Prompt (Shell/Auto mode) | Shell tab completion |
-| `!` | Prompt (at start) | Enter legacy shell mode |
+| Shortcut     | Context                  | Action                             |
+| ------------ | ------------------------ | ---------------------------------- |
+| `Ctrl+Space` | Prompt                   | Toggle mode (Shell → Agent → Auto) |
+| `Tab`        | Prompt (Shell/Auto mode) | Shell tab completion               |
+| `!`          | Prompt (at start)        | Enter legacy shell mode            |
 
 ---
 
@@ -218,12 +237,25 @@ These are wrapped around `<App />` in `src/cli/cmd/tui/app.tsx`:
 
 ### Auto Mode Routing
 
-| Input | Route |
-|-------|-------|
-| `ls -la` | Shell |
-| `git status` | Shell |
-| `what files are here?` | Agent |
-| `explain this code` | Agent |
+| Input                            | Route | Reason                              |
+| -------------------------------- | ----- | ----------------------------------- |
+| `ls -la`                         | Shell | `ls` found by `command -v`          |
+| `git status`                     | Shell | `git` found by `command -v`         |
+| `do we have a way to uninstall?` | Agent | `do` is a shell reserved word       |
+| `in the codebase where is auth?` | Agent | `in` is a shell reserved word       |
+| `what files are here?`           | Agent | `what` not found by `command -v`    |
+| `explain this code`              | Agent | `explain` not found by `command -v` |
+
+### Post-Execution Natural Language Detection
+
+| Input                        | Shell Output                    | Hint Shown? |
+| ---------------------------- | ------------------------------- | ----------- |
+| `find out how auth works`    | `unknown primary or operator`   | Yes         |
+| `make sure the tests pass`   | `No rule to make target 'sure'` | Yes         |
+| `go ahead and fix the tests` | `go ahead: unknown command`     | Yes         |
+| `git me the latest changes`  | `'me' is not a git command`     | Yes         |
+| `ls -la`                     | (succeeds)                      | No          |
+| `grep -r foo`                | `recursive search of stdin`     | No          |
 
 ### Tab Completion
 
