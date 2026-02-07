@@ -136,6 +136,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     requestAnimationFrame(scrollCursorIntoView)
   }
 
+  const handleModelSelectorOpenChange = (open: boolean) => {
+    props.onModelSelectorOpenChange?.(open)
+    if (open) return
+    requestAnimationFrame(() => {
+      if (dialog.active) return
+      editorRef?.focus()
+    })
+  }
+
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const tabs = createMemo(() => layout.tabs(sessionKey))
   const view = createMemo(() => layout.view(sessionKey))
@@ -1072,7 +1081,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   >
                     <ModelSelectorPopover
                       open={props.modelSelectorOpen}
-                      onOpenChange={props.onModelSelectorOpenChange}
+                      onOpenChange={handleModelSelectorOpenChange}
                       triggerAs={Button}
                       triggerProps={{ variant: "ghost", class: "min-w-0 max-w-[240px]" }}
                     >
