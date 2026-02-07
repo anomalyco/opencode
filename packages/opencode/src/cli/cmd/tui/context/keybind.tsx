@@ -20,23 +20,35 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
     })
     const [store, setStore] = createStore({
       leader: false,
+      mods: {
+        ctrl: false,
+        meta: false,
+        shift: false,
+        super: false,
+      },
     })
     const renderer = useRenderer()
 
     let focus: Renderable | null
     let timeout: NodeJS.Timeout
-    function leader(active: boolean) {
+    function leader(active: boolean, evt?: ParsedKey) {
       if (active) {
         setStore("leader", true)
+        const parsed = evt ? Keybind.fromParsedKey(evt) : undefined
+        setStore("mods", {
+          ctrl: !!parsed?.ctrl,
+          meta: !!parsed?.meta,
+          shift: !!parsed?.shift,
+          super: !!parsed?.super,
+        })
         focus = renderer.currentFocusedRenderable
         focus?.blur()
         if (timeout) clearTimeout(timeout)
         timeout = setTimeout(() => {
           if (!store.leader) return
           leader(false)
-          if (focus) {
-            focus.focus()
-          }
+          if (!focus || focus.isDestroyed) return
+          focus.focus()
         }, 2000)
         return
       }
@@ -46,12 +58,18 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
           focus.focus()
         }
         setStore("leader", false)
+        setStore("mods", {
+          ctrl: false,
+          meta: false,
+          shift: false,
+          super: false,
+        })
       }
     }
 
     useKeyboard(async (evt) => {
       if (!store.leader && result.match("leader", evt)) {
-        leader(true)
+        leader(true, evt)
         return
       }
 
@@ -73,21 +91,33 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
         return store.leader
       },
       parse(evt: ParsedKey): Keybind.Info {
-        // Handle special case for Ctrl+Underscore (represented as \x1F)
-        if (evt.name === "\x1F") {
-          return Keybind.fromParsedKey({ ...evt, name: "_", ctrl: true }, store.leader)
-        }
         return Keybind.fromParsedKey(evt, store.leader)
       },
       match(key: keyof KeybindsConfig, evt: ParsedKey) {
         const keybind = keybinds()[key]
         if (!keybind) return false
         const parsed: Keybind.Info = result.parse(evt)
-        for (const key of keybind) {
-          if (Keybind.match(key, parsed)) {
-            return true
-          }
+        for (const binding of keybind) {
+          if (Keybind.match(binding, parsed)) return true
         }
+
+        // If we're in leader mode, users often keep holding the leader modifiers
+        // (e.g. holding Ctrl for `ctrl+x` and then pressing the next key).
+        // Fall back to matching with the leader modifiers stripped.
+        if (!store.leader) return false
+
+        const stripped: Keybind.Info = {
+          ...parsed,
+          ctrl: store.mods.ctrl ? false : parsed.ctrl,
+          meta: store.mods.meta ? false : parsed.meta,
+          shift: store.mods.shift ? false : parsed.shift,
+          super: store.mods.super ? false : parsed.super,
+        }
+        for (const binding of keybind) {
+          if (Keybind.match(binding, stripped)) return true
+        }
+
+        return false
       },
       print(key: keyof KeybindsConfig) {
         const first = keybinds()[key]?.at(0)

@@ -1,4 +1,5 @@
 import { describe, test, expect } from "bun:test"
+import type { ParsedKey } from "@opentui/core"
 import { Keybind } from "../src/util/keybind"
 
 describe("Keybind.toString", () => {
@@ -172,6 +173,105 @@ describe("Keybind.match", () => {
     const a: Keybind.Info = { ctrl: true, meta: true, shift: true, super: true, leader: false, name: "a" }
     const b: Keybind.Info = { ctrl: true, meta: true, shift: true, super: false, leader: false, name: "a" }
     expect(Keybind.match(a, b)).toBe(false)
+  })
+})
+
+describe("Keybind.fromParsedKey", () => {
+  test("should normalize Ctrl+Underscore control code", () => {
+    const key = {
+      name: "\x1F",
+      ctrl: false,
+      meta: false,
+      shift: false,
+      super: false,
+    } as ParsedKey
+    expect(Keybind.fromParsedKey(key)).toEqual({
+      name: "_",
+      ctrl: true,
+      meta: false,
+      shift: false,
+      super: false,
+      leader: false,
+    })
+  })
+
+  test("should normalize Ctrl+letter ASCII control codes", () => {
+    const key = {
+      name: "\x07", // Ctrl+G
+      ctrl: false,
+      meta: false,
+      shift: false,
+      super: false,
+    } as ParsedKey
+    expect(Keybind.fromParsedKey(key)).toEqual({
+      name: "g",
+      ctrl: true,
+      meta: false,
+      shift: false,
+      super: false,
+      leader: false,
+    })
+  })
+
+  test("should normalize single-letter names to lowercase", () => {
+    const key = {
+      name: "G",
+      ctrl: false,
+      meta: false,
+      shift: false,
+      super: false,
+    } as ParsedKey
+    expect(Keybind.fromParsedKey(key).name).toBe("g")
+  })
+
+  test("should not normalize ambiguous control codes (tab/enter)", () => {
+    const tab = {
+      name: "\t",
+      ctrl: false,
+      meta: false,
+      shift: false,
+      super: false,
+    } as ParsedKey
+    expect(Keybind.fromParsedKey(tab)).toEqual({
+      name: "\t",
+      ctrl: false,
+      meta: false,
+      shift: false,
+      super: false,
+      leader: false,
+    })
+
+    const linefeed = {
+      name: "\n",
+      ctrl: false,
+      meta: false,
+      shift: false,
+      super: false,
+    } as ParsedKey
+    expect(Keybind.fromParsedKey(linefeed)).toEqual({
+      name: "\n",
+      ctrl: false,
+      meta: false,
+      shift: false,
+      super: false,
+      leader: false,
+    })
+
+    const carriageReturn = {
+      name: "\r",
+      ctrl: false,
+      meta: false,
+      shift: false,
+      super: false,
+    } as ParsedKey
+    expect(Keybind.fromParsedKey(carriageReturn)).toEqual({
+      name: "\r",
+      ctrl: false,
+      meta: false,
+      shift: false,
+      super: false,
+      leader: false,
+    })
   })
 })
 

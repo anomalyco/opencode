@@ -22,12 +22,41 @@ export namespace Keybind {
    * This helper ensures all required fields are present and avoids manual object creation.
    */
   export function fromParsedKey(key: ParsedKey, leader = false): Info {
+    const normalized = (() => {
+      if (typeof key.name !== "string") return key
+
+      // Some terminals encode Ctrl+<key> as an ASCII control character.
+      // Normalize those to the expected key name + ctrl modifier.
+      //
+      // NOTE: We intentionally avoid mapping ambiguous codes that commonly
+      // overlap with dedicated special keys in terminals.
+      const code = key.name.length === 1 ? key.name.charCodeAt(0) : -1
+
+      // Ctrl+Underscore is often represented as \x1F.
+      if (code === 0x1f) return { ...key, name: "_", ctrl: true }
+
+      // Map ASCII control codes 1..26 (Ctrl+A..Ctrl+Z) to letters.
+      // Skip: backspace (0x08), tab (0x09), linefeed (0x0A), carriage return (0x0D)
+      // because those are frequently emitted by non-ctrl special keys.
+      if (code >= 0x01 && code <= 0x1a && code !== 0x08 && code !== 0x09 && code !== 0x0a && code !== 0x0d) {
+        return { ...key, name: String.fromCharCode(code + 0x60), ctrl: true }
+      }
+
+      // Normalize single-character names to lowercase for stable matching.
+      if (key.name.length === 1) {
+        const lower = key.name.toLowerCase()
+        if (lower !== key.name) return { ...key, name: lower }
+      }
+
+      return key
+    })()
+
     return {
-      name: key.name,
-      ctrl: key.ctrl,
-      meta: key.meta,
-      shift: key.shift,
-      super: key.super ?? false,
+      name: normalized.name,
+      ctrl: normalized.ctrl,
+      meta: normalized.meta,
+      shift: normalized.shift,
+      super: normalized.super ?? false,
       leader,
     }
   }
