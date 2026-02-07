@@ -13,9 +13,48 @@ interface Context {
 }
 const context = Context.create<Context>("instance")
 const cache = new Map<string, Promise<Context>>()
+const lastAccessed = new Map<string, number>()
+const MAX_INSTANCES = 20
 
 const disposal = {
   all: undefined as Promise<void> | undefined,
+}
+
+async function evictLRU() {
+  while (cache.size > MAX_INSTANCES) {
+    let oldest: string | undefined
+    let oldestTime = Infinity
+    for (const [key, time] of lastAccessed) {
+      if (time < oldestTime && cache.has(key)) {
+        oldest = key
+        oldestTime = time
+      }
+    }
+    if (!oldest) break
+
+    const value = cache.get(oldest)
+    if (!value) {
+      cache.delete(oldest)
+      lastAccessed.delete(oldest)
+      continue
+    }
+
+    Log.Default.info("evicting LRU instance", {
+      directory: oldest,
+      cacheSize: cache.size,
+    })
+
+    const ctx = await value.catch(() => undefined)
+    if (!ctx) {
+      cache.delete(oldest)
+      lastAccessed.delete(oldest)
+      continue
+    }
+
+    await context.provide(ctx, async () => {
+      await Instance.dispose()
+    })
+  }
 }
 
 export const Instance = {
@@ -36,7 +75,10 @@ export const Instance = {
         return ctx
       })
       cache.set(input.directory, existing)
+      lastAccessed.set(input.directory, Date.now())
+      await evictLRU()
     }
+    lastAccessed.set(input.directory, Date.now())
     const ctx = await existing
     return context.provide(ctx, async () => {
       return input.fn()
@@ -50,6 +92,9 @@ export const Instance = {
   },
   get project() {
     return context.use().project
+  },
+  get cacheSize() {
+    return cache.size
   },
   /**
    * Check if a path is within the project boundary.
@@ -70,6 +115,7 @@ export const Instance = {
     Log.Default.info("disposing instance", { directory: Instance.directory })
     await State.dispose(Instance.directory)
     cache.delete(Instance.directory)
+    lastAccessed.delete(Instance.directory)
     GlobalBus.emit("event", {
       directory: Instance.directory,
       payload: {
@@ -96,6 +142,7 @@ export const Instance = {
 
         if (!ctx) {
           if (cache.get(key) === value) cache.delete(key)
+          lastAccessed.delete(key)
           continue
         }
 
@@ -105,6 +152,7 @@ export const Instance = {
           await Instance.dispose()
         })
       }
+      lastAccessed.clear()
     }).finally(() => {
       disposal.all = undefined
     })

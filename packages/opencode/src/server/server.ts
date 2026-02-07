@@ -508,17 +508,33 @@ export namespace Server {
                   properties: {},
                 }),
               })
-              const unsub = Bus.subscribeAll(async (event) => {
+
+              let cleaned = false
+              let resolveStream: (() => void) | undefined
+              let heartbeat: ReturnType<typeof setInterval> | undefined
+              let unsub: (() => void) | undefined
+
+              const cleanup = () => {
+                if (cleaned) return
+                cleaned = true
+                if (heartbeat) clearInterval(heartbeat)
+                unsub?.()
+                log.info("event disconnected")
+                resolveStream?.()
+              }
+
+              unsub = Bus.subscribeAll(async (event) => {
                 await stream.writeSSE({
                   data: JSON.stringify(event),
                 })
                 if (event.type === Bus.InstanceDisposed.type) {
+                  cleanup()
                   stream.close()
                 }
               })
 
               // Send heartbeat every 30s to prevent WKWebView timeout (60s default)
-              const heartbeat = setInterval(() => {
+              heartbeat = setInterval(() => {
                 stream.writeSSE({
                   data: JSON.stringify({
                     type: "server.heartbeat",
@@ -528,11 +544,9 @@ export namespace Server {
               }, 30000)
 
               await new Promise<void>((resolve) => {
+                resolveStream = resolve
                 stream.onAbort(() => {
-                  clearInterval(heartbeat)
-                  unsub()
-                  resolve()
-                  log.info("event disconnected")
+                  cleanup()
                 })
               })
             })
