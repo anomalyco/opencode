@@ -27,6 +27,59 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 
 type Translator = (key: UiI18nKey, params?: UiI18nParams) => string
 
+function record(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value)
+}
+
+function unwrap(message: string) {
+  const text = message.replace(/^Error:\s*/, "").trim()
+
+  const parse = (value: string) => {
+    try {
+      return JSON.parse(value) as unknown
+    } catch {
+      return undefined
+    }
+  }
+
+  const read = (value: string) => {
+    const first = parse(value)
+    if (typeof first !== "string") return first
+    return parse(first.trim())
+  }
+
+  let json = read(text)
+
+  if (json === undefined) {
+    const start = text.indexOf("{")
+    const end = text.lastIndexOf("}")
+    if (start !== -1 && end > start) {
+      json = read(text.slice(start, end + 1))
+    }
+  }
+
+  if (!record(json)) return message
+
+  const err = record(json.error) ? json.error : undefined
+  if (err) {
+    const type = typeof err.type === "string" ? err.type : undefined
+    const msg = typeof err.message === "string" ? err.message : undefined
+    if (type && msg) return `${type}: ${msg}`
+    if (msg) return msg
+    if (type) return type
+    const code = typeof err.code === "string" ? err.code : undefined
+    if (code) return code
+  }
+
+  const msg = typeof json.message === "string" ? json.message : undefined
+  if (msg) return msg
+
+  const reason = typeof json.error === "string" ? json.error : undefined
+  if (reason) return reason
+
+  return message
+}
+
 function computeStatusFromPart(part: PartType | undefined, t: Translator): string | undefined {
   if (!part) return undefined
 
@@ -236,6 +289,12 @@ export function SessionTurn(
   const lastAssistantMessage = createMemo(() => assistantMessages().at(-1))
 
   const error = createMemo(() => assistantMessages().find((m) => m.error)?.error)
+  const errorText = createMemo(() => {
+    const msg = error()?.data?.message
+    if (typeof msg === "string") return unwrap(msg)
+    if (msg === undefined || msg === null) return ""
+    return unwrap(String(msg))
+  })
 
   const lastTextPart = createMemo(() => {
     const msgs = assistantMessages()
@@ -463,6 +522,39 @@ export function SessionTurn(
     onCleanup(() => clearInterval(timer))
   })
 
+  let retryLog = ""
+  createEffect(() => {
+    const r = retry()
+    if (!r) return
+    const key = `${r.attempt}:${r.next}:${r.message}`
+    if (key === retryLog) return
+    retryLog = key
+    console.warn("[session-turn] retry", {
+      sessionID: props.sessionID,
+      messageID: props.messageID,
+      attempt: r.attempt,
+      next: r.next,
+      raw: r.message,
+      parsed: unwrap(r.message),
+    })
+  })
+
+  let errorLog = ""
+  createEffect(() => {
+    const value = error()?.data?.message
+    if (value === undefined || value === null) return
+    const raw = typeof value === "string" ? value : String(value)
+    if (!raw) return
+    if (raw === errorLog) return
+    errorLog = raw
+    console.warn("[session-turn] assistant-error", {
+      sessionID: props.sessionID,
+      messageID: props.messageID,
+      raw,
+      parsed: unwrap(raw),
+    })
+  })
+
   createEffect(() => {
     const update = () => {
       setStore("duration", duration())
@@ -595,7 +687,8 @@ export function SessionTurn(
                                   {(() => {
                                     const r = retry()
                                     if (!r) return ""
-                                    return r.message.length > 60 ? r.message.slice(0, 60) + "..." : r.message
+                                    const msg = unwrap(r.message)
+                                    return msg.length > 60 ? msg.slice(0, 60) + "..." : msg
                                   })()}
                                 </span>
                                 <span data-slot="session-turn-retry-seconds">
@@ -640,7 +733,7 @@ export function SessionTurn(
                         </For>
                         <Show when={error()}>
                           <Card variant="error" class="error-card">
-                            {error()?.data?.message as string}
+                            {errorText()}
                           </Card>
                         </Show>
                       </div>
@@ -696,7 +789,7 @@ export function SessionTurn(
                     </Show>
                     <Show when={error() && !props.stepsExpanded}>
                       <Card variant="error" class="error-card">
-                        {error()?.data?.message as string}
+                        {errorText()}
                       </Card>
                     </Show>
                   </Match>

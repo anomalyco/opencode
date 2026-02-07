@@ -13,6 +13,7 @@ import { decode64 } from "@/utils/base64"
 import { EventSessionError } from "@opencode-ai/sdk/v2"
 import { Persist, persisted } from "@/utils/persist"
 import { playSound, soundSrc } from "@/utils/sound"
+import { buildNotificationIndex } from "./notification-index"
 
 type NotificationBase = {
   directory?: string
@@ -81,49 +82,7 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       setStore("list", (list) => pruneNotifications([...list, notification]))
     }
 
-    const index = createMemo(() => {
-      const sessionAll = new Map<string, Notification[]>()
-      const sessionUnseen = new Map<string, Notification[]>()
-      const projectAll = new Map<string, Notification[]>()
-      const projectUnseen = new Map<string, Notification[]>()
-
-      for (const notification of store.list) {
-        const session = notification.session
-        if (session) {
-          const list = sessionAll.get(session)
-          if (list) list.push(notification)
-          else sessionAll.set(session, [notification])
-          if (!notification.viewed) {
-            const unseen = sessionUnseen.get(session)
-            if (unseen) unseen.push(notification)
-            else sessionUnseen.set(session, [notification])
-          }
-        }
-
-        const directory = notification.directory
-        if (directory) {
-          const list = projectAll.get(directory)
-          if (list) list.push(notification)
-          else projectAll.set(directory, [notification])
-          if (!notification.viewed) {
-            const unseen = projectUnseen.get(directory)
-            if (unseen) unseen.push(notification)
-            else projectUnseen.set(directory, [notification])
-          }
-        }
-      }
-
-      return {
-        session: {
-          all: sessionAll,
-          unseen: sessionUnseen,
-        },
-        project: {
-          all: projectAll,
-          unseen: projectUnseen,
-        },
-      }
-    })
+    const index = createMemo(() => buildNotificationIndex(store.list))
 
     const unsub = globalSDK.event.listen((e) => {
       const event = e.details
@@ -208,6 +167,12 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
         unseen(session: string) {
           return index().session.unseen.get(session) ?? empty
         },
+        unseenCount(session: string) {
+          return index().session.unseenCount.get(session) ?? 0
+        },
+        unseenHasError(session: string) {
+          return index().session.unseenHasError.get(session) ?? false
+        },
         markViewed(session: string) {
           setStore("list", (n) => n.session === session, "viewed", true)
         },
@@ -218,6 +183,12 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
         },
         unseen(directory: string) {
           return index().project.unseen.get(directory) ?? empty
+        },
+        unseenCount(directory: string) {
+          return index().project.unseenCount.get(directory) ?? 0
+        },
+        unseenHasError(directory: string) {
+          return index().project.unseenHasError.get(directory) ?? false
         },
         markViewed(directory: string) {
           setStore("list", (n) => n.directory === directory, "viewed", true)

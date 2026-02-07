@@ -7,6 +7,7 @@ export const dict = {
   "ui.sessionReview.collapseAll": "Collapse all",
   "ui.sessionReview.change.added": "Added",
   "ui.sessionReview.change.removed": "Removed",
+  "ui.sessionReview.change.modified": "Modified",
 
   "ui.lineComment.label.prefix": "Comment on ",
   "ui.lineComment.label.suffix": "",
