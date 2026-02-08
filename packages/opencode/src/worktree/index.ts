@@ -411,8 +411,13 @@ export namespace Worktree {
         if (key === directory) return item
       }
     })()
+
     if (!entry?.path) {
-      throw new RemoveFailedError({ message: "Worktree not found" })
+      const directoryExists = await exists(directory)
+      if (directoryExists) {
+        await fs.rm(directory, { recursive: true, force: true })
+      }
+      return true
     }
 
     const removed = await $`git worktree remove --force ${entry.path}`.quiet().nothrow().cwd(Instance.worktree)

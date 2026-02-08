@@ -11,6 +11,7 @@ import { Filesystem } from "@/util/filesystem"
 import { Flag } from "@/flag/flag"
 import { Bus } from "@/bus"
 import { Session } from "@/session"
+import { Discovery } from "./discovery"
 
 export namespace Skill {
   const log = Log.create({ service: "skill" })
@@ -50,6 +51,7 @@ export namespace Skill {
 
   export const state = Instance.state(async () => {
     const skills: Record<string, Info> = {}
+    const dirs = new Set<string>()
 
     const addSkill = async (match: string) => {
       const md = await ConfigMarkdown.parse(match).catch((err) => {
@@ -74,6 +76,8 @@ export namespace Skill {
           duplicate: match,
         })
       }
+
+      dirs.add(path.dirname(match))
 
       skills[parsed.data.name] = {
         name: parsed.data.name,
@@ -148,11 +152,25 @@ export namespace Skill {
       }
     }
 
-    const dirs = Array.from(new Set(Object.values(skills).map((item) => path.dirname(item.location))))
+    // Download and load skills from URLs
+    for (const url of config.skills?.urls ?? []) {
+      const list = await Discovery.pull(url)
+      for (const dir of list) {
+        dirs.add(dir)
+        for await (const match of SKILL_GLOB.scan({
+          cwd: dir,
+          absolute: true,
+          onlyFiles: true,
+          followSymlinks: true,
+        })) {
+          await addSkill(match)
+        }
+      }
+    }
 
     return {
       skills,
-      dirs,
+      dirs: Array.from(dirs),
     }
   })
 
