@@ -1,5 +1,5 @@
 import { cmd } from "@/cli/cmd/cmd"
-import { tui } from "./app"
+import { tui, getTerminalBackgroundColor } from "./app"
 import { Rpc } from "@/util/rpc"
 import { type rpc } from "./worker"
 import path from "path"
@@ -9,6 +9,7 @@ import { Log } from "@/util/log"
 import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
 import type { Event } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
+import type { ProgressLog, ProgressSource } from "./context/progress"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -82,6 +83,9 @@ export const TuiThreadCommand = cmd({
       process.exit(1)
     }
 
+    // Start mode detection immediately (runs in parallel with setup below)
+    const modePromise = getTerminalBackgroundColor()
+
     // Resolve relative paths against PWD to preserve behavior when using --cwd flag
     const baseCwd = process.env.PWD ?? process.cwd()
     const cwd = args.project ? path.resolve(baseCwd, args.project) : process.cwd()
@@ -108,6 +112,22 @@ export const TuiThreadCommand = cmd({
       Log.Default.error(e)
     }
     const client = Rpc.client<typeof rpc>(worker)
+
+    // Collect startup progress logs from worker (for TUI's BootLog)
+    const progressLogs: ProgressLog[] = []
+    const progressHandlers = new Set<(log: ProgressLog) => void>()
+    client.on<ProgressLog>("progress", (data) => {
+      progressLogs.push(data)
+      for (const handler of progressHandlers) handler(data)
+    })
+    const progressSource: ProgressSource = {
+      logs: progressLogs,
+      subscribe(handler) {
+        progressHandlers.add(handler)
+        return () => progressHandlers.delete(handler)
+      },
+    }
+
     process.on("uncaughtException", (e) => {
       Log.Default.error(e)
     })
@@ -149,10 +169,26 @@ export const TuiThreadCommand = cmd({
       events = createEventSource(client)
     }
 
+    // Warm up worker in background: trigger InstanceBootstrap (plugin install, LSP init, etc.)
+    // Don't wait for it - TUI will show progress via BootLog
+    client
+      .call("fetch", {
+        url: "http://opencode.internal/v2/config",
+        method: "GET",
+        headers: {},
+      })
+      .catch(() => {})
+
+    // Await mode detection before starting TUI (must complete to avoid stdin conflicts)
+    const mode = await modePromise
+
+    // Start TUI with detected mode
     const tuiPromise = tui({
       url,
+      mode,
       fetch: customFetch,
       events,
+      progress: progressSource,
       args: {
         continue: args.continue,
         sessionID: args.session,

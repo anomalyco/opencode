@@ -2,7 +2,19 @@ import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentu
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
+import {
+  Switch,
+  Match,
+  createEffect,
+  untrack,
+  ErrorBoundary,
+  createSignal,
+  onMount,
+  Show,
+  on,
+  For,
+  createMemo,
+} from "solid-js"
 import { Installation } from "@/installation"
 import { Flag } from "@/flag/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
@@ -19,7 +31,8 @@ import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command
 import { DialogAgent } from "@tui/component/dialog-agent"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { KeybindProvider } from "@tui/context/keybind"
-import { ThemeProvider, useTheme } from "@tui/context/theme"
+import { ThemeProvider, useTheme, tint } from "@tui/context/theme"
+import { ModeProvider } from "@tui/context/mode"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
 import { PromptHistoryProvider } from "./component/prompt/history"
@@ -33,11 +46,15 @@ import { TuiEvent } from "./event"
 import { KVProvider, useKV } from "./context/kv"
 import { Provider } from "@/provider/provider"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
+import { getDefaultColors } from "./default-colors"
 import open from "open"
 import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
+import { ProgressProvider, useProgress, type ProgressSource } from "./context/progress"
+import { Logo } from "@tui/component/logo"
+import { Spinner } from "@tui/component/spinner"
 
-async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
+export async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
   if (!process.stdin.isTTY) return "dark"
 
@@ -102,15 +119,17 @@ import type { EventSource } from "./context/sdk"
 export function tui(input: {
   url: string
   args: Args
+  mode: "dark" | "light"
   directory?: string
   fetch?: typeof fetch
   headers?: RequestInit["headers"]
   events?: EventSource
+  progress?: ProgressSource
   onExit?: () => Promise<void>
 }) {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
-    const mode = await getTerminalBackgroundColor()
+    const mode = input.mode
     const onExit = async () => {
       await input.onExit?.()
       resolve()
@@ -122,45 +141,49 @@ export function tui(input: {
           <ErrorBoundary
             fallback={(error, reset) => <ErrorComponent error={error} reset={reset} onExit={onExit} mode={mode} />}
           >
-            <ArgsProvider {...input.args}>
-              <ExitProvider onExit={onExit}>
-                <KVProvider>
-                  <ToastProvider>
-                    <RouteProvider>
-                      <SDKProvider
-                        url={input.url}
-                        directory={input.directory}
-                        fetch={input.fetch}
-                        headers={input.headers}
-                        events={input.events}
-                      >
-                        <SyncProvider>
-                          <ThemeProvider mode={mode}>
-                            <LocalProvider>
-                              <KeybindProvider>
-                                <PromptStashProvider>
-                                  <DialogProvider>
-                                    <CommandProvider>
-                                      <FrecencyProvider>
-                                        <PromptHistoryProvider>
-                                          <PromptRefProvider>
-                                            <App />
-                                          </PromptRefProvider>
-                                        </PromptHistoryProvider>
-                                      </FrecencyProvider>
-                                    </CommandProvider>
-                                  </DialogProvider>
-                                </PromptStashProvider>
-                              </KeybindProvider>
-                            </LocalProvider>
-                          </ThemeProvider>
-                        </SyncProvider>
-                      </SDKProvider>
-                    </RouteProvider>
-                  </ToastProvider>
-                </KVProvider>
-              </ExitProvider>
-            </ArgsProvider>
+            <ModeProvider mode={mode}>
+              <ArgsProvider {...input.args}>
+                <ExitProvider onExit={onExit}>
+                  <KVProvider>
+                    <ToastProvider>
+                      <RouteProvider>
+                        <SDKProvider
+                          url={input.url}
+                          directory={input.directory}
+                          fetch={input.fetch}
+                          headers={input.headers}
+                          events={input.events}
+                        >
+                          <ProgressProvider source={input.progress}>
+                            <SyncProvider>
+                              <ThemeProvider>
+                                <LocalProvider>
+                                  <KeybindProvider>
+                                    <PromptStashProvider>
+                                      <DialogProvider>
+                                        <CommandProvider>
+                                          <FrecencyProvider>
+                                            <PromptHistoryProvider>
+                                              <PromptRefProvider>
+                                                <App />
+                                              </PromptRefProvider>
+                                            </PromptHistoryProvider>
+                                          </FrecencyProvider>
+                                        </CommandProvider>
+                                      </DialogProvider>
+                                    </PromptStashProvider>
+                                  </KeybindProvider>
+                                </LocalProvider>
+                              </ThemeProvider>
+                            </SyncProvider>
+                          </ProgressProvider>
+                        </SDKProvider>
+                      </RouteProvider>
+                    </ToastProvider>
+                  </KVProvider>
+                </ExitProvider>
+              </ArgsProvider>
+            </ModeProvider>
           </ErrorBoundary>
         )
       },
@@ -194,7 +217,7 @@ function App() {
   const command = useCommandDialog()
   const sdk = useSDK()
   const toast = useToast()
-  const { theme, mode, setMode } = useTheme()
+  const { theme, mode, setMode, ready: themeReady } = useTheme()
   const sync = useSync()
   const exit = useExit()
   const promptRef = usePromptRef()
@@ -237,27 +260,41 @@ function App() {
   })
 
   const args = useArgs()
-  onMount(() => {
-    batch(() => {
-      if (args.agent) local.agent.set(args.agent)
-      if (args.model) {
-        const { providerID, modelID } = Provider.parseModel(args.model)
-        if (!providerID || !modelID)
-          return toast.show({
-            variant: "warning",
-            message: `Invalid model format: ${args.model}`,
-            duration: 3000,
-          })
-        local.model.set({ providerID, modelID }, { recent: true })
-      }
-      // Handle --session without --fork immediately (fork is handled in createEffect below)
-      if (args.sessionID && !args.fork) {
-        route.navigate({
-          type: "session",
-          sessionID: args.sessionID,
+  let agentApplied = !args.agent
+  let modelApplied = !args.model
+
+  createEffect(() => {
+    if (!agentApplied) {
+      if (sync.data.agent.length === 0) return
+      local.agent.set(args.agent!)
+      agentApplied = true
+    }
+
+    if (!modelApplied) {
+      if (sync.data.provider.length === 0) return
+      const { providerID, modelID } = Provider.parseModel(args.model!)
+      if (!providerID || !modelID) {
+        toast.show({
+          variant: "warning",
+          message: `Invalid model format: ${args.model}`,
+          duration: 3000,
         })
+        modelApplied = true
+        return
       }
-    })
+      local.model.set({ providerID, modelID }, { recent: true })
+      modelApplied = true
+    }
+  })
+
+  onMount(() => {
+    // Handle --session without --fork immediately (fork is handled in createEffect below)
+    if (args.sessionID && !args.fork) {
+      route.navigate({
+        type: "session",
+        sessionID: args.sessionID,
+      })
+    }
   })
 
   let continued = false
@@ -707,6 +744,9 @@ function App() {
       }}
     >
       <Switch>
+        <Match when={sync.status === "loading" || !themeReady}>
+          <BootLog />
+        </Match>
         <Match when={route.data.type === "home"}>
           <Home />
         </Match>
@@ -714,6 +754,59 @@ function App() {
           <Session />
         </Match>
       </Switch>
+    </box>
+  )
+}
+
+function BootLog() {
+  const { theme } = useTheme()
+  const progress = useProgress()
+  const dimensions = useTerminalDimensions()
+
+  const maxLines = 5
+
+  const visibleLogs = createMemo(() => {
+    const logs = progress.logs
+    return logs.slice(Math.max(0, logs.length - maxLines))
+  })
+
+  const rows = createMemo(() => {
+    const logs = visibleLogs()
+    const padding = Array.from({ length: Math.max(0, maxLines - logs.length) }, () => undefined)
+    return [...padding, ...logs]
+  })
+
+  // Symmetric fade: center = 1.0, edges = 0.15
+  const getFade = (index: number, total: number): number => {
+    if (total <= 1) return 1
+    const center = (total - 1) / 2
+    const distance = Math.abs(index - center) / center
+    return 1 - distance * 0.85
+  }
+
+  const getLogColor = (fade: number) => tint(theme.textMuted, theme.text, fade)
+
+  return (
+    <box
+      width={dimensions().width}
+      height={dimensions().height}
+      backgroundColor={theme.background}
+      justifyContent="center"
+      alignItems="center"
+      flexDirection="column"
+    >
+      <Logo />
+      <box paddingTop={1} paddingBottom={1}>
+        <Spinner>Starting OpenCode...</Spinner>
+      </box>
+      <box flexDirection="column" alignItems="center">
+        <For each={rows()}>
+          {(log, i) => {
+            const fade = () => getFade(i(), maxLines)
+            return <text fg={getLogColor(fade())}>{log?.message ?? " "}</text>
+          }}
+        </For>
+      </box>
     </box>
   )
 }
@@ -743,13 +836,7 @@ function ErrorComponent(props: {
   const issueURL = new URL("https://github.com/anomalyco/opencode/issues/new?template=bug-report.yml")
 
   // Choose safe fallback colors per mode since theme context may not be available
-  const isLight = props.mode === "light"
-  const colors = {
-    bg: isLight ? "#ffffff" : "#0a0a0a",
-    text: isLight ? "#1a1a1a" : "#eeeeee",
-    muted: isLight ? "#8a8a8a" : "#808080",
-    primary: isLight ? "#3b7dd8" : "#fab283",
-  }
+  const colors = getDefaultColors(props.mode ?? "dark")
 
   if (props.error.message) {
     issueURL.searchParams.set("title", `opentui: fatal: ${props.error.message}`)
@@ -771,29 +858,29 @@ function ErrorComponent(props: {
   }
 
   return (
-    <box flexDirection="column" gap={1} backgroundColor={colors.bg}>
+    <box flexDirection="column" gap={1} backgroundColor={colors.background}>
       <box flexDirection="row" gap={1} alignItems="center">
         <text attributes={TextAttributes.BOLD} fg={colors.text}>
           Please report an issue.
         </text>
         <box onMouseUp={copyIssueURL} backgroundColor={colors.primary} padding={1}>
-          <text attributes={TextAttributes.BOLD} fg={colors.bg}>
+          <text attributes={TextAttributes.BOLD} fg={colors.background}>
             Copy issue URL (exception info pre-filled)
           </text>
         </box>
-        {copied() && <text fg={colors.muted}>Successfully copied</text>}
+        {copied() && <text fg={colors.textMuted}>Successfully copied</text>}
       </box>
       <box flexDirection="row" gap={2} alignItems="center">
         <text fg={colors.text}>A fatal error occurred!</text>
         <box onMouseUp={props.reset} backgroundColor={colors.primary} padding={1}>
-          <text fg={colors.bg}>Reset TUI</text>
+          <text fg={colors.background}>Reset TUI</text>
         </box>
         <box onMouseUp={handleExit} backgroundColor={colors.primary} padding={1}>
-          <text fg={colors.bg}>Exit</text>
+          <text fg={colors.background}>Exit</text>
         </box>
       </box>
       <scrollbox height={Math.floor(term().height * 0.7)}>
-        <text fg={colors.muted}>{props.error.stack}</text>
+        <text fg={colors.textMuted}>{props.error.stack}</text>
       </scrollbox>
       <text fg={colors.text}>{props.error.message}</text>
     </box>

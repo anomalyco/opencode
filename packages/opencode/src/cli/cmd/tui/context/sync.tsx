@@ -28,6 +28,7 @@ import { useArgs } from "./args"
 import { batch, onMount } from "solid-js"
 import { Log } from "@/util/log"
 import type { Path } from "@opencode-ai/sdk"
+import { useProgress } from "./progress"
 
 export const { use: useSync, provider: SyncProvider } = createSimpleContext({
   name: "Sync",
@@ -103,6 +104,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     })
 
     const sdk = useSDK()
+    const progress = useProgress()
+    function log(message: string) {
+      progress.addLog(message)
+    }
 
     sdk.event.listen((e) => {
       const event = e.details
@@ -330,15 +335,19 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
     async function bootstrap() {
       console.log("bootstrapping")
+      log("Connecting to server...")
       const start = Date.now() - 30 * 24 * 60 * 60 * 1000
       const sessionListPromise = sdk.client.session
         .list({ start: start })
         .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
 
       // blocking - include session.list when continuing a session
+      log("Loading providers...")
       const providersPromise = sdk.client.config.providers({}, { throwOnError: true })
       const providerListPromise = sdk.client.provider.list({}, { throwOnError: true })
+      log("Loading agents...")
       const agentsPromise = sdk.client.app.agents({}, { throwOnError: true })
+      log("Loading configuration...")
       const configPromise = sdk.client.config.get({}, { throwOnError: true })
       const blockingRequests: Promise<unknown>[] = [
         providersPromise,
@@ -350,6 +359,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
       await Promise.all(blockingRequests)
         .then(() => {
+          log("Providers and configuration loaded")
           const providersResponse = providersPromise.then((x) => x.data!)
           const providerListResponse = providerListPromise.then((x) => x.data!)
           const agentsResponse = agentsPromise.then((x) => x.data ?? [])
@@ -380,6 +390,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           })
         })
         .then(() => {
+          log("Ready")
           if (store.status !== "complete") setStore("status", "partial")
           // non-blocking
           Promise.all([
@@ -419,9 +430,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       set: setStore,
       get status() {
         return store.status
-      },
-      get ready() {
-        return store.status !== "loading"
       },
       session: {
         get(sessionID: string) {

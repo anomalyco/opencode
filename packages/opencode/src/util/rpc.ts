@@ -17,6 +17,13 @@ export namespace Rpc {
     postMessage(JSON.stringify({ type: "rpc.event", event, data }))
   }
 
+  /** Emit a startup progress event. Safe to call outside Worker context. */
+  export function progress(message: string) {
+    try {
+      emit("progress", { message, time: Date.now() })
+    } catch {}
+  }
+
   export function client<T extends Definition>(target: {
     postMessage: (data: string) => void | null
     onmessage: ((this: Worker, ev: MessageEvent<any>) => any) | null

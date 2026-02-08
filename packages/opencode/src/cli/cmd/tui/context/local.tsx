@@ -39,7 +39,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const [agentStore, setAgentStore] = createStore<{
         current: string
       }>({
-        current: agents()[0].name,
+        current: "",
+      })
+      // Set initial agent once agents are loaded
+      createEffect(() => {
+        const list = agents()
+        if (list.length > 0 && agentStore.current === "") {
+          setAgentStore("current", list[0].name)
+        }
       })
       const { theme } = useTheme()
       const colors = createMemo(() => [
@@ -195,6 +202,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       const currentModel = createMemo(() => {
         const a = agent.current()
+        if (!a) return undefined
         return (
           getFirstValidModel(
             () => modelStore.model[a.name],
@@ -235,6 +243,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         cycle(direction: 1 | -1) {
           const current = currentModel()
           if (!current) return
+          const a = agent.current()
+          if (!a) return
           const recent = modelStore.recent
           const index = recent.findIndex((x) => x.providerID === current.providerID && x.modelID === current.modelID)
           if (index === -1) return
@@ -243,7 +253,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (next >= recent.length) next = 0
           const val = recent[next]
           if (!val) return
-          setModelStore("model", agent.current().name, { ...val })
+          setModelStore("model", a.name, { ...val })
         },
         cycleFavorite(direction: 1 | -1) {
           const favorites = modelStore.favorite.filter((item) => isModelValid(item))
@@ -269,7 +279,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
           const next = favorites[index]
           if (!next) return
-          setModelStore("model", agent.current().name, { ...next })
+          const a = agent.current()
+          if (!a) return
+          setModelStore("model", a.name, { ...next })
           const uniq = uniqueBy([next, ...modelStore.recent], (x) => `${x.providerID}/${x.modelID}`)
           if (uniq.length > 10) uniq.pop()
           setModelStore(
@@ -288,7 +300,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               })
               return
             }
-            setModelStore("model", agent.current().name, model)
+            const a = agent.current()
+            if (!a) return
+            setModelStore("model", a.name, model)
             if (options?.recent) {
               const uniq = uniqueBy([model, ...modelStore.recent], (x) => `${x.providerID}/${x.modelID}`)
               if (uniq.length > 10) uniq.pop()
@@ -384,6 +398,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     // Automatically update model when agent changes
     createEffect(() => {
       const value = agent.current()
+      if (!value) return
       if (value.model) {
         if (isModelValid(value.model))
           model.set({

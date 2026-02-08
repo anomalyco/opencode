@@ -12,6 +12,7 @@ import { Session } from "../session"
 import { NamedError } from "@opencode-ai/util/error"
 import { CopilotAuthPlugin } from "./copilot"
 import { gitlabAuthPlugin as GitlabAuthPlugin } from "@gitlab/opencode-gitlab-auth"
+import { Rpc } from "@/util/rpc"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -41,12 +42,16 @@ export namespace Plugin {
 
     for (const plugin of INTERNAL_PLUGINS) {
       log.info("loading internal plugin", { name: plugin.name })
+      Rpc.progress(`Loading internal plugin: ${plugin.name}`)
       const init = await plugin(input)
       hooks.push(init)
     }
 
     let plugins = config.plugin ?? []
-    if (plugins.length) await Config.waitForDependencies()
+    if (plugins.length) {
+      Rpc.progress("Installing plugin dependencies...")
+      await Config.waitForDependencies()
+    }
     if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
       plugins = [...BUILTIN, ...plugins]
     }
@@ -54,12 +59,14 @@ export namespace Plugin {
     for (let plugin of plugins) {
       // ignore old codex plugin since it is supported first party now
       if (plugin.includes("opencode-openai-codex-auth") || plugin.includes("opencode-copilot-auth")) continue
+      const displayName = Config.getPluginName(plugin)
       log.info("loading plugin", { path: plugin })
       if (!plugin.startsWith("file://")) {
         const lastAtIndex = plugin.lastIndexOf("@")
         const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
         const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
         const builtin = BUILTIN.some((x) => x.startsWith(pkg + "@"))
+        Rpc.progress(`Installing plugin: ${displayName}`)
         plugin = await BunProc.install(pkg, version).catch((err) => {
           if (!builtin) throw err
 
@@ -79,6 +86,7 @@ export namespace Plugin {
         })
         if (!plugin) continue
       }
+      Rpc.progress(`Loading plugin: ${displayName}`)
       const mod = await import(plugin)
       // Prevent duplicate initialization when plugins export the same function
       // as both a named export and default export (e.g., `export const X` and `export default X`).

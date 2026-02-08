@@ -3,6 +3,7 @@ import path from "path"
 import { createEffect, createMemo, onMount } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { createSimpleContext } from "./helper"
+import { useMode } from "@tui/context/mode"
 import aura from "./theme/aura.json" with { type: "json" }
 import ayu from "./theme/ayu.json" with { type: "json" }
 import catppuccin from "./theme/catppuccin.json" with { type: "json" }
@@ -278,14 +279,35 @@ function ansiToRgba(code: number): RGBA {
 
 export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   name: "Theme",
-  init: (props: { mode: "dark" | "light" }) => {
+  init: () => {
+    const mode = useMode()
     const sync = useSync()
     const kv = useKV()
     const [store, setStore] = createStore({
       themes: DEFAULT_THEMES,
-      mode: kv.get("theme_mode", props.mode),
+      mode: kv.get("theme_mode", mode),
       active: (sync.data.config.theme ?? kv.get("theme", "opencode")) as string,
       ready: false,
+      kvReady: false,
+      themesReady: false,
+    })
+
+    // Update theme from KV once it loads (if not overridden by config)
+    createEffect(() => {
+      if (!kv.ready) return
+      if (store.kvReady) return
+      setStore("kvReady", true)
+      // Config theme takes priority, otherwise use KV saved theme
+      if (!sync.data.config.theme) {
+        const savedTheme = kv.get("theme")
+        if (savedTheme) setStore("active", savedTheme)
+        const savedMode = kv.get("theme_mode")
+        if (savedMode) setStore("mode", savedMode)
+      }
+      // Check if we can set ready now
+      if (store.themesReady && store.active !== "system") {
+        setStore("ready", true)
+      }
     })
 
     createEffect(() => {
@@ -307,7 +329,9 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
           setStore("active", "opencode")
         })
         .finally(() => {
-          if (store.active !== "system") {
+          setStore("themesReady", true)
+          // Only set ready if KV is also ready and not using system theme
+          if (store.kvReady && store.active !== "system") {
             setStore("ready", true)
           }
         })
@@ -359,6 +383,9 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     const subtleSyntax = createMemo(() => generateSubtleSyntax(values()))
 
     return {
+      get ready() {
+        return store.ready
+      },
       theme: new Proxy(values(), {
         get(_target, prop) {
           // @ts-expect-error
@@ -383,9 +410,6 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       set(theme: string) {
         setStore("active", theme)
         kv.set("theme", theme)
-      },
-      get ready() {
-        return store.ready
       },
     }
   },

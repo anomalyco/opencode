@@ -1,5 +1,5 @@
 import { cmd } from "../cmd"
-import { tui } from "./app"
+import { tui, getTerminalBackgroundColor } from "./app"
 
 export const AttachCommand = cmd({
   command: "attach <url>",
@@ -42,8 +42,10 @@ export const AttachCommand = cmd({
       const auth = `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`
       return { Authorization: auth }
     })()
+    const mode = await getTerminalBackgroundColor()
     await tui({
       url: args.url,
+      mode,
       args: { sessionID: args.session },
       directory,
       headers,
