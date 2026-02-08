@@ -86,3 +86,7 @@ Anything related to the documentation should have a docs label
 ### windows
 
 Use for any issue that involves the windows OS
+
+## Translation
+
+If the issue is not written in English, you should translate the title and body to English and provide them via the `translated_title` and `translated_body` parameters. This will post a comment on the issue with the English translation.
