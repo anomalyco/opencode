@@ -6,6 +6,44 @@ import { Instance } from "../../src/project/instance"
 import { ToolRegistry } from "../../src/tool/registry"
 
 describe("tool.registry", () => {
+  test("includes plan_exit on cli", async () => {
+    const client = process.env.OPENCODE_CLIENT
+    process.env.OPENCODE_CLIENT = "cli"
+    await using tmp = await tmpdir()
+
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const ids = await ToolRegistry.ids()
+          expect(ids).toContain("plan_exit")
+        },
+      })
+    } finally {
+      if (client === undefined) delete process.env.OPENCODE_CLIENT
+      else process.env.OPENCODE_CLIENT = client
+    }
+  })
+
+  test("does not include plan_exit outside cli", async () => {
+    const client = process.env.OPENCODE_CLIENT
+    process.env.OPENCODE_CLIENT = "app"
+    await using tmp = await tmpdir()
+
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const ids = await ToolRegistry.ids()
+          expect(ids).not.toContain("plan_exit")
+        },
+      })
+    } finally {
+      if (client === undefined) delete process.env.OPENCODE_CLIENT
+      else process.env.OPENCODE_CLIENT = client
+    }
+  })
+
   test("loads tools from .opencode/tool (singular)", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {

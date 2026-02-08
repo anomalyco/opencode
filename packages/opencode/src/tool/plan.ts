@@ -22,12 +22,15 @@ export const PlanExitTool = Tool.define("plan_exit", {
   parameters: z.object({}),
   async execute(_params, ctx) {
     const session = await Session.get(ctx.sessionID)
-    const plan = path.relative(Instance.worktree, Session.plan(session))
+    const planRel = path.relative(Instance.worktree, Session.plan(session))
+    const planExists = await Bun.file(Session.plan(session)).exists()
+    const done = planExists ? `Plan at ${planRel}` : "Planning"
+    const approved = planExists ? `The plan at ${planRel}` : "The plan"
     const answers = await Question.ask({
       sessionID: ctx.sessionID,
       questions: [
         {
-          question: `Plan at ${plan} is complete. Would you like to switch to the build agent and start implementing?`,
+          question: `${done} is complete. Would you like to switch to the build agent and start implementing?`,
           header: "Build Agent",
           custom: false,
           options: [
@@ -60,7 +63,7 @@ export const PlanExitTool = Tool.define("plan_exit", {
       messageID: userMsg.id,
       sessionID: ctx.sessionID,
       type: "text",
-      text: `The plan at ${plan} has been approved, you can now edit files. Execute the plan`,
+      text: `${approved} has been approved, you can now edit files. Execute the plan.`,
       synthetic: true,
     } satisfies MessageV2.TextPart)
 

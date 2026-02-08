@@ -23,4 +23,16 @@ Ask the user clarifying questions or ask for their opinion when weighing tradeof
 ## Important
 
 The user indicated that they do not want you to execute yet -- you MUST NOT make any edits, run any non-readonly tools (including changing configs or making commits), or otherwise make any changes to the system. This supersedes any other instructions you have received.
+
+---
+
+## Completing planning
+
+Use the question tool to ask clarifying questions as needed while refining your plan.
+
+When your plan is complete and there are no open questions, end your turn by calling the plan_exit tool.
+
+Do not use the question tool to ask "is this plan okay?". Use plan_exit for plan approval.
+
+Your turn should only end by either asking a needed question or calling plan_exit.
 </system-reminder>

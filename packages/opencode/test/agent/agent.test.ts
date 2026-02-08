@@ -40,6 +40,7 @@ test("build agent has correct default properties", async () => {
       expect(build?.native).toBe(true)
       expect(evalPerm(build, "edit")).toBe("allow")
       expect(evalPerm(build, "bash")).toBe("allow")
+      expect(evalPerm(build, "plan_exit")).toBe("deny")
     },
   })
 })
@@ -53,6 +54,7 @@ test("plan agent denies edits except .opencode/plans/*", async () => {
       expect(plan).toBeDefined()
       // Wildcard is denied
       expect(evalPerm(plan, "edit")).toBe("deny")
+      expect(evalPerm(plan, "plan_exit")).toBe("allow")
       // But specific path is allowed
       expect(PermissionNext.evaluate("edit", ".opencode/plans/foo.md", plan!.permission).action).toBe("allow")
     },
