@@ -1155,12 +1155,11 @@ export function Prompt(props: PromptProps) {
                   setStore("extmarkToPartIndex", new Map())
                   return
                 }
-                if (vimEnabled() && store.mode === "normal" && vimState.mode() === "normal" && vimScroll(e)) {
-                  // Allow vim scroll keys to override app exit in normal mode
-                } else if (keybind.match("app_exit", e)) {
+                const isVimScrollOverride =
+                  vimEnabled() && store.mode === "normal" && vimState.mode() === "normal" && !!vimScroll(e)
+                if (!isVimScrollOverride && keybind.match("app_exit", e)) {
                   if (store.prompt.input === "") {
                     await exit()
-                    // Prevent textarea from handling the key after exit
                     e.preventDefault()
                     return
                   }
