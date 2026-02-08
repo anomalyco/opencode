@@ -19,7 +19,7 @@ import { useRenderer } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
-import type { FilePart } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, FilePart } from "@opencode-ai/sdk/v2"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
@@ -115,6 +115,33 @@ export function Prompt(props: PromptProps) {
     const messages = sync.data.message[props.sessionID]
     if (!messages) return undefined
     return messages.findLast((m) => m.role === "user")
+  })
+
+  const messages = createMemo(() => {
+    if (!props.sessionID) return []
+    return sync.data.message[props.sessionID] ?? []
+  })
+
+  const finished = createMemo(() => {
+    const msg = messages().findLast((x) => x.role === "assistant" && !!x.time.completed) as AssistantMessage | undefined
+    if (!msg) return
+    if (msg.tokens.input <= 0 && msg.tokens.output <= 0) return
+    return msg
+  })
+
+  const metric = createMemo(() => {
+    const last = finished()
+    if (!last) return
+    const parent = messages().find((x) => x.id === last.parentID)
+    const start = parent?.role === "user" ? parent.time.created : last.time.created
+    const end = last.time.completed ?? last.time.created
+    const elapsed = Math.max(1000, end - start)
+    const rate = Math.round((last.tokens.output * 1000) / elapsed)
+    return {
+      input: Locale.number(last.tokens.input),
+      output: Locale.number(last.tokens.output),
+      rate: Locale.number(rate) + "/s",
+    }
   })
 
   const [store, setStore] = createStore<{
@@ -973,23 +1000,36 @@ export function Prompt(props: PromptProps) {
               cursorColor={theme.text}
               syntaxStyle={syntax()}
             />
-            <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
-              <text fg={highlight()}>
-                {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
-              </text>
-              <Show when={store.mode === "normal"}>
-                <box flexDirection="row" gap={1}>
-                  <text flexShrink={0} fg={keybind.leader ? theme.textMuted : theme.text}>
-                    {local.model.parsed().model}
-                  </text>
-                  <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
-                  <Show when={showVariant()}>
-                    <text fg={theme.textMuted}>·</text>
-                    <text>
-                      <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
+            <box flexDirection="row" flexShrink={0} paddingTop={1} justifyContent="space-between" gap={1}>
+              <box flexDirection="row" gap={1}>
+                <text fg={highlight()}>
+                  {store.mode === "shell" ? "Shell" : Locale.titlecase(local.agent.current().name)}{" "}
+                </text>
+                <Show when={store.mode === "normal"}>
+                  <box flexDirection="row" gap={1}>
+                    <text flexShrink={0} fg={keybind.leader ? theme.textMuted : theme.text}>
+                      {local.model.parsed().model}
                     </text>
-                  </Show>
-                </box>
+                    <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
+                    <Show when={showVariant()}>
+                      <text fg={theme.textMuted}>·</text>
+                      <text>
+                        <span style={{ fg: theme.warning, bold: true }}>{local.model.variant.current()}</span>
+                      </text>
+                    </Show>
+                  </box>
+                </Show>
+              </box>
+              <Show when={store.mode === "normal" && metric()}>
+                {(data) => (
+                  <text fg={theme.textMuted}>
+                    <span style={{ fg: theme.textMuted }}>↓</span> {data().input}
+                    <span style={{ fg: theme.textMuted }}> · </span>
+                    <span style={{ fg: theme.textMuted }}>↑</span> {data().output}
+                    <span style={{ fg: theme.textMuted }}> · </span>
+                    {data().rate}
+                  </text>
+                )}
               </Show>
             </box>
           </box>
