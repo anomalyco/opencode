@@ -28,6 +28,11 @@ const options = {
     describe: "additional domains to allow for CORS",
     default: [] as string[],
   },
+  yolo: {
+    type: "boolean" as const,
+    describe: "auto-approve all permissions (YOLO mode)",
+    default: false,
+  },
 }
 
 export type NetworkOptions = InferredOptionTypes<typeof options>
@@ -57,4 +62,26 @@ export async function resolveNetworkOptions(args: NetworkOptions) {
   const cors = [...configCors, ...argsCors]
 
   return { hostname, port, mdns, mdnsDomain, cors }
+}
+
+export function applyYoloMode() {
+  process.env.OPENCODE_PERMISSION = JSON.stringify({
+    bash: "allow",
+    edit: "allow",
+    read: { "*": "allow" },
+    glob: { "*": "allow" },
+    grep: { "*": "allow" },
+    list: { "*": "allow" },
+    task: "allow",
+    external_directory: { "*": "allow" },
+    todowrite: "allow",
+    todoread: "allow",
+    question: "allow",
+    webfetch: "allow",
+    websearch: "allow",
+    codesearch: "allow",
+    lsp: { "*": "allow" },
+    doom_loop: "allow",
+    skill: { "*": "allow" },
+  })
 }

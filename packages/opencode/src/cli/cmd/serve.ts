@@ -1,6 +1,6 @@
 import { Server } from "../../server/server"
 import { cmd } from "./cmd"
-import { withNetworkOptions, resolveNetworkOptions } from "../network"
+import { withNetworkOptions, resolveNetworkOptions, applyYoloMode } from "../network"
 import { Flag } from "../../flag/flag"
 
 export const ServeCommand = cmd({
@@ -8,6 +8,7 @@ export const ServeCommand = cmd({
   builder: (yargs) => withNetworkOptions(yargs),
   describe: "starts a headless opencode server",
   handler: async (args) => {
+    if (args.yolo) applyYoloMode()
     if (!Flag.OPENCODE_SERVER_PASSWORD) {
       console.log("Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
     }
