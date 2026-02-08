@@ -68,12 +68,9 @@ declare global {
   interface Window {
     __OPENCODE__?: {
       updaterEnabled?: boolean
+      serverPassword?: string
       deepLinks?: string[]
-      wsl?: boolean
-    }
-    api?: {
-      setTitlebar?: (theme: { mode: "light" | "dark" }) => Promise<void>
-      exportDebugLogs?: () => Promise<string>
+      initialPath?: string | null
     }
   }
 }

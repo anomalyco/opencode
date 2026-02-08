@@ -29,19 +29,7 @@ import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
-import { DbCommand } from "./cli/cmd/db"
-import path from "path"
-import { Global } from "@opencode-ai/core/global"
-import { JsonMigration } from "@/storage/json-migration"
-import { Database } from "@/storage/db"
-import { errorMessage } from "./util/error"
-import { PluginCommand } from "./cli/cmd/plug"
-import { Heap } from "./cli/heap"
-import { drizzle } from "drizzle-orm/bun-sqlite"
-import { ensureProcessMetadata } from "@opencode-ai/core/util/opencode-process"
-import { isRecord } from "@/util/record"
-
-const processMetadata = ensureProcessMetadata("main")
+import { DesktopCommand } from "./cli/cmd/desktop"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -176,8 +164,7 @@ const cli = yargs(args)
   .command(GithubCommand)
   .command(PrCommand)
   .command(SessionCommand)
-  .command(PluginCommand)
-  .command(DbCommand)
+  .command(DesktopCommand)
   .fail((msg, err) => {
     if (
       msg?.startsWith("Unknown argument") ||
