@@ -39,5 +39,5 @@ const newValues = Array.from({ length: PARTS }, (_, i) =>
 )
 
 const envFile = Bun.file(path.join(os.tmpdir(), `models-${Date.now()}.env`))
-await envFile.write(newValues.map((v, i) => `ZEN_MODELS${i + 1}=${v}`).join("\n"))
+await envFile.write(newValues.map((v, i) => `ZEN_MODELS${i + 1}="${v.replace(/"/g, '\\"')}"`).join("\n"))
 await $`bun sst secret load ${envFile.name}`.cwd(root)
