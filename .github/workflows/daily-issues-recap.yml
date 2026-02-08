@@ -1,9 +1,6 @@
 name: daily-issues-recap
 
 on:
-  schedule:
-    # Run at 6 PM EST (23:00 UTC, or 22:00 UTC during daylight saving)
-    - cron: "0 23 * * *"
   workflow_dispatch: # Allow manual trigger for testing
 
 jobs:

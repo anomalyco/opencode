@@ -7,8 +7,6 @@ on:
         description: "Log actions without closing PRs"
         type: boolean
         default: false
-  schedule:
-    - cron: "0 6 * * *"
 
 permissions:
   contents: read

@@ -1,9 +1,6 @@
 name: daily-pr-recap
 
 on:
-  schedule:
-    # Run at 5pm EST (22:00 UTC, or 21:00 UTC during daylight saving)
-    - cron: "0 22 * * *"
   workflow_dispatch: # Allow manual trigger for testing
 
 jobs:
