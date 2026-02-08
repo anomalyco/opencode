@@ -153,6 +153,15 @@ export namespace SessionPrompt {
     const message = await createUserMessage(input)
     await Session.touch(input.sessionID)
 
+    // Fire prompt.submit hook for plugins (e.g., permission extraction from user language)
+    const text = input.parts
+      .filter((p): p is typeof p & { type: "text" } => p.type === "text")
+      .map((p) => p.text)
+      .join("\n")
+    if (text.trim()) {
+      await Plugin.trigger("prompt.submit", { sessionID: input.sessionID, text }, {})
+    }
+
     // this is backwards compatibility for allowing `tools` to be specified when
     // prompting
     const permissions: PermissionNext.Ruleset = []

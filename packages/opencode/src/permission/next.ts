@@ -12,6 +12,8 @@ import z from "zod"
 
 export namespace PermissionNext {
   const log = Log.create({ service: "permission" })
+  // Lazy import to avoid circular dependency: permission/next → plugin → session → permission/next
+  const plugin = () => import("@/plugin").then((m) => m.Plugin)
 
   function expand(pattern: string): string {
     if (pattern.startsWith("~/")) return os.homedir() + pattern.slice(1)
@@ -138,18 +140,51 @@ export namespace PermissionNext {
           throw new DeniedError(ruleset.filter((r) => Wildcard.match(request.permission, r.permission)))
         if (rule.action === "ask") {
           const id = input.id ?? Identifier.ascending("permission")
-          return new Promise<void>((resolve, reject) => {
-            const info: Request = {
-              id,
-              ...request,
-            }
+          const info: Request = {
+            id,
+            ...request,
+          }
+          const pending = new Promise<void>((resolve, reject) => {
             s.pending[id] = {
               info,
               resolve,
               reject,
             }
-            Bus.publish(Event.Asked, info)
           })
+          // Trigger plugin hook to let plugins override the decision.
+          // The pending entry is registered synchronously above so that
+          // reply() can find it even if called before the hook resolves.
+          plugin()
+            .then((Plugin) =>
+              Plugin.trigger(
+                "permission.ask",
+                {
+                  permission: request.permission,
+                  pattern,
+                  sessionID: request.sessionID,
+                  metadata: request.metadata,
+                  tool: request.tool,
+                },
+                { status: "ask" as "ask" | "deny" | "allow" },
+              ),
+            )
+            .then((hookResult) => {
+              const entry = s.pending[id]
+              if (!entry) return
+              if (hookResult.status === "allow") {
+                delete s.pending[id]
+                entry.resolve()
+              }
+              if (hookResult.status === "deny") {
+                delete s.pending[id]
+                entry.reject(new DeniedError(ruleset.filter((r) => Wildcard.match(request.permission, r.permission))))
+              }
+            })
+            .catch(() => {
+              // Plugin error - fall through to user prompt (fail-safe)
+            })
+          Bus.publish(Event.Asked, info)
+          return pending
         }
         if (rule.action === "allow") continue
       }
@@ -276,5 +311,10 @@ export namespace PermissionNext {
 
   export async function list() {
     return state().then((x) => Object.values(x.pending).map((x) => x.info))
+  }
+
+  export async function grant(rules: Ruleset) {
+    const s = await state()
+    s.approved.push(...rules)
   }
 }

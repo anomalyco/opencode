@@ -43,6 +43,31 @@ export const PermissionRoutes = lazy(() =>
         return c.json(true)
       },
     )
+    .post(
+      "/grant",
+      describeRoute({
+        summary: "Grant permission rules",
+        description: "Dynamically inject permission rules into the approved ruleset.",
+        operationId: "permission.grant",
+        responses: {
+          200: {
+            description: "Rules granted successfully",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", z.object({ rules: PermissionNext.Ruleset })),
+      async (c) => {
+        const json = c.req.valid("json")
+        await PermissionNext.grant(json.rules)
+        return c.json(true)
+      },
+    )
     .get(
       "/",
       describeRoute({
