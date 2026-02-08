@@ -1,17 +1,17 @@
-import { BusEvent } from "@/bus/bus-event"
-import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
+import type { SystemError } from "bun"
+import { STATUS_CODES } from "http"
+import z from "zod"
+import { BusEvent } from "@/bus/bus-event"
+import type { Provider } from "@/provider/provider"
+import { ProviderTransform } from "@/provider/transform"
+import { Snapshot } from "@/snapshot"
+import { Storage } from "@/storage/storage"
+import { fn } from "@/util/fn"
+import { iife } from "@/util/iife"
 import { Identifier } from "../id/id"
 import { LSP } from "../lsp"
-import { Snapshot } from "@/snapshot"
-import { fn } from "@/util/fn"
-import { Storage } from "@/storage/storage"
-import { ProviderTransform } from "@/provider/transform"
-import { STATUS_CODES } from "http"
-import { iife } from "@/util/iife"
-import { type SystemError } from "bun"
-import type { Provider } from "@/provider/provider"
 
 export namespace MessageV2 {
   export const OutputLengthError = NamedError.create("MessageOutputLengthError", z.object({}))
@@ -354,6 +354,7 @@ export namespace MessageV2 {
     time: z.object({
       created: z.number(),
       completed: z.number().optional(),
+      firstToken: z.number().optional(),
     }),
     error: z
       .discriminatedUnion("name", [
@@ -750,9 +751,9 @@ export namespace MessageV2 {
           },
           { cause: e },
         ).toObject()
-      case APICallError.isInstance(e):
+      case APICallError.isInstance(e): {
         const message = iife(() => {
-          let msg = e.message
+          const msg = e.message
           if (msg === "") {
             if (e.responseBody) return e.responseBody
             if (e.statusCode) {
@@ -793,6 +794,7 @@ export namespace MessageV2 {
           },
           { cause: e },
         ).toObject()
+      }
       case e instanceof Error:
         return new NamedError.Unknown({ message: e.toString() }, { cause: e }).toObject()
       default:

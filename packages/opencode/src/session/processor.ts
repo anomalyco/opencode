@@ -1,20 +1,20 @@
-import { MessageV2 } from "./message-v2"
-import { Log } from "@/util/log"
-import { Identifier } from "@/id/id"
-import { Session } from "."
 import { Agent } from "@/agent/agent"
-import { Snapshot } from "@/snapshot"
-import { SessionSummary } from "./summary"
 import { Bus } from "@/bus"
-import { SessionRetry } from "./retry"
-import { SessionStatus } from "./status"
+import { Config } from "@/config/config"
+import { Identifier } from "@/id/id"
+import { PermissionNext } from "@/permission/next"
 import { Plugin } from "@/plugin"
 import type { Provider } from "@/provider/provider"
-import { LLM } from "./llm"
-import { Config } from "@/config/config"
-import { SessionCompaction } from "./compaction"
-import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
+import { Snapshot } from "@/snapshot"
+import { Log } from "@/util/log"
+import { Session } from "."
+import { SessionCompaction } from "./compaction"
+import { LLM } from "./llm"
+import { MessageV2 } from "./message-v2"
+import { SessionRetry } from "./retry"
+import { SessionStatus } from "./status"
+import { SessionSummary } from "./summary"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -34,6 +34,16 @@ export namespace SessionProcessor {
     let blocked = false
     let attempt = 0
     let needsCompaction = false
+    let firstOutputDeltaTimestamp: number | undefined
+    let lastOutputDeltaTimestamp: number | undefined
+
+    const markOutputDeltaTimestamp = (now: number) => {
+      if (firstOutputDeltaTimestamp === undefined) {
+        firstOutputDeltaTimestamp = now
+        input.assistantMessage.time.firstToken = now
+      }
+      lastOutputDeltaTimestamp = now
+    }
 
     const result = {
       get message() {
@@ -45,11 +55,13 @@ export namespace SessionProcessor {
       async process(streamInput: LLM.StreamInput) {
         log.info("process")
         needsCompaction = false
+        firstOutputDeltaTimestamp = undefined
+        lastOutputDeltaTimestamp = undefined
         const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
         while (true) {
           try {
             let currentText: MessageV2.TextPart | undefined
-            let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
+            const reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
             const stream = await LLM.stream(streamInput)
 
             for await (const value of stream.fullStream) {
@@ -78,6 +90,8 @@ export namespace SessionProcessor {
 
                 case "reasoning-delta":
                   if (value.id in reasoningMap) {
+                    const now = Date.now()
+                    markOutputDeltaTimestamp(now)
                     const part = reasoningMap[value.id]
                     part.text += value.text
                     if (value.providerMetadata) part.metadata = value.providerMetadata
@@ -100,7 +114,7 @@ export namespace SessionProcessor {
                   }
                   break
 
-                case "tool-input-start":
+                case "tool-input-start": {
                   const part = await Session.updatePart({
                     id: toolcalls[value.id]?.id ?? Identifier.ascending("part"),
                     messageID: input.assistantMessage.id,
@@ -116,9 +130,13 @@ export namespace SessionProcessor {
                   })
                   toolcalls[value.id] = part as MessageV2.ToolPart
                   break
+                }
 
-                case "tool-input-delta":
+                case "tool-input-delta": {
+                  const now = Date.now()
+                  markOutputDeltaTimestamp(now)
                   break
+                }
 
                 case "tool-input-end":
                   break
@@ -233,7 +251,7 @@ export namespace SessionProcessor {
                   })
                   break
 
-                case "finish-step":
+                case "finish-step": {
                   const usage = Session.getUsage({
                     model: input.model,
                     usage: value.usage,
@@ -241,7 +259,11 @@ export namespace SessionProcessor {
                   })
                   input.assistantMessage.finish = value.finishReason
                   input.assistantMessage.cost += usage.cost
-                  input.assistantMessage.tokens = usage.tokens
+                  input.assistantMessage.tokens.input += usage.tokens.input
+                  input.assistantMessage.tokens.output += usage.tokens.output
+                  input.assistantMessage.tokens.reasoning += usage.tokens.reasoning
+                  input.assistantMessage.tokens.cache.read += usage.tokens.cache.read
+                  input.assistantMessage.tokens.cache.write += usage.tokens.cache.write
                   await Session.updatePart({
                     id: Identifier.ascending("part"),
                     reason: value.finishReason,
@@ -275,6 +297,7 @@ export namespace SessionProcessor {
                     needsCompaction = true
                   }
                   break
+                }
 
                 case "text-start":
                   currentText = {
@@ -292,6 +315,8 @@ export namespace SessionProcessor {
 
                 case "text-delta":
                   if (currentText) {
+                    const now = Date.now()
+                    markOutputDeltaTimestamp(now)
                     currentText.text += value.text
                     if (value.providerMetadata) currentText.metadata = value.providerMetadata
                     if (currentText.text)
@@ -393,7 +418,7 @@ export namespace SessionProcessor {
               })
             }
           }
-          input.assistantMessage.time.completed = Date.now()
+          input.assistantMessage.time.completed = lastOutputDeltaTimestamp ?? Date.now()
           await Session.updateMessage(input.assistantMessage)
           if (needsCompaction) return "compact"
           if (blocked) return "stop"
