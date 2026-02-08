@@ -2,6 +2,7 @@ import { onCleanup, onMount } from "solid-js"
 import { showToast } from "@opencode-ai/ui/toast"
 import { usePrompt, type ContentPart, type ImageAttachmentPart } from "@/context/prompt"
 import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
 import { getCursorPosition } from "./editor-dom"
 
 export const ACCEPTED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"]
@@ -19,6 +20,7 @@ type PromptAttachmentsInput = {
 export function createPromptAttachments(input: PromptAttachmentsInput) {
   const prompt = usePrompt()
   const language = useLanguage()
+  const platform = usePlatform()
 
   const addImageAttachment = async (file: File) => {
     if (!ACCEPTED_FILE_TYPES.includes(file.type)) return
@@ -80,6 +82,8 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     input.addPart({ type: "text", content: plainText, start: 0, end: 0 })
   }
 
+  // HTML5 drag events — only used for intra-page dragging (text/@mention)
+  // OS file/folder drops are handled via Tauri native events on desktop
   const handleGlobalDragOver = (event: DragEvent) => {
     if (input.isDialogActive()) return
 
@@ -87,7 +91,11 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     const hasFiles = event.dataTransfer?.types.includes("Files")
     const hasText = event.dataTransfer?.types.includes("text/plain")
     if (hasFiles) {
-      input.setDraggingType("image")
+      // On desktop, OS file drops are intercepted by Tauri native handler
+      // so this only fires for intra-page file drags
+      if (platform.platform !== "desktop") {
+        input.setDraggingType("image")
+      }
     } else if (hasText) {
       input.setDraggingType("@mention")
     }
@@ -115,6 +123,9 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
       return
     }
 
+    // On desktop, OS file drops go through Tauri native events, not HTML5
+    if (platform.platform === "desktop") return
+
     const dropped = event.dataTransfer?.files
     if (!dropped) return
 
@@ -125,16 +136,36 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     }
   }
 
+  // Handle file drops forwarded from layout.tsx via Tauri native drag events (desktop only)
+  const handleNativeFileDrop = (event: Event) => {
+    const detail = (event as CustomEvent<{ paths: string[] }>).detail
+    if (!detail?.paths?.length) return
+
+    input.focusEditor()
+    for (const filePath of detail.paths) {
+      input.addPart({ type: "file", path: filePath, content: "@" + filePath, start: 0, end: 0 })
+    }
+  }
+
   onMount(() => {
     document.addEventListener("dragover", handleGlobalDragOver)
     document.addEventListener("dragleave", handleGlobalDragLeave)
     document.addEventListener("drop", handleGlobalDrop)
+
+    // Desktop-only: listen for Tauri native file drop events (forwarded from layout)
+    if (platform.platform === "desktop") {
+      window.addEventListener("opencode:file-drop", handleNativeFileDrop)
+    }
   })
 
   onCleanup(() => {
     document.removeEventListener("dragover", handleGlobalDragOver)
     document.removeEventListener("dragleave", handleGlobalDragLeave)
     document.removeEventListener("drop", handleGlobalDrop)
+
+    if (platform.platform === "desktop") {
+      window.removeEventListener("opencode:file-drop", handleNativeFileDrop)
+    }
   })
 
   return {
