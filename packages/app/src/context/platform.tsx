@@ -9,9 +9,6 @@ export type Platform = {
   /** Desktop OS (Tauri only) */
   os?: "macos" | "windows" | "linux"
 
-  /** Desktop OS version (Tauri only) */
-  osVersion?: string
-
   /** App version */
   version?: string
 

@@ -6,7 +6,6 @@ export const iconNames = [
   "zed",
   "file-explorer",
   "finder",
-  "finder-tahoe",
   "terminal",
   "iterm2",
   "ghostty",

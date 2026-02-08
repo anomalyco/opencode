@@ -23,7 +23,6 @@ const icons = {
   zed,
   "file-explorer": fileExplorer,
   finder,
-  "finder-tahoe": "https://upload.wikimedia.org/wikipedia/commons/b/b9/Finder_Icon_macOS_Tahoe.png",
   terminal,
   iterm2,
   ghostty,

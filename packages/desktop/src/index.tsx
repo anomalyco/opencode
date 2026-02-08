@@ -6,7 +6,7 @@ import { open, save } from "@tauri-apps/plugin-dialog"
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link"
 import { openPath as openerOpenPath } from "@tauri-apps/plugin-opener"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
-import { type as ostype, version as osversion } from "@tauri-apps/plugin-os"
+import { type as ostype } from "@tauri-apps/plugin-os"
 import { check, Update } from "@tauri-apps/plugin-updater"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification"
@@ -57,7 +57,6 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
     if (type === "macos" || type === "windows" || type === "linux") return type
     return undefined
   })(),
-  osVersion: osversion(),
   version: pkg.version,
 
   async openDirectoryPickerDialog(opts) {
