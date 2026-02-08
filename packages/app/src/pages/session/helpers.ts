@@ -36,3 +36,10 @@ export const createOpenReviewFile = (input: {
 export const combineCommandSections = (sections: readonly (readonly CommandOption[])[]) => {
   return sections.flatMap((section) => section)
 }
+
+export const getTabReorderIndex = (tabs: readonly string[], from: string, to: string) => {
+  const fromIndex = tabs.indexOf(from)
+  const toIndex = tabs.indexOf(to)
+  if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return undefined
+  return toIndex
+}
