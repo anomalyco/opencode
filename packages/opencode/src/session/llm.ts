@@ -229,6 +229,7 @@ export namespace LLM {
               }
             : undefined),
         ...input.model.headers,
+        ...ProviderTransform.headers(input.model),
         ...headers,
       },
       maxRetries: input.retries ?? 0,

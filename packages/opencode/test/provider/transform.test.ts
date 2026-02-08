@@ -1,5 +1,6 @@
-import { describe, expect, test } from "bun:test"
+import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { ProviderTransform } from "../../src/provider/transform"
+import { Flag } from "../../src/flag/flag"
 
 const OUTPUT_TOKEN_MAX = 32000
 
@@ -2016,6 +2017,106 @@ describe("ProviderTransform.variants", () => {
         },
       })
       const result = ProviderTransform.variants(model)
+      expect(result).toEqual({})
+    })
+  })
+})
+
+describe("ProviderTransform.headers", () => {
+  const createModel = (overrides: Partial<any> = {}): any => ({
+    id: "claude-opus-4-6",
+    providerID: "anthropic",
+    api: {
+      id: "claude-opus-4-6",
+      url: "https://api.anthropic.com",
+      npm: "@ai-sdk/anthropic",
+    },
+    name: "Claude Opus 4.6",
+    capabilities: {},
+    cost: { input: 0.015, output: 0.075, cache: { read: 0.0015, write: 0.01875 } },
+    limit: { context: 200000, output: 32000 },
+    status: "active",
+    options: {},
+    headers: {},
+    ...overrides,
+  })
+
+  describe("when OPENCODE_OPUS_FAST_MODE is enabled", () => {
+    const original = Flag.OPENCODE_OPUS_FAST_MODE
+
+    beforeAll(() => {
+      ;(Flag as any).OPENCODE_OPUS_FAST_MODE = true
+    })
+
+    afterAll(() => {
+      ;(Flag as any).OPENCODE_OPUS_FAST_MODE = original
+    })
+
+    test("adds anthropic-beta header for claude-opus-4-6 with @ai-sdk/anthropic", () => {
+      const model = createModel()
+      const result = ProviderTransform.headers(model)
+      expect(result["anthropic-beta"]).toBe("research-preview-2026-02-01")
+    })
+
+    test("appends to existing anthropic-beta header", () => {
+      const model = createModel({
+        headers: { "anthropic-beta": "existing-beta-1" },
+      })
+      const result = ProviderTransform.headers(model)
+      expect(result["anthropic-beta"]).toBe("existing-beta-1,research-preview-2026-02-01")
+    })
+
+    test("appends to multiple existing anthropic-beta values", () => {
+      const model = createModel({
+        headers: { "anthropic-beta": "beta-1, beta-2" },
+      })
+      const result = ProviderTransform.headers(model)
+      expect(result["anthropic-beta"]).toBe("beta-1,beta-2,research-preview-2026-02-01")
+    })
+
+    test("returns empty headers for non-anthropic npm package", () => {
+      const model = createModel({
+        api: {
+          id: "claude-opus-4-6",
+          url: "https://api.openai.com",
+          npm: "@ai-sdk/openai",
+        },
+      })
+      const result = ProviderTransform.headers(model)
+      expect(result).toEqual({})
+    })
+
+    test("returns empty headers for non-opus model", () => {
+      const model = createModel({
+        id: "claude-sonnet-4-20250514",
+      })
+      const result = ProviderTransform.headers(model)
+      expect(result).toEqual({})
+    })
+  })
+
+  describe("when OPENCODE_OPUS_FAST_MODE is disabled", () => {
+    const original = Flag.OPENCODE_OPUS_FAST_MODE
+
+    beforeAll(() => {
+      ;(Flag as any).OPENCODE_OPUS_FAST_MODE = false
+    })
+
+    afterAll(() => {
+      ;(Flag as any).OPENCODE_OPUS_FAST_MODE = original
+    })
+
+    test("returns empty headers for claude-opus-4-6", () => {
+      const model = createModel()
+      const result = ProviderTransform.headers(model)
+      expect(result).toEqual({})
+    })
+
+    test("returns empty headers even with existing anthropic-beta", () => {
+      const model = createModel({
+        headers: { "anthropic-beta": "existing-beta" },
+      })
+      const result = ProviderTransform.headers(model)
       expect(result).toEqual({})
     })
   })

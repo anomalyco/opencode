@@ -5,6 +5,7 @@ import type { JSONSchema } from "zod/v4/core"
 import type { Provider } from "./provider"
 import type { ModelsDev } from "./models"
 import { iife } from "@/util/iife"
+import { Flag } from "@/flag/flag"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -577,6 +578,17 @@ export namespace ProviderTransform {
         return Object.fromEntries(WIDELY_SUPPORTED_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
     }
     return {}
+  }
+
+  export function headers(model: Provider.Model): Record<string, string> {
+    const result: Record<string, string> = {}
+    if (Flag.OPENCODE_OPUS_FAST_MODE && model.api.npm === "@ai-sdk/anthropic" && model.id === "claude-opus-4-6") {
+      const prev = model.headers["anthropic-beta"]
+      const betas = prev ? prev.split(",").map((b) => b.trim()) : []
+      betas.push("research-preview-2026-02-01")
+      result["anthropic-beta"] = betas.join(",")
+    }
+    return result
   }
 
   export function options(input: {
