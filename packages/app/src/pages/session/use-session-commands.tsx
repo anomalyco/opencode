@@ -14,6 +14,7 @@ import { useTerminal } from "@/context/terminal"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectMcp } from "@/components/dialog-select-mcp"
+import { DialogSelectSkill } from "@/components/dialog-select-skill"
 import { DialogFork } from "@/components/dialog-fork"
 import { showToast } from "@opencode-ai/ui/toast"
 import { findLast } from "@opencode-ai/util/array"
@@ -48,6 +49,7 @@ export const useSessionCommands = (input: {
   setExpanded: (id: string, fn: (open: boolean | undefined) => boolean) => void
   setActiveMessage: (message: UserMessage | undefined) => void
   addSelectionToContext: (path: string, selection: FileSelection) => void
+  focusInput: () => void
 }) => {
   const sessionCommands = createMemo(() => [
     {
@@ -139,11 +141,15 @@ export const useSessionCommands = (input: {
       title: input.language.t("command.fileTree.toggle"),
       description: "",
       category: input.language.t("command.category.view"),
-      onSelect: () => {
-        const opening = !input.layout.fileTree.opened()
-        if (opening && !input.view().reviewPanel.opened()) input.view().reviewPanel.open()
-        input.layout.fileTree.toggle()
-      },
+      keybind: "mod+\\",
+      onSelect: () => input.layout.fileTree.toggle(),
+    },
+    {
+      id: "input.focus",
+      title: input.language.t("command.input.focus"),
+      category: input.language.t("command.category.view"),
+      keybind: "ctrl+l",
+      onSelect: () => input.focusInput(),
     },
     {
       id: "terminal.new",
@@ -238,6 +244,14 @@ export const useSessionCommands = (input: {
       onSelect: () => {
         input.local.model.variant.cycle()
       },
+    },
+    {
+      id: "skill.list",
+      title: input.language.t("command.skill.list"),
+      description: input.language.t("command.skill.list.description"),
+      category: input.language.t("command.category.skill"),
+      keybind: "mod+shift+;",
+      onSelect: () => input.dialog.show(() => <DialogSelectSkill />),
     },
   ])
 
@@ -360,30 +374,41 @@ export const useSessionCommands = (input: {
     return [
       {
         id: "session.share",
-        title: input.language.t("command.session.share"),
-        description: input.language.t("command.session.share.description"),
+        title: input.info()?.share?.url ? "Copy share link" : input.language.t("command.session.share"),
+        description: input.info()?.share?.url
+          ? "Copy share URL to clipboard"
+          : input.language.t("command.session.share.description"),
         category: input.language.t("command.category.session"),
         slash: "share",
-        disabled: !input.params.id || !!input.info()?.share?.url,
+        disabled: !input.params.id,
         onSelect: async () => {
           if (!input.params.id) return
-          await input.sdk.client.session
-            .share({ sessionID: input.params.id })
-            .then((res) => {
-              navigator.clipboard.writeText(res.data!.share!.url).catch(() =>
+          const copy = (url: string, existing: boolean) =>
+            navigator.clipboard
+              .writeText(url)
+              .then(() =>
+                showToast({
+                  title: existing
+                    ? input.language.t("session.share.copy.copied")
+                    : input.language.t("toast.session.share.success.title"),
+                  description: input.language.t("toast.session.share.success.description"),
+                  variant: "success",
+                }),
+              )
+              .catch(() =>
                 showToast({
                   title: input.language.t("toast.session.share.copyFailed.title"),
                   variant: "error",
                 }),
               )
-            })
-            .then(() =>
-              showToast({
-                title: input.language.t("toast.session.share.success.title"),
-                description: input.language.t("toast.session.share.success.description"),
-                variant: "success",
-              }),
-            )
+          const url = input.info()?.share?.url
+          if (url) {
+            await copy(url, true)
+            return
+          }
+          await input.sdk.client.session
+            .share({ sessionID: input.params.id })
+            .then((res) => copy(res.data!.share!.url, false))
             .catch(() =>
               showToast({
                 title: input.language.t("toast.session.share.failed.title"),

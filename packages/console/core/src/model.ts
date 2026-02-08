@@ -53,6 +53,8 @@ export namespace ZenData {
         weight: z.number().optional(),
         disabled: z.boolean().optional(),
         storeModel: z.string().optional(),
+        headers: z.record(z.string(), z.string()).optional(),
+        bodyModifier: z.record(z.string(), z.string()).optional(),
       }),
     ),
   })

@@ -31,7 +31,10 @@ export function SessionPromptDock(props: {
       <div
         classList={{
           "w-full px-4 pointer-events-auto": true,
-          "md:max-w-200 md:mx-auto 3xl:max-w-[1200px]": props.centered,
+          "md:mx-auto": props.centered,
+        }}
+        style={{
+          "max-width": props.centered ? "var(--session-content-width)" : undefined,
         }}
       >
         <Show when={props.questionRequest()} keyed>

@@ -179,7 +179,10 @@ export function MessageTimeline(props: {
                 "sticky top-0 z-30 bg-background-stronger": true,
                 "w-full": true,
                 "px-4 md:px-6": true,
-                "md:max-w-200 md:mx-auto 3xl:max-w-[1200px]": props.centered,
+                "md:mx-auto": props.centered,
+              }}
+              style={{
+                "max-width": props.centered ? "var(--session-content-width)" : undefined,
               }}
             >
               <div class="h-10 w-full flex items-center justify-between gap-2">
@@ -278,9 +281,12 @@ export function MessageTimeline(props: {
             class="flex flex-col gap-12 items-start justify-start pb-[calc(var(--prompt-height,8rem)+64px)] md:pb-[calc(var(--prompt-height,10rem)+64px)] transition-[margin]"
             classList={{
               "w-full": true,
-              "md:max-w-200 md:mx-auto 3xl:max-w-[1200px]": props.centered,
+              "md:mx-auto": props.centered,
               "mt-0.5": props.centered,
               "mt-0": !props.centered,
+            }}
+            style={{
+              "max-width": props.centered ? "var(--session-content-width)" : undefined,
             }}
           >
             <Show when={props.turnStart > 0}>
@@ -321,7 +327,7 @@ export function MessageTimeline(props: {
                     }}
                     classList={{
                       "min-w-0 w-full max-w-full": true,
-                      "md:max-w-200 3xl:max-w-[1200px]": props.centered,
+                      "md:max-w-[var(--session-content-width)]": props.centered,
                     }}
                   >
                     <SessionTurn
