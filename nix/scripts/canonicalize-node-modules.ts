@@ -15,6 +15,15 @@ async function isDirectory(path: string) {
   }
 }
 
+function isValidSemver(v: string) {
+  try {
+    Bun.semver.order(v, "0.0.0")
+    return true
+  } catch {
+    return false
+  }
+}
+
 const root = process.cwd()
 const bunRoot = join(root, "node_modules/.bun")
 const linkRoot = join(bunRoot, "node_modules")
@@ -32,15 +41,23 @@ for (const entry of directories) {
     continue
   }
   const list = versions.get(parsed.name) ?? []
-  list.push({ dir: full, version: parsed.version, label: entry })
+  list.push({ dir: full, version: parsed.version })
   versions.set(parsed.name, list)
 }
 
 const selections = new Map<string, Entry>()
 
 for (const [slug, list] of versions) {
-  list.sort((a, b) => -Bun.semver.order(a.version, b.version))
-  selections.set(slug, list[0])
+  list.sort((a, b) => {
+    const aValid = isValidSemver(a.version)
+    const bValid = isValidSemver(b.version)
+    if (aValid && bValid) return -Bun.semver.order(a.version, b.version)
+    if (aValid) return -1
+    if (bValid) return 1
+    return b.version.localeCompare(a.version)
+  })
+  const first = list[0]
+  if (first) selections.set(slug, first)
 }
 
 await rm(linkRoot, { recursive: true, force: true })
