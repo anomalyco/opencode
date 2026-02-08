@@ -180,7 +180,17 @@ export namespace LLM {
       })
     }
 
-    return streamText({
+    const ctx = {
+      sessionID: input.sessionID,
+      agent: input.agent,
+      model: input.model,
+      provider,
+      message: input.user,
+      requestID: input.user.id,
+      type: "stream",
+    }
+
+    const call = {
       onError(error) {
         l.error("stream error", {
           error,
@@ -262,7 +272,20 @@ export namespace LLM {
           sessionId: input.sessionID,
         },
       },
-    })
+    }
+
+    await Plugin.trigger("llm.request.before", ctx, { params: call })
+
+    const stream = await streamText(call)
+    const full = stream.fullStream
+    const fullStream = (async function* () {
+      for await (const part of full) {
+        await Plugin.trigger("llm.stream.chunk", ctx, { part })
+        yield part
+      }
+    })()
+
+    return { ...stream, fullStream }
   }
 
   async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "user">) {

@@ -283,6 +283,7 @@ export namespace Agent {
     const cfg = await Config.get()
     const defaultModel = input.model ?? (await Provider.defaultModel())
     const model = await Provider.getModel(defaultModel.providerID, defaultModel.modelID)
+    const provider = await Provider.getProvider(defaultModel.providerID)
     const language = await Provider.getLanguage(model)
 
     const system = [PROMPT_GENERATE]
@@ -317,22 +318,33 @@ export namespace Agent {
       }),
     } satisfies Parameters<typeof generateObject>[0]
 
+    const ctx = {
+      model,
+      provider,
+    }
+
     if (defaultModel.providerID === "openai" && (await Auth.get(defaultModel.providerID))?.type === "oauth") {
-      const result = streamObject({
+      const call = {
         ...params,
         providerOptions: ProviderTransform.providerOptions(model, {
           instructions: SystemPrompt.instructions(),
           store: false,
         }),
         onError: () => {},
-      })
+      }
+      await Plugin.trigger("llm.request.before", { ...ctx, type: "stream" }, { params: call })
+      const result = streamObject(call)
       for await (const part of result.fullStream) {
+        await Plugin.trigger("llm.stream.chunk", { ...ctx, type: "stream" }, { part })
         if (part.type === "error") throw part.error
       }
+      await Plugin.trigger("llm.response.after", { ...ctx, type: "stream" }, { result: result.object })
       return result.object
     }
 
+    await Plugin.trigger("llm.request.before", { ...ctx, type: "generate" }, { params })
     const result = await generateObject(params)
+    await Plugin.trigger("llm.response.after", { ...ctx, type: "generate" }, { result: result.object })
     return result.object
   }
 }

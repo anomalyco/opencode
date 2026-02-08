@@ -23,6 +23,18 @@ export type ProviderContext = {
   options: Record<string, any>
 }
 
+export type LlmPhase = "generate" | "stream"
+
+export type LlmContext = {
+  sessionID?: string
+  agent?: unknown
+  model?: Model
+  provider?: unknown
+  message?: UserMessage
+  requestID?: string
+  type: LlmPhase
+}
+
 export type PluginInput = {
   client: ReturnType<typeof createOpencodeClient>
   project: Project
@@ -176,6 +188,18 @@ export interface Hooks {
     input: { sessionID: string; agent: string; model: Model; provider: ProviderContext; message: UserMessage },
     output: { headers: Record<string, string> },
   ) => Promise<void>
+  /**
+   * Last hook before the request is sent to the provider
+   */
+  "llm.request.before"?: (input: LlmContext, output: { params: Record<string, unknown> }) => Promise<void>
+  /**
+   * First hook after a non-stream response is received
+   */
+  "llm.response.after"?: (input: LlmContext, output: { result: unknown }) => Promise<void>
+  /**
+   * Stream chunk hook before opencode processing
+   */
+  "llm.stream.chunk"?: (input: LlmContext, output: { part: unknown }) => Promise<void>
   "permission.ask"?: (input: Permission, output: { status: "ask" | "deny" | "allow" }) => Promise<void>
   "command.execute.before"?: (
     input: { command: string; sessionID: string; arguments: string },
