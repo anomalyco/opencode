@@ -239,6 +239,7 @@ export const dict = {
   "prompt.toast.shellSendFailed.title": "ไม่สามารถส่งคำสั่งเชลล์",
   "prompt.toast.commandSendFailed.title": "ไม่สามารถส่งคำสั่ง",
   "prompt.toast.promptSendFailed.title": "ไม่สามารถส่งพร้อมท์",
+  "prompt.toast.promptSendFailed.description": "ไม่สามารถดึงเซสชันได้",
 
   "dialog.mcp.title": "MCPs",
   "dialog.mcp.description": "{{enabled}} จาก {{total}} ที่เปิดใช้งาน",

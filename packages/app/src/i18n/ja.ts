@@ -233,6 +233,7 @@ export const dict = {
   "prompt.toast.shellSendFailed.title": "シェルコマンドの送信に失敗しました",
   "prompt.toast.commandSendFailed.title": "コマンドの送信に失敗しました",
   "prompt.toast.promptSendFailed.title": "プロンプトの送信に失敗しました",
+  "prompt.toast.promptSendFailed.description": "セッションを取得できませんでした",
 
   "dialog.mcp.title": "MCP",
   "dialog.mcp.description": "{{total}}個中{{enabled}}個が有効",

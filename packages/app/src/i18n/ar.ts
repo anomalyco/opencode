@@ -234,6 +234,7 @@ export const dict = {
   "prompt.toast.shellSendFailed.title": "فشل إرسال أمر shell",
   "prompt.toast.commandSendFailed.title": "فشل إرسال الأمر",
   "prompt.toast.promptSendFailed.title": "فشل إرسال الموجه",
+  "prompt.toast.promptSendFailed.description": "تعذر استرداد الجلسة",
 
   "dialog.mcp.title": "MCPs",
   "dialog.mcp.description": "{{enabled}} من {{total}} مفعل",

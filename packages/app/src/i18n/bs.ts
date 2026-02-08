@@ -242,6 +242,7 @@ export const dict = {
   "prompt.toast.shellSendFailed.title": "Neuspješno slanje shell naredbe",
   "prompt.toast.commandSendFailed.title": "Neuspješno slanje komande",
   "prompt.toast.promptSendFailed.title": "Neuspješno slanje upita",
+  "prompt.toast.promptSendFailed.description": "Nije moguće dohvatiti sesiju",
 
   "dialog.mcp.title": "MCP-ovi",
   "dialog.mcp.description": "{{enabled}} od {{total}} omogućeno",
