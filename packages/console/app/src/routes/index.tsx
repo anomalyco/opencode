@@ -107,8 +107,8 @@ export default function Home() {
                   <Tabs.Trigger value="brew" data-slot="tab">
                     brew
                   </Tabs.Trigger>
-                  <Tabs.Trigger value="paru" data-slot="tab">
-                    paru
+                  <Tabs.Trigger value="pacman" data-slot="tab">
+                    pacman
                   </Tabs.Trigger>
                   <Tabs.Indicator />
                 </Tabs.List>
@@ -151,10 +151,10 @@ export default function Home() {
                       <CopyStatus />
                     </button>
                   </Tabs.Content>
-                  <Tabs.Content as="pre" data-slot="panel" value="paru">
+                  <Tabs.Content as="pre" data-slot="panel" value="pacman">
                     <button data-copy data-slot="command" onClick={handleCopyClick}>
                       <span>
-                        <span data-slot="protocol">paru -S </span>
+                        <span data-slot="protocol">pacman -S </span>
                         <span data-slot="highlight">opencode</span>
                       </span>
                       <CopyStatus />

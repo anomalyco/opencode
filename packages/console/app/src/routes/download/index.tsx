@@ -143,9 +143,9 @@ export default function Download() {
                 </code>
                 <CopyStatus />
               </button>
-              <button data-component="cli-row" onClick={handleCopyClick("paru -S opencode")}>
+              <button data-component="cli-row" onClick={handleCopyClick("pacman -S opencode")}>
                 <code>
-                  paru -S <strong>opencode</strong>
+                  pacman -S <strong>opencode</strong>
                 </code>
                 <CopyStatus />
               </button>

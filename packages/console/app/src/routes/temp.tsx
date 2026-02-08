@@ -137,10 +137,10 @@ export default function Home() {
             </button>
           </div>
           <div data-component="method">
-            <h3 data-component="title">paru</h3>
+            <h3 data-component="title">pacman</h3>
             <button data-copy data-slot="button">
               <span>
-                paru -S <strong>opencode-bin</strong>
+                pacman -S <strong>opencode</strong>
               </span>
               <CopyStatus />
             </button>
