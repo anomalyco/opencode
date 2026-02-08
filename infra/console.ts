@@ -135,6 +135,16 @@ const ZEN_MODELS = [
   new sst.Secret("ZEN_MODELS8"),
   new sst.Secret("ZEN_MODELS9"),
   new sst.Secret("ZEN_MODELS10"),
+  new sst.Secret("ZEN_MODELS11"),
+  new sst.Secret("ZEN_MODELS12"),
+  new sst.Secret("ZEN_MODELS13"),
+  new sst.Secret("ZEN_MODELS14"),
+  new sst.Secret("ZEN_MODELS15"),
+  new sst.Secret("ZEN_MODELS16"),
+  new sst.Secret("ZEN_MODELS17"),
+  new sst.Secret("ZEN_MODELS18"),
+  new sst.Secret("ZEN_MODELS19"),
+  new sst.Secret("ZEN_MODELS20"),
 ]
 const STRIPE_SECRET_KEY = new sst.Secret("STRIPE_SECRET_KEY")
 const STRIPE_PUBLISHABLE_KEY = new sst.Secret("STRIPE_PUBLISHABLE_KEY")
