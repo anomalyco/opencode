@@ -6392,6 +6392,9 @@
             },
             "required": ["input", "output", "reasoning", "cache"]
           },
+          "variant": {
+            "type": "string"
+          },
           "finish": {
             "type": "string"
           }
@@ -9543,6 +9546,13 @@
             "properties": {
               "paths": {
                 "description": "Additional paths to skill folders",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "urls": {
+                "description": "URLs to fetch skills from (e.g., https://example.com/.well-known/skills/)",
                 "type": "array",
                 "items": {
                   "type": "string"

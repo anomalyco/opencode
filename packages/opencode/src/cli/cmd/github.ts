@@ -160,25 +160,17 @@ export function parseGitHubRemote(url: string): { owner: string; repo: string } 
 
 /**
  * Extracts displayable text from assistant response parts.
- * Returns null for tool-only or reasoning-only responses (signals summary needed).
- * Throws for truly unusable responses (empty, step-start only, etc.).
+ * Returns null for non-text responses (signals summary needed).
+ * Throws only for truly empty responses.
  */
 export function extractResponseText(parts: MessageV2.Part[]): string | null {
-  // Priority 1: Look for text parts
   const textPart = parts.findLast((p) => p.type === "text")
   if (textPart) return textPart.text
 
-  // Priority 2: Reasoning-only - return null to signal summary needed
-  const reasoningPart = parts.findLast((p) => p.type === "reasoning")
-  if (reasoningPart) return null
+  // Non-text parts (tools, reasoning, step-start/step-finish, etc.) - signal summary needed
+  if (parts.length > 0) return null
 
-  // Priority 3: Tool-only - return null to signal summary needed
-  const toolParts = parts.filter((p) => p.type === "tool" && p.state.status === "completed")
-  if (toolParts.length > 0) return null
-
-  // No usable parts - throw with debug info
-  const partTypes = parts.map((p) => p.type).join(", ") || "none"
-  throw new Error(`Failed to parse response. Part types found: [${partTypes}]`)
+  throw new Error("Failed to parse response: no parts returned")
 }
 
 export const GithubCommand = cmd({
