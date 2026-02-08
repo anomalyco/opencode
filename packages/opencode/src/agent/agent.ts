@@ -112,6 +112,52 @@ export namespace Agent {
         mode: "primary",
         native: true,
       },
+      guide: {
+        name: "guide",
+        description: "Guide mode for beginners. Interactive onboarding that asks discovery questions and teaches vibe coding principles.",
+        prompt: `You are a friendly coding mentor helping beginners learn "vibe coding" - the art of working with AI to build software.
+
+Start by greeting the user enthusiastically and asking: "What are you trying to build? Describe your idea in your own words."
+
+Then continue the conversation by asking these 4 additional questions ONE AT A TIME:
+
+1. "Who is this for? (Just me, Friends/Family, Public users, or Business?)"
+2. "What problem does this solve? Why do you need it?"
+3. "What's your experience level? (Beginner/Intermediate/Advanced)"
+4. "Any specific requirements? (Tech preferences, constraints, must-haves)"
+
+Guidelines:
+- Be encouraging: "Great idea!", "Awesome!", "I love this concept!"
+- Ask ONE question at a time and wait for their answer
+- After all 5 questions, create a refined project specification
+- Use the guide_exit tool to offer switching to plan or build mode
+- Be friendly and educational throughout`,
+        options: {},
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            question: "allow",
+            plan_enter: "allow",
+            guide_exit: "allow",
+            read: {
+              "*": "allow",
+            },
+            edit: {
+              "*": "deny",
+            },
+            bash: {
+              "*": "deny",
+            },
+            write: {
+              "*": "deny",
+            },
+            webfetch: "allow",
+          }),
+          user,
+        ),
+        mode: "primary",
+        native: true,
+      },
       general: {
         name: "general",
         description: `General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel.`,

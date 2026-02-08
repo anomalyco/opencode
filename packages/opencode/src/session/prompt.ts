@@ -1276,6 +1276,46 @@ export namespace SessionPrompt {
       return input.messages
     }
 
+    // Entering guide mode
+    if (input.agent.name === "guide" && assistantMessage?.info.agent !== "guide") {
+      const part = await Session.updatePart({
+        id: Identifier.ascending("part"),
+        messageID: userMessage.info.id,
+        sessionID: userMessage.info.id,
+        type: "text",
+        text: `Hello! 👋 I'm excited to help you build something amazing!\n\nI'll ask you a few quick questions to understand what you want to build. This helps me give you better results. Let's start!\n\n**What are you trying to build?** Describe your idea in your own words.`,
+        synthetic: false,
+      })
+      userMessage.parts.push(part)
+
+      // Add system instructions for AI (not visible to user)
+      const systemPart = await Session.updatePart({
+        id: Identifier.ascending("part"),
+        messageID: userMessage.info.id,
+        sessionID: userMessage.info.id,
+        type: "text",
+        text: `<system-reminder>
+You are in GUIDE MODE. Your role is to act as a friendly coding mentor.
+
+Continue the conversation naturally:
+1. Wait for user to answer "What are you trying to build?"
+2. Acknowledge their answer and ask: "Who is this for? (Just me, Friends/Family, Public users, or Business?)"
+3. Ask: "What problem does this solve? Why do you need it?"
+4. Ask: "What's your experience level? (Beginner/Intermediate/Advanced)"
+5. Ask: "Any specific requirements? (Tech preferences, constraints, must-haves)"
+
+Guidelines:
+- Be encouraging and friendly (e.g., "Great idea!", "Awesome!", "I love this concept!")
+- Ask ONE question at a time and wait for answer
+- After all 5 questions, create a refined project specification
+- Use guide_exit tool to offer switching to plan or build mode
+</system-reminder>`,
+        synthetic: true,
+      })
+      userMessage.parts.push(systemPart)
+      return input.messages
+    }
+
     // Entering plan mode
     if (input.agent.name === "plan" && assistantMessage?.info.agent !== "plan") {
       const plan = Session.plan(input.session)
