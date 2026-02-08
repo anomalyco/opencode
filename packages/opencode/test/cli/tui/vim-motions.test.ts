@@ -81,6 +81,7 @@ function createHandler(
   options?: {
     enabled?: boolean
     mode?: "normal" | "insert"
+    submit?: () => void
   },
 ) {
   const textarea = createTextarea(text)
@@ -118,7 +119,7 @@ function createHandler(
     enabled,
     state,
     textarea: () => textarea,
-    submit() {},
+    submit: options?.submit ?? (() => {}),
     scroll(action) {
       scrollCalls.push(action)
     },
@@ -263,6 +264,23 @@ describe("vim motion handler", () => {
     expect(ctx.handler.handleKey(esc.event)).toBe(true)
     expect(esc.prevented()).toBe(true)
     expect(ctx.state.mode()).toBe("normal")
+  })
+
+  test("submit from normal resets mode and pending", () => {
+    let calls = 0
+    const ctx = createHandler("", {
+      mode: "normal",
+      submit() {
+        calls++
+      },
+    })
+    ctx.state.setPending("d")
+
+    ctx.handler.handleKey(createEvent("return").event)
+
+    expect(calls).toBe(1)
+    expect(ctx.state.mode()).toBe("insert")
+    expect(ctx.state.pending()).toBe("")
   })
 
   test("vim disabled does not intercept keys", () => {

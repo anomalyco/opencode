@@ -117,6 +117,7 @@ export function createVimHandler(input: {
 
       if (key === "return" && !hasModifier(event)) {
         input.submit()
+        input.state.reset()
         event.preventDefault()
         return true
       }
