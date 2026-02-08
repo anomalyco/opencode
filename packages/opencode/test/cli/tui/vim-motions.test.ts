@@ -87,7 +87,7 @@ function createHandler(
   const textarea = createTextarea(text)
   const [enabled] = createSignal(options?.enabled ?? true)
   const [mode, setMode] = createSignal<"normal" | "insert">(options?.mode ?? "normal")
-  const [pending, setPending] = createSignal<"" | "d" | "g">("")
+  const [pending, setPending] = createSignal<"" | "c" | "d" | "g">("")
   const scrollCalls: VimScroll[] = []
   const jumpCalls: VimJump[] = []
 
@@ -328,6 +328,66 @@ describe("vim motion handler", () => {
     expect(ctx.state.mode()).toBe("insert")
     expect(ctx.textarea.plainText).toBe("")
     expect(ctx.textarea.cursorOffset).toBe(0)
+  })
+
+  test("cc clears current line and enters insert", () => {
+    const ctx = createHandler("one\ntwo\nthree")
+    ctx.textarea.cursorOffset = 5
+
+    const c1 = createEvent("c")
+    expect(ctx.handler.handleKey(c1.event)).toBe(true)
+    expect(c1.prevented()).toBe(true)
+    expect(ctx.state.pending()).toBe("c")
+
+    const c2 = createEvent("c")
+    expect(ctx.handler.handleKey(c2.event)).toBe(true)
+    expect(c2.prevented()).toBe(true)
+    expect(ctx.state.mode()).toBe("insert")
+    expect(ctx.textarea.plainText).toBe("one\n\nthree")
+    expect(ctx.textarea.cursorOffset).toBe(4)
+    expect(ctx.state.pending()).toBe("")
+  })
+
+  test("cw deletes to next word and enters insert", () => {
+    const ctx = createHandler("hello world test")
+    ctx.textarea.cursorOffset = 0
+
+    const c = createEvent("c")
+    expect(ctx.handler.handleKey(c.event)).toBe(true)
+    expect(ctx.state.pending()).toBe("c")
+
+    const w = createEvent("w")
+    expect(ctx.handler.handleKey(w.event)).toBe(true)
+    expect(w.prevented()).toBe(true)
+    expect(ctx.textarea.plainText).toBe("world test")
+    expect(ctx.textarea.cursorOffset).toBe(0)
+    expect(ctx.state.mode()).toBe("insert")
+    expect(ctx.state.pending()).toBe("")
+  })
+
+  test("pending c clears on escape", () => {
+    const ctx = createHandler("hello world")
+
+    expect(ctx.handler.handleKey(createEvent("c").event)).toBe(true)
+    expect(ctx.state.pending()).toBe("c")
+
+    const esc = createEvent("escape")
+    expect(ctx.handler.handleKey(esc.event)).toBe(true)
+    expect(esc.prevented()).toBe(true)
+    expect(ctx.state.pending()).toBe("")
+    expect(ctx.textarea.plainText).toBe("hello world")
+  })
+
+  test("pending c clears on modifier key", () => {
+    const ctx = createHandler("abc")
+
+    expect(ctx.handler.handleKey(createEvent("c").event)).toBe(true)
+    expect(ctx.state.pending()).toBe("c")
+
+    const mod = createEvent("j", { ctrl: true })
+    expect(ctx.handler.handleKey(mod.event)).toBe(false)
+    expect(mod.prevented()).toBe(false)
+    expect(ctx.state.pending()).toBe("")
   })
 
   test("insert mode only handles escape", () => {

@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, type Accessor } from "solid-js"
 
 export type VimMode = "normal" | "insert"
-export type VimPending = "" | "d" | "g"
+export type VimPending = "" | "c" | "d" | "g"
 
 export function createVimState(input: { enabled: Accessor<boolean>; initial?: Accessor<VimMode | undefined> }) {
   const [mode, setMode] = createSignal<VimMode>(input.initial?.() ?? "insert")

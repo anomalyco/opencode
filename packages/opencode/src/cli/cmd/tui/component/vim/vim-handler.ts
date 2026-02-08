@@ -95,6 +95,31 @@ export function createVimHandler(input: {
         return true
       }
 
+      if (input.state.pending() === "c") {
+        if (key === "c" && !event.shift && !hasModifier(event)) {
+          substituteLine(input.textarea())
+          input.state.clearPending()
+          input.state.setMode("insert")
+          event.preventDefault()
+          return true
+        }
+
+        if (key === "w" && !event.shift && !hasModifier(event)) {
+          deleteWord(input.textarea())
+          input.state.clearPending()
+          input.state.setMode("insert")
+          event.preventDefault()
+          return true
+        }
+
+        if (hasModifier(event)) {
+          input.state.clearPending()
+          return false
+        }
+
+        input.state.clearPending()
+      }
+
       if (input.state.pending() === "d") {
         if (key === "d" && !event.shift && !hasModifier(event)) {
           deleteLine(input.textarea())
@@ -121,6 +146,12 @@ export function createVimHandler(input: {
       if (key === "return" && !hasModifier(event)) {
         input.submit()
         input.state.reset()
+        event.preventDefault()
+        return true
+      }
+
+      if (key === "c" && !event.shift && !hasModifier(event)) {
+        input.state.setPending("c")
         event.preventDefault()
         return true
       }
