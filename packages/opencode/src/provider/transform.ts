@@ -130,6 +130,27 @@ export namespace ProviderTransform {
       return result
     }
 
+    // OpenAI and GitHub Copilot (OpenAI-compatible) allow max 40 chars for tool_calls[].id
+    const openAiLikeNpm = ["@ai-sdk/openai", "@ai-sdk/github-copilot", "@ai-sdk/openai-compatible"]
+    if (openAiLikeNpm.includes(model.api.npm ?? "")) {
+      const MAX_TOOL_CALL_ID_LENGTH = 40
+      msgs = msgs.map((msg) => {
+        if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
+          return {
+            ...msg,
+            content: msg.content.map((part: any) => {
+              if ((part.type === "tool-call" || part.type === "tool-result") && part.toolCallId) {
+                const id = part.toolCallId.replace(/[^a-zA-Z0-9_-]/g, "_")
+                return { ...part, toolCallId: id.length > MAX_TOOL_CALL_ID_LENGTH ? id.slice(0, MAX_TOOL_CALL_ID_LENGTH) : id }
+              }
+              return part
+            }),
+          }
+        }
+        return msg
+      })
+    }
+
     if (typeof model.capabilities.interleaved === "object" && model.capabilities.interleaved.field) {
       const field = model.capabilities.interleaved.field
       return msgs.map((msg) => {
