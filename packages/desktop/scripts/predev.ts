@@ -1,4 +1,5 @@
 import { $ } from "bun"
+import path from "path"
 
 import { copyBinaryToSidecarFolder, getCurrentSidecar, windowsify } from "./utils"
 
@@ -8,6 +9,11 @@ const sidecarConfig = getCurrentSidecar(RUST_TARGET)
 
 const binaryPath = windowsify(`../opencode/dist/${sidecarConfig.ocBinary}/bin/opencode`)
 
-await $`cd ../opencode && bun run build --single`
+const models = Bun.env.MODELS_DEV_API_JSON ?? path.join("test", "tool", "fixtures", "models-api.json")
+
+await $`cd ../opencode && bun run build --single --skip-install`.env({
+  ...Bun.env,
+  MODELS_DEV_API_JSON: models,
+})
 
 await copyBinaryToSidecarFolder(binaryPath, RUST_TARGET)

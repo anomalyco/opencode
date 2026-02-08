@@ -5,6 +5,7 @@ mod job_object;
 #[cfg(target_os = "linux")]
 pub mod linux_display;
 mod markdown;
+mod perf;
 mod server;
 mod window_customizer;
 mod windows;
@@ -37,6 +38,7 @@ use crate::cli::sync_cli;
 use crate::constants::*;
 use crate::server::get_saved_server_url;
 use crate::windows::{LoadingWindow, MainWindow};
+use perf::PerfState;
 
 #[derive(Clone, serde::Serialize, specta::Type, Debug)]
 struct ServerReadyData {
@@ -90,6 +92,12 @@ struct LogState(Arc<Mutex<VecDeque<String>>>);
 
 #[tauri::command]
 #[specta::specta]
+fn perf_event(state: State<'_, PerfState>, name: String, at_ms: Option<f64>, data: Option<String>) {
+    state.frontend(name, at_ms, data);
+}
+
+#[tauri::command]
+#[specta::specta]
 fn kill_sidecar(app: AppHandle) {
     let Some(server_state) = app.try_state::<ServerState>() else {
         println!("Server not running");
@@ -120,6 +128,27 @@ async fn get_logs(app: AppHandle) -> Result<String, String> {
         .map_err(|_| "Failed to acquire log lock")?;
 
     Ok(logs.iter().cloned().collect::<Vec<_>>().join(""))
+}
+
+#[tauri::command]
+#[specta::specta]
+async fn ensure_server_ready(
+    state: State<'_, ServerState>,
+    perf: State<'_, PerfState>,
+) -> Result<ServerReadyData, String> {
+    perf.rust("ensure_server_ready_call", None);
+    let res = state
+        .status
+        .clone()
+        .await
+        .map_err(|_| "Failed to get server status".to_string())?;
+
+    match &res {
+        Ok(_) => perf.rust("ensure_server_ready_ok", None),
+        Err(_) => perf.rust("ensure_server_ready_error", None),
+    }
+
+    res
 }
 
 #[tauri::command]
@@ -478,6 +507,9 @@ pub fn run() {
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             let app = app.handle().clone();
+
+            let perf = PerfState::new(&app);
+            app.manage(perf);
 
             builder.mount_events(&app);
             tauri::async_runtime::spawn(initialize(app));

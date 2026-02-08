@@ -264,7 +264,9 @@ pub fn create_command(app: &tauri::AppHandle, args: &str, extra_env: &[(&str, St
             format!("\"{}\" {}", sidecar.display(), args)
         };
 
-        let mut cmd = app.shell().command(&shell).args(["-il", "-c", &cmd]);
+        // NOTE: avoid interactive shells (e.g. zsh -i), which can be very slow due to user rc files.
+        // Login shells keep PATH fixes from profiles without paying the interactive startup cost.
+        let mut cmd = app.shell().command(&shell).args(["-l", "-c", &cmd]);
 
         for (key, value) in envs {
             cmd = cmd.env(key, value);

@@ -92,6 +92,12 @@ pub fn set_wsl_config(app: AppHandle, config: WslConfig) -> Result<(), String> {
 }
 
 pub async fn get_saved_server_url(app: &tauri::AppHandle) -> Option<String> {
+    // CLAXEDO_BACKEND_URL env var takes highest priority (for Claxedo cloud mode)
+    if let Ok(url) = std::env::var("CLAXEDO_BACKEND_URL") {
+        println!("Using CLAXEDO_BACKEND_URL: {url}");
+        return Some(url);
+    }
+
     if let Some(url) = get_default_server_url(app.clone()).ok().flatten() {
         println!("Using desktop-specific custom URL: {url}");
         return Some(url);

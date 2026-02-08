@@ -13,6 +13,17 @@ export async function createMenu(trigger: (id: string) => void) {
 
   await initI18n()
 
+  const focusedTerminal = () => {
+    const elt = document.activeElement
+    if (!(elt instanceof HTMLElement)) return false
+    return elt.closest('[data-component="terminal"]') != null
+  }
+
+  const emitTerminal = (type: "new" | "split.vertical" | "split.horizontal") => {
+    if (!focusedTerminal()) return
+    window.dispatchEvent(new CustomEvent("opencode:terminal", { detail: { type } }))
+  }
+
   const menu = await Menu.new({
     items: [
       await Submenu.new({
@@ -105,6 +116,19 @@ export async function createMenu(trigger: (id: string) => void) {
           }),
           await PredefinedMenuItem.new({
             item: "SelectAll",
+          }),
+          await PredefinedMenuItem.new({
+            item: "Separator",
+          }),
+          await MenuItem.new({
+            text: "New Terminal (Cmd+D)",
+            accelerator: "CmdOrCtrl+D",
+            action: () => emitTerminal("new"),
+          }),
+          await MenuItem.new({
+            text: "Split Horizontal (Cmd+Shift+D)",
+            accelerator: "CmdOrCtrl+Shift+D",
+            action: () => emitTerminal("split.horizontal"),
           }),
         ],
       }),
