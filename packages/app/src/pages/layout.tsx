@@ -1449,6 +1449,58 @@ export default function Layout(props: ParentProps) {
     makeEventListener(window, deepLinkEvent, handler as EventListener)
   })
 
+  // Folder drag-drop handling (desktop only - Tauri native drag events)
+  const [folderDragging, setFolderDragging] = createSignal(false)
+  const [fileDragging, setFileDragging] = createSignal(false)
+
+  onMount(() => {
+    if (platform.platform !== "desktop") return
+
+    const dragDropEventName = "opencode:drag-drop"
+
+    const handler = async (event: Event) => {
+      const detail = (event as CustomEvent<{ type: string; paths: string[]; position: { x: number; y: number } }>).detail
+      if (!detail) return
+
+      if (detail.type === "enter") {
+        if (detail.paths.length > 0 && platform.filterDirectories) {
+          const dirs = await platform.filterDirectories(detail.paths).catch((): string[] => [])
+          const hasFiles = dirs.length < detail.paths.length
+          setFolderDragging(dirs.length > 0)
+          setFileDragging(hasFiles)
+        }
+      } else if (detail.type === "leave") {
+        setFolderDragging(false)
+        setFileDragging(false)
+      } else if (detail.type === "drop") {
+        setFolderDragging(false)
+        setFileDragging(false)
+        if (detail.paths.length === 0 || !platform.filterDirectories) return
+
+        const dirs = await platform.filterDirectories(detail.paths).catch((): string[] => [])
+        const files = detail.paths.filter((p) => !dirs.includes(p))
+
+        // Open directories as projects
+        if (dirs.length > 0) {
+          for (const dir of dirs) {
+            openProject(dir, false)
+          }
+          navigateToProject(dirs[0])
+        }
+
+        // Forward files as @mention attachments
+        if (files.length > 0) {
+          window.dispatchEvent(new CustomEvent("opencode:file-drop", { detail: { paths: files } }))
+        }
+      }
+    }
+
+    window.addEventListener(dragDropEventName, handler as EventListener)
+    onCleanup(() => window.removeEventListener(dragDropEventName, handler as EventListener))
+  })
+
+  const displayName = (project: LocalProject) => project.name || getFilename(project.worktree)
+
   async function renameProject(project: LocalProject, next: string) {
     const current = displayName(project)
     if (next === current) return
@@ -3353,33 +3405,40 @@ export default function Layout(props: ParentProps) {
   }
 
   return (
-    <div class="relative bg-background-base flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
-      {autoselecting() ?? ""}
-      <Titlebar update={titlebarUpdate} />
-      <Show when={updateVersion() !== undefined}>
-        <UpdateAvailableToast version={updateVersion() ?? ""} install={installUpdate} language={language} />
+    <div class="relative bg-background-base flex-1 min-h-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
+      <Show when={folderDragging() || fileDragging()}>
+        <div class="fixed inset-0 z-[100] flex items-center justify-center bg-background-base/80 pointer-events-none">
+          <div class="flex flex-col items-center gap-3 text-text-weak">
+            <Show when={folderDragging()} fallback={<Icon name="photo" class="size-12" />}>
+              <Icon name="folder" class="size-12" />
+            </Show>
+            <span class="text-16-medium">
+              {folderDragging() ? language.t("sidebar.dropFolder") : language.t("sidebar.dropFile")}
+            </span>
+          </div>
+        </div>
       </Show>
-      <div class="flex-1 min-h-0 min-w-0 flex">
-        <div class="flex-1 min-h-0 relative">
-          <div class="size-full relative overflow-x-hidden">
-            <nav
-              aria-label={language.t("sidebar.nav.projectsAndSessions")}
-              data-component="sidebar-nav-desktop"
-              classList={{
-                "hidden xl:block": true,
-                "absolute inset-y-0 left-0": true,
-                "z-10": true,
-              }}
-              style={{ width: `${side()}px` }}
-              ref={(el) => {
-                setState("nav", el)
-              }}
-              onMouseEnter={() => {
-                disarm()
-              }}
-              onMouseLeave={() => {
-                aim.reset()
-                if (!sidebarHovering()) return
+      <Titlebar />
+      <div class="flex-1 min-h-0 flex">
+        <nav
+          aria-label={language.t("sidebar.nav.projectsAndSessions")}
+          data-component="sidebar-nav-desktop"
+          classList={{
+            "hidden xl:block": true,
+            "relative shrink-0": true,
+          }}
+          style={{ width: layout.sidebar.opened() ? `${Math.max(layout.sidebar.width(), 244)}px` : "64px" }}
+          ref={(el) => {
+            setState("nav", el)
+          }}
+          onMouseEnter={() => {
+            if (navLeave.current === undefined) return
+            clearTimeout(navLeave.current)
+            navLeave.current = undefined
+          }}
+          onMouseLeave={() => {
+            aim.reset()
+            if (!sidebarHovering()) return
 
                 arm()
               }}

@@ -123,14 +123,8 @@ export type Platform = {
   /** Check if an editor app exists (desktop only) */
   checkAppExists?(appName: string): Promise<boolean>
 
-  /** Read image from clipboard (desktop only) */
-  readClipboardImage?(): Promise<File | null>
-
-  /** Export collected diagnostic logs (desktop only) */
-  exportDebugLogs?(): Promise<string>
-
-  /** Record a fatal renderer error in platform logs (desktop only) */
-  recordFatalRendererError?(error: FatalRendererErrorLog): Promise<void>
+  /** Filter paths to return only directories (desktop only) */
+  filterDirectories?(paths: string[]): Promise<string[]>
 }
 
 export type DisplayBackend = "auto" | "wayland"
