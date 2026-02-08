@@ -1,0 +1,41 @@
+button.decorum-tb-btn,
+button#decorum-tb-minimize,
+button#decorum-tb-maximize,
+button#decorum-tb-close,
+div[data-tauri-decorum-tb] {
+  height: calc(var(--spacing) * 10) !important;
+}
+
+/* Subtle scrollbar styling for sidebar */
+.rail-sidebar-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.rail-sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.rail-sidebar-scroll::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.3);
+  border-radius: 3px;
+}
+
+.rail-sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.5);
+}
+
+/* Hold-to-delete fill animation */
+@keyframes hold-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.animate-hold-fill {
+  animation: hold-fill 800ms linear forwards;
+}
+
+

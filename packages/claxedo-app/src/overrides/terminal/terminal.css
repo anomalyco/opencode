@@ -1,0 +1,53 @@
+/* xterm.js terminal styling */
+
+/* Ensure xterm fills container */
+.xterm {
+  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.xterm-screen {
+  height: 100%;
+  width: 100%;
+}
+
+/* Ensure viewport doesn't overflow */
+.xterm .xterm-viewport {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Scrollbar styling */
+.xterm .xterm-viewport {
+  scrollbar-width: auto;
+  scrollbar-color: rgba(128, 128, 128, 0.5) transparent;
+}
+
+.xterm .xterm-viewport::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.xterm .xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.xterm .xterm-viewport::-webkit-scrollbar-thumb {
+  background-color: rgba(128, 128, 128, 0.5);
+  border-radius: 6px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+.xterm .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(128, 128, 128, 0.7);
+}
+
+.xterm .xterm-viewport::-webkit-scrollbar-thumb:active {
+  background-color: rgba(128, 128, 128, 0.8);
+}
+
+.xterm .xterm-viewport::-webkit-scrollbar-corner {
+  background: transparent;
+}

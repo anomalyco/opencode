@@ -1,0 +1,72 @@
+/**
+ * Claxedo Layout Styles
+ *
+ * Panel mode visibility:
+ * Mode 0: All visible (Messages + Review + Files)
+ * Mode 5: Messages collapsed (Review + Files)
+ *
+ * NOTE: These CSS rules work as a fallback. The session override uses
+ * conditional rendering via <Show> for better performance (unmounts DOM).
+ */
+
+/* Mode 5: Hide messages panel (CSS fallback) */
+.claxedo-session[data-panel-mode="5"] .\@container {
+  display: none !important;
+}
+
+/* Mode 5: Hide resize handle between session and review */
+.claxedo-session[data-panel-mode="5"] .\@container + div[class*="relative"][class*="shrink-0"]:has([class*="ResizeHandle"]) {
+  display: none !important;
+}
+
+/* Mode 5: Make the review panel take full width */
+.claxedo-session[data-panel-mode="5"] #review-panel {
+  flex: 1 1 100% !important;
+  border-left: none !important;
+}
+
+/* ─── Settings dialog: mobile drill-down layout ─── */
+
+/* Back button hidden by default (desktop) */
+.settings-mobile-back {
+  display: none;
+}
+
+@media (max-width: 639px) {
+  /* Single column on mobile */
+  .settings-dialog {
+    flex-direction: column !important;
+  }
+
+  /* Menu mode: full-width tab list, hide content */
+  .settings-mobile-menu > [data-slot="tabs-list"] {
+    width: 100% !important;
+    min-width: 0 !important;
+    border-right: none !important;
+  }
+  .settings-mobile-menu > [data-slot="tabs-content"] {
+    display: none !important;
+  }
+
+  /* Content mode: hide tab list, show back + content */
+  .settings-mobile-content > [data-slot="tabs-list"] {
+    display: none !important;
+  }
+  .settings-mobile-content > .settings-mobile-back {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-weak-base);
+    cursor: pointer;
+    color: var(--text-base);
+    font-family: var(--font-family-sans);
+    font-size: 14px;
+    font-weight: var(--font-weight-medium);
+    background: var(--surface-raised-stronger-non-alpha);
+    flex-shrink: 0;
+  }
+  .settings-mobile-content > .settings-mobile-back:active {
+    background: var(--surface-raised-base-hover);
+  }
+}

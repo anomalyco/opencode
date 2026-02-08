@@ -27,3 +27,8 @@ target
 opencode-dev
 logs/
 *.bun-build
+*.tsbuildinfo
+
+# Claxedo development artifacts
+packages/claxedo-app/dev-docs/
+packages/claxedo-app/dist-opencode/

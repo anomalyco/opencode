@@ -1,0 +1,902 @@
+import { createStore, produce } from "solid-js/store"
+import { batch, createEffect, createMemo, on, onCleanup, onMount, type Accessor } from "solid-js"
+import { createSimpleContext } from "@opencode-ai/ui/context"
+import { useGlobalSync } from "@/context/global-sync"
+import { useGlobalSDK } from "@/context/global-sdk"
+import { useServer } from "@/context/server"
+import { Project } from "@opencode-ai/sdk/v2"
+import { Persist, persisted, removePersisted } from "@/utils/persist"
+import { same } from "@/utils/same"
+import { createScrollPersistence, type SessionScroll } from "@/context/layout-scroll"
+import { validWorktree } from "@claxedo/utils/worktree"
+
+const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const
+export type AvatarColorKey = (typeof AVATAR_COLOR_KEYS)[number]
+const SERVER_SCOPED_PERSIST = import.meta.env.VITE_SERVER_SCOPED_PERSIST === "true"
+
+export function getAvatarColors(key?: string) {
+  if (key && AVATAR_COLOR_KEYS.includes(key as AvatarColorKey)) {
+    return {
+      background: `var(--avatar-background-${key})`,
+      foreground: `var(--avatar-text-${key})`,
+    }
+  }
+  return {
+    background: "var(--surface-info-base)",
+    foreground: "var(--text-base)",
+  }
+}
+
+type SessionTabs = {
+  active?: string
+  all: string[]
+}
+
+type SessionView = {
+  scroll: Record<string, SessionScroll>
+  reviewOpen?: string[]
+  pendingMessage?: string
+  pendingMessageAt?: number
+}
+
+type TabHandoff = {
+  dir: string
+  id: string
+  at: number
+}
+
+const PENDING_MESSAGE_TTL_MS = 5000
+
+export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
+
+export type ReviewDiffStyle = "unified" | "split"
+
+export const { use: useLayout, provider: LayoutProvider, ctx: LayoutContext } = createSimpleContext({
+  name: "Layout",
+  init: () => {
+    const globalSdk = useGlobalSDK()
+    const globalSync = useGlobalSync()
+    const server = useServer()
+
+    const isRecord = (value: unknown): value is Record<string, unknown> =>
+      typeof value === "object" && value !== null && !Array.isArray(value)
+
+    const migrate = (value: unknown) => {
+      if (!isRecord(value)) return value
+
+      const sidebar = value.sidebar
+      const migratedSidebar = (() => {
+        if (!isRecord(sidebar)) return sidebar
+        if (typeof sidebar.workspaces !== "boolean") return sidebar
+        return {
+          ...sidebar,
+          workspaces: {},
+          workspacesDefault: sidebar.workspaces,
+        }
+      })()
+
+      const fileTree = value.fileTree
+      const migratedFileTree = (() => {
+        if (!isRecord(fileTree)) return fileTree
+        if (fileTree.tab === "changes" || fileTree.tab === "all") return fileTree
+
+        const width = typeof fileTree.width === "number" ? fileTree.width : 344
+        return {
+          ...fileTree,
+          opened: true,
+          width: width === 260 ? 344 : width,
+          tab: "changes",
+        }
+      })()
+
+      if (migratedSidebar === sidebar && migratedFileTree === fileTree) return value
+      return {
+        ...value,
+        sidebar: migratedSidebar,
+        fileTree: migratedFileTree,
+      }
+    }
+
+    const target = Persist.global("layout", ["layout.v6"])
+    const [store, setStore, _, ready] = persisted(
+      { ...target, migrate },
+      createStore({
+        sidebar: {
+          opened: false,
+          width: 344,
+          workspaces: {} as Record<string, boolean>,
+          workspacesDefault: false,
+        },
+        terminal: {
+          height: 280,
+          opened: false,
+        },
+        review: {
+          diffStyle: "split" as ReviewDiffStyle,
+          panelOpened: true,
+        },
+        fileTree: {
+          opened: true,
+          width: 344,
+          tab: "changes" as "changes" | "all",
+        },
+        session: {
+          width: 600,
+          collapsed: false,
+          panelMode: 0 as number, // 0-5 cycle for panel visibility
+        },
+        mobileSidebar: {
+          opened: false,
+        },
+        sessionTabs: {} as Record<string, SessionTabs>,
+        sessionView: {} as Record<string, SessionView>,
+        handoff: {
+          tabs: undefined as TabHandoff | undefined,
+        },
+      }),
+    )
+
+    const MAX_SESSION_KEYS = 50
+    const meta = { active: undefined as string | undefined, pruned: false }
+    const used = new Map<string, number>()
+
+    const SESSION_STATE_KEYS = [
+      { key: "prompt", legacy: "prompt", version: "v2" },
+      { key: "terminal", legacy: "terminal", version: "v1" },
+      { key: "file-view", legacy: "file", version: "v1" },
+    ] as const
+
+    const dropSessionState = (keys: string[]) => {
+      for (const key of keys) {
+        const parts = key.split("/")
+        const dir = parts[0]
+        const session = parts[1]
+        if (!dir) continue
+
+        for (const entry of SESSION_STATE_KEYS) {
+          const target = SERVER_SCOPED_PERSIST
+            ? Persist.serverScoped(server.url, dir, session, entry.key)
+            : session
+              ? Persist.session(dir, session, entry.key)
+              : Persist.workspace(dir, entry.key)
+          void removePersisted(target)
+
+          const legacyKey = `${dir}/${entry.legacy}${session ? "/" + session : ""}.${entry.version}`
+          void removePersisted({ key: legacyKey })
+        }
+      }
+    }
+
+    function prune(keep?: string) {
+      if (!keep) return
+
+      const keys = new Set<string>()
+      for (const key of Object.keys(store.sessionView)) keys.add(key)
+      for (const key of Object.keys(store.sessionTabs)) keys.add(key)
+      if (keys.size <= MAX_SESSION_KEYS) return
+
+      const score = (key: string) => {
+        if (key === keep) return Number.MAX_SAFE_INTEGER
+        return used.get(key) ?? 0
+      }
+
+      const ordered = Array.from(keys).sort((a, b) => score(b) - score(a))
+      const drop = ordered.slice(MAX_SESSION_KEYS)
+      if (drop.length === 0) return
+
+      setStore(
+        produce((draft) => {
+          for (const key of drop) {
+            delete draft.sessionView[key]
+            delete draft.sessionTabs[key]
+          }
+        }),
+      )
+
+      scroll.drop(drop)
+      dropSessionState(drop)
+
+      for (const key of drop) {
+        used.delete(key)
+      }
+    }
+
+    function touch(sessionKey: string) {
+      meta.active = sessionKey
+      used.set(sessionKey, Date.now())
+
+      if (!ready()) return
+      if (meta.pruned) return
+
+      meta.pruned = true
+      prune(sessionKey)
+    }
+
+    const scroll = createScrollPersistence({
+      debounceMs: 250,
+      getSnapshot: (sessionKey) => store.sessionView[sessionKey]?.scroll,
+      onFlush: (sessionKey, next) => {
+        const current = store.sessionView[sessionKey]
+        const keep = meta.active ?? sessionKey
+        if (!current) {
+          setStore("sessionView", sessionKey, { scroll: next })
+          prune(keep)
+          return
+        }
+
+        setStore("sessionView", sessionKey, "scroll", (prev) => ({ ...(prev ?? {}), ...next }))
+        prune(keep)
+      },
+    })
+
+    createEffect(() => {
+      if (!ready()) return
+      if (meta.pruned) return
+      const active = meta.active
+      if (!active) return
+      meta.pruned = true
+      prune(active)
+    })
+
+    onMount(() => {
+      const flush = () => batch(() => scroll.flushAll())
+      const handleVisibility = () => {
+        if (document.visibilityState !== "hidden") return
+        flush()
+      }
+
+      window.addEventListener("pagehide", flush)
+      document.addEventListener("visibilitychange", handleVisibility)
+
+      onCleanup(() => {
+        window.removeEventListener("pagehide", flush)
+        document.removeEventListener("visibilitychange", handleVisibility)
+        scroll.dispose()
+      })
+    })
+
+    const [colors, setColors] = createStore<Record<string, AvatarColorKey>>({})
+    const colorRequested = new Map<string, AvatarColorKey>()
+
+    function pickAvailableColor(used: Set<string>): AvatarColorKey {
+      const available = AVATAR_COLOR_KEYS.filter((c) => !used.has(c))
+      if (available.length === 0) return AVATAR_COLOR_KEYS[Math.floor(Math.random() * AVATAR_COLOR_KEYS.length)]
+      return available[Math.floor(Math.random() * available.length)]
+    }
+
+    function enrich(project: { worktree: string; expanded: boolean }) {
+      const [childStore] = globalSync.child(project.worktree, { bootstrap: false })
+      const projectID = childStore.project
+      const metadata = projectID
+        ? globalSync.data.project.find((x) => x.id === projectID)
+        : globalSync.data.project.find((x) => x.worktree === project.worktree)
+
+      const local = childStore.projectMeta
+      const localOverride =
+        local?.name !== undefined ||
+        local?.commands?.start !== undefined ||
+        local?.icon?.override !== undefined ||
+        local?.icon?.color !== undefined
+
+      const base = {
+        ...(metadata ?? {}),
+        ...project,
+        icon: {
+          url: metadata?.icon?.url,
+          override: metadata?.icon?.override ?? childStore.icon,
+          color: metadata?.icon?.color,
+        },
+      }
+
+      const isGlobal = projectID === "global" || (metadata?.id === undefined && localOverride)
+      if (!isGlobal) return base
+
+      return {
+        ...base,
+        id: base.id ?? "global",
+        name: local?.name,
+        commands: local?.commands,
+        icon: {
+          url: base.icon?.url,
+          override: local?.icon?.override,
+          color: local?.icon?.color,
+        },
+      }
+    }
+
+    const roots = createMemo(() => {
+      const map = new Map<string, string>()
+      for (const project of globalSync.data.project) {
+        const sandboxes = project.sandboxes ?? []
+        for (const sandbox of sandboxes) {
+          map.set(sandbox, project.worktree)
+        }
+      }
+      return map
+    })
+
+    const rootFor = (directory: string) => {
+      const map = roots()
+      if (map.size === 0) return directory
+
+      const visited = new Set<string>()
+      const chain = [directory]
+
+      while (chain.length) {
+        const current = chain[chain.length - 1]
+        if (!current) return directory
+
+        const next = map.get(current)
+        if (!next) return current
+
+        if (visited.has(next)) return directory
+        visited.add(next)
+        chain.push(next)
+      }
+
+      return directory
+    }
+
+    createEffect(() => {
+      const projects = server.projects.list()
+      const seen = new Set(projects.map((project) => project.worktree))
+
+      batch(() => {
+        for (const project of projects) {
+          const root = rootFor(project.worktree)
+          if (root === project.worktree) continue
+
+          server.projects.remove(project.worktree)
+
+          if (!seen.has(root) && validWorktree(root)) {
+            server.projects.open(root)
+            seen.add(root)
+          }
+
+          if (project.expanded) server.projects.expand(root)
+        }
+      })
+    })
+
+    const enriched = createMemo(() => server.projects.list().filter((p) => validWorktree(p.worktree)).map(enrich))
+    const list = createMemo(() => {
+      const projects = enriched()
+      return projects.map((project) => {
+        const color = project.icon?.color ?? colors[project.worktree]
+        if (!color) return project
+        const icon = project.icon ? { ...project.icon, color } : { color }
+        return { ...project, icon }
+      })
+    })
+
+    createEffect(() => {
+      const projects = enriched()
+      if (projects.length === 0) return
+      if (!globalSync.ready) return
+
+      for (const project of projects) {
+        if (!project.id) continue
+        if (project.id === "global") continue
+        globalSync.project.icon(project.worktree, project.icon?.override)
+      }
+    })
+
+    createEffect(() => {
+      const projects = enriched()
+      if (projects.length === 0) return
+
+      for (const project of projects) {
+        if (project.icon?.color) colorRequested.delete(project.worktree)
+      }
+
+      const used = new Set<string>()
+      for (const project of projects) {
+        const color = project.icon?.color ?? colors[project.worktree]
+        if (color) used.add(color)
+      }
+
+      for (const project of projects) {
+        if (project.icon?.color) continue
+        const worktree = project.worktree
+        const existing = colors[worktree]
+        const color = existing ?? pickAvailableColor(used)
+        if (!existing) {
+          used.add(color)
+          setColors(worktree, color)
+        }
+        if (!project.id) continue
+
+        const requested = colorRequested.get(worktree)
+        if (requested === color) continue
+        colorRequested.set(worktree, color)
+
+        if (project.id === "global") {
+          globalSync.project.meta(worktree, { icon: { color } })
+          continue
+        }
+
+        void globalSdk.client.project
+          .update({ projectID: project.id, directory: worktree, icon: { color } })
+          .catch(() => {
+            if (colorRequested.get(worktree) === color) colorRequested.delete(worktree)
+          })
+      }
+    })
+
+    onMount(() => {
+      Promise.all(
+        server.projects.list().filter((project) => validWorktree(project.worktree)).map((project) => {
+          return globalSync.project.loadSessions(project.worktree)
+        }),
+      )
+    })
+
+    // Sync API projects to sidebar - ensures projects from server appear in sidebar
+    createEffect(() => {
+      if (!globalSync.ready) return
+      if (server.isLocal()) return
+      const apiProjects = globalSync.data.project
+      if (!apiProjects || apiProjects.length === 0) return
+
+      const api = apiProjects.map((p) => p.worktree).filter(validWorktree)
+      if (api.length === 0) return
+
+      const current = server.projects.list().map((p) => p.worktree).filter(validWorktree)
+      const apiSet = new Set(api)
+      const keep = current.filter((worktree) => apiSet.has(worktree))
+      const keepSet = new Set(keep)
+      const next = [...keep, ...api.filter((worktree) => !keepSet.has(worktree))]
+
+      const changed = next.length !== current.length || next.some((x, i) => x !== current[i])
+      if (!changed) return
+
+      server.projects.sync(next)
+
+      const currentSet = new Set(current)
+      for (const worktree of next) {
+        if (currentSet.has(worktree)) continue
+        void globalSync.project.loadSessions(worktree)
+      }
+    })
+
+    return {
+      ready,
+      handoff: {
+        tabs: createMemo(() => store.handoff?.tabs),
+        setTabs(dir: string, id: string) {
+          setStore("handoff", "tabs", { dir, id, at: Date.now() })
+        },
+        clearTabs() {
+          if (!store.handoff?.tabs) return
+          setStore("handoff", "tabs", undefined)
+        },
+      },
+      projects: {
+        list,
+        open(directory: string) {
+          const root = rootFor(directory)
+          if (!validWorktree(root)) return
+          globalSync.project.loadSessions(root)
+          if (!server.isLocal()) return
+          if (server.projects.list().some((x) => x.worktree === root)) return
+          server.projects.open(root)
+        },
+        close(directory: string) {
+          if (!server.isLocal()) return
+          server.projects.close(directory)
+        },
+        remove(directory: string) {
+          server.projects.remove(directory)
+        },
+        expand(directory: string) {
+          server.projects.expand(directory)
+        },
+        collapse(directory: string) {
+          server.projects.collapse(directory)
+        },
+        toggle(directory: string) {
+          const project = server.projects.list().find((p) => p.worktree === directory)
+          if (!project) return
+          if (project.expanded) {
+            server.projects.collapse(directory)
+          } else {
+            server.projects.expand(directory)
+          }
+        },
+        move(directory: string, toIndex: number) {
+          server.projects.move(directory, toIndex)
+        },
+      },
+      sidebar: {
+        opened: createMemo(() => store.sidebar.opened),
+        open() {
+          setStore("sidebar", "opened", true)
+        },
+        close() {
+          setStore("sidebar", "opened", false)
+        },
+        toggle() {
+          setStore("sidebar", "opened", (x) => !x)
+        },
+        width: createMemo(() => store.sidebar.width),
+        resize(width: number) {
+          setStore("sidebar", "width", width)
+        },
+        workspaces(directory: string) {
+          return () => store.sidebar.workspaces[directory] ?? store.sidebar.workspacesDefault ?? false
+        },
+        setWorkspaces(directory: string, value: boolean) {
+          setStore("sidebar", "workspaces", directory, value)
+        },
+        toggleWorkspaces(directory: string) {
+          const current = store.sidebar.workspaces[directory] ?? store.sidebar.workspacesDefault ?? false
+          setStore("sidebar", "workspaces", directory, !current)
+        },
+      },
+      terminal: {
+        height: createMemo(() => store.terminal.height),
+        resize(height: number) {
+          setStore("terminal", "height", height)
+        },
+      },
+      review: {
+        diffStyle: createMemo(() => store.review?.diffStyle ?? "split"),
+        setDiffStyle(diffStyle: ReviewDiffStyle) {
+          if (!store.review) {
+            setStore("review", { diffStyle })
+            return
+          }
+          setStore("review", "diffStyle", diffStyle)
+        },
+        panelOpened: createMemo(() => store.review?.panelOpened ?? true),
+        togglePanel() {
+          const current = store.review?.panelOpened ?? true
+          if (!store.review) {
+            setStore("review", { diffStyle: "split" as ReviewDiffStyle, panelOpened: !current })
+            return
+          }
+          setStore("review", "panelOpened", !current)
+        },
+      },
+      fileTree: {
+        opened: createMemo(() => store.fileTree?.opened ?? true),
+        width: createMemo(() => store.fileTree?.width ?? 344),
+        tab: createMemo(() => store.fileTree?.tab ?? "changes"),
+        setTab(tab: "changes" | "all") {
+          if (!store.fileTree) {
+            setStore("fileTree", { opened: true, width: 344, tab })
+            return
+          }
+          setStore("fileTree", "tab", tab)
+        },
+        open() {
+          if (!store.fileTree) {
+            setStore("fileTree", { opened: true, width: 344, tab: "changes" })
+            return
+          }
+          setStore("fileTree", "opened", true)
+        },
+        close() {
+          if (!store.fileTree) {
+            setStore("fileTree", { opened: false, width: 344, tab: "changes" })
+            return
+          }
+          setStore("fileTree", "opened", false)
+        },
+        toggle() {
+          if (!store.fileTree) {
+            setStore("fileTree", { opened: true, width: 344, tab: "changes" })
+            return
+          }
+          setStore("fileTree", "opened", (x) => !x)
+        },
+        resize(width: number) {
+          if (!store.fileTree) {
+            setStore("fileTree", { opened: true, width, tab: "changes" })
+            return
+          }
+          setStore("fileTree", "width", width)
+        },
+      },
+      session: {
+        width: createMemo(() => store.session?.width ?? 600),
+        collapsed: createMemo(() => store.session?.collapsed ?? false),
+        /**
+         * Panel mode for visibility states:
+         * 0: All visible (Messages + Review + Files)
+         * 5: Messages collapsed (Review + Files)
+         */
+        panelMode: createMemo(() => store.session?.panelMode ?? 0),
+        resize(width: number) {
+          if (!store.session) {
+            setStore("session", { width, collapsed: false, panelMode: 0 })
+            return
+          }
+          setStore("session", "width", width)
+        },
+        collapse() {
+          if (!store.session) {
+            setStore("session", { width: 600, collapsed: true, panelMode: 0 })
+            return
+          }
+          setStore("session", "collapsed", true)
+        },
+        expand() {
+          if (!store.session) {
+            setStore("session", { width: 600, collapsed: false, panelMode: 0 })
+            return
+          }
+          setStore("session", "collapsed", false)
+        },
+        toggle() {
+          if (!store.session) {
+            setStore("session", { width: 600, collapsed: true, panelMode: 0 })
+            return
+          }
+          setStore("session", "collapsed", (x) => !x)
+        },
+        // Set panel mode directly
+        setPanelMode(mode: number) {
+          if (!store.session) {
+            setStore("session", { width: 600, collapsed: false, panelMode: mode })
+            return
+          }
+          setStore("session", "panelMode", mode)
+        },
+      },
+      mobileSidebar: {
+        opened: createMemo(() => store.mobileSidebar?.opened ?? false),
+        show() {
+          setStore("mobileSidebar", "opened", true)
+        },
+        hide() {
+          setStore("mobileSidebar", "opened", false)
+        },
+        toggle() {
+          setStore("mobileSidebar", "opened", (x) => !x)
+        },
+      },
+      pendingMessage: {
+        set(sessionKey: string, messageID: string) {
+          const at = Date.now()
+          touch(sessionKey)
+          const current = store.sessionView[sessionKey]
+          if (!current) {
+            setStore("sessionView", sessionKey, {
+              scroll: {},
+              pendingMessage: messageID,
+              pendingMessageAt: at,
+            })
+            prune(meta.active ?? sessionKey)
+            return
+          }
+
+          setStore(
+            "sessionView",
+            sessionKey,
+            produce((draft) => {
+              draft.pendingMessage = messageID
+              draft.pendingMessageAt = at
+            }),
+          )
+        },
+        consume(sessionKey: string) {
+          const current = store.sessionView[sessionKey]
+          const message = current?.pendingMessage
+          const at = current?.pendingMessageAt
+          if (!message || !at) return
+
+          setStore(
+            "sessionView",
+            sessionKey,
+            produce((draft) => {
+              delete draft.pendingMessage
+              delete draft.pendingMessageAt
+            }),
+          )
+
+          if (Date.now() - at > PENDING_MESSAGE_TTL_MS) return
+          return message
+        },
+      },
+      view(sessionKey: string | Accessor<string>) {
+        const key = typeof sessionKey === "function" ? sessionKey : () => sessionKey
+
+        touch(key())
+        scroll.seed(key())
+
+        createEffect(
+          on(
+            key,
+            (value) => {
+              touch(value)
+              scroll.seed(value)
+            },
+            { defer: true },
+          ),
+        )
+
+        const s = createMemo(() => store.sessionView[key()] ?? { scroll: {} })
+        const terminalOpened = createMemo(() => store.terminal?.opened ?? false)
+
+        function setTerminalOpened(next: boolean) {
+          const current = store.terminal
+          if (!current) {
+            setStore("terminal", { height: 280, opened: next })
+            return
+          }
+
+          const value = current.opened ?? false
+          if (value === next) return
+          setStore("terminal", "opened", next)
+        }
+
+        const reviewPanelOpened = createMemo(() => store.review?.panelOpened ?? true)
+
+        function setReviewPanelOpened(next: boolean) {
+          const current = store.review
+          if (!current) {
+            setStore("review", { diffStyle: "split" as ReviewDiffStyle, panelOpened: next })
+            return
+          }
+
+          const value = current.panelOpened ?? true
+          if (value === next) return
+          setStore("review", "panelOpened", next)
+        }
+
+        return {
+          scroll(tab: string) {
+            return scroll.scroll(key(), tab)
+          },
+          setScroll(tab: string, pos: SessionScroll) {
+            scroll.setScroll(key(), tab, pos)
+          },
+          terminal: {
+            opened: terminalOpened,
+            open() {
+              setTerminalOpened(true)
+            },
+            close() {
+              setTerminalOpened(false)
+            },
+            toggle() {
+              setTerminalOpened(!terminalOpened())
+            },
+          },
+          reviewPanel: {
+            opened: reviewPanelOpened,
+            open() {
+              setReviewPanelOpened(true)
+            },
+            close() {
+              setReviewPanelOpened(false)
+            },
+            toggle() {
+              setReviewPanelOpened(!reviewPanelOpened())
+            },
+          },
+          review: {
+            open: createMemo(() => s().reviewOpen),
+            setOpen(open: string[]) {
+              const session = key()
+              const current = store.sessionView[session]
+              if (!current) {
+                setStore("sessionView", session, {
+                  scroll: {},
+                  reviewOpen: open,
+                })
+                return
+              }
+
+              if (same(current.reviewOpen, open)) return
+              setStore("sessionView", session, "reviewOpen", open)
+            },
+          },
+        }
+      },
+      tabs(sessionKey: string | Accessor<string>) {
+        const key = typeof sessionKey === "function" ? sessionKey : () => sessionKey
+
+        touch(key())
+
+        createEffect(
+          on(
+            key,
+            (value) => {
+              touch(value)
+            },
+            { defer: true },
+          ),
+        )
+
+        const tabs = createMemo(() => store.sessionTabs[key()] ?? { all: [] })
+        return {
+          tabs,
+          active: createMemo(() => (tabs().active === "review" ? undefined : tabs().active)),
+          all: createMemo(() => tabs().all.filter((tab) => tab !== "review")),
+          setActive(tab: string | undefined) {
+            const session = key()
+            if (tab === "review") return
+            if (!store.sessionTabs[session]) {
+              setStore("sessionTabs", session, { all: [], active: tab })
+            } else {
+              setStore("sessionTabs", session, "active", tab)
+            }
+          },
+          setAll(all: string[]) {
+            const session = key()
+            const next = all.filter((tab) => tab !== "review")
+            if (!store.sessionTabs[session]) {
+              setStore("sessionTabs", session, { all: next, active: undefined })
+            } else {
+              setStore("sessionTabs", session, "all", next)
+            }
+          },
+          async open(tab: string) {
+            if (tab === "review") return
+            const session = key()
+            const current = store.sessionTabs[session] ?? { all: [] }
+
+            if (tab === "context") {
+              const all = [tab, ...current.all.filter((x) => x !== tab)]
+              if (!store.sessionTabs[session]) {
+                setStore("sessionTabs", session, { all, active: tab })
+                return
+              }
+              setStore("sessionTabs", session, "all", all)
+              setStore("sessionTabs", session, "active", tab)
+              return
+            }
+
+            if (!current.all.includes(tab)) {
+              if (!store.sessionTabs[session]) {
+                setStore("sessionTabs", session, { all: [tab], active: tab })
+                return
+              }
+              setStore("sessionTabs", session, "all", [...current.all, tab])
+              setStore("sessionTabs", session, "active", tab)
+              return
+            }
+
+            if (!store.sessionTabs[session]) {
+              setStore("sessionTabs", session, { all: current.all, active: tab })
+              return
+            }
+            setStore("sessionTabs", session, "active", tab)
+          },
+          close(tab: string) {
+            const session = key()
+            const current = store.sessionTabs[session]
+            if (!current) return
+
+            const all = current.all.filter((x) => x !== tab)
+            batch(() => {
+              setStore("sessionTabs", session, "all", all)
+              if (current.active !== tab) return
+
+              const index = current.all.findIndex((f) => f === tab)
+              const next = all[index - 1] ?? all[0]
+              setStore("sessionTabs", session, "active", next)
+            })
+          },
+          move(tab: string, to: number) {
+            const session = key()
+            const current = store.sessionTabs[session]
+            if (!current) return
+            const index = current.all.findIndex((f) => f === tab)
+            if (index === -1) return
+            setStore(
+              "sessionTabs",
+              session,
+              "all",
+              produce((opened) => {
+                opened.splice(to, 0, opened.splice(index, 1)[0])
+              }),
+            )
+          },
+        }
+      },
+    }
+  },
+})

@@ -1,0 +1,89 @@
+# Root-level .dockerignore for claxedo Docker builds
+# (build context is monorepo root)
+
+# Git
+.git
+.gitignore
+
+# IDE/Editor
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Dependencies (rebuilt in container)
+**/node_modules/
+.pnp
+.pnp.js
+
+# Build outputs (rebuilt in container)
+**/dist/
+**/dist-*/
+**/.turbo/
+**/e2e/
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# Environment files (secrets - never include!)
+.env
+.env.*
+!.env.example
+!.env.fly.example
+
+# Documentation
+*.md
+docs/
+
+# Test files
+*.test.ts
+*.spec.ts
+__tests__/
+coverage/
+
+# Fly.io config (not needed in image)
+fly.toml
+
+# Development configs
+docker-compose*.yml
+.dockerignore
+
+# Docs not needed
+packages/docs/
+
+# Exclude source/build files from packages we only need package.json from
+packages/console/*/src/
+packages/console/*/dist/
+packages/console/*/.turbo/
+packages/desktop/src/
+packages/desktop/src-tauri/
+packages/desktop/dist/
+packages/desktop/.turbo/
+packages/enterprise/src/
+packages/enterprise/dist/
+packages/enterprise/.turbo/
+packages/extensions/
+packages/function/src/
+packages/function/dist/
+packages/function/.turbo/
+packages/identity/
+packages/opencode/src/
+packages/opencode/test/
+packages/web/src/
+packages/web/dist/
+packages/web/.turbo/
+packages/slack/src/
+packages/slack/dist/
+packages/slack/.turbo/
+packages/claxedo-desktop/
+packages/claxedo-web/
+packages/containers/
