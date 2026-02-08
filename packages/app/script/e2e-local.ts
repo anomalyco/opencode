@@ -89,6 +89,7 @@ let runner: ReturnType<typeof Bun.spawn> | undefined
 let server: { stop: () => Promise<void> | void } | undefined
 let inst: { Instance: { disposeAll: () => Promise<void> | void } } | undefined
 let cleaned = false
+let internalError = false
 
 const cleanup = async () => {
   if (cleaned) return
@@ -113,16 +114,20 @@ const shutdown = (code: number, reason: string) => {
   })
 }
 
+const reportInternalError = (reason: string, error: unknown) => {
+  internalError = true
+  console.error(`e2e-local internal error: ${reason}`)
+  console.error(error)
+}
+
 process.once("SIGINT", () => shutdown(130, "SIGINT"))
 process.once("SIGTERM", () => shutdown(143, "SIGTERM"))
 process.once("SIGHUP", () => shutdown(129, "SIGHUP"))
 process.once("uncaughtException", (error) => {
-  console.error(error)
-  shutdown(1, "uncaughtException")
+  reportInternalError("uncaughtException", error)
 })
 process.once("unhandledRejection", (error) => {
-  console.error(error)
-  shutdown(1, "unhandledRejection")
+  reportInternalError("unhandledRejection", error)
 })
 
 let code = 1
@@ -171,5 +176,7 @@ try {
 } finally {
   await cleanup()
 }
+
+if (code === 0 && internalError) code = 1
 
 process.exit(code)
