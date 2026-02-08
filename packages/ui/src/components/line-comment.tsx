@@ -136,16 +136,15 @@ export const LineCommentEditor = (props: LineCommentEditorProps) => {
           value={split.value}
           onInput={(e) => split.onInput(e.currentTarget.value)}
           onKeyDown={(e) => {
+            e.stopPropagation()
             if (e.key === "Escape") {
               e.preventDefault()
-              e.stopPropagation()
               split.onCancel()
               return
             }
             if (e.key !== "Enter") return
             if (e.shiftKey) return
             e.preventDefault()
-            e.stopPropagation()
             submit()
           }}
         />
