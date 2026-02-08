@@ -69,7 +69,15 @@ function EditBody(props: { request: PermissionRequest }) {
         <text fg={theme.textMuted}>Edit {normalizePath(filepath())}</text>
       </box>
       <Show when={diff()}>
-        <scrollbox height="100%">
+        <scrollbox
+          height="100%"
+          verticalScrollbarOptions={{
+            trackOptions: {
+              backgroundColor: theme.background,
+              foregroundColor: theme.borderActive,
+            },
+          }}
+        >
           <diff
             diff={diff()}
             view={view()}
