@@ -77,6 +77,7 @@ import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { formatTranscript } from "../../util/transcript"
+import { ExitGuard } from "../../util/exit-guard"
 import { UI } from "@/cli/ui.ts"
 
 addDefaultParsers(parsers.parsers)
@@ -223,6 +224,7 @@ export function Session() {
 
   // Allow exit when in child session (prompt is hidden)
   const exit = useExit()
+  let exitPendingAt: number | undefined
 
   createEffect(() => {
     const title = Locale.truncate(session()?.title ?? "", 50)
@@ -239,6 +241,22 @@ export function Session() {
   useKeyboard((evt) => {
     if (!session()?.parentID) return
     if (keybind.match("app_exit", evt)) {
+      const parsed = keybind.parse(evt)
+      const result = ExitGuard.consume({
+        key: parsed,
+        pendingAt: exitPendingAt,
+        now: Date.now(),
+      })
+      if (result.action === "confirm") {
+        exitPendingAt = result.pendingAt
+        toast.show({
+          variant: "info",
+          message: "Press Ctrl+C again to exit",
+          duration: 1500,
+        })
+        return
+      }
+      exitPendingAt = undefined
       exit()
     }
   })

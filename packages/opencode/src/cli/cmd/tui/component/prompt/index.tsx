@@ -32,6 +32,7 @@ import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { useTextareaKeybindings } from "../textarea-keybindings"
 import { DialogSkill } from "../dialog-skill"
+import { ExitGuard } from "../../util/exit-guard"
 
 export type PromptProps = {
   sessionID?: string
@@ -74,6 +75,7 @@ export function Prompt(props: PromptProps) {
   const renderer = useRenderer()
   const { theme, syntax } = useTheme()
   const kv = useKV()
+  const [exitPendingAt, setExitPendingAt] = createSignal<number | undefined>()
 
   function promptModelWarning() {
     toast.show({
@@ -843,8 +845,24 @@ export function Prompt(props: PromptProps) {
                 }
                 if (keybind.match("app_exit", e)) {
                   if (store.prompt.input === "") {
+                    const parsed = keybind.parse(e)
+                    const result = ExitGuard.consume({
+                      key: parsed,
+                      pendingAt: exitPendingAt(),
+                      now: Date.now(),
+                    })
+                    if (result.action === "confirm") {
+                      setExitPendingAt(result.pendingAt)
+                      toast.show({
+                        variant: "info",
+                        message: "Press Ctrl+C again to exit",
+                        duration: 1500,
+                      })
+                      e.preventDefault()
+                      return
+                    }
+                    setExitPendingAt(undefined)
                     await exit()
-                    // Don't preventDefault - let textarea potentially handle the event
                     e.preventDefault()
                     return
                   }
