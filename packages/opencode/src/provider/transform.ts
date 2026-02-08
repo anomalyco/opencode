@@ -366,13 +366,13 @@ export namespace ProviderTransform {
         if (model.id.includes("anthropic")) {
           return {
             high: {
-              reasoningConfig: {
+              thinking: {
                 type: "enabled",
                 budgetTokens: 16000,
               },
             },
             max: {
-              reasoningConfig: {
+              thinking: {
                 type: "enabled",
                 budgetTokens: 31999,
               },

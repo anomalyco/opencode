@@ -241,6 +241,22 @@ describe("ProviderTransform.providerOptions", () => {
     })
   })
 
+  test("uses model id provider slug when gateway api id is unscoped", () => {
+    const model = createModel({
+      id: "anthropic/claude-sonnet-4",
+      providerID: "vercel",
+      api: {
+        id: "claude-sonnet-4",
+        url: "https://ai-gateway.vercel.sh/v3/ai",
+        npm: "@ai-sdk/gateway",
+      },
+    })
+
+    expect(ProviderTransform.providerOptions(model, { thinking: { type: "enabled", budgetTokens: 12_000 } })).toEqual({
+      anthropic: { thinking: { type: "enabled", budgetTokens: 12_000 } },
+    })
+  })
+
   test("splits gateway routing options from provider-specific options", () => {
     const model = createModel({
       providerID: "vercel",
@@ -264,6 +280,7 @@ describe("ProviderTransform.providerOptions", () => {
 
   test("falls back to gateway key when model id has no provider slug", () => {
     const model = createModel({
+      id: "claude-sonnet-4",
       providerID: "vercel",
       api: {
         id: "claude-sonnet-4",
@@ -1605,6 +1622,32 @@ describe("ProviderTransform.variants", () => {
   })
 
   describe("@ai-sdk/gateway", () => {
+    test("anthropic models return anthropic thinking options", () => {
+      const model = createMockModel({
+        id: "anthropic/claude-sonnet-4",
+        providerID: "gateway",
+        api: {
+          id: "anthropic/claude-sonnet-4",
+          url: "https://gateway.ai",
+          npm: "@ai-sdk/gateway",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(Object.keys(result)).toEqual(["high", "max"])
+      expect(result.high).toEqual({
+        thinking: {
+          type: "enabled",
+          budgetTokens: 16000,
+        },
+      })
+      expect(result.max).toEqual({
+        thinking: {
+          type: "enabled",
+          budgetTokens: 31999,
+        },
+      })
+    })
+
     test("returns OPENAI_EFFORTS with reasoningEffort", () => {
       const model = createMockModel({
         id: "gateway/gateway-model",
