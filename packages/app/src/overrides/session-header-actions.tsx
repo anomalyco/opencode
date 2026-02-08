@@ -3,10 +3,12 @@ import { useParams } from "@solidjs/router"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { showToast } from "@opencode-ai/ui/toast"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLayout } from "@/context/layout"
 import { useTerminal } from "@/context/terminal"
 import { decode64 } from "@/utils/base64"
 import { SettingsPopup } from "./settings-popup"
+import { CreateDialog } from "./create-dialog"
 
 function RunIcon() {
   return (
@@ -18,6 +20,7 @@ function RunIcon() {
 
 export function SessionHeaderActions() {
   const params = useParams()
+  const dialog = useDialog()
   const layout = useLayout()
   const terminal = useTerminal()
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
@@ -42,8 +45,8 @@ export function SessionHeaderActions() {
     runCommand({ command: "latervibe", args: ["start", "--wait"], label: "Run" })
   }
 
-  const deploy = () => {
-    runCommand({ command: "latervibe", args: ["deploy", "--wait"], label: "Deploy" })
+  const publish = () => {
+    runCommand({ command: "latervibe", args: ["publish", "--wait"], label: "Publish" })
   }
 
   return (
@@ -51,12 +54,18 @@ export function SessionHeaderActions() {
       <Button variant="secondary" class="rounded-sm h-[24px] w-[24px] p-0" onClick={run} aria-label="Run">
         <RunIcon />
       </Button>
-      <Button variant="secondary" class="rounded-sm h-[24px] w-[24px] p-0" onClick={deploy} aria-label="Deploy">
+      <Button variant="secondary" class="rounded-sm h-[24px] w-[24px] p-0" onClick={publish} aria-label="Publish">
         <Icon name="cloud-upload" size="small" class="text-icon-base" />
       </Button>
-      <SettingsPopup
-        onRun={() => runCommand({ command: "latervibe", args: ["settings", "--wait"], label: "Settings" })}
-      />
+      <SettingsPopup />
+      <Button
+        variant="secondary"
+        class="rounded-sm h-[24px] w-[24px] p-0"
+        onClick={() => dialog.show(() => <CreateDialog />)}
+        aria-label="Create"
+      >
+        <Icon name="plus-small" size="small" class="text-icon-base" />
+      </Button>
     </div>
   )
 }
