@@ -55,6 +55,21 @@ export function moveLeft(textarea: TextareaRenderable) {
   textarea.cursorOffset = Math.max(start, textarea.cursorOffset - 1)
 }
 
+export function moveLineBeginning(textarea: TextareaRenderable) {
+  const text = textarea.plainText
+  textarea.cursorOffset = lineStart(text, textarea.cursorOffset)
+}
+
+export function moveFirstNonWhitespace(textarea: TextareaRenderable) {
+  const text = textarea.plainText
+  textarea.cursorOffset = firstNonWhitespace(text, textarea.cursorOffset)
+}
+
+export function moveLineEnd(textarea: TextareaRenderable) {
+  const text = textarea.plainText
+  textarea.cursorOffset = lineLast(text, textarea.cursorOffset)
+}
+
 export function moveRight(textarea: TextareaRenderable) {
   const text = textarea.plainText
   const last = lineLast(text, textarea.cursorOffset)

@@ -13,10 +13,13 @@ import {
   moveBigWordEnd,
   moveBigWordNext,
   moveBigWordPrev,
+  moveFirstNonWhitespace,
   moveLeft,
+  moveLineBeginning,
   moveLineDown,
   moveLineUp,
   moveRight,
+  moveLineEnd,
   moveWordEnd,
   moveWordNext,
   moveWordPrev,
@@ -197,6 +200,24 @@ export function createVimHandler(input: {
 
       if (key === "k" && !event.shift && !hasModifier(event)) {
         moveLineUp(input.textarea())
+        event.preventDefault()
+        return true
+      }
+
+      if (key === "0" && !event.shift && !hasModifier(event)) {
+        moveLineBeginning(input.textarea())
+        event.preventDefault()
+        return true
+      }
+
+      if (key === "^" && !hasModifier(event)) {
+        moveFirstNonWhitespace(input.textarea())
+        event.preventDefault()
+        return true
+      }
+
+      if (key === "$" && !hasModifier(event)) {
+        moveLineEnd(input.textarea())
         event.preventDefault()
         return true
       }

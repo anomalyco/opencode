@@ -207,6 +207,55 @@ describe("vim motion handler", () => {
     expect(ctx.textarea.cursorOffset).toBe(5)
   })
 
+  test("0 moves to line beginning", () => {
+    const ctx = createHandler("  hello")
+    ctx.textarea.cursorOffset = 4
+    ctx.handler.handleKey(createEvent("0").event)
+    expect(ctx.textarea.cursorOffset).toBe(0)
+  })
+
+  test("0 on multiline moves to current line start", () => {
+    const ctx = createHandler("abc\n  def")
+    ctx.textarea.cursorOffset = 7
+    ctx.handler.handleKey(createEvent("0").event)
+    expect(ctx.textarea.cursorOffset).toBe(4)
+  })
+
+  test("^ moves to first non-whitespace", () => {
+    const ctx = createHandler("  hello")
+    ctx.textarea.cursorOffset = 5
+    ctx.handler.handleKey(createEvent("^").event)
+    expect(ctx.textarea.cursorOffset).toBe(2)
+  })
+
+  test("^ on line with no leading whitespace goes to column 0", () => {
+    const ctx = createHandler("hello")
+    ctx.textarea.cursorOffset = 3
+    ctx.handler.handleKey(createEvent("^").event)
+    expect(ctx.textarea.cursorOffset).toBe(0)
+  })
+
+  test("$ moves to last char of line", () => {
+    const ctx = createHandler("hello")
+    ctx.textarea.cursorOffset = 0
+    ctx.handler.handleKey(createEvent("$").event)
+    expect(ctx.textarea.cursorOffset).toBe(4)
+  })
+
+  test("$ on multiline moves to last char of current line", () => {
+    const ctx = createHandler("abc\ndef")
+    ctx.textarea.cursorOffset = 0
+    ctx.handler.handleKey(createEvent("$").event)
+    expect(ctx.textarea.cursorOffset).toBe(2)
+  })
+
+  test("$ on single char stays put", () => {
+    const ctx = createHandler("a")
+    ctx.textarea.cursorOffset = 0
+    ctx.handler.handleKey(createEvent("$").event)
+    expect(ctx.textarea.cursorOffset).toBe(0)
+  })
+
   test("supports insert transitions for A I O", () => {
     const i0 = createHandler("abc")
     i0.textarea.cursorOffset = 1
