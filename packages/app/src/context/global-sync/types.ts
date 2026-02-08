@@ -3,6 +3,7 @@ import type {
   Command,
   Config,
   FileDiff,
+  FormatterStatus,
   LspStatus,
   McpStatus,
   Message,
@@ -62,6 +63,7 @@ export type State = {
     [name: string]: McpStatus
   }
   lsp: LspStatus[]
+  formatter: FormatterStatus[]
   vcs: VcsInfo | undefined
   limit: number
   message: {

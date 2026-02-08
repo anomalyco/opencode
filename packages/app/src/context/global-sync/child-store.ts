@@ -177,6 +177,7 @@ export function createChildStoreManager(input: {
             question: {},
             mcp: {},
             lsp: [],
+            formatter: [],
             vcs: vcsStore.value,
             limit: 5,
             message: {},

@@ -250,6 +250,7 @@ export const dict = {
 
   "dialog.lsp.empty": "LSP-ovi se automatski otkrivaju prema tipu datoteke",
   "dialog.plugins.empty": "Plugini su konfigurisani u opencode.json",
+  "dialog.formatters.empty": "Nema aktivnih formatera",
 
   "mcp.status.connected": "povezano",
   "mcp.status.failed": "neuspjelo",
@@ -481,6 +482,7 @@ export const dict = {
   "status.popover.tab.mcp": "MCP",
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "Plugini",
+  "status.popover.tab.formatters": "Formatatori",
   "status.popover.action.manageServers": "Upravljaj serverima",
 
   "session.share.popover.title": "Objavi na webu",

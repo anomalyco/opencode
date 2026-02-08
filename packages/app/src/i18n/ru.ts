@@ -242,6 +242,7 @@ export const dict = {
 
   "dialog.lsp.empty": "LSP автоматически обнаружены по типам файлов",
   "dialog.plugins.empty": "Плагины настроены в opencode.json",
+  "dialog.formatters.empty": "Нет активных форматтеров",
 
   "mcp.status.connected": "подключено",
   "mcp.status.failed": "ошибка",
@@ -456,6 +457,7 @@ export const dict = {
   "status.popover.tab.mcp": "MCP",
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "Плагины",
+  "status.popover.tab.formatters": "Форматтеры",
   "status.popover.action.manageServers": "Управлять серверами",
 
   "session.share.popover.title": "Опубликовать в интернете",

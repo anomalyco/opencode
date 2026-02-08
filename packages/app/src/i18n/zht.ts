@@ -280,6 +280,7 @@ export const dict = {
 
   "dialog.lsp.empty": "已從檔案類型自動偵測到 LSPs",
   "dialog.plugins.empty": "在 opencode.json 中設定的外掛程式",
+  "dialog.formatters.empty": "沒有活動的格式化工具",
 
   "mcp.status.connected": "已連線",
   "mcp.status.failed": "失敗",
@@ -488,6 +489,7 @@ export const dict = {
   "status.popover.tab.mcp": "MCP",
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "外掛程式",
+  "status.popover.tab.formatters": "格式化工具",
   "status.popover.action.manageServers": "管理伺服器",
 
   "session.share.popover.title": "發佈到網頁",

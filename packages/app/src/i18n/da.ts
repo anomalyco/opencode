@@ -242,6 +242,7 @@ export const dict = {
 
   "dialog.lsp.empty": "LSP'er registreret automatisk fra filtyper",
   "dialog.plugins.empty": "Plugins konfigureret i opencode.json",
+  "dialog.formatters.empty": "Ingen aktive formateringsværktøjer",
 
   "mcp.status.connected": "forbundet",
   "mcp.status.failed": "mislykkedes",
@@ -453,6 +454,7 @@ export const dict = {
   "status.popover.tab.mcp": "MCP",
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "Plugins",
+  "status.popover.tab.formatters": "Formateringsværktøjer",
   "status.popover.action.manageServers": "Administrer servere",
 
   "session.share.popover.title": "Udgiv på nettet",

@@ -247,6 +247,7 @@ export const dict = {
 
   "dialog.lsp.empty": "LSPs ตรวจจับอัตโนมัติจากประเภทไฟล์",
   "dialog.plugins.empty": "ปลั๊กอินที่กำหนดค่าใน opencode.json",
+  "dialog.formatters.empty": "ไม่มีตัวจัดรูปแบบที่ใช้งานอยู่",
 
   "mcp.status.connected": "เชื่อมต่อแล้ว",
   "mcp.status.failed": "ล้มเหลว",
@@ -458,6 +459,7 @@ export const dict = {
   "status.popover.tab.mcp": "MCP",
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "ปลั๊กอิน",
+  "status.popover.tab.formatters": "ตัวจัดรูปแบบ",
   "status.popover.action.manageServers": "จัดการเซิร์ฟเวอร์",
 
   "session.share.popover.title": "เผยแพร่บนเว็บ",

@@ -242,6 +242,7 @@ export const dict = {
 
   "dialog.lsp.empty": "تم الكشف تلقائيًا عن LSPs من أنواع الملفات",
   "dialog.plugins.empty": "الإضافات المكونة في opencode.json",
+  "dialog.formatters.empty": "لا توجد منسقات نشطة",
 
   "mcp.status.connected": "متصل",
   "mcp.status.failed": "فشل",
@@ -451,6 +452,7 @@ export const dict = {
   "status.popover.tab.mcp": "MCP",
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "الإضافات",
+  "status.popover.tab.formatters": "المنسقات",
   "status.popover.action.manageServers": "إدارة الخوادم",
 
   "session.share.popover.title": "نشر على الويب",

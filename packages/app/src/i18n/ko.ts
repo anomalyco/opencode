@@ -245,6 +245,7 @@ export const dict = {
 
   "dialog.lsp.empty": "파일 유형에서 자동 감지된 LSP",
   "dialog.plugins.empty": "opencode.json에 구성된 플러그인",
+  "dialog.formatters.empty": "활성 포맷터 없음",
 
   "mcp.status.connected": "연결됨",
   "mcp.status.failed": "실패",
@@ -454,6 +455,7 @@ export const dict = {
   "status.popover.tab.mcp": "MCP",
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "플러그인",
+  "status.popover.tab.formatters": "포맷터",
   "status.popover.action.manageServers": "서버 관리",
 
   "session.share.popover.title": "웹에 게시",

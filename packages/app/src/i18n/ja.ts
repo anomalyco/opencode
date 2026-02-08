@@ -241,6 +241,7 @@ export const dict = {
 
   "dialog.lsp.empty": "ファイルタイプから自動検出されたLSP",
   "dialog.plugins.empty": "opencode.jsonで設定されたプラグイン",
+  "dialog.formatters.empty": "アクティブなフォーマッタがありません",
 
   "mcp.status.connected": "接続済み",
   "mcp.status.failed": "失敗",
@@ -447,6 +448,7 @@ export const dict = {
   "status.popover.tab.mcp": "MCP",
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "プラグイン",
+  "status.popover.tab.formatters": "フォーマッタ",
   "status.popover.action.manageServers": "サーバーを管理",
 
   "session.share.popover.title": "ウェブで公開",

@@ -109,6 +109,8 @@ export function StatusPopover() {
   const lspCount = createMemo(() => lspItems().length)
   const plugins = createMemo(() => sync.data.config.plugin ?? [])
   const pluginCount = createMemo(() => plugins().length)
+  const formatterItems = createMemo(() => (sync.data.formatter ?? []).filter((f) => f.enabled))
+  const formatterCount = createMemo(() => formatterItems().length)
 
   const overallHealthy = createMemo(() => {
     const serverHealthy = server.healthy() === true
@@ -171,7 +173,10 @@ export function StatusPopover() {
           defaultValue="servers"
           variant="alt"
         >
-          <Tabs.List data-slot="tablist" class="bg-transparent border-b-0 px-4 pt-2 pb-0 gap-4 h-10">
+          <Tabs.List
+            data-slot="tablist"
+            class="bg-transparent border-b-0 px-4 pt-2 pb-0 gap-2 h-10 overflow-x-auto no-scrollbar"
+          >
             <Tabs.Trigger value="servers" data-slot="tab" class="text-12-regular">
               {serverCount() > 0 ? `${serverCount()} ` : ""}
               {language.t("status.popover.tab.servers")}
@@ -183,6 +188,10 @@ export function StatusPopover() {
             <Tabs.Trigger value="lsp" data-slot="tab" class="text-12-regular">
               {lspCount() > 0 ? `${lspCount()} ` : ""}
               {language.t("status.popover.tab.lsp")}
+            </Tabs.Trigger>
+            <Tabs.Trigger value="formatters" data-slot="tab" class="text-12-regular">
+              {formatterCount() > 0 ? `${formatterCount()} ` : ""}
+              {language.t("status.popover.tab.formatters")}
             </Tabs.Trigger>
             <Tabs.Trigger value="plugins" data-slot="tab" class="text-12-regular">
               {pluginCount() > 0 ? `${pluginCount()} ` : ""}
@@ -321,6 +330,30 @@ export function StatusPopover() {
                           }}
                         />
                         <span class="text-14-regular text-text-base truncate">{item.name || item.id}</span>
+                      </div>
+                    )}
+                  </For>
+                </Show>
+              </div>
+            </div>
+          </Tabs.Content>
+
+          <Tabs.Content value="formatters">
+            <div class="flex flex-col px-2 pb-2">
+              <div class="flex flex-col p-3 bg-background-base rounded-sm min-h-14">
+                <Show
+                  when={formatterItems().length > 0}
+                  fallback={
+                    <div class="text-14-regular text-text-base text-center my-auto">
+                      {language.t("dialog.formatters.empty")}
+                    </div>
+                  }
+                >
+                  <For each={formatterItems()}>
+                    {(item) => (
+                      <div class="flex items-center gap-2 w-full px-2 py-1">
+                        <div class="size-1.5 rounded-full shrink-0 bg-icon-success-base" />
+                        <span class="text-14-regular text-text-base truncate">{item.name}</span>
                       </div>
                     )}
                   </For>
