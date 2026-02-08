@@ -544,11 +544,7 @@ export function SessionHeader() {
                   <Button
                     variant="ghost"
                     class="group/file-tree-toggle size-6 p-0"
-                    onClick={() => {
-                      const opening = !layout.fileTree.opened()
-                      if (opening && !view().reviewPanel.opened()) view().reviewPanel.open()
-                      layout.fileTree.toggle()
-                    }}
+                    onClick={() => layout.fileTree.toggle()}
                     aria-label={language.t("command.fileTree.toggle")}
                     aria-expanded={layout.fileTree.opened()}
                     aria-controls="file-tree-panel"
