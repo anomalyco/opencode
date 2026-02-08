@@ -15,14 +15,7 @@ async function isDirectory(path: string) {
   }
 }
 
-function isValidSemver(v: string) {
-  try {
-    Bun.semver.order(v, "0.0.0")
-    return true
-  } catch {
-    return false
-  }
-}
+const isValidSemver = (v: string) => Bun.semver.satisfies(v, "x.x.x")
 
 const root = process.cwd()
 const bunRoot = join(root, "node_modules/.bun")
