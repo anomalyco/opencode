@@ -26,7 +26,6 @@ export interface Settings {
   appearance: {
     fontSize: number
     font: string
-    transparentAppIcons: boolean
   }
   keybinds: Record<string, string>
   permissions: {
@@ -47,7 +46,6 @@ const defaultSettings: Settings = {
   appearance: {
     fontSize: 14,
     font: "ibm-plex-mono",
-    transparentAppIcons: true,
   },
   keybinds: {},
   permissions: {
@@ -126,12 +124,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         font: createMemo(() => store.appearance?.font ?? defaultSettings.appearance.font),
         setFont(value: string) {
           setStore("appearance", "font", value)
-        },
-        transparentAppIcons: createMemo(
-          () => store.appearance?.transparentAppIcons ?? defaultSettings.appearance.transparentAppIcons,
-        ),
-        setTransparentAppIcons(value: boolean) {
-          setStore("appearance", "transparentAppIcons", value)
         },
       },
       keybinds: {
