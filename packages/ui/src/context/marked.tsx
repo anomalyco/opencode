@@ -376,34 +376,53 @@ registerCustomTheme("OpenCode", () => {
   } as unknown as ThemeRegistrationResolved)
 })
 
+function unescapeHtmlEntities(text: string): string {
+  return text
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+}
+
+function stripEquationNumbers(math: string): string {
+  return math
+    .replace(/\\begin\{(align|equation|gather|eqnarray)\}/g, "\\begin{$1*}")
+    .replace(/\\end\{(align|equation|gather|eqnarray)\}/g, "\\end{$1*}")
+}
+
 function renderMathInText(text: string): string {
   let result = text
 
-  // Display math: $$...$$
-  const displayMathRegex = /\$\$([\s\S]*?)\$\$/g
-  result = result.replace(displayMathRegex, (_, math) => {
-    try {
-      return katex.renderToString(math, {
-        displayMode: true,
-        throwOnError: false,
-      })
-    } catch {
-      return `$$${math}$$`
-    }
-  })
+  // Display math: <span data-math-style="display">...</span> (from comrak math_dollars)
+  result = result.replace(
+    /<span data-math-style="display">([\s\S]*?)<\/span>/g,
+    (_, math) => {
+      try {
+        return katex.renderToString(stripEquationNumbers(unescapeHtmlEntities(math)), {
+          displayMode: true,
+          throwOnError: false,
+        })
+      } catch {
+        return `$$${math}$$`
+      }
+    },
+  )
 
-  // Inline math: $...$
-  const inlineMathRegex = /(?<!\$)\$(?!\$)((?:[^$\\]|\\.)+?)\$(?!\$)/g
-  result = result.replace(inlineMathRegex, (_, math) => {
-    try {
-      return katex.renderToString(math, {
-        displayMode: false,
-        throwOnError: false,
-      })
-    } catch {
-      return `$${math}$`
-    }
-  })
+  // Inline math: <span data-math-style="inline">...</span> (from comrak math_dollars)
+  result = result.replace(
+    /<span data-math-style="inline">([\s\S]*?)<\/span>/g,
+    (_, math) => {
+      try {
+        return katex.renderToString(unescapeHtmlEntities(math), {
+          displayMode: false,
+          throwOnError: false,
+        })
+      } catch {
+        return `$${math}$`
+      }
+    },
+  )
 
   return result
 }
@@ -433,12 +452,7 @@ async function highlightCodeBlocks(html: string): Promise<string> {
   let result = html
   for (const match of matches) {
     const [fullMatch, lang, escapedCode] = match
-    const code = escapedCode
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&amp;/g, "&")
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
+    const code = unescapeHtmlEntities(escapedCode)
 
     let language = lang || "text"
     if (!(language in bundledLanguages)) {

@@ -47,6 +47,7 @@ pub fn parse_markdown(input: &str) -> String {
     options.extension.table = true;
     options.extension.tasklist = true;
     options.extension.autolink = true;
+    options.extension.math_dollars = true;
     options.render.r#unsafe = true;
 
     let arena = Arena::new();
