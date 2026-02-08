@@ -31,24 +31,6 @@ const platform: Platform = {
   openLink(url: string) {
     window.open(url, "_blank")
   },
-  openPath(path: string, app?: string) {
-    const value = encodeURI(path.replaceAll("\\", "/"))
-    const key = app?.toLowerCase()
-    if (key === "code" || key === "visual studio code") {
-      window.open(`vscode://file/${value}`, "_blank")
-      return Promise.resolve()
-    }
-    if (key === "cursor") {
-      window.open(`cursor://file/${value}`, "_blank")
-      return Promise.resolve()
-    }
-    if (key === "zed") {
-      window.open(`zed://file/${value}`, "_blank")
-      return Promise.resolve()
-    }
-    window.open(`file://${value}`, "_blank")
-    return Promise.resolve()
-  },
   back() {
     window.history.back()
   },
