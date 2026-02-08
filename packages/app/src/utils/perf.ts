@@ -31,6 +31,30 @@ const required = [
   "storage:file-view-ready",
 ]
 
+type DesktopPerf = {
+  mark: (name: string, data?: unknown) => void
+}
+
+const desktop = (): DesktopPerf | undefined => {
+  const g = globalThis as typeof globalThis & { __OPENCODE__?: { perf?: DesktopPerf } }
+  return g.__OPENCODE__?.perf
+}
+
+export function mark(name: string, data?: unknown) {
+  desktop()?.mark(name, data)
+}
+
+export async function span<T>(name: string, fn: () => Promise<T>, data?: unknown) {
+  const api = desktop()
+  if (!api) return fn()
+
+  api.mark(`${name}:start`, data)
+  const start = now()
+  const res = await fn()
+  api.mark(`${name}:end`, { elapsed_ms: now() - start, data: data ?? null })
+  return res
+}
+
 function flush(id: string, reason: "complete" | "timeout") {
   if (!dev) return
   const nav = navs.get(id)

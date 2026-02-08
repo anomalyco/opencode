@@ -16,6 +16,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
   let autoTimer: ReturnType<typeof setTimeout> | undefined
   let cleanup: (() => void) | undefined
   let auto: { top: number; time: number } | undefined
+  const suspended = () => typeof document !== "undefined" && document.documentElement.dataset.terminalResizeSuspended === "1"
 
   const threshold = () => options.bottomThreshold ?? 10
 
@@ -161,22 +162,34 @@ export function createAutoScroll(options: AutoScrollOptions) {
     el.style.overflowAnchor = store.userScrolled ? "auto" : "none"
   }
 
+  const handleContentResize = () => {
+    if (suspended()) return
+    const el = scroll
+    if (el && !canScroll(el)) {
+      if (store.userScrolled) setStore("userScrolled", false)
+      return
+    }
+    if (!active()) return
+    if (store.userScrolled) return
+    scrollToBottom(false)
+  }
+
   createResizeObserver(
     () => store.contentRef,
     () => {
-      const el = scroll
-      if (el && !canScroll(el)) {
-        if (store.userScrolled) setStore("userScrolled", false)
-        return
-      }
-      if (!active()) return
-      if (store.userScrolled) return
       // ResizeObserver fires after layout, before paint.
       // Keep the bottom locked in the same frame to avoid visible
       // "jump up then catch up" artifacts while streaming content.
-      scrollToBottom(false)
+      handleContentResize()
     },
   )
+
+  createEffect(() => {
+    if (typeof window === "undefined") return
+    const handleFit = () => handleContentResize()
+    window.addEventListener("opencode:terminal-fit", handleFit)
+    onCleanup(() => window.removeEventListener("opencode:terminal-fit", handleFit))
+  })
 
   createEffect(
     on(options.working, (working: boolean) => {

@@ -2,15 +2,7 @@ export const deepLinkEvent = "opencode:deep-link"
 
 export const parseDeepLink = (input: string) => {
   if (!input.startsWith("opencode://")) return
-  if (typeof URL.canParse === "function" && !URL.canParse(input)) return
-  const url = (() => {
-    try {
-      return new URL(input)
-    } catch {
-      return undefined
-    }
-  })()
-  if (!url) return
+  const url = new URL(input)
   if (url.hostname !== "open-project") return
   const directory = url.searchParams.get("directory")
   if (!directory) return

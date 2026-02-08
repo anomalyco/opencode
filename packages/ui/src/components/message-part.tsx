@@ -308,6 +308,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   const [expanded, setExpanded] = createSignal(false)
   const [canExpand, setCanExpand] = createSignal(false)
   let textRef: HTMLDivElement | undefined
+  const suspended = () => typeof document !== "undefined" && document.documentElement.dataset.terminalResizeSuspended === "1"
 
   const updateCanExpand = () => {
     const el = textRef
@@ -319,9 +320,20 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
   createResizeObserver(
     () => textRef,
     () => {
+      if (suspended()) return
       updateCanExpand()
     },
   )
+
+  createEffect(() => {
+    if (typeof window === "undefined") return
+    const handleFit = () => {
+      if (suspended()) return
+      updateCanExpand()
+    }
+    window.addEventListener("opencode:terminal-fit", handleFit)
+    onCleanup(() => window.removeEventListener("opencode:terminal-fit", handleFit))
+  })
 
   const textPart = createMemo(
     () => props.parts?.find((p) => p.type === "text" && !(p as TextPart).synthetic) as TextPart | undefined,

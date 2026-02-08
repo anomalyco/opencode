@@ -9,6 +9,7 @@
     "dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
     "dev:desktop": "bun --cwd packages/desktop tauri dev",
     "dev:web": "bun --cwd packages/app dev",
+    "web:dev:local": "bun ./script/web-dev-local.ts",
     "typecheck": "bun turbo typecheck",
     "prepare": "husky",
     "random": "echo 'Random script'",
@@ -78,6 +79,7 @@
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
+    "sandbox-agent": "0.1.7",
     "typescript": "catalog:"
   },
   "repository": {
@@ -101,6 +103,8 @@
     "@types/node": "catalog:"
   },
   "patchedDependencies": {
-    "@standard-community/standard-openapi@0.2.9": "patches/@standard-community%2Fstandard-openapi@0.2.9.patch"
+    "@standard-community/standard-openapi@0.2.9": "patches/@standard-community%2Fstandard-openapi@0.2.9.patch",
+    "ghostty-web@0.3.0": "patches/ghostty-web@0.3.0.patch",
+    "@floating-ui/utils@0.2.10": "patches/@floating-ui+utils@0.2.10.patch"
   }
 }

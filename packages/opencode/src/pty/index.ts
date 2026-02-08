@@ -15,16 +15,65 @@ export namespace Pty {
 
   const BUFFER_LIMIT = 1024 * 1024 * 2
   const BUFFER_CHUNK = 64 * 1024
-  const encoder = new TextEncoder()
+  const DEBUG = process.env.OPENCODE_PTY_DEBUG === "1"
 
-  // WebSocket control frame: 0x00 + UTF-8 JSON (currently { cursor }).
-  const meta = (cursor: number) => {
-    const json = JSON.stringify({ cursor })
-    const bytes = encoder.encode(json)
-    const out = new Uint8Array(bytes.length + 1)
-    out[0] = 0
-    out.set(bytes, 1)
-    return out
+  export const osc7 = (buf: string, chunk: string) => {
+    // OSC-7: ESC ] 7 ; file://hostname/path BEL  (or ST = ESC \\)
+    const esc = "\x1b"
+    const bel = "\x07"
+    const prefix = `${esc}]7;file://`
+    const max = 1024
+
+    const data = buf + chunk
+
+    let pos = 0
+    let cwd: string | undefined
+    for (;;) {
+      const start = data.indexOf(prefix, pos)
+      if (start === -1) break
+
+      const from = start + prefix.length
+      const belEnd = data.indexOf(bel, from)
+      const st = `${esc}\\`
+      const stEnd = data.indexOf(st, from)
+
+      const end = (() => {
+        if (belEnd === -1) return stEnd
+        if (stEnd === -1) return belEnd
+        return Math.min(belEnd, stEnd)
+      })()
+
+      if (end === -1) {
+        const tail = data.slice(start)
+        return {
+          cwd,
+          buf: tail.length <= max ? tail : "",
+        }
+      }
+
+      const body = data.slice(from, end)
+      const slash = body.indexOf("/")
+      if (slash !== -1) {
+        const raw = body.slice(slash)
+        cwd = (() => {
+          if (!raw.includes("%")) return raw
+          try {
+            return decodeURIComponent(raw)
+          } catch {
+            return raw
+          }
+        })()
+      }
+
+      pos = end + (end === stEnd ? st.length : 1)
+    }
+
+    const last = data.lastIndexOf(esc)
+    if (last === -1) return { cwd, buf: "" }
+
+    const tail = data.slice(last)
+    if (!prefix.startsWith(tail)) return { cwd, buf: "" }
+    return { cwd, buf: tail.length <= max ? tail : "" }
   }
 
   const pty = lazy(async () => {
@@ -79,8 +128,7 @@ export namespace Pty {
     info: Info
     process: IPty
     buffer: string
-    bufferCursor: number
-    cursor: number
+    osc7: string
     subscribers: Set<WSContext>
   }
 
@@ -131,6 +179,7 @@ export namespace Pty {
       env.LANG = "C.UTF-8"
     }
     log.info("creating session", { id, cmd: command, args, cwd })
+    if (DEBUG) log.info("create input", input)
 
     const spawn = await pty()
     const ptyProcess = spawn(command, args, {
@@ -152,27 +201,32 @@ export namespace Pty {
       info,
       process: ptyProcess,
       buffer: "",
-      bufferCursor: 0,
-      cursor: 0,
+      osc7: "",
       subscribers: new Set(),
     }
     state().set(id, session)
     ptyProcess.onData((data) => {
-      session.cursor += data.length
+      const parsed = osc7(session.osc7, data)
+      session.osc7 = parsed.buf
+      if (parsed.cwd && parsed.cwd !== session.info.cwd) {
+        session.info.cwd = parsed.cwd
+        if (DEBUG) log.info("cwd updated", { id, cwd: parsed.cwd })
+        Bus.publish(Event.Updated, { info: session.info })
+      }
 
+      let open = false
       for (const ws of session.subscribers) {
         if (ws.readyState !== 1) {
           session.subscribers.delete(ws)
           continue
         }
+        open = true
         ws.send(data)
       }
-
+      if (open) return
       session.buffer += data
       if (session.buffer.length <= BUFFER_LIMIT) return
-      const excess = session.buffer.length - BUFFER_LIMIT
-      session.buffer = session.buffer.slice(excess)
-      session.bufferCursor += excess
+      session.buffer = session.buffer.slice(-BUFFER_LIMIT)
     })
     ptyProcess.onExit(({ exitCode }) => {
       log.info("session exited", { id, exitCode })
@@ -232,47 +286,28 @@ export namespace Pty {
     }
   }
 
-  export function connect(id: string, ws: WSContext, cursor?: number) {
+  export function connect(id: string, ws: WSContext) {
     const session = state().get(id)
     if (!session) {
       ws.close()
       return
     }
     log.info("client connected to session", { id })
-
-    const start = session.bufferCursor
-    const end = session.cursor
-
-    const from =
-      cursor === -1 ? end : typeof cursor === "number" && Number.isSafeInteger(cursor) ? Math.max(0, cursor) : 0
-
-    const data = (() => {
-      if (!session.buffer) return ""
-      if (from >= end) return ""
-      const offset = Math.max(0, from - start)
-      if (offset >= session.buffer.length) return ""
-      return session.buffer.slice(offset)
-    })()
-
-    if (data) {
+    session.subscribers.add(ws)
+    if (session.buffer) {
+      const buffer = session.buffer.length <= BUFFER_LIMIT ? session.buffer : session.buffer.slice(-BUFFER_LIMIT)
+      session.buffer = ""
       try {
-        for (let i = 0; i < data.length; i += BUFFER_CHUNK) {
-          ws.send(data.slice(i, i + BUFFER_CHUNK))
+        for (let i = 0; i < buffer.length; i += BUFFER_CHUNK) {
+          ws.send(buffer.slice(i, i + BUFFER_CHUNK))
         }
       } catch {
+        session.subscribers.delete(ws)
+        session.buffer = buffer
         ws.close()
         return
       }
     }
-
-    try {
-      ws.send(meta(end))
-    } catch {
-      ws.close()
-      return
-    }
-
-    session.subscribers.add(ws)
     return {
       onMessage: (message: string | ArrayBuffer) => {
         session.process.write(String(message))

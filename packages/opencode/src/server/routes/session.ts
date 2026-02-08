@@ -16,6 +16,7 @@ import { Log } from "../../util/log"
 import { PermissionNext } from "@/permission/next"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { withSpan, SpanKind, startTimer } from "../../observability/index.ts"
 
 const log = Log.create({ service: "server" })
 
@@ -203,7 +204,16 @@ export const SessionRoutes = lazy(() =>
       validator("json", Session.create.schema.optional()),
       async (c) => {
         const body = c.req.valid("json") ?? {}
-        const session = await Session.create(body)
+        const session = await withSpan(
+          "opencode.session.create",
+          async (span) => {
+            const result = await Session.create(body)
+            span.setAttribute("session.id", result.id)
+            span.setAttribute("session.title", result.title)
+            return result
+          },
+          { kind: SpanKind.INTERNAL }
+        )
         return c.json(session)
       },
     )

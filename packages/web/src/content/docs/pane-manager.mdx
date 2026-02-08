@@ -1,0 +1,539 @@
+---
+title: Pane Manager
+description: Generic hierarchical layout engine for nested panes.
+---
+
+The pane manager is a domain-agnostic layout engine for building hierarchical UI structures. It handles tree operations, layout calculations, and coordinates while consumers render the actual content.
+
+---
+
+## Philosophy
+
+The pane manager separates concerns between the engine and consumer:
+
+| Layer           | Responsibility                                  |
+| --------------- | ----------------------------------------------- |
+| **Pane Engine** | Tree structure, layout math, coordinates        |
+| **Consumer**    | Content rendering, titles, styles, interactions |
+
+The engine knows nothing about terminals, sessions, or workspaces. It only manages nodes in a tree.
+
+---
+
+## Core types
+
+### Node
+
+A node is either a leaf (content container) or a split (layout container).
+
+```typescript
+type PaneNode<Meta> =
+  | { type: "leaf"; id: string; meta?: Meta }
+  | {
+      type: "split"
+      id: string
+      direction: "h" | "v" // h=top/bottom, v=left/right
+      children: [PaneNode<Meta>, PaneNode<Meta>]
+      size: number // 0.0-1.0 ratio for first child
+      meta?: Meta
+    }
+```
+
+### Container
+
+A container holds a pane tree and can be nested under other containers.
+
+```typescript
+type Container<Meta> = {
+  id: string
+  root?: PaneNode<Meta>
+  parentId?: string
+  meta?: Meta
+}
+```
+
+### Metadata
+
+Metadata is opaque to the engine. Consumers define their own schema.
+
+```typescript
+// Consumer defines their metadata type
+type TerminalMeta = {
+  terminalId: string
+  title?: string
+  agentStatus?: "idle" | "working"
+}
+
+// Engine stores and passes it through
+const node: PaneNode<TerminalMeta> = {
+  type: "leaf",
+  id: "pane-1",
+  meta: { terminalId: "pty-123", title: "Shell" },
+}
+```
+
+---
+
+## Create manager
+
+```typescript
+import { usePaneManager } from "@opencode-ai/ui/context/pane-manager"
+
+// In a component
+const paneManager = usePaneManager<TerminalMeta>()
+```
+
+---
+
+## Container operations
+
+Containers form the hierarchy. A container can hold other containers as children.
+
+Children are **ordered**. This powers tab strips, tab groups, and any UI where sibling order matters.
+
+```typescript
+// Create a root container
+await paneManager.createContainer("workspace-1")
+
+// Create a child container
+await paneManager.createContainer("tab-1", "workspace-1")
+
+// Move container to new parent (optionally choose insert position)
+await paneManager.moveContainer("tab-1", "workspace-2", { index: 0 })
+
+// Reorder children within a parent (e.g. tab strip)
+await paneManager.reorderContainers("workspace-2", ["tab-2", "tab-1", "tab-3"])
+
+// Delete container and descendants
+await paneManager.deleteContainer("workspace-1")
+```
+
+---
+
+## Tab groups (Chrome-style)
+
+Chrome-style tab grouping can be modeled as **containers that contain tab containers**.
+
+- A **group** is a container (renders as a header/pill in the tab strip)
+- A **tab** is a container (renders as a tab)
+- Panes/splits live inside the tab container as the node tree
+
+Example structure:
+
+```text
+workspace
+  group-1 (title/color/collapsed)
+    tab-1
+    tab-2
+  tab-3 (ungrouped)
+```
+
+Example operations:
+
+```typescript
+type GroupMeta = { type: "group"; title?: string; color?: string; collapsed?: boolean }
+type TabMeta = { type: "tab"; title?: string }
+
+await paneManager.createContainer("group-1", "workspace-1", {
+  type: "group",
+  title: "Debug",
+  color: "blue",
+})
+
+await paneManager.createContainer("tab-1", "group-1", { type: "tab", title: "Server" })
+await paneManager.createContainer("tab-2", "group-1", { type: "tab", title: "Client" })
+
+// Drag a tab into / out of a group
+await paneManager.moveContainer("tab-3", "group-1", { index: 0 })
+await paneManager.moveContainer("tab-2", "workspace-1", { index: 2 })
+
+// Collapse/expand group (consumer decides how to render)
+await paneManager.updateContainerMeta("group-1", { collapsed: true })
+
+// Reorder tabs within a group (drag within group)
+await paneManager.reorderContainers("group-1", ["tab-2", "tab-1"])
+```
+
+Typical UI behaviors map cleanly to container ops:
+
+- **Create group from selection**: create a group container, then move the selected tab containers under it (preserving order).
+- **Ungroup**: move child tabs back to the workspace, then delete the group.
+- **Drag group**: reorder the group container among workspace children (tabs + groups).
+- **Drop on group header**: move tab into group and insert at computed index.
+
+---
+
+## Node operations
+
+Nodes live inside containers and form the split tree.
+
+### Create
+
+```typescript
+// Add first node to empty container
+await paneManager.createNode("tab-1", "pane-1", {
+  terminalId: "pty-123",
+})
+```
+
+### Split
+
+```typescript
+// Split vertically (left/right)
+await paneManager.splitNode(
+  "tab-1", // container
+  "pane-1", // node to split
+  "pane-2", // new node id
+  "v", // direction
+  { terminalId: "pty-456" },
+)
+
+// Split horizontally (top/bottom)
+await paneManager.splitNode("tab-1", "pane-1", "pane-3", "h")
+```
+
+### Delete
+
+```typescript
+// Remove node, tree auto-rebalances
+await paneManager.deleteNode("tab-1", "pane-2")
+```
+
+### Resize
+
+```typescript
+// Set split ratio (0.1 to 0.9)
+await paneManager.resizeSplit("tab-1", "split-1", 0.3)
+```
+
+### Swap
+
+```typescript
+// Exchange positions of two nodes
+await paneManager.swapNodes("tab-1", "pane-1", "pane-2")
+```
+
+### Move
+
+```typescript
+// Move node between containers
+await paneManager.moveNode(
+  "pane-1", // node
+  "tab-1", // from container
+  "tab-2", // to container
+  "pane-3", // target node to split (optional)
+  "v", // split direction (optional)
+)
+```
+
+---
+
+## Update metadata
+
+The engine stores metadata but doesn't interpret it.
+
+```typescript
+// Update node metadata
+await paneManager.updateNodeMeta("tab-1", "pane-1", {
+  title: "Build Server",
+})
+
+// Update container metadata
+await paneManager.updateContainerMeta("tab-1", {
+  isActive: true,
+})
+```
+
+---
+
+## Query hierarchy
+
+Navigate the container tree.
+
+```typescript
+// Get direct children
+const children = await paneManager.getChildren("workspace-1")
+
+// Get parent
+const parent = await paneManager.getParent("tab-1")
+
+// Get siblings
+const siblings = await paneManager.getSiblings("tab-1")
+
+// Get all ancestors (up to root)
+const ancestors = await paneManager.getAncestors("tab-1")
+
+// Get all descendants (recursive)
+const descendants = await paneManager.getDescendants("workspace-1")
+```
+
+---
+
+## Query nodes
+
+Find nodes within a container.
+
+```typescript
+// Get specific node
+const node = await paneManager.getNode("tab-1", "pane-1")
+
+// Get all leaf nodes
+const leaves = await paneManager.getAllNodes("tab-1")
+
+// Get node path in tree (e.g., "0.1.0")
+const path = await paneManager.getNodePath("tab-1", "pane-1")
+
+// Find nodes by predicate
+const working = await paneManager.findNodes("tab-1", (node) => node.meta?.agentStatus === "working")
+```
+
+---
+
+## Rendering
+
+The engine calculates layout coordinates. The consumer renders content.
+
+### Get render tree
+
+```typescript
+const tree = await paneManager.getRenderTree("tab-1")
+
+// tree.root contains:
+// - id, type, meta
+// - rect: { x, y, width, height } (percentages)
+// - depth (for z-index)
+// - path (tree location)
+// - isActive, isFocused
+// - children (for splits)
+```
+
+### Render types
+
+```typescript
+type LayoutRect = {
+  x: number // 0-100%
+  y: number // 0-100%
+  width: number // 0-100%
+  height: number // 0-100%
+}
+
+type RenderNode<Meta> = {
+  id: string
+  type: "leaf" | "split"
+  meta?: Meta
+  rect: LayoutRect
+  depth: number
+  path: string
+  isActive?: boolean
+  isFocused?: boolean
+  splitDirection?: "h" | "v"
+  splitPosition?: number
+  children?: [RenderNode<Meta>, RenderNode<Meta>]
+}
+```
+
+### Subscribe to changes
+
+```typescript
+const unsubscribe = paneManager.onLayoutChange("tab-1", (tree) => {
+  // Re-render with new layout
+  console.log("Layout changed:", tree)
+})
+
+// Later: cleanup
+unsubscribe()
+```
+
+---
+
+## Render component
+
+A generic renderer component that consumers customize.
+
+```tsx
+import { PaneRenderer } from "@opencode-ai/ui/components/pane-renderer"
+
+function TerminalContainer(props: { tabId: string }) {
+  return (
+    <PaneRenderer<TerminalMeta>
+      containerId={props.tabId}
+      // Required: render leaf content
+      renderLeaf={(node) => <Terminal id={node.meta?.terminalId} />}
+      // Optional: render pane header
+      renderTitle={(node) => (
+        <div class="pane-header">
+          <span>{node.meta?.title ?? "Terminal"}</span>
+          <button onClick={() => closePane(node.id)}>×</button>
+        </div>
+      )}
+      // Optional: custom split handle
+      renderSplitHandle={(node) => <div class="resize-handle" onDblClick={() => resetToHalf(node.id)} />}
+      // Optional: empty state
+      renderEmpty={() => <p>Press Cmd+D to create a pane</p>}
+    />
+  )
+}
+```
+
+---
+
+## Focus
+
+Track which container and node is active.
+
+```typescript
+// Set active container
+await paneManager.focusContainer("tab-1")
+
+// Set active node within container
+await paneManager.focusNode("tab-1", "pane-2")
+
+// Query focus state
+const activeContainer = await paneManager.getActiveContainer()
+const activeNode = await paneManager.getActiveNode("tab-1")
+```
+
+---
+
+## Navigation
+
+Move focus between nodes spatially.
+
+```typescript
+const nextId = await paneManager.navigate(
+  "tab-1", // container
+  "pane-1", // from node
+  "right", // direction: up, down, left, right, parent, child
+)
+
+if (nextId) {
+  await paneManager.focusNode("tab-1", nextId)
+}
+```
+
+---
+
+## Batch operations
+
+Apply multiple operations atomically.
+
+```typescript
+await paneManager.applyOperations([
+  { type: "split-node", containerId: "tab-1", nodeId: "pane-1", newNodeId: "pane-2", direction: "v" },
+  { type: "update-node-meta", containerId: "tab-1", nodeId: "pane-2", meta: { title: "New" } },
+  { type: "focus-node", containerId: "tab-1", nodeId: "pane-2" },
+])
+```
+
+---
+
+## Persistence
+
+Save and restore layout state.
+
+```typescript
+// Get complete layout
+const state = await paneManager.getLayout()
+localStorage.setItem("layout", JSON.stringify(state))
+
+// Restore layout
+const saved = JSON.parse(localStorage.getItem("layout"))
+await paneManager.setLayout(saved)
+```
+
+---
+
+## Example: 4-layer hierarchy
+
+Build a project → workspace → tab → pane structure.
+
+```typescript
+type ProjectMeta = { name: string; icon?: string }
+type WorkspaceMeta = { directory: string; branch?: string }
+type TabMeta = { sessionId?: string; type: "session" | "terminal" }
+type PaneMeta = { terminalId: string; title?: string }
+
+// Layer 4: Project
+await paneManager.createContainer("project-1", undefined, {
+  name: "opencode",
+})
+
+// Layer 3: Workspace
+await paneManager.createContainer("workspace-1", "project-1", {
+  directory: "/code/opencode",
+  branch: "main",
+})
+
+// Layer 2: Tab
+await paneManager.createContainer("tab-1", "workspace-1", {
+  type: "terminal",
+})
+
+// Layer 1: Terminal panes
+await paneManager.createNode("tab-1", "pane-1", {
+  terminalId: "pty-1",
+  title: "Server",
+})
+
+await paneManager.splitNode("tab-1", "pane-1", "pane-2", "v", {
+  terminalId: "pty-2",
+  title: "Client",
+})
+```
+
+---
+
+## Keyboard shortcuts
+
+Register shortcuts that work at any layer.
+
+```typescript
+import { createPaneShortcuts } from "@opencode-ai/ui/context/pane-shortcuts"
+
+const shortcuts = createPaneShortcuts(paneManager)
+
+shortcuts.register({
+  async onSplit(containerId, nodeId, direction) {
+    const newId = `pane-${Date.now()}`
+    await paneManager.splitNode(containerId, nodeId, newId, direction)
+    // Consumer creates actual terminal
+    await createTerminal(newId)
+  },
+
+  async onClose(containerId, nodeId) {
+    await paneManager.deleteNode(containerId, nodeId)
+  },
+
+  async onNavigate(containerId, fromNodeId, direction) {
+    const nextId = await paneManager.navigate(containerId, fromNodeId, direction)
+    if (nextId) await paneManager.focusNode(containerId, nextId)
+  },
+})
+```
+
+Default bindings:
+
+| Shortcut           | Action                 |
+| ------------------ | ---------------------- |
+| `Cmd+D`            | Split vertical         |
+| `Cmd+Shift+D`      | Split horizontal       |
+| `Cmd+W`            | Close pane             |
+| `Cmd+Option+Arrow` | Navigate between panes |
+
+---
+
+## Provider
+
+The pane manager is currently a pure JavaScript engine.
+
+```typescript
+import { PaneManagerProvider } from "@opencode-ai/ui/context/pane-manager"
+
+function App() {
+  return (
+    <PaneManagerProvider>
+      <Content />
+    </PaneManagerProvider>
+  )
+}
+```

@@ -8,6 +8,7 @@ export function createSimpleContext<T, Props extends Record<string, any>>(input:
   const ctx = createContext<T>()
 
   return {
+    ctx,
     provider: (props: ParentProps<Props>) => {
       const init = input.init(props)
       const gate = input.gate ?? true

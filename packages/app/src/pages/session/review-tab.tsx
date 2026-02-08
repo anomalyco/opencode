@@ -1,4 +1,4 @@
-import { createEffect, on, onCleanup, createSignal, type JSX } from "solid-js"
+import { createEffect, on, onCleanup, createSignal, type Accessor, type JSX } from "solid-js"
 import type { FileDiff } from "@opencode-ai/sdk/v2"
 import { SessionReview } from "@opencode-ai/ui/session-review"
 import type { SelectedLineRange } from "@/context/file"
@@ -22,6 +22,7 @@ export interface SessionReviewTabProps {
   onFocusedCommentChange?: (focus: { file: string; id: string } | null) => void
   focusedFile?: string
   onScrollRef?: (el: HTMLDivElement) => void
+  actions?: JSX.Element
   classes?: {
     root?: string
     header?: string
@@ -153,6 +154,7 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
       comments={props.comments}
       focusedComment={props.focusedComment}
       onFocusedCommentChange={props.onFocusedCommentChange}
+      actions={props.actions}
     />
   )
 }

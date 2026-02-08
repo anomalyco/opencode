@@ -6,19 +6,24 @@ import { List, type ListRef } from "@opencode-ai/ui/list"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tag } from "@opencode-ai/ui/tag"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { type Component, onCleanup, onMount, Show } from "solid-js"
+import { createMemo, type Component, onCleanup, onMount, Show } from "solid-js"
 import { useLocal } from "@/context/local"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { DialogConnectProvider } from "./dialog-connect-provider"
 import { DialogSelectProvider } from "./dialog-select-provider"
 import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
+import { getExtensions } from "@opencode-ai/app-shared"
 
-export const DialogSelectModelUnpaid: Component = () => {
+export const DialogSelectModelUnpaid: Component<{ provider?: string }> = (props) => {
   const local = useLocal()
   const dialog = useDialog()
   const providers = useProviders()
   const language = useLanguage()
+
+  const models = createMemo(() =>
+    local.model.list().filter((m) => (props.provider ? m.provider.id === props.provider : true)),
+  )
 
   let listRef: ListRef | undefined
   const handleKey = (e: KeyboardEvent) => {
@@ -43,7 +48,7 @@ export const DialogSelectModelUnpaid: Component = () => {
         <List
           class="[&_[data-slot=list-scroll]]:overflow-visible"
           ref={(ref) => (listRef = ref)}
-          items={local.model.list}
+          items={models}
           current={local.model.current()}
           key={(x) => `${x.provider.id}:${x.id}`}
           itemWrapper={(item, node) => (

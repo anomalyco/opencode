@@ -163,6 +163,15 @@ import type {
   TuiShowToastResponses,
   TuiSubmitPromptResponses,
   VcsGetResponses,
+  WorkspaceBranchDiffResponses,
+  WorkspaceBranchesResponses,
+  WorkspaceDiffResponses,
+  WorkspaceDiscardResponses,
+  WorkspaceStageAllResponses,
+  WorkspaceStageResponses,
+  WorkspaceStatusResponses,
+  WorkspaceUnstageAllResponses,
+  WorkspaceUnstageResponses,
   WorktreeCreateErrors,
   WorktreeCreateInput,
   WorktreeCreateResponses,
@@ -2161,6 +2170,249 @@ export class Provider extends HeyApiClient {
   }
 }
 
+export class Workspace extends HeyApiClient {
+  /**
+   * Get workspace git status
+   *
+   * Get the git status of the workspace including staged, unstaged, and untracked files.
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<WorkspaceStatusResponses, unknown, ThrowOnError>({
+      url: "/workspace/status",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get workspace diffs
+   *
+   * Get file diffs for staged, unstaged, or all changes in the workspace.
+   */
+  public diff<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      scope?: "staged" | "unstaged" | "all"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "scope" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<WorkspaceDiffResponses, unknown, ThrowOnError>({
+      url: "/workspace/diff",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get branch diff
+   *
+   * Get file diffs comparing current branch to a base branch.
+   */
+  public branchDiff<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      base: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "base" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<WorkspaceBranchDiffResponses, unknown, ThrowOnError>({
+      url: "/workspace/branch-diff",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List git branches
+   *
+   * List all local and remote branches in the repository.
+   */
+  public branches<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<WorkspaceBranchesResponses, unknown, ThrowOnError>({
+      url: "/workspace/branches",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Stage files
+   *
+   * Stage files for commit.
+   */
+  public stage<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      files?: Array<string>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "files" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<WorkspaceStageResponses, unknown, ThrowOnError>({
+      url: "/workspace/stage",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Unstage files
+   *
+   * Unstage files from the staging area.
+   */
+  public unstage<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      files?: Array<string>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "files" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<WorkspaceUnstageResponses, unknown, ThrowOnError>({
+      url: "/workspace/unstage",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Stage all files
+   *
+   * Stage all changes in the workspace.
+   */
+  public stageAll<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).post<WorkspaceStageAllResponses, unknown, ThrowOnError>({
+      url: "/workspace/stage-all",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Unstage all files
+   *
+   * Unstage all files from the staging area.
+   */
+  public unstageAll<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).post<WorkspaceUnstageAllResponses, unknown, ThrowOnError>({
+      url: "/workspace/unstage-all",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Discard changes
+   *
+   * Discard unstaged changes in specified files.
+   */
+  public discard<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      files?: Array<string>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "files" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<WorkspaceDiscardResponses, unknown, ThrowOnError>({
+      url: "/workspace/discard",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Find extends HeyApiClient {
   /**
    * Find text
@@ -3249,6 +3501,11 @@ export class OpencodeClient extends HeyApiClient {
   private _provider?: Provider
   get provider(): Provider {
     return (this._provider ??= new Provider({ client: this.client }))
+  }
+
+  private _workspace?: Workspace
+  get workspace(): Workspace {
+    return (this._workspace ??= new Workspace({ client: this.client }))
   }
 
   private _find?: Find

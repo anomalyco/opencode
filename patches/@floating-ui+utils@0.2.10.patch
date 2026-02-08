@@ -1,0 +1,19 @@
+diff --git a/dist/floating-ui.utils.dom.mjs b/dist/floating-ui.utils.dom.mjs
+--- a/dist/floating-ui.utils.dom.mjs
++++ b/dist/floating-ui.utils.dom.mjs
+@@ -44,6 +44,7 @@ function isShadowRoot(value) {
+ }
+ const invalidOverflowDisplayValues = /*#__PURE__*/new Set(['inline', 'contents']);
+ function isOverflowElement(element) {
++  if (!isElement(element)) return false;
+   const {
+     overflow,
+     overflowX,
+@@ -138,6 +139,7 @@ function getNearestOverflowAncestor(node) {
+   return getNearestOverflowAncestor(parentNode);
+ }
+ function getOverflowAncestors(node, list, traverseIframes) {
++  if (!node) return list || [];
+   var _node$ownerDocument2;
+   if (list === void 0) {
+     list = [];
