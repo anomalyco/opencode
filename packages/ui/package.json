@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/ui",
-  "version": "0.0.12",
+  "version": "1.7.6",
   "type": "module",
   "license": "MIT",
   "exports": {
