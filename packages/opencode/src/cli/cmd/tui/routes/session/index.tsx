@@ -1483,10 +1483,32 @@ type ToolProps<T extends Tool.Info> = {
   part: ToolPart
 }
 function GenericTool(props: ToolProps<any>) {
+  const { theme } = useTheme()
+  const [expanded, setExpanded] = createSignal(false)
+
   return (
-    <InlineTool icon="⚙" pending="Writing command..." complete={true} part={props.part}>
-      {props.tool} {input(props.input)}
-    </InlineTool>
+    <Switch>
+      <Match when={props.output !== undefined}>
+        <BlockTool title={"# " + props.tool} part={props.part} onClick={() => setExpanded((prev) => !prev)}>
+          <box gap={1}>
+            <Show when={Object.keys(props.input).length}>
+              <text fg={theme.textMuted}>{input(props.input)}</text>
+            </Show>
+            <Show when={expanded() && props.output}>
+              <text fg={theme.text}>{props.output}</text>
+            </Show>
+            <Show when={props.output}>
+              <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
+            </Show>
+          </box>
+        </BlockTool>
+      </Match>
+      <Match when={true}>
+        <InlineTool icon="⚙" pending="Running..." complete={true} part={props.part}>
+          {props.tool} {input(props.input)}
+        </InlineTool>
+      </Match>
+    </Switch>
   )
 }
 
