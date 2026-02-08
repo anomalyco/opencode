@@ -10,6 +10,7 @@ import type {
   Session,
   SessionStatus,
   Todo,
+  CoordTeamSummary,
 } from "@opencode-ai/sdk/v2/client"
 import type { State, VcsCache } from "./types"
 import { trimSessions } from "./session-trim"
@@ -44,10 +45,12 @@ function cleanupSessionCaches(store: Store<State>, setStore: SetStoreFunction<St
   const hasAny =
     store.message[sessionID] !== undefined ||
     store.session_diff[sessionID] !== undefined ||
-    store.todo[sessionID] !== undefined ||
-    store.permission[sessionID] !== undefined ||
-    store.question[sessionID] !== undefined ||
-    store.session_status[sessionID] !== undefined
+      store.todo[sessionID] !== undefined ||
+      store.coord[sessionID] !== undefined ||
+      store.permission[sessionID] !== undefined ||
+      store.question[sessionID] !== undefined ||
+      store.session_status[sessionID] !== undefined
+
   if (!hasAny) return
   setStore(
     produce((draft) => {
@@ -62,6 +65,7 @@ function cleanupSessionCaches(store: Store<State>, setStore: SetStoreFunction<St
       delete draft.message[sessionID]
       delete draft.session_diff[sessionID]
       delete draft.todo[sessionID]
+      delete draft.coord[sessionID]
       delete draft.permission[sessionID]
       delete draft.question[sessionID]
       delete draft.session_status[sessionID]
@@ -149,6 +153,11 @@ export function applyDirectoryEvent(input: {
     case "todo.updated": {
       const props = event.properties as { sessionID: string; todos: Todo[] }
       input.setStore("todo", props.sessionID, reconcile(props.todos, { key: "id" }))
+      break
+    }
+    case "coord.summary.updated": {
+      const props = event.properties as { sessionID: string; summary: CoordTeamSummary }
+      input.setStore("coord", props.sessionID, reconcile(props.summary))
       break
     }
     case "session.status": {

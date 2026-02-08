@@ -60,11 +60,17 @@ export namespace Agent {
         [Truncate.GLOB]: "allow",
         ...Object.fromEntries(skillDirs.map((dir) => [path.join(dir, "*"), "allow"])),
       },
-      question: "deny",
-      plan_enter: "deny",
-      plan_exit: "deny",
-      // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
-      read: {
+            question: "deny",
+            plan_enter: "deny",
+            plan_exit: "deny",
+            coord_team: "ask",
+            coord_member: "ask",
+            coord_message: "ask",
+            coord_task: "ask",
+            coord_session: "ask",
+            // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
+            read: {
+
         "*": "allow",
         "*.env": "ask",
         "*.env.*": "ask",

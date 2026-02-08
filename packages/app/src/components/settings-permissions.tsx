@@ -103,6 +103,31 @@ const ITEMS = [
     title: "settings.permissions.tool.doom_loop.title",
     description: "settings.permissions.tool.doom_loop.description",
   },
+  {
+    id: "coord_team",
+    title: "settings.permissions.tool.coord_team.title",
+    description: "settings.permissions.tool.coord_team.description",
+  },
+  {
+    id: "coord_member",
+    title: "settings.permissions.tool.coord_member.title",
+    description: "settings.permissions.tool.coord_member.description",
+  },
+  {
+    id: "coord_message",
+    title: "settings.permissions.tool.coord_message.title",
+    description: "settings.permissions.tool.coord_message.description",
+  },
+  {
+    id: "coord_task",
+    title: "settings.permissions.tool.coord_task.title",
+    description: "settings.permissions.tool.coord_task.description",
+  },
+  {
+    id: "coord_session",
+    title: "settings.permissions.tool.coord_session.title",
+    description: "settings.permissions.tool.coord_session.description",
+  },
 ] as const
 
 const VALID_ACTIONS = new Set<PermissionAction>(["allow", "ask", "deny"])

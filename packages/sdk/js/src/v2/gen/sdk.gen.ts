@@ -19,6 +19,33 @@ import type {
   ConfigProvidersResponses,
   ConfigUpdateErrors,
   ConfigUpdateResponses,
+  CoordInboxErrors,
+  CoordInboxReadErrors,
+  CoordInboxReadResponses,
+  CoordInboxResponses,
+  CoordMemberRemoveErrors,
+  CoordMemberRemoveResponses,
+  CoordMessageSendErrors,
+  CoordMessageSendResponses,
+  CoordSessionErrors,
+  CoordSessionResponses,
+  CoordTaskClaimErrors,
+  CoordTaskClaimResponses,
+  CoordTaskCompleteErrors,
+  CoordTaskCompleteResponses,
+  CoordTaskCreateErrors,
+  CoordTaskCreateResponses,
+  CoordTaskListErrors,
+  CoordTaskListResponses,
+  CoordTaskUpdateErrors,
+  CoordTaskUpdateResponses,
+  CoordTeamCreateErrors,
+  CoordTeamCreateResponses,
+  CoordTeamDeleteErrors,
+  CoordTeamDeleteResponses,
+  CoordTeamGetErrors,
+  CoordTeamGetResponses,
+  CoordTeamListResponses,
   EventSubscribeResponses,
   EventTuiCommandExecute,
   EventTuiPromptAppend,
@@ -102,6 +129,8 @@ import type {
   SessionChildrenResponses,
   SessionCommandErrors,
   SessionCommandResponses,
+  SessionCoordErrors,
+  SessionCoordResponses,
   SessionCreateErrors,
   SessionCreateResponses,
   SessionDeleteErrors,
@@ -1182,6 +1211,36 @@ export class Session extends HeyApiClient {
   }
 
   /**
+   * Get session coordination
+   *
+   * Retrieve the coordination team for a session, including inbox summary.
+   */
+  public coord<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionCoordResponses, SessionCoordErrors, ThrowOnError>({
+      url: "/session/{sessionID}/coord",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
    * Initialize session
    *
    * Analyze the current application and create an AGENTS.md file with project-specific agent configurations.
@@ -1939,6 +1998,600 @@ export class Permission extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+}
+
+export class Team extends HeyApiClient {
+  /**
+   * List coordination teams
+   *
+   * List all coordination teams in the current project.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<CoordTeamListResponses, unknown, ThrowOnError>({
+      url: "/coord/team",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Create coordination team
+   *
+   * Create a new coordination team.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      team_id?: string
+      name?: string
+      description?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "team_id" },
+            { in: "body", key: "name" },
+            { in: "body", key: "description" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<CoordTeamCreateResponses, CoordTeamCreateErrors, ThrowOnError>({
+      url: "/coord/team",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Delete coordination team
+   *
+   * Delete a coordination team.
+   */
+  public delete<ThrowOnError extends boolean = false>(
+    parameters: {
+      teamID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "teamID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<CoordTeamDeleteResponses, CoordTeamDeleteErrors, ThrowOnError>({
+      url: "/coord/team/{teamID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get coordination team
+   *
+   * Get a coordination team by ID.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      teamID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "teamID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<CoordTeamGetResponses, CoordTeamGetErrors, ThrowOnError>({
+      url: "/coord/team/{teamID}",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Member extends HeyApiClient {
+  /**
+   * Remove team member
+   *
+   * Remove a member from a coordination team.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      teamID: string
+      name: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "teamID" },
+            { in: "path", key: "name" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<CoordMemberRemoveResponses, CoordMemberRemoveErrors, ThrowOnError>({
+      url: "/coord/team/{teamID}/member/{name}",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Message extends HeyApiClient {
+  /**
+   * Send team message
+   *
+   * Send a message to a team member.
+   */
+  public send<ThrowOnError extends boolean = false>(
+    parameters: {
+      teamID: string
+      directory?: string
+      recipient?: string
+      message?:
+        | {
+            type: "message"
+            recipient: string
+            content: string
+            summary: string
+          }
+        | {
+            type: "broadcast"
+            content: string
+            summary: string
+          }
+        | {
+            type: "shutdown_request"
+            recipient: string
+            requestId: string
+            content?: string
+          }
+        | {
+            type: "shutdown_approved"
+            requestId: string
+          }
+        | {
+            type: "shutdown_rejected"
+            requestId: string
+            content?: string
+          }
+        | {
+            type: "plan_approval_request"
+            requestId: string
+            planContent: string
+          }
+        | {
+            type: "plan_approval_response"
+            requestId: string
+            approved: boolean
+            content?: string
+          }
+        | {
+            type: "idle_notification"
+            lastTaskId?: string
+            peerSummary?: string
+          }
+        | {
+            type: "task_assignment"
+            taskId: string
+            recipient: string
+          }
+        | {
+            type: "teammate_terminated"
+            agentName: string
+            reason?: string
+          }
+        | {
+            type: "permission_request"
+            requestId: string
+            action: string
+            details?: string
+          }
+        | {
+            type: "permission_response"
+            requestId: string
+            granted: boolean
+            reason?: string
+          }
+        | {
+            type: "sandbox_permission_request"
+            requestId: string
+            command: string
+            details?: string
+          }
+        | {
+            type: "sandbox_permission_response"
+            requestId: string
+            granted: boolean
+            reason?: string
+          }
+      from?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "teamID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "recipient" },
+            { in: "body", key: "message" },
+            { in: "body", key: "from" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<CoordMessageSendResponses, CoordMessageSendErrors, ThrowOnError>({
+      url: "/coord/team/{teamID}/message",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Inbox extends HeyApiClient {
+  /**
+   * Mark inbox read
+   *
+   * Mark messages as read.
+   */
+  public read<ThrowOnError extends boolean = false>(
+    parameters: {
+      teamID: string
+      member: string
+      directory?: string
+      index?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "teamID" },
+            { in: "path", key: "member" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "index" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<CoordInboxReadResponses, CoordInboxReadErrors, ThrowOnError>({
+      url: "/coord/team/{teamID}/inbox/{member}/read",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Task extends HeyApiClient {
+  /**
+   * List tasks
+   *
+   * List tasks for a coordination team.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters: {
+      teamID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "teamID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<CoordTaskListResponses, CoordTaskListErrors, ThrowOnError>({
+      url: "/coord/team/{teamID}/task",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Create task
+   *
+   * Create a task for a coordination team.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters: {
+      teamID: string
+      directory?: string
+      subject?: string
+      description?: string
+      active_form?: string
+      blocked_by?: Array<string>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "teamID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "subject" },
+            { in: "body", key: "description" },
+            { in: "body", key: "active_form" },
+            { in: "body", key: "blocked_by" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<CoordTaskCreateResponses, CoordTaskCreateErrors, ThrowOnError>({
+      url: "/coord/team/{teamID}/task",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Update task
+   *
+   * Update a coordination task.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      teamID: string
+      taskID: string
+      directory?: string
+      subject?: string
+      description?: string
+      status?: "pending" | "in_progress" | "completed" | "deleted"
+      owner?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "teamID" },
+            { in: "path", key: "taskID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "subject" },
+            { in: "body", key: "description" },
+            { in: "body", key: "status" },
+            { in: "body", key: "owner" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<CoordTaskUpdateResponses, CoordTaskUpdateErrors, ThrowOnError>({
+      url: "/coord/team/{teamID}/task/{taskID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Claim task
+   *
+   * Claim a coordination task.
+   */
+  public claim<ThrowOnError extends boolean = false>(
+    parameters: {
+      teamID: string
+      taskID: string
+      directory?: string
+      owner?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "teamID" },
+            { in: "path", key: "taskID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "owner" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<CoordTaskClaimResponses, CoordTaskClaimErrors, ThrowOnError>({
+      url: "/coord/team/{teamID}/task/{taskID}/claim",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Complete task
+   *
+   * Complete a coordination task.
+   */
+  public complete<ThrowOnError extends boolean = false>(
+    parameters: {
+      teamID: string
+      taskID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "teamID" },
+            { in: "path", key: "taskID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<CoordTaskCompleteResponses, CoordTaskCompleteErrors, ThrowOnError>({
+      url: "/coord/team/{teamID}/task/{taskID}/complete",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Coord extends HeyApiClient {
+  /**
+   * Read inbox
+   *
+   * Read a team member inbox.
+   */
+  public inbox<ThrowOnError extends boolean = false>(
+    parameters: {
+      teamID: string
+      member: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "teamID" },
+            { in: "path", key: "member" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<CoordInboxResponses, CoordInboxErrors, ThrowOnError>({
+      url: "/coord/team/{teamID}/inbox/{member}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get session team
+   *
+   * Get coordination team summary for a session.
+   */
+  public session<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<CoordSessionResponses, CoordSessionErrors, ThrowOnError>({
+      url: "/coord/session/{sessionID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  private _team?: Team
+  get team(): Team {
+    return (this._team ??= new Team({ client: this.client }))
+  }
+
+  private _member?: Member
+  get member(): Member {
+    return (this._member ??= new Member({ client: this.client }))
+  }
+
+  private _message?: Message
+  get message(): Message {
+    return (this._message ??= new Message({ client: this.client }))
+  }
+
+  private _inbox?: Inbox
+  get inbox2(): Inbox {
+    return (this._inbox ??= new Inbox({ client: this.client }))
+  }
+
+  private _task?: Task
+  get task(): Task {
+    return (this._task ??= new Task({ client: this.client }))
   }
 }
 
@@ -3239,6 +3892,11 @@ export class OpencodeClient extends HeyApiClient {
   private _permission?: Permission
   get permission(): Permission {
     return (this._permission ??= new Permission({ client: this.client }))
+  }
+
+  private _coord?: Coord
+  get coord(): Coord {
+    return (this._coord ??= new Coord({ client: this.client }))
   }
 
   private _question?: Question

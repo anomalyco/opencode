@@ -666,6 +666,55 @@ export type EventTodoUpdated = {
   }
 }
 
+export type CoordTeam = {
+  id: string
+  name: string
+  description: string
+  createdAt: string
+  members: Array<{
+    name: string
+    agentId: string
+    agentType: string
+  }>
+  metadata: {
+    [key: string]: unknown
+  }
+}
+
+export type EventCoordTeamUpdated = {
+  type: "coord.team.updated"
+  properties: {
+    team: CoordTeam
+  }
+}
+
+export type EventCoordSessionUpdated = {
+  type: "coord.session.updated"
+  properties: {
+    sessionID: string
+    teamID: string
+  }
+}
+
+export type CoordMemberInbox = {
+  name: string
+  unread: number
+  total: number
+}
+
+export type CoordTeamSummary = {
+  team: CoordTeam
+  inbox: Array<CoordMemberInbox>
+}
+
+export type EventCoordSummaryUpdated = {
+  type: "coord.summary.updated"
+  properties: {
+    sessionID: string
+    summary: CoordTeamSummary
+  }
+}
+
 export type EventTuiPromptAppend = {
   type: "tui.prompt.append"
   properties: {
@@ -909,6 +958,9 @@ export type Event =
   | EventSessionCompacted
   | EventFileWatcherUpdated
   | EventTodoUpdated
+  | EventCoordTeamUpdated
+  | EventCoordSessionUpdated
+  | EventCoordSummaryUpdated
   | EventTuiPromptAppend
   | EventTuiCommandExecute
   | EventTuiToastShow
@@ -2038,6 +2090,150 @@ export type SubtaskPartInput = {
   command?: string
 }
 
+export type CoordMessage =
+  | {
+      from: string
+      timestamp: string
+      read?: boolean
+      type: "message"
+      recipient: string
+      content: string
+      summary: string
+    }
+  | {
+      from: string
+      timestamp: string
+      read?: boolean
+      type: "broadcast"
+      content: string
+      summary: string
+    }
+  | {
+      from: string
+      timestamp: string
+      read?: boolean
+      type: "shutdown_request"
+      recipient: string
+      requestId: string
+      content?: string
+    }
+  | {
+      from: string
+      timestamp: string
+      read?: boolean
+      type: "shutdown_approved"
+      requestId: string
+    }
+  | {
+      from: string
+      timestamp: string
+      read?: boolean
+      type: "shutdown_rejected"
+      requestId: string
+      content?: string
+    }
+  | {
+      from: string
+      timestamp: string
+      read?: boolean
+      type: "plan_approval_request"
+      requestId: string
+      planContent: string
+    }
+  | {
+      from: string
+      timestamp: string
+      read?: boolean
+      type: "plan_approval_response"
+      requestId: string
+      approved: boolean
+      content?: string
+    }
+  | {
+      from: string
+      timestamp: string
+      read?: boolean
+      type: "idle_notification"
+      lastTaskId?: string
+      peerSummary?: string
+    }
+  | {
+      from: string
+      timestamp: string
+      read?: boolean
+      type: "task_assignment"
+      taskId: string
+      recipient: string
+    }
+  | {
+      from: string
+      timestamp: string
+      read?: boolean
+      type: "teammate_terminated"
+      agentName: string
+      reason?: string
+    }
+  | {
+      from: string
+      timestamp: string
+      read?: boolean
+      type: "permission_request"
+      requestId: string
+      action: string
+      details?: string
+    }
+  | {
+      from: string
+      timestamp: string
+      read?: boolean
+      type: "permission_response"
+      requestId: string
+      granted: boolean
+      reason?: string
+    }
+  | {
+      from: string
+      timestamp: string
+      read?: boolean
+      type: "sandbox_permission_request"
+      requestId: string
+      command: string
+      details?: string
+    }
+  | {
+      from: string
+      timestamp: string
+      read?: boolean
+      type: "sandbox_permission_response"
+      requestId: string
+      granted: boolean
+      reason?: string
+    }
+
+export type CoordTaskSummary = {
+  id: string
+  subject: string
+  status: "pending" | "in_progress" | "completed" | "deleted"
+  owner: string | null
+  blockedBy: Array<string>
+}
+
+export type CoordTask = {
+  id: string
+  subject: string
+  description: string
+  status: "pending" | "in_progress" | "completed" | "deleted"
+  owner: string | null
+  blockedBy: Array<string>
+  blocks: Array<string>
+  activeForm: string | null
+  metadata: {
+    [key: string]: unknown
+  }
+  createdAt: string
+  updatedAt: string
+}
+
 export type ProviderAuthMethod = {
   type: "oauth" | "api"
   label: string
@@ -3099,6 +3295,42 @@ export type SessionTodoResponses = {
 
 export type SessionTodoResponse = SessionTodoResponses[keyof SessionTodoResponses]
 
+export type SessionCoordData = {
+  body?: never
+  path: {
+    /**
+     * Session ID
+     */
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/coord"
+}
+
+export type SessionCoordErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionCoordError = SessionCoordErrors[keyof SessionCoordErrors]
+
+export type SessionCoordResponses = {
+  /**
+   * Coordination summary
+   */
+  200: CoordTeamSummary | null
+}
+
+export type SessionCoordResponse = SessionCoordResponses[keyof SessionCoordResponses]
+
 export type SessionInitData = {
   body?: {
     modelID: string
@@ -3802,6 +4034,538 @@ export type PermissionRespondResponses = {
 }
 
 export type PermissionRespondResponse = PermissionRespondResponses[keyof PermissionRespondResponses]
+
+export type CoordTeamListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/coord/team"
+}
+
+export type CoordTeamListResponses = {
+  /**
+   * List of teams
+   */
+  200: Array<CoordTeam>
+}
+
+export type CoordTeamListResponse = CoordTeamListResponses[keyof CoordTeamListResponses]
+
+export type CoordTeamCreateData = {
+  body?: {
+    team_id: string
+    name?: string
+    description?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/coord/team"
+}
+
+export type CoordTeamCreateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type CoordTeamCreateError = CoordTeamCreateErrors[keyof CoordTeamCreateErrors]
+
+export type CoordTeamCreateResponses = {
+  /**
+   * Created team
+   */
+  200: CoordTeam
+}
+
+export type CoordTeamCreateResponse = CoordTeamCreateResponses[keyof CoordTeamCreateResponses]
+
+export type CoordTeamDeleteData = {
+  body?: never
+  path: {
+    teamID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/coord/team/{teamID}"
+}
+
+export type CoordTeamDeleteErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type CoordTeamDeleteError = CoordTeamDeleteErrors[keyof CoordTeamDeleteErrors]
+
+export type CoordTeamDeleteResponses = {
+  /**
+   * Deleted
+   */
+  200: {
+    deleted: boolean
+    sessions: Array<string>
+  }
+}
+
+export type CoordTeamDeleteResponse = CoordTeamDeleteResponses[keyof CoordTeamDeleteResponses]
+
+export type CoordTeamGetData = {
+  body?: never
+  path: {
+    teamID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/coord/team/{teamID}"
+}
+
+export type CoordTeamGetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type CoordTeamGetError = CoordTeamGetErrors[keyof CoordTeamGetErrors]
+
+export type CoordTeamGetResponses = {
+  /**
+   * Team
+   */
+  200: CoordTeam
+}
+
+export type CoordTeamGetResponse = CoordTeamGetResponses[keyof CoordTeamGetResponses]
+
+export type CoordMemberRemoveData = {
+  body?: never
+  path: {
+    teamID: string
+    name: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/coord/team/{teamID}/member/{name}"
+}
+
+export type CoordMemberRemoveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type CoordMemberRemoveError = CoordMemberRemoveErrors[keyof CoordMemberRemoveErrors]
+
+export type CoordMemberRemoveResponses = {
+  /**
+   * Removed
+   */
+  200: boolean
+}
+
+export type CoordMemberRemoveResponse = CoordMemberRemoveResponses[keyof CoordMemberRemoveResponses]
+
+export type CoordMessageSendData = {
+  body?: {
+    recipient: string
+    message:
+      | {
+          type: "message"
+          recipient: string
+          content: string
+          summary: string
+        }
+      | {
+          type: "broadcast"
+          content: string
+          summary: string
+        }
+      | {
+          type: "shutdown_request"
+          recipient: string
+          requestId: string
+          content?: string
+        }
+      | {
+          type: "shutdown_approved"
+          requestId: string
+        }
+      | {
+          type: "shutdown_rejected"
+          requestId: string
+          content?: string
+        }
+      | {
+          type: "plan_approval_request"
+          requestId: string
+          planContent: string
+        }
+      | {
+          type: "plan_approval_response"
+          requestId: string
+          approved: boolean
+          content?: string
+        }
+      | {
+          type: "idle_notification"
+          lastTaskId?: string
+          peerSummary?: string
+        }
+      | {
+          type: "task_assignment"
+          taskId: string
+          recipient: string
+        }
+      | {
+          type: "teammate_terminated"
+          agentName: string
+          reason?: string
+        }
+      | {
+          type: "permission_request"
+          requestId: string
+          action: string
+          details?: string
+        }
+      | {
+          type: "permission_response"
+          requestId: string
+          granted: boolean
+          reason?: string
+        }
+      | {
+          type: "sandbox_permission_request"
+          requestId: string
+          command: string
+          details?: string
+        }
+      | {
+          type: "sandbox_permission_response"
+          requestId: string
+          granted: boolean
+          reason?: string
+        }
+    from?: string
+  }
+  path: {
+    teamID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/coord/team/{teamID}/message"
+}
+
+export type CoordMessageSendErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type CoordMessageSendError = CoordMessageSendErrors[keyof CoordMessageSendErrors]
+
+export type CoordMessageSendResponses = {
+  /**
+   * Sent
+   */
+  200: boolean
+}
+
+export type CoordMessageSendResponse = CoordMessageSendResponses[keyof CoordMessageSendResponses]
+
+export type CoordInboxData = {
+  body?: never
+  path: {
+    teamID: string
+    member: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/coord/team/{teamID}/inbox/{member}"
+}
+
+export type CoordInboxErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type CoordInboxError = CoordInboxErrors[keyof CoordInboxErrors]
+
+export type CoordInboxResponses = {
+  /**
+   * Inbox
+   */
+  200: Array<CoordMessage>
+}
+
+export type CoordInboxResponse = CoordInboxResponses[keyof CoordInboxResponses]
+
+export type CoordInboxReadData = {
+  body?: {
+    index?: number
+  }
+  path: {
+    teamID: string
+    member: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/coord/team/{teamID}/inbox/{member}/read"
+}
+
+export type CoordInboxReadErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type CoordInboxReadError = CoordInboxReadErrors[keyof CoordInboxReadErrors]
+
+export type CoordInboxReadResponses = {
+  /**
+   * Updated
+   */
+  200: boolean
+}
+
+export type CoordInboxReadResponse = CoordInboxReadResponses[keyof CoordInboxReadResponses]
+
+export type CoordTaskListData = {
+  body?: never
+  path: {
+    teamID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/coord/team/{teamID}/task"
+}
+
+export type CoordTaskListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type CoordTaskListError = CoordTaskListErrors[keyof CoordTaskListErrors]
+
+export type CoordTaskListResponses = {
+  /**
+   * Task list
+   */
+  200: Array<CoordTaskSummary>
+}
+
+export type CoordTaskListResponse = CoordTaskListResponses[keyof CoordTaskListResponses]
+
+export type CoordTaskCreateData = {
+  body?: {
+    subject: string
+    description?: string
+    active_form?: string
+    blocked_by?: Array<string>
+  }
+  path: {
+    teamID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/coord/team/{teamID}/task"
+}
+
+export type CoordTaskCreateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type CoordTaskCreateError = CoordTaskCreateErrors[keyof CoordTaskCreateErrors]
+
+export type CoordTaskCreateResponses = {
+  /**
+   * Task
+   */
+  200: CoordTask
+}
+
+export type CoordTaskCreateResponse = CoordTaskCreateResponses[keyof CoordTaskCreateResponses]
+
+export type CoordTaskUpdateData = {
+  body?: {
+    subject?: string
+    description?: string
+    status?: "pending" | "in_progress" | "completed" | "deleted"
+    owner?: string
+  }
+  path: {
+    teamID: string
+    taskID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/coord/team/{teamID}/task/{taskID}"
+}
+
+export type CoordTaskUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type CoordTaskUpdateError = CoordTaskUpdateErrors[keyof CoordTaskUpdateErrors]
+
+export type CoordTaskUpdateResponses = {
+  /**
+   * Task
+   */
+  200: CoordTask
+}
+
+export type CoordTaskUpdateResponse = CoordTaskUpdateResponses[keyof CoordTaskUpdateResponses]
+
+export type CoordTaskClaimData = {
+  body?: {
+    owner: string
+  }
+  path: {
+    teamID: string
+    taskID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/coord/team/{teamID}/task/{taskID}/claim"
+}
+
+export type CoordTaskClaimErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type CoordTaskClaimError = CoordTaskClaimErrors[keyof CoordTaskClaimErrors]
+
+export type CoordTaskClaimResponses = {
+  /**
+   * Task
+   */
+  200: CoordTask
+}
+
+export type CoordTaskClaimResponse = CoordTaskClaimResponses[keyof CoordTaskClaimResponses]
+
+export type CoordTaskCompleteData = {
+  body?: never
+  path: {
+    teamID: string
+    taskID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/coord/team/{teamID}/task/{taskID}/complete"
+}
+
+export type CoordTaskCompleteErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type CoordTaskCompleteError = CoordTaskCompleteErrors[keyof CoordTaskCompleteErrors]
+
+export type CoordTaskCompleteResponses = {
+  /**
+   * Task
+   */
+  200: CoordTask
+}
+
+export type CoordTaskCompleteResponse = CoordTaskCompleteResponses[keyof CoordTaskCompleteResponses]
+
+export type CoordSessionData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/coord/session/{sessionID}"
+}
+
+export type CoordSessionErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type CoordSessionError = CoordSessionErrors[keyof CoordSessionErrors]
+
+export type CoordSessionResponses = {
+  /**
+   * Session summary
+   */
+  200: CoordTeamSummary | null
+}
+
+export type CoordSessionResponse = CoordSessionResponses[keyof CoordSessionResponses]
 
 export type PermissionReplyData = {
   body?: {

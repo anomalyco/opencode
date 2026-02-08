@@ -14,6 +14,7 @@ import { Agent } from "../../agent/agent"
 import { Snapshot } from "@/snapshot"
 import { Log } from "../../util/log"
 import { PermissionNext } from "@/permission/next"
+import { CoordSession, CoordSummary } from "@/coord"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 
@@ -180,6 +181,38 @@ export const SessionRoutes = lazy(() =>
         const sessionID = c.req.valid("param").sessionID
         const todos = await Todo.get(sessionID)
         return c.json(todos)
+      },
+    )
+    .get(
+      "/:sessionID/coord",
+      describeRoute({
+        summary: "Get session coordination",
+        description: "Retrieve the coordination team for a session, including inbox summary.",
+        operationId: "session.coord",
+        responses: {
+          200: {
+            description: "Coordination summary",
+            content: {
+              "application/json": {
+                schema: resolver(CoordSummary.TeamSummary.nullable()),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: z.string().meta({ description: "Session ID" }),
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        const link = await CoordSession.getTeam(sessionID)
+        if (!link) return c.json(null)
+        const summary = await CoordSummary.summarize(sessionID, link.teamID)
+        return c.json(summary ?? null)
       },
     )
     .post(

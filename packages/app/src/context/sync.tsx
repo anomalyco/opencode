@@ -5,7 +5,7 @@ import { retry } from "@opencode-ai/util/retry"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useGlobalSync } from "./global-sync"
 import { useSDK } from "./sdk"
-import type { Message, Part } from "@opencode-ai/sdk/v2/client"
+import type { Message, Part, CoordTeamSummary } from "@opencode-ai/sdk/v2/client"
 
 const keyFor = (directory: string, id: string) => `${directory}\n${id}`
 
@@ -14,7 +14,9 @@ const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 type OptimisticStore = {
   message: Record<string, Message[] | undefined>
   part: Record<string, Part[] | undefined>
+  coord: Record<string, CoordTeamSummary | null | undefined>
 }
+
 
 type OptimisticAddInput = {
   sessionID: string
@@ -67,6 +69,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
     const inflight = new Map<string, Promise<void>>()
     const inflightDiff = new Map<string, Promise<void>>()
     const inflightTodo = new Map<string, Promise<void>>()
+    const inflightCoord = new Map<string, Promise<void>>()
     const [meta, setMeta] = createStore({
       limit: {} as Record<string, number>,
       complete: {} as Record<string, boolean>,
@@ -289,6 +292,27 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             })
 
           inflightTodo.set(key, promise)
+          return promise
+        },
+        async coord(sessionID: string) {
+          const directory = sdk.directory
+          const client = sdk.client
+          const [store, setStore] = globalSync.child(directory)
+          if (store.coord[sessionID] !== undefined) return
+
+          const key = keyFor(directory, sessionID)
+          const pending = inflightCoord.get(key)
+          if (pending) return pending
+
+          const promise = retry(() => client.session.coord({ sessionID }))
+            .then((coord) => {
+              setStore("coord", sessionID, reconcile(coord.data ?? null))
+            })
+            .finally(() => {
+              inflightCoord.delete(key)
+            })
+
+          inflightCoord.set(key, promise)
           return promise
         },
         history: {

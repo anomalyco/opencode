@@ -6,7 +6,8 @@ import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Mark } from "@opencode-ai/ui/logo"
 import FileTree from "@/components/file-tree"
 import { SessionContextUsage } from "@/components/session-context-usage"
-import { SessionContextTab, SortableTab, FileVisual } from "@/components/session"
+import type { CoordTeamSummary } from "@opencode-ai/sdk/v2/client"
+import { SessionContextTab, SessionWorkersTab, SortableTab, FileVisual } from "@/components/session"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
@@ -36,6 +37,7 @@ export function SessionSidePanel(props: {
   reviewCount: number
   reviewTab: boolean
   contextOpen: () => boolean
+  workersOpen: () => boolean
   openedTabs: () => string[]
   activeTab: () => string
   activeFileTab: () => string | undefined
@@ -47,6 +49,7 @@ export function SessionSidePanel(props: {
   visibleUserMessages: () => unknown[]
   view: () => ReturnType<ReturnType<typeof useLayout>["view"]>
   info: () => unknown
+  workersSummary: () => CoordTeamSummary | null | undefined
   handoffFiles: () => Record<string, SelectedLineRange | null> | undefined
   codeComponent: NonNullable<ValidComponent>
   addCommentToContext: (input: {
@@ -136,6 +139,28 @@ export function SessionSidePanel(props: {
                             </div>
                           </Tabs.Trigger>
                         </Show>
+                        <Show when={props.workersSummary()}>
+                          <Tabs.Trigger
+                            value="workers"
+                            closeButton={
+                              <Tooltip value={props.language.t("common.closeTab")} placement="bottom">
+                                <IconButton
+                                  icon="close-small"
+                                  variant="ghost"
+                                  class="h-5 w-5"
+                                  onClick={() => props.tabs().close("workers")}
+                                  aria-label={props.language.t("common.closeTab")}
+                                />
+                              </Tooltip>
+                            }
+                            hideCloseButton
+                            onMiddleClick={() => props.tabs().close("workers")}
+                          >
+                            <div class="flex items-center gap-2">
+                              <div>{props.language.t("session.tab.workers")}</div>
+                            </div>
+                          </Tabs.Trigger>
+                        </Show>
                         <SortableProvider ids={props.openedTabs()}>
                           <For each={props.openedTabs()}>
                             {(tab) => <SortableTab tab={tab} onTabClose={props.tabs().close} />}
@@ -192,6 +217,15 @@ export function SessionSidePanel(props: {
                               view={props.view as never}
                               info={props.info as never}
                             />
+                          </div>
+                        </Show>
+                      </Tabs.Content>
+                    </Show>
+                    <Show when={props.workersOpen()}>
+                      <Tabs.Content value="workers" class="flex flex-col h-full overflow-hidden contain-strict">
+                        <Show when={props.activeTab() === "workers"}>
+                          <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">
+                            <SessionWorkersTab summary={props.workersSummary()} />
                           </div>
                         </Show>
                       </Tabs.Content>

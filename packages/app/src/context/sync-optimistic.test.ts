@@ -25,6 +25,7 @@ describe("sync optimistic reducers", () => {
     const draft = {
       message: { [sessionID]: [userMessage("msg_2", sessionID)] },
       part: {} as Record<string, Part[] | undefined>,
+      coord: {},
     }
 
     applyOptimisticAdd(draft, {
@@ -45,6 +46,7 @@ describe("sync optimistic reducers", () => {
         msg_1: [textPart("prt_1", sessionID, "msg_1")],
         msg_2: [textPart("prt_2", sessionID, "msg_2")],
       } as Record<string, Part[] | undefined>,
+      coord: {},
     }
 
     applyOptimisticRemove(draft, { sessionID, messageID: "msg_1" })

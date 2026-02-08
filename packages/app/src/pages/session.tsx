@@ -37,7 +37,7 @@ import { useComments } from "@/context/comments"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { usePermission } from "@/context/permission"
 import { showToast } from "@opencode-ai/ui/toast"
-import { SessionHeader, SessionContextTab, SortableTab, FileVisual, NewSessionView } from "@/components/session"
+import { SessionHeader, SessionContextTab, SessionWorkersTab, SortableTab, FileVisual, NewSessionView } from "@/components/session"
 import { navMark, navParams } from "@/utils/perf"
 import { same } from "@/utils/same"
 import { createOpenReviewFile, focusTerminalById } from "@/pages/session/helpers"
@@ -267,6 +267,11 @@ export default function Page() {
   const openTab = (value: string) => {
     const next = normalizeTab(value)
     tabs().open(next)
+
+    if (next === "workers") {
+      openReviewPanel()
+      return
+    }
 
     const path = file.pathFromTab(next)
     if (!path) return
@@ -884,11 +889,20 @@ export default function Page() {
   }
 
   const contextOpen = createMemo(() => tabs().active() === "context" || tabs().all().includes("context"))
+  const workersOpen = createMemo(() => tabs().active() === "workers" || tabs().all().includes("workers"))
   const openedTabs = createMemo(() =>
     tabs()
       .all()
-      .filter((tab) => tab !== "context" && tab !== "review"),
+      .filter((tab) => tab !== "context" && tab !== "review" && tab !== "workers"),
   )
+
+  const workersSummary = createMemo(() => {
+    const id = params.id
+    if (!id) return
+    return sync.data.coord[id]
+  })
+
+  const hasWorkers = createMemo(() => !!workersSummary())
 
   const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
   const reviewTab = createMemo(() => isDesktop() && !layout.fileTree.opened())
@@ -1149,12 +1163,14 @@ export default function Page() {
   const activeTab = createMemo(() => {
     const active = tabs().active()
     if (active === "context") return "context"
+    if (active === "workers" && hasWorkers()) return "workers"
     if (active === "review" && reviewTab()) return "review"
     if (active && file.pathFromTab(active)) return normalizeTab(active)
 
     const first = openedTabs()[0]
     if (first) return first
     if (contextOpen()) return "context"
+    if (workersOpen() && hasWorkers()) return "workers"
     if (reviewTab() && hasReview()) return "review"
     return "empty"
   })
@@ -1165,10 +1181,11 @@ export default function Page() {
     return active
   })
 
+
   createEffect(() => {
     if (!layout.ready()) return
     if (tabs().active()) return
-    if (openedTabs().length === 0 && !contextOpen() && !(reviewTab() && hasReview())) return
+    if (openedTabs().length === 0 && !contextOpen() && !hasWorkers() && !(reviewTab() && hasReview())) return
 
     const next = activeTab()
     if (next === "empty") return
@@ -1190,6 +1207,10 @@ export default function Page() {
         }
 
         if (fileTreeTab() !== "changes") return
+        if (hasWorkers()) {
+          tabs().setActive("workers")
+          return
+        }
         tabs().setActive("review")
       },
       { defer: true },
@@ -1202,7 +1223,7 @@ export default function Page() {
     if (fileTreeTab() !== "all") return
 
     const active = tabs().active()
-    if (active && active !== "review") return
+    if (active && active !== "review" && active !== "workers") return
 
     const first = openedTabs()[0]
     if (first) {
@@ -1210,7 +1231,12 @@ export default function Page() {
       return
     }
 
-    if (contextOpen()) tabs().setActive("context")
+    if (contextOpen()) {
+      tabs().setActive("context")
+      return
+    }
+
+    if (hasWorkers()) tabs().setActive("workers")
   })
 
   createEffect(() => {
@@ -1225,6 +1251,15 @@ export default function Page() {
     if (sync.status === "loading") return
 
     void sync.session.diff(id)
+  })
+
+  createEffect(() => {
+    const id = params.id
+    if (!id) return
+    if (sync.data.coord[id] !== undefined) return
+    if (sync.status === "loading") return
+
+    void sync.session.coord(id)
   })
 
   let treeDir: string | undefined
@@ -1702,6 +1737,7 @@ export default function Page() {
           reviewCount={reviewCount()}
           reviewTab={reviewTab()}
           contextOpen={contextOpen}
+          workersOpen={workersOpen}
           openedTabs={openedTabs}
           activeTab={activeTab}
           activeFileTab={activeFileTab}
@@ -1713,6 +1749,7 @@ export default function Page() {
           visibleUserMessages={visibleUserMessages as () => unknown[]}
           view={view}
           info={info as () => unknown}
+          workersSummary={workersSummary}
           handoffFiles={() => handoff.session.get(sessionKey())?.files}
           codeComponent={codeComponent}
           addCommentToContext={addCommentToContext}

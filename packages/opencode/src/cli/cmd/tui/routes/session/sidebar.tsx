@@ -11,6 +11,7 @@ import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
+import { CoordWorkers } from "../../component/coord-workers"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
@@ -18,6 +19,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const session = createMemo(() => sync.session.get(props.sessionID)!)
   const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
   const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
+  const coord = createMemo(() => sync.data.coord[props.sessionID] ?? null)
   const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
 
   const [expanded, setExpanded] = createStore({
@@ -202,25 +204,36 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 </For>
               </Show>
             </box>
-            <Show when={todo().length > 0 && todo().some((t) => t.status !== "completed")}>
-              <box>
-                <box
-                  flexDirection="row"
-                  gap={1}
-                  onMouseDown={() => todo().length > 2 && setExpanded("todo", !expanded.todo)}
-                >
-                  <Show when={todo().length > 2}>
-                    <text fg={theme.text}>{expanded.todo ? "▼" : "▶"}</text>
-                  </Show>
-                  <text fg={theme.text}>
-                    <b>Todo</b>
-                  </text>
-                </box>
-                <Show when={todo().length <= 2 || expanded.todo}>
-                  <For each={todo()}>{(todo) => <TodoItem status={todo.status} content={todo.content} />}</For>
-                </Show>
-              </box>
-            </Show>
+             <Show when={coord()}>
+               <box>
+                 <box flexDirection="row" gap={1}>
+                   <text fg={theme.text}>
+                     <b>Workers</b>
+                   </text>
+                 </box>
+                 <CoordWorkers summary={coord()} />
+               </box>
+             </Show>
+             <Show when={todo().length > 0 && todo().some((t) => t.status !== "completed")}>
+               <box>
+                 <box
+                   flexDirection="row"
+                   gap={1}
+                   onMouseDown={() => todo().length > 2 && setExpanded("todo", !expanded.todo)}
+                 >
+                   <Show when={todo().length > 2}>
+                     <text fg={theme.text}>{expanded.todo ? "▼" : "▶"}</text>
+                   </Show>
+                   <text fg={theme.text}>
+                     <b>Todo</b>
+                   </text>
+                 </box>
+                 <Show when={todo().length <= 2 || expanded.todo}>
+                   <For each={todo()}>{(todo) => <TodoItem status={todo.status} content={todo.content} />}</For>
+                 </Show>
+               </box>
+             </Show>
+
             <Show when={diff().length > 0}>
               <box>
                 <box

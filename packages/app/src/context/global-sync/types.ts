@@ -16,6 +16,7 @@ import type {
   SessionStatus,
   Todo,
   VcsInfo,
+  CoordTeamSummary,
 } from "@opencode-ai/sdk/v2/client"
 import type { Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
@@ -51,6 +52,9 @@ export type State = {
   }
   todo: {
     [sessionID: string]: Todo[]
+  }
+  coord: {
+    [sessionID: string]: CoordTeamSummary | null
   }
   permission: {
     [sessionID: string]: PermissionRequest[]

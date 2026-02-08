@@ -17,7 +17,12 @@ import { dict as zh } from "./zh"
 import { dict as zht } from "./zht"
 
 const locales = [ar, br, bs, da, de, es, fr, ja, ko, no, pl, ru, th, zh, zht]
-const keys = ["command.session.previous.unseen", "command.session.next.unseen"] as const
+const keys = [
+  "command.session.previous.unseen",
+  "command.session.next.unseen",
+  "session.tab.workers",
+  "session.workers.empty",
+] as const
 
 describe("i18n parity", () => {
   test("non-English locales translate targeted unseen session keys", () => {
