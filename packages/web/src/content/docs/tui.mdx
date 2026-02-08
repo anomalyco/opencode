@@ -394,6 +394,32 @@ You can customize various aspects of the TUI view using the command palette (`ct
 
 ---
 
+## Vim mode
+
+Optional Vim-style prompt mode for the TUI. Disabled by default.
+Enable it from the command palette or in your config.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tui": {
+    "vim": true
+  }
+}
+```
+
+**Supported keys:**
+
+**Movement:** `h`, `j`, `k`, `l`, `0`, `^`, `$`; `w`, `b`, `e`, `W`, `B`, `E`
+
+**Insert / edit:** `i`, `I`, `a`, `A`, `o`, `O`; `x`; `S`, `cc`, `cw`; `dd`, `dw`
+
+**Navigation:** `gg`, `G`
+
+**Scrolling:** `Ctrl+e`, `Ctrl+y`; `Ctrl+d`, `Ctrl+u`; `Ctrl+f`, `Ctrl+b`
+
+---
+
 #### Username display
 
 Toggle whether your username appears in chat messages. Access this through:
