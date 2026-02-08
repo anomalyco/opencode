@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { combineCommandSections, createOpenReviewFile, focusTerminalById } from "./helpers"
+import { combineCommandSections, createOpenReviewFile, focusTerminalById, getTabReorderIndex } from "./helpers"
 
 describe("createOpenReviewFile", () => {
   test("opens and loads selected review file", () => {
@@ -57,5 +57,15 @@ describe("combineCommandSections", () => {
     ])
 
     expect(result.map((item) => item.id)).toEqual(["a", "b", "c"])
+  })
+})
+
+describe("getTabReorderIndex", () => {
+  test("returns target index for valid drag reorder", () => {
+    expect(getTabReorderIndex(["a", "b", "c"], "a", "c")).toBe(2)
+  })
+
+  test("returns undefined for unknown droppable id", () => {
+    expect(getTabReorderIndex(["a", "b", "c"], "a", "missing")).toBeUndefined()
   })
 })
