@@ -1,0 +1,48 @@
+name: test-pr-triage
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR number to triage"
+        required: true
+        type: number
+
+jobs:
+  test-triage:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Install opencode
+        run: curl -fsSL https://opencode.ai/install | bash
+
+      - name: Fetch PR info
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr view ${{ inputs.pr_number }} --json title,body --jq '.title' > /tmp/pr_title.txt
+          gh pr view ${{ inputs.pr_number }} --json title,body --jq '.body' > /tmp/pr_body.txt
+
+      - name: Triage PR
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+        run: |
+          PR_TITLE=$(cat /tmp/pr_title.txt)
+          PR_BODY=$(cat /tmp/pr_body.txt)
+          opencode run --agent pr-triage "Analyze this PR and add appropriate labels based on:
+          - The PR title: $PR_TITLE
+          - The PR body: $PR_BODY"

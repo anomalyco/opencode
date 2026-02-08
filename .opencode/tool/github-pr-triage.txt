@@ -1,0 +1,52 @@
+Use this tool to add labels to a GitHub Pull Request.
+
+## Labels
+
+### Platform Labels
+- nix - Any PR mentioning nix or nixos
+- opentui - Anything relating to the TUI, a library for building terminal user interfaces. OpenCode's TUI is built with OpenTUI
+- perf - Anything changes that address slow performance, high ram, high cpu usage, or any other performance related improvements
+- web - Related to `opencode web` command, web app or desktop app
+- zen - Related to OpenCode Zen, billing, or model quality
+- docs - Documentation, i18n(localization) changes
+- windows - Changes involving Windows OS compatibility
+
+## Conventional Commits
+
+PR titles should follow conventional commit format:
+
+```
+type(scope): description
+```
+
+Types:
+- `feat` - new feature or functionality
+- `fix` - bug fix
+- `docs` - documentation changes
+- `chore` - maintenance tasks, dependency updates
+- `refactor` - code refactoring without behavior change
+- `test` - adding or updating tests
+
+Scope is the package name (e.g., app, desktop, opencode).
+
+### Label Inference from Scope
+
+Use scope as a **strong indicator** for labels:
+
+| Scope    | Label               |
+| -------- | ------------------- |
+| desktop  | web                 |
+| app      | web                 |
+| opencode | (no specific label) |
+| zen      | zen                 |
+| docs     | docs                |
+| nix      | nix                 |
+| tui      | opentui             |
+| opentui  | opentui             |
+
+Always add the corresponding label when the scope matches.
+
+## Usage
+
+Always add appropriate labels based on the PR content.
+For PRs with multiple areas, add all relevant labels.
