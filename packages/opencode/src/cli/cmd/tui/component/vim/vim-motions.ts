@@ -98,12 +98,19 @@ function prevWordStart(text: string, offset: number, big: boolean) {
 }
 
 function wordEnd(text: string, offset: number, big: boolean) {
+  if (text.length === 0) return 0
   const match = big ? isBigWord : isWord
   let pos = offset
-  if (pos < text.length) pos++
+  if (pos >= text.length) pos = text.length - 1
+
+  if (match(text[pos]) && (pos + 1 >= text.length || !match(text[pos + 1]))) {
+    pos++
+  }
+
   while (pos < text.length && !match(text[pos])) pos++
-  while (pos < text.length && match(text[pos])) pos++
-  if (pos > offset + 1) pos--
+  if (pos >= text.length) return text.length - 1
+
+  while (pos + 1 < text.length && match(text[pos + 1])) pos++
   return pos
 }
 

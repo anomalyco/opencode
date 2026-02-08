@@ -179,6 +179,34 @@ describe("vim motion handler", () => {
     expect(ctx.textarea.cursorOffset).toBe(8)
   })
 
+  test("e stays on single-char word", () => {
+    const ctx = createHandler("a")
+    ctx.textarea.cursorOffset = 0
+    ctx.handler.handleKey(createEvent("e").event)
+    expect(ctx.textarea.cursorOffset).toBe(0)
+  })
+
+  test("e from end of word moves to next word end", () => {
+    const ctx = createHandler("a b")
+    ctx.textarea.cursorOffset = 0
+    ctx.handler.handleKey(createEvent("e").event)
+    expect(ctx.textarea.cursorOffset).toBe(2)
+  })
+
+  test("e from word end moves to next word end", () => {
+    const ctx = createHandler("ab cd")
+    ctx.textarea.cursorOffset = 1
+    ctx.handler.handleKey(createEvent("e").event)
+    expect(ctx.textarea.cursorOffset).toBe(4)
+  })
+
+  test("e from whitespace moves to next word end", () => {
+    const ctx = createHandler("ab  cd")
+    ctx.textarea.cursorOffset = 2
+    ctx.handler.handleKey(createEvent("e").event)
+    expect(ctx.textarea.cursorOffset).toBe(5)
+  })
+
   test("supports insert transitions for A I O", () => {
     const i0 = createHandler("abc")
     i0.textarea.cursorOffset = 1
