@@ -31,6 +31,11 @@ async function bootstrap() {
   })
 }
 
+async function writeLarge(file: string) {
+  await Bun.write(file, "")
+  await fs.truncate(file, 1024 * 1024 * 1024 + 1)
+}
+
 test("tracks deleted files correctly", async () => {
   await using tmp = await bootstrap()
   await Instance.provide({
@@ -188,6 +193,186 @@ test("large file handling", async () => {
       await Filesystem.write(`${tmp.path}/large.txt`, "x".repeat(1024 * 1024))
 
       expect((await Snapshot.patch(before!)).files).toContain(fwd(tmp.path, "large.txt"))
+    },
+  })
+})
+
+test("patch ignores files larger than snapshot threshold", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      const big = `${tmp.path}/big.bin`
+      const small = `${tmp.path}/small.txt`
+
+      await writeLarge(big)
+      await Bun.write(small, "small")
+
+      const patch = await Snapshot.patch(before!)
+      expect(patch.files).toContain(small)
+      expect(patch.files).not.toContain(big)
+      expect(await Bun.file(big).exists()).toBe(true)
+    },
+  })
+})
+
+test("patch ignores large files with spaces and leading dashes", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      const spaced = `${tmp.path}/big file.bin`
+      const dashed = `${tmp.path}/-big.bin`
+      const small = `${tmp.path}/small.txt`
+
+      await writeLarge(spaced)
+      await writeLarge(dashed)
+      await Bun.write(small, "small")
+
+      const patch = await Snapshot.patch(before!)
+      expect(patch.files).toContain(small)
+      expect(patch.files).not.toContain(spaced)
+      expect(patch.files).not.toContain(dashed)
+      expect(await Bun.file(spaced).exists()).toBe(true)
+      expect(await Bun.file(dashed).exists()).toBe(true)
+    },
+  })
+})
+
+test("patch ignores large files with gitignore metacharacters", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      const hashed = `${tmp.path}/#big.bin`
+      const negated = `${tmp.path}/!big.bin`
+      const bracket = `${tmp.path}/big[1].bin`
+      const small = `${tmp.path}/small.txt`
+
+      await writeLarge(hashed)
+      await writeLarge(negated)
+      await writeLarge(bracket)
+      await Bun.write(small, "small")
+
+      const patch = await Snapshot.patch(before!)
+      expect(patch.files).toContain(small)
+      expect(patch.files).not.toContain(hashed)
+      expect(patch.files).not.toContain(negated)
+      expect(patch.files).not.toContain(bracket)
+      expect(await Bun.file(hashed).exists()).toBe(true)
+      expect(await Bun.file(negated).exists()).toBe(true)
+      expect(await Bun.file(bracket).exists()).toBe(true)
+    },
+  })
+})
+
+test("patch keeps symlink to large file", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      const big = `${tmp.path}/big.bin`
+      const link = `${tmp.path}/big-link.bin`
+      const small = `${tmp.path}/small.txt`
+
+      await writeLarge(big)
+      await $`ln -s ${big} ${link}`.quiet()
+      await Bun.write(small, "small")
+
+      const patch = await Snapshot.patch(before!)
+      expect(patch.files).toContain(link)
+      expect(patch.files).toContain(small)
+      expect(patch.files).not.toContain(big)
+      expect(await Bun.file(link).exists()).toBe(true)
+    },
+  })
+})
+
+test("diff ignores files larger than snapshot threshold", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      const big = `${tmp.path}/big.bin`
+      const small = `${tmp.path}/small.txt`
+
+      await writeLarge(big)
+      await Bun.write(small, "small")
+
+      const diff = await Snapshot.diff(before!)
+      expect(diff).toContain("small.txt")
+      expect(diff).not.toContain("big.bin")
+      expect(await Bun.file(big).exists()).toBe(true)
+    },
+  })
+})
+
+test("diff ignores large files with gitignore metacharacters", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      const hashed = `${tmp.path}/#big.bin`
+      const negated = `${tmp.path}/!big.bin`
+      const bracket = `${tmp.path}/big[1].bin`
+      const small = `${tmp.path}/small.txt`
+
+      await writeLarge(hashed)
+      await writeLarge(negated)
+      await writeLarge(bracket)
+      await Bun.write(small, "small")
+
+      const diff = await Snapshot.diff(before!)
+      expect(diff).toContain("small.txt")
+      expect(diff).not.toContain("#big.bin")
+      expect(diff).not.toContain("!big.bin")
+      expect(diff).not.toContain("big[1].bin")
+      expect(await Bun.file(hashed).exists()).toBe(true)
+      expect(await Bun.file(negated).exists()).toBe(true)
+      expect(await Bun.file(bracket).exists()).toBe(true)
+    },
+  })
+})
+
+test("diffFull ignores files larger than snapshot threshold", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const before = await Snapshot.track()
+      expect(before).toBeTruthy()
+
+      const big = `${tmp.path}/big.bin`
+      const small = `${tmp.path}/small.txt`
+
+      await writeLarge(big)
+      await Bun.write(small, "small")
+
+      const after = await Snapshot.track()
+      expect(after).toBeTruthy()
+
+      const diffs = await Snapshot.diffFull(before!, after!)
+      expect(diffs.length).toBe(1)
+      expect(diffs[0].file).toBe("small.txt")
+      expect(await Bun.file(big).exists()).toBe(true)
     },
   })
 })
