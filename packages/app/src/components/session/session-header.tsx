@@ -334,7 +334,7 @@ export function SessionHeader() {
                             {language.t("session.header.open.action", { app: current().label })}
                           </span>
                         </Button>
-                        <div class="h-full w-px bg-border-base" />
+                        <div class="self-stretch w-px bg-border-base/70" />
                         <DropdownMenu>
                           <DropdownMenu.Trigger
                             as={IconButton}
