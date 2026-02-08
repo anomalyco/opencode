@@ -277,6 +277,7 @@ export const dict = {
   "prompt.toast.shellSendFailed.title": "Shell-Befehl konnte nicht gesendet werden",
   "prompt.toast.commandSendFailed.title": "Befehl konnte nicht gesendet werden",
   "prompt.toast.promptSendFailed.title": "Eingabe konnte nicht gesendet werden",
+  "prompt.toast.promptSendFailed.description": "Sitzung konnte nicht abgerufen werden",
 
   "dialog.mcp.title": "MCPs",
   "dialog.mcp.description": "{{enabled}} von {{total}} aktiviert",
