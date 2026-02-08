@@ -2,6 +2,8 @@
   "app.head.titleSuffix": "وكيل برمجة بالذكاء الاصطناعي مصمم للطرفية",
   "app.header.home": "الرئيسية",
   "app.header.docs": "التوثيق",
+  "app.footer.issueLink": "وجدت خطأ؟ افتح بلاغا",
+  "app.footer.discordLink": "انضم إلى مجتمع Discord الخاص بنا",
   "app.lander.hero.title": "وكيل البرمجة بالذكاء الاصطناعي المصمم للطرفية.",
   "app.lander.cta.getStarted": "ابدأ الآن",
   "app.lander.features.native_tui.title": "TUI أصلي",

@@ -1,53 +1,53 @@
 ---
 title: Web
-description: Using OpenCode in your browser.
+description: Korišćenje OpenCode-a u vašem pretraživaču.
 ---
 
-OpenCode can run as a web application in your browser, providing the same powerful AI coding experience without needing a terminal.
+OpenCode može raditi kao web aplikacija u vašem pretraživaču, pružajući isto moćno iskustvo AI kodiranja bez potrebe za terminalom.
 
-![OpenCode Web - New Session](../../../assets/web/web-homepage-new-session.png)
+![OpenCode Web - Nova sesija](../../../assets/web/web-homepage-new-session.png)
 
-## Getting Started
+## Početak rada
 
-Start the web interface by running:
+Pokrenite web interfejs tako što ćete pokrenuti:
 
 ```bash
 opencode web
 ```
 
-This starts a local server on `127.0.0.1` with a random available port and automatically opens OpenCode in your default browser.
+Ovo pokreće lokalni server na `127.0.0.1` sa nasumičnim dostupnim portom i automatski otvara OpenCode u vašem podrazumevanom pretraživaču.
 
 :::caution
-If `OPENCODE_SERVER_PASSWORD` is not set, the server will be unsecured. This is fine for local use but should be set for network access.
+Ako `OPENCODE_SERVER_PASSWORD` nije postavljen, server će biti nezaštićen. Ovo je u redu za lokalnu upotrebu, ali bi trebalo biti postavljeno za pristup mreži.
 :::
 
 :::tip[Windows Users]
-For the best experience, run `opencode web` from [WSL](./windows-wsl) rather than PowerShell. This ensures proper file system access and terminal integration.
+Za najbolje iskustvo, pokrenite `opencode web` iz [WSL](./windows-wsl) umjesto PowerShell-a. Ovo osigurava pravilan pristup sistemu datoteka i integraciju terminala.
 :::
 
 ---
 
-## Configuration
+## Konfiguracija
 
-You can configure the web server using command line flags or in your [config file](./config).
+Možete konfigurirati web server koristeći oznake komandne linije ili u vašoj [config file](./config).
 
 ### Port
 
-By default, OpenCode picks an available port. You can specify a port:
+OpenCode podrazumevano bira dostupni port. Možete odrediti port:
 
 ```bash
 opencode web --port 4096
 ```
 
-### Hostname
+### Ime hosta
 
-By default, the server binds to `127.0.0.1` (localhost only). To make OpenCode accessible on your network:
+Podrazumevano, server se vezuje za `127.0.0.1` (samo lokalni host). Da biste OpenCode učinili dostupnim na vašoj mreži:
 
 ```bash
 opencode web --hostname 0.0.0.0
 ```
 
-When using `0.0.0.0`, OpenCode will display both local and network addresses:
+Kada koristite `0.0.0.0`, OpenCode će prikazati i lokalne i mrežne adrese:
 
 ```
   Local access:       http://localhost:4096
@@ -56,15 +56,15 @@ When using `0.0.0.0`, OpenCode will display both local and network addresses:
 
 ### mDNS Discovery
 
-Enable mDNS to make your server discoverable on the local network:
+Omogućite mDNS kako bi vaš server bio vidljiv na lokalnoj mreži:
 
 ```bash
 opencode web --mdns
 ```
 
-This automatically sets the hostname to `0.0.0.0` and advertises the server as `opencode.local`.
+Ovo automatski postavlja ime hosta na `0.0.0.0` i oglašava server kao `opencode.local`.
 
-You can customize the mDNS domain name to run multiple instances on the same network:
+Možete prilagoditi ime mDNS domene za pokretanje više instanci na istoj mreži:
 
 ```bash
 opencode web --mdns --mdns-domain myproject.local
@@ -72,45 +72,45 @@ opencode web --mdns --mdns-domain myproject.local
 
 ### CORS
 
-To allow additional domains for CORS (useful for custom frontends):
+Da biste omogućili dodatne domene za CORS (korisno za prilagođene frontendove):
 
 ```bash
 opencode web --cors https://example.com
 ```
 
-### Authentication
+### Autentifikacija
 
-To protect access, set a password using the `OPENCODE_SERVER_PASSWORD` environment variable:
+Da biste zaštitili pristup, postavite lozinku koristeći varijablu okruženja `OPENCODE_SERVER_PASSWORD`:
 
 ```bash
 OPENCODE_SERVER_PASSWORD=secret opencode web
 ```
 
-The username defaults to `opencode` but can be changed with `OPENCODE_SERVER_USERNAME`.
+Korisničko ime podrazumevano je `opencode`, ali se može promeniti sa `OPENCODE_SERVER_USERNAME`.
 
 ---
 
-## Using the Web Interface
+## Korištenje web sučelja
 
-Once started, the web interface provides access to your OpenCode sessions.
+Jednom pokrenut, web sučelje pruža pristup vašim OpenCode sesijama.
 
-### Sessions
+### Sesije
 
-View and manage your sessions from the homepage. You can see active sessions and start new ones.
+Pregledajte i upravljajte svojim sesijama sa početne stranice. Možete vidjeti aktivne sesije i započeti nove.
 
-![OpenCode Web - Active Session](../../../assets/web/web-homepage-active-session.png)
+![OpenCode Web - aktivna sesija](../../../assets/web/web-homepage-active-session.png)
 
-### Server Status
+### Status servera
 
-Click "See Servers" to view connected servers and their status.
+Kliknite "Pogledajte servere" da vidite povezane servere i njihov status.
 
-![OpenCode Web - See Servers](../../../assets/web/web-homepage-see-servers.png)
+![OpenCode Web - Vidi servere](../../../assets/web/web-homepage-see-servers.png)
 
 ---
 
-## Attaching a Terminal
+## Povezivanje terminala
 
-You can attach a terminal TUI to a running web server:
+Možete priključiti TUI terminala na aktivni web server:
 
 ```bash
 # Start the web server
@@ -120,13 +120,13 @@ opencode web --port 4096
 opencode attach http://localhost:4096
 ```
 
-This allows you to use both the web interface and terminal simultaneously, sharing the same sessions and state.
+Ovo vam omogućava da istovremeno koristite i web sučelje i terminal, dijeleći iste sesije i stanje.
 
 ---
 
-## Config File
+## Konfiguracioni fajl
 
-You can also configure server settings in your `opencode.json` config file:
+Također možete konfigurirati postavke servera u svom `opencode.json` konfiguracijskom fajlu:
 
 ```json
 {
@@ -139,4 +139,4 @@ You can also configure server settings in your `opencode.json` config file:
 }
 ```
 
-Command line flags take precedence over config file settings.
+Oznake komandne linije imaju prednost nad postavkama konfiguracione datoteke.

@@ -2,6 +2,8 @@
   "app.head.titleSuffix": "AI-агент для программирования, созданный для терминала",
   "app.header.home": "Главная",
   "app.header.docs": "Документация",
+  "app.footer.issueLink": "Нашли ошибку? Откройте issue",
+  "app.footer.discordLink": "Присоединяйтесь к нашему сообществу в Discord",
   "app.lander.hero.title": "AI-агент для программирования, созданный для терминала.",
   "app.lander.cta.getStarted": "Начать",
   "app.lander.features.native_tui.title": "Нативный TUI",

@@ -1,22 +1,22 @@
 ---
-title: Server
-description: Interact with opencode server over HTTP.
+title: Sunucu
+description: opencode sunucusuyla HTTP uzerinden etkilesin.
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-The `opencode serve` command runs a headless HTTP server that exposes an OpenAPI endpoint that an opencode client can use.
+`opencode serve` komutu, opencode istemcisinin kullanabilecegi bir OpenAPI endpoint'i acan headless bir HTTP sunucusu calistirir.
 
 ---
 
-### Usage
+### Kullanim
 
 ```bash
 opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 ```
 
-#### Options
+#### Secenekler
 
 | Flag            | Description                         | Default          |
 | --------------- | ----------------------------------- | ---------------- |
@@ -26,7 +26,7 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--mdns-domain` | Custom domain name for mDNS service | `opencode.local` |
 | `--cors`        | Additional browser origins to allow | `[]`             |
 
-`--cors` can be passed multiple times:
+`--cors` birden fazla kez gecilebilir:
 
 ```bash
 opencode serve --cors http://localhost:5173 --cors https://app.example.com
@@ -34,9 +34,9 @@ opencode serve --cors http://localhost:5173 --cors https://app.example.com
 
 ---
 
-### Authentication
+### Kimlik dogrulama
 
-Set `OPENCODE_SERVER_PASSWORD` to protect the server with HTTP basic auth. The username defaults to `opencode`, or set `OPENCODE_SERVER_USERNAME` to override it. This applies to both `opencode serve` and `opencode web`.
+Sunucuyu HTTP basic auth ile korumak icin `OPENCODE_SERVER_PASSWORD` ayarlayin. Kullanici adi varsayilan olarak `opencode` degeridir; degistirmek isterseniz `OPENCODE_SERVER_USERNAME` ayarlayabilirsiniz. Bu ayar hem `opencode serve` hem de `opencode web` icin gecerlidir.
 
 ```bash
 OPENCODE_SERVER_PASSWORD=your-password opencode serve
@@ -44,46 +44,44 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve
 
 ---
 
-### How it works
+### Nasil calisir
 
-When you run `opencode` it starts a TUI and a server. Where the TUI is the
-client that talks to the server. The server exposes an OpenAPI 3.1 spec
-endpoint. This endpoint is also used to generate an [SDK](./sdk).
+`opencode` calistirdiginizda hem TUI hem de sunucu baslar. TUI, sunucuyla konusan istemci tarafidir.
+Sunucu bir OpenAPI 3.1 spec endpoint'i acar. Bu endpoint [SDK](./sdk) uretiminde de kullanilir.
 
 :::tip
-Use the opencode server to interact with opencode programmatically.
+opencode ile programatik etkilesim icin opencode sunucusunu kullanin.
 :::
 
-This architecture lets opencode support multiple clients and allows you to interact with opencode programmatically.
+Bu mimari, opencode'un birden fazla istemciyi desteklemesini ve programatik kullanimlari mumkun kilmasini saglar.
 
-You can run `opencode serve` to start a standalone server. If you have the
-opencode TUI running, `opencode serve` will start a new server.
-
----
-
-#### Connect to an existing server
-
-When you start the TUI it randomly assigns a port and hostname. You can instead pass in the `--hostname` and `--port` [flags](./cli). Then use this to connect to its server.
-
-The [`/tui`](#tui) endpoint can be used to drive the TUI through the server. For example, you can prefill or run a prompt. This setup is used by the OpenCode [IDE](./ide) plugins.
+`opencode serve` ile bagimsiz bir sunucu baslatabilirsiniz. opencode TUI aciksa, `opencode serve` yeni bir sunucu baslatir.
 
 ---
 
-## Spec
+#### Mevcut sunucuya baglanin
 
-The server publishes an OpenAPI 3.1 spec that can be viewed at:
+TUI baslarken rastgele bir port ve hostname atanir. Bunun yerine `--hostname` ve `--port` [bayraklarini](./cli) verebilirsiniz.
+
+[`/tui`](#tui) endpoint'i sunucu uzerinden TUI'yi surmek icin kullanilabilir. Ornegin bir istemi onceden doldurabilir veya calistirabilirsiniz. Bu kurulum OpenCode [IDE](./ide) eklentileri tarafindan kullanilir.
+
+---
+
+## Spesifikasyon
+
+Sunucu, su adreste gorulebilen bir OpenAPI 3.1 spec yayinlar:
 
 ```
 http://<hostname>:<port>/doc
 ```
 
-For example, `http://localhost:4096/doc`. Use the spec to generate clients or inspect request and response types. Or view it in a Swagger explorer.
+Ornegin `http://localhost:4096/doc`. Istemci olusturmak, istek/yanit tiplerini incelemek veya Swagger gezgininde acmak icin bu spec'i kullanin.
 
 ---
 
-## APIs
+## API'ler
 
-The opencode server exposes the following APIs.
+opencode sunucusu asagidaki API'leri sunar.
 
 ---
 
@@ -200,17 +198,17 @@ The opencode server exposes the following APIs.
 | `GET`  | `/file/content?path=<p>` | Read a file                        | <a href={typesUrl}><code>FileContent</code></a>                                             |
 | `GET`  | `/file/status`           | Get status for tracked files       | <a href={typesUrl}><code>File[]</code></a>                                                  |
 
-#### `/find/file` query parameters
+#### `/find/file` query parametreleri
 
-- `query` (required) — search string (fuzzy match)
-- `type` (optional) — limit results to `"file"` or `"directory"`
-- `directory` (optional) — override the project root for the search
-- `limit` (optional) — max results (1–200)
-- `dirs` (optional) — legacy flag (`"false"` returns only files)
+- `query` (required) - arama metni (fuzzy match)
+- `type` (optional) - sonuclari `"file"` veya `"directory"` ile sinirlama
+- `directory` (optional) - arama icin proje kokunu gecersiz kilma
+- `limit` (optional) - en fazla sonuc (1-200)
+- `dirs` (optional) - eski bayrak (`"false"` sadece dosyalari dondurur)
 
 ---
 
-### Tools (Experimental)
+### Tools (Deneysel)
 
 | Method | Path                                        | Description                              | Response                                     |
 | ------ | ------------------------------------------- | ---------------------------------------- | -------------------------------------------- |

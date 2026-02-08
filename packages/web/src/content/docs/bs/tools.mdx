@@ -1,17 +1,17 @@
 ---
-title: Tools
-description: Manage the tools an LLM can use.
+title: Alati
+description: Upravljajte alatima koje LLM moze koristiti.
 ---
 
-Tools allow the LLM to perform actions in your codebase. OpenCode comes with a set of built-in tools, but you can extend it with [custom tools](./custom-tools) or [MCP servers](./mcp-servers).
+Alati omogucavaju LLM-u da izvrsava akcije u vasem kodu. OpenCode dolazi sa skupom ugradenih alata, a mozete ga prosiriti kroz [custom tools](./custom-tools) ili [MCP servers](./mcp-servers).
 
-By default, all tools are **enabled** and don't need permission to run. You can control tool behavior through [permissions](./permissions).
+Po defaultu su svi alati **ukljuceni** i ne traze dozvolu za pokretanje. Ponasanje alata kontrolisete kroz [permissions](./permissions).
 
 ---
 
 ## Configure
 
-Use the `permission` field to control tool behavior. You can allow, deny, or require approval for each tool.
+Koristite polje `permission` za kontrolu ponasanja alata. Za svaki alat mozete postaviti allow, deny ili ask.
 
 ```json title="opencode.json"
 {
@@ -24,7 +24,7 @@ Use the `permission` field to control tool behavior. You can allow, deny, or req
 }
 ```
 
-You can also use wildcards to control multiple tools at once. For example, to require approval for all tools from an MCP server:
+Mozete koristiti i wildcard obrasce da kontrolisete vise alata odjednom. Na primjer, da trazite odobrenje za sve alate jednog MCP servera:
 
 ```json title="opencode.json"
 {
@@ -35,19 +35,19 @@ You can also use wildcards to control multiple tools at once. For example, to re
 }
 ```
 
-[Learn more](./permissions) about configuring permissions.
+[Saznajte vise](./permissions) o konfigurisanju dozvola.
 
 ---
 
 ## Built-in
 
-Here are all the built-in tools available in OpenCode.
+Ovo su svi ugradeni alati dostupni u OpenCode-u.
 
 ---
 
 ### bash
 
-Execute shell commands in your project environment.
+Izvrsava shell komande u okruzenju projekta.
 
 ```json title="opencode.json" {4}
 {
@@ -58,13 +58,13 @@ Execute shell commands in your project environment.
 }
 ```
 
-This tool allows the LLM to run terminal commands like `npm install`, `git status`, or any other shell command.
+Ovaj alat omogucava LLM-u da pokrece terminalske komande kao `npm install`, `git status` i druge shell komande.
 
 ---
 
 ### edit
 
-Modify existing files using exact string replacements.
+Mijenja postojece datoteke tacnim zamjenama stringova.
 
 ```json title="opencode.json" {4}
 {
@@ -75,13 +75,13 @@ Modify existing files using exact string replacements.
 }
 ```
 
-This tool performs precise edits to files by replacing exact text matches. It's the primary way the LLM modifies code.
+Ovaj alat radi precizne izmjene datoteka zamjenom tacnih poklapanja teksta. To je glavni nacin na koji LLM mijenja kod.
 
 ---
 
 ### write
 
-Create new files or overwrite existing ones.
+Kreira nove datoteke ili prepisuje postojece.
 
 ```json title="opencode.json" {4}
 {
@@ -92,17 +92,17 @@ Create new files or overwrite existing ones.
 }
 ```
 
-Use this to allow the LLM to create new files. It will overwrite existing files if they already exist.
+Koristite ovo da dozvolite LLM-u kreiranje novih datoteka. Ako datoteka vec postoji, bit ce prepisana.
 
 :::note
-The `write` tool is controlled by the `edit` permission, which covers all file modifications (`edit`, `write`, `patch`, `multiedit`).
+`write` alat kontrolise `edit` dozvola, koja pokriva sve izmjene datoteka (`edit`, `write`, `patch`, `multiedit`).
 :::
 
 ---
 
 ### read
 
-Read file contents from your codebase.
+Cita sadrzaj datoteka iz vaseg koda.
 
 ```json title="opencode.json" {4}
 {
@@ -113,13 +113,13 @@ Read file contents from your codebase.
 }
 ```
 
-This tool reads files and returns their contents. It supports reading specific line ranges for large files.
+Ovaj alat cita datoteke i vraca njihov sadrzaj. Podrzava citanje odredenih raspona linija kod velikih fajlova.
 
 ---
 
 ### grep
 
-Search file contents using regular expressions.
+Pretrazuje sadrzaj datoteka pomocu regularnih izraza.
 
 ```json title="opencode.json" {4}
 {
@@ -130,13 +130,13 @@ Search file contents using regular expressions.
 }
 ```
 
-Fast content search across your codebase. Supports full regex syntax and file pattern filtering.
+Brza pretraga sadrzaja kroz cijeli kod. Podrzava puni regex i filtriranje po obrascima datoteka.
 
 ---
 
 ### glob
 
-Find files by pattern matching.
+Pronalazi datoteke po obrascima.
 
 ```json title="opencode.json" {4}
 {
@@ -147,13 +147,13 @@ Find files by pattern matching.
 }
 ```
 
-Search for files using glob patterns like `**/*.js` or `src/**/*.ts`. Returns matching file paths sorted by modification time.
+Trazi datoteke koristeci glob obrasce kao `**/*.js` ili `src/**/*.ts`. Vraca putanje sortirane po vremenu izmjene.
 
 ---
 
 ### list
 
-List files and directories in a given path.
+Ispisuje datoteke i direktorije na zadanoj putanji.
 
 ```json title="opencode.json" {4}
 {
@@ -164,16 +164,16 @@ List files and directories in a given path.
 }
 ```
 
-This tool lists directory contents. It accepts glob patterns to filter results.
+Ovaj alat ispisuje sadrzaj direktorija. Prihvata glob obrasce za filtriranje rezultata.
 
 ---
 
 ### lsp (experimental)
 
-Interact with your configured LSP servers to get code intelligence features like definitions, references, hover info, and call hierarchy.
+Komunicira sa konfigurisanim LSP serverima za funkcije inteligencije koda kao definicije, reference, hover info i hijerarhija poziva.
 
 :::note
-This tool is only available when `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (or `OPENCODE_EXPERIMENTAL=true`).
+Ovaj alat je dostupan samo kada je `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (ili `OPENCODE_EXPERIMENTAL=true`).
 :::
 
 ```json title="opencode.json" {4}
@@ -185,15 +185,15 @@ This tool is only available when `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (or `OPEN
 }
 ```
 
-Supported operations include `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls`, and `outgoingCalls`.
+Podrzane operacije ukljucuju `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls` i `outgoingCalls`.
 
-To configure which LSP servers are available for your project, see [LSP Servers](./lsp).
+Za konfiguraciju dostupnih LSP servera u projektu, pogledajte [LSP Servers](./lsp).
 
 ---
 
 ### patch
 
-Apply patches to files.
+Primjenjuje zakrpe na datoteke.
 
 ```json title="opencode.json" {4}
 {
@@ -204,17 +204,17 @@ Apply patches to files.
 }
 ```
 
-This tool applies patch files to your codebase. Useful for applying diffs and patches from various sources.
+Ovaj alat primjenjuje patch datoteke na kod. Koristan je za diffs i patch-eve iz razlicitih izvora.
 
 :::note
-The `patch` tool is controlled by the `edit` permission, which covers all file modifications (`edit`, `write`, `patch`, `multiedit`).
+`patch` alat kontrolise `edit` dozvola, koja pokriva sve izmjene datoteka (`edit`, `write`, `patch`, `multiedit`).
 :::
 
 ---
 
 ### skill
 
-Load a [skill](./skills) (a `SKILL.md` file) and return its content in the conversation.
+Ucitajte [skill](./skills) (`SKILL.md` datoteku) i vratite njegov sadrzaj u razgovor.
 
 ```json title="opencode.json" {4}
 {
@@ -229,7 +229,7 @@ Load a [skill](./skills) (a `SKILL.md` file) and return its content in the conve
 
 ### todowrite
 
-Manage todo lists during coding sessions.
+Upravlja todo listama tokom coding sesija.
 
 ```json title="opencode.json" {4}
 {
@@ -240,17 +240,17 @@ Manage todo lists during coding sessions.
 }
 ```
 
-Creates and updates task lists to track progress during complex operations. The LLM uses this to organize multi-step tasks.
+Kreira i azurira liste zadataka za pracenje napretka tokom slozenih operacija. LLM ovo koristi za organizaciju zadataka u vise koraka.
 
 :::note
-This tool is disabled for subagents by default, but you can enable it manually. [Learn more](./agents/#permissions)
+Ovaj alat je po defaultu iskljucen za subagente, ali ga mozete rucno ukljuciti. [Saznajte vise](./agents/#permissions)
 :::
 
 ---
 
 ### todoread
 
-Read existing todo lists.
+Cita postojece todo liste.
 
 ```json title="opencode.json" {4}
 {
@@ -261,17 +261,17 @@ Read existing todo lists.
 }
 ```
 
-Reads the current todo list state. Used by the LLM to track what tasks are pending or completed.
+Cita trenutno stanje todo liste. LLM ga koristi da prati sta je na cekanju i sta je zavrseno.
 
 :::note
-This tool is disabled for subagents by default, but you can enable it manually. [Learn more](./agents/#permissions)
+Ovaj alat je po defaultu iskljucen za subagente, ali ga mozete rucno ukljuciti. [Saznajte vise](./agents/#permissions)
 :::
 
 ---
 
 ### webfetch
 
-Fetch web content.
+Preuzima web sadrzaj.
 
 ```json title="opencode.json" {4}
 {
@@ -282,18 +282,18 @@ Fetch web content.
 }
 ```
 
-Allows the LLM to fetch and read web pages. Useful for looking up documentation or researching online resources.
+Omogucava LLM-u da preuzima i cita web stranice. Korisno za dokumentaciju i online istrazivanje.
 
 ---
 
 ### websearch
 
-Search the web for information.
+Pretrazuje web za informacije.
 
 :::note
-This tool is only available when using the OpenCode provider or when the `OPENCODE_ENABLE_EXA` environment variable is set to any truthy value (e.g., `true` or `1`).
+Ovaj alat je dostupan samo uz OpenCode provajdera ili kada je varijabla `OPENCODE_ENABLE_EXA` postavljena na truthy vrijednost (npr. `true` ili `1`).
 
-To enable when launching OpenCode:
+Da ukljucite pri pokretanju OpenCode-a:
 
 ```bash
 OPENCODE_ENABLE_EXA=1 opencode
@@ -310,19 +310,19 @@ OPENCODE_ENABLE_EXA=1 opencode
 }
 ```
 
-Performs web searches using Exa AI to find relevant information online. Useful for researching topics, finding current events, or gathering information beyond the training data cutoff.
+Vrsi web pretrage preko Exa AI da pronade relevantne informacije online. Korisno za istrazivanje tema, aktuelnosti i podataka van granice trening skupa.
 
-No API key is required — the tool connects directly to Exa AI's hosted MCP service without authentication.
+API kljuc nije potreban - alat se direktno povezuje na Exa AI hosted MCP servis bez autentifikacije.
 
 :::tip
-Use `websearch` when you need to find information (discovery), and `webfetch` when you need to retrieve content from a specific URL (retrieval).
+Koristite `websearch` kada trebate pronaci informacije (discovery), a `webfetch` kada trebate preuzeti sadrzaj sa konkretnog URL-a (retrieval).
 :::
 
 ---
 
 ### question
 
-Ask the user questions during execution.
+Postavlja korisniku pitanja tokom izvrsavanja.
 
 ```json title="opencode.json" {4}
 {
@@ -333,42 +333,42 @@ Ask the user questions during execution.
 }
 ```
 
-This tool allows the LLM to ask the user questions during a task. It's useful for:
+Ovaj alat omogucava LLM-u da postavlja pitanja korisniku tokom zadatka. Koristan je za:
 
-- Gathering user preferences or requirements
-- Clarifying ambiguous instructions
-- Getting decisions on implementation choices
-- Offering choices about what direction to take
+- Prikupljanje korisnickih preferencija i zahtjeva
+- Razjasnjavanje nejasnih uputstava
+- Donosenje odluka oko implementacije
+- Nudjenje izbora o smjeru rada
 
-Each question includes a header, the question text, and a list of options. Users can select from the provided options or type a custom answer. When there are multiple questions, users can navigate between them before submitting all answers.
+Svako pitanje ukljucuje naslov, tekst pitanja i listu opcija. Korisnici mogu izabrati ponudenu opciju ili upisati vlastiti odgovor. Kada ima vise pitanja, mogu se kretati izmedu njih prije slanja svih odgovora.
 
 ---
 
 ## Custom tools
 
-Custom tools let you define your own functions that the LLM can call. These are defined in your config file and can execute arbitrary code.
+Custom tools vam omogucavaju da definisete vlastite funkcije koje LLM moze pozivati. Definisu se u config datoteci i mogu izvrsavati proizvoljan kod.
 
-[Learn more](./custom-tools) about creating custom tools.
+[Saznajte vise](./custom-tools) o kreiranju custom tools.
 
 ---
 
 ## MCP servers
 
-MCP (Model Context Protocol) servers allow you to integrate external tools and services. This includes database access, API integrations, and third-party services.
+MCP (Model Context Protocol) serveri omogucavaju integraciju eksternih alata i servisa. Ovo ukljucuje pristup bazama, API integracije i third-party servise.
 
-[Learn more](./mcp-servers) about configuring MCP servers.
+[Saznajte vise](./mcp-servers) o konfigurisanju MCP servera.
 
 ---
 
 ## Internals
 
-Internally, tools like `grep`, `glob`, and `list` use [ripgrep](https://github.com/BurntSushi/ripgrep) under the hood. By default, ripgrep respects `.gitignore` patterns, which means files and directories listed in your `.gitignore` will be excluded from searches and listings.
+Interno, alati kao `grep`, `glob` i `list` koriste [ripgrep](https://github.com/BurntSushi/ripgrep). Po defaultu, ripgrep postuje `.gitignore` obrasce, pa se fajlovi i direktoriji iz `.gitignore` izostavljaju iz pretraga i listinga.
 
 ---
 
 ### Ignore patterns
 
-To include files that would normally be ignored, create a `.ignore` file in your project root. This file can explicitly allow certain paths.
+Da ukljucite fajlove koji bi inace bili ignorisani, kreirajte `.ignore` datoteku u korijenu projekta. Ova datoteka moze eksplicitno dozvoliti odredene putanje.
 
 ```text title=".ignore"
 !node_modules/
@@ -376,4 +376,4 @@ To include files that would normally be ignored, create a `.ignore` file in your
 !build/
 ```
 
-For example, this `.ignore` file allows ripgrep to search within `node_modules/`, `dist/`, and `build/` directories even if they're listed in `.gitignore`.
+Na primjer, ova `.ignore` datoteka dozvoljava ripgrep-u da pretrazuje `node_modules/`, `dist/` i `build/` direktorije i kada su navedeni u `.gitignore`.

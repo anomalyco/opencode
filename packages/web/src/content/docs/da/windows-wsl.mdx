@@ -1,37 +1,37 @@
 ---
 title: Windows (WSL)
-description: Run OpenCode on Windows using WSL for the best experience.
+description: Kør OpenCode på Windows med WSL for den bedste oplevelse.
 ---
 
 import { Steps } from "@astrojs/starlight/components"
 
-While OpenCode can run directly on Windows, we recommend using [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) for the best experience. WSL provides a Linux environment that works seamlessly with OpenCode's features.
+Selvom OpenCode kan køre direkte på Windows, anbefaler vi at bruge [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) for den bedste oplevelse. WSL giver et Linux-miljø, der fungerer problemfrit med OpenCodes funktioner.
 
-:::tip[Why WSL?]
-WSL offers better file system performance, full terminal support, and compatibility with development tools that OpenCode relies on.
+:::tip[Hvorfor WSL?]
+WSL giver bedre filsystemydelse, fuld terminalunderstøttelse og kompatibilitet med de udviklingsværktøjer, som OpenCode er afhængig af.
 :::
 
 ---
 
-## Setup
+## Opsætning
 
 <Steps>
 
-1. **Install WSL**
+1. **Installer WSL**
 
-   If you haven't already, [install WSL](https://learn.microsoft.com/en-us/windows/wsl/install) using the official Microsoft guide.
+   Hvis du ikke allerede har gjort det, så [installer WSL](https://learn.microsoft.com/en-us/windows/wsl/install) med Microsofts officielle vejledning.
 
-2. **Install OpenCode in WSL**
+2. **Installer OpenCode i WSL**
 
-   Once WSL is set up, open your WSL terminal and install OpenCode using one of the [installation methods](./).
+   Når WSL er sat op, skal du åbne din WSL-terminal og installere OpenCode med en af [installationsmetoderne](./).
 
    ```bash
    curl -fsSL https://opencode.ai/install | bash
    ```
 
-3. **Use OpenCode from WSL**
+3. **Brug OpenCode fra WSL**
 
-   Navigate to your project directory (access Windows files via `/mnt/c/`, `/mnt/d/`, etc.) and run OpenCode.
+   Gå til din projektmappe (få adgang til Windows-filer via `/mnt/c/`, `/mnt/d/` osv.) og kør OpenCode.
 
    ```bash
    cd /mnt/c/Users/YourName/project
@@ -42,24 +42,24 @@ WSL offers better file system performance, full terminal support, and compatibil
 
 ---
 
-## Desktop App + WSL Server
+## Desktop-app + WSL-server
 
-If you prefer using the OpenCode Desktop app but want to run the server in WSL:
+Hvis du foretrækker OpenCode Desktop-appen, men vil køre serveren i WSL:
 
-1. **Start the server in WSL** with `--hostname 0.0.0.0` to allow external connections:
+1. **Start serveren i WSL** med `--hostname 0.0.0.0` for at tillade eksterne forbindelser:
 
    ```bash
    opencode serve --hostname 0.0.0.0 --port 4096
    ```
 
-2. **Connect the Desktop app** to `http://localhost:4096`
+2. **Forbind Desktop-appen** til `http://localhost:4096`
 
 :::note
-If `localhost` does not work in your setup, connect using the WSL IP address instead (from WSL: `hostname -I`) and use `http://<wsl-ip>:4096`.
+Hvis `localhost` ikke virker i din opsætning, så forbind i stedet med WSL-IP-adressen (fra WSL: `hostname -I`) og brug `http://<wsl-ip>:4096`.
 :::
 
 :::caution
-When using `--hostname 0.0.0.0`, set `OPENCODE_SERVER_PASSWORD` to secure the server.
+Når du bruger `--hostname 0.0.0.0`, skal du sætte `OPENCODE_SERVER_PASSWORD` for at sikre serveren.
 
 ```bash
 OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
@@ -69,31 +69,31 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
 
 ---
 
-## Web Client + WSL
+## Webklient + WSL
 
-For the best web experience on Windows:
+For den bedste weboplevelse på Windows:
 
-1. **Run `opencode web` in the WSL terminal** rather than PowerShell:
+1. **Kør `opencode web` i WSL-terminalen** i stedet for PowerShell:
 
    ```bash
    opencode web --hostname 0.0.0.0
    ```
 
-2. **Access from your Windows browser** at `http://localhost:<port>` (OpenCode prints the URL)
+2. **Åbn fra din Windows-browser** på `http://localhost:<port>` (OpenCode udskriver URL'en)
 
-Running `opencode web` from WSL ensures proper file system access and terminal integration while still being accessible from your Windows browser.
+Når du kører `opencode web` fra WSL, får du korrekt filsystemadgang og terminalintegration, samtidig med at det stadig er tilgængeligt fra din Windows-browser.
 
 ---
 
-## Accessing Windows Files
+## Adgang til Windows-filer
 
-WSL can access all your Windows files through the `/mnt/` directory:
+WSL kan få adgang til alle dine Windows-filer via `/mnt/`-mappen:
 
-- `C:` drive → `/mnt/c/`
-- `D:` drive → `/mnt/d/`
-- And so on...
+- `C:`-drev → `/mnt/c/`
+- `D:`-drev → `/mnt/d/`
+- Og så videre...
 
-Example:
+Eksempel:
 
 ```bash
 cd /mnt/c/Users/YourName/Documents/project
@@ -101,13 +101,13 @@ opencode
 ```
 
 :::tip
-For the smoothest experience, consider cloning/copying your repo into the WSL filesystem (for example under `~/code/`) and running OpenCode there.
+For den mest problemfri oplevelse kan du overveje at klone/kopiere dit repo ind i WSL-filsystemet (for eksempel under `~/code/`) og køre OpenCode derfra.
 :::
 
 ---
 
 ## Tips
 
-- Keep OpenCode running in WSL for projects stored on Windows drives - file access is seamless
-- Use VS Code's [WSL extension](https://code.visualstudio.com/docs/remote/wsl) alongside OpenCode for an integrated development workflow
-- Your OpenCode config and sessions are stored within the WSL environment at `~/.local/share/opencode/`
+- Lad OpenCode køre i WSL for projekter, der ligger på Windows-drev - filadgangen er problemfri
+- Brug VS Codes [WSL-udvidelse](https://code.visualstudio.com/docs/remote/wsl) sammen med OpenCode for et integreret udviklingsworkflow
+- Din OpenCode-konfiguration og dine sessioner gemmes i WSL-miljøet i `~/.local/share/opencode/`

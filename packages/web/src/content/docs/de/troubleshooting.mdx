@@ -1,51 +1,52 @@
 ---
 title: Troubleshooting
-description: Common issues and how to resolve them.
+description: Haeufige Probleme und schnelle Loesungen.
 ---
 
-To debug issues with OpenCode, start by checking the logs and local data it stores on disk.
+Wenn OpenCode Probleme macht, starte mit Logs und lokal gespeicherten Daten auf der Festplatte.
 
 ---
 
 ## Logs
 
-Log files are written to:
+Logdateien werden hier gespeichert:
 
 - **macOS/Linux**: `~/.local/share/opencode/log/`
 - **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.local\share\opencode\log`
 
-Log files are named with timestamps (e.g., `2025-01-09T123456.log`) and the most recent 10 log files are kept.
+Dateinamen enthalten Zeitstempel (z. B. `2025-01-09T123456.log`) und es bleiben die letzten 10 Logs erhalten.
 
-You can set the log level with the `--log-level` command-line option to get more detailed debug information. For example, `opencode --log-level DEBUG`.
+Mit `--log-level` bekommst du detailliertere Diagnoseinfos, z. B. `opencode --log-level DEBUG`.
 
 ---
 
 ## Storage
 
-opencode stores session data and other application data on disk at:
+opencode speichert Sitzungs- und App-Daten auf der Festplatte unter:
 
 - **macOS/Linux**: `~/.local/share/opencode/`
 - **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.local\share\opencode`
 
-This directory contains:
+Dieses Verzeichnis enthaelt:
 
-- `auth.json` - Authentication data like API keys, OAuth tokens
-- `log/` - Application logs
-- `project/` - Project-specific data like session and message data
-  - If the project is within a Git repo, it is stored in `./<project-slug>/storage/`
-  - If it is not a Git repo, it is stored in `./global/storage/`
+- `auth.json` - Authentifizierungsdaten wie API-Keys und OAuth-Tokens
+- `log/` - Anwendungslogs
+- `project/` - Projektspezifische Daten wie Sitzungen und Nachrichten
+  - In Git-Repositories unter `./<project-slug>/storage/`
+  - Ohne Git unter `./global/storage/`
 
 ---
 
 ## Desktop app
 
-OpenCode Desktop runs a local OpenCode server (the `opencode-cli` sidecar) in the background. Most issues are caused by a misbehaving plugin, a corrupted cache, or a bad server setting.
+OpenCode Desktop startet im Hintergrund einen lokalen OpenCode-Server (`opencode-cli`-Sidecar).
+Viele Probleme kommen von fehlerhaften Plugins, kaputtem Cache oder falschen Server-Einstellungen.
 
 ### Quick checks
 
-- Fully quit and relaunch the app.
-- If the app shows an error screen, click **Restart** and copy the error details.
-- macOS only: `OpenCode` menu -> **Reload Webview** (helps if the UI is blank/frozen).
+- App komplett beenden und neu starten
+- Bei Fehlerbildschirm **Restart** klicken und Details kopieren
+- Nur macOS: `OpenCode`-Menue -> **Reload Webview** (hilft bei leerer/eingefrorener UI)
 
 ---
 
@@ -169,29 +170,29 @@ To find the directory quickly:
 
 ---
 
-## Getting help
+## Hilfe bekommen
 
-If you're experiencing issues with OpenCode:
+Wenn du Probleme mit OpenCode hast:
 
-1. **Report issues on GitHub**
+1. **Probleme auf GitHub melden**
 
-   The best way to report bugs or request features is through our GitHub repository:
+   Bugs und Feature-Wuensche meldest du am besten im GitHub-Repository:
 
    [**github.com/anomalyco/opencode/issues**](https://github.com/anomalyco/opencode/issues)
 
-   Before creating a new issue, search existing issues to see if your problem has already been reported.
+   Suche vor dem Erstellen nach bestehenden Issues, damit Duplikate vermieden werden.
 
-2. **Join our Discord**
+2. **Unserem Discord beitreten**
 
-   For real-time help and community discussion, join our Discord server:
+   Fuer schnelle Hilfe und Austausch in der Community:
 
    [**opencode.ai/discord**](https://opencode.ai/discord)
 
 ---
 
-## Common issues
+## Haeufige Probleme
 
-Here are some common issues and how to resolve them.
+Hier sind typische Fehlerbilder und wie du sie loest.
 
 ---
 

@@ -1,43 +1,43 @@
 ---
-title: Share
-description: Share your OpenCode conversations.
+title: Dele
+description: Del dine OpenCode-samtaler.
 ---
 
-OpenCode's share feature allows you to create public links to your OpenCode conversations, so you can collaborate with teammates or get help from others.
+OpenCodes delingsfunksjon lar deg lage offentlige lenker til dine OpenCode-samtaler, slik at du kan samarbeide med lagkamerater eller få hjelp fra andre.
 
 :::note
-Shared conversations are publicly accessible to anyone with the link.
+Delte samtaler er offentlig tilgjengelige for alle med linken.
 :::
 
 ---
 
-## How it works
+## Slik fungerer det
 
-When you share a conversation, OpenCode:
+Når du deler en samtale, OpenCode:
 
-1. Creates a unique public URL for your session
-2. Syncs your conversation history to our servers
-3. Makes the conversation accessible via the shareable link — `opncd.ai/s/<share-id>`
-
----
-
-## Sharing
-
-OpenCode supports three sharing modes that control how conversations are shared:
+1. Oppretter en unik offentlig URL for økten din
+2. Synkroniserer samtaleloggen din til serverne våre
+3. Gjør samtalen tilgjengelig via den delbare lenken — `opncd.ai/s/<share-id>`
 
 ---
 
-### Manual (default)
+## Deling
 
-By default, OpenCode uses manual sharing mode. Sessions are not shared automatically, but you can manually share them using the `/share` command:
+OpenCode støtter tre delingsmoduser som kontrollerer hvordan samtaler deles:
+
+---
+
+### Manuell (standard)
+
+Som standard bruker OpenCode manuell delingsmodus. Økter deles ikke automatisk, men du kan dele dem manuelt ved å bruke kommandoen `/share`:
 
 ```
 /share
 ```
 
-This will generate a unique URL that'll be copied to your clipboard.
+Dette vil generere en unik URL som vil bli kopiert til utklippstavlen din.
 
-To explicitly set manual mode in your [config file](./config):
+For å eksplisitt angi manuell modus i [konfigurasjonsfilen](./config):
 
 ```json title="opencode.json"
 {
@@ -48,9 +48,9 @@ To explicitly set manual mode in your [config file](./config):
 
 ---
 
-### Auto-share
+### Automatisk deling
 
-You can enable automatic sharing for all new conversations by setting the `share` option to `"auto"` in your [config file](./config):
+Du kan aktivere automatisk deling for alle nye samtaler ved å sette alternativet `share` til `"auto"` i [konfigurasjonsfilen](./config):
 
 ```json title="opencode.json"
 {
@@ -59,13 +59,13 @@ You can enable automatic sharing for all new conversations by setting the `share
 }
 ```
 
-With auto-share enabled, every new conversation will automatically be shared and a link will be generated.
+Med automatisk deling aktivert, vil hver nye samtale automatisk bli delt og en kobling vil bli generert.
 
 ---
 
-### Disabled
+### Deaktivert
 
-You can disable sharing entirely by setting the `share` option to `"disabled"` in your [config file](./config):
+Du kan deaktivere deling helt ved å sette alternativet `share` til `"disabled"` i [konfigurasjonsfilen](./config):
 
 ```json title="opencode.json"
 {
@@ -74,55 +74,55 @@ You can disable sharing entirely by setting the `share` option to `"disabled"` i
 }
 ```
 
-To enforce this across your team for a given project, add it to the `opencode.json` in your project and check into Git.
+For å håndheve dette på tvers av teamet ditt for et gitt prosjekt, legg det til `opencode.json` i prosjektet ditt og sjekk inn i Git.
 
 ---
 
-## Un-sharing
+## Opphev deling
 
-To stop sharing a conversation and remove it from public access:
+Slik slutter du å dele en samtale og fjerner den fra offentlig tilgang:
 
 ```
 /unshare
 ```
 
-This will remove the share link and delete the data related to the conversation.
+Dette vil fjerne delelinken og slette dataene knyttet til samtalen.
 
 ---
 
-## Privacy
+## Personvern
 
-There are a few things to keep in mind when sharing a conversation.
-
----
-
-### Data retention
-
-Shared conversations remain accessible until you explicitly unshare them. This
-includes:
-
-- Full conversation history
-- All messages and responses
-- Session metadata
+Det er et par ting du må huske på når du deler en samtale.
 
 ---
 
-### Recommendations
+### Datalagring
 
-- Only share conversations that don't contain sensitive information.
-- Review conversation content before sharing.
-- Unshare conversations when collaboration is complete.
-- Avoid sharing conversations with proprietary code or confidential data.
-- For sensitive projects, disable sharing entirely.
+Delte samtaler forblir tilgjengelige til du eksplisitt opphever deling av dem. Dette
+inkluderer:
+
+- Full samtalehistorikk
+- Alle meldinger og svar
+- Metadata for økter
 
 ---
 
-## For enterprises
+### Anbefalinger
 
-For enterprise deployments, the share feature can be:
+- Del kun samtaler som ikke inneholder sensitiv informasjon.
+- Se gjennom samtaleinnholdet før du deler.
+- Opphev deling av samtaler når samarbeidet er fullført.
+- Unngå å dele samtaler med proprietær kode eller konfidensielle data.
+- For sensitive prosjekter, deaktiver deling helt.
 
-- **Disabled** entirely for security compliance
-- **Restricted** to users authenticated through SSO only
-- **Self-hosted** on your own infrastructure
+---
 
-[Learn more](./enterprise) about using opencode in your organization.
+## For bedrifter
+
+For bedriftsimplementeringer kan delingsfunksjonen være:
+
+- **Deaktivert** helt for overholdelse av sikkerhet
+- **Begrenset** til brukere som kun er autentisert gjennom SSO
+- **Selvvert** på din egen infrastruktur
+
+[Finn ut mer](./enterprise) om bruk av opencode i organisasjonen din.

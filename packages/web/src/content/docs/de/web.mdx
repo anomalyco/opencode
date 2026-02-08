@@ -1,39 +1,39 @@
 ---
 title: Web
-description: Using OpenCode in your browser.
+description: Verwenden Sie OpenCode in Ihrem Browser.
 ---
 
-OpenCode can run as a web application in your browser, providing the same powerful AI coding experience without needing a terminal.
+OpenCode kann als Webanwendung in Ihrem Browser ausgeführt werden und bietet das gleiche leistungsstarke KI-Codierungserlebnis, ohne dass ein Terminal erforderlich ist.
 
-![OpenCode Web - New Session](../../../assets/web/web-homepage-new-session.png)
+![OpenCode Web – Neue Sitzung](../../../assets/web/web-homepage-new-session.png)
 
-## Getting Started
+## Erste Schritte
 
-Start the web interface by running:
+Starten Sie die Weboberfläche, indem Sie Folgendes ausführen:
 
 ```bash
 opencode web
 ```
 
-This starts a local server on `127.0.0.1` with a random available port and automatically opens OpenCode in your default browser.
+Dadurch wird ein lokaler Server auf `127.0.0.1` mit einem zufällig verfügbaren Port gestartet und OpenCode automatisch in Ihrem Standardbrowser geöffnet.
 
 :::caution
-If `OPENCODE_SERVER_PASSWORD` is not set, the server will be unsecured. This is fine for local use but should be set for network access.
+Wenn `OPENCODE_SERVER_PASSWORD` nicht gesetzt ist, ist der Server ungesichert. Dies ist für den lokalen Gebrauch in Ordnung, sollte aber für den Netzwerkzugriff eingestellt werden.
 :::
 
 :::tip[Windows Users]
-For the best experience, run `opencode web` from [WSL](./windows-wsl) rather than PowerShell. This ensures proper file system access and terminal integration.
+Um die beste Erfahrung zu erzielen, führen Sie `opencode web` über [WSL](./windows-wsl) und nicht über PowerShell aus. Dies gewährleistet den ordnungsgemäßen Zugriff auf das Dateisystem und die Terminalintegration.
 :::
 
 ---
 
-## Configuration
+## Konfiguration
 
-You can configure the web server using command line flags or in your [config file](./config).
+Sie können den Webserver mithilfe von Befehlszeilen-Flags oder in Ihrer [Konfigurationsdatei](./config) konfigurieren.
 
 ### Port
 
-By default, OpenCode picks an available port. You can specify a port:
+Standardmäßig wählt OpenCode einen verfügbaren Port aus. Sie können einen Port angeben:
 
 ```bash
 opencode web --port 4096
@@ -41,30 +41,30 @@ opencode web --port 4096
 
 ### Hostname
 
-By default, the server binds to `127.0.0.1` (localhost only). To make OpenCode accessible on your network:
+Standardmäßig bindet der Server an `127.0.0.1` (nur localhost). So machen Sie OpenCode in Ihrem Netzwerk zugänglich:
 
 ```bash
 opencode web --hostname 0.0.0.0
 ```
 
-When using `0.0.0.0`, OpenCode will display both local and network addresses:
+Bei Verwendung von `0.0.0.0` zeigt OpenCode sowohl lokale als auch Netzwerkadressen an:
 
 ```
   Local access:       http://localhost:4096
   Network access:     http://192.168.1.100:4096
 ```
 
-### mDNS Discovery
+### mDNS-Erkennung
 
-Enable mDNS to make your server discoverable on the local network:
+Aktivieren Sie mDNS, um Ihren Server im lokalen Netzwerk erkennbar zu machen:
 
 ```bash
 opencode web --mdns
 ```
 
-This automatically sets the hostname to `0.0.0.0` and advertises the server as `opencode.local`.
+Dadurch wird der Hostname automatisch auf `0.0.0.0` gesetzt und der Server als `opencode.local` angekündigt.
 
-You can customize the mDNS domain name to run multiple instances on the same network:
+Sie können den mDNS-Domänennamen anpassen, um mehrere Instanzen im selben Netzwerk auszuführen:
 
 ```bash
 opencode web --mdns --mdns-domain myproject.local
@@ -72,45 +72,45 @@ opencode web --mdns --mdns-domain myproject.local
 
 ### CORS
 
-To allow additional domains for CORS (useful for custom frontends):
+So erlauben Sie zusätzliche Domänen für CORS (nützlich für benutzerdefinierte Frontends):
 
 ```bash
 opencode web --cors https://example.com
 ```
 
-### Authentication
+### Authentifizierung
 
-To protect access, set a password using the `OPENCODE_SERVER_PASSWORD` environment variable:
+Um den Zugriff zu schützen, legen Sie mithilfe der Umgebungsvariablen `OPENCODE_SERVER_PASSWORD` ein Passwort fest:
 
 ```bash
 OPENCODE_SERVER_PASSWORD=secret opencode web
 ```
 
-The username defaults to `opencode` but can be changed with `OPENCODE_SERVER_USERNAME`.
+Der Benutzername ist standardmäßig `opencode`, kann aber mit `OPENCODE_SERVER_USERNAME` geändert werden.
 
 ---
 
-## Using the Web Interface
+## Verwenden der Weboberfläche
 
-Once started, the web interface provides access to your OpenCode sessions.
+Nach dem Start bietet die Weboberfläche Zugriff auf Ihre OpenCode-Sitzungen.
 
-### Sessions
+### Sitzungen
 
-View and manage your sessions from the homepage. You can see active sessions and start new ones.
+Zeigen Sie Ihre Sitzungen auf der Startseite an und verwalten Sie sie. Sie können aktive Sitzungen sehen und neue starten.
 
-![OpenCode Web - Active Session](../../../assets/web/web-homepage-active-session.png)
+![OpenCode Web – Aktive Sitzung](../../../assets/web/web-homepage-active-session.png)
 
-### Server Status
+### Serverstatus
 
-Click "See Servers" to view connected servers and their status.
+Klicken Sie auf „Server anzeigen“, um verbundene Server und deren Status anzuzeigen.
 
-![OpenCode Web - See Servers](../../../assets/web/web-homepage-see-servers.png)
+![OpenCode Web – Siehe Server](../../../assets/web/web-homepage-see-servers.png)
 
 ---
 
-## Attaching a Terminal
+## Anschließen eines Terminals
 
-You can attach a terminal TUI to a running web server:
+Sie können eine Terminal-TUI an einen laufenden Webserver anschließen:
 
 ```bash
 # Start the web server
@@ -120,13 +120,13 @@ opencode web --port 4096
 opencode attach http://localhost:4096
 ```
 
-This allows you to use both the web interface and terminal simultaneously, sharing the same sessions and state.
+Dadurch können Sie sowohl die Weboberfläche als auch das Terminal gleichzeitig verwenden und dieselben Sitzungen und denselben Status teilen.
 
 ---
 
-## Config File
+## Konfigurationsdatei
 
-You can also configure server settings in your `opencode.json` config file:
+Sie können Servereinstellungen auch in Ihrer `opencode.json`-Konfigurationsdatei konfigurieren:
 
 ```json
 {
@@ -139,4 +139,4 @@ You can also configure server settings in your `opencode.json` config file:
 }
 ```
 
-Command line flags take precedence over config file settings.
+Befehlszeilenflags haben Vorrang vor Konfigurationsdateieinstellungen.

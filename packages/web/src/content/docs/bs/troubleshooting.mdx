@@ -1,67 +1,67 @@
 ---
-title: Troubleshooting
-description: Common issues and how to resolve them.
+title: Rješavanje problema
+description: Uobičajeni problemi i kako ih riješiti.
 ---
 
-To debug issues with OpenCode, start by checking the logs and local data it stores on disk.
+Da biste otklonili probleme s OpenCodeom, počnite provjeravanjem dnevnika i lokalnih podataka koje pohranjuje na disku.
 
 ---
 
-## Logs
+## Dnevnici
 
-Log files are written to:
+Log fajlovi se pišu na:
 
 - **macOS/Linux**: `~/.local/share/opencode/log/`
-- **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.local\share\opencode\log`
+- **Windows**: Pritisnite `WIN+R` i zalijepite `%USERPROFILE%\.local\share\opencode\log`
 
-Log files are named with timestamps (e.g., `2025-01-09T123456.log`) and the most recent 10 log files are kept.
+Datoteke evidencije se imenuju vremenskim oznakama (npr. `2025-01-09T123456.log`) i čuvaju se najnovijih 10 datoteka dnevnika.
 
-You can set the log level with the `--log-level` command-line option to get more detailed debug information. For example, `opencode --log-level DEBUG`.
+Možete postaviti nivo dnevnika pomoću opcije komandne linije `--log-level` da biste dobili detaljnije informacije o otklanjanju grešaka. Na primjer, `opencode --log-level DEBUG`.
 
 ---
 
-## Storage
+## Skladištenje
 
-opencode stores session data and other application data on disk at:
+opencode pohranjuje podatke o sesiji i druge podatke aplikacije na disku na:
 
 - **macOS/Linux**: `~/.local/share/opencode/`
-- **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.local\share\opencode`
+- **Windows**: Pritisnite `WIN+R` i zalijepite `%USERPROFILE%\.local\share\opencode`
 
-This directory contains:
+Ovaj direktorij sadrži:
 
-- `auth.json` - Authentication data like API keys, OAuth tokens
-- `log/` - Application logs
-- `project/` - Project-specific data like session and message data
-  - If the project is within a Git repo, it is stored in `./<project-slug>/storage/`
-  - If it is not a Git repo, it is stored in `./global/storage/`
-
----
-
-## Desktop app
-
-OpenCode Desktop runs a local OpenCode server (the `opencode-cli` sidecar) in the background. Most issues are caused by a misbehaving plugin, a corrupted cache, or a bad server setting.
-
-### Quick checks
-
-- Fully quit and relaunch the app.
-- If the app shows an error screen, click **Restart** and copy the error details.
-- macOS only: `OpenCode` menu -> **Reload Webview** (helps if the UI is blank/frozen).
+- `auth.json` - ​​Podaci o autentifikaciji kao što su API ključevi, OAuth tokeni
+- `log/` - ​​Dnevnici aplikacije
+- `project/` - ​​Podaci specifični za projekat kao što su podaci o sesiji i poruci
+  - Ako je projekat unutar Git repo-a, on je pohranjen u `./<project-slug>/storage/`
+  - Ako nije Git repo, pohranjuje se u `./global/storage/`
 
 ---
 
-### Disable plugins
+## Desktop aplikacija
 
-If the desktop app is crashing on launch, hanging, or behaving strangely, start by disabling plugins.
+OpenCode Desktop pokreće lokalni OpenCode server (`opencode-cli` sidecar) u pozadini. Većina problema je uzrokovana nedostatkom dodatka, oštećenom keš memorijom ili lošim postavkama servera.
 
-#### Check the global config
+### Brze provjere
 
-Open your global config file and look for a `plugin` key.
+- Potpuno zatvorite i ponovo pokrenite aplikaciju.
+- Ako aplikacija prikaže ekran s greškom, kliknite na **Restart** i kopirajte detalje o grešci.
+- samo za macOS: `OpenCode` meni -> **Ponovo učitaj Webview** (pomaže ako je korisnički interfejs prazan/zamrznut).
 
-- **macOS/Linux**: `~/.config/opencode/opencode.jsonc` (or `~/.config/opencode/opencode.json`)
-- **macOS/Linux** (older installs): `~/.local/share/opencode/opencode.jsonc`
-- **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.config\opencode\opencode.jsonc`
+---
 
-If you have plugins configured, temporarily disable them by removing the key or setting it to an empty array:
+### Onemogući dodatke
+
+Ako se desktop aplikacija ruši pri pokretanju, visi ili se čudno ponaša, počnite s onemogućavanjem dodataka.
+
+#### Provjerite globalnu konfiguraciju
+
+Otvorite svoju globalnu konfiguracijsku datoteku i potražite ključ `plugin`.
+
+- **macOS/Linux**: `~/.config/opencode/opencode.jsonc` (ili `~/.config/opencode/opencode.json`)
+- **macOS/Linux** (starije instalacije): `~/.local/share/opencode/opencode.jsonc`
+- **Windows**: Pritisnite `WIN+R` i zalijepite `%USERPROFILE%\.config\opencode\opencode.jsonc`
+
+Ako imate konfigurirane dodatke, privremeno ih onemogućite uklanjanjem ključa ili postavljanjem na prazan niz:
 
 ```jsonc
 {
@@ -70,175 +70,175 @@ If you have plugins configured, temporarily disable them by removing the key or 
 }
 ```
 
-#### Check plugin directories
+#### Provjerite imenike dodataka
 
-OpenCode can also load local plugins from disk. Temporarily move these out of the way (or rename the folder) and restart the desktop app:
+OpenCode također može učitati lokalne dodatke s diska. Privremeno ih maknite s puta (ili preimenujte folder) i ponovo pokrenite desktop aplikaciju:
 
-- **Global plugins**
+- **Globalni dodaci**
   - **macOS/Linux**: `~/.config/opencode/plugins/`
-  - **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.config\opencode\plugins`
-- **Project plugins** (only if you use per-project config)
+  - **Windows**: Pritisnite `WIN+R` i zalijepite `%USERPROFILE%\.config\opencode\plugins`
+- **Projektni dodaci** (samo ako koristite konfiguraciju po projektu)
   - `<your-project>/.opencode/plugins/`
 
-If the app starts working again, re-enable plugins one at a time to find which one is causing the issue.
+Ako aplikacija ponovo počne raditi, ponovo omogućite dodatke jedan po jedan kako biste otkrili koji od njih uzrokuje problem.
 
 ---
 
-### Clear the cache
+### Očisti keš memoriju
 
-If disabling plugins doesn't help (or a plugin install is stuck), clear the cache so OpenCode can rebuild it.
+Ako onemogućavanje dodataka ne pomogne (ili se instalacija dodatka zaglavila), obrišite keš memoriju kako bi ga OpenCode mogao ponovo izgraditi.
 
-1. Quit OpenCode Desktop completely.
-2. Delete the cache directory:
+1. Potpuno zatvorite OpenCode Desktop.
+2. Izbrišite keš direktorij:
 
-- **macOS**: Finder -> `Cmd+Shift+G` -> paste `~/.cache/opencode`
-- **Linux**: delete `~/.cache/opencode` (or run `rm -rf ~/.cache/opencode`)
-- **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.cache\opencode`
+- **macOS**: Finder -> `Cmd+Shift+G` -> zalijepi `~/.cache/opencode`
+- **Linux**: obrišite `~/.cache/opencode` (ili pokrenite `rm -rf ~/.cache/opencode`)
+- **Windows**: Pritisnite `WIN+R` i zalijepite `%USERPROFILE%\.cache\opencode`
 
-3. Restart OpenCode Desktop.
-
----
-
-### Fix server connection issues
-
-OpenCode Desktop can either start its own local server (default) or connect to a server URL you configured.
-
-If you see a **"Connection Failed"** dialog (or the app never gets past the splash screen), check for a custom server URL.
-
-#### Clear the desktop default server URL
-
-From the Home screen, click the server name (with the status dot) to open the Server picker. In the **Default server** section, click **Clear**.
-
-#### Remove `server.port` / `server.hostname` from your config
-
-If your `opencode.json(c)` contains a `server` section, temporarily remove it and restart the desktop app.
-
-#### Check environment variables
-
-If you have `OPENCODE_PORT` set in your environment, the desktop app will try to use that port for the local server.
-
-- Unset `OPENCODE_PORT` (or pick a free port) and restart.
+3. Ponovo pokrenite OpenCode Desktop.
 
 ---
 
-### Linux: Wayland / X11 issues
+### Popravite probleme sa vezom na serveru
 
-On Linux, some Wayland setups can cause blank windows or compositor errors.
+OpenCode Desktop može ili pokrenuti svoj lokalni server (podrazumevano) ili se povezati na URL servera koji ste konfigurisali.
 
-- If you're on Wayland and the app is blank/crashing, try launching with `OC_ALLOW_WAYLAND=1`.
-- If that makes things worse, remove it and try launching under an X11 session instead.
+Ako vidite dijaloški okvir **"Povezivanje nije uspjelo"** (ili aplikacija nikada ne prođe kroz početni ekran), provjerite da li postoji prilagođeni URL servera.
+
+#### Obrišite zadani URL servera radne površine
+
+Na početnom ekranu kliknite na ime servera (sa tačkom statusa) da otvorite birač servera. U odjeljku **Podrazumevani server** kliknite na **Obriši**.
+
+#### Uklonite `server.port` / `server.hostname` iz vaše konfiguracije
+
+Ako vaš `opencode.json(c)` sadrži odjeljak `server`, privremeno ga uklonite i ponovo pokrenite desktop aplikaciju.
+
+#### Provjerite varijable okruženja
+
+Ako ste postavili `OPENCODE_PORT` u svom okruženju, desktop aplikacija će pokušati da koristi taj port za lokalni server.
+
+- Poništite `OPENCODE_PORT` (ili odaberite slobodan port) i ponovo pokrenite.
+
+---
+
+### Linux: Wayland / X11 problemi
+
+Na Linuxu, neka podešavanja Waylanda mogu uzrokovati prazne prozore ili greške sastavljača.
+
+- Ako ste na Waylandu, a aplikacija je prazna/ispada, pokušajte pokrenuti sa `OC_ALLOW_WAYLAND=1`.
+- Ako to pogorša stvari, uklonite ga i pokušajte pokrenuti pod X11 sesijom umjesto toga.
 
 ---
 
 ### Windows: WebView2 runtime
 
-On Windows, OpenCode Desktop requires the Microsoft Edge **WebView2 Runtime**. If the app opens to a blank window or won't start, install/update WebView2 and try again.
+Na Windows-u, OpenCode Desktop zahtijeva Microsoft Edge **WebView2 Runtime**. Ako se aplikacija otvori u praznom prozoru ili se ne pokrene, instalirajte/ažurirajte WebView2 i pokušajte ponovo.
 
 ---
 
-### Windows: General performance issues
+### Windows: Opšti problemi sa performansama
 
-If you're experiencing slow performance, file access issues, or terminal problems on Windows, try using [WSL (Windows Subsystem for Linux)](./windows-wsl). WSL provides a Linux environment that works more seamlessly with OpenCode's features.
-
----
-
-### Notifications not showing
-
-OpenCode Desktop only shows system notifications when:
-
-- notifications are enabled for OpenCode in your OS settings, and
-- the app window is not focused.
+Ako imate spore performanse, probleme s pristupom datotekama ili probleme s terminalom na Windows-u, pokušajte koristiti [WSL (Windows podsistem za Linux)](./windows-wsl). WSL pruža Linux okruženje koje radi neprimetnije sa OpenCode-ovim karakteristikama.
 
 ---
 
-### Reset desktop app storage (last resort)
+### Obavještenja se ne prikazuju
 
-If the app won't start and you can't clear settings from inside the UI, reset the desktop app's saved state.
+OpenCode Desktop prikazuje sistemska obavještenja samo kada:
 
-1. Quit OpenCode Desktop.
-2. Find and delete these files (they live in the OpenCode Desktop app data directory):
-
-- `opencode.settings.dat` (desktop default server URL)
-- `opencode.global.dat` and `opencode.workspace.*.dat` (UI state like recent servers/projects)
-
-To find the directory quickly:
-
-- **macOS**: Finder -> `Cmd+Shift+G` -> `~/Library/Application Support` (then search for the filenames above)
-- **Linux**: search under `~/.local/share` for the filenames above
-- **Windows**: Press `WIN+R` -> `%APPDATA%` (then search for the filenames above)
+- obavještenja su omogućena za OpenCode u postavkama vašeg OS-a, i
+- prozor aplikacije nije fokusiran.
 
 ---
 
-## Getting help
+### Poništi pohranu desktop aplikacija (posljednje rješenje)
 
-If you're experiencing issues with OpenCode:
+Ako se aplikacija ne pokrene i ne možete izbrisati postavke unutar korisničkog sučelja, resetirajte spremljeno stanje desktop aplikacije.
 
-1. **Report issues on GitHub**
+1. Zatvorite OpenCode Desktop.
+2. Pronađite i izbrišite ove datoteke (oni žive u direktoriju podataka OpenCode Desktop aplikacije):
 
-   The best way to report bugs or request features is through our GitHub repository:
+- `opencode.settings.dat` (URL zadanog servera za desktop)
+- `opencode.global.dat` i `opencode.workspace.*.dat` (stanje korisničkog interfejsa poput nedavnih servera/projekata)
+
+Da brzo pronađete direktorij:
+
+- **macOS**: Finder -> `Cmd+Shift+G` -> `~/Library/Application Support` (onda potražite nazive fajlova iznad)
+- **Linux**: potražite nazive fajlova iznad pod `~/.local/share`
+- **Windows**: Pritisnite `WIN+R` -> `%APPDATA%` (zatim potražite nazive fajlova iznad)
+
+---
+
+## Dobivanje pomoći
+
+Ako imate problema s OpenCodeom:
+
+1. **Prijavite probleme na GitHub**
+
+   Najbolji način da prijavite greške ili zatražite funkcije je putem našeg GitHub spremišta:
 
    [**github.com/anomalyco/opencode/issues**](https://github.com/anomalyco/opencode/issues)
 
-   Before creating a new issue, search existing issues to see if your problem has already been reported.
+   Prije kreiranja novog problema, pretražite postojeće probleme da vidite je li vaš problem već prijavljen.
 
-2. **Join our Discord**
+2. **Pridružite se našem Discordu**
 
-   For real-time help and community discussion, join our Discord server:
+   Za pomoć u stvarnom vremenu i diskusiju u zajednici, pridružite se našem Discord serveru:
 
    [**opencode.ai/discord**](https://opencode.ai/discord)
 
 ---
 
-## Common issues
+## Uobičajeni problemi
 
-Here are some common issues and how to resolve them.
-
----
-
-### OpenCode won't start
-
-1. Check the logs for error messages
-2. Try running with `--print-logs` to see output in the terminal
-3. Ensure you have the latest version with `opencode upgrade`
+Evo nekih uobičajenih problema i kako ih riješiti.
 
 ---
 
-### Authentication issues
+### OpenCode se neće pokrenuti
 
-1. Try re-authenticating with the `/connect` command in the TUI
-2. Check that your API keys are valid
-3. Ensure your network allows connections to the provider's API
+1. Provjerite dnevnike za poruke o greškama
+2. Pokušajte pokrenuti sa `--print-logs` da vidite izlaz u terminalu
+3. Uvjerite se da imate najnoviju verziju sa `opencode upgrade`
 
 ---
 
-### Model not available
+### Problemi s autentifikacijom
 
-1. Check that you've authenticated with the provider
-2. Verify the model name in your config is correct
-3. Some models may require specific access or subscriptions
+1. Pokušajte ponovo autentifikovati sa naredbom `/connect` u TUI
+2. Provjerite da li su vaši API ključevi važeći
+3. Uvjerite se da vaša mreža dozvoljava veze s API-jem provajdera
 
-If you encounter `ProviderModelNotFoundError` you are most likely incorrectly
-referencing a model somewhere.
-Models should be referenced like so: `<providerId>/<modelId>`
+---
 
-Examples:
+### Model nije dostupan
+
+1. Provjerite jeste li se autentifikovali kod provajdera
+2. Provjerite je li naziv modela u vašoj konfiguraciji tačan
+3. Neki modeli mogu zahtijevati poseban pristup ili pretplate
+
+Ako naiđete na `ProviderModelNotFoundError` najvjerovatnije niste u pravu
+referenciranje modela negdje.
+Modele treba referencirati ovako: `<providerId>/<modelId>`
+
+primjeri:
 
 - `openai/gpt-4.1`
 - `openrouter/google/gemini-2.5-flash`
 - `opencode/kimi-k2`
 
-To figure out what models you have access to, run `opencode models`
+Da saznate kojim modelima imate pristup, pokrenite `opencode models`
 
 ---
 
 ### ProviderInitError
 
-If you encounter a ProviderInitError, you likely have an invalid or corrupted configuration.
+Ako naiđete na grešku ProviderInitError, vjerovatno imate nevažeću ili oštećenu konfiguraciju.
 
-To resolve this:
+Da biste ovo riješili:
 
-1. First, verify your provider is set up correctly by following the [providers guide](./providers)
-2. If the issue persists, try clearing your stored configuration:
+1. Prvo provjerite da li je vaš provajder ispravno postavljen slijedeći [vodič za pružatelje](./providers)
+2. Ako se problem nastavi, pokušajte obrisati pohranjenu konfiguraciju:
 
    
 
@@ -248,19 +248,19 @@ To resolve this:
 
 ```
 
-   On Windows, press `WIN+R` and delete: `%USERPROFILE%\.local\share\opencode`
+   Na Windows-u pritisnite `WIN+R` i izbrišite: `%USERPROFILE%\.local\share\opencode`
 
-3. Re-authenticate with your provider using the `/connect` command in the TUI.
+3. Ponovo izvršite autentifikaciju kod svog provajdera koristeći naredbu `/connect` u TUI.
 
 ---
 
-### AI_APICallError and provider package issues
+### AI_APICallError i problemi sa paketom dobavljača
 
-If you encounter API call errors, this may be due to outdated provider packages. opencode dynamically installs provider packages (OpenAI, Anthropic, Google, etc.) as needed and caches them locally.
+Ako naiđete na greške API poziva, to može biti zbog zastarjelih paketa dobavljača. opencode dinamički instalira pakete dobavljača (OpenAI, Anthropic, Google, itd.) po potrebi i kešira ih lokalno.
 
-To resolve provider package issues:
+Da biste riješili probleme s paketom dobavljača:
 
-1. Clear the provider package cache:
+1. Obrišite keš paketa provajdera:
 
    
 
@@ -270,19 +270,19 @@ To resolve provider package issues:
 
 ```
 
-   On Windows, press `WIN+R` and delete: `%USERPROFILE%\.cache\opencode`
+   Na Windows-u pritisnite `WIN+R` i izbrišite: `%USERPROFILE%\.cache\opencode`
 
-2. Restart opencode to reinstall the latest provider packages
+2. Ponovo pokrenite opencode da ponovo instalirate najnovije pakete dobavljača
 
-This will force opencode to download the most recent versions of provider packages, which often resolves compatibility issues with model parameters and API changes.
+Ovo će prisiliti opencode da preuzme najnovije verzije paketa dobavljača, što često rješava probleme kompatibilnosti s parametrima modela i promjenama API-ja.
 
 ---
 
-### Copy/paste not working on Linux
+### Copy/paste ne radi na Linuxu
 
-Linux users need to have one of the following clipboard utilities installed for copy/paste functionality to work:
+Korisnici Linuxa moraju imati instaliran jedan od sljedećih uslužnih programa međuspremnika da bi funkcionirala funkcionalnost kopiranja/lijepljenja:
 
-**For X11 systems:**
+**Za X11 sisteme:**
 
 ```bash
 apt install -y xclip
@@ -290,13 +290,13 @@ apt install -y xclip
 apt install -y xsel
 ```
 
-**For Wayland systems:**
+**Za Wayland sisteme:**
 
 ```bash
 apt install -y wl-clipboard
 ```
 
-**For headless environments:**
+**Za okruženja bez glave:**
 
 ```bash
 apt install -y xvfb
@@ -305,4 +305,4 @@ Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
 export DISPLAY=:99.0
 ```
 
-opencode will detect if you're using Wayland and prefer `wl-clipboard`, otherwise it will try to find clipboard tools in order of: `xclip` and `xsel`.
+opencode će otkriti da li koristite Wayland i preferirate `wl-clipboard`, u suprotnom će pokušati pronaći alate međuspremnika po redoslijedu: `xclip` i `xsel`.

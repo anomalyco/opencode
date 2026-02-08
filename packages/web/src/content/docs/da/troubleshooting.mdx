@@ -1,67 +1,67 @@
 ---
-title: Troubleshooting
-description: Common issues and how to resolve them.
+title: Feilsøking
+description: Vanlige problemer og hvordan de kan løses.
 ---
 
-To debug issues with OpenCode, start by checking the logs and local data it stores on disk.
+For å feilsøke problemer med OpenCode, start med å sjekke loggene og lokale data den lagrer på disken.
 
 ---
 
-## Logs
+## Logger
 
-Log files are written to:
+Loggfiler skrives til:
 
 - **macOS/Linux**: `~/.local/share/opencode/log/`
-- **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.local\share\opencode\log`
+- **Windows**: Trykk `WIN+R` og lim inn `%USERPROFILE%\.local\share\opencode\log`
 
-Log files are named with timestamps (e.g., `2025-01-09T123456.log`) and the most recent 10 log files are kept.
+Loggfiler navngis med tidsstempler (f.eks. `2025-01-09T123456.log`) og de siste 10 loggfilene beholdes.
 
-You can set the log level with the `--log-level` command-line option to get more detailed debug information. For example, `opencode --log-level DEBUG`.
+Du kan angi loggnivået med kommandolinjealternativet `--log-level` for å få mer detaljert feilsøkingsinformasjon. For eksempel `opencode --log-level DEBUG`.
 
 ---
 
-## Storage
+## Lagring
 
-opencode stores session data and other application data on disk at:
+opencode lagrer øktdata og andre applikasjonsdata på disken på:
 
 - **macOS/Linux**: `~/.local/share/opencode/`
-- **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.local\share\opencode`
+- **Windows**: Trykk `WIN+R` og lim inn `%USERPROFILE%\.local\share\opencode`
 
-This directory contains:
+Denne katalogen inneholder:
 
-- `auth.json` - Authentication data like API keys, OAuth tokens
-- `log/` - Application logs
-- `project/` - Project-specific data like session and message data
-  - If the project is within a Git repo, it is stored in `./<project-slug>/storage/`
-  - If it is not a Git repo, it is stored in `./global/storage/`
-
----
-
-## Desktop app
-
-OpenCode Desktop runs a local OpenCode server (the `opencode-cli` sidecar) in the background. Most issues are caused by a misbehaving plugin, a corrupted cache, or a bad server setting.
-
-### Quick checks
-
-- Fully quit and relaunch the app.
-- If the app shows an error screen, click **Restart** and copy the error details.
-- macOS only: `OpenCode` menu -> **Reload Webview** (helps if the UI is blank/frozen).
+- `auth.json` - Autentiseringsdata som API-nøkler, OAuth-tokens
+- `log/` - Applikasjonslogger
+- `project/` - Prosjektspesifikke data som økt- og meldingsdata
+  - Hvis prosjektet er innenfor en Git-repo, lagres det i `./<project-slug>/storage/`
+  - Hvis det ikke er en Git-repo, lagres det i `./global/storage/`
 
 ---
 
-### Disable plugins
+## Desktop-app
 
-If the desktop app is crashing on launch, hanging, or behaving strangely, start by disabling plugins.
+OpenCode Desktop kjører en lokal OpenCode-server (`opencode-cli` sidevognen) i bakgrunnen. De fleste problemene er forårsaket av en plugin som fungerer dårlig, en ødelagt cache eller en dårlig serverinnstilling.
 
-#### Check the global config
+### Raske sjekker
 
-Open your global config file and look for a `plugin` key.
+- Avslutt og start appen på nytt.
+- Hvis appen viser en feilskjerm, klikker du på **Start på nytt** og kopierer feildetaljene.
+- Bare macOS: `OpenCode`-meny -> **Last nettvisning på nytt** (hjelper hvis UI er tom/frosset).
 
-- **macOS/Linux**: `~/.config/opencode/opencode.jsonc` (or `~/.config/opencode/opencode.json`)
-- **macOS/Linux** (older installs): `~/.local/share/opencode/opencode.jsonc`
-- **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.config\opencode\opencode.jsonc`
+---
 
-If you have plugins configured, temporarily disable them by removing the key or setting it to an empty array:
+### Deaktiver plugins
+
+Hvis skrivebordsappen krasjer ved oppstart, henger eller oppfører seg merkelig, start med å deaktivere plugins.
+
+#### Sjekk den globale konfigurasjonen
+
+Åpne den globale konfigurasjonsfilen og se etter en `plugin`-nøkkel.
+
+- **macOS/Linux**: `~/.config/opencode/opencode.jsonc` (eller `~/.config/opencode/opencode.json`)
+- **macOS/Linux** (eldre installasjoner): `~/.local/share/opencode/opencode.jsonc`
+- **Windows**: Trykk `WIN+R` og lim inn `%USERPROFILE%\.config\opencode\opencode.jsonc`
+
+Hvis du har konfigurert plugins, deaktiver dem midlertidig ved å fjerne nøkkelen eller sette den til en tom matrise:
 
 ```jsonc
 {
@@ -70,211 +70,211 @@ If you have plugins configured, temporarily disable them by removing the key or 
 }
 ```
 
-#### Check plugin directories
+#### Sjekk plugin-kataloger
 
-OpenCode can also load local plugins from disk. Temporarily move these out of the way (or rename the folder) and restart the desktop app:
+OpenCode kan også laste lokale plugins fra disken. Flytt disse midlertidig ut av veien (eller gi nytt navn til mappen) og start skrivebordsappen på nytt:
 
-- **Global plugins**
+- **Globale plugins**
   - **macOS/Linux**: `~/.config/opencode/plugins/`
-  - **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.config\opencode\plugins`
-- **Project plugins** (only if you use per-project config)
+  - **Windows**: Trykk `WIN+R` og lim inn `%USERPROFILE%\.config\opencode\plugins`
+- **Prosjektplugins** (bare hvis du bruker konfigurasjon per prosjekt)
   - `<your-project>/.opencode/plugins/`
 
-If the app starts working again, re-enable plugins one at a time to find which one is causing the issue.
+Hvis appen begynner å fungere igjen, aktiverer du plugins én om gangen for å finne ut hvilken som forårsaker problemet.
 
 ---
 
-### Clear the cache
+### Tøm hurtigbufferen
 
-If disabling plugins doesn't help (or a plugin install is stuck), clear the cache so OpenCode can rebuild it.
+Hvis deaktivering av plugins ikke hjelper (eller en plugin-installasjon sitter fast), tøm hurtigbufferen slik at OpenCode kan gjenoppbygge den.
 
-1. Quit OpenCode Desktop completely.
-2. Delete the cache directory:
+1. Avslutt OpenCode Desktop helt.
+2. Slett hurtigbufferkatalogen:
 
-- **macOS**: Finder -> `Cmd+Shift+G` -> paste `~/.cache/opencode`
-- **Linux**: delete `~/.cache/opencode` (or run `rm -rf ~/.cache/opencode`)
-- **Windows**: Press `WIN+R` and paste `%USERPROFILE%\.cache\opencode`
+- **macOS**: Finder -> `Cmd+Shift+G` -> lim inn `~/.cache/opencode`
+- **Linux**: slett `~/.cache/opencode` (eller kjør `rm -rf ~/.cache/opencode`)
+- **Windows**: Trykk `WIN+R` og lim inn `%USERPROFILE%\.cache\opencode`
 
-3. Restart OpenCode Desktop.
-
----
-
-### Fix server connection issues
-
-OpenCode Desktop can either start its own local server (default) or connect to a server URL you configured.
-
-If you see a **"Connection Failed"** dialog (or the app never gets past the splash screen), check for a custom server URL.
-
-#### Clear the desktop default server URL
-
-From the Home screen, click the server name (with the status dot) to open the Server picker. In the **Default server** section, click **Clear**.
-
-#### Remove `server.port` / `server.hostname` from your config
-
-If your `opencode.json(c)` contains a `server` section, temporarily remove it and restart the desktop app.
-
-#### Check environment variables
-
-If you have `OPENCODE_PORT` set in your environment, the desktop app will try to use that port for the local server.
-
-- Unset `OPENCODE_PORT` (or pick a free port) and restart.
+3. Start OpenCode Desktop på nytt.
 
 ---
 
-### Linux: Wayland / X11 issues
+### Løs problemer med servertilkobling
 
-On Linux, some Wayland setups can cause blank windows or compositor errors.
+OpenCode Desktop kan enten starte sin egen lokale server (standard) eller koble til en server URL du har konfigurert.
 
-- If you're on Wayland and the app is blank/crashing, try launching with `OC_ALLOW_WAYLAND=1`.
-- If that makes things worse, remove it and try launching under an X11 session instead.
+Hvis du ser en **"Tilkobling mislyktes"**-dialogboks (eller appen kommer aldri forbi splash-skjermen), se etter en tilpasset server URL.
 
----
+#### Slett standardserveren for skrivebordet URL
 
-### Windows: WebView2 runtime
+Fra startskjermen klikker du på servernavnet (med statusprikken) for å åpne servervelgeren. I delen **Standardserver** klikker du på **Slett**.
 
-On Windows, OpenCode Desktop requires the Microsoft Edge **WebView2 Runtime**. If the app opens to a blank window or won't start, install/update WebView2 and try again.
+#### Fjern `server.port` / `server.hostname` fra konfigurasjonen din
 
----
+Hvis `opencode.json(c)` inneholder en `server`-del, fjern den midlertidig og start skrivebordsappen på nytt.
 
-### Windows: General performance issues
+#### Sjekk miljøvariabler
 
-If you're experiencing slow performance, file access issues, or terminal problems on Windows, try using [WSL (Windows Subsystem for Linux)](./windows-wsl). WSL provides a Linux environment that works more seamlessly with OpenCode's features.
+Hvis du har `OPENCODE_PORT` satt i miljøet ditt, vil skrivebordsappen prøve å bruke den porten for den lokale serveren.
 
----
-
-### Notifications not showing
-
-OpenCode Desktop only shows system notifications when:
-
-- notifications are enabled for OpenCode in your OS settings, and
-- the app window is not focused.
+- Deaktiver `OPENCODE_PORT` (eller velg en ledig port) og start på nytt.
 
 ---
 
-### Reset desktop app storage (last resort)
+### Linux: Wayland / X11 problemer
 
-If the app won't start and you can't clear settings from inside the UI, reset the desktop app's saved state.
+På Linux kan noen Wayland-oppsett forårsake tomme vinduer eller kompositorfeil.
 
-1. Quit OpenCode Desktop.
-2. Find and delete these files (they live in the OpenCode Desktop app data directory):
-
-- `opencode.settings.dat` (desktop default server URL)
-- `opencode.global.dat` and `opencode.workspace.*.dat` (UI state like recent servers/projects)
-
-To find the directory quickly:
-
-- **macOS**: Finder -> `Cmd+Shift+G` -> `~/Library/Application Support` (then search for the filenames above)
-- **Linux**: search under `~/.local/share` for the filenames above
-- **Windows**: Press `WIN+R` -> `%APPDATA%` (then search for the filenames above)
+- Hvis du er på Wayland og appen er tom/krasj, prøv å starte med `OC_ALLOW_WAYLAND=1`.
+- Hvis det gjør ting verre, fjern det og prøv å starte under en X11-økt i stedet.
 
 ---
 
-## Getting help
+### Windows: WebView2 kjøretid
 
-If you're experiencing issues with OpenCode:
+På Windows krever OpenCode Desktop Microsoft Edge **WebView2 Runtime**. Hvis appen åpnes i et tomt vindu eller ikke starter, installer/oppdater WebView2 og prøv igjen.
 
-1. **Report issues on GitHub**
+---
 
-   The best way to report bugs or request features is through our GitHub repository:
+### Windows: Generelle ytelsesproblemer
+
+Hvis du opplever treg ytelse, problemer med filtilgang eller terminalproblemer på Windows, kan du prøve å bruke [WSL (Windows Subsystem for Linux)](./windows-wsl). WSL gir et Linux-miljø som fungerer mer sømløst med funksjonene til OpenCode.
+
+---
+
+### Varsler vises ikke
+
+OpenCode Desktop viser bare systemvarsler når:
+
+- varsler er aktivert for OpenCode i OS-innstillingene dine, og
+- appvinduet er ikke fokusert.
+
+---
+
+### Tilbakestill skrivebordsapplagring (siste utvei)
+
+Hvis appen ikke starter og du ikke kan slette innstillingene fra UI, tilbakestill skrivebordsappens lagrede tilstand.
+
+1. Avslutt OpenCode Desktop.
+2. Finn og slett disse filene (de finnes i OpenCode Desktop-appens datakatalog):
+
+- `opencode.settings.dat` (stasjonær standardserver URL)
+- `opencode.global.dat` og `opencode.workspace.*.dat` (UI tilstand som nylige servere/prosjekter)
+
+Slik finner du katalogen raskt:
+
+- **macOS**: Finder -> `Cmd+Shift+G` -> `~/Library/Application Support` (søk deretter etter filnavnene ovenfor)
+- **Linux**: søk under `~/.local/share` etter filnavnene ovenfor
+- **Windows**: Trykk `WIN+R` -> `%APPDATA%` (søk deretter etter filnavnene ovenfor)
+
+---
+
+## Får hjelp
+
+Hvis du opplever problemer med OpenCode:
+
+1. **Rapporter problemer på GitHub**
+
+   Den beste måten å rapportere feil eller be om funksjoner på er gjennom vårt GitHub-lager:
 
    [**github.com/anomalyco/opencode/issues**](https://github.com/anomalyco/opencode/issues)
 
-   Before creating a new issue, search existing issues to see if your problem has already been reported.
+   Før du oppretter et nytt problem, søk i eksisterende problemer for å se om problemet ditt allerede er rapportert.
 
-2. **Join our Discord**
+2. **Bli med i vår Discord**
 
-   For real-time help and community discussion, join our Discord server:
+   For sanntidshjelp og fellesskapsdiskusjon, bli med i vår Discord-server:
 
    [**opencode.ai/discord**](https://opencode.ai/discord)
 
 ---
 
-## Common issues
+## Vanlige problemer
 
-Here are some common issues and how to resolve them.
-
----
-
-### OpenCode won't start
-
-1. Check the logs for error messages
-2. Try running with `--print-logs` to see output in the terminal
-3. Ensure you have the latest version with `opencode upgrade`
+Her er noen vanlige problemer og hvordan du kan løse dem.
 
 ---
 
-### Authentication issues
+### OpenCode vil ikke starte
 
-1. Try re-authenticating with the `/connect` command in the TUI
-2. Check that your API keys are valid
-3. Ensure your network allows connections to the provider's API
+1. Sjekk loggene for feilmeldinger
+2. Prøv å kjøre med `--print-logs` for å se utdata i terminalen
+3. Sørg for at du har den nyeste versjonen med `opencode upgrade`
 
 ---
 
-### Model not available
+### Autentiseringsproblemer
 
-1. Check that you've authenticated with the provider
-2. Verify the model name in your config is correct
-3. Some models may require specific access or subscriptions
+1. Prøv å autentisere på nytt med kommandoen `/connect` i TUI
+2. Sjekk at API-nøklene dine er gyldige
+3. Sørg for at nettverket ditt tillater tilkoblinger til leverandørens API
 
-If you encounter `ProviderModelNotFoundError` you are most likely incorrectly
-referencing a model somewhere.
-Models should be referenced like so: `<providerId>/<modelId>`
+---
 
-Examples:
+### Modellen er ikke tilgjengelig
+
+1. Sjekk at du har autentisert deg med leverandøren
+2. Kontroller at modellnavnet i konfigurasjonen er riktig
+3. Noen modeller kan kreve spesifikk tilgang eller abonnement
+
+Hvis du støter på `ProviderModelNotFoundError` er du mest sannsynlig feil
+refererer til en modell et sted.
+Modeller skal refereres slik: `<providerId>/<modelId>`
+
+Eksempler:
 
 - `openai/gpt-4.1`
 - `openrouter/google/gemini-2.5-flash`
 - `opencode/kimi-k2`
 
-To figure out what models you have access to, run `opencode models`
+For å finne ut hvilke modeller du har tilgang til, kjør `opencode models`
 
 ---
 
 ### ProviderInitError
 
-If you encounter a ProviderInitError, you likely have an invalid or corrupted configuration.
+Hvis du støter på en ProviderInitError, har du sannsynligvis en ugyldig eller ødelagt konfigurasjon.
 
-To resolve this:
+For å løse dette:
 
-1. First, verify your provider is set up correctly by following the [providers guide](./providers)
-2. If the issue persists, try clearing your stored configuration:
+1. Kontroller først at leverandøren din er riktig konfigurert ved å følge [leverandørveiledningen](./providers)
+2. Hvis problemet vedvarer, prøv å tømme den lagrede konfigurasjonen:
 
    ```bash
    rm -rf ~/.local/share/opencode
    ```
 
-   On Windows, press `WIN+R` and delete: `%USERPROFILE%\.local\share\opencode`
+   På Windows, trykk `WIN+R` og slett: `%USERPROFILE%\.local\share\opencode`
 
-3. Re-authenticate with your provider using the `/connect` command in the TUI.
+3. Autentiser på nytt med leverandøren din ved å bruke kommandoen `/connect` i TUI.
 
 ---
 
-### AI_APICallError and provider package issues
+### AI_APICallError og leverandørpakkeproblemer
 
-If you encounter API call errors, this may be due to outdated provider packages. opencode dynamically installs provider packages (OpenAI, Anthropic, Google, etc.) as needed and caches them locally.
+Hvis du støter på API anropsfeil, kan dette skyldes utdaterte leverandørpakker. opencode installerer dynamisk leverandørpakker (OpenAI, Anthropic, Google, etc.) etter behov og cacher dem lokalt.
 
-To resolve provider package issues:
+For å løse problemer med leverandørpakke:
 
-1. Clear the provider package cache:
+1. Tøm leverandørens pakkebuffer:
 
    ```bash
    rm -rf ~/.cache/opencode
    ```
 
-   On Windows, press `WIN+R` and delete: `%USERPROFILE%\.cache\opencode`
+   På Windows, trykk `WIN+R` og slett: `%USERPROFILE%\.cache\opencode`
 
-2. Restart opencode to reinstall the latest provider packages
+2. Start opencode på nytt for å installere de nyeste leverandørpakkene på nytt
 
-This will force opencode to download the most recent versions of provider packages, which often resolves compatibility issues with model parameters and API changes.
+Dette vil tvinge opencode til å laste ned de nyeste versjonene av leverandørpakkene, som ofte løser kompatibilitetsproblemer med modellparametere og API endringer.
 
 ---
 
-### Copy/paste not working on Linux
+### Kopier/lim inn fungerer ikke på Linux
 
-Linux users need to have one of the following clipboard utilities installed for copy/paste functionality to work:
+Linux-brukere må ha ett av følgende utklippstavleverktøy installert for at kopier/lim inn-funksjonalitet skal fungere:
 
-**For X11 systems:**
+**For X11-systemer:**
 
 ```bash
 apt install -y xclip
@@ -282,13 +282,13 @@ apt install -y xclip
 apt install -y xsel
 ```
 
-**For Wayland systems:**
+**For Wayland-systemer:**
 
 ```bash
 apt install -y wl-clipboard
 ```
 
-**For headless environments:**
+**For hodeløse miljøer:**
 
 ```bash
 apt install -y xvfb
@@ -297,4 +297,4 @@ Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
 export DISPLAY=:99.0
 ```
 
-opencode will detect if you're using Wayland and prefer `wl-clipboard`, otherwise it will try to find clipboard tools in order of: `xclip` and `xsel`.
+opencode vil oppdage om du bruker Wayland og foretrekker `wl-clipboard`, ellers vil den prøve å finne utklippstavleverktøy i rekkefølgen: `xclip` og `xsel`.

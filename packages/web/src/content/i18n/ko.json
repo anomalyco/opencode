@@ -2,6 +2,8 @@
   "app.head.titleSuffix": "맨끝을 위해 건축되는 AI 기호화 대리인",
   "app.header.home": "홈 > 제품",
   "app.header.docs": "사이트맵",
+  "app.footer.issueLink": "버그를 찾으셨나요? 이슈를 열어 주세요",
+  "app.footer.discordLink": "Discord 커뮤니티에 참여하세요",
   "app.lander.hero.title": "터미널에 내장 된 AI 코딩 에이전트.",
   "app.lander.cta.getStarted": "시작하기",
   "app.lander.features.native_tui.title": "기본 TUI",

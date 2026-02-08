@@ -2,6 +2,8 @@
   "app.head.titleSuffix": "Agent za AI kodiranje napravljen za terminal",
   "app.header.home": "Dom",
   "app.header.docs": "Docs",
+  "app.footer.issueLink": "Pronašli ste grešku? Otvorite issue",
+  "app.footer.discordLink": "Pridružite se našoj Discord zajednici",
   "app.lander.hero.title": "Agent za AI kodiranje napravljen za terminal.",
   "app.lander.cta.getStarted": "Započnite",
   "app.lander.features.native_tui.title": "Native TUI",

@@ -1,21 +1,21 @@
 ---
 title: SDK
-description: Type-safe JS client for opencode server.
+description: Typsicherer JS-Client fuer den opencode-Server.
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-The opencode JS/TS SDK provides a type-safe client for interacting with the server.
-Use it to build integrations and control opencode programmatically.
+Das opencode JS/TS SDK bietet einen typsicheren Client fuer die Server-API.
+Damit kannst du Integrationen bauen und opencode programmatisch steuern.
 
-[Learn more](./server) about how the server works. For examples, check out the [projects](./ecosystem#projects) built by the community.
+[Mehr zum Server](./server). Beispiele findest du in den [Community-Projekten](./ecosystem#projects).
 
 ---
 
 ## Install
 
-Install the SDK from npm:
+Installiere das SDK ueber npm:
 
 ```bash
 npm install @opencode-ai/sdk
@@ -23,9 +23,9 @@ npm install @opencode-ai/sdk
 
 ---
 
-## Create client
+## Client erstellen
 
-Create an instance of opencode:
+Erstelle eine opencode-Instanz:
 
 ```javascript
 import { createOpencode } from "@opencode-ai/sdk"
@@ -33,9 +33,9 @@ import { createOpencode } from "@opencode-ai/sdk"
 const { client } = await createOpencode()
 ```
 
-This starts both a server and a client
+Das startet Server und Client.
 
-#### Options
+#### Optionen
 
 | Option     | Type          | Description                    | Default     |
 | ---------- | ------------- | ------------------------------ | ----------- |
@@ -49,7 +49,8 @@ This starts both a server and a client
 
 ## Config
 
-You can pass a configuration object to customize behavior. The instance still picks up your `opencode.json`, but you can override or add configuration inline:
+Du kannst ein Konfigurationsobjekt uebergeben, um das Verhalten anzupassen.
+`opencode.json` wird weiterhin geladen, kann aber inline ueberschrieben oder erweitert werden:
 
 ```javascript
 import { createOpencode } from "@opencode-ai/sdk"
@@ -67,9 +68,9 @@ console.log(`Server running at ${opencode.server.url}`)
 opencode.server.close()
 ```
 
-## Client only
+## Nur Client
 
-If you already have a running instance of opencode, you can create a client instance to connect to it:
+Wenn opencode bereits laeuft, kannst du nur einen Client erstellen und verbinden:
 
 ```javascript
 import { createOpencodeClient } from "@opencode-ai/sdk"
@@ -91,21 +92,22 @@ const client = createOpencodeClient({
 
 ---
 
-## Types
+## Typen
 
-The SDK includes TypeScript definitions for all API types. Import them directly:
+Das SDK bringt TypeScript-Definitionen fuer alle API-Typen mit.
+Du kannst sie direkt importieren:
 
 ```typescript
 import type { Session, Message, Part } from "@opencode-ai/sdk"
 ```
 
-All types are generated from the server's OpenAPI specification and available in the <a href={typesUrl}>types file</a>.
+Alle Typen werden aus der OpenAPI-Spezifikation des Servers generiert und sind in der <a href={typesUrl}>Typdatei</a> verfuegbar.
 
 ---
 
 ## Errors
 
-The SDK can throw errors that you can catch and handle:
+Das SDK kann Fehler werfen, die du abfangen und behandeln kannst:
 
 ```typescript
 try {
@@ -119,7 +121,7 @@ try {
 
 ## APIs
 
-The SDK exposes all server APIs through a type-safe client.
+Das SDK stellt alle Server-APIs ueber einen typsicheren Client bereit.
 
 ---
 

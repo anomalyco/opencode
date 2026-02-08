@@ -1,25 +1,25 @@
 ---
 title: TUI
-description: Using the OpenCode terminal user interface.
+description: Bruke OpenCode-terminalbrukergrensesnittet.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode provides an interactive terminal interface or TUI for working on your projects with an LLM.
+OpenCode gir et interaktivt terminalgrensesnitt eller TUI for å jobbe med prosjektene dine med en LLM.
 
-Running OpenCode starts the TUI for the current directory.
+Å kjøre OpenCode starter TUI for gjeldende katalog.
 
 ```bash
 opencode
 ```
 
-Or you can start it for a specific working directory.
+Eller du kan starte den for en bestemt arbeidskatalog.
 
 ```bash
 opencode /path/to/project
 ```
 
-Once you're in the TUI, you can prompt it with a message.
+Når du er i TUI, kan du spørre den med en melding.
 
 ```text
 Give me a quick summary of the codebase.
@@ -27,51 +27,51 @@ Give me a quick summary of the codebase.
 
 ---
 
-## File references
+## Filreferanser
 
-You can reference files in your messages using `@`. This does a fuzzy file search in the current working directory.
+Du kan referere til filer i meldingene dine ved å bruke `@`. Dette gjør et uklar filsøk i gjeldende arbeidskatalog.
 
-:::tip
-You can also use `@` to reference files in your messages.
+:::tupp
+Du kan også bruke `@` til å referere til filer i meldingene dine.
 :::
 
 ```text "@packages/functions/src/api/index.ts"
 How is auth handled in @packages/functions/src/api/index.ts?
 ```
 
-The content of the file is added to the conversation automatically.
+Innholdet i filen legges automatisk til samtalen.
 
 ---
 
-## Bash commands
+## Bash-kommandoer
 
-Start a message with `!` to run a shell command.
+Start en melding med `!` for å kjøre en shell-kommando.
 
 ```bash frame="none"
 !ls -la
 ```
 
-The output of the command is added to the conversation as a tool result.
+Utdataene fra kommandoen legges til samtalen som et verktøyresultat.
 
 ---
 
-## Commands
+## Kommandoer
 
-When using the OpenCode TUI, you can type `/` followed by a command name to quickly execute actions. For example:
+Når du bruker OpenCode TUI, kan du skrive `/` etterfulgt av et kommandonavn for raskt å utføre handlinger. For eksempel:
 
 ```bash frame="none"
 /help
 ```
 
-Most commands also have keybind using `ctrl+x` as the leader key, where `ctrl+x` is the default leader key. [Learn more](./keybinds).
+De fleste kommandoer har også tastebinding som bruker `ctrl+x` som ledernøkkel, der `ctrl+x` er standard ledernøkkel. [Finn ut mer](./keybinds).
 
-Here are all available slash commands:
+Her er alle tilgjengelige skråstrekkommandoer:
 
 ---
 
-### connect
+### koble til
 
-Add a provider to OpenCode. Allows you to select from available providers and add their API keys.
+Legg til en leverandør til OpenCode. Lar deg velge fra tilgjengelige leverandører og legge til deres API-nøkler.
 
 ```bash frame="none"
 /connect
@@ -79,175 +79,175 @@ Add a provider to OpenCode. Allows you to select from available providers and ad
 
 ---
 
-### compact
+### kompakt
 
-Compact the current session. _Alias_: `/summarize`
+Komprimer gjeldende økt. _Alias_: `/summarize`
 
 ```bash frame="none"
 /compact
 ```
 
-**Keybind:** `ctrl+x c`
+**Nøkkelbinding:** `ctrl+x c`
 
 ---
 
-### details
+### detaljer
 
-Toggle tool execution details.
+Veksle verktøyutførelsesdetaljer.
 
 ```bash frame="none"
 /details
 ```
 
-**Keybind:** `ctrl+x d`
+**Nøkkelbinding:** `ctrl+x d`
 
 ---
 
-### editor
+### redaktør
 
-Open external editor for composing messages. Uses the editor set in your `EDITOR` environment variable. [Learn more](#editor-setup).
+Åpne eksternt redigeringsprogram for å skrive meldinger. Bruker redigeringssettet i miljøvariabelen `EDITOR`. [Finn ut mer](#editor-setup).
 
 ```bash frame="none"
 /editor
 ```
 
-**Keybind:** `ctrl+x e`
+**Nøkkelbinding:** `ctrl+x e`
 
 ---
 
-### exit
+### avslutt
 
-Exit OpenCode. _Aliases_: `/quit`, `/q`
+Avslutt OpenCode. _Aliaser_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
 ```
 
-**Keybind:** `ctrl+x q`
+**Nøkkelbinding:** `ctrl+x q`
 
 ---
 
-### export
+### eksport
 
-Export current conversation to Markdown and open in your default editor. Uses the editor set in your `EDITOR` environment variable. [Learn more](#editor-setup).
+Eksporter gjeldende samtale til Markdown og åpne i standardredigeringsprogrammet. Bruker redigeringssettet i miljøvariabelen `EDITOR`. [Finn ut mer](#editor-setup).
 
 ```bash frame="none"
 /export
 ```
 
-**Keybind:** `ctrl+x x`
+**Nøkkelbinding:** `ctrl+x x`
 
 ---
 
-### help
+### hjelp
 
-Show the help dialog.
+Vis hjelpedialogen.
 
 ```bash frame="none"
 /help
 ```
 
-**Keybind:** `ctrl+x h`
+**Nøkkelbinding:** `ctrl+x h`
 
 ---
 
 ### init
 
-Create or update `AGENTS.md` file. [Learn more](./rules).
+Opprett eller oppdater `AGENTS.md`-fil. [Finn ut mer](./rules).
 
 ```bash frame="none"
 /init
 ```
 
-**Keybind:** `ctrl+x i`
+**Nøkkelbinding:** `ctrl+x i`
 
 ---
 
-### models
+### modeller
 
-List available models.
+Liste over tilgjengelige modeller.
 
 ```bash frame="none"
 /models
 ```
 
-**Keybind:** `ctrl+x m`
+**Nøkkelbinding:** `ctrl+x m`
 
 ---
 
-### new
+### ny
 
-Start a new session. _Alias_: `/clear`
+Start en ny økt. _Alias_: `/clear`
 
 ```bash frame="none"
 /new
 ```
 
-**Keybind:** `ctrl+x n`
+**Nøkkelbinding:** `ctrl+x n`
 
 ---
 
-### redo
+### gjør om
 
-Redo a previously undone message. Only available after using `/undo`.
+Gjenta en tidligere angret melding. Kun tilgjengelig etter bruk av `/undo`.
 
-:::tip
-Any file changes will also be restored.
+:::tupp
+Eventuelle filendringer vil også bli gjenopprettet.
 :::
 
-Internally, this uses Git to manage the file changes. So your project **needs to
-be a Git repository**.
+Internt bruker dette Git til å administrere filendringene. Så ditt prosjekt **må
+være et Git-depot**.
 
 ```bash frame="none"
 /redo
 ```
 
-**Keybind:** `ctrl+x r`
+**Nøkkelbinding:** `ctrl+x r`
 
 ---
 
-### sessions
+### økter
 
-List and switch between sessions. _Aliases_: `/resume`, `/continue`
+List opp og bytt mellom økter. _Aliaser_: `/resume`, `/continue`
 
 ```bash frame="none"
 /sessions
 ```
 
-**Keybind:** `ctrl+x l`
+**Nøkkelbinding:** `ctrl+x l`
 
 ---
 
-### share
+### del
 
-Share current session. [Learn more](./share).
+Del gjeldende økt. [Finn ut mer](./share).
 
 ```bash frame="none"
 /share
 ```
 
-**Keybind:** `ctrl+x s`
+**Nøkkelbinding:** `ctrl+x s`
 
 ---
 
-### themes
+### temaer
 
-List available themes.
+Liste over tilgjengelige temaer.
 
 ```bash frame="none"
 /theme
 ```
 
-**Keybind:** `ctrl+x t`
+**Nøkkelbinding:** `ctrl+x t`
 
 ---
 
-### thinking
+### tenker
 
-Toggle the visibility of thinking/reasoning blocks in the conversation. When enabled, you can see the model's reasoning process for models that support extended thinking.
+Veksle mellom synligheten av tenke-/resonneringsblokker i samtalen. Når den er aktivert, kan du se modellens resonneringsprosess for modeller som støtter utvidet tenkning.
 
 :::note
-This command only controls whether thinking blocks are **displayed** - it does not enable or disable the model's reasoning capabilities. To toggle actual reasoning capabilities, use `ctrl+t` to cycle through model variants.
+Denne kommandoen kontrollerer bare om tenkeblokker **vises** - den aktiverer eller deaktiverer ikke modellens resonneringsmuligheter. For å veksle mellom faktiske resonneringsmuligheter, bruk `ctrl+t` for å bla gjennom modellvarianter.
 :::
 
 ```bash frame="none"
@@ -256,28 +256,28 @@ This command only controls whether thinking blocks are **displayed** - it does n
 
 ---
 
-### undo
+### angre
 
-Undo last message in the conversation. Removes the most recent user message, all subsequent responses, and any file changes.
+Angre siste melding i samtalen. Fjerner den siste brukermeldingen, alle påfølgende svar og eventuelle filendringer.
 
-:::tip
-Any file changes made will also be reverted.
+:::tupp
+Eventuelle filendringer vil også bli tilbakestilt.
 :::
 
-Internally, this uses Git to manage the file changes. So your project **needs to
-be a Git repository**.
+Internt bruker dette Git til å administrere filendringene. Så ditt prosjekt **må
+være et Git-depot**.
 
 ```bash frame="none"
 /undo
 ```
 
-**Keybind:** `ctrl+x u`
+**Nøkkelbinding:** `ctrl+x u`
 
 ---
 
-### unshare
+### avbryt deling
 
-Unshare current session. [Learn more](./share#un-sharing).
+Opphev deling av gjeldende økt. [Finn ut mer](./share#un-sharing).
 
 ```bash frame="none"
 /unshare
@@ -285,9 +285,9 @@ Unshare current session. [Learn more](./share#un-sharing).
 
 ---
 
-## Editor setup
+## Redaktøroppsett
 
-Both the `/editor` and `/export` commands use the editor specified in your `EDITOR` environment variable.
+Både kommandoene `/editor` og `/export` bruker redigeringsprogrammet som er spesifisert i miljøvariabelen `EDITOR`.
 
 <Tabs>
   <TabItem label="Linux/macOS">
@@ -301,8 +301,8 @@ Both the `/editor` and `/export` commands use the editor specified in your `EDIT
     export EDITOR="code --wait"
     ```
 
-    To make it permanent, add this to your shell profile;
-    `~/.bashrc`, `~/.zshrc`, etc.
+    For å gjøre det permanent, legg dette til i skallprofilen din;
+    `~/.bashrc`, `~/.zshrc` osv.
 
   </TabItem>
 
@@ -315,8 +315,8 @@ Both the `/editor` and `/export` commands use the editor specified in your `EDIT
     set EDITOR=code --wait
     ```
 
-    To make it permanent, use **System Properties** > **Environment
-    Variables**.
+    For å gjøre det permanent, bruk **Systemegenskaper** > **Miljø
+    Variabler**.
 
   </TabItem>
 
@@ -329,33 +329,33 @@ Both the `/editor` and `/export` commands use the editor specified in your `EDIT
     $env:EDITOR = "code --wait"
     ```
 
-    To make it permanent, add this to your PowerShell profile.
+    For å gjøre det permanent, legg dette til i PowerShell-profilen din.
 
   </TabItem>
 </Tabs>
 
-Popular editor options include:
+Populære redigeringsalternativer inkluderer:
 
 - `code` - Visual Studio Code
 - `cursor` - Cursor
-- `windsurf` - Windsurf
-- `nvim` - Neovim editor
+- `windsurf` - Vindsurfing
+- `nvim` - Neovim-redaktør
 - `vim` - Vim editor
-- `nano` - Nano editor
-- `notepad` - Windows Notepad
-- `subl` - Sublime Text
+- `nano` - Nano-editor
+- `notepad` - Windows Notisblokk
+- `subl` - Sublim tekst
 
 :::note
-Some editors like VS Code need to be started with the `--wait` flag.
+Noen redaktører som VS Code må startes med flagget `--wait`.
 :::
 
-Some editors need command-line arguments to run in blocking mode. The `--wait` flag makes the editor process block until closed.
+Noen redaktører trenger kommandolinjeargumenter for å kjøre i blokkeringsmodus. `--wait`-flagget gjør at redigeringsprosessen blokkeres til den lukkes.
 
 ---
 
-## Configure
+## Konfigurer
 
-You can customize TUI behavior through your OpenCode config file.
+Du kan tilpasse TUI-oppførselen gjennom OpenCode-konfigurasjonsfilen.
 
 ```json title="opencode.json"
 {
@@ -369,22 +369,22 @@ You can customize TUI behavior through your OpenCode config file.
 }
 ```
 
-### Options
+### Alternativer
 
-- `scroll_acceleration` - Enable macOS-style scroll acceleration for smooth, natural scrolling. When enabled, scroll speed increases with rapid scrolling gestures and stays precise for slower movements. **This setting takes precedence over `scroll_speed` and overrides it when enabled.**
-- `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (minimum: `1`). Defaults to `3`. **Note: This is ignored if `scroll_acceleration.enabled` is set to `true`.**
-
----
-
-## Customization
-
-You can customize various aspects of the TUI view using the command palette (`ctrl+x h` or `/help`). These settings persist across restarts.
+- `scroll_acceleration` - Aktiver rulleakselerasjon i macOS-stil for jevn, naturlig rulling. Når aktivert, øker rullehastigheten med raske rullebevegelser og forblir presis for langsommere bevegelser. **Denne innstillingen har forrang over `scroll_speed` og overstyrer den når den er aktivert.**
+- `scroll_speed` - Styrer hvor raskt TUI ruller når du bruker rullekommandoer (minimum: `1`). Standard er `3`. **Merk: Dette ignoreres hvis `scroll_acceleration.enabled` er satt til `true`.**
 
 ---
 
-#### Username display
+## Tilpasning
 
-Toggle whether your username appears in chat messages. Access this through:
+Du kan tilpasse ulike aspekter av TUI-visningen ved å bruke kommandopaletten (`ctrl+x h` eller `/help`). Disse innstillingene vedvarer ved omstarter.
 
-- Command palette: Search for "username" or "hide username"
-- The setting persists automatically and will be remembered across TUI sessions
+---
+
+#### Visning av brukernavn
+
+Veksle om brukernavnet ditt vises i chat-meldinger. Få tilgang til dette gjennom:
+
+- Kommandopalett: Søk etter "brukernavn" eller "skjul brukernavn"
+- Innstillingen vedvarer automatisk og vil bli husket over TUI økter

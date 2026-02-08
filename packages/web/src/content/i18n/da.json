@@ -2,6 +2,8 @@
   "app.head.titleSuffix": "AI-kodningsagent bygget til terminalen",
   "app.header.home": "Hjem",
   "app.header.docs": "Dokumenter",
+  "app.footer.issueLink": "Har du fundet en fejl? Opret en issue",
+  "app.footer.discordLink": "Bliv en del af vores Discord-fællesskab",
   "app.lander.hero.title": "AI-kodningsagenten bygget til terminalen.",
   "app.lander.cta.getStarted": "Kom i gang",
   "app.lander.features.native_tui.title": "Native TUI",

@@ -1,62 +1,62 @@
 ---
-title: "Agent Skills"
-description: "Define reusable behavior via SKILL.md definitions"
+title: "Skills agenata"
+description: "Definisite ponasanje koje se moze ponovo koristiti"
 ---
 
-Agent skills let OpenCode discover reusable instructions from your repo or home directory.
-Skills are loaded on-demand via the native `skill` tool—agents see available skills and can load the full content when needed.
-
----
-
-## Place files
-
-Create one folder per skill name and put a `SKILL.md` inside it.
-OpenCode searches these locations:
-
-- Project config: `.opencode/skills/<name>/SKILL.md`
-- Global config: `~/.config/opencode/skills/<name>/SKILL.md`
-- Project Claude-compatible: `.claude/skills/<name>/SKILL.md`
-- Global Claude-compatible: `~/.claude/skills/<name>/SKILL.md`
-- Project agent-compatible: `.agents/skills/<name>/SKILL.md`
-- Global agent-compatible: `~/.agents/skills/<name>/SKILL.md`
+Agent skills omogucavaju OpenCode-u da pronade uputstva koja se mogu ponovo koristiti iz repozitorija ili home direktorija.
+Skills se ucitavaju po potrebi kroz ugradeni `skill` alat - agenti vide dostupne skills i ucitavaju puni sadrzaj kad zatreba.
 
 ---
 
-## Understand discovery
+## Postavite datoteke
 
-For project-local paths, OpenCode walks up from your current working directory until it reaches the git worktree.
-It loads any matching `skills/*/SKILL.md` in `.opencode/` and any matching `.claude/skills/*/SKILL.md` or `.agents/skills/*/SKILL.md` along the way.
+Kreirajte jedan folder po nazivu skill-a i stavite `SKILL.md` unutar njega.
+OpenCode pretrazuje ove lokacije:
 
-Global definitions are also loaded from `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md`, and `~/.agents/skills/*/SKILL.md`.
-
----
-
-## Write frontmatter
-
-Each `SKILL.md` must start with YAML frontmatter.
-Only these fields are recognized:
-
-- `name` (required)
-- `description` (required)
-- `license` (optional)
-- `compatibility` (optional)
-- `metadata` (optional, string-to-string map)
-
-Unknown frontmatter fields are ignored.
+- Konfiguracija projekta: `.opencode/skills/<name>/SKILL.md`
+- Globalna konfiguracija: `~/.config/opencode/skills/<name>/SKILL.md`
+- Claude kompatibilno u projektu: `.claude/skills/<name>/SKILL.md`
+- Globalno Claude kompatibilno: `~/.claude/skills/<name>/SKILL.md`
+- Agent kompatibilno u projektu: `.agents/skills/<name>/SKILL.md`
+- Globalno agent kompatibilno: `~/.agents/skills/<name>/SKILL.md`
 
 ---
 
-## Validate names
+## Razumijte otkrivanje
 
-`name` must:
+Za projektne lokalne putanje, OpenCode ide prema gore od trenutnog radnog direktorija dok ne dode do git worktree-ja.
+Usput ucitava sve odgovarajuce `skills/*/SKILL.md` u `.opencode/` i odgovarajuce `.claude/skills/*/SKILL.md` ili `.agents/skills/*/SKILL.md`.
 
-- Be 1–64 characters
-- Be lowercase alphanumeric with single hyphen separators
-- Not start or end with `-`
-- Not contain consecutive `--`
-- Match the directory name that contains `SKILL.md`
+Globalne definicije se takoder ucitavaju iz `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` i `~/.agents/skills/*/SKILL.md`.
 
-Equivalent regex:
+---
+
+## Napisite frontmatter
+
+Svaki `SKILL.md` mora poceti YAML frontmatter-om.
+Prepoznaju se samo ova polja:
+
+- `name` (obavezno)
+- `description` (obavezno)
+- `license` (opcionalno)
+- `compatibility` (opcionalno)
+- `metadata` (opcionalno, mapa string->string)
+
+Nepoznata frontmatter polja se ignorisu.
+
+---
+
+## Validirajte nazive
+
+`name` mora:
+
+- Imati 1-64 karaktera
+- Biti malim slovima i brojevima sa jednim crticama kao razdvajacima
+- Ne pocinjati ni zavrsavati sa `-`
+- Ne sadrzavati uzastopno `--`
+- Odgovarati nazivu direktorija koji sadrzi `SKILL.md`
+
+Ekvivalentni regex:
 
 ```text
 ^[a-z0-9]+(-[a-z0-9]+)*$
@@ -64,16 +64,16 @@ Equivalent regex:
 
 ---
 
-## Follow length rules
+## Pratite pravila duzine
 
-`description` must be 1-1024 characters.
-Keep it specific enough for the agent to choose correctly.
+`description` mora imati 1-1024 karaktera.
+Neka bude dovoljno precizan da agent moze pravilno odabrati.
 
 ---
 
-## Use an example
+## Koristite primjer
 
-Create `.opencode/skills/git-release/SKILL.md` like this:
+Kreirajte `.opencode/skills/git-release/SKILL.md` ovako:
 
 ```markdown
 ---
@@ -100,10 +100,10 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ---
 
-## Recognize tool description
+## Prepoznajte opis alata
 
-OpenCode lists available skills in the `skill` tool description.
-Each entry includes the skill name and description:
+OpenCode navodi dostupne skills u opisu `skill` alata.
+Svaki unos sadrzi naziv i opis skill-a:
 
 ```xml
 <available_skills>
@@ -114,7 +114,7 @@ Each entry includes the skill name and description:
 </available_skills>
 ```
 
-The agent loads a skill by calling the tool:
+Agent ucitava skill pozivom alata:
 
 ```
 skill({ name: "git-release" })
@@ -122,9 +122,9 @@ skill({ name: "git-release" })
 
 ---
 
-## Configure permissions
+## Konfigurisite dozvole
 
-Control which skills agents can access using pattern-based permissions in `opencode.json`:
+Kontrolisite kojim skills agenti mogu pristupiti pomocu dozvola baziranih na obrascima u `opencode.json`:
 
 ```json
 {
@@ -139,21 +139,21 @@ Control which skills agents can access using pattern-based permissions in `openc
 }
 ```
 
-| Permission | Behavior                                  |
-| ---------- | ----------------------------------------- |
-| `allow`    | Skill loads immediately                   |
-| `deny`     | Skill hidden from agent, access rejected  |
-| `ask`      | User prompted for approval before loading |
+| Dozvola | Ponasanje                                   |
+| ------- | ------------------------------------------- |
+| `allow` | Skill se ucitava odmah                      |
+| `deny`  | Skill je skriven od agenta, pristup odbijen |
+| `ask`   | Korisnik mora odobriti prije ucitavanja     |
 
-Patterns support wildcards: `internal-*` matches `internal-docs`, `internal-tools`, etc.
+Obrasci podrzavaju wildcard znakove: `internal-*` poklapa `internal-docs`, `internal-tools` itd.
 
 ---
 
-## Override per agent
+## Nadjacajte po agentu
 
-Give specific agents different permissions than the global defaults.
+Dajte odredenim agentima drugacije dozvole od globalnih defaulta.
 
-**For custom agents** (in agent frontmatter):
+**Za prilagodene agente** (u frontmatter-u agenta):
 
 ```yaml
 ---
@@ -163,7 +163,7 @@ permission:
 ---
 ```
 
-**For built-in agents** (in `opencode.json`):
+**Za ugradene agente** (u `opencode.json`):
 
 ```json
 {
@@ -181,11 +181,11 @@ permission:
 
 ---
 
-## Disable the skill tool
+## Iskljucite skill alat
 
-Completely disable skills for agents that shouldn't use them:
+Potpuno iskljucite skills za agente koji ih ne bi trebali koristiti:
 
-**For custom agents**:
+**Za prilagodene agente**:
 
 ```yaml
 ---
@@ -194,7 +194,7 @@ tools:
 ---
 ```
 
-**For built-in agents**:
+**Za ugradene agente**:
 
 ```json
 {
@@ -208,15 +208,15 @@ tools:
 }
 ```
 
-When disabled, the `<available_skills>` section is omitted entirely.
+Kada je iskljuceno, sekcija `<available_skills>` se potpuno izostavlja.
 
 ---
 
-## Troubleshoot loading
+## Rjesavanje problema s ucitavanjem
 
-If a skill does not show up:
+Ako se skill ne pojavi:
 
-1. Verify `SKILL.md` is spelled in all caps
-2. Check that frontmatter includes `name` and `description`
-3. Ensure skill names are unique across all locations
-4. Check permissions—skills with `deny` are hidden from agents
+1. Provjerite da je naziv `SKILL.md` napisan velikim slovima
+2. Provjerite da frontmatter sadrzi `name` i `description`
+3. Potvrdite da su nazivi skill-ova jedinstveni na svim lokacijama
+4. Provjerite dozvole - skills sa `deny` su skriveni od agenata

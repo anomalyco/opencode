@@ -1,21 +1,21 @@
 ---
 title: SDK
-description: Type-safe JS client for opencode server.
+description: Type-safe JS klijent za opencode server.
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-The opencode JS/TS SDK provides a type-safe client for interacting with the server.
-Use it to build integrations and control opencode programmatically.
+opencode JS/TS SDK pruza type-safe klijent za interakciju sa serverom.
+Koristite ga za izradu integracija i programsko upravljanje opencode-om.
 
-[Learn more](./server) about how the server works. For examples, check out the [projects](./ecosystem#projects) built by the community.
+[Saznajte vise](./server) kako server radi. Za primjere pogledajte [projects](./ecosystem#projects) koje je napravila zajednica.
 
 ---
 
 ## Install
 
-Install the SDK from npm:
+Instalirajte SDK sa npm-a:
 
 ```bash
 npm install @opencode-ai/sdk
@@ -25,7 +25,7 @@ npm install @opencode-ai/sdk
 
 ## Create client
 
-Create an instance of opencode:
+Kreirajte instancu opencode-a:
 
 ```javascript
 import { createOpencode } from "@opencode-ai/sdk"
@@ -33,23 +33,23 @@ import { createOpencode } from "@opencode-ai/sdk"
 const { client } = await createOpencode()
 ```
 
-This starts both a server and a client
+Ovo pokrece i server i klijent
 
 #### Options
 
-| Option     | Type          | Description                    | Default     |
-| ---------- | ------------- | ------------------------------ | ----------- |
-| `hostname` | `string`      | Server hostname                | `127.0.0.1` |
-| `port`     | `number`      | Server port                    | `4096`      |
-| `signal`   | `AbortSignal` | Abort signal for cancellation  | `undefined` |
-| `timeout`  | `number`      | Timeout in ms for server start | `5000`      |
-| `config`   | `Config`      | Configuration object           | `{}`        |
+| Opcija     | Tip           | Opis                          | Default     |
+| ---------- | ------------- | ----------------------------- | ----------- |
+| `hostname` | `string`      | Hostname servera              | `127.0.0.1` |
+| `port`     | `number`      | Port servera                  | `4096`      |
+| `signal`   | `AbortSignal` | Abort signal za otkazivanje   | `undefined` |
+| `timeout`  | `number`      | Timeout u ms za start servera | `5000`      |
+| `config`   | `Config`      | Konfiguracijski objekat       | `{}`        |
 
 ---
 
 ## Config
 
-You can pass a configuration object to customize behavior. The instance still picks up your `opencode.json`, but you can override or add configuration inline:
+Mozete proslijediti konfiguracijski objekat za prilagodavanje ponasanja. Instanca i dalje ucitava `opencode.json`, ali konfiguraciju mozete nadjacati ili dodati inline:
 
 ```javascript
 import { createOpencode } from "@opencode-ai/sdk"
@@ -69,7 +69,7 @@ opencode.server.close()
 
 ## Client only
 
-If you already have a running instance of opencode, you can create a client instance to connect to it:
+Ako vec imate pokrenutu opencode instancu, mozete napraviti klijentsku instancu i povezati se na nju:
 
 ```javascript
 import { createOpencodeClient } from "@opencode-ai/sdk"
@@ -81,31 +81,31 @@ const client = createOpencodeClient({
 
 #### Options
 
-| Option          | Type       | Description                      | Default                 |
-| --------------- | ---------- | -------------------------------- | ----------------------- |
-| `baseUrl`       | `string`   | URL of the server                | `http://localhost:4096` |
-| `fetch`         | `function` | Custom fetch implementation      | `globalThis.fetch`      |
-| `parseAs`       | `string`   | Response parsing method          | `auto`                  |
-| `responseStyle` | `string`   | Return style: `data` or `fields` | `fields`                |
-| `throwOnError`  | `boolean`  | Throw errors instead of return   | `false`                 |
+| Opcija          | Tip        | Opis                              | Default                 |
+| --------------- | ---------- | --------------------------------- | ----------------------- |
+| `baseUrl`       | `string`   | URL servera                       | `http://localhost:4096` |
+| `fetch`         | `function` | Prilagodena fetch implementacija  | `globalThis.fetch`      |
+| `parseAs`       | `string`   | Metoda parsiranja odgovora        | `auto`                  |
+| `responseStyle` | `string`   | Stil povrata: `data` ili `fields` | `fields`                |
+| `throwOnError`  | `boolean`  | Baci greske umjesto povrata       | `false`                 |
 
 ---
 
 ## Types
 
-The SDK includes TypeScript definitions for all API types. Import them directly:
+SDK ukljucuje TypeScript definicije za sve API tipove. Uvezite ih direktno:
 
 ```typescript
 import type { Session, Message, Part } from "@opencode-ai/sdk"
 ```
 
-All types are generated from the server's OpenAPI specification and available in the <a href={typesUrl}>types file</a>.
+Svi tipovi su generisani iz OpenAPI specifikacije servera i dostupni u <a href={typesUrl}>types datoteci</a>.
 
 ---
 
 ## Errors
 
-The SDK can throw errors that you can catch and handle:
+SDK moze baciti greske koje mozete uhvatiti i obraditi:
 
 ```typescript
 try {
@@ -119,15 +119,15 @@ try {
 
 ## APIs
 
-The SDK exposes all server APIs through a type-safe client.
+SDK izlaže sve server API-je kroz type-safe klijent.
 
 ---
 
 ### Global
 
-| Method            | Description                     | Response                             |
-| ----------------- | ------------------------------- | ------------------------------------ |
-| `global.health()` | Check server health and version | `{ healthy: true, version: string }` |
+| Metoda            | Opis                        | Odgovor                              |
+| ----------------- | --------------------------- | ------------------------------------ |
+| `global.health()` | Provjera zdravlja i verzije | `{ healthy: true, version: string }` |
 
 ---
 
@@ -142,10 +142,10 @@ console.log(health.data.version)
 
 ### App
 
-| Method         | Description               | Response                                    |
-| -------------- | ------------------------- | ------------------------------------------- |
-| `app.log()`    | Write a log entry         | `boolean`                                   |
-| `app.agents()` | List all available agents | <a href={typesUrl}><code>Agent[]</code></a> |
+| Metoda         | Opis                    | Odgovor                                     |
+| -------------- | ----------------------- | ------------------------------------------- |
+| `app.log()`    | Upis log zapisa         | `boolean`                                   |
+| `app.agents()` | Lista dostupnih agenata | <a href={typesUrl}><code>Agent[]</code></a> |
 
 ---
 
@@ -169,10 +169,10 @@ const agents = await client.app.agents()
 
 ### Project
 
-| Method              | Description         | Response                                      |
-| ------------------- | ------------------- | --------------------------------------------- |
-| `project.list()`    | List all projects   | <a href={typesUrl}><code>Project[]</code></a> |
-| `project.current()` | Get current project | <a href={typesUrl}><code>Project</code></a>   |
+| Metoda              | Opis                 | Odgovor                                       |
+| ------------------- | -------------------- | --------------------------------------------- |
+| `project.list()`    | Lista svih projekata | <a href={typesUrl}><code>Project[]</code></a> |
+| `project.current()` | Trenutni projekat    | <a href={typesUrl}><code>Project</code></a>   |
 
 ---
 
@@ -190,9 +190,9 @@ const currentProject = await client.project.current()
 
 ### Path
 
-| Method       | Description      | Response                                 |
+| Metoda       | Opis             | Odgovor                                  |
 | ------------ | ---------------- | ---------------------------------------- |
-| `path.get()` | Get current path | <a href={typesUrl}><code>Path</code></a> |
+| `path.get()` | Trenutna putanja | <a href={typesUrl}><code>Path</code></a> |
 
 ---
 
@@ -207,10 +207,10 @@ const pathInfo = await client.path.get()
 
 ### Config
 
-| Method               | Description                       | Response                                                                                              |
+| Metoda               | Opis                              | Odgovor                                                                                               |
 | -------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `config.get()`       | Get config info                   | <a href={typesUrl}><code>Config</code></a>                                                            |
-| `config.providers()` | List providers and default models | `{ providers: `<a href={typesUrl}><code>Provider[]</code></a>`, default: { [key: string]: string } }` |
+| `config.get()`       | Info o konfiguraciji              | <a href={typesUrl}><code>Config</code></a>                                                            |
+| `config.providers()` | Lista provajdera i default modela | `{ providers: `<a href={typesUrl}><code>Provider[]</code></a>`, default: { [key: string]: string } }` |
 
 ---
 

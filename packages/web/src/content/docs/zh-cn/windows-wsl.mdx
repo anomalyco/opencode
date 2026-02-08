@@ -1,37 +1,37 @@
 ---
 title: Windows (WSL)
-description: Run OpenCode on Windows using WSL for the best experience.
+description: 在 Windows 上通过 WSL 使用 OpenCode。
 ---
 
 import { Steps } from "@astrojs/starlight/components"
 
-While OpenCode can run directly on Windows, we recommend using [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) for the best experience. WSL provides a Linux environment that works seamlessly with OpenCode's features.
+虽然 OpenCode 可以直接在 Windows 上运行，但为了获得最佳体验，我们推荐使用 [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install)。WSL 提供了一个与 OpenCode 功能无缝协作的 Linux 环境。
 
-:::tip[Why WSL?]
-WSL offers better file system performance, full terminal support, and compatibility with development tools that OpenCode relies on.
+:::tip[为什么使用 WSL？]
+WSL 提供更好的文件系统性能、完整的终端支持，以及与 OpenCode 依赖的开发工具的兼容性。
 :::
 
 ---
 
-## Setup
+## 设置
 
 <Steps>
 
-1. **Install WSL**
+1. **安装 WSL**
 
-   If you haven't already, [install WSL](https://learn.microsoft.com/en-us/windows/wsl/install) using the official Microsoft guide.
+   如果你还没有安装，请按照 Microsoft 官方指南 [安装 WSL](https://learn.microsoft.com/en-us/windows/wsl/install)。
 
-2. **Install OpenCode in WSL**
+2. **在 WSL 中安装 OpenCode**
 
-   Once WSL is set up, open your WSL terminal and install OpenCode using one of the [installation methods](./).
+   完成 WSL 设置后，打开 WSL 终端并使用任一[安装方式](./)安装 OpenCode。
 
    ```bash
    curl -fsSL https://opencode.ai/install | bash
    ```
 
-3. **Use OpenCode from WSL**
+3. **从 WSL 使用 OpenCode**
 
-   Navigate to your project directory (access Windows files via `/mnt/c/`, `/mnt/d/`, etc.) and run OpenCode.
+   进入你的项目目录（可通过 `/mnt/c/`、`/mnt/d/` 等访问 Windows 文件）并运行 OpenCode。
 
    ```bash
    cd /mnt/c/Users/YourName/project
@@ -42,24 +42,24 @@ WSL offers better file system performance, full terminal support, and compatibil
 
 ---
 
-## Desktop App + WSL Server
+## 桌面应用 + WSL 服务器
 
-If you prefer using the OpenCode Desktop app but want to run the server in WSL:
+如果你想使用 OpenCode 桌面应用，但希望在 WSL 中运行服务器：
 
-1. **Start the server in WSL** with `--hostname 0.0.0.0` to allow external connections:
+1. **在 WSL 中启动服务器**，并使用 `--hostname 0.0.0.0` 以允许外部连接：
 
    ```bash
    opencode serve --hostname 0.0.0.0 --port 4096
    ```
 
-2. **Connect the Desktop app** to `http://localhost:4096`
+2. **将桌面应用连接到** `http://localhost:4096`
 
 :::note
-If `localhost` does not work in your setup, connect using the WSL IP address instead (from WSL: `hostname -I`) and use `http://<wsl-ip>:4096`.
+如果你的环境中 `localhost` 不可用，请改用 WSL 的 IP 地址连接（在 WSL 中执行：`hostname -I`），并使用 `http://<wsl-ip>:4096`。
 :::
 
 :::caution
-When using `--hostname 0.0.0.0`, set `OPENCODE_SERVER_PASSWORD` to secure the server.
+使用 `--hostname 0.0.0.0` 时，请设置 `OPENCODE_SERVER_PASSWORD` 来保护服务器。
 
 ```bash
 OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
@@ -69,31 +69,31 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
 
 ---
 
-## Web Client + WSL
+## Web 客户端 + WSL
 
-For the best web experience on Windows:
+在 Windows 上获得最佳 Web 体验：
 
-1. **Run `opencode web` in the WSL terminal** rather than PowerShell:
+1. **请在 WSL 终端中运行 `opencode web`**，而不是在 PowerShell 中运行：
 
    ```bash
    opencode web --hostname 0.0.0.0
    ```
 
-2. **Access from your Windows browser** at `http://localhost:<port>` (OpenCode prints the URL)
+2. **在 Windows 浏览器中访问** `http://localhost:<port>`（OpenCode 会打印该 URL）
 
-Running `opencode web` from WSL ensures proper file system access and terminal integration while still being accessible from your Windows browser.
+从 WSL 运行 `opencode web` 可以确保正确的文件系统访问和终端集成，同时仍可在 Windows 浏览器中访问。
 
 ---
 
-## Accessing Windows Files
+## 访问 Windows 文件
 
-WSL can access all your Windows files through the `/mnt/` directory:
+WSL 可以通过 `/mnt/` 目录访问你所有的 Windows 文件：
 
 - `C:` drive → `/mnt/c/`
 - `D:` drive → `/mnt/d/`
-- And so on...
+- 其他盘符同理
 
-Example:
+示例：
 
 ```bash
 cd /mnt/c/Users/YourName/Documents/project
@@ -101,13 +101,13 @@ opencode
 ```
 
 :::tip
-For the smoothest experience, consider cloning/copying your repo into the WSL filesystem (for example under `~/code/`) and running OpenCode there.
+为了获得更流畅的体验，建议将仓库克隆或复制到 WSL 文件系统中（例如 `~/code/`），并在那里运行 OpenCode。
 :::
 
 ---
 
-## Tips
+## 提示
 
-- Keep OpenCode running in WSL for projects stored on Windows drives - file access is seamless
-- Use VS Code's [WSL extension](https://code.visualstudio.com/docs/remote/wsl) alongside OpenCode for an integrated development workflow
-- Your OpenCode config and sessions are stored within the WSL environment at `~/.local/share/opencode/`
+- 即使项目存放在 Windows 盘符中，也建议在 WSL 中运行 OpenCode，文件访问会更顺畅
+- 可将 OpenCode 与 VS Code 的 [WSL 扩展](https://code.visualstudio.com/docs/remote/wsl)配合使用，形成一体化开发流程
+- OpenCode 的配置和会话会保存在 WSL 环境中的 `~/.local/share/opencode/`

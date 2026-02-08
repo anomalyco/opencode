@@ -1,62 +1,62 @@
 ---
-title: "Agent Skills"
-description: "Define reusable behavior via SKILL.md definitions"
+title: "Ajan becerileri"
+description: "SKILL.md ile tekrar kullanilabilir davranis tanimlayin"
 ---
 
-Agent skills let OpenCode discover reusable instructions from your repo or home directory.
-Skills are loaded on-demand via the native `skill` tool—agents see available skills and can load the full content when needed.
-
----
-
-## Place files
-
-Create one folder per skill name and put a `SKILL.md` inside it.
-OpenCode searches these locations:
-
-- Project config: `.opencode/skills/<name>/SKILL.md`
-- Global config: `~/.config/opencode/skills/<name>/SKILL.md`
-- Project Claude-compatible: `.claude/skills/<name>/SKILL.md`
-- Global Claude-compatible: `~/.claude/skills/<name>/SKILL.md`
-- Project agent-compatible: `.agents/skills/<name>/SKILL.md`
-- Global agent-compatible: `~/.agents/skills/<name>/SKILL.md`
+Ajan becerileri, OpenCode'un deponuzdan veya ev dizininizden tekrar kullanilabilir talimatlari kesfetmesini saglar.
+Beceriler, yerel `skill` araci uzerinden ihtiyac aninda yuklenir; ajanlar mevcut becerileri gorur ve gerektiginde tam icerigi yukler.
 
 ---
 
-## Understand discovery
+## Dosyalari yerlestirin
 
-For project-local paths, OpenCode walks up from your current working directory until it reaches the git worktree.
-It loads any matching `skills/*/SKILL.md` in `.opencode/` and any matching `.claude/skills/*/SKILL.md` or `.agents/skills/*/SKILL.md` along the way.
+Her beceri adi icin bir klasor olusturun ve icine bir `SKILL.md` koyun.
+OpenCode su konumlari tarar:
 
-Global definitions are also loaded from `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md`, and `~/.agents/skills/*/SKILL.md`.
-
----
-
-## Write frontmatter
-
-Each `SKILL.md` must start with YAML frontmatter.
-Only these fields are recognized:
-
-- `name` (required)
-- `description` (required)
-- `license` (optional)
-- `compatibility` (optional)
-- `metadata` (optional, string-to-string map)
-
-Unknown frontmatter fields are ignored.
+- Proje konfigurasyonu: `.opencode/skills/<name>/SKILL.md`
+- Genel konfigurasyon: `~/.config/opencode/skills/<name>/SKILL.md`
+- Proje Claude uyumlu: `.claude/skills/<name>/SKILL.md`
+- Genel Claude uyumlu: `~/.claude/skills/<name>/SKILL.md`
+- Proje agent uyumlu: `.agents/skills/<name>/SKILL.md`
+- Genel agent uyumlu: `~/.agents/skills/<name>/SKILL.md`
 
 ---
 
-## Validate names
+## Kesfi anlayin
 
-`name` must:
+Proje yerel yollarinda OpenCode, mevcut calisma dizininizden baslayip git worktree kokune kadar yukari cikar.
+Bu sirada `.opencode/` altindaki eslesen `skills/*/SKILL.md` dosyalarini ve `.claude/skills/*/SKILL.md` ya da `.agents/skills/*/SKILL.md` dosyalarini yukler.
 
-- Be 1–64 characters
-- Be lowercase alphanumeric with single hyphen separators
-- Not start or end with `-`
-- Not contain consecutive `--`
-- Match the directory name that contains `SKILL.md`
+Genel tanimlar da `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` ve `~/.agents/skills/*/SKILL.md` yollarindan yuklenir.
 
-Equivalent regex:
+---
+
+## Frontmatter yazin
+
+Her `SKILL.md`, YAML frontmatter ile baslamalidir.
+Sadece su alanlar taninir:
+
+- `name` (zorunlu)
+- `description` (zorunlu)
+- `license` (istege bagli)
+- `compatibility` (istege bagli)
+- `metadata` (istege bagli, string-to-string map)
+
+Bilinmeyen frontmatter alanlari yok sayilir.
+
+---
+
+## Adlari dogrulayin
+
+`name` su kurallari saglamalidir:
+
+- 1-64 karakter olmali
+- Kucuk harf alfanumerik ve tekli tire ayirici kullanmali
+- `-` ile baslamamali veya bitmemeli
+- Ardisik `--` icermemeli
+- `SKILL.md` dosyasini barindiran klasor adi ile ayni olmali
+
+Esdeger regex:
 
 ```text
 ^[a-z0-9]+(-[a-z0-9]+)*$
@@ -64,16 +64,16 @@ Equivalent regex:
 
 ---
 
-## Follow length rules
+## Uzunluk kurallarina uyun
 
-`description` must be 1-1024 characters.
-Keep it specific enough for the agent to choose correctly.
+`description` 1-1024 karakter arasinda olmali.
+Ajanin dogru secim yapmasi icin yeterince acik yazin.
 
 ---
 
-## Use an example
+## Ornek kullanin
 
-Create `.opencode/skills/git-release/SKILL.md` like this:
+`.opencode/skills/git-release/SKILL.md` dosyasini soyle olusturun:
 
 ```markdown
 ---
@@ -100,10 +100,10 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ---
 
-## Recognize tool description
+## Arac aciklamasini taniyin
 
-OpenCode lists available skills in the `skill` tool description.
-Each entry includes the skill name and description:
+OpenCode, `skill` araci aciklamasinda mevcut becerileri listeler.
+Her kayitta beceri adi ve aciklamasi yer alir:
 
 ```xml
 <available_skills>
@@ -114,7 +114,7 @@ Each entry includes the skill name and description:
 </available_skills>
 ```
 
-The agent loads a skill by calling the tool:
+Ajan, araci cagirarak beceri yukler:
 
 ```
 skill({ name: "git-release" })
@@ -122,9 +122,9 @@ skill({ name: "git-release" })
 
 ---
 
-## Configure permissions
+## Izinleri yapilandirin
 
-Control which skills agents can access using pattern-based permissions in `opencode.json`:
+`opencode.json` icinde pattern tabanli izinlerle ajanlarin hangi becerilere erisecegini kontrol edin:
 
 ```json
 {
@@ -139,21 +139,21 @@ Control which skills agents can access using pattern-based permissions in `openc
 }
 ```
 
-| Permission | Behavior                                  |
-| ---------- | ----------------------------------------- |
-| `allow`    | Skill loads immediately                   |
-| `deny`     | Skill hidden from agent, access rejected  |
-| `ask`      | User prompted for approval before loading |
+| Permission | Behavior                                   |
+| ---------- | ------------------------------------------ |
+| `allow`    | Beceri hemen yuklenir                      |
+| `deny`     | Beceri ajandan gizlenir, erisim reddedilir |
+| `ask`      | Yukleme oncesi kullanicidan onay istenir   |
 
-Patterns support wildcards: `internal-*` matches `internal-docs`, `internal-tools`, etc.
+Pattern'lar wildcard destekler: `internal-*`, `internal-docs`, `internal-tools` vb. adlarla eslesir.
 
 ---
 
-## Override per agent
+## Ajan bazinda gecersiz kilin
 
-Give specific agents different permissions than the global defaults.
+Belirli ajanlara genel varsayimlardan farkli izinler verebilirsiniz.
 
-**For custom agents** (in agent frontmatter):
+**Ozel ajanlar icin** (agent frontmatter icinde):
 
 ```yaml
 ---
@@ -163,7 +163,7 @@ permission:
 ---
 ```
 
-**For built-in agents** (in `opencode.json`):
+**Yerlesik ajanlar icin** (`opencode.json` icinde):
 
 ```json
 {
@@ -181,11 +181,11 @@ permission:
 
 ---
 
-## Disable the skill tool
+## Skill aracini kapatin
 
-Completely disable skills for agents that shouldn't use them:
+Beceri kullanmamasi gereken ajanlar icin skill aracini tamamen kapatabilirsiniz:
 
-**For custom agents**:
+**Ozel ajanlar icin**:
 
 ```yaml
 ---
@@ -194,7 +194,7 @@ tools:
 ---
 ```
 
-**For built-in agents**:
+**Yerlesik ajanlar icin**:
 
 ```json
 {
@@ -208,15 +208,15 @@ tools:
 }
 ```
 
-When disabled, the `<available_skills>` section is omitted entirely.
+Devre disi oldugunda `<available_skills>` bolumu tamamen kaldirilir.
 
 ---
 
-## Troubleshoot loading
+## Yukleme sorunlarini giderin
 
-If a skill does not show up:
+Bir beceri listede gorunmuyorsa:
 
-1. Verify `SKILL.md` is spelled in all caps
-2. Check that frontmatter includes `name` and `description`
-3. Ensure skill names are unique across all locations
-4. Check permissions—skills with `deny` are hidden from agents
+1. `SKILL.md` adinin tamamen buyuk harfle yazildigini dogrulayin
+2. Frontmatter icinde `name` ve `description` oldugunu kontrol edin
+3. Tum konumlarda beceri adlarinin benzersiz oldugundan emin olun
+4. Izinleri kontrol edin - `deny` olan beceriler ajanlardan gizlenir

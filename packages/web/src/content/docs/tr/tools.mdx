@@ -1,17 +1,17 @@
 ---
-title: Tools
-description: Manage the tools an LLM can use.
+title: Araclar
+description: LLM'in kullanabilecegi araclari yonetin.
 ---
 
-Tools allow the LLM to perform actions in your codebase. OpenCode comes with a set of built-in tools, but you can extend it with [custom tools](./custom-tools) or [MCP servers](./mcp-servers).
+Araclar, LLM'in kod tabaninizda eylem gerceklestirmesini saglar. OpenCode yerlesik bir arac setiyle gelir, ancak bunu [ozel araclarla](./custom-tools) veya [MCP sunuculariyla](./mcp-servers) genisletebilirsiniz.
 
-By default, all tools are **enabled** and don't need permission to run. You can control tool behavior through [permissions](./permissions).
+Varsayilan olarak tum araclar **etkindir** ve calismak icin izin istemez. Arac davranisini [izinler](./permissions) uzerinden kontrol edebilirsiniz.
 
 ---
 
-## Configure
+## Yapilandirin
 
-Use the `permission` field to control tool behavior. You can allow, deny, or require approval for each tool.
+Arac davranisini kontrol etmek icin `permission` alanini kullanin. Her arac icin izin verebilir, reddedebilir veya onay isteyebilirsiniz.
 
 ```json title="opencode.json"
 {
@@ -24,7 +24,7 @@ Use the `permission` field to control tool behavior. You can allow, deny, or req
 }
 ```
 
-You can also use wildcards to control multiple tools at once. For example, to require approval for all tools from an MCP server:
+Birden fazla araci ayni anda kontrol etmek icin wildcard da kullanabilirsiniz. Ornegin, bir MCP sunucusundan gelen tum araclar icin onay istemek:
 
 ```json title="opencode.json"
 {
@@ -35,19 +35,19 @@ You can also use wildcards to control multiple tools at once. For example, to re
 }
 ```
 
-[Learn more](./permissions) about configuring permissions.
+Izin yapilandirmasi icin [daha fazla bilgi alin](./permissions).
 
 ---
 
-## Built-in
+## Yerlesik
 
-Here are all the built-in tools available in OpenCode.
+OpenCode icinde bulunan tum yerlesik araclar asagidadir.
 
 ---
 
 ### bash
 
-Execute shell commands in your project environment.
+Proje ortaminizda kabuk komutlari calistirir.
 
 ```json title="opencode.json" {4}
 {
@@ -58,13 +58,13 @@ Execute shell commands in your project environment.
 }
 ```
 
-This tool allows the LLM to run terminal commands like `npm install`, `git status`, or any other shell command.
+Bu arac LLM'in `npm install`, `git status` gibi terminal komutlarini veya diger kabuk komutlarini calistirmasini saglar.
 
 ---
 
 ### edit
 
-Modify existing files using exact string replacements.
+Birebir metin degistirme ile mevcut dosyalari duzenler.
 
 ```json title="opencode.json" {4}
 {
@@ -75,13 +75,13 @@ Modify existing files using exact string replacements.
 }
 ```
 
-This tool performs precise edits to files by replacing exact text matches. It's the primary way the LLM modifies code.
+Bu arac dosyalarda kesin metin eslesmelerini degistirerek hassas duzenleme yapar. LLM'in kodu degistirmek icin kullandigi temel yontemdir.
 
 ---
 
 ### write
 
-Create new files or overwrite existing ones.
+Yeni dosyalar olusturur veya mevcut dosyalari uzerine yazar.
 
 ```json title="opencode.json" {4}
 {
@@ -92,17 +92,17 @@ Create new files or overwrite existing ones.
 }
 ```
 
-Use this to allow the LLM to create new files. It will overwrite existing files if they already exist.
+LLM'in yeni dosya olusturmasina izin vermek icin bunu kullanin. Dosya zaten varsa uzerine yazar.
 
 :::note
-The `write` tool is controlled by the `edit` permission, which covers all file modifications (`edit`, `write`, `patch`, `multiedit`).
+`write` araci `edit` izniyle kontrol edilir; bu izin tum dosya degisikliklerini kapsar (`edit`, `write`, `patch`, `multiedit`).
 :::
 
 ---
 
 ### read
 
-Read file contents from your codebase.
+Kod tabaninizdan dosya icerigi okur.
 
 ```json title="opencode.json" {4}
 {
@@ -113,13 +113,13 @@ Read file contents from your codebase.
 }
 ```
 
-This tool reads files and returns their contents. It supports reading specific line ranges for large files.
+Bu arac dosyalari okur ve iceriklerini dondurur. Buyuk dosyalar icin belirli satir araliklarini okuma destegi vardir.
 
 ---
 
 ### grep
 
-Search file contents using regular expressions.
+Duzensiz ifadelerle dosya iceriginde arama yapar.
 
 ```json title="opencode.json" {4}
 {
@@ -130,13 +130,13 @@ Search file contents using regular expressions.
 }
 ```
 
-Fast content search across your codebase. Supports full regex syntax and file pattern filtering.
+Kod tabaninda hizli icerik aramasi sunar. Tam regex sozdizimini ve dosya desen filtrelerini destekler.
 
 ---
 
 ### glob
 
-Find files by pattern matching.
+Desen eslestirme ile dosya bulur.
 
 ```json title="opencode.json" {4}
 {
@@ -147,13 +147,13 @@ Find files by pattern matching.
 }
 ```
 
-Search for files using glob patterns like `**/*.js` or `src/**/*.ts`. Returns matching file paths sorted by modification time.
+`**/*.js` veya `src/**/*.ts` gibi glob desenleriyle dosya arar. Eslesen dosya yollarini degisim zamanina gore siralar.
 
 ---
 
 ### list
 
-List files and directories in a given path.
+Verilen yoldaki dosya ve dizinleri listeler.
 
 ```json title="opencode.json" {4}
 {
@@ -164,16 +164,16 @@ List files and directories in a given path.
 }
 ```
 
-This tool lists directory contents. It accepts glob patterns to filter results.
+Bu arac dizin icerigini listeler. Sonuclari filtrelemek icin glob desenlerini kabul eder.
 
 ---
 
-### lsp (experimental)
+### lsp (deneysel)
 
-Interact with your configured LSP servers to get code intelligence features like definitions, references, hover info, and call hierarchy.
+Tanim, referans, hover bilgisi ve cagrilar hiyerarsisi gibi kod zekasi ozellikleri icin yapilandirdiginiz LSP sunuculariyla etkilesir.
 
 :::note
-This tool is only available when `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (or `OPENCODE_EXPERIMENTAL=true`).
+Bu arac yalnizca `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (veya `OPENCODE_EXPERIMENTAL=true`) oldugunda kullanilabilir.
 :::
 
 ```json title="opencode.json" {4}
@@ -185,15 +185,15 @@ This tool is only available when `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (or `OPEN
 }
 ```
 
-Supported operations include `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls`, and `outgoingCalls`.
+Desteklenen islemler: `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls`, `outgoingCalls`.
 
-To configure which LSP servers are available for your project, see [LSP Servers](./lsp).
+Projeniz icin kullanilabilir LSP sunucularini ayarlamak icin [LSP Servers](./lsp) sayfasina bakin.
 
 ---
 
 ### patch
 
-Apply patches to files.
+Dosyalara patch uygular.
 
 ```json title="opencode.json" {4}
 {
@@ -204,17 +204,17 @@ Apply patches to files.
 }
 ```
 
-This tool applies patch files to your codebase. Useful for applying diffs and patches from various sources.
+Bu arac patch dosyalarini kod tabaniniza uygular. Farkli kaynaklardan gelen diff ve patch'leri uygulamak icin kullanislidir.
 
 :::note
-The `patch` tool is controlled by the `edit` permission, which covers all file modifications (`edit`, `write`, `patch`, `multiedit`).
+`patch` araci `edit` izniyle kontrol edilir; bu izin tum dosya degisikliklerini kapsar (`edit`, `write`, `patch`, `multiedit`).
 :::
 
 ---
 
 ### skill
 
-Load a [skill](./skills) (a `SKILL.md` file) and return its content in the conversation.
+Bir [skill](./skills) (`SKILL.md` dosyasi) yukler ve icerigini konusmaya dondurur.
 
 ```json title="opencode.json" {4}
 {
@@ -229,7 +229,7 @@ Load a [skill](./skills) (a `SKILL.md` file) and return its content in the conve
 
 ### todowrite
 
-Manage todo lists during coding sessions.
+Kodlama oturumlarinda yapilacaklar listesini yonetir.
 
 ```json title="opencode.json" {4}
 {
@@ -240,17 +240,17 @@ Manage todo lists during coding sessions.
 }
 ```
 
-Creates and updates task lists to track progress during complex operations. The LLM uses this to organize multi-step tasks.
+Karmasik islemlerde ilerlemeyi takip etmek icin gorev listeleri olusturur ve gunceller. LLM bunu cok adimli gorevleri duzenlemek icin kullanir.
 
 :::note
-This tool is disabled for subagents by default, but you can enable it manually. [Learn more](./agents/#permissions)
+Bu arac alt ajanlar icin varsayilan olarak devre disidir, ama manuel etkinlestirebilirsiniz. [Daha fazla bilgi](./agents/#permissions)
 :::
 
 ---
 
 ### todoread
 
-Read existing todo lists.
+Mevcut yapilacaklar listesini okur.
 
 ```json title="opencode.json" {4}
 {
@@ -261,17 +261,17 @@ Read existing todo lists.
 }
 ```
 
-Reads the current todo list state. Used by the LLM to track what tasks are pending or completed.
+Guncel todo listesi durumunu okur. LLM bunu hangi gorevlerin bekledigini veya tamamlandigini takip etmek icin kullanir.
 
 :::note
-This tool is disabled for subagents by default, but you can enable it manually. [Learn more](./agents/#permissions)
+Bu arac alt ajanlar icin varsayilan olarak devre disidir, ama manuel etkinlestirebilirsiniz. [Daha fazla bilgi](./agents/#permissions)
 :::
 
 ---
 
 ### webfetch
 
-Fetch web content.
+Web icerigi getirir.
 
 ```json title="opencode.json" {4}
 {
@@ -282,18 +282,18 @@ Fetch web content.
 }
 ```
 
-Allows the LLM to fetch and read web pages. Useful for looking up documentation or researching online resources.
+LLM'in web sayfalarini getirip okumasini saglar. Dokumantasyon aramak veya cevrimici kaynaklari incelemek icin kullanislidir.
 
 ---
 
 ### websearch
 
-Search the web for information.
+Web'de bilgi arar.
 
 :::note
-This tool is only available when using the OpenCode provider or when the `OPENCODE_ENABLE_EXA` environment variable is set to any truthy value (e.g., `true` or `1`).
+Bu arac yalnizca OpenCode provider kullanilirken veya `OPENCODE_ENABLE_EXA` ortam degiskeni dogru degerlerden birine ayarlandiginda (ornegin `true` ya da `1`) kullanilabilir.
 
-To enable when launching OpenCode:
+OpenCode baslatirken etkinlestirmek icin:
 
 ```bash
 OPENCODE_ENABLE_EXA=1 opencode
@@ -310,19 +310,19 @@ OPENCODE_ENABLE_EXA=1 opencode
 }
 ```
 
-Performs web searches using Exa AI to find relevant information online. Useful for researching topics, finding current events, or gathering information beyond the training data cutoff.
+Exa AI ile web aramasi yaparak ilgili bilgileri bulur. Egitim verisi kesim tarihinin otesindeki konulari arastirmak, guncel olaylari bulmak veya genel arastirma yapmak icin kullanislidir.
 
-No API key is required — the tool connects directly to Exa AI's hosted MCP service without authentication.
+API anahtari gerekmez - arac Exa AI'nin barindirilan MCP hizmetine dogrudan kimlik dogrulamasi olmadan baglanir.
 
 :::tip
-Use `websearch` when you need to find information (discovery), and `webfetch` when you need to retrieve content from a specific URL (retrieval).
+Bilgi kesfetmeniz gerekiyorsa `websearch`, belirli bir URL'den icerik cekmeniz gerekiyorsa `webfetch` kullanin.
 :::
 
 ---
 
 ### question
 
-Ask the user questions during execution.
+Calisma sirasinda kullaniciya soru sorar.
 
 ```json title="opencode.json" {4}
 {
@@ -333,42 +333,42 @@ Ask the user questions during execution.
 }
 ```
 
-This tool allows the LLM to ask the user questions during a task. It's useful for:
+Bu arac LLM'in gorev sirasinda kullaniciya soru sormasini saglar. Sunlar icin kullanislidir:
 
-- Gathering user preferences or requirements
-- Clarifying ambiguous instructions
-- Getting decisions on implementation choices
-- Offering choices about what direction to take
+- Kullanici tercihleri veya gereksinimleri toplamak
+- Belirsiz talimatlari netlestirmek
+- Uygulama seceneklerinde karar almak
+- Hangi yone gidilecegine dair secenek sunmak
 
-Each question includes a header, the question text, and a list of options. Users can select from the provided options or type a custom answer. When there are multiple questions, users can navigate between them before submitting all answers.
-
----
-
-## Custom tools
-
-Custom tools let you define your own functions that the LLM can call. These are defined in your config file and can execute arbitrary code.
-
-[Learn more](./custom-tools) about creating custom tools.
+Her soru bir baslik, soru metni ve secenek listesi icerir. Kullanicilar seceneklerden birini secebilir veya ozel yanit yazabilir. Birden fazla soru varsa tum yanitlari gondermeden once sorular arasinda gezebilirler.
 
 ---
 
-## MCP servers
+## Ozel araclar
 
-MCP (Model Context Protocol) servers allow you to integrate external tools and services. This includes database access, API integrations, and third-party services.
+Ozel araclar, LLM'in cagirabilecegi kendi fonksiyonlarinizi tanimlamanizi saglar. Bunlar config dosyanizda tanimlanir ve keyfi kod calistirabilir.
 
-[Learn more](./mcp-servers) about configuring MCP servers.
-
----
-
-## Internals
-
-Internally, tools like `grep`, `glob`, and `list` use [ripgrep](https://github.com/BurntSushi/ripgrep) under the hood. By default, ripgrep respects `.gitignore` patterns, which means files and directories listed in your `.gitignore` will be excluded from searches and listings.
+Ozel arac olusturma icin [daha fazla bilgi alin](./custom-tools).
 
 ---
 
-### Ignore patterns
+## MCP sunuculari
 
-To include files that would normally be ignored, create a `.ignore` file in your project root. This file can explicitly allow certain paths.
+MCP (Model Context Protocol) sunuculari, harici araclari ve servisleri entegre etmenizi saglar. Buna veritabani erisimi, API entegrasyonlari ve ucuncu taraf servisler dahildir.
+
+MCP sunucularini yapilandirma icin [daha fazla bilgi alin](./mcp-servers).
+
+---
+
+## Dahili detaylar
+
+Dahilde `grep`, `glob` ve `list` gibi araclar [ripgrep](https://github.com/BurntSushi/ripgrep) kullanir. Varsayilan olarak ripgrep `.gitignore` desenlerine uyar; yani `.gitignore` icindeki dosya ve dizinler arama ve listeleme sonucuna dahil edilmez.
+
+---
+
+### Ignore desenleri
+
+Normalde yok sayilan dosyalari dahil etmek icin proje kokunde bir `.ignore` dosyasi olusturun. Bu dosya belirli yollari acikca izinli yapabilir.
 
 ```text title=".ignore"
 !node_modules/
@@ -376,4 +376,4 @@ To include files that would normally be ignored, create a `.ignore` file in your
 !build/
 ```
 
-For example, this `.ignore` file allows ripgrep to search within `node_modules/`, `dist/`, and `build/` directories even if they're listed in `.gitignore`.
+Ornegin bu `.ignore` dosyasi, `.gitignore` icinde olsalar bile ripgrep'in `node_modules/`, `dist/` ve `build/` dizinlerinde arama yapmasina izin verir.

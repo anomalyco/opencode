@@ -1,17 +1,20 @@
 ---
 title: Tools
-description: Manage the tools an LLM can use.
+description: Verwalte, welche Tools ein LLM nutzen darf.
 ---
 
-Tools allow the LLM to perform actions in your codebase. OpenCode comes with a set of built-in tools, but you can extend it with [custom tools](./custom-tools) or [MCP servers](./mcp-servers).
+Tools erlauben dem LLM Aktionen in deiner Codebasis.
+OpenCode bringt eingebaute Tools mit und laesst sich ueber [Custom Tools](./custom-tools) oder [MCP-Server](./mcp-servers) erweitern.
 
-By default, all tools are **enabled** and don't need permission to run. You can control tool behavior through [permissions](./permissions).
+Standardmaessig sind alle Tools **aktiviert** und brauchen keine Freigabe.
+Das Verhalten steuerst du ueber [Berechtigungen](./permissions).
 
 ---
 
 ## Configure
 
-Use the `permission` field to control tool behavior. You can allow, deny, or require approval for each tool.
+Nutze das Feld `permission`, um Tool-Verhalten zu steuern.
+Pro Tool kannst du erlauben, verbieten oder eine Rueckfrage verlangen.
 
 ```json title="opencode.json"
 {
@@ -24,7 +27,8 @@ Use the `permission` field to control tool behavior. You can allow, deny, or req
 }
 ```
 
-You can also use wildcards to control multiple tools at once. For example, to require approval for all tools from an MCP server:
+Mit Wildcards kannst du mehrere Tools auf einmal steuern.
+Zum Beispiel, um fuer alle Tools eines MCP-Servers eine Freigabe zu verlangen:
 
 ```json title="opencode.json"
 {
@@ -35,19 +39,19 @@ You can also use wildcards to control multiple tools at once. For example, to re
 }
 ```
 
-[Learn more](./permissions) about configuring permissions.
+[Mehr dazu](./permissions), wie du Berechtigungen konfigurierst.
 
 ---
 
 ## Built-in
 
-Here are all the built-in tools available in OpenCode.
+Hier sind alle in OpenCode verfuegbaren eingebauten Tools.
 
 ---
 
 ### bash
 
-Execute shell commands in your project environment.
+Fuehrt Shell-Befehle in deiner Projektumgebung aus.
 
 ```json title="opencode.json" {4}
 {
@@ -58,13 +62,13 @@ Execute shell commands in your project environment.
 }
 ```
 
-This tool allows the LLM to run terminal commands like `npm install`, `git status`, or any other shell command.
+Damit kann das LLM Terminal-Befehle wie `npm install`, `git status` oder andere Shell-Kommandos ausfuehren.
 
 ---
 
 ### edit
 
-Modify existing files using exact string replacements.
+Bearbeitet bestehende Dateien ueber exakte String-Ersetzungen.
 
 ```json title="opencode.json" {4}
 {
@@ -75,13 +79,14 @@ Modify existing files using exact string replacements.
 }
 ```
 
-This tool performs precise edits to files by replacing exact text matches. It's the primary way the LLM modifies code.
+Dieses Tool fuehrt praezise Aenderungen per exakter Textsuche aus.
+Es ist der zentrale Weg, wie das LLM Code aendert.
 
 ---
 
 ### write
 
-Create new files or overwrite existing ones.
+Erstellt neue Dateien oder ueberschreibt bestehende Dateien.
 
 ```json title="opencode.json" {4}
 {
@@ -92,10 +97,12 @@ Create new files or overwrite existing ones.
 }
 ```
 
-Use this to allow the LLM to create new files. It will overwrite existing files if they already exist.
+Damit erlaubst du dem LLM, neue Dateien anzulegen.
+Bestehende Dateien werden dabei ueberschrieben.
 
 :::note
-The `write` tool is controlled by the `edit` permission, which covers all file modifications (`edit`, `write`, `patch`, `multiedit`).
+Das Tool `write` wird ueber die Berechtigung `edit` gesteuert.
+`edit` gilt fuer alle Datei-Aenderungen (`edit`, `write`, `patch`, `multiedit`).
 :::
 
 ---
@@ -346,29 +353,33 @@ Each question includes a header, the question text, and a list of options. Users
 
 ## Custom tools
 
-Custom tools let you define your own functions that the LLM can call. These are defined in your config file and can execute arbitrary code.
+Mit Custom Tools definierst du eigene Funktionen, die das LLM aufrufen kann.
+Sie werden in der Konfigurationsdatei definiert und koennen beliebigen Code ausfuehren.
 
-[Learn more](./custom-tools) about creating custom tools.
+[Mehr dazu](./custom-tools), wie du Custom Tools erstellst.
 
 ---
 
 ## MCP servers
 
-MCP (Model Context Protocol) servers allow you to integrate external tools and services. This includes database access, API integrations, and third-party services.
+MCP-Server (Model Context Protocol) binden externe Tools und Dienste ein.
+Dazu gehoeren Datenbanken, API-Integrationen und Drittanbieter-Services.
 
-[Learn more](./mcp-servers) about configuring MCP servers.
+[Mehr dazu](./mcp-servers), wie du MCP-Server konfigurierst.
 
 ---
 
 ## Internals
 
-Internally, tools like `grep`, `glob`, and `list` use [ripgrep](https://github.com/BurntSushi/ripgrep) under the hood. By default, ripgrep respects `.gitignore` patterns, which means files and directories listed in your `.gitignore` will be excluded from searches and listings.
+Intern verwenden Tools wie `grep`, `glob` und `list` [ripgrep](https://github.com/BurntSushi/ripgrep).
+Standardmaessig beachtet ripgrep `.gitignore`, daher werden dort aufgefuehrte Dateien und Ordner nicht durchsucht.
 
 ---
 
 ### Ignore patterns
 
-To include files that would normally be ignored, create a `.ignore` file in your project root. This file can explicitly allow certain paths.
+Wenn du normalerweise ignorierte Dateien einschliessen willst, lege im Projekt-Root eine `.ignore`-Datei an.
+Dort kannst du Pfade explizit erlauben.
 
 ```text title=".ignore"
 !node_modules/
@@ -376,4 +387,4 @@ To include files that would normally be ignored, create a `.ignore` file in your
 !build/
 ```
 
-For example, this `.ignore` file allows ripgrep to search within `node_modules/`, `dist/`, and `build/` directories even if they're listed in `.gitignore`.
+Dieses Beispiel erlaubt ripgrep, in `node_modules/`, `dist/` und `build/` zu suchen, auch wenn sie in `.gitignore` stehen.

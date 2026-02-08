@@ -2,6 +2,8 @@
   "app.head.titleSuffix": "Terminal için oluşturulan AI taşıma aracı",
   "app.header.home": "ev",
   "app.header.docs": "Dokumanlar",
+  "app.footer.issueLink": "Bir hata buldunuz mu? Issue acin",
+  "app.footer.discordLink": "Discord toplulugumuza katilin",
   "app.lander.hero.title": "Terminal için oluşturulmuş AI taşıma aracı.",
   "app.lander.cta.getStarted": "Başlayın",
   "app.lander.features.native_tui.title": "Yerli TUI",

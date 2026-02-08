@@ -2,6 +2,8 @@
   "app.head.titleSuffix": "AI coding agent built for the terminal",
   "app.header.home": "Home",
   "app.header.docs": "Docs",
+  "app.footer.issueLink": "Found a bug? Open an issue",
+  "app.footer.discordLink": "Join our Discord community",
   "app.lander.hero.title": "The AI coding agent built for the terminal.",
   "app.lander.cta.getStarted": "Get Started",
   "app.lander.features.native_tui.title": "Native TUI",

@@ -1,12 +1,12 @@
 ---
 title: Server
-description: Interact with opencode server over HTTP.
+description: Komunicirajte s opencode serverom preko HTTP-a.
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-The `opencode serve` command runs a headless HTTP server that exposes an OpenAPI endpoint that an opencode client can use.
+Komanda `opencode serve` pokrece headless HTTP server koji izlaže OpenAPI endpoint koji opencode klijent moze koristiti.
 
 ---
 
@@ -18,15 +18,15 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 
 #### Options
 
-| Flag            | Description                         | Default          |
+| Zastava         | Opis                                | Default          |
 | --------------- | ----------------------------------- | ---------------- |
-| `--port`        | Port to listen on                   | `4096`           |
-| `--hostname`    | Hostname to listen on               | `127.0.0.1`      |
-| `--mdns`        | Enable mDNS discovery               | `false`          |
-| `--mdns-domain` | Custom domain name for mDNS service | `opencode.local` |
-| `--cors`        | Additional browser origins to allow | `[]`             |
+| `--port`        | Port na kojem slusa                 | `4096`           |
+| `--hostname`    | Hostname na kojem slusa             | `127.0.0.1`      |
+| `--mdns`        | Ukljuci mDNS otkrivanje             | `false`          |
+| `--mdns-domain` | Prilagodeni domen za mDNS servis    | `opencode.local` |
+| `--cors`        | Dodatni browser origin-i koje dozv. | `[]`             |
 
-`--cors` can be passed multiple times:
+`--cors` mozete navesti vise puta:
 
 ```bash
 opencode serve --cors http://localhost:5173 --cors https://app.example.com
@@ -36,7 +36,7 @@ opencode serve --cors http://localhost:5173 --cors https://app.example.com
 
 ### Authentication
 
-Set `OPENCODE_SERVER_PASSWORD` to protect the server with HTTP basic auth. The username defaults to `opencode`, or set `OPENCODE_SERVER_USERNAME` to override it. This applies to both `opencode serve` and `opencode web`.
+Postavite `OPENCODE_SERVER_PASSWORD` da zastitite server HTTP basic auth mehanizmom. Korisnicko ime je po defaultu `opencode`, ili postavite `OPENCODE_SERVER_USERNAME` za nadjacavanje. Ovo vazi i za `opencode serve` i za `opencode web`.
 
 ```bash
 OPENCODE_SERVER_PASSWORD=your-password opencode serve
@@ -46,44 +46,41 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve
 
 ### How it works
 
-When you run `opencode` it starts a TUI and a server. Where the TUI is the
-client that talks to the server. The server exposes an OpenAPI 3.1 spec
-endpoint. This endpoint is also used to generate an [SDK](./sdk).
+Kada pokrenete `opencode`, pokrecu se TUI i server. TUI je klijent koji komunicira sa serverom. Server izlaže OpenAPI 3.1 spec endpoint koji se koristi i za generisanje [SDK-a](./sdk).
 
 :::tip
-Use the opencode server to interact with opencode programmatically.
+Koristite opencode server za programsku interakciju sa opencode-om.
 :::
 
-This architecture lets opencode support multiple clients and allows you to interact with opencode programmatically.
+Ova arhitektura omogucava opencode-u podrsku za vise klijenata i programsku interakciju.
 
-You can run `opencode serve` to start a standalone server. If you have the
-opencode TUI running, `opencode serve` will start a new server.
+Mozete pokrenuti `opencode serve` da startate standalone server. Ako je opencode TUI vec pokrenut, `opencode serve` ce pokrenuti novi server.
 
 ---
 
 #### Connect to an existing server
 
-When you start the TUI it randomly assigns a port and hostname. You can instead pass in the `--hostname` and `--port` [flags](./cli). Then use this to connect to its server.
+Kada pokrenete TUI, port i hostname se nasumicno dodijele. Umjesto toga, mozete zadati `--hostname` i `--port` [zastave](./cli), pa se povezati na taj server.
 
-The [`/tui`](#tui) endpoint can be used to drive the TUI through the server. For example, you can prefill or run a prompt. This setup is used by the OpenCode [IDE](./ide) plugins.
+Endpoint [`/tui`](#tui) mozete koristiti za upravljanje TUI-jem kroz server. Na primjer, mozete unaprijed popuniti ili pokrenuti prompt. Ovaj setup koriste OpenCode [IDE](./ide) pluginovi.
 
 ---
 
 ## Spec
 
-The server publishes an OpenAPI 3.1 spec that can be viewed at:
+Server objavljuje OpenAPI 3.1 specifikaciju koju mozete vidjeti na:
 
 ```
 http://<hostname>:<port>/doc
 ```
 
-For example, `http://localhost:4096/doc`. Use the spec to generate clients or inspect request and response types. Or view it in a Swagger explorer.
+Na primjer, `http://localhost:4096/doc`. Koristite specifikaciju da generisete klijente ili pregledate tipove zahtjeva i odgovora. Mozete je otvoriti i u Swagger exploreru.
 
 ---
 
 ## APIs
 
-The opencode server exposes the following APIs.
+opencode server izlaže sljedece API-je.
 
 ---
 

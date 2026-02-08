@@ -1,29 +1,30 @@
 ---
 title: Themes
-description: Select a built-in theme or define your own.
+description: Waehle ein eingebautes Theme oder erstelle eins.
 ---
 
-With OpenCode you can select from one of several built-in themes, use a theme that adapts to your terminal theme, or define your own custom theme.
+Mit OpenCode kannst du ein eingebautes Theme waehlen, ein an dein Terminal angepasstes Theme nutzen oder ein eigenes Theme definieren.
 
-By default, OpenCode uses our own `opencode` theme.
-
----
-
-## Terminal requirements
-
-For themes to display correctly with their full color palette, your terminal must support **truecolor** (24-bit color). Most modern terminals support this by default, but you may need to enable it:
-
-- **Check support**: Run `echo $COLORTERM` - it should output `truecolor` or `24bit`
-- **Enable truecolor**: Set the environment variable `COLORTERM=truecolor` in your shell profile
-- **Terminal compatibility**: Ensure your terminal emulator supports 24-bit color (most modern terminals like iTerm2, Alacritty, Kitty, Windows Terminal, and recent versions of GNOME Terminal do)
-
-Without truecolor support, themes may appear with reduced color accuracy or fall back to the nearest 256-color approximation.
+Standardmaessig verwendet OpenCode das `opencode`-Theme.
 
 ---
 
-## Built-in themes
+## Terminal-Anforderungen
 
-OpenCode comes with several built-in themes.
+Damit Themes mit voller Farbpalette korrekt angezeigt werden, muss dein Terminal **truecolor** (24-Bit-Farben) unterstuetzen.
+Die meisten modernen Terminals koennen das bereits, eventuell musst du es aber aktivieren:
+
+- **Support pruefen**: Fuehre `echo $COLORTERM` aus - erwartet ist `truecolor` oder `24bit`
+- **Truecolor aktivieren**: Setze in deinem Shell-Profil `COLORTERM=truecolor`
+- **Terminal-Kompatibilitaet**: Stelle sicher, dass dein Terminal-Emulator 24-Bit-Farben unterstuetzt
+
+Ohne truecolor werden Farben weniger exakt dargestellt oder auf eine 256-Farben-Naeherung reduziert.
+
+---
+
+## Eingebaute Themes
+
+OpenCode liefert mehrere eingebaute Themes mit.
 
 | Name                   | Description                                                                  |
 | ---------------------- | ---------------------------------------------------------------------------- |
@@ -39,29 +40,30 @@ OpenCode comes with several built-in themes.
 | `matrix`               | Hacker-style green on black theme                                            |
 | `one-dark`             | Based on the [Atom One](https://github.com/Th3Whit3Wolf/one-nvim) Dark theme |
 
-And more, we are constantly adding new themes.
+Und es kommen laufend weitere dazu.
 
 ---
 
-## System theme
+## System-Theme
 
-The `system` theme is designed to automatically adapt to your terminal's color scheme. Unlike traditional themes that use fixed colors, the _system_ theme:
+Das `system`-Theme passt sich automatisch an das Farbschema deines Terminals an.
+Im Gegensatz zu Themes mit festen Farben gilt beim _system_-Theme:
 
-- **Generates gray scale**: Creates a custom gray scale based on your terminal's background color, ensuring optimal contrast.
-- **Uses ANSI colors**: Leverages standard ANSI colors (0-15) for syntax highlighting and UI elements, which respect your terminal's color palette.
-- **Preserves terminal defaults**: Uses `none` for text and background colors to maintain your terminal's native appearance.
+- **Generiert Graustufen**: Basierend auf deiner Terminal-Hintergrundfarbe fuer guten Kontrast
+- **Nutzt ANSI-Farben**: Verwendet Standardfarben (0-15), die dein Terminalschema respektieren
+- **Behaelt Terminal-Defaults**: Verwendet `none` fuer Text und Hintergruende
 
-The system theme is for users who:
+Das System-Theme ist ideal fuer Nutzer, die:
 
-- Want OpenCode to match their terminal's appearance
-- Use custom terminal color schemes
-- Prefer a consistent look across all terminal applications
+- OpenCode optisch ans Terminal anpassen wollen
+- eigene Terminal-Farbschemata nutzen
+- ein konsistentes Erscheinungsbild in Terminal-Apps bevorzugen
 
 ---
 
-## Using a theme
+## Theme verwenden
 
-You can select a theme by bringing up the theme select with the `/theme` command. Or you can specify it in your [config](./config).
+Du kannst ein Theme ueber `/theme` auswaehlen oder direkt in der [Konfiguration](./config) setzen.
 
 ```json title="opencode.json" {3}
 {
@@ -72,9 +74,10 @@ You can select a theme by bringing up the theme select with the `/theme` command
 
 ---
 
-## Custom themes
+## Eigene Themes
 
-OpenCode supports a flexible JSON-based theme system that allows users to create and customize themes easily.
+OpenCode unterstuetzt ein flexibles JSON-basiertes Theme-System.
+Damit lassen sich Themes einfach erstellen und anpassen.
 
 ---
 

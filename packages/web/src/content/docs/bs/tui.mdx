@@ -1,25 +1,25 @@
 ---
 title: TUI
-description: Using the OpenCode terminal user interface.
+description: Korištenje korisničkog interfejsa OpenCode terminala.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode provides an interactive terminal interface or TUI for working on your projects with an LLM.
+OpenCode pruža interaktivni terminalski interfejs ili TUI za rad na vašim projektima sa LLM.
 
-Running OpenCode starts the TUI for the current directory.
+Pokretanje OpenCode-a pokreće TUI za trenutni direktorij.
 
 ```bash
 opencode
 ```
 
-Or you can start it for a specific working directory.
+Ili ga možete pokrenuti za određeni radni direktorij.
 
 ```bash
 opencode /path/to/project
 ```
 
-Once you're in the TUI, you can prompt it with a message.
+Kada uđete u TUI, možete to zatražiti porukom.
 
 ```text
 Give me a quick summary of the codebase.
@@ -27,51 +27,51 @@ Give me a quick summary of the codebase.
 
 ---
 
-## File references
+## Reference fajlova
 
-You can reference files in your messages using `@`. This does a fuzzy file search in the current working directory.
+Možete referencirati datoteke u svojim porukama koristeći `@`. Ovo vrši nejasnu pretragu datoteka u trenutnom radnom direktoriju.
 
 :::tip
-You can also use `@` to reference files in your messages.
+Također možete koristiti `@` da referencirate datoteke u svojim porukama.
 :::
 
 ```text "@packages/functions/src/api/index.ts"
 How is auth handled in @packages/functions/src/api/index.ts?
 ```
 
-The content of the file is added to the conversation automatically.
+Sadržaj datoteke se automatski dodaje u razgovor.
 
 ---
 
-## Bash commands
+## Bash komande
 
-Start a message with `!` to run a shell command.
+Započnite poruku sa `!` da pokrenete komandu ljuske.
 
 ```bash frame="none"
 !ls -la
 ```
 
-The output of the command is added to the conversation as a tool result.
+Izlaz naredbe se dodaje u razgovor kao rezultat alata.
 
 ---
 
-## Commands
+## Komande
 
-When using the OpenCode TUI, you can type `/` followed by a command name to quickly execute actions. For example:
+Kada koristite OpenCode TUI, možete upisati `/` nakon čega slijedi ime komande da biste brzo izvršili radnje. na primjer:
 
 ```bash frame="none"
 /help
 ```
 
-Most commands also have keybind using `ctrl+x` as the leader key, where `ctrl+x` is the default leader key. [Learn more](./keybinds).
+Većina naredbi također ima vezu pomoću `ctrl+x` kao vodeće tipke, gdje je `ctrl+x` zadani vodeći ključ. [Saznajte više](./keybinds).
 
-Here are all available slash commands:
+Ovdje su sve dostupne komande kose crte:
 
 ---
 
 ### connect
 
-Add a provider to OpenCode. Allows you to select from available providers and add their API keys.
+Dodajte provajdera u OpenCode. Omogućava vam da odaberete između dostupnih provajdera i dodate njihove API ključeve.
 
 ```bash frame="none"
 /connect
@@ -81,173 +81,173 @@ Add a provider to OpenCode. Allows you to select from available providers and ad
 
 ### compact
 
-Compact the current session. _Alias_: `/summarize`
+Sažimanje trenutne sesije. _Alias_: `/summarize`
 
 ```bash frame="none"
 /compact
 ```
 
-**Keybind:** `ctrl+x c`
+**Tastatura:** `ctrl+x c`
 
 ---
 
 ### details
 
-Toggle tool execution details.
+Prebacite detalje o izvršavanju alata.
 
 ```bash frame="none"
 /details
 ```
 
-**Keybind:** `ctrl+x d`
+**Tastatura:** `ctrl+x d`
 
 ---
 
 ### editor
 
-Open external editor for composing messages. Uses the editor set in your `EDITOR` environment variable. [Learn more](#editor-setup).
+Otvorite vanjski uređivač za sastavljanje poruka. Koristi editor postavljen u vašoj varijabli okruženja `EDITOR`. [Saznajte više](#editor-setup).
 
 ```bash frame="none"
 /editor
 ```
 
-**Keybind:** `ctrl+x e`
+**Tastatura:** `ctrl+x e`
 
 ---
 
 ### exit
 
-Exit OpenCode. _Aliases_: `/quit`, `/q`
+Izađite iz OpenCode-a. _Aliases_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
 ```
 
-**Keybind:** `ctrl+x q`
+**Tastatura:** `ctrl+x q`
 
 ---
 
 ### export
 
-Export current conversation to Markdown and open in your default editor. Uses the editor set in your `EDITOR` environment variable. [Learn more](#editor-setup).
+Izvezite trenutni razgovor u Markdown i otvorite ga u zadanom uređivaču. Koristi editor postavljen u vašoj varijabli okruženja `EDITOR`. [Saznajte više](#editor-setup).
 
 ```bash frame="none"
 /export
 ```
 
-**Keybind:** `ctrl+x x`
+**Tastatura:** `ctrl+x x`
 
 ---
 
 ### help
 
-Show the help dialog.
+Prikaži dijalog pomoći.
 
 ```bash frame="none"
 /help
 ```
 
-**Keybind:** `ctrl+x h`
+**Tastatura:** `ctrl+x h`
 
 ---
 
 ### init
 
-Create or update `AGENTS.md` file. [Learn more](./rules).
+Kreirajte ili ažurirajte datoteku `AGENTS.md`. [Saznajte više](./rules).
 
 ```bash frame="none"
 /init
 ```
 
-**Keybind:** `ctrl+x i`
+**Tastatura:** `ctrl+x i`
 
 ---
 
 ### models
 
-List available models.
+Navedite dostupne modele.
 
 ```bash frame="none"
 /models
 ```
 
-**Keybind:** `ctrl+x m`
+**Tastatura:** `ctrl+x m`
 
 ---
 
 ### new
 
-Start a new session. _Alias_: `/clear`
+Započnite novu sesiju. _Alias_: `/clear`
 
 ```bash frame="none"
 /new
 ```
 
-**Keybind:** `ctrl+x n`
+**Tastatura:** `ctrl+x n`
 
 ---
 
 ### redo
 
-Redo a previously undone message. Only available after using `/undo`.
+Ponovite prethodno poništenu poruku. Dostupno samo nakon korištenja `/undo`.
 
 :::tip
-Any file changes will also be restored.
+Sve promjene fajla će također biti vraćene.
 :::
 
-Internally, this uses Git to manage the file changes. So your project **needs to
-be a Git repository**.
+Interno, ovo koristi Git za upravljanje promjenama datoteke. Dakle, vaš projekat **treba
+biti Git spremište**.
 
 ```bash frame="none"
 /redo
 ```
 
-**Keybind:** `ctrl+x r`
+**Tastatura:** `ctrl+x r`
 
 ---
 
 ### sessions
 
-List and switch between sessions. _Aliases_: `/resume`, `/continue`
+Listanje i prebacivanje između sesija. _Aliases_: `/resume`, `/continue`
 
 ```bash frame="none"
 /sessions
 ```
 
-**Keybind:** `ctrl+x l`
+**Tastatura:** `ctrl+x l`
 
 ---
 
 ### share
 
-Share current session. [Learn more](./share).
+Podijelite trenutnu sesiju. [Saznajte više](./share).
 
 ```bash frame="none"
 /share
 ```
 
-**Keybind:** `ctrl+x s`
+**Tastatura:** `ctrl+x s`
 
 ---
 
 ### themes
 
-List available themes.
+Navedite dostupne teme.
 
 ```bash frame="none"
 /theme
 ```
 
-**Keybind:** `ctrl+x t`
+**Tastatura:** `ctrl+x t`
 
 ---
 
 ### thinking
 
-Toggle the visibility of thinking/reasoning blocks in the conversation. When enabled, you can see the model's reasoning process for models that support extended thinking.
+Uključite/isključite vidljivost blokova razmišljanja/rezoniranja u razgovoru. Kada je omogućeno, možete vidjeti proces rezonovanja modela za modele koji podržavaju prošireno razmišljanje.
 
 :::note
-This command only controls whether thinking blocks are **displayed** - it does not enable or disable the model's reasoning capabilities. To toggle actual reasoning capabilities, use `ctrl+t` to cycle through model variants.
+Ova naredba samo kontrolira da li se blokovi razmišljanja **prikažu** - ne omogućava niti onemogućuje mogućnosti razmišljanja modela. Da biste uključili stvarne mogućnosti zaključivanja, koristite `ctrl+t` za kretanje kroz varijante modela.
 :::
 
 ```bash frame="none"
@@ -258,26 +258,26 @@ This command only controls whether thinking blocks are **displayed** - it does n
 
 ### undo
 
-Undo last message in the conversation. Removes the most recent user message, all subsequent responses, and any file changes.
+Poništi posljednju poruku u razgovoru. Uklanja najnoviju korisničku poruku, sve naknadne odgovore i sve promjene datoteke.
 
 :::tip
-Any file changes made will also be reverted.
+Sve promjene u fajlu će također biti poništene.
 :::
 
-Internally, this uses Git to manage the file changes. So your project **needs to
-be a Git repository**.
+Interno, ovo koristi Git za upravljanje promjenama datoteke. Dakle, vaš projekat **treba
+biti Git spremište**.
 
 ```bash frame="none"
 /undo
 ```
 
-**Keybind:** `ctrl+x u`
+**Tastatura:** `ctrl+x u`
 
 ---
 
 ### unshare
 
-Unshare current session. [Learn more](./share#un-sharing).
+Poništi dijeljenje trenutne sesije. [Saznajte više](./share#un-sharing).
 
 ```bash frame="none"
 /unshare
@@ -285,9 +285,9 @@ Unshare current session. [Learn more](./share#un-sharing).
 
 ---
 
-## Editor setup
+## Podešavanje uređivača
 
-Both the `/editor` and `/export` commands use the editor specified in your `EDITOR` environment variable.
+Obje naredbe `/editor` i `/export` koriste editor specificiran u vašoj varijabli okruženja `EDITOR`.
 
 <Tabs>
   <TabItem label="Linux/macOS">
@@ -305,8 +305,8 @@ Both the `/editor` and `/export` commands use the editor specified in your `EDIT
 
 ```
 
-    To make it permanent, add this to your shell profile;
-    `~/.bashrc`, `~/.zshrc`, etc.
+    Da biste ga učinili trajnim, dodajte ovo u svoj shell profil;
+    `~/.bashrc`, `~/.zshrc`, itd.
 
   </TabItem>
 
@@ -323,8 +323,8 @@ Both the `/editor` and `/export` commands use the editor specified in your `EDIT
 
 ```
 
-    To make it permanent, use **System Properties** > **Environment
-    Variables**.
+    Da biste ga učinili trajnim, koristite **Svojstva sistema** > **Okruženje
+    Varijable**.
 
   </TabItem>
 
@@ -341,33 +341,33 @@ Both the `/editor` and `/export` commands use the editor specified in your `EDIT
 
 ```
 
-    To make it permanent, add this to your PowerShell profile.
+    Da biste ga učinili trajnim, dodajte ovo u svoj PowerShell profil.
 
   </TabItem>
 </Tabs>
 
-Popular editor options include:
+Popularne opcije uređivača uključuju:
 
-- `code` - Visual Studio Code
-- `cursor` - Cursor
-- `windsurf` - Windsurf
-- `nvim` - Neovim editor
-- `vim` - Vim editor
-- `nano` - Nano editor
-- `notepad` - Windows Notepad
-- `subl` - Sublime Text
+- `code` - ​​Visual Studio Code
+- `cursor` - ​​Kursor
+- `windsurf` - ​​jedrenje na dasci
+- `nvim` - ​​Neovim editorom
+- `vim` - ​​Vim editor
+- `nano` - ​​Nano editor
+- `notepad` - ​​Windows Notepad
+- `subl` - ​​Uzvišeni tekst
 
 :::note
-Some editors like VS Code need to be started with the `--wait` flag.
+Neki uređivači kao što je VS Code moraju biti pokrenuti sa `--wait` zastavicom.
 :::
 
-Some editors need command-line arguments to run in blocking mode. The `--wait` flag makes the editor process block until closed.
+Nekim uređivačima su potrebni argumenti komandne linije da bi se pokrenuli u načinu blokiranja. Oznaka `--wait` blokira proces uređivača dok se ne zatvori.
 
 ---
 
-## Configure
+## Konfiguriši
 
-You can customize TUI behavior through your OpenCode config file.
+Možete prilagoditi TUI ponašanje putem vašeg OpenCode konfiguracionog fajla.
 
 ```json title="opencode.json"
 {
@@ -381,22 +381,22 @@ You can customize TUI behavior through your OpenCode config file.
 }
 ```
 
-### Options
+### Opcije
 
-- `scroll_acceleration` - Enable macOS-style scroll acceleration for smooth, natural scrolling. When enabled, scroll speed increases with rapid scrolling gestures and stays precise for slower movements. **This setting takes precedence over `scroll_speed` and overrides it when enabled.**
-- `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (minimum: `1`). Defaults to `3`. **Note: This is ignored if `scroll_acceleration.enabled` is set to `true`.**
-
----
-
-## Customization
-
-You can customize various aspects of the TUI view using the command palette (`ctrl+x h` or `/help`). These settings persist across restarts.
+- `scroll_acceleration` - ​​Omogućite ubrzanje pomicanja u macOS stilu za glatko, prirodno pomicanje. Kada je omogućeno, brzina pomicanja se povećava brzim pokretima pomicanja i ostaje precizna za sporije pokrete. **Ova postavka ima prednost nad `scroll_speed` i nadjačava je kada je omogućena.**
+- `scroll_speed` - ​​Kontrolira koliko brzo TUI skroluje kada se koriste komande za pomeranje (minimalno: `1`). Podrazumevano je `3`. **Napomena: Ovo se zanemaruje ako je `scroll_acceleration.enabled` postavljeno na `true`.**
 
 ---
 
-#### Username display
+## Prilagođavanje
 
-Toggle whether your username appears in chat messages. Access this through:
+Možete prilagoditi različite aspekte TUI prikaza koristeći paletu komandi (`ctrl+x h` ili `/help`). Ove postavke traju i nakon ponovnog pokretanja.
 
-- Command palette: Search for "username" or "hide username"
-- The setting persists automatically and will be remembered across TUI sessions
+---
+
+#### Prikaz korisničkog imena
+
+Uključite da li se vaše korisničko ime pojavljuje u porukama za ćaskanje. Pristupite ovome putem:
+
+- Paleta naredbi: Potražite "korisničko ime" ili "sakrij korisničko ime"
+- Postavka se automatski nastavlja i pamtit će se tijekom TUI sesija

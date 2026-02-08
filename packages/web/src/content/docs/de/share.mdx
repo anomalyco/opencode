@@ -1,43 +1,45 @@
 ---
 title: Share
-description: Share your OpenCode conversations.
+description: Teile OpenCode-Unterhaltungen per oeffentlichem Link.
 ---
 
-OpenCode's share feature allows you to create public links to your OpenCode conversations, so you can collaborate with teammates or get help from others.
+Mit der Share-Funktion erstellst du oeffentliche Links zu OpenCode-Unterhaltungen.
+So kannst du einfacher mit dem Team zusammenarbeiten oder Hilfe einholen.
 
 :::note
-Shared conversations are publicly accessible to anyone with the link.
+Geteilte Unterhaltungen sind fuer alle mit dem Link oeffentlich zugaenglich.
 :::
 
 ---
 
 ## How it works
 
-When you share a conversation, OpenCode:
+Wenn du eine Unterhaltung teilst, macht OpenCode Folgendes:
 
-1. Creates a unique public URL for your session
-2. Syncs your conversation history to our servers
-3. Makes the conversation accessible via the shareable link — `opncd.ai/s/<share-id>`
+1. Erstellt eine eindeutige oeffentliche URL fuer deine Sitzung
+2. Synchronisiert den Verlauf auf unsere Server
+3. Stellt die Unterhaltung unter `opncd.ai/s/<share-id>` bereit
 
 ---
 
 ## Sharing
 
-OpenCode supports three sharing modes that control how conversations are shared:
+OpenCode hat drei Modi, die das Teilen steuern:
 
 ---
 
 ### Manual (default)
 
-By default, OpenCode uses manual sharing mode. Sessions are not shared automatically, but you can manually share them using the `/share` command:
+Standardmaessig nutzt OpenCode den manuellen Modus.
+Sitzungen werden nicht automatisch geteilt, du kannst sie aber mit `/share` veroeffentlichen:
 
 ```
 /share
 ```
 
-This will generate a unique URL that'll be copied to your clipboard.
+Dabei wird eine eindeutige URL erzeugt und in die Zwischenablage kopiert.
 
-To explicitly set manual mode in your [config file](./config):
+Um den manuellen Modus explizit in der [Konfiguration](./config) zu setzen:
 
 ```json title="opencode.json"
 {
@@ -50,7 +52,7 @@ To explicitly set manual mode in your [config file](./config):
 
 ### Auto-share
 
-You can enable automatic sharing for all new conversations by setting the `share` option to `"auto"` in your [config file](./config):
+Du kannst automatisches Teilen fuer neue Unterhaltungen aktivieren, indem du in der [Konfiguration](./config) `share` auf `"auto"` setzt:
 
 ```json title="opencode.json"
 {
@@ -59,13 +61,13 @@ You can enable automatic sharing for all new conversations by setting the `share
 }
 ```
 
-With auto-share enabled, every new conversation will automatically be shared and a link will be generated.
+Mit aktiviertem Auto-Share wird jede neue Unterhaltung automatisch geteilt und ein Link erstellt.
 
 ---
 
 ### Disabled
 
-You can disable sharing entirely by setting the `share` option to `"disabled"` in your [config file](./config):
+Du kannst Teilen komplett deaktivieren, indem du in der [Konfiguration](./config) `share` auf `"disabled"` setzt:
 
 ```json title="opencode.json"
 {
@@ -74,55 +76,55 @@ You can disable sharing entirely by setting the `share` option to `"disabled"` i
 }
 ```
 
-To enforce this across your team for a given project, add it to the `opencode.json` in your project and check into Git.
+Wenn das fuer ein Projekt teamweit gelten soll, lege es in der Projekt-`opencode.json` fest und committe die Datei.
 
 ---
 
-## Un-sharing
+## Teilen aufheben
 
-To stop sharing a conversation and remove it from public access:
+Um das Teilen zu beenden und den oeffentlichen Zugriff zu entfernen:
 
 ```
 /unshare
 ```
 
-This will remove the share link and delete the data related to the conversation.
+Dadurch wird der Share-Link entfernt und die zugehoerigen Daten werden geloescht.
 
 ---
 
 ## Privacy
 
-There are a few things to keep in mind when sharing a conversation.
+Beim Teilen solltest du ein paar Punkte beachten.
 
 ---
 
 ### Data retention
 
-Shared conversations remain accessible until you explicitly unshare them. This
-includes:
+Geteilte Unterhaltungen bleiben veroeffentlicht, bis du sie explizit aufhebst.
+Das umfasst:
 
-- Full conversation history
-- All messages and responses
-- Session metadata
+- Vollstaendigen Unterhaltungsverlauf
+- Alle Nachrichten und Antworten
+- Sitzungsmetadaten
 
 ---
 
 ### Recommendations
 
-- Only share conversations that don't contain sensitive information.
-- Review conversation content before sharing.
-- Unshare conversations when collaboration is complete.
-- Avoid sharing conversations with proprietary code or confidential data.
-- For sensitive projects, disable sharing entirely.
+- Teile nur Unterhaltungen ohne sensible Informationen.
+- Pruefe Inhalte vor dem Teilen.
+- Hebe das Teilen wieder auf, wenn die Zusammenarbeit beendet ist.
+- Teile keine proprietaeren Codes oder vertraulichen Daten.
+- Deaktiviere Teilen komplett bei sensiblen Projekten.
 
 ---
 
 ## For enterprises
 
-For enterprise deployments, the share feature can be:
+In Enterprise-Umgebungen kann die Share-Funktion:
 
-- **Disabled** entirely for security compliance
-- **Restricted** to users authenticated through SSO only
-- **Self-hosted** on your own infrastructure
+- **Deaktiviert** werden, um Compliance-Vorgaben einzuhalten
+- Auf **SSO-authentifizierte** Nutzer eingeschraenkt werden
+- **Self-hosted** auf eigener Infrastruktur betrieben werden
 
-[Learn more](./enterprise) about using opencode in your organization.
+[Mehr dazu](./enterprise), wie du opencode in deiner Organisation einsetzt.

@@ -2,6 +2,8 @@
   "app.head.titleSuffix": "为表达式构建的AI编码代理",
   "app.header.home": "家",
   "app.header.docs": "檔案",
+  "app.footer.issueLink": "发现了问题？提交 issue",
+  "app.footer.discordLink": "加入我们的 Discord 社区",
   "app.lander.hero.title": "为表达式构建的AI编码代理。",
   "app.lander.cta.getStarted": "開始使用",
   "app.lander.features.native_tui.title": "本机TUI",

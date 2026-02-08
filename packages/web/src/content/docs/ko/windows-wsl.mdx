@@ -1,37 +1,37 @@
 ---
 title: Windows (WSL)
-description: Run OpenCode on Windows using WSL for the best experience.
+description: WSL로 Windows에서 OpenCode를 더 편하게 사용하세요.
 ---
 
 import { Steps } from "@astrojs/starlight/components"
 
-While OpenCode can run directly on Windows, we recommend using [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) for the best experience. WSL provides a Linux environment that works seamlessly with OpenCode's features.
+OpenCode는 Windows에서 직접 실행할 수 있지만, 가장 좋은 사용 경험을 위해 [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) 사용을 권장합니다. WSL은 OpenCode 기능과 자연스럽게 동작하는 Linux 환경을 제공합니다.
 
-:::tip[Why WSL?]
-WSL offers better file system performance, full terminal support, and compatibility with development tools that OpenCode relies on.
+:::tip[왜 WSL인가요?]
+WSL은 더 나은 파일 시스템 성능, 완전한 터미널 지원, 그리고 OpenCode가 의존하는 개발 도구와의 호환성을 제공합니다.
 :::
 
 ---
 
-## Setup
+## 설정
 
 <Steps>
 
-1. **Install WSL**
+1. **WSL 설치하기**
 
-   If you haven't already, [install WSL](https://learn.microsoft.com/en-us/windows/wsl/install) using the official Microsoft guide.
+   아직 설치하지 않았다면 Microsoft 공식 가이드를 따라 [WSL을 설치](https://learn.microsoft.com/en-us/windows/wsl/install)하세요.
 
-2. **Install OpenCode in WSL**
+2. **WSL에 OpenCode 설치하기**
 
-   Once WSL is set up, open your WSL terminal and install OpenCode using one of the [installation methods](./).
+   WSL 설정이 끝나면 WSL 터미널을 열고 [설치 방법](./) 중 하나로 OpenCode를 설치하세요.
 
    ```bash
    curl -fsSL https://opencode.ai/install | bash
    ```
 
-3. **Use OpenCode from WSL**
+3. **WSL에서 OpenCode 실행하기**
 
-   Navigate to your project directory (access Windows files via `/mnt/c/`, `/mnt/d/`, etc.) and run OpenCode.
+   프로젝트 디렉터리로 이동한 뒤(OpenCode에서 Windows 파일은 `/mnt/c/`, `/mnt/d/` 등으로 접근) OpenCode를 실행하세요.
 
    ```bash
    cd /mnt/c/Users/YourName/project
@@ -42,24 +42,28 @@ WSL offers better file system performance, full terminal support, and compatibil
 
 ---
 
-## Desktop App + WSL Server
+## 데스크톱 앱 + WSL 서버
 
-If you prefer using the OpenCode Desktop app but want to run the server in WSL:
+OpenCode 데스크톱 앱을 쓰면서 서버는 WSL에서 실행하고 싶다면 다음처럼 진행하세요.
 
-1. **Start the server in WSL** with `--hostname 0.0.0.0` to allow external connections:
+1. **WSL에서 서버 시작하기**
+
+   외부 연결을 허용하려면 `--hostname 0.0.0.0` 옵션을 사용하세요.
 
    ```bash
    opencode serve --hostname 0.0.0.0 --port 4096
    ```
 
-2. **Connect the Desktop app** to `http://localhost:4096`
+2. **데스크톱 앱 연결하기**
+
+   `http://localhost:4096`로 연결하세요.
 
 :::note
-If `localhost` does not work in your setup, connect using the WSL IP address instead (from WSL: `hostname -I`) and use `http://<wsl-ip>:4096`.
+환경에 따라 `localhost`가 동작하지 않으면 WSL의 IP 주소를 사용하세요(WSL에서 `hostname -I` 실행). 이후 `http://<wsl-ip>:4096`로 접속하면 됩니다.
 :::
 
 :::caution
-When using `--hostname 0.0.0.0`, set `OPENCODE_SERVER_PASSWORD` to secure the server.
+`--hostname 0.0.0.0`을 사용할 때는 `OPENCODE_SERVER_PASSWORD`를 설정해 서버를 보호하세요.
 
 ```bash
 OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
@@ -69,31 +73,33 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
 
 ---
 
-## Web Client + WSL
+## 웹 클라이언트 + WSL
 
-For the best web experience on Windows:
+Windows에서 웹 사용 경험을 가장 좋게 하려면:
 
-1. **Run `opencode web` in the WSL terminal** rather than PowerShell:
+1. **PowerShell 대신 WSL 터미널에서 `opencode web` 실행하기**
 
    ```bash
    opencode web --hostname 0.0.0.0
    ```
 
-2. **Access from your Windows browser** at `http://localhost:<port>` (OpenCode prints the URL)
+2. **Windows 브라우저에서 접속하기**
 
-Running `opencode web` from WSL ensures proper file system access and terminal integration while still being accessible from your Windows browser.
+   `http://localhost:<port>`로 접속하세요(OpenCode가 URL을 출력합니다).
+
+WSL에서 `opencode web`를 실행하면 올바른 파일 시스템 접근과 터미널 통합을 유지하면서도 Windows 브라우저에서 바로 사용할 수 있습니다.
 
 ---
 
-## Accessing Windows Files
+## Windows 파일 접근
 
-WSL can access all your Windows files through the `/mnt/` directory:
+WSL에서는 `/mnt/` 디렉터리를 통해 Windows 파일 전체에 접근할 수 있습니다.
 
 - `C:` drive → `/mnt/c/`
 - `D:` drive → `/mnt/d/`
-- And so on...
+- 다른 드라이브도 같은 방식입니다
 
-Example:
+예시:
 
 ```bash
 cd /mnt/c/Users/YourName/Documents/project
@@ -101,13 +107,13 @@ opencode
 ```
 
 :::tip
-For the smoothest experience, consider cloning/copying your repo into the WSL filesystem (for example under `~/code/`) and running OpenCode there.
+가장 매끄러운 경험을 원한다면 저장소를 WSL 파일시스템(예: `~/code/`)으로 복제하거나 복사한 뒤 그 위치에서 OpenCode를 실행해 보세요.
 :::
 
 ---
 
-## Tips
+## 팁
 
-- Keep OpenCode running in WSL for projects stored on Windows drives - file access is seamless
-- Use VS Code's [WSL extension](https://code.visualstudio.com/docs/remote/wsl) alongside OpenCode for an integrated development workflow
-- Your OpenCode config and sessions are stored within the WSL environment at `~/.local/share/opencode/`
+- Windows 드라이브에 있는 프로젝트라도 OpenCode는 WSL에서 실행하면 파일 접근이 더 자연스럽습니다
+- 통합된 개발 워크플로를 위해 OpenCode와 함께 VS Code의 [WSL 확장](https://code.visualstudio.com/docs/remote/wsl)을 사용해 보세요
+- OpenCode 설정과 세션은 WSL 환경의 `~/.local/share/opencode/`에 저장됩니다

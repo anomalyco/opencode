@@ -1,70 +1,70 @@
 ---
 title: Web
-description: Using OpenCode in your browser.
+description: Tarayıcınızda OpenCode'u kullanma.
 ---
 
-OpenCode can run as a web application in your browser, providing the same powerful AI coding experience without needing a terminal.
+OpenCode, tarayıcınızda bir web uygulaması olarak çalışabilir ve bir terminale ihtiyaç duymadan aynı güçlü AI kodlama deneyimini sağlayabilir.
 
-![OpenCode Web - New Session](../../../assets/web/web-homepage-new-session.png)
+![OpenCode Web - Yeni Oturum](../../../assets/web/web-homepage-new-session.png)
 
-## Getting Started
+## Başlarken
 
-Start the web interface by running:
+Aşağıdakileri çalıştırarak web arayüzünü başlatın:
 
 ```bash
 opencode web
 ```
 
-This starts a local server on `127.0.0.1` with a random available port and automatically opens OpenCode in your default browser.
+Bu, `127.0.0.1` üzerinde rastgele kullanılabilir bir bağlantı noktasına sahip yerel bir sunucuyu başlatır ve OpenCode'u varsayılan tarayıcınızda otomatik olarak açar.
 
 :::caution
-If `OPENCODE_SERVER_PASSWORD` is not set, the server will be unsecured. This is fine for local use but should be set for network access.
+`OPENCODE_SERVER_PASSWORD` ayarlanmadıysa sunucunun güvenliği kaldırılacaktır. Bu, yerel kullanım için iyidir ancak ağ erişimi için ayarlanmalıdır.
 :::
 
 :::tip[Windows Users]
-For the best experience, run `opencode web` from [WSL](./windows-wsl) rather than PowerShell. This ensures proper file system access and terminal integration.
+En iyi deneyim için PowerShell yerine `opencode web`'yi [WSL](./windows-wsl)'den çalıştırın. Bu, uygun dosya sistemi erişimini ve terminal entegrasyonunu sağlar.
 :::
 
 ---
 
-## Configuration
+## Yapılandırma
 
-You can configure the web server using command line flags or in your [config file](./config).
+Web sunucusunu komut satırı bayraklarıyla veya [config dosyanızda](./config) yapılandırabilirsiniz.
 
 ### Port
 
-By default, OpenCode picks an available port. You can specify a port:
+OpenCode varsayılan olarak kullanılabilir bir bağlantı noktasını seçer. Bir bağlantı noktası belirtebilirsiniz:
 
 ```bash
 opencode web --port 4096
 ```
 
-### Hostname
+### Ana makine adı
 
-By default, the server binds to `127.0.0.1` (localhost only). To make OpenCode accessible on your network:
+Varsayılan olarak sunucu `127.0.0.1` (yalnızca localhost) öğesine bağlanır. OpenCode'u ağınızda erişilebilir kılmak için:
 
 ```bash
 opencode web --hostname 0.0.0.0
 ```
 
-When using `0.0.0.0`, OpenCode will display both local and network addresses:
+`0.0.0.0` kullanıldığında, OpenCode hem yerel hem de ağ adreslerini gösterecektir:
 
 ```
   Local access:       http://localhost:4096
   Network access:     http://192.168.1.100:4096
 ```
 
-### mDNS Discovery
+### mDNS Keşfi
 
-Enable mDNS to make your server discoverable on the local network:
+Sunucunuzun yerel ağda bulunabilir olmasını sağlamak için mDNS'yi etkinleştirin:
 
 ```bash
 opencode web --mdns
 ```
 
-This automatically sets the hostname to `0.0.0.0` and advertises the server as `opencode.local`.
+Bu, ana bilgisayar adını otomatik olarak `0.0.0.0` olarak ayarlar ve sunucuyu `opencode.local` olarak tanıtır.
 
-You can customize the mDNS domain name to run multiple instances on the same network:
+Aynı ağ üzerinde birden fazla örneği çalıştıracak şekilde mDNS alan adını özelleştirebilirsiniz:
 
 ```bash
 opencode web --mdns --mdns-domain myproject.local
@@ -72,45 +72,45 @@ opencode web --mdns --mdns-domain myproject.local
 
 ### CORS
 
-To allow additional domains for CORS (useful for custom frontends):
+CORS'a yönelik ek alan adlarına izin vermek için (özel ön uçlar için kullanışlıdır):
 
 ```bash
 opencode web --cors https://example.com
 ```
 
-### Authentication
+### Kimlik Doğrulaması
 
-To protect access, set a password using the `OPENCODE_SERVER_PASSWORD` environment variable:
+Erişimi korumak için `OPENCODE_SERVER_PASSWORD` ortam değişkenini kullanarak bir parola ayarlayın:
 
 ```bash
 OPENCODE_SERVER_PASSWORD=secret opencode web
 ```
 
-The username defaults to `opencode` but can be changed with `OPENCODE_SERVER_USERNAME`.
+Kullanıcı adı varsayılan olarak `opencode` şeklindedir ancak `OPENCODE_SERVER_USERNAME` ile değiştirilebilir.
 
 ---
 
-## Using the Web Interface
+## Web Arayüzünü Kullanma
 
-Once started, the web interface provides access to your OpenCode sessions.
+Web arayüzü başlatıldığında OpenCode oturumlarınıza erişim sağlar.
 
-### Sessions
+### Oturum
 
-View and manage your sessions from the homepage. You can see active sessions and start new ones.
+Oturumlarınızı ana sayfadan görüntüleyin ve yönetin. Aktif oturumları görebilir ve yenilerini başlatabilirsiniz.
 
-![OpenCode Web - Active Session](../../../assets/web/web-homepage-active-session.png)
+![OpenCode Web - Etkin Oturum](../../../assets/web/web-homepage-active-session.png)
 
-### Server Status
+### Sunucu Durumu
 
-Click "See Servers" to view connected servers and their status.
+Bağlı sunucuları ve durumlarını görüntülemek için "Sunucuları Gör" seçeneğini tıklayın.
 
-![OpenCode Web - See Servers](../../../assets/web/web-homepage-see-servers.png)
+![OpenCode Web - Sunuculara bakın](../../../assets/web/web-homepage-see-servers.png)
 
 ---
 
-## Attaching a Terminal
+## Terminal Takma
 
-You can attach a terminal TUI to a running web server:
+Çalışan bir web sunucusuna bir terminal TUI'si ekleyebilirsiniz:
 
 ```bash
 # Start the web server
@@ -120,13 +120,13 @@ opencode web --port 4096
 opencode attach http://localhost:4096
 ```
 
-This allows you to use both the web interface and terminal simultaneously, sharing the same sessions and state.
+Bu, aynı oturumları ve durumu paylaşarak hem web arayüzünü hem de terminali aynı anda kullanmanıza olanak tanır.
 
 ---
 
-## Config File
+## Yapılandırma Dosyası
 
-You can also configure server settings in your `opencode.json` config file:
+Sunucu ayarlarını `opencode.json` yapılandırma dosyanızda da yapılandırabilirsiniz:
 
 ```json
 {
@@ -139,4 +139,4 @@ You can also configure server settings in your `opencode.json` config file:
 }
 ```
 
-Command line flags take precedence over config file settings.
+Komut satırı bayrakları yapılandırma dosyası ayarlarından önceliklidir.

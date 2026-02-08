@@ -1,37 +1,37 @@
 ---
 title: Providers
-description: Using any LLM provider in OpenCode.
+description: Usa qualsiasi provider LLM in OpenCode.
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 
-OpenCode uses the [AI SDK](https://ai-sdk.dev/) and [Models.dev](https://models.dev) to support **75+ LLM providers** and it supports running local models.
+OpenCode usa [AI SDK](https://ai-sdk.dev/) e [Models.dev](https://models.dev) per supportare **oltre 75 provider LLM** e anche modelli locali.
 
-To add a provider you need to:
+Per aggiungere un provider devi:
 
-1. Add the API keys for the provider using the `/connect` command.
-2. Configure the provider in your OpenCode config.
+1. Aggiungere le API key del provider con il comando `/connect`.
+2. Configurare il provider nella configurazione di OpenCode.
 
 ---
 
-### Credentials
+### Credenziali
 
-When you add a provider's API keys with the `/connect` command, they are stored
+Quando aggiungi le API key di un provider con `/connect`, vengono salvate
 in `~/.local/share/opencode/auth.json`.
 
 ---
 
-### Config
+### Configurazione
 
-You can customize the providers through the `provider` section in your OpenCode
-config.
+Puoi personalizzare i provider tramite la sezione `provider` nella
+configurazione di OpenCode.
 
 ---
 
-#### Base URL
+#### URL base
 
-You can customize the base URL for any provider by setting the `baseURL` option. This is useful when using proxy services or custom endpoints.
+Puoi personalizzare l'URL base per qualsiasi provider impostando l'opzione `baseURL`. E utile quando usi servizi proxy o endpoint personalizzati.
 
 ```json title="opencode.json" {6}
 {
@@ -50,22 +50,22 @@ You can customize the base URL for any provider by setting the `baseURL` option.
 
 ## OpenCode Zen
 
-OpenCode Zen is a list of models provided by the OpenCode team that have been
-tested and verified to work well with OpenCode. [Learn more](./zen).
+OpenCode Zen e una lista di modelli forniti dal team OpenCode, testati e
+verificati per funzionare bene con OpenCode. [Scopri di piu](./zen).
 
 :::tip
-If you are new, we recommend starting with OpenCode Zen.
+Se sei all'inizio, ti consigliamo di partire da OpenCode Zen.
 :::
 
-1. Run the `/connect` command in the TUI, select opencode, and head to [opencode.ai/auth](https://opencode.ai/auth).
+1. Esegui `/connect` nella TUI, seleziona opencode e vai su [opencode.ai/auth](https://opencode.ai/auth).
 
    ```txt
    /connect
    ```
 
-2. Sign in, add your billing details, and copy your API key.
+2. Accedi, aggiungi i dati di fatturazione e copia la tua API key.
 
-3. Paste your API key.
+3. Incolla la tua API key.
 
    ```txt
    ┌ API key
@@ -74,23 +74,23 @@ If you are new, we recommend starting with OpenCode Zen.
    └ enter
    ```
 
-4. Run `/models` in the TUI to see the list of models we recommend.
+4. Esegui `/models` nella TUI per vedere la lista di modelli consigliati.
 
    ```txt
    /models
    ```
 
-It works like any other provider in OpenCode and is completely optional to use.
+Funziona come qualsiasi altro provider in OpenCode ed e totalmente opzionale.
 
 ---
 
-## Directory
+## Elenco
 
-Let's look at some of the providers in detail. If you'd like to add a provider to the
-list, feel free to open a PR.
+Vediamo alcuni provider nel dettaglio. Se vuoi aggiungerne uno
+all'elenco, apri pure una PR.
 
 :::note
-Don't see a provider here? Submit a PR.
+Non vedi un provider qui? Invia una PR.
 :::
 
 ---

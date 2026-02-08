@@ -1,17 +1,17 @@
 ---
 title: "Agent Skills"
-description: "Define reusable behavior via SKILL.md definitions"
+description: "Definiere wiederverwendbares Verhalten ueber SKILL.md"
 ---
 
-Agent skills let OpenCode discover reusable instructions from your repo or home directory.
-Skills are loaded on-demand via the native `skill` tool—agents see available skills and can load the full content when needed.
+Agent Skills erlauben OpenCode, wiederverwendbare Anweisungen aus deinem Repo oder Home-Verzeichnis zu finden.
+Sie werden bei Bedarf ueber das native `skill`-Tool geladen, wenn ein Agent sie wirklich braucht.
 
 ---
 
 ## Place files
 
-Create one folder per skill name and put a `SKILL.md` inside it.
-OpenCode searches these locations:
+Erstelle pro Skill-Namen einen Ordner und lege dort eine `SKILL.md` ab.
+OpenCode sucht in folgenden Pfaden:
 
 - Project config: `.opencode/skills/<name>/SKILL.md`
 - Global config: `~/.config/opencode/skills/<name>/SKILL.md`
@@ -24,17 +24,17 @@ OpenCode searches these locations:
 
 ## Understand discovery
 
-For project-local paths, OpenCode walks up from your current working directory until it reaches the git worktree.
-It loads any matching `skills/*/SKILL.md` in `.opencode/` and any matching `.claude/skills/*/SKILL.md` or `.agents/skills/*/SKILL.md` along the way.
+Bei projektlokalen Pfaden laeuft OpenCode vom aktuellen Verzeichnis nach oben bis zum Git-Worktree.
+Dabei werden passende `skills/*/SKILL.md` in `.opencode/` sowie passende Dateien unter `.claude/skills/*/SKILL.md` und `.agents/skills/*/SKILL.md` geladen.
 
-Global definitions are also loaded from `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md`, and `~/.agents/skills/*/SKILL.md`.
+Globale Definitionen kommen zusaetzlich aus `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` und `~/.agents/skills/*/SKILL.md`.
 
 ---
 
 ## Write frontmatter
 
-Each `SKILL.md` must start with YAML frontmatter.
-Only these fields are recognized:
+Jede `SKILL.md` muss mit YAML-Frontmatter beginnen.
+Nur diese Felder werden ausgewertet:
 
 - `name` (required)
 - `description` (required)
@@ -42,21 +42,21 @@ Only these fields are recognized:
 - `compatibility` (optional)
 - `metadata` (optional, string-to-string map)
 
-Unknown frontmatter fields are ignored.
+Unbekannte Frontmatter-Felder werden ignoriert.
 
 ---
 
 ## Validate names
 
-`name` must:
+`name` muss:
 
-- Be 1–64 characters
-- Be lowercase alphanumeric with single hyphen separators
-- Not start or end with `-`
-- Not contain consecutive `--`
-- Match the directory name that contains `SKILL.md`
+- 1-64 Zeichen lang sein
+- nur Kleinbuchstaben und Ziffern mit einzelnen Bindestrichen enthalten
+- nicht mit `-` beginnen oder enden
+- kein `--` enthalten
+- zum Verzeichnisnamen passen, in dem `SKILL.md` liegt
 
-Equivalent regex:
+Entsprechender Regex:
 
 ```text
 ^[a-z0-9]+(-[a-z0-9]+)*$
@@ -66,14 +66,14 @@ Equivalent regex:
 
 ## Follow length rules
 
-`description` must be 1-1024 characters.
-Keep it specific enough for the agent to choose correctly.
+`description` muss 1-1024 Zeichen lang sein.
+Formuliere sie so konkret, dass Agenten den Skill eindeutig auswaehlen koennen.
 
 ---
 
 ## Use an example
 
-Create `.opencode/skills/git-release/SKILL.md` like this:
+Erstelle `.opencode/skills/git-release/SKILL.md` zum Beispiel so:
 
 ```markdown
 ---
@@ -102,8 +102,8 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ## Recognize tool description
 
-OpenCode lists available skills in the `skill` tool description.
-Each entry includes the skill name and description:
+OpenCode listet verfuegbare Skills in der Beschreibung des `skill`-Tools.
+Jeder Eintrag enthaelt Namen und Beschreibung:
 
 ```xml
 <available_skills>
@@ -114,7 +114,7 @@ Each entry includes the skill name and description:
 </available_skills>
 ```
 
-The agent loads a skill by calling the tool:
+Der Agent laedt einen Skill per Tool-Aufruf:
 
 ```
 skill({ name: "git-release" })
@@ -124,7 +124,7 @@ skill({ name: "git-release" })
 
 ## Configure permissions
 
-Control which skills agents can access using pattern-based permissions in `opencode.json`:
+Steuere in `opencode.json` per Muster, auf welche Skills Agenten zugreifen duerfen:
 
 ```json
 {
@@ -139,21 +139,21 @@ Control which skills agents can access using pattern-based permissions in `openc
 }
 ```
 
-| Permission | Behavior                                  |
-| ---------- | ----------------------------------------- |
-| `allow`    | Skill loads immediately                   |
-| `deny`     | Skill hidden from agent, access rejected  |
-| `ask`      | User prompted for approval before loading |
+| Berechtigung | Verhalten                                |
+| ------------ | ---------------------------------------- |
+| `allow`      | Skill wird sofort geladen                |
+| `deny`       | Skill ist fuer Agenten versteckt         |
+| `ask`        | Vor dem Laden wird nach Freigabe gefragt |
 
-Patterns support wildcards: `internal-*` matches `internal-docs`, `internal-tools`, etc.
+Muster unterstuetzen Wildcards: `internal-*` passt z. B. auf `internal-docs` oder `internal-tools`.
 
 ---
 
 ## Override per agent
 
-Give specific agents different permissions than the global defaults.
+Du kannst einzelnen Agenten andere Berechtigungen als die globalen Defaults geben.
 
-**For custom agents** (in agent frontmatter):
+**Fuer benutzerdefinierte Agenten** (im Frontmatter):
 
 ```yaml
 ---
@@ -163,7 +163,7 @@ permission:
 ---
 ```
 
-**For built-in agents** (in `opencode.json`):
+**Fuer eingebaute Agenten** (in `opencode.json`):
 
 ```json
 {
@@ -183,9 +183,9 @@ permission:
 
 ## Disable the skill tool
 
-Completely disable skills for agents that shouldn't use them:
+Deaktiviere Skills komplett fuer Agenten, die sie nicht nutzen sollen:
 
-**For custom agents**:
+**Fuer benutzerdefinierte Agenten**:
 
 ```yaml
 ---
@@ -194,7 +194,7 @@ tools:
 ---
 ```
 
-**For built-in agents**:
+**Fuer eingebaute Agenten**:
 
 ```json
 {
@@ -208,15 +208,15 @@ tools:
 }
 ```
 
-When disabled, the `<available_skills>` section is omitted entirely.
+Wenn deaktiviert, wird der Abschnitt `<available_skills>` komplett weggelassen.
 
 ---
 
 ## Troubleshoot loading
 
-If a skill does not show up:
+Wenn ein Skill nicht auftaucht:
 
-1. Verify `SKILL.md` is spelled in all caps
-2. Check that frontmatter includes `name` and `description`
-3. Ensure skill names are unique across all locations
-4. Check permissions—skills with `deny` are hidden from agents
+1. Pruefe, ob `SKILL.md` exakt in Grossbuchstaben geschrieben ist
+2. Pruefe, ob Frontmatter `name` und `description` enthaelt
+3. Stelle sicher, dass Skill-Namen ueber alle Orte hinweg eindeutig sind
+4. Pruefe Berechtigungen - Skills mit `deny` sind fuer Agenten unsichtbar

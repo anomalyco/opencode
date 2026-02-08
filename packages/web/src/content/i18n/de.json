@@ -2,6 +2,8 @@
   "app.head.titleSuffix": "AI Codierungsagent, der für das Terminal erstellt wurde",
   "app.header.home": "Heim",
   "app.header.docs": "Dokumente",
+  "app.footer.issueLink": "Einen Fehler gefunden? Eröffne ein Issue",
+  "app.footer.discordLink": "Tritt unserer Discord-Community bei",
   "app.lander.hero.title": "Der für das Terminal erstellte Codierungsagent AI.",
   "app.lander.cta.getStarted": "Legen Sie los",
   "app.lander.features.native_tui.title": "Native TUI",

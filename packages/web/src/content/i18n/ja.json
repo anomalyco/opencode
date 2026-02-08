@@ -2,6 +2,8 @@
   "app.head.titleSuffix": "端末向けに構築されたAIコーディングエージェント",
   "app.header.home": "家",
   "app.header.docs": "ドキュメント",
+  "app.footer.issueLink": "バグを見つけましたか？Issueを作成",
+  "app.footer.discordLink": "Discordコミュニティに参加",
   "app.lander.hero.title": "端末用に構築された AI コーディング エージェント。",
   "app.lander.cta.getStarted": "始めましょう",
   "app.lander.features.native_tui.title": "ネイティブ TUI",

@@ -1,25 +1,25 @@
 ---
 title: TUI
-description: Using the OpenCode terminal user interface.
+description: Arbeite mit OpenCode in der Terminal-Oberflaeche.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode provides an interactive terminal interface or TUI for working on your projects with an LLM.
+OpenCode bietet eine interaktive Terminaloberflaeche (TUI), um mit einem LLM an deinen Projekten zu arbeiten.
 
-Running OpenCode starts the TUI for the current directory.
+Ohne weitere Argumente startet OpenCode die TUI im aktuellen Verzeichnis.
 
 ```bash
 opencode
 ```
 
-Or you can start it for a specific working directory.
+Oder du startest sie fuer ein bestimmtes Arbeitsverzeichnis.
 
 ```bash
 opencode /path/to/project
 ```
 
-Once you're in the TUI, you can prompt it with a message.
+In der TUI kannst du direkt mit einer Nachricht prompten.
 
 ```text
 Give me a quick summary of the codebase.
@@ -27,45 +27,48 @@ Give me a quick summary of the codebase.
 
 ---
 
-## File references
+## Datei-Referenzen
 
-You can reference files in your messages using `@`. This does a fuzzy file search in the current working directory.
+Mit `@` kannst du Dateien in Nachrichten referenzieren.
+Dabei wird im aktuellen Verzeichnis eine unscharfe Dateisuche genutzt.
 
 :::tip
-You can also use `@` to reference files in your messages.
+Du kannst `@` in Nachrichten fuer Datei-Referenzen verwenden.
 :::
 
 ```text "@packages/functions/src/api/index.ts"
 How is auth handled in @packages/functions/src/api/index.ts?
 ```
 
-The content of the file is added to the conversation automatically.
+Der Dateiinhalt wird automatisch zur Unterhaltung hinzugefuegt.
 
 ---
 
 ## Bash commands
 
-Start a message with `!` to run a shell command.
+Beginne eine Nachricht mit `!`, um einen Shell-Befehl auszufuehren.
 
 ```bash frame="none"
 !ls -la
 ```
 
-The output of the command is added to the conversation as a tool result.
+Die Ausgabe landet als Tool-Ergebnis in der Unterhaltung.
 
 ---
 
 ## Commands
 
-When using the OpenCode TUI, you can type `/` followed by a command name to quickly execute actions. For example:
+In der OpenCode-TUI kannst du `/` plus Befehlsnamen eingeben, um Aktionen schnell auszufuehren.
+Zum Beispiel:
 
 ```bash frame="none"
 /help
 ```
 
-Most commands also have keybind using `ctrl+x` as the leader key, where `ctrl+x` is the default leader key. [Learn more](./keybinds).
+Viele Befehle haben auch Tastenkombinationen mit `ctrl+x` als Leader-Key.
+[Mehr dazu](./keybinds).
 
-Here are all available slash commands:
+Hier sind alle verfuegbaren Slash-Commands:
 
 ---
 
