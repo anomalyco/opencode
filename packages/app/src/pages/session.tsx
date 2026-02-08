@@ -42,6 +42,7 @@ import { DialogSelectFile } from "@/components/dialog-select-file"
 import FileTree from "@/components/file-tree"
 import { DialogSelectModel } from "@/components/dialog-select-model"
 import { DialogSelectMcp } from "@/components/dialog-select-mcp"
+import { DialogSelectSkill } from "@/components/dialog-select-skill"
 import { DialogFork } from "@/components/dialog-fork"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
@@ -949,6 +950,14 @@ export default function Page() {
       keybind: "mod+;",
       slash: "mcp",
       onSelect: () => dialog.show(() => <DialogSelectMcp />),
+    },
+    {
+      id: "skill.list",
+      title: language.t("command.skill.list"),
+      description: language.t("command.skill.list.description"),
+      category: language.t("command.category.skill"),
+      keybind: "mod+shift+;",
+      onSelect: () => dialog.show(() => <DialogSelectSkill />),
     },
     {
       id: "agent.cycle",
