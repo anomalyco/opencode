@@ -1,8 +1,9 @@
-import { DIFFS_TAG_NAME, FileDiff, type SelectedLineRange } from "@pierre/diffs"
+import { DIFFS_TAG_NAME, FileDiff, type SelectedLineRange, VirtualizedFileDiff } from "@pierre/diffs"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 import { createEffect, onCleanup, onMount, Show, splitProps } from "solid-js"
 import { Dynamic, isServer } from "solid-js/web"
 import { createDefaultOptions, styleVariables, type DiffProps } from "../pierre"
+import { acquireVirtualizer, virtualMetrics } from "../pierre/virtualizer"
 import { useWorkerPool } from "../context/worker-pool"
 
 export type SSRDiffProps<T = {}> = DiffProps<T> & {
@@ -24,9 +25,20 @@ export function Diff<T>(props: SSRDiffProps<T>) {
   const workerPool = useWorkerPool(props.diffStyle)
 
   let fileDiffInstance: FileDiff<T> | undefined
+  let sharedVirtualizer: NonNullable<ReturnType<typeof acquireVirtualizer>> | undefined
   const cleanupFunctions: Array<() => void> = []
 
   const getRoot = () => fileDiffRef?.shadowRoot ?? undefined
+
+  const getVirtualizer = () => {
+    if (sharedVirtualizer) return sharedVirtualizer.virtualizer
+
+    const result = acquireVirtualizer(container)
+    if (!result) return
+
+    sharedVirtualizer = result
+    return result.virtualizer
+  }
 
   const applyScheme = () => {
     const scheme = document.documentElement.dataset.colorScheme
@@ -215,14 +227,27 @@ export function Diff<T>(props: SSRDiffProps<T>) {
       onCleanup(() => monitor.disconnect())
     }
 
-    fileDiffInstance = new FileDiff<T>(
-      {
-        ...createDefaultOptions(props.diffStyle),
-        ...others,
-        ...props.preloadedDiff,
-      },
-      workerPool,
-    )
+    const virtualizer = getVirtualizer()
+
+    fileDiffInstance = virtualizer
+      ? new VirtualizedFileDiff<T>(
+          {
+            ...createDefaultOptions(props.diffStyle),
+            ...others,
+            ...props.preloadedDiff,
+          },
+          virtualizer,
+          virtualMetrics,
+          workerPool,
+        )
+      : new FileDiff<T>(
+          {
+            ...createDefaultOptions(props.diffStyle),
+            ...others,
+            ...props.preloadedDiff,
+          },
+          workerPool,
+        )
     // @ts-expect-error - fileContainer is private but needed for SSR hydration
     fileDiffInstance.fileContainer = fileDiffRef
     fileDiffInstance.hydrate({
@@ -276,6 +301,8 @@ export function Diff<T>(props: SSRDiffProps<T>) {
     // Clean up FileDiff event handlers and dispose SolidJS components
     fileDiffInstance?.cleanUp()
     cleanupFunctions.forEach((dispose) => dispose())
+    sharedVirtualizer?.release()
+    sharedVirtualizer = undefined
   })
 
   return (
