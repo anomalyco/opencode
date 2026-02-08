@@ -86,6 +86,9 @@ export type Platform = {
 
   /** Check if an editor app exists (desktop only) */
   checkAppExists?(appName: string): Promise<boolean>
+
+  /** Filter paths to return only directories (desktop only) */
+  filterDirectories?(paths: string[]): Promise<string[]>
 }
 
 export const { use: usePlatform, provider: PlatformProvider } = createSimpleContext({

@@ -9,6 +9,7 @@ import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { type as ostype } from "@tauri-apps/plugin-os"
 import { check, Update } from "@tauri-apps/plugin-updater"
 import { getCurrentWindow } from "@tauri-apps/api/window"
+import { getCurrentWebview } from "@tauri-apps/api/webview"
 import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification"
 import { relaunch } from "@tauri-apps/plugin-process"
 import { AsyncStorage } from "@solid-primitives/storage"
@@ -68,6 +69,38 @@ const listenForOpenPath = async () => {
 
   await listen<string>("opencode:open-path", (event) => {
     navigateToPath(event.payload)
+  })
+}
+
+const dragDropEvent = "opencode:drag-drop"
+
+export type DragDropDetail = {
+  type: "enter" | "over" | "drop" | "leave"
+  paths: string[]
+  position: { x: number; y: number }
+}
+
+const emitDragDrop = (detail: DragDropDetail) => {
+  window.dispatchEvent(new CustomEvent(dragDropEvent, { detail }))
+}
+
+const listenForDragDrop = async () => {
+  await getCurrentWebview().onDragDropEvent((event) => {
+    const payload = event.payload
+    switch (payload.type) {
+      case "enter":
+        emitDragDrop({ type: "enter", paths: payload.paths, position: payload.position })
+        break
+      case "over":
+        emitDragDrop({ type: "over", paths: [], position: payload.position })
+        break
+      case "drop":
+        emitDragDrop({ type: "drop", paths: payload.paths, position: payload.position })
+        break
+      case "leave":
+        emitDragDrop({ type: "leave", paths: [], position: { x: 0, y: 0 } })
+        break
+    }
   })
 }
 
@@ -394,6 +427,10 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
   checkAppExists: async (appName: string) => {
     return commands.checkAppExists(appName)
   },
+
+  filterDirectories: async (paths: string[]) => {
+    return commands.filterDirectories(paths)
+  },
 })
 
 let menuTrigger = null as null | ((id: string) => void)
@@ -402,6 +439,7 @@ createMenu((id) => {
 })
 void listenForDeepLinks()
 void listenForOpenPath()
+void listenForDragDrop()
 
 render(() => {
   const [serverPassword, setServerPassword] = createSignal<string | null>(null)

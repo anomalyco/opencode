@@ -168,6 +168,15 @@ async fn await_initialization(
 
 #[tauri::command]
 #[specta::specta]
+fn filter_directories(paths: Vec<String>) -> Vec<String> {
+    paths
+        .into_iter()
+        .filter(|p| PathBuf::from(p).is_dir())
+        .collect()
+}
+
+#[tauri::command]
+#[specta::specta]
 fn check_app_exists(app_name: &str) -> bool {
     #[cfg(target_os = "windows")]
     {
@@ -449,6 +458,7 @@ pub fn run() {
             server::set_default_server_url,
             markdown::parse_markdown_command,
             check_app_exists,
+            filter_directories,
             open_in_finder,
             open_in_vscode,
             open_in_editor,

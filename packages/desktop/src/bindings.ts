@@ -12,6 +12,7 @@ export const commands = {
 	setDefaultServerUrl: (url: string | null) => __TAURI_INVOKE<null>("set_default_server_url", { url }),
 	parseMarkdownCommand: (markdown: string) => __TAURI_INVOKE<string>("parse_markdown_command", { markdown }),
 	checkAppExists: (appName: string) => __TAURI_INVOKE<boolean>("check_app_exists", { appName }),
+	filterDirectories: (paths: string[]) => __TAURI_INVOKE<string[]>("filter_directories", { paths }),
 	openInFinder: (path: string) => __TAURI_INVOKE<null>("open_in_finder", { path }),
 	openInVscode: (path: string) => __TAURI_INVOKE<null>("open_in_vscode", { path }),
 	openInEditor: (editor: string, path: string, customPath: string | null) => __TAURI_INVOKE<null>("open_in_editor", { editor, path, customPath }),

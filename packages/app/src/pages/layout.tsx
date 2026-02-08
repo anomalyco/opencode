@@ -1352,6 +1352,56 @@ export default function Layout(props: ParentProps) {
     onCleanup(() => window.removeEventListener(deepLinkEvent, handler as EventListener))
   })
 
+  // Folder drag-drop handling (desktop only - Tauri native drag events)
+  const [folderDragging, setFolderDragging] = createSignal(false)
+  const [fileDragging, setFileDragging] = createSignal(false)
+
+  onMount(() => {
+    if (platform.platform !== "desktop") return
+
+    const dragDropEventName = "opencode:drag-drop"
+
+    const handler = async (event: Event) => {
+      const detail = (event as CustomEvent<{ type: string; paths: string[]; position: { x: number; y: number } }>).detail
+      if (!detail) return
+
+      if (detail.type === "enter") {
+        if (detail.paths.length > 0 && platform.filterDirectories) {
+          const dirs = await platform.filterDirectories(detail.paths).catch((): string[] => [])
+          const hasFiles = dirs.length < detail.paths.length
+          setFolderDragging(dirs.length > 0)
+          setFileDragging(hasFiles)
+        }
+      } else if (detail.type === "leave") {
+        setFolderDragging(false)
+        setFileDragging(false)
+      } else if (detail.type === "drop") {
+        setFolderDragging(false)
+        setFileDragging(false)
+        if (detail.paths.length === 0 || !platform.filterDirectories) return
+
+        const dirs = await platform.filterDirectories(detail.paths).catch((): string[] => [])
+        const files = detail.paths.filter((p) => !dirs.includes(p))
+
+        // Open directories as projects
+        if (dirs.length > 0) {
+          for (const dir of dirs) {
+            openProject(dir, false)
+          }
+          navigateToProject(dirs[0])
+        }
+
+        // Forward files as @mention attachments
+        if (files.length > 0) {
+          window.dispatchEvent(new CustomEvent("opencode:file-drop", { detail: { paths: files } }))
+        }
+      }
+    }
+
+    window.addEventListener(dragDropEventName, handler as EventListener)
+    onCleanup(() => window.removeEventListener(dragDropEventName, handler as EventListener))
+  })
+
   const displayName = (project: LocalProject) => project.name || getFilename(project.worktree)
 
   async function renameProject(project: LocalProject, next: string) {
@@ -2956,6 +3006,18 @@ export default function Layout(props: ParentProps) {
 
   return (
     <div class="relative bg-background-base flex-1 min-h-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text">
+      <Show when={folderDragging() || fileDragging()}>
+        <div class="fixed inset-0 z-[100] flex items-center justify-center bg-background-base/80 pointer-events-none">
+          <div class="flex flex-col items-center gap-3 text-text-weak">
+            <Show when={folderDragging()} fallback={<Icon name="photo" class="size-12" />}>
+              <Icon name="folder" class="size-12" />
+            </Show>
+            <span class="text-16-medium">
+              {folderDragging() ? language.t("sidebar.dropFolder") : language.t("sidebar.dropFile")}
+            </span>
+          </div>
+        </div>
+      </Show>
       <Titlebar />
       <div class="flex-1 min-h-0 flex">
         <nav
