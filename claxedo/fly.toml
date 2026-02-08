@@ -1,0 +1,42 @@
+# Fly.io configuration for Claxedo Gateway
+app = "claxedo-gateway"
+primary_region = "sjc"  # San Jose - change to your preferred region
+
+[build]
+  dockerfile = "Dockerfile"
+
+[build.args]
+  VITE_CLERK_PUBLISHABLE_KEY = "pk_test_c3VpdGFibGUtZWxmLTIyLmNsZXJrLmFjY291bnRzLmRldiQ"
+  VITE_CONVEX_URL = "https://successful-gnu-138.convex.cloud"
+  VITE_CONVEX_SITE_URL = "https://successful-gnu-138.convex.site"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "8080"
+  HOST = "0.0.0.0"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false  # Keep running for WebSocket connections
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 250
+    soft_limit = 200
+
+[[http_service.checks]]
+  grace_period = "10s"
+  interval = "30s"
+  method = "GET"
+  timeout = "5s"
+  path = "/api/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
