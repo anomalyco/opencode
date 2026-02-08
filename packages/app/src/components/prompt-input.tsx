@@ -26,6 +26,7 @@ import type { IconName } from "@opencode-ai/ui/icons/provider"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
+import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ModelSelectorPopover } from "@/components/dialog-select-model"
 import { DialogSelectModelUnpaid } from "@/components/dialog-select-model-unpaid"
@@ -45,6 +46,15 @@ import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
+import { suppressAbortedError } from "@/utils/session-abort"
+
+type QueuedPrompt = {
+  sessionID: string
+  messageID: string
+  prompt: Prompt
+  mode: "normal" | "shell"
+  preview: string
+}
 
 interface PromptInputProps {
   class?: string
@@ -103,6 +113,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let slashPopoverRef!: HTMLDivElement
 
   const mirror = { input: false }
+  const immediate = { sendNow: false }
 
   const scrollCursorIntoView = () => {
     const container = scrollRef
@@ -217,6 +228,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     mode: "normal",
     applyingHistory: false,
   })
+  const [queued, setQueued] = createStore<{
+    item: QueuedPrompt | undefined
+    menu: boolean
+    busy: boolean
+  }>({
+    item: undefined,
+    menu: false,
+    busy: false,
+  })
   const placeholder = createMemo(() =>
     promptPlaceholder({
       mode: store.mode,
@@ -225,6 +245,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       t: (key, params) => language.t(key as Parameters<typeof language.t>[0], params as never),
     }),
   )
+
+  const previewQueued = (next: Prompt) =>
+    next
+      .map((part) => {
+        if (part.type === "file") return `@${part.path}`
+        if (part.type === "agent") return `@${part.name}`
+        if (part.type === "image") return `[${part.filename}]`
+        return part.content
+      })
+      .join("")
+      .trim()
 
   const MAX_HISTORY = 100
   const [history, setHistory] = persisted(
@@ -787,6 +818,116 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     newSessionWorktree: props.newSessionWorktree,
     onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
     onSubmit: props.onSubmit,
+    skipQueue: () => {
+      if (!immediate.sendNow) return false
+      immediate.sendNow = false
+      return true
+    },
+    onQueuedMessage: (item) => {
+      setQueued({
+        item: {
+          sessionID: item.sessionID,
+          messageID: item.messageID,
+          prompt: item.prompt,
+          mode: item.mode,
+          preview: previewQueued(item.prompt),
+        },
+        menu: true,
+        busy: false,
+      })
+    },
+  })
+
+  const clearQueued = () => {
+    setQueued({
+      item: undefined,
+      menu: false,
+      busy: false,
+    })
+  }
+
+  const restoreQueued = (item: QueuedPrompt) => {
+    prompt.set(item.prompt, promptLength(item.prompt))
+    setStore("mode", item.mode)
+    setStore("popover", null)
+    requestAnimationFrame(() => {
+      editorRef.focus()
+      setCursorPosition(editorRef, promptLength(item.prompt))
+      queueScroll()
+    })
+  }
+
+  const removeQueued = async (edit: boolean) => {
+    const item = queued.item
+    const sessionID = params.id
+    if (!item || !sessionID || queued.busy) return
+
+    setQueued("busy", true)
+    const ok = await sdk.client.session
+      .revert({ sessionID, messageID: item.messageID })
+      .then(() => true)
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : String(err)
+        showToast({ title: language.t("common.requestFailed"), description: message })
+        return false
+      })
+
+    if (!ok) {
+      setQueued("busy", false)
+      return
+    }
+
+    clearQueued()
+    if (edit) restoreQueued(item)
+  }
+
+  const sendQueuedNow = async () => {
+    const item = queued.item
+    const sessionID = params.id
+    if (!item || !sessionID || queued.busy) return
+
+    setQueued("busy", true)
+    const messages = sync.data.message[sessionID] ?? []
+    const running = [...messages]
+      .reverse()
+      .find((message) => message.role === "assistant" && "parentID" in message && !message.time.completed)
+    if (running && "parentID" in running) suppressAbortedError(sessionID, running.parentID)
+
+    if (working()) await abort()
+
+    const ok = await sdk.client.session
+      .revert({ sessionID, messageID: item.messageID })
+      .then(() => true)
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : String(err)
+        showToast({ title: language.t("common.requestFailed"), description: message })
+        return false
+      })
+
+    if (!ok) {
+      setQueued("busy", false)
+      return
+    }
+
+    clearQueued()
+    restoreQueued(item)
+    requestAnimationFrame(() => {
+      immediate.sendNow = true
+      void handleSubmit(new Event("submit"))
+    })
+  }
+
+  createEffect(() => {
+    const item = queued.item
+    if (!item) return
+    const sessionID = params.id
+    if (!sessionID || item.sessionID !== sessionID) {
+      clearQueued()
+      return
+    }
+    const messages = sync.data.message[sessionID] ?? []
+    const answered = messages.some((message) => message.role === "assistant" && message.parentID === item.messageID)
+    if (answered) clearQueued()
   })
 
   const handleKeyDown = (event: KeyboardEvent) => {
@@ -979,6 +1120,51 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           onRemove={removeImageAttachment}
           removeLabel={language.t("prompt.attachment.remove")}
         />
+        <Show when={queued.item}>
+          <div class="px-3 pt-3">
+            <div class="w-full rounded-lg border border-border-base bg-surface-panel px-2.5 py-2 flex items-center gap-2">
+              <div class="min-w-0 flex-1">
+                <div class="text-11-medium text-text-muted">{language.t("prompt.queue.title")}</div>
+                <div class="text-13-regular text-text-strong truncate">{queued.item?.preview}</div>
+              </div>
+              <Button
+                variant="secondary"
+                size="small"
+                class="h-7 px-2"
+                disabled={queued.busy}
+                onClick={() => void sendQueuedNow()}
+              >
+                {language.t("prompt.queue.sendNow")}
+              </Button>
+              <Tooltip placement="top" value={language.t("prompt.queue.remove")}>
+                <IconButton
+                  icon="trash"
+                  variant="ghost"
+                  class="size-7"
+                  disabled={queued.busy}
+                  onClick={() => void removeQueued(false)}
+                  aria-label={language.t("prompt.queue.remove")}
+                />
+              </Tooltip>
+              <DropdownMenu open={queued.menu} onOpenChange={(open) => setQueued("menu", open)}>
+                <DropdownMenu.Trigger
+                  as={IconButton}
+                  icon="dot-grid"
+                  variant="ghost"
+                  class="size-7"
+                  aria-label={language.t("prompt.queue.menu")}
+                />
+                <DropdownMenu.Portal>
+                  <DropdownMenu.Content placement="bottom-end" gutter={6}>
+                    <DropdownMenu.Item disabled={queued.busy} onSelect={() => void removeQueued(true)}>
+                      <DropdownMenu.ItemLabel>{language.t("common.edit")}</DropdownMenu.ItemLabel>
+                    </DropdownMenu.Item>
+                  </DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              </DropdownMenu>
+            </div>
+          </div>
+        </Show>
         <div class="relative max-h-[240px] overflow-y-auto" ref={(el) => (scrollRef = el)}>
           <div
             data-component="prompt-input"

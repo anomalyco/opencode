@@ -269,6 +269,10 @@ export const dict = {
   "prompt.attachment.remove": "Remove attachment",
   "prompt.action.send": "Send",
   "prompt.action.stop": "Stop",
+  "prompt.queue.title": "Queued message",
+  "prompt.queue.sendNow": "Send now",
+  "prompt.queue.remove": "Remove from queue",
+  "prompt.queue.menu": "Queued message options",
 
   "prompt.toast.pasteUnsupported.title": "Unsupported paste",
   "prompt.toast.pasteUnsupported.description": "Only images or PDFs can be pasted here.",

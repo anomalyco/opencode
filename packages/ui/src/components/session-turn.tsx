@@ -187,6 +187,7 @@ export function SessionTurn(
     stepsExpanded?: boolean
     onStepsExpandedToggle?: () => void
     onUserInteracted?: () => void
+    suppressAbortedError?: boolean
     classes?: {
       root?: string
       content?: string
@@ -289,8 +290,15 @@ export function SessionTurn(
   const lastAssistantMessage = createMemo(() => assistantMessages().at(-1))
 
   const error = createMemo(() => assistantMessages().find((m) => m.error)?.error)
+  const visibleError = createMemo(() => {
+    const next = error()
+    if (!next) return undefined
+    if (!props.suppressAbortedError) return next
+    if (next.name !== "MessageAbortedError") return next
+    return undefined
+  })
   const errorText = createMemo(() => {
-    const msg = error()?.data?.message
+    const msg = visibleError()?.data?.message
     if (typeof msg === "string") return unwrap(msg)
     if (msg === undefined || msg === null) return ""
     return unwrap(String(msg))
@@ -731,7 +739,7 @@ export function SessionTurn(
                             />
                           )}
                         </For>
-                        <Show when={error()}>
+                        <Show when={visibleError()}>
                           <Card variant="error" class="error-card">
                             {errorText()}
                           </Card>
@@ -787,7 +795,7 @@ export function SessionTurn(
                         </div>
                       </div>
                     </Show>
-                    <Show when={error() && !props.stepsExpanded}>
+                    <Show when={visibleError() && !props.stepsExpanded}>
                       <Card variant="error" class="error-card">
                         {errorText()}
                       </Card>

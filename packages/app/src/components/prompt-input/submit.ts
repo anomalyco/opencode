@@ -40,6 +40,8 @@ type PromptSubmitInput = {
   newSessionWorktree?: string
   onNewSessionWorktreeReset?: () => void
   onSubmit?: () => void
+  skipQueue?: () => boolean
+  onQueuedMessage?: (item: { sessionID: string; messageID: string; prompt: Prompt; mode: "normal" | "shell" }) => void
 }
 
 type CommentItem = {
@@ -286,6 +288,17 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const commentItems = context.filter((item) => item.type === "file" && !!item.comment?.trim())
 
     const messageID = Identifier.ascending("message")
+    const queuedMessage = input.working() && !input.skipQueue?.()
+
+    if (queuedMessage) {
+      input.onQueuedMessage?.({
+        sessionID: session.id,
+        messageID,
+        prompt: currentPrompt,
+        mode,
+      })
+    }
+
     const { requestParts, optimisticParts } = buildRequestParts({
       prompt: currentPrompt,
       context,

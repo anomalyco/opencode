@@ -58,6 +58,7 @@ import { SessionPromptDock } from "@/pages/session/session-prompt-dock"
 import { SessionMobileTabs } from "@/pages/session/session-mobile-tabs"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
+import { isAbortedErrorSuppressed } from "@/utils/session-abort"
 
 type HandoffSession = {
   prompt: string
@@ -1633,6 +1634,7 @@ export default function Page() {
                     lastUserMessageID={lastUserMessage()?.id}
                     expanded={store.expanded}
                     onToggleExpanded={(id) => setStore("expanded", id, (open: boolean | undefined) => !open)}
+                    suppressAbortedError={(messageID) => isAbortedErrorSuppressed(params.id!, messageID)}
                   />
                 </Show>
               </Match>
