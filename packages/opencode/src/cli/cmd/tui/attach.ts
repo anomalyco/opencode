@@ -40,6 +40,12 @@ export const AttachCommand = cmd({
         describe: "basic auth password (defaults to OPENCODE_SERVER_PASSWORD)",
       }),
   handler: async (args) => {
+    for (const signal of ["SIGHUP", "SIGTERM"] as const) {
+      process.once(signal, () => {
+        process.kill(process.pid, signal)
+      })
+    }
+
     const unguard = win32InstallCtrlCGuard()
     try {
       win32DisableProcessedInput()

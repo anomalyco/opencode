@@ -32,6 +32,26 @@ process.on("uncaughtException", (e) => {
   })
 })
 
+for (const signal of ["SIGHUP", "SIGTERM"] as const) {
+  process.once(signal, () => {
+    rpc.shutdown().finally(() => {
+      process.kill(process.pid, signal)
+    })
+  })
+}
+
+if (process.platform !== "win32") {
+  const monitor = setInterval(() => {
+    // Avoid stale parent PID checks; rely on reparent-to-init (ppid=1) instead.
+    if (process.ppid !== 1) return
+    clearInterval(monitor)
+    rpc.shutdown().finally(() => {
+      process.kill(process.pid, "SIGTERM")
+    })
+  }, 2000)
+  monitor.unref()
+}
+
 // Subscribe to global events and forward them via RPC
 GlobalBus.on("event", (event) => {
   Rpc.emit("global.event", event)

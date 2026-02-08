@@ -11,6 +11,12 @@ export const ServeCommand = cmd({
   builder: (yargs) => withNetworkOptions(yargs),
   describe: "starts a headless opencode server",
   handler: async (args) => {
+    for (const signal of ["SIGHUP", "SIGTERM"] as const) {
+      process.once(signal, () => {
+        process.kill(process.pid, signal)
+      })
+    }
+
     if (!Flag.OPENCODE_SERVER_PASSWORD) {
       console.log("Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
     }
