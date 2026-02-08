@@ -16,6 +16,7 @@ import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
 import { Store } from "@tauri-apps/plugin-store"
 import { Splash } from "@opencode-ai/ui/logo"
 import { createSignal, Show, Accessor, JSX, createResource, onMount, onCleanup } from "solid-js"
+import { readImage } from "@tauri-apps/plugin-clipboard-manager"
 
 import { UPDATER_ENABLED } from "./updater"
 import { initI18n, t } from "./i18n"
@@ -343,6 +344,29 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
 
   checkAppExists: async (appName: string) => {
     return commands.checkAppExists(appName)
+  },
+
+  async readClipboardImage() {
+    const image = await readImage().catch(() => null)
+    if (!image) return null
+    const bytes = await image.rgba().catch(() => null)
+    if (!bytes || bytes.length === 0) return null
+    const size = await image.size().catch(() => null)
+    if (!size) return null
+    const canvas = document.createElement("canvas")
+    canvas.width = size.width
+    canvas.height = size.height
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return null
+    const imageData = ctx.createImageData(size.width, size.height)
+    imageData.data.set(bytes)
+    ctx.putImageData(imageData, 0, 0)
+    return new Promise<File | null>((resolve) => {
+      canvas.toBlob((blob) => {
+        if (!blob) return resolve(null)
+        resolve(new File([blob], `pasted-image-${Date.now()}.png`, { type: "image/png" }))
+      }, "image/png")
+    })
   },
 })
 

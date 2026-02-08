@@ -65,6 +65,9 @@ export type Platform = {
 
   /** Check if an editor app exists (desktop only) */
   checkAppExists?(appName: string): Promise<boolean>
+
+  /** Read image from clipboard (desktop only) */
+  readClipboardImage?(): Promise<File | null>
 }
 
 export const { use: usePlatform, provider: PlatformProvider } = createSimpleContext({
