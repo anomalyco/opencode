@@ -1,5 +1,6 @@
 import { For, Match, Show, Switch, createMemo, onCleanup, type JSX, type ValidComponent } from "solid-js"
 import { Tabs } from "@opencode-ai/ui/tabs"
+import { Breadcrumb } from "@opencode-ai/ui/breadcrumb"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
@@ -204,20 +205,33 @@ export function SessionSidePanel(props: {
                     </Show>
 
                     <Show when={props.activeFileTab()} keyed>
-                      {(tab) => (
-                        <FileTabContent
-                          tab={tab}
-                          activeTab={props.activeTab}
-                          tabs={props.tabs}
-                          view={props.vm.view}
-                          handoffFiles={props.handoffFiles}
-                          file={props.file}
-                          comments={props.comments}
-                          language={props.language}
-                          codeComponent={props.codeComponent}
-                          addCommentToContext={props.addCommentToContext}
-                        />
-                      )}
+                      {(tab) => {
+                        const path = createMemo(() => props.file.pathFromTab(tab))
+                        const pathParts = createMemo(() => {
+                          const p = path()
+                          if (!p) return []
+                          return p.split("/").filter(Boolean)
+                        })
+                        return (
+                          <>
+                            <Show when={pathParts().length > 0}>
+                              <Breadcrumb items={pathParts()} />
+                            </Show>
+                            <FileTabContent
+                              tab={tab}
+                              activeTab={props.activeTab}
+                              tabs={props.tabs}
+                              view={props.vm.view}
+                              handoffFiles={props.handoffFiles}
+                              file={props.file}
+                              comments={props.comments}
+                              language={props.language}
+                              codeComponent={props.codeComponent}
+                              addCommentToContext={props.addCommentToContext}
+                            />
+                          </>
+                        )
+                      }}
                     </Show>
                   </Tabs>
                   <DragOverlay>

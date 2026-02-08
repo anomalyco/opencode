@@ -476,7 +476,7 @@ export function FileTabContent(props: {
   return (
     <Tabs.Content
       value={props.tab}
-      class="mt-3 relative"
+      class="relative"
       ref={(el: HTMLDivElement) => {
         scroll = el
         restoreScroll()
