@@ -115,6 +115,26 @@ export function SessionHeader() {
     return "unknown"
   })
 
+  const finder = createMemo(() => {
+    if (os() !== "macos") return "finder"
+    if (platform.platform === "desktop" && platform.os === "macos" && platform.osVersion) {
+      const parts = platform.osVersion.split(/[._]/).map((part) => Number(part))
+      const major = parts[0]
+      if (!Number.isFinite(major)) return "finder"
+      const value = major === 10 ? parts[1] ?? 0 : major
+      if (value >= 26) return "finder-tahoe"
+      return "finder"
+    }
+    if (typeof navigator !== "object") return "finder"
+    const value = navigator.userAgent.match(/Mac OS X (\d+)(?:[._](\d+))?/i)
+    if (!value) return "finder"
+    const major = Number(value[1])
+    if (!Number.isFinite(major)) return "finder"
+    const version = major === 10 ? Number(value[2] ?? 0) : major
+    if (version >= 26) return "finder-tahoe"
+    return "finder"
+  })
+
   const [exists, setExists] = createStore<Partial<Record<OpenApp, boolean>>>({ finder: true })
 
   createEffect(() => {
@@ -140,7 +160,7 @@ export function SessionHeader() {
 
   const options = createMemo(() => {
     if (os() === "macos") {
-      return [{ id: "finder", label: "Finder", icon: "finder" }, ...MAC_APPS.filter((app) => exists[app.id])] as const
+      return [{ id: "finder", label: "Finder", icon: finder() }, ...MAC_APPS.filter((app) => exists[app.id])] as const
     }
 
     if (os() === "windows") {

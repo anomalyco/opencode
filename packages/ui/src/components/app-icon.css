@@ -7,3 +7,7 @@ img[data-component="app-icon"] {
   border: 1px solid var(--smoke-light-alpha-4);
   object-fit: contain;
 }
+
+html[data-color-scheme="dark"] img[data-component="app-icon"][data-app-icon-id="zed"] {
+  filter: invert(1);
+}

@@ -23,6 +23,7 @@ const icons = {
   zed,
   "file-explorer": fileExplorer,
   finder,
+  "finder-tahoe": "https://upload.wikimedia.org/wikipedia/commons/b/b9/Finder_Icon_macOS_Tahoe.png",
   terminal,
   iterm2,
   ghostty,
@@ -43,6 +44,7 @@ export const AppIcon: Component<AppIconProps> = (props) => {
   return (
     <img
       data-component="app-icon"
+      data-app-icon-id={local.id}
       {...rest}
       src={icons[local.id]}
       alt={local.alt ?? ""}
