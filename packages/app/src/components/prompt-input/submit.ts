@@ -200,7 +200,14 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
       }
     }
-    if (!session) return
+   if (!session) {
+      showToast({
+        title: language.t("prompt.toast.promptSendFailed.title"),
+        description: language.t("prompt.toast.promptSendFailed.description"),
+      })
+      return
+    }
+    
 
     input.onSubmit?.()
 
