@@ -2071,6 +2071,31 @@ test("variants filtered in second pass for database models", async () => {
   })
 })
 
+test("anthropic-beta does not include research_preview when OPENCODE_OPUS_FAST_MODE is unset", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("ANTHROPIC_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const beta = providers["anthropic"].options.headers["anthropic-beta"] as string
+      expect(beta).not.toContain("research_preview_2026_02")
+      expect(beta).toContain("claude-code-20250219")
+    },
+  })
+})
+
 test("custom model with variants enabled and disabled", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
