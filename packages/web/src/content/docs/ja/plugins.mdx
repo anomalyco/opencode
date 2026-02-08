@@ -5,7 +5,7 @@ description: OpenCode を拡張する独自のプラグインを作成します�
 
 プラグインを使用すると、さまざまなイベントにフックして動作をカスタマイズすることで OpenCode を拡張できます。プラグインを作成して、新しい機能を追加したり、外部サービスと統合したり、OpenCode のデフォルトの動作を変更したりできます。
 
-たとえば、コミュニティによって作成された [plugins](./ecosystem#plugins)] をチェックしてください。
+たとえば、コミュニティによって作成された [plugins](./ecosystem#plugins) をチェックしてください。
 
 ---
 
@@ -47,7 +47,7 @@ JavaScript または TypeScript ファイルをプラグイン ディレクト�
 
 **npm プラグイン** は、起動時に Bun を使用して自動的にインストールされます。パッケージとその依存関係は `~/.cache/opencode/node_modules/` にキャッシュされます。
 
-**ローカル プラグイン**は、プラグイン ディレクトリから直接ロードされます。外部パッケージを使用するには、config ディレクトリ内に `package.json` を作成するか ([Dependency](#dependencies)] を参照)、プラグインを npm に公開して [config](./config#plugins) に追加する] 必要があります。
+**ローカル プラグイン**は、プラグイン ディレクトリから直接ロードされます。外部パッケージを使用するには、config ディレクトリ内に `package.json` を作成するか ([Dependency](#dependencies) を参照)、プラグインを npm に公開して [config](./config#plugins) に追加する] 必要があります。
 
 ---
 
@@ -234,7 +234,7 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 
 macOS 上で AppleScript を実行するために `osascript` を使用しています。ここでは通知を送信するために使用しています。
 
-：：：注記
+:::注記
 OpenCode デスクトップ アプリを使用している場合は、応答の準備ができたとき、またはセッション エラーが発生したときにシステム通知を自動的に送信できます。
 :::
 
@@ -327,7 +327,7 @@ export const MyPlugin = async ({ client }) => {
 }
 ```
 
-レベル: `debug`、`info`、`warn`、`error`。詳細については、[SDK ドキュメント](https://opencode.ai/docs/sdk)] を参照してください。
+レベル: `debug`、`info`、`warn`、`error`。詳細については、[SDK ドキュメント](https://opencode.ai/docs/sdk) を参照してください。
 
 ---
 

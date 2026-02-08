@@ -13,8 +13,8 @@ description: “贯穿 SKILL.md 定义可重用行为”
 为每个技能名称建立一个资料夹，并在其中放入`SKILL.md`。
 OpenCode 搜索这些位置：
 
-- 專案配置：`.___W0___/skills/<name>/SKILL.md`
-- 全域性配置：`~/.config/___W0___/skills/<name>/SKILL.md`
+- Project config: `.opencode/skills/<name>/SKILL.md`
+- Global config: `~/.config/opencode/skills/<name>/SKILL.md`
 - 專案Claude相容：`.claude/skills/<name>/SKILL.md`
 - 全域性 Claude 相容： `~/.claude/skills/<name>/SKILL.md`
 - 專案代理相容：`.agents/skills/<name>/SKILL.md`
@@ -25,9 +25,9 @@ OpenCode 搜索这些位置：
 ## 瞭解發現
 
 对于专案本地路径， OpenCode 从当前工作目录向上走，直到到达 git 工作树。
-它会加载 `.___W0___/` 中任何匹配的 `skills/*/SKILL.md` 以及一路上任何匹配的 `.claude/skills/*/SKILL.md` 或 `.agents/skills/*/SKILL.md`。
+It loads any matching `skills/*/SKILL.md` in `.opencode/` and any matching `.claude/skills/*/SKILL.md` or `.agents/skills/*/SKILL.md` along the way.
 
-全域性定义也从 `~/.config/___W0___/skills/*/SKILL.md`、`~/.claude/skills/*/SKILL.md` 和 `~/.agents/skills/*/SKILL.md` 加载。
+Global definitions are also loaded from `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md`, and `~/.agents/skills/*/SKILL.md`.
 
 ---
 
@@ -73,7 +73,7 @@ OpenCode 搜索这些位置：
 
 ## 使用一個例子
 
-像这样建立`.___W0___/skills/git-release/SKILL.md`：
+Create `.opencode/skills/git-release/SKILL.md` like this:
 
 ```markdown
 ---
@@ -124,7 +124,7 @@ skill({ name: "git-release" })
 
 ## 配置許可權
 
-使用 `___W0___.json` 中基于模式的许可权限控制客服人员可以访问哪些技能：
+Control which skills agents can access using pattern-based permissions in `opencode.json`:
 
 ```json
 {
@@ -163,7 +163,7 @@ permission:
 ---
 ```
 
-**对于内建代理**（在`___W0___.json`中）：
+**For built-in agents** (in `opencode.json`):
 
 ```json
 {

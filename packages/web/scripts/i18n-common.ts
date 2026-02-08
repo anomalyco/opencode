@@ -1,24 +1,7 @@
 import path from "node:path"
+import { docsLocale } from "../src/i18n/locales"
 
-export const locale = [
-  "ar",
-  "bs",
-  "da",
-  "de",
-  "es",
-  "fr",
-  "it",
-  "ja",
-  "ko",
-  "nb",
-  "pl",
-  "pt-br",
-  "ru",
-  "th",
-  "tr",
-  "zh-cn",
-  "zh-tw",
-] as const
+export const locale = docsLocale
 
 export type Locale = (typeof locale)[number]
 

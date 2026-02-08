@@ -6,7 +6,7 @@ description: 使用 OpenCode 中的任何 LLM 提供程式。
 import config from "../../../../config.mjs"
 export const console = config.console
 
-OpenCode 使用 [AI SDK](___T3___) 和 [___W0___](___T4___) 支持 **75+ LLM 提供程序**，并且支持执行本地模型。
+OpenCode uses the [AI SDK](https://ai-sdk.dev/) and [Models.dev](https://models.dev) to support **75+ LLM providers** and it supports running local models.
 
 要新增提供商，您需要：
 
@@ -18,7 +18,7 @@ OpenCode 使用 [AI SDK](___T3___) 和 [___W0___](___T4___) 支持 **75+ LLM 提
 ### 證書
 
 当您使用 `/connect` 命令再次成功的 API 时，它们会被存储
-在`~/.local/share/___W0___/auth.json`。
+in `~/.local/share/opencode/auth.json`.
 
 ---
 
@@ -53,11 +53,11 @@ OpenCode 使用 [AI SDK](___T3___) 和 [___W0___](___T4___) 支持 **75+ LLM 提
 OpenCode Zen 是OpenCode团队提供的模型列表，这些模型已被
 经测试和验证可与OpenCode良好配合。 [了解更多](./zen)。
 
-：：：提示
+:::提示
 如果您是新手，我们建议您从 OpenCode Zen 开始。
 :::
 
-1. 在 TUI 中执行 `/connect` 命令，选择 opencode，然后前往 [___W0___.ai/auth](___T3___)。
+1. Run the `/connect` command in the TUI, select opencode, and head to [opencode.ai/auth](https://opencode.ai/auth).
 
    ```txt
    /connect
@@ -89,7 +89,7 @@ OpenCode Zen 是OpenCode团队提供的模型列表，这些模型已被
 讓我們詳細瞭解一些提供商。如果您想將提供商新增到
 列表，请随时开启PR。
 
-：：：笔记
+:::笔记
 在这里没有看到成功？提交 PR。
 :::
 
@@ -97,7 +97,7 @@ OpenCode Zen 是OpenCode团队提供的模型列表，这些模型已被
 
 ### 302.艾伊
 
-1. 前往[302.AI控制台](___T1___)，建立一个账户，并生成API金钥匙。
+1. Head over to the [302.AI console](https://302.ai/), create an account, and generate an API key.
 
 2. 执行`/connect`命令并搜索**302.AI**。
 
@@ -129,7 +129,7 @@ OpenCode Zen 是OpenCode团队提供的模型列表，这些模型已被
 1. 前往 Amazon Bedrock 控制台中的 **模型目录** 并请求
    訪問您想要的模型。
 
-   ：：：提示
+   :::提示
    您需要能够在 Amazon Bedrock 中访问所需的模型。
    :::
 
@@ -159,7 +159,7 @@ OpenCode Zen 是OpenCode团队提供的模型列表，这些模型已被
 
    #### 配置檔案（推薦）
 
-   对于特定的专案或持久的配置，请使用`___W0___.json`：
+   For project-specific or persistent configuration, use `opencode.json`:
 
    ```json title="opencode.json"
    {
@@ -180,7 +180,7 @@ OpenCode Zen 是OpenCode团队提供的模型列表，这些模型已被
    - `profile` - 来自 `~/.aws/credentials` 的 AWS 命名配置档案
    - `endpoint` - VPC 节点节点的自定义节点 URL（通用 `baseURL` 选项的别名）
 
-   ：：：提示
+   :::提示
    配置檔案選項優先於環境變數。
    :::
 
@@ -203,7 +203,7 @@ OpenCode Zen 是OpenCode团队提供的模型列表，这些模型已被
    }
    ```
 
-   ：：：笔记
+   :::笔记
    `endpoint` 选项是通用 `baseURL` 选项的别名，使用 AWS 术语特定。如果同时指定了 `endpoint` 和 `baseURL`，则 `endpoint` 优先。
    :::
 
@@ -219,7 +219,7 @@ OpenCode Zen 是OpenCode团队提供的模型列表，这些模型已被
    1. **不记名令牌** - `AWS_BEARER_TOKEN_BEDROCK`环境变化数据或来自`/connect`令牌的令牌
    2. **AWS 凭证链** - 配置档案、访问金钥、共享凭证、IAM 角色、Web 身份令牌 (EKS IRSA)、实例项后设置资料
 
-   ：：：笔记
+   :::笔记
    设置不记名令牌（使用 `/connect` 或 `AWS_BEARER_TOKEN_BEDROCK`）时，其优先于所有 AWS 凭证方法（包括配置的配置文件）。
    :::
 
@@ -229,7 +229,7 @@ OpenCode Zen 是OpenCode团队提供的模型列表，这些模型已被
    /models
    ```
 
-：：：笔记
+:::笔记
 对于自定义推理配置文件，请在按键中使用模型并提供程序名称，并将 `id` 属性设置为 arn。这确保了正确的快取：
 
 ```json title="opencode.json"
@@ -278,8 +278,8 @@ OpenCode Zen 是OpenCode团队提供的模型列表，这些模型已被
    /models
    ```
 
-：：：信息
-[___W0___](___T3___) 在 OpenCode 中未正式支持使用您的 Claude Pro/Max 订阅。
+:::信息
+Using your Claude Pro/Max subscription in OpenCode is not officially supported by [Anthropic](https://anthropic.com).
 :::
 
 ##### 使用 API 键
@@ -292,17 +292,17 @@ OpenCode Zen 是OpenCode团队提供的模型列表，这些模型已被
 
 ### 天蓝色 OpenAI
 
-：：：笔记
+:::笔记
 如果遇到“抱歉，但我无法协助该请求”错误，请尝试将 Azure 资源中的内容筛选器从 **DefaultV2** 更改为 **Default**。
 :::
 
-1. 前往[Azure门户](___T1___)并建立**Azure OpenAI**资源。你需要：
+1. Head over to the [Azure portal](https://portal.azure.com/) and create an **Azure OpenAI** resource. You'll need:
    - **资源名称**：这将成为您的 API 端点 (`https://RESOURCE_NAME.openai.azure.com/`) 的一部分
    - **API 金钥匙**：来自您资源的 `KEY 1` 或 `KEY 2`
 
-2. 前往【Azure AI Foundry](___T1___)并部署模型。
+2. Go to [Azure AI Foundry](https://ai.azure.com/) and deploy a model.
 
-   ：：：笔记
+   :::笔记
    部署名称必须与型号名称匹配，opencode才能正常工作。
    :::
 
@@ -343,13 +343,13 @@ OpenCode Zen 是OpenCode团队提供的模型列表，这些模型已被
 
 ### Azure 认知服务
 
-1. 前往[Azure门户](___T1___)并建立**Azure OpenAI**资源。你需要：
+1. Head over to the [Azure portal](https://portal.azure.com/) and create an **Azure OpenAI** resource. You'll need:
    - **资源名称**：这将成为您的 API 端点 (`https://AZURE_COGNITIVE_SERVICES_RESOURCE_NAME.cognitiveservices.azure.com/`) 的一部分
    - **API 金钥匙**：来自您资源的 `KEY 1` 或 `KEY 2`
 
-2. 前往【Azure AI Foundry](___T1___)并部署模型。
+2. Go to [Azure AI Foundry](https://ai.azure.com/) and deploy a model.
 
-   ：：：笔记
+   :::笔记
    部署名称必须与型号名称匹配，opencode才能正常工作。
    :::
 
@@ -390,7 +390,7 @@ OpenCode Zen 是OpenCode团队提供的模型列表，这些模型已被
 
 ### 巴吉度獵犬
 
-1. 前往[Baseten](___T1___)，建立一个帐户，并生成API金钥匙。
+1. Head over to the [Baseten](https://app.baseten.co/), create an account, and generate an API key.
 
 2. 执行 `/connect` 命令并搜索 **Baseten**。
 
@@ -417,7 +417,7 @@ OpenCode Zen 是OpenCode团队提供的模型列表，这些模型已被
 
 ### 大腦
 
-1. 前往[Cerebras控制台](___T1___)，建立一个账户，并生成API金钥匙。
+1. Head over to the [Cerebras console](https://inference.cerebras.ai/), create an account, and generate an API key.
 
 2. 执行 `/connect` 命令并搜索 **Cerebras**。
 
@@ -444,9 +444,9 @@ OpenCode Zen 是OpenCode团队提供的模型列表，这些模型已被
 
 ### Cloudflare AI闸道器
 
-Cloudflare AI Gateway 您可以让统一端点访问来自 OpenAI、Anthropic、Workers AI 等的模型。使用 [Unified Billing](___T3___)，您不需要为每个巨头提供单独的 API 金钥。
+Cloudflare AI Gateway lets you access models from OpenAI, Anthropic, Workers AI, and more through a unified endpoint. With [Unified Billing](https://developers.cloudflare.com/ai-gateway/features/unified-billing/) you don't need separate API keys for each provider.
 
-1. 前往[Cloudflare仪表板](___T0___)，导航至**AI** > **AI网关**，然后建立一个新闸道器。
+1. Head over to the [Cloudflare dashboard](https://dash.cloudflare.com/), navigate to **AI** > **AI Gateway**, and create a new gateway.
 
 2. 将您的账户ID和闸道器ID设定为环境变量。
 
@@ -502,7 +502,7 @@ Cloudflare AI Gateway 您可以让统一端点访问来自 OpenAI、Anthropic、
 
 ### 皮質
 
-1. 前往[Cortecs console](___T1___)，创建一个账户，并生成API金钥匙。
+1. Head over to the [Cortecs console](https://cortecs.ai/), create an account, and generate an API key.
 
 2. 执行 `/connect` 命令并搜索 **Cortecs**。
 
@@ -529,7 +529,7 @@ Cloudflare AI Gateway 您可以让统一端点访问来自 OpenAI、Anthropic、
 
 ### 深度搜尋
 
-1. 前往[DeepSeek console](___T1___)，建立一个账户，然后单击**建立新的API金钥匙**。
+1. Head over to the [DeepSeek console](https://platform.deepseek.com/), create an account, and click **Create new API key**.
 
 2. 执行 `/connect` 命令并搜索 **DeepSeek**。
 
@@ -556,7 +556,7 @@ Cloudflare AI Gateway 您可以让统一端点访问来自 OpenAI、Anthropic、
 
 ### 深層基礎設施
 
-1. 前往【Deep Infra仪表板](___T1___)，建立一个账户，并生成API金钥匙。
+1. Head over to the [Deep Infra dashboard](https://deepinfra.com/dash), create an account, and generate an API key.
 
 2. 执行 `/connect` 命令并搜索 **Deep Infra**。
 
@@ -583,7 +583,7 @@ Cloudflare AI Gateway 您可以让统一端点访问来自 OpenAI、Anthropic、
 
 ### 韌體
 
-1. 前往【固件仪表板](___T1___)，创建一个账户，并生成API金钥匙。
+1. Head over to the [Firmware dashboard](https://app.firmware.ai/signup), create an account, and generate an API key.
 
 2. 执行`/connect`命令并搜索**韧体**。
 
@@ -610,7 +610,7 @@ Cloudflare AI Gateway 您可以让统一端点访问来自 OpenAI、Anthropic、
 
 ### 煙花人工智慧
 
-1. 前往[Fireworks AI控制台](___T1___)，建立一个帐户，然后单击**建立API金钥匙**。
+1. Head over to the [Fireworks AI console](https://app.fireworks.ai/), create an account, and click **Create API Key**.
 
 2. 执行 `/connect` 命令并搜索 **Fireworks AI**。
 
@@ -660,9 +660,9 @@ GitLab Duo 通过 GitLab 的人工代理提供具有本机工具呼叫功能的�
    选择**OAuth**，您的浏览器将开启并进行授权。
 
    #### 使用個人訪問令牌
-   1. 转到 [___W0___ 用户设置 > 访问令牌](___T2___)
+   1. Go to [GitLab User Settings > Access Tokens](https://gitlab.com/-/user_settings/personal_access_tokens)
    2. 單擊**新增新令牌**
-   3. 名称：`___W0___`，范围：`api`
+   3. Name: `OpenCode`, Scopes: `api`
    4. 复制令牌（以 `glpat-` 发起人）
    5. 在終端中輸入
 
@@ -677,7 +677,7 @@ GitLab Duo 通过 GitLab 的人工代理提供具有本机工具呼叫功能的�
    - **duo-chat-sonnet-4-5** - 大多数工作流程的平衡失败
    - **duo-chat-opus-4-5** - 最有能力进行复杂分析
 
-：：：笔记
+:::笔记
 如果您不愿意，也可以指定“GITLAB_TOKEN”环境变量
 将令牌存储在opencode身份验证存储中。
 :::
@@ -688,7 +688,7 @@ GitLab Duo 通过 GitLab 的人工代理提供具有本机工具呼叫功能的�
 OpenCode 使用一个小模型来执行一些 AI 任务，例如生成会话标题。
 情况下，其配置为使用 gpt-5-nano，由 Zen 托管。默认 OpenCode
 只需使用您自己的 GitLab 托管示例项，即可将以下内容添加到您的
-`___W0___.json` 文件。还建议取消会话共享。
+`opencode.json` file. It is also recommended to disable session sharing.
 
 ```json
 {
@@ -721,10 +721,10 @@ export GITLAB_AI_GATEWAY_URL=https://ai-gateway.company.com
 export GITLAB_TOKEN=glpat-...
 ```
 
-：：：笔记
+:::笔记
 您的 GitLab 管理员必须启用以下功能：
 
-1. [Duo Agent Platform](___T0___) 用于用户、组或例项
+1. [Duo Agent Platform](https://docs.gitlab.com/user/gitlab_duo/turn_on_off/) for the user, group, or instance
 2. 功能标志（透过Rails控制台）：
    - `agent_platform_claude_code`
    - `third_party_agents_enabled`
@@ -746,11 +746,11 @@ export GITLAB_TOKEN=glpat-...
 export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 ```
 
-更多文件请参见 [___W0___-gitlab-auth](___T2___) 主页。
+More documentation on [opencode-gitlab-auth](https://www.npmjs.com/package/@gitlab/opencode-gitlab-auth) homepage.
 
 ##### 配置
 
-贯穿`___W0___.json`定制：
+Customize through `opencode.json`:
 
 ```json title="opencode.json"
 {
@@ -788,11 +788,11 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 相当于您的 GitHub Copilot 订阅与 opencode 一起使用：
 
-：：：笔记
+:::笔记
 某些型号可能需要 [Pro+
 订阅](https://github.com/features/copilot/plans)使用。
 
-某些模型需要在您的 [___W1___ ___W0___ 设置](___T2___) 中手动启用。
+Some models need to be manually enabled in your [GitHub Copilot settings](https://docs.github.com/en/copilot/how-tos/use-ai-models/configure-access-to-ai-models#setup-for-individual-use).
 :::
 
 1. 执行 `/connect` 命令并搜索 GitHub Copilot。
@@ -801,7 +801,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
    /connect
    ```
 
-2. 导航至 [github.com/login/device](___T0___) 并输入程序码。
+2. Navigate to [github.com/login/device](https://github.com/login/device) and enter the code.
 
    ```txt
    ┌ Login with GitHub Copilot
@@ -828,7 +828,7 @@ Google Vertex AI 与 OpenCode 结合使用：
 1. 前往 Google Cloud Console 中的 **模型花园** 并检查
    您所在地區提供的型號。
 
-   ：：：笔记
+   :::笔记
    您需要有一个启用了 Vertex AI API 的 Google Cloud 专案。
    :::
 
@@ -853,8 +853,8 @@ Google Vertex AI 与 OpenCode 结合使用：
    export VERTEX_LOCATION=global
    ```
 
-：：：提示
-`global`区域消耗额外成本可以提高可用性并减少错误。使用区域端点（例如`us-central1`）来满足数据驻留要求。 [了解更多](___T2___)
+:::提示
+The `global` region improves availability and reduces errors at no extra cost. Use regional endpoints (e.g., `us-central1`) for data residency requirements. [Learn more](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
 :::
 
 3. 执行`/models`命令选择所需的型号。
@@ -867,7 +867,7 @@ Google Vertex AI 与 OpenCode 结合使用：
 
 ### 格羅克
 
-1. 前往 [Groq console](___T1___)，点击 **建立 API 金钥匙**，然后复制金钥匙。
+1. Head over to the [Groq console](https://console.groq.com/), click **Create API Key**, and copy the key.
 
 2. 执行 `/connect` 命令并搜索 Groq。
 
@@ -894,9 +894,9 @@ Google Vertex AI 与 OpenCode 结合使用：
 
 ### 抱臉
 
-[Hugging Face Inference Providers](___T0___) 提供对超过 17 个企业支持的开放模型的访问。
+[Hugging Face Inference Providers](https://huggingface.co/docs/inference-providers) provides access to open models supported by 17+ providers.
 
-1. 前往[拥抱脸设置](___T0___)]建立一个具有呼叫推理提供方案许可权的令牌。
+1. Head over to [Hugging Face settings](https://huggingface.co/settings/tokens/new?ownUserPermissions=inference.serverless.write&tokenType=fineGrained) to create a token with permission to make calls to Inference Providers.
 
 2. 执行 `/connect` 命令并搜索 **拥抱脸**。
 
@@ -923,9 +923,9 @@ Google Vertex AI 与 OpenCode 结合使用：
 
 ### 螺旋錐
 
-[Helicone](___T1___) 是一个 LLM 可观察性平台，可以为您的 AI 应用程序提供日志记录、监控和分析。 Helicone AI Gateway 根据模型自动将您的请求路由到适当的主机。
+[Helicone](https://helicone.ai) is an LLM observability platform that provides logging, monitoring, and analytics for your AI applications. The Helicone AI Gateway routes your requests to the appropriate provider automatically based on the model.
 
-1. 前往[Helicone](___T1___)，建立一个账户，然后从仪表板生成API金钥匙。
+1. Head over to [Helicone](https://helicone.ai), create an account, and generate an API key from your dashboard.
 
 2. 执行 `/connect` 命令并搜索 **Helicone**。
 
@@ -948,13 +948,13 @@ Google Vertex AI 与 OpenCode 结合使用：
    /models
    ```
 
-有关更多提供程序和高阶功能（例如快取和速率限制），请查看 [Helicone 文档](___T0___)。
+For more providers and advanced features like caching and rate limiting, check the [Helicone documentation](https://docs.helicone.ai).
 
 #### 可選配置
 
 如果您发现Helicone的某些功能或型号未通过opencode自动配置，您始终可以自行配置。
 
-这里是[Helicone的模型目录](___T0___)，您需要它来获取您想要的新增模型的ID。
+Here's [Helicone's Model Directory](https://helicone.ai/models), you'll need this to grab the IDs of the models you want to add.
 
 ```jsonc title="~/.config/opencode/opencode.jsonc"
 {
@@ -1005,7 +1005,7 @@ Helicone 支持快速获取、用户跟踪和会话管理等功能的自定义�
 
 ##### 會話跟蹤
 
-Helicone 的 [Sessions](___T3___) 功能可以让您将相关的 LLM 请求分组放在一起。使用 [___W1___-helicone-session](___T4___) 外挂自动将每个 OpenCode 对话记录作为 Helicone 中的会话。
+Helicone's [Sessions](https://docs.helicone.ai/features/sessions) feature lets you group related LLM requests together. Use the [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) plugin to automatically log each OpenCode conversation as a session in Helicone.
 
 ```bash
 npm install -g opencode-helicone-session
@@ -1025,18 +1025,18 @@ npm install -g opencode-helicone-session
 
 |標題 |描述 |
 | -------------------------- | ------------------------------------------------------------- |
-| `Helicone-Cache-Enabled` | 启用响应快取 (___T1__T3___) |
+| `Helicone-Cache-Enabled`   | Enable response caching (`true`/`false`)                      |
 | `Helicone-User-Id` | 点击用户跟踪指标 |
 | `Helicone-Property-[Name]` | 新增自定义属性（例如`Helicone-Property-Environment`）|
 | `Helicone-Prompt-Id` |将请求与提示版本相关联 |
 
-请参阅 [Helicone 标头目录](___T0___) 了解所有可用标头。
+See the [Helicone Header Directory](https://docs.helicone.ai/helicone-headers/header-directory) for all available headers.
 
 ---
 
 ### 呼叫.cpp
 
-您可以通过 [llama.cpp's](___T1___) llama-server 实用程序将 opencode 配置用于使用本地模型
+You can configure opencode to use local models through [llama.cpp's](https://github.com/ggml-org/llama.cpp) llama-server utility
 
 ```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
 {
@@ -1065,7 +1065,7 @@ npm install -g opencode-helicone-session
 在這個例子中：
 
 - `llama.cpp` 是自定义创建 ID。这可以是您想要的任何字串。
-- `___W1___` 指定用于此提供方案的包。在这里，`@ai-sdk/openai-compatible` 用于任何 OpenAI 相内容的 API。
+- `npm` specifies the package to use for this provider. Here, `@ai-sdk/openai-compatible` is used for any OpenAI-compatible API.
 - `name` 是 UI 中提供程序的显示名称。
 - `options.baseURL` 是本地服务器器的端点。
 - `models` 是型号 ID 以及配置的对应映射。型号名称将显示在型号选择列表中。
@@ -1076,7 +1076,7 @@ npm install -g opencode-helicone-session
 
 IO.NET提供了17种针对各种例子进行优化的模型：
 
-1. 前往[IO.NET控制台](___T1___)，创建一个帐户，并生成API金钥匙。
+1. Head over to the [IO.NET console](https://ai.io.net/), create an account, and generate an API key.
 
 2. 执行`/connect`命令并搜索**IO.NET**。
 
@@ -1128,7 +1128,7 @@ IO.NET提供了17种针对各种例子进行优化的模型：
 在這個例子中：
 
 - `lmstudio` 是自定义创建 ID。这可以是您想要的任何字串。
-- `___W1___` 指定用于此提供方案的包。在这里，`@ai-sdk/openai-compatible` 用于任何 OpenAI 相内容的 API。
+- `npm` specifies the package to use for this provider. Here, `@ai-sdk/openai-compatible` is used for any OpenAI-compatible API.
 - `name` 是 UI 中提供程序的显示名称。
 - `options.baseURL` 是本地服务器器的端点。
 - `models` 是型号 ID 以及配置的对应映射。型号名称将显示在型号选择列表中。
@@ -1139,7 +1139,7 @@ IO.NET提供了17种针对各种例子进行优化的模型：
 
 要使用 Moonshot AI 中的 Kimi K2：
 
-1. 前往[Moonshot AI控制台](___T1___)，建立一个帐户，然后单击**建立API金钥匙**。
+1. Head over to the [Moonshot AI console](https://platform.moonshot.ai/console), create an account, and click **Create API key**.
 
 2. 执行 `/connect` 命令并搜索 **Moonshot AI**。
 
@@ -1166,7 +1166,7 @@ IO.NET提供了17种针对各种例子进行优化的模型：
 
 ### 最小最大
 
-1. 前往[MiniMax ___W0___ Console](___T1___)，建立一个账户，并生成API金钥匙。
+1. Head over to the [MiniMax API Console](https://platform.minimax.io/login), create an account, and generate an API key.
 
 2. 执行 `/connect` 命令并搜索 **MiniMax**。
 
@@ -1193,7 +1193,7 @@ IO.NET提供了17种针对各种例子进行优化的模型：
 
 ### Nebius 代币工厂
 
-1. 前往[Nebius Token Factory控制台](___T0___)，建立一个帐户，然后单击**增加金钥匙**。
+1. Head over to the [Nebius Token Factory console](https://tokenfactory.nebius.com/), create an account, and click **Add Key**.
 
 2. 执行`/connect`命令并搜索**Nebius令牌工厂**。
 
@@ -1222,8 +1222,8 @@ IO.NET提供了17种针对各种例子进行优化的模型：
 
 您可以使用 Ollama 配置 opencode 本地模型。
 
-：：：提示
-Ollama 可以自动将自身配置为 OpenCode。有关详细信息，请参阅[Ollama 集成文档](___T2___)。
+:::提示
+Ollama can automatically configure itself for OpenCode. See the [Ollama integration docs](https://docs.ollama.com/integrations/opencode) for details.
 :::
 
 ```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
@@ -1249,12 +1249,12 @@ Ollama 可以自动将自身配置为 OpenCode。有关详细信息，请参阅[
 在這個例子中：
 
 - `ollama` 是自定义创建 ID。这可以是您想要的任何字串。
-- `___W1___` 指定用于此提供方案的包。在这里，`@ai-sdk/openai-compatible` 用于任何 OpenAI 相内容的 API。
+- `npm` specifies the package to use for this provider. Here, `@ai-sdk/openai-compatible` is used for any OpenAI-compatible API.
 - `name` 是 UI 中提供程序的显示名称。
 - `options.baseURL` 是本地服务器器的端点。
 - `models` 是型号 ID 以及配置的对应映射。型号名称将显示在型号选择列表中。
 
-：：：提示
+:::提示
 如果工具暂停，请尝试增加 Ollama 中的 `num_ctx`。从 16k - 32k 左右开始。
 :::
 
@@ -1301,7 +1301,7 @@ Ollama 可以自动将自身配置为 OpenCode。有关详细信息，请参阅[
 
 ### 开放人工智能
 
-我们建议注册 [ChatGPT Plus 或 Pro](___T0___)。
+We recommend signing up for [ChatGPT Plus or Pro](https://chatgpt.com/pricing).
 
 1. 注册后，执行`/connect`命令并选择OpenAI。
 
@@ -1363,7 +1363,7 @@ OpenCode Zen 是 OpenCode 团队提供的经过测试和验证的模型列表。
 
 ### 開放路由器
 
-1. 前往[OpenRouter仪表板](___T1___)，点击**建立API金钥匙**，然后复制金钥匙。
+1. Head over to the [OpenRouter dashboard](https://openrouter.ai/settings/keys), click **Create API Key**, and copy the key.
 
 2. 执行`/connect`命令并搜索OpenRouter。
 
@@ -1429,10 +1429,10 @@ OpenCode Zen 是 OpenCode 团队提供的经过测试和验证的模型列表。
 
 SAP AI Core跨统一平台提供对OpenAI、Anthropic、Google、Amazon、Meta、Mistral和AI21的40多个模型的访问。
 
-1. 例如转到您的[SAP BTP Cockpit](___T1___)，导航到SAP AI Core服务项，然后建立服务金钥。
+1. Go to your [SAP BTP Cockpit](https://account.hana.ondemand.com/), navigate to your SAP AI Core service instance, and create a service key.
 
-   ：：：提示
-   服务金钥匙是一个 JSON 工件，包含 `clientid`、`clientsecret`、`url` 和 `serviceurls.AI____W1____URL`。您可以在 BTP Cockpit 的 **服务** > **实例项和订阅**下您的 AI Core 实例项。
+   :::提示
+   The service key is a JSON object containing `clientid`, `clientsecret`, `url`, and `serviceurls.AI_API_URL`. You can find your AI Core instance under **Services** > **Instances and Subscriptions** in the BTP Cockpit.
    :::
 
 2. 执行`/connect`命令并搜索**SAP AI Core**。
@@ -1468,7 +1468,7 @@ SAP AI Core跨统一平台提供对OpenAI、Anthropic、Google、Amazon、Meta�
    AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group opencode
    ```
 
-   ：：：笔记
+   :::笔记
    这些设置是可选的，应根据 SAP AI Core 设置进行配置。
    :::
 
@@ -1482,7 +1482,7 @@ SAP AI Core跨统一平台提供对OpenAI、Anthropic、Google、Amazon、Meta�
 
 ### OVHcloud AI 端点
 
-1. 前往[OVHcloud面板](___T5___)。导航到`Public Cloud`部分，`AI & Machine Learning` > `AI Endpoints`，然后在`___W0___ Keys`选项卡中，单击**建立新的API金钥匙**。
+1. Head over to the [OVHcloud panel](https://ovh.com/manager). Navigate to the `Public Cloud` section, `AI & Machine Learning` > `AI Endpoints` and in `API Keys` tab, click **Create a new API key**.
 
 2. 执行 `/connect` 命令并搜索 **OVHcloud AI 端点**。
 
@@ -1509,9 +1509,9 @@ SAP AI Core跨统一平台提供对OpenAI、Anthropic、Google、Amazon、Meta�
 
 ### 斯卡威
 
-[Scaleway Generative ___W0___s](___T1___) 与 Opencode 结合使用：
+To use [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/) with Opencode:
 
-1. 前往 [Scaleway Console IAM 设置](___T1___) 生成新的API 金钥匙。
+1. Head over to the [Scaleway Console IAM settings](https://console.scaleway.com/iam/api-keys) to generate a new API key.
 
 2. 执行 `/connect` 命令并搜索 **Scaleway**。
 
@@ -1538,7 +1538,7 @@ SAP AI Core跨统一平台提供对OpenAI、Anthropic、Google、Amazon、Meta�
 
 ### 一起人工智慧
 
-1. 前往[一起AI控制台](___T0___)，建立一个帐户，然后单击**增加金钥匙**。
+1. Head over to the [Together AI console](https://api.together.ai), create an account, and click **Add Key**.
 
 2. 执行 `/connect` 命令并搜索 **Together AI**。
 
@@ -1565,7 +1565,7 @@ SAP AI Core跨统一平台提供对OpenAI、Anthropic、Google、Amazon、Meta�
 
 ### 威尼斯人工智慧
 
-1. 前往【威尼斯AI控制台](___T1___)，建立一个账户，并生成API金钥匙。
+1. Head over to the [Venice AI console](https://venice.ai), create an account, and generate an API key.
 
 2. 执行 `/connect` 命令并搜索 **Venice AI**。
 
@@ -1594,7 +1594,7 @@ SAP AI Core跨统一平台提供对OpenAI、Anthropic、Google、Amazon、Meta�
 
 Vercel AI Gateway 可以让您跨统一端点访问来自 OpenAI、Anthropic、Google、xAI 等的模型。型号按标价提供，不加价。
 
-1. 前往 [Vercel 仪表板](___T1___)，导航到 **AI Gateway** 选项卡，然后单击 **API 金钥匙** 以建立新的 API 金钥匙。
+1. Head over to the [Vercel dashboard](https://vercel.com/), navigate to the **AI Gateway** tab, and click **API keys** to create a new API key.
 
 2. 执行 `/connect` 命令并搜索 **Vercel AI Gateway**。
 
@@ -1648,7 +1648,7 @@ Vercel AI Gateway 可以让您跨统一端点访问来自 OpenAI、Anthropic、G
 
 ### 人工智慧
 
-1. 前往[xAI控制台](___T1___)，建立一个帐户，并生成API金钥匙。
+1. Head over to the [xAI console](https://console.x.ai/), create an account, and generate an API key.
 
 2. 执行 `/connect` 命令并搜索 **xAI**。
 
@@ -1675,7 +1675,7 @@ Vercel AI Gateway 可以让您跨统一端点访问来自 OpenAI、Anthropic、G
 
 ### 扎艾
 
-1. 前往 [Z.AI ___W0___ console](___T1___)，建立一个帐户，然后单击 **建立新的 API 金钥匙**。
+1. Head over to the [Z.AI API console](https://z.ai/manage-apikey/apikey-list), create an account, and click **Create a new API key**.
 
 2. 执行 `/connect` 命令并搜索 **Z.AI**。
 
@@ -1704,7 +1704,7 @@ Vercel AI Gateway 可以让您跨统一端点访问来自 OpenAI、Anthropic、G
 
 ### 多路復用器
 
-1. 前往[ZenMux仪表板](___T1___)，点击**建立API金钥匙**，然后复制金钥匙。
+1. Head over to the [ZenMux dashboard](https://zenmux.ai/settings/keys), click **Create API Key**, and copy the key.
 
 2. 执行 `/connect` 命令并搜索 ZenMux。
 
@@ -1748,7 +1748,7 @@ Vercel AI Gateway 可以让您跨统一端点访问来自 OpenAI、Anthropic、G
 
 要新增 `/connect` 命令中未列出的任何 **OpenAI 相容**提供程式：
 
-：：：提示
+:::提示
 您可以将任何 OpenAI 相容的提供方案与 opencode 一起使用。大多数人工现代智慧工厂都提供 OpenAI 相容 API。
 :::
 
@@ -1777,7 +1777,7 @@ Vercel AI Gateway 可以让您跨统一端点访问来自 OpenAI、Anthropic、G
    └
    ```
 
-   ：：：笔记
+   :::笔记
    选择一个容易记住的 ID，您将在配置文件中使用它。
    :::
 
@@ -1795,7 +1795,7 @@ Vercel AI Gateway 可以让您跨统一端点访问来自 OpenAI、Anthropic、G
    └
    ```
 
-4. 在专案目录中建立或更新 `___W0___.json` 档案：
+4. Create or update your `opencode.json` file in your project directory:
 
    ```json title="opencode.json" ""myprovider"" {5-15}
    {
@@ -1878,7 +1878,7 @@ Vercel AI Gateway 可以让您跨统一端点访问来自 OpenAI、Anthropic、G
 
 如果您在配置提供商時遇到問題，請檢查以下內容：
 
-1. **检查身份设置验证**：执行`___W0___ auth list`以检视凭据是否
+1. **Check the auth setup**: Run `opencode auth list` to see if the credentials
    提供商的配置已新增到您的配置中。
 
    这并不利于 Amazon Bedrock 等依赖环境变数进行身份验证的工作。

@@ -3,9 +3,9 @@ title: ACPのサポート
 description: ACP 互換エディターで OpenCode を使用します。
 ---
 
-OpenCode は [Agent Client Protocol](https://agentclientprotocol.com) または (ACP)] をサポートしているため、互換性のあるエディターや IDE で直接使用できます。
+OpenCode は [Agent Client Protocol](https://agentclientprotocol.com) または (ACP) をサポートしているため、互換性のあるエディターや IDE で直接使用できます。
 
-：：：ヒント
+:::ヒント
 ACP をサポートするエディターとツールのリストについては、[ACP progress report](https://zed.dev/blog/acp-progress-report#available-now).
 :::
 
@@ -25,7 +25,7 @@ ACP 経由で OpenCode を使用するには、`opencode acp` コマンドを実
 
 ### ゼッド
 
-[Zed](https://zed.dev) 構成 (`~/.config/zed/settings.json`)] に追加します。
+[Zed](https://zed.dev) 構成 (`~/.config/zed/settings.json`) に追加します。
 
 ```json title="~/.config/zed/settings.json"
 {
@@ -121,7 +121,7 @@ ACP 経由で OpenCode を使用するには、`opencode acp` コマンドを実
 
 ### CodeCompanion.nvim
 
-[CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim)] で OpenCode を ACP エージェントとして使用するには、以下を Neovim 構成に追加します。
+[CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim) で OpenCode を ACP エージェントとして使用するには、以下を Neovim 構成に追加します。
 
 ```lua
 require("codecompanion").setup({
@@ -144,7 +144,7 @@ require("codecompanion").setup({
 
 OpenCode は、ACP 経由でもターミナル内で動作するのと同じように動作します。すべての機能がサポートされています。
 
-：：：注記
+:::注記
 `/undo` や `/redo` などの一部の組み込みスラッシュ コマンドは現在サポートされていません。
 :::
 

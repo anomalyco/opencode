@@ -11,7 +11,7 @@ description: オープンコードのカスタム命令を設定します。
 
 新しい `AGENTS.md` ファイルを作成するには、opencode で `/init` コマンドを実行します。
 
-：：：ヒント
+:::ヒント
 プロジェクトの `AGENTS.md` ファイルを Git にコミットする必要があります。
 :::
 
@@ -72,7 +72,7 @@ Claude Code から移行するユーザーのために、OpenCode はフォー�
 
 - **プロジェクト ルール**: プロジェクト ディレクトリ内の `CLAUDE.md` (`AGENTS.md` が存在しない場合に使用されます)
 - **グローバル ルール**: `~/.claude/CLAUDE.md` (`~/.config/opencode/AGENTS.md` が存在しない場合に使用)
-- **スキル**: `~/.claude/skills/` — 詳細については、[エージェント スキル ](./skills/)] を参照してください。
+- **スキル**: `~/.claude/skills/` — 詳細については、[エージェント スキル ](./skills/) を参照してください。
 
 クロード コードの互換性を無効にするには、次の環境変数のいずれかを設定します。
 
@@ -175,6 +175,6 @@ Read the following file immediately as it's relevant to all workflows: @rules/ge
 - 詳細なガイドラインを参照しながら、AGENTS.md を簡潔に保ちます
 - opencode が特定のタスクに必要な場合にのみファイルをロードするようにする
 
-：：：ヒント
+:::ヒント
 モノリポジトリまたは共有標準を使用するプロジェクトの場合、グロブ パターン (`packages/*/AGENTS.md` など) で `opencode.json` を使用する方が、手動で指示するよりも保守しやすくなります。
 :::

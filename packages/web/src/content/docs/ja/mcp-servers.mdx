@@ -13,7 +13,7 @@ MCP ツールを追加すると、組み込みツールとともに LLM で自�
 
 MCP サーバーを使用すると、コンテキストが追加されます。多くのツールがある場合、これはすぐに増加する可能性があります。したがって、使用する MCP サーバーには注意することをお勧めします。
 
-：：：ヒント
+:::ヒント
 MCP サーバーはコンテキストに追加されるため、どのサーバーを有効にするかには注意してください。
 :::
 
@@ -23,7 +23,7 @@ GitHub MCP サーバーなどの特定の MCP サーバーは、大量のトー�
 
 ## 有効にする
 
-MCP サーバーは、`mcp` の下の [OpenCode Config](https://opencode.ai/docs/config/)] で定義できます。各 MCP を一意の名前で追加します。 LLM にプロンプ​​トを表示するときに、その MCP を名前で参照できます。
+MCP サーバーは、`mcp` の下の [OpenCode Config](https://opencode.ai/docs/config/) で定義できます。各 MCP を一意の名前で追加します。 LLM にプロンプ​​トを表示するときに、その MCP を名前で参照できます。
 
 ```jsonc title="opencode.jsonc" {6}
 {
@@ -383,7 +383,7 @@ MCP は、組み込みツールと並んで、OpenCode のツールとして利�
 - `?` は 1 つの文字に正確に一致します
 - 他のすべての文字は文字通り一致します
 
-：：：注記
+:::注記
 MCP サーバー ツールはサーバー名をプレフィックスとして登録されているため、サーバーのすべてのツールを無効にするには、次のコマンドを使用するだけです。
 
 ```
@@ -435,7 +435,7 @@ Show me the latest unresolved issues in my project. use sentry
 
 ### コンテキスト7
 
-ドキュメントを検索するために [Context7 MCP server](https://github.com/upstash/context7)] を追加します。
+ドキュメントを検索するために [Context7 MCP server](https://github.com/upstash/context7) を追加します。
 
 ```json title="opencode.json" {4-7}
 {

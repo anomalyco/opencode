@@ -6,6 +6,7 @@ const docsShellFiles = [
   "components/Header.astro",
   "components/Head.astro",
   "components/Lander.astro",
+  "components/Footer.astro",
   "components/Share.tsx",
   "pages/s/[id].astro",
   "pages/[...slug].md.ts",

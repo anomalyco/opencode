@@ -20,6 +20,7 @@ export const console = config.console
 당신의 맨끝에 있는 OpenCode를 사용하려면, 당신은 필요로 할 것입니다:
 
 1. 현대 맨끝 에뮬레이터는 좋아합니다:
+
 - [WezTerm](https://wezterm.org), 크로스 플랫폼
 - [Alacritty](https://alacritty.org), 크로스 플랫폼
 - [Ghostty] (https://ghostty.org), 리눅스 및 macOS
@@ -223,61 +224,61 @@ How is authentication handled in @packages/functions/src/api/index.ts
 
 1. **플랜을 선택 **
 
-OpenCode는  Plan mode 로 변경할 수 있는 능력을 비활성화하고
-대신 제안  how  그것은 기능을 구현할 것입니다.
+OpenCode는 Plan mode 로 변경할 수 있는 능력을 비활성화하고
+대신 제안 how 그것은 기능을 구현할 것입니다.
 
 **Tab** 키를 사용하여 전환합니다. 오른쪽 하단에 있는 이 지표를 볼 수 있습니다.
 
-   ```bash frame="none" title="Switch to Plan mode"
-   <TAB>
-   ```
+```bash frame="none" title="Switch to Plan mode"
+<TAB>
+```
 
 이제 우리가해야 할 일을 설명합니다.
 
-   ```txt frame="none"
-   When a user deletes a note, we'd like to flag it as deleted in the database.
-   Then create a screen that shows all the recently deleted notes.
-   From this screen, the user can undelete a note or permanently delete it.
-   ```
+```txt frame="none"
+When a user deletes a note, we'd like to flag it as deleted in the database.
+Then create a screen that shows all the recently deleted notes.
+From this screen, the user can undelete a note or permanently delete it.
+```
 
 당신이 원하는 것을 이해하기 위해 OpenCode를 충분히 세부 정보를 제공하려는. 그것은 도움
 팀의 주니어 개발자에게 이야기하고 싶습니다.
 
-   :::tip
+:::tip
 OpenCode를 많은 컨텍스트와 예제를 제공하여 당신이 무엇을 이해하는 데 도움이
-이름 *
-   :::
+이름 \*
+:::
 
 2. **플랜에 대해서 **
 
 플랜을 제공하면 피드백을 제공하거나 자세한 내용을 추가 할 수 있습니다.
 
-   ```txt frame="none"
-   We'd like to design this new screen using a design I've used before.
-   [Image #1] Take a look at this image and use it as a reference.
-   ```
+```txt frame="none"
+We'd like to design this new screen using a design I've used before.
+[Image #1] Take a look at this image and use it as a reference.
+```
 
-   :::tip
+:::tip
 단말에 이미지를 드래그하고 드롭하여 프롬프트에 추가합니다.
-   :::
+:::
 
 OpenCode는 어떤 이미지를 스캔할 수 있습니다. 당신은 할 수
 이 작업을 수행하고 끝으로 이미지를 삭제합니다.
 
 3. ** 기능 구축 **
 
-플랜으로 편안하게 느끼면  Build mode  by
+플랜으로 편안하게 느끼면 Build mode by
 **Tab** 키를 다시 입력합니다.
 
-   ```bash frame="none"
-   <TAB>
-   ```
+```bash frame="none"
+<TAB>
+```
 
 그리고 변경을 요청합니다.
 
-   ```bash frame="none"
-   Sounds good! Go ahead and make the changes.
-   ```
+```bash frame="none"
+Sounds good! Go ahead and make the changes.
+```
 
 ---
 
@@ -293,7 +294,7 @@ the same logic in @packages/functions/src/settings.ts
 ```
 
 좋은 양의 세부 사항을 제공 하려면 OpenCode가 올바른
-이름 *
+이름 \*
 
 ---
 
@@ -325,7 +326,7 @@ Can you refactor the function in @packages/functions/src/api/index.ts?
 `/undo`를 여러 번 실행할 수 있습니다.
 :::
 
-또는 ** `/redo` 명령을 사용하여 변경할 수 있습니다.
+또는 \*\* `/redo` 명령을 사용하여 변경할 수 있습니다.
 
 ```bash frame="none"
 /redo
@@ -335,8 +336,7 @@ Can you refactor the function in @packages/functions/src/api/index.ts?
 
 ## 공유
 
-OpenCode가 있는 대화는 [shared with your
-팀] (./share).
+OpenCode와 나눈 대화는 [팀과 공유](./share)할 수 있습니다.
 
 ```bash frame="none"
 /share

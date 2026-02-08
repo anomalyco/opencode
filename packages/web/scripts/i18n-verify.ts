@@ -1,7 +1,13 @@
 import path from "node:path"
 
 const args = Bun.argv.slice(2)
-const checks = ["i18n-check-keys.ts", "i18n-check-pages.ts", "i18n-check-links.ts", "i18n-check-ui-strings.ts"]
+const checks = [
+  "i18n-check-keys.ts",
+  "i18n-check-pages.ts",
+  "i18n-check-links.ts",
+  "i18n-check-content-integrity.ts",
+  "i18n-check-ui-strings.ts",
+]
 
 for (const check of checks) {
   const file = path.join(import.meta.dir, check)

@@ -6,7 +6,7 @@ description: Использование любого провайдера LLM в
 import config from "../../../../config.mjs"
 export const console = config.console
 
-OpenCode использует [AI SDK](https://ai-sdk.dev/) и [Models.dev](https://models.dev)] для поддержки **более 75 поставщиков LLM** и поддерживает запуск локальных моделей.
+OpenCode использует [AI SDK](https://ai-sdk.dev/) и [Models.dev](https://models.dev) для поддержки **более 75 поставщиков LLM** и поддерживает запуск локальных моделей.
 
 Чтобы добавить провайдера, вам необходимо:
 
@@ -296,11 +296,11 @@ OpenCode Zen — это список моделей, предоставленн�
 Если вы столкнулись с ошибками «Извините, но я не могу помочь с этим запросом», попробуйте изменить фильтр содержимого с **DefaultV2** на **Default** в своем ресурсе Azure.
 :::
 
-1. Перейдите на [портал Azure](https://portal.azure.com/)] и создайте ресурс **Azure OpenAI**. Вам понадобится:
+1. Перейдите на [портал Azure](https://portal.azure.com/) и создайте ресурс **Azure OpenAI**. Вам понадобится:
    - **Имя ресурса**: оно становится частью вашей конечной точки API (`https://RESOURCE_NAME.openai.azure.com/`).
    - **Ключ API**: `KEY 1` или `KEY 2` из вашего ресурса.
 
-2. Перейдите в [Azure AI Foundry](https://ai.azure.com/)] и разверните модель.
+2. Перейдите в [Azure AI Foundry](https://ai.azure.com/) и разверните модель.
 
    :::примечание
    Для правильной работы открытого кода имя развертывания должно совпадать с именем модели.
@@ -343,11 +343,11 @@ OpenCode Zen — это список моделей, предоставленн�
 
 ### Когнитивные службы Azure
 
-1. Перейдите на [портал Azure](https://portal.azure.com/)] и создайте ресурс **Azure OpenAI**. Вам понадобится:
+1. Перейдите на [портал Azure](https://portal.azure.com/) и создайте ресурс **Azure OpenAI**. Вам понадобится:
    - **Имя ресурса**: оно становится частью вашей конечной точки API (`https://AZURE_COGNITIVE_SERVICES_RESOURCE_NAME.cognitiveservices.azure.com/`).
    - **Ключ API**: `KEY 1` или `KEY 2` из вашего ресурса.
 
-2. Перейдите в [Azure AI Foundry](https://ai.azure.com/)] и разверните модель.
+2. Перейдите в [Azure AI Foundry](https://ai.azure.com/) и разверните модель.
 
    :::примечание
    Для правильной работы открытого кода имя развертывания должно совпадать с именем модели.
@@ -446,7 +446,7 @@ OpenCode Zen — это список моделей, предоставленн�
 
 Cloudflare AI Gateway позволяет вам получать доступ к моделям OpenAI, Anthropic, Workers AI и т. д. через единую конечную точку. Благодаря [Unified Billing](https://developers.cloudflare.com/ai-gateway/features/unified-billing/) вам не нужны отдельные ключи API для каждого провайдера.
 
-1. Перейдите на [панель управления Cloudflare](https://dash.cloudflare.com/)], выберите **AI** > **AI Gateway** и создайте новый шлюз.
+1. Перейдите на [панель управления Cloudflare](https://dash.cloudflare.com/), выберите **AI** > **AI Gateway** и создайте новый шлюз.
 
 2. Установите идентификатор своей учетной записи и идентификатор шлюза в качестве переменных среды.
 
@@ -583,7 +583,7 @@ Cloudflare AI Gateway позволяет вам получать доступ к
 
 ### Прошивка
 
-1. Перейдите на [панель встроенного ПО](https://app.firmware.ai/signup)], создайте учетную запись и сгенерируйте ключ API.
+1. Перейдите на [панель встроенного ПО](https://app.firmware.ai/signup), создайте учетную запись и сгенерируйте ключ API.
 
 2. Запустите команду `/connect` и найдите **Прошивка**.
 
@@ -660,7 +660,7 @@ GitLab Duo предоставляет агентский чат на базе и
    Выберите **OAuth**, и ваш браузер откроется для авторизации.
 
    #### Использование токена личного доступа
-   1. Перейдите в [Настройки пользователя GitLab > Токены доступа](https://gitlab.com/-/user_settings/personal_access_tokens)].
+   1. Перейдите в [Настройки пользователя GitLab > Токены доступа](https://gitlab.com/-/user_settings/personal_access_tokens).
    2. Нажмите **Добавить новый токен**.
    3. Имя: `OpenCode`, Области применения: `api`
    4. Скопируйте токен (начинается с `glpat-`)
@@ -801,7 +801,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
    /connect
    ```
 
-2. Перейдите на [github.com/login/device](https://github.com/login/device)] и введите код.
+2. Перейдите на [github.com/login/device](https://github.com/login/device) и введите код.
 
    ```txt
    ┌ Login with GitHub Copilot
@@ -1005,7 +1005,7 @@ Helicone поддерживает пользовательские заголо�
 
 ##### Отслеживание сеансов
 
-Функция Helicone [Sessions](https://docs.helicone.ai/features/sessions)] позволяет группировать связанные запросы LLM вместе. Используйте плагин [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session)], чтобы автоматически регистрировать каждый диалог OpenCode как сеанс в Helicone.
+Функция Helicone [Sessions](https://docs.helicone.ai/features/sessions) позволяет группировать связанные запросы LLM вместе. Используйте плагин [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session), чтобы автоматически регистрировать каждый диалог OpenCode как сеанс в Helicone.
 
 ```bash
 npm install -g opencode-helicone-session
@@ -1030,13 +1030,13 @@ npm install -g opencode-helicone-session
 | ХХ0ГГ | Добавьте пользовательские свойства (например, `Helicone-Property-Environment`) |
 | ХХ0ГГ | Связывание запросов с подсказками |
 
-См. [Справочник заголовков Helicone](https://docs.helicone.ai/helicone-headers/header-directory)] для всех доступных заголовков.
+См. [Справочник заголовков Helicone](https://docs.helicone.ai/helicone-headers/header-directory) для всех доступных заголовков.
 
 ---
 
 ### вызов.cpp
 
-Вы можете настроить открытый код для использования локальных моделей с помощью [утилиты llama-server llama.cpp's](https://github.com/ggml-org/llama.cpp)]
+Вы можете настроить открытый код для использования локальных моделей с помощью [утилиты llama-server llama.cpp's](https://github.com/ggml-org/llama.cpp)
 
 ```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
 {
@@ -1429,7 +1429,7 @@ OpenCode Zen — это список протестированных и про�
 
 SAP AI Core предоставляет доступ к более чем 40 моделям от OpenAI, Anthropic, Google, Amazon, Meta, Mistral и AI21 через единую платформу.
 
-1. Перейдите в [SAP BTP Cockpit](https://account.hana.ondemand.com/)], перейдите к экземпляру службы SAP AI Core и создайте ключ службы.
+1. Перейдите в [SAP BTP Cockpit](https://account.hana.ondemand.com/), перейдите к экземпляру службы SAP AI Core и создайте ключ службы.
 
    :::кончик
    Ключ службы — это объект JSON, содержащий `clientid`, `clientsecret`, `url` и `serviceurls.AI_API_URL`. Экземпляр AI Core можно найти в разделе **Сервисы** > **Экземпляры и подписки** в панели управления BTP.
@@ -1594,7 +1594,7 @@ SAP AI Core предоставляет доступ к более чем 40 мо
 
 Vercel AI Gateway позволяет получать доступ к моделям OpenAI, Anthropic, Google, xAI и других источников через единую конечную точку. Модели предлагаются по прейскурантной цене без наценок.
 
-1. Перейдите на [панель мониторинга Vercel](https://vercel.com/)], перейдите на вкладку **AI Gateway** и нажмите **Ключи API**, чтобы создать новый ключ API.
+1. Перейдите на [панель мониторинга Vercel](https://vercel.com/), перейдите на вкладку **AI Gateway** и нажмите **Ключи API**, чтобы создать новый ключ API.
 
 2. Запустите команду `/connect` и найдите **Vercel AI Gateway**.
 
@@ -1704,7 +1704,7 @@ Vercel AI Gateway позволяет получать доступ к модел
 
 ### ДзенМукс
 
-1. Перейдите на [панель управления ZenMux](https://zenmux.ai/settings/keys)], нажмите **Создать ключ API** и скопируйте ключ.
+1. Перейдите на [панель управления ZenMux](https://zenmux.ai/settings/keys), нажмите **Создать ключ API** и скопируйте ключ.
 
 2. Запустите команду `/connect` и найдите ZenMux.
 

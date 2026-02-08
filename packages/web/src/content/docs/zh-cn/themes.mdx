@@ -5,7 +5,7 @@ description: 選擇內建主題或定義您自己的主題。
 
 使用 OpenCode，您可以从多个内建主题中进行选择，使用适合您的终端主题的主题，或定义您自己的自定义主题。
 
-默认情况下，OpenCode 使用我们自己的 `___W1___` 主题。
+By default, OpenCode uses our own `opencode` theme.
 
 ---
 
@@ -28,16 +28,16 @@ OpenCode 带有几个内建主题。
 |名稱 |描述 |
 | ---------------------- | ---------------------------------------------------------------------------- |
 | `system` |适应您所处的背景颜色|
-| `tokyonight` | 基于 [Tokyonight](___T1___) 主题 |
-| `everforest` | 基于 [Everforest](___T1___) 主题 |
-| `ayu` | 基于 [Ayu](___T1___) 黑暗主题 |
-| `catppuccin` | 基于 [Catppuccin](___T1___) 主题 |
-| `catppuccin-macchiato` | 基于 [Catppuccin](___T1___) 主题 |
-| `gruvbox` | 基于 [Gruvbox](___T1___) 主题 |
-| `kanagawa` | 基于 [神奈川](___T1___) 主题 |
-| `nord` | 基于 [Nord](___T1___) 主题 |
+| `tokyonight`           | Based on the [Tokyonight](https://github.com/folke/tokyonight.nvim) theme    |
+| `everforest`           | Based on the [Everforest](https://github.com/sainnhe/everforest) theme       |
+| `ayu`                  | Based on the [Ayu](https://github.com/ayu-theme) dark theme                  |
+| `catppuccin`           | Based on the [Catppuccin](https://github.com/catppuccin) theme               |
+| `catppuccin-macchiato` | Based on the [Catppuccin](https://github.com/catppuccin) theme               |
+| `gruvbox`              | Based on the [Gruvbox](https://github.com/morhetz/gruvbox) theme             |
+| `kanagawa`             | Based on the [Kanagawa](https://github.com/rebelot/kanagawa.nvim) theme      |
+| `nord`                 | Based on the [Nord](https://github.com/nordtheme/nord) theme                 |
 | `matrix` | 骇客风格黑底绿主题|
-| `one-dark` | 基于 [Atom One](___T1___) 黑暗主题 |
+| `one-dark`             | Based on the [Atom One](https://github.com/Th3Whit3Wolf/one-nvim) Dark theme |
 
 此外，我們還在不斷新增新主題。
 
@@ -83,9 +83,9 @@ OpenCode 支持灵活的基于 JSON 的主题系统，允许用户轻松创建�
 主題按以下順序從多個目錄載入，其中後面的目錄覆蓋前面的目錄：
 
 1. **內建主題** - 這些主題嵌入在二進製檔案中
-2. **用户配置目录** - 在 `~/.config/___W0___/themes/*.json` 或 `$XDG_CONFIG_HOME/___W0___/themes/*.json` 中定义
-3. **專案根目錄** - 在 `<project-root>/.___W0___/themes/*.json` 中定義
-4. **当前工作目录** - 在 `./.___W0___/themes/*.json` 中定义
+2. **User config directory** - Defined in `~/.config/opencode/themes/*.json` or `$XDG_CONFIG_HOME/opencode/themes/*.json`
+3. **Project root directory** - Defined in the `<project-root>/.opencode/themes/*.json`
+4. **Current working directory** - Defined in `./.opencode/themes/*.json`
 
 如果多個目錄包含同名主題，則將使用優先順序較高的目錄中的主題。
 

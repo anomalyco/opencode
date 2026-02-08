@@ -1,61 +1,18 @@
 import { defineMiddleware } from "astro:middleware"
+import { matchLocale } from "./i18n/locales"
 
-const MAP = {
-  en: "root",
-  root: "root",
-  zh: "zh-cn",
-  "zh-cn": "zh-cn",
-  zht: "zh-tw",
-  "zh-tw": "zh-tw",
-  ko: "ko",
-  bs: "bs",
-  de: "de",
-  es: "es",
-  fr: "fr",
-  it: "it",
-  da: "da",
-  ja: "ja",
-  pl: "pl",
-  ru: "ru",
-  ar: "ar",
-  no: "nb",
-  nb: "nb",
-  nn: "nb",
-  br: "pt-br",
-  "pt-br": "pt-br",
-  pt: "pt-br",
-  th: "th",
-  tr: "tr",
-} as const
+function docsAlias(pathname: string) {
+  const hit = /^\/docs\/([^/]+)(\/.*)?$/.exec(pathname)
+  if (!hit) return null
 
-function match(input: string) {
-  const value = decodeURIComponent(input).trim().toLowerCase()
-  if (!value) return null
+  const value = hit[1] ?? ""
+  const tail = hit[2] ?? ""
+  const locale = matchLocale(value)
+  if (!locale) return null
+  if (locale === "root") return `/docs${tail}`
+  if (value === locale) return null
 
-  if (value.startsWith("zh")) {
-    if (value.includes("hant") || value.includes("-tw") || value.includes("-hk") || value.includes("-mo"))
-      return "zh-tw"
-    return "zh-cn"
-  }
-
-  if (value in MAP) return MAP[value as keyof typeof MAP]
-  if (value.startsWith("pt")) return "pt-br"
-  if (value.startsWith("no") || value.startsWith("nb") || value.startsWith("nn")) return "nb"
-  if (value.startsWith("ko")) return "ko"
-  if (value.startsWith("bs")) return "bs"
-  if (value.startsWith("de")) return "de"
-  if (value.startsWith("es")) return "es"
-  if (value.startsWith("fr")) return "fr"
-  if (value.startsWith("it")) return "it"
-  if (value.startsWith("da")) return "da"
-  if (value.startsWith("ja")) return "ja"
-  if (value.startsWith("pl")) return "pl"
-  if (value.startsWith("ru")) return "ru"
-  if (value.startsWith("ar")) return "ar"
-  if (value.startsWith("th")) return "th"
-  if (value.startsWith("tr")) return "tr"
-  if (value.startsWith("en")) return "root"
-  return null
+  return `/docs/${locale}${tail}`
 }
 
 function localeFromCookie(header: string | null) {
@@ -66,7 +23,7 @@ function localeFromCookie(header: string | null) {
     .find((x) => x.startsWith("oc_locale="))
     ?.slice("oc_locale=".length)
   if (!raw) return null
-  return match(raw)
+  return matchLocale(raw)
 }
 
 function localeFromAcceptLanguage(header: string | null) {
@@ -93,13 +50,20 @@ function localeFromAcceptLanguage(header: string | null) {
   const locale = items
     .map((item) => item.lang)
     .filter((lang) => lang && lang !== "*")
-    .map((lang) => match(lang))
+    .map((lang) => matchLocale(lang))
     .find((lang) => lang)
 
   return locale ?? "root"
 }
 
 export const onRequest = defineMiddleware((ctx, next) => {
+  const alias = docsAlias(ctx.url.pathname)
+  if (alias) {
+    const url = new URL(ctx.request.url)
+    url.pathname = alias
+    return ctx.redirect(url.toString(), 302)
+  }
+
   if (ctx.url.pathname !== "/docs" && ctx.url.pathname !== "/docs/") return next()
 
   const locale =

@@ -5,3 +5,5 @@ export const extraLocaleKeysAllowlist: Partial<Record<Locale, readonly string[]>
 export const uiLiteralAllowlist: readonly string[] = []
 
 export const uiBlockedPhraseAllowlist: Partial<Record<string, readonly string[]>> = {}
+
+export const docsResidualProseAllowlist: Partial<Record<string, readonly string[]>> = {}

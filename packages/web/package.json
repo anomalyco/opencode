@@ -15,6 +15,7 @@
     "i18n:check:keys": "bun scripts/i18n-check-keys.ts",
     "i18n:check:pages": "bun scripts/i18n-check-pages.ts",
     "i18n:check:links": "bun scripts/i18n-check-links.ts",
+    "i18n:check:content-integrity": "bun scripts/i18n-check-content-integrity.ts",
     "i18n:check:ui": "bun scripts/i18n-check-ui-strings.ts"
   },
   "dependencies": {

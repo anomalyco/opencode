@@ -6,7 +6,7 @@ description: 通过 HTTP 与 opencode 服务器交互。
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-`___W0___ serve` 命令执行无头 HTTP 服务器，该服务器公开 opencode 客户端可以使用的 OpenAPI 端点。
+The `opencode serve` command runs a headless HTTP server that exposes an OpenAPI endpoint that an opencode client can use.
 
 ---
 
@@ -23,7 +23,7 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 | `--port`        | 监听音频              | `4096`           |
 | `--hostname`    | 监听的主机名          | `127.0.0.1`      |
 | `--mdns`        | 启用 mDNS 发现        | `false`          |
-| `--mdns-domain` | mDNS 服务的自定义域名 | `___W0___.local` |
+| `--mdns-domain` | Custom domain name for mDNS service | `opencode.local` |
 | `--cors`        | 允许的其他浏览器来源  | `[]`             |
 
 `--cors` 可以多次交付：
@@ -36,7 +36,7 @@ opencode serve --cors http://localhost:5173 --cors https://app.example.com
 
 ### 驗證
 
-设置 `OPENCODE_SERVER_PASSWORD` 以使用 HTTP 基本身份验证保护服务器。用户默认名称为 `___W0___`，或设置 `OPENCODE_SERVER_USERNAME` 覆盖它。这适用于 `___W0___ serve` 和 `___W0___ web`。
+Set `OPENCODE_SERVER_PASSWORD` to protect the server with HTTP basic auth. The username defaults to `opencode`, or set `OPENCODE_SERVER_USERNAME` to override it. This applies to both `opencode serve` and `opencode web`.
 
 ```bash
 OPENCODE_SERVER_PASSWORD=your-password opencode serve
@@ -46,18 +46,18 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve
 
 ### 它是如何運作的
 
-当您执行 `___W0___` 时，它会启动 TUI 和服务器。其中 TUI 是
+When you run `opencode` it starts a TUI and a server. Where the TUI is the
 与服务器器对话的客户端。服务器器公开 OpenAPI 3.1 规范
 该端点还用于生成 [SDK](./sdk)。
 
-：：：提示
+:::提示
 使用opencode服务器以程序设计方式与opencode交互。
 :::
 
 该架构让 opencode 支持客户端，并允许您以多种设计方式与 opencode 交互。
 
-您执行可以 `___W0___ serve` 来启动独立服务器。如果您有
-opencode TUI 执行， `___W0___ serve` 将启动一个新服务器。
+You can run `opencode serve` to start a standalone server. If you have the
+opencode TUI running, `opencode serve` will start a new server.
 
 ---
 
@@ -155,7 +155,7 @@ opencode服务器公开以下API。
 | `PATCH`  | `/session/:id`                           | 更新會話屬性                  | 正文： `{ title? }`，返回 <a href={typesUrl}><code>Session</code></a>            |
 | `GET`    | `/session/:id/children`                  | 獲取會話的子會話              | 返回 <a href={typesUrl}><code>Session[]</code></a>                               |
 | `GET`    | `/session/:id/todo`                      | 獲取會話的待辦事項列表        | 返回 <a href={typesUrl}><code>Todo[]</code></a>                                  |
-| `POST`   | `/session/:id/init`                      | 分析应用程序并建立 `___W0___` | 正文：`{ messageID, providerID, modelID }`，返回 `boolean`                       |
+| `POST`   | `/session/:id/init`                      | Analyze app and create `AGENTS.md`    | body: `{ messageID, providerID, modelID }`, returns `boolean`                      |
 | `POST`   | `/session/:id/fork`                      | 在訊息中分叉現有會話          | 正文： `{ messageID? }`，返回 <a href={typesUrl}><code>Session</code></a>        |
 | `POST`   | `/session/:id/abort`                     | 中止正在执行的会话            | 返回`boolean`                                                                    |
 | `POST`   | `/session/:id/share`                     | 分享會議                      | 返回<a href={typesUrl}><code>會話</code></a>                                     |

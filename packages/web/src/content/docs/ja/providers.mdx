@@ -6,7 +6,7 @@ description: OpenCode で LLM プロバイダーを使用する。
 import config from "../../../../config.mjs"
 export const console = config.console
 
-OpenCode は [AI SDK](https://ai-sdk.dev/) および [Models.dev](https://models.dev)] を使用して **75 以上の LLM プロバイダー** をサポートし、ローカル モデルの実行をサポートします。
+OpenCode は [AI SDK](https://ai-sdk.dev/) および [Models.dev](https://models.dev) を使用して **75 以上の LLM プロバイダー** をサポートし、ローカル モデルの実行をサポートします。
 
 プロバイダーを追加するには、次のことを行う必要があります。
 
@@ -53,7 +53,7 @@ config.
 OpenCode Zen は、OpenCode チームが提供するモデルのリストです。
 OpenCode で適切に動作することがテストおよび検証されています。 [詳細はこちら](./zen)。
 
-：：：ヒント
+:::ヒント
 初めての方は、OpenCode Zen から始めることをお勧めします。
 :::
 
@@ -89,7 +89,7 @@ OpenCode で適切に動作することがテストおよび検証されてい�
 いくつかのプロバイダーを詳しく見てみましょう。プロバイダーを追加したい場合は、
 リストにある場合は、お気軽に PR を開いてください。
 
-：：：注記
+:::注記
 ここにプロバイダーが表示されない場合は、 PRを送信してください。
 :::
 
@@ -97,7 +97,7 @@ OpenCode で適切に動作することがテストおよび検証されてい�
 
 ### 302.AI
 
-1. [302.AI console](https://302.ai/)] に移動し、アカウントを作成し、API キーを生成します。
+1. [302.AI console](https://302.ai/) に移動し、アカウントを作成し、API キーを生成します。
 
 2. `/connect` コマンドを実行し、**302.AI** を検索します。
 
@@ -129,7 +129,7 @@ OpenCode で Amazon Bedrock を使用するには:
 1. Amazon Bedrock コンソールの **モデル カタログ** に移動してリクエストします。
    必要なモデルにアクセスします。
 
-：：：ヒント
+:::ヒント
 Amazon Bedrock で必要なモデルにアクセスできる必要があります。
 :::
 
@@ -181,7 +181,7 @@ export AWS_REGION=us-east-1
 - `profile` - `~/.aws/credentials` からの AWS 名前付きプロファイル
 - `endpoint` - VPC エンドポイントのカスタム エンドポイント URL (汎用 `baseURL` オプションのエイリアス)
 
-：：：ヒント
+:::ヒント
 構成ファイルのオプションは環境変数より優先されます。
 :::
 
@@ -204,7 +204,7 @@ Bedrock の VPC エンドポイントを使用している場合:
 }
 ```
 
-：：：注記
+:::注記
 `endpoint` オプションは、AWS 固有の用語を使用した汎用の `baseURL` オプションのエイリアスです。 `endpoint` と `baseURL` の両方が指定された場合は、`endpoint` が優先されます。
 :::
 
@@ -222,7 +222,7 @@ Amazon Bedrock は次の認証優先度を使用します。
 1.  **ベアラー トークン** - `AWS_BEARER_TOKEN_BEDROCK` 環境変数または `/connect` コマンドからのトークン
 2.  **AWS 認証情報チェーン** - プロファイル、アクセス キー、共有認証情報、IAM ロール、Web ID トークン (EKS IRSA)、インスタンス メタデータ
 
-：：：注記
+:::注記
 ベアラー トークンが (`/connect` または `AWS_BEARER_TOKEN_BEDROCK` 経由で) 設定されると、設定されたプロファイルを含むすべての AWS 認証情報方法よりも優先されます。
 :::
 
@@ -232,7 +232,7 @@ Amazon Bedrock は次の認証優先度を使用します。
    /models
    ```
 
-：：：注記
+:::注記
 カスタム推論プロファイルの場合、キーでモデルとプロバイダー名を使用し、`id` プロパティを arn に設定します。これにより、正しいキャッシュが保証されます。
 
 ```json title="opencode.json"
@@ -281,7 +281,7 @@ Amazon Bedrock は次の認証優先度を使用します。
    /models
    ```
 
-：：：情報
+:::情報
 OpenCode での Claude Pro/Max サブスクリプションの使用は、[Anthropic](https://anthropic.com).
 :::
 
@@ -295,7 +295,7 @@ Pro/Max サブスクリプションをお持ちでない場合は、[**API キ�
 
 ### Azure OpenAI
 
-：：：注記
+:::注記
 「申し訳ありませんが、そのリクエストには対応できません」エラーが発生した場合は、Azure リソースのコンテンツ フィルターを **DefaultV2** から **Default** に変更してみてください。
 :::
 
@@ -303,9 +303,9 @@ Pro/Max サブスクリプションをお持ちでない場合は、[**API キ�
    - **リソース名**: これは API エンドポイント (`https://RESOURCE_NAME.openai.azure.com/`) の一部になります。
    - **API キー**: リソースの `KEY 1` または `KEY 2` のいずれか
 
-2. [Azure AI Foundry](https://ai.azure.com/)] に移動し、モデルをデプロイします。
+2. [Azure AI Foundry](https://ai.azure.com/) に移動し、モデルをデプロイします。
 
-：：：注記
+:::注記
 オープンコードが正しく動作するには、デプロイメント名がモデル名と一致する必要があります。
 :::
 
@@ -350,9 +350,9 @@ export AZURE_RESOURCE_NAME=XXX
    - **リソース名**: これは API エンドポイント (`https://RESOURCE_NAME.openai.azure.com/`) の一部になります。
    - **API キー**: リソースの `KEY 1` または `KEY 2` のいずれか
 
-2. [Azure AI Foundry](https://ai.azure.com/)] に移動し、モデルをデプロイします。
+2. [Azure AI Foundry](https://ai.azure.com/) に移動し、モデルをデプロイします。
 
-：：：注記
+:::注記
 オープンコードが正しく動作するには、デプロイメント名がモデル名と一致する必要があります。
 :::
 
@@ -393,7 +393,7 @@ export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
 
 ### ベーステン
 
-1. [Baseten](https://app.baseten.co/)] に移動し、アカウントを作成し、API キーを生成します。
+1. [Baseten](https://app.baseten.co/) に移動し、アカウントを作成し、API キーを生成します。
 
 2. `/connect` コマンドを実行し、**Baseten** を検索します。
 
@@ -420,7 +420,7 @@ export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
 
 ### 大脳
 
-1. [Cerebras console](https://inference.cerebras.ai/)] に移動し、アカウントを作成し、API キーを生成します。
+1. [Cerebras console](https://inference.cerebras.ai/) に移動し、アカウントを作成し、API キーを生成します。
 
 2. `/connect` コマンドを実行し、**Cerebras** を検索します。
 
@@ -505,7 +505,7 @@ export CLOUDFLARE_API_TOKEN=your-api-token
 
 ### コルテックス
 
-1. [Cortecs console](https://cortecs.ai/)] に移動し、アカウントを作成し、API キーを生成します。
+1. [Cortecs console](https://cortecs.ai/) に移動し、アカウントを作成し、API キーを生成します。
 
 2. `/connect` コマンドを実行し、**Cortecs** を検索します。
 
@@ -559,7 +559,7 @@ export CLOUDFLARE_API_TOKEN=your-api-token
 
 ### ディープインフラ
 
-1. [Deep Infra ダッシュボード](https://deepinfra.com/dash)] に移動し、アカウントを作成し、API キーを生成します。
+1. [Deep Infra ダッシュボード](https://deepinfra.com/dash) に移動し、アカウントを作成し、API キーを生成します。
 
 2. `/connect` コマンドを実行し、**Deep Infra** を検索します。
 
@@ -586,7 +586,7 @@ export CLOUDFLARE_API_TOKEN=your-api-token
 
 ### ファームウェア
 
-1. [ファームウェア ダッシュボード](https://app.firmware.ai/signup)] に移動し、アカウントを作成し、API キーを生成します。
+1. [ファームウェア ダッシュボード](https://app.firmware.ai/signup) に移動し、アカウントを作成し、API キーを生成します。
 
 2. `/connect` コマンドを実行し、**ファームウェア**を検索します。
 
@@ -664,7 +664,7 @@ GitLab Duo は、GitLab の Anthropic プロキシを介したネイティブ �
 
 #### パーソナルアクセストークンの使用
 
-1.  [GitLab ユーザー設定 > アクセス Tokens](https://gitlab.com/-/user_settings/personal_access_tokens)] に移動します。
+1.  [GitLab ユーザー設定 > アクセス Tokens](https://gitlab.com/-/user_settings/personal_access_tokens) に移動します。
 2.  **新しいトークンを追加** をクリックします
 3.  名前: `OpenCode`、スコープ: `api`
 4.  トークンをコピーします（`glpat-`で始まる）
@@ -682,7 +682,7 @@ GitLab Duo は、GitLab の Anthropic プロキシを介したネイティブ �
 - **duo-chat-sonnet-4-5** - ほとんどのワークフローでバランスの取れたパフォーマンス
 - **duo-chat-opus-4-5** - 複雑な分析に最も適した能力
 
-：：：注記
+:::注記
 必要がない場合は、「GITLAB_TOKEN」環境変数を指定することもできます。
 トークンをオープンコード認証ストレージに保存します。
 :::
@@ -726,7 +726,7 @@ export GITLAB_AI_GATEWAY_URL=https://ai-gateway.company.com
 export GITLAB_TOKEN=glpat-...
 ```
 
-：：：注記
+:::注記
 GitLab 管理者は以下を有効にする必要があります。
 
 1. [Duo Agent Platform](https://docs.gitlab.com/user/gitlab_duo/turn_on_off/) (ユーザー、グループ、またはインスタンス用)
@@ -793,7 +793,7 @@ GitLab ツール (マージ リクエスト、問題、パイプライン、CI/C
 
 GitHub Copilot サブスクリプションをオープンコードで使用するには:
 
-：：：注記
+:::注記
 一部のモデルでは [Pro+] が必要になる場合があります。
 subscription](https://github.com/features/copilot/plans) を使用します。
 
@@ -806,7 +806,7 @@ subscription](https://github.com/features/copilot/plans) を使用します。
    /connect
    ```
 
-2. [github.com/login/device](https://github.com/login/device)] に移動し、コードを入力します。
+2. [github.com/login/device](https://github.com/login/device) に移動し、コードを入力します。
 
    ```txt
    ┌ Login with GitHub Copilot
@@ -833,7 +833,7 @@ OpenCode で Google Vertex AI を使用するには:
 1. Google Cloud Console の **Model Garden** に移動し、
    お住まいの地域で利用可能なモデル。
 
-：：：注記
+:::注記
 Vertex AI API が有効になっている Google Cloud プロジェクトが必要です。
 :::
 
@@ -858,7 +858,7 @@ export GOOGLE_CLOUD_PROJECT=your-project-id
 export VERTEX_LOCATION=global
 ```
 
-：：：ヒント
+:::ヒント
 `global` 領域は、追加コストなしで可用性を向上させ、エラーを削減します。データ常駐要件には、リージョン エンドポイント (`us-central1` など) を使用します。 [詳細はこちら](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
 :::
 
@@ -872,7 +872,7 @@ export VERTEX_LOCATION=global
 
 ### グロク
 
-1. [Groq console](https://console.groq.com/)] に移動し、[**API キーの作成**] をクリックして、キーをコピーします。
+1. [Groq console](https://console.groq.com/) に移動し、[**API キーの作成**] をクリックして、キーをコピーします。
 
 2. `/connect` コマンドを実行し、Groq を検索します。
 
@@ -901,7 +901,7 @@ export VERTEX_LOCATION=global
 
 [ハグ顔推論プロバイダー ](https://huggingface.co/docs/inference-providers) は、17 を超えるプロバイダーがサポートするオープン モデルへのアクセスを提供します。
 
-1. [Hugging Face settings](https://huggingface.co/settings/tokens/new?ownUserPermissions=inference.serverless.write&tokenType=fineGrained)] に移動して、推論プロバイダーを呼び出す権限を持つトークンを作成します。
+1. [Hugging Face settings](https://huggingface.co/settings/tokens/new?ownUserPermissions=inference.serverless.write&tokenType=fineGrained) に移動して、推論プロバイダーを呼び出す権限を持つトークンを作成します。
 
 2. `/connect` コマンドを実行し、**Hugging Face** を検索します。
 
@@ -930,7 +930,7 @@ export VERTEX_LOCATION=global
 
 [Helicone](https://helicone.ai) は、AI アプリケーションのロギング、監視、分析を提供する LLM 可観測性プラットフォームです。 Helicone AI ゲートウェイは、モデルに基づいてリクエストを適切なプロバイダーに自動的にルーティングします。
 
-1. [Helicone](https://helicone.ai)] に移動し、アカウントを作成し、ダッシュボードから API キーを生成します。
+1. [Helicone](https://helicone.ai) に移動し、アカウントを作成し、ダッシュボードから API キーを生成します。
 
 2. `/connect` コマンドを実行し、**Helicone** を検索します。
 
@@ -1010,7 +1010,7 @@ Helicone は、キャッシュ、ユーザー追跡、セッション管理な�
 
 ##### セッション追跡
 
-Helicone の [Sessions](https://docs.helicone.ai/features/sessions)] 機能を使用すると、関連する LLM リクエストをグループ化できます。 [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) プラグインを使用して、各 OpenCode 会話を Helicone のセッションとして自動的に記録します。
+Helicone の [Sessions](https://docs.helicone.ai/features/sessions) 機能を使用すると、関連する LLM リクエストをグループ化できます。 [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) プラグインを使用して、各 OpenCode 会話を Helicone のセッションとして自動的に記録します。
 
 ```bash
 npm install -g opencode-helicone-session
@@ -1035,7 +1035,7 @@ npm install -g opencode-helicone-session
 | `Helicone-Property-[Name]` | カスタム プロパティを追加します (例: `Helicone-Property-Environment`)。 |
 | `Helicone-Prompt-Id`       | リクエストをプロンプト バージョンに関連付ける                           |
 
-利用可能なすべてのヘッダーについては、[Helicone Header Directory](https://docs.helicone.ai/helicone-headers/header-directory)] を参照してください。
+利用可能なすべてのヘッダーについては、[Helicone Header Directory](https://docs.helicone.ai/helicone-headers/header-directory) を参照してください。
 
 ---
 
@@ -1144,7 +1144,7 @@ LM Studio を通じてローカル モデルを使用するようにオープン
 
 Moonshot AI の Kim K2 を使用するには:
 
-1. [Moonshot AI console](https://platform.moonshot.ai/console)] に移動し、アカウントを作成し、[**API キーの作成**] をクリックします。
+1. [Moonshot AI console](https://platform.moonshot.ai/console) に移動し、アカウントを作成し、[**API キーの作成**] をクリックします。
 
 2. `/connect` コマンドを実行し、**Moonshot AI** を検索します。
 
@@ -1171,7 +1171,7 @@ Moonshot AI の Kim K2 を使用するには:
 
 ### ミニマックス
 
-1. [MiniMax API Console](https://platform.minimax.io/login)] に移動し、アカウントを作成し、API キーを生成します。
+1. [MiniMax API Console](https://platform.minimax.io/login) に移動し、アカウントを作成し、API キーを生成します。
 
 2. `/connect` コマンドを実行し、**MiniMax** を検索します。
 
@@ -1198,7 +1198,7 @@ Moonshot AI の Kim K2 を使用するには:
 
 ### ネビウストークンファクトリー
 
-1. [Nebius Token Factory console](https://tokenfactory.nebius.com/)] に移動し、アカウントを作成し、[**キーの追加**] をクリックします。
+1. [Nebius Token Factory console](https://tokenfactory.nebius.com/) に移動し、アカウントを作成し、[**キーの追加**] をクリックします。
 
 2. `/connect` コマンドを実行し、**Nebius Token Factory** を検索します。
 
@@ -1227,7 +1227,7 @@ Moonshot AI の Kim K2 を使用するには:
 
 Ollama を通じてローカル モデルを使用するようにオープンコードを構成できます。
 
-：：：ヒント
+:::ヒント
 Ollama は OpenCode 用に自動的に構成できます。詳細については、「Ollama 統合 docs](https://docs.ollama.com/integrations/opencode)」を参照してください。
 :::
 
@@ -1259,7 +1259,7 @@ Ollama は OpenCode 用に自動的に構成できます。詳細については
 - `options.baseURL` はローカル サーバーのエンドポイントです。
 - `models` は、モデル ID とその構成のマップです。機種選択リストに機種名が表示されます。
 
-：：：ヒント
+:::ヒント
 ツール呼び出しが機能しない場合は、Ollama の `num_ctx` を増やしてみてください。 16k〜32kあたりから始めてください。
 :::
 
@@ -1306,7 +1306,7 @@ OpenCode で Ollama Cloud を使用するには:
 
 ### OpenAI
 
-[ChatGPT Plus または Pro](https://chatgpt.com/pricing)] にサインアップすることをお勧めします。
+[ChatGPT Plus または Pro](https://chatgpt.com/pricing) にサインアップすることをお勧めします。
 
 1. サインアップしたら、`/connect` コマンドを実行し、OpenAI を選択します。
 
@@ -1368,7 +1368,7 @@ OpenCode Zen は、OpenCode チームによって提供される、テストお�
 
 ### オープンルーター
 
-1. [OpenRouter ダッシュボード](https://openrouter.ai/settings/keys)] に移動し、[**API キーの作成**] をクリックして、キーをコピーします。
+1. [OpenRouter ダッシュボード](https://openrouter.ai/settings/keys) に移動し、[**API キーの作成**] をクリックして、キーをコピーします。
 
 2. `/connect` コマンドを実行し、OpenRouter を検索します。
 
@@ -1434,9 +1434,9 @@ OpenCode Zen は、OpenCode チームによって提供される、テストお�
 
 SAP AI コアは、統合プラットフォームを通じて、OpenAI、Anthropic、Google、Amazon、Meta、Mistral、AI21 の 40 以上のモデルへのアクセスを提供します。
 
-1. [SAP BTP Cockpit](https://account.hana.ondemand.com/)] に移動し、SAP AI コア サービス インスタンスに移動して、サービス キーを作成します。
+1. [SAP BTP Cockpit](https://account.hana.ondemand.com/) に移動し、SAP AI コア サービス インスタンスに移動して、サービス キーを作成します。
 
-：：：ヒント
+:::ヒント
 サービス キーは、`clientid`、`clientsecret`、`url`、および `serviceurls.AI_API_URL` を含む JSON オブジェクトです。 AI コア インスタンスは、BTP コックピットの **サービス** > **インスタンスとサブスクリプション** で見つかります。
 :::
 
@@ -1473,7 +1473,7 @@ export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","s
    AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group opencode
    ```
 
-：：：注記
+:::注記
 これらの設定はオプションであり、SAP AI コアのセットアップに従って構成する必要があります。
 :::
 
@@ -1487,7 +1487,7 @@ export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","s
 
 ### OVHcloud AI エンドポイント
 
-1. [OVHcloud パネル](https://ovh.com/manager)] に移動します。 `Public Cloud` セクション、`AI & Machine Learning` > `AI Endpoints` に移動し、`API Keys` タブで **新しい API キーの作成** をクリックします。
+1. [OVHcloud パネル](https://ovh.com/manager) に移動します。 `Public Cloud` セクション、`AI & Machine Learning` > `AI Endpoints` に移動し、`API Keys` タブで **新しい API キーの作成** をクリックします。
 
 2. `/connect` コマンドを実行し、**OVHcloud AI エンドポイント**を検索します。
 
@@ -1516,7 +1516,7 @@ export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","s
 
 [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/) を Opencode で使用するには:
 
-1. [Scaleway Console IAM settings](https://console.scaleway.com/iam/api-keys)] に移動して、新しい API キーを生成します。
+1. [Scaleway Console IAM settings](https://console.scaleway.com/iam/api-keys) に移動して、新しい API キーを生成します。
 
 2. `/connect` コマンドを実行し、**Scaleway** を検索します。
 
@@ -1543,7 +1543,7 @@ export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","s
 
 ### 一緒にAI
 
-1. [Together AI console](https://api.together.ai)] に移動し、アカウントを作成し、[**キーの追加**] をクリックします。
+1. [Together AI console](https://api.together.ai) に移動し、アカウントを作成し、[**キーの追加**] をクリックします。
 
 2. `/connect` コマンドを実行し、**Together AI** を検索します。
 
@@ -1570,7 +1570,7 @@ export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","s
 
 ### ヴェニス AI
 
-1. [Venice AI console](https://venice.ai)] に移動し、アカウントを作成し、API キーを生成します。
+1. [Venice AI console](https://venice.ai) に移動し、アカウントを作成し、API キーを生成します。
 
 2. `/connect` コマンドを実行し、**Venice AI** を検索します。
 
@@ -1709,7 +1709,7 @@ Vercel AI Gateway を使用すると、統合エンドポイントを通じて O
 
 ### ZenMux
 
-1. [ZenMux ダッシュボード](https://zenmux.ai/settings/keys)] に移動し、[**API キーの作成**] をクリックして、キーをコピーします。
+1. [ZenMux ダッシュボード](https://zenmux.ai/settings/keys) に移動し、[**API キーの作成**] をクリックして、キーをコピーします。
 
 2. `/connect` コマンドを実行し、ZenMux を検索します。
 
@@ -1753,7 +1753,7 @@ Vercel AI Gateway を使用すると、統合エンドポイントを通じて O
 
 `/connect` コマンドにリストされていない **OpenAI 互換**プロバイダーを追加するには:
 
-：：：ヒント
+:::ヒント
 OpenAI と互換性のある任意のプロバイダーをオープンコードで使用できます。最新の AI プロバイダーのほとんどは、OpenAI 互換の API を提供しています。
 :::
 
@@ -1782,7 +1782,7 @@ OpenAI と互換性のある任意のプロバイダーをオープンコード�
    └
    ```
 
-：：：注記
+:::注記
 覚えやすい ID を選択してください。これを構成ファイルで使用します。
 :::
 
