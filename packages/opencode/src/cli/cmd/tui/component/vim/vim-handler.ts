@@ -22,6 +22,7 @@ import {
   moveWordPrev,
   openLineAbove,
   openLineBelow,
+  substituteLine,
 } from "./vim-motions"
 
 export type VimEvent = {
@@ -122,6 +123,14 @@ export function createVimHandler(input: {
 
       if (key === "d" && !event.shift && !hasModifier(event)) {
         input.state.setPending("d")
+        event.preventDefault()
+        return true
+      }
+
+      if (isShifted(event, "s") && !hasModifier(event)) {
+        input.state.clearPending()
+        substituteLine(input.textarea())
+        input.state.setMode("insert")
         event.preventDefault()
         return true
       }

@@ -222,3 +222,10 @@ export function deleteLine(textarea: TextareaRenderable) {
 
   deleteOffsets(textarea, start, end)
 }
+
+export function substituteLine(textarea: TextareaRenderable) {
+  const text = textarea.plainText
+  const start = lineStart(text, textarea.cursorOffset)
+  const end = lineEnd(text, textarea.cursorOffset)
+  deleteOffsets(textarea, start, end)
+}

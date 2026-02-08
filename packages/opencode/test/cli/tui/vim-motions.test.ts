@@ -218,6 +218,40 @@ describe("vim motion handler", () => {
     expect(b.textarea.plainText).toBe("ab\ncd")
   })
 
+  test("S clears current line and enters insert", () => {
+    const ctx = createHandler("one\ntwo\nthree")
+    ctx.textarea.cursorOffset = 5
+    const s = createEvent("S")
+
+    expect(ctx.handler.handleKey(s.event)).toBe(true)
+    expect(s.prevented()).toBe(true)
+    expect(ctx.state.mode()).toBe("insert")
+    expect(ctx.textarea.plainText).toBe("one\n\nthree")
+    expect(ctx.textarea.cursorOffset).toBe(4)
+  })
+
+  test("S clears single line", () => {
+    const ctx = createHandler("abc")
+    const s = createEvent("S")
+
+    expect(ctx.handler.handleKey(s.event)).toBe(true)
+    expect(s.prevented()).toBe(true)
+    expect(ctx.state.mode()).toBe("insert")
+    expect(ctx.textarea.plainText).toBe("")
+    expect(ctx.textarea.cursorOffset).toBe(0)
+  })
+
+  test("S keeps empty buffer", () => {
+    const ctx = createHandler("")
+    const s = createEvent("S")
+
+    expect(ctx.handler.handleKey(s.event)).toBe(true)
+    expect(s.prevented()).toBe(true)
+    expect(ctx.state.mode()).toBe("insert")
+    expect(ctx.textarea.plainText).toBe("")
+    expect(ctx.textarea.cursorOffset).toBe(0)
+  })
+
   test("insert mode only handles escape", () => {
     const ctx = createHandler("abc", { mode: "insert" })
 
