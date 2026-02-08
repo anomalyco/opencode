@@ -22,7 +22,7 @@ use std::{
     time::Duration,
     process::Command,
 };
-use tauri::{AppHandle, Manager, RunEvent, State, ipc::Channel};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, State, ipc::Channel};
 #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_shell::process::CommandChild;
@@ -78,6 +78,29 @@ impl ServerState {
 
 #[derive(Clone)]
 struct LogState(Arc<Mutex<VecDeque<String>>>);
+
+#[derive(Clone, Default)]
+struct InitialPathState(Arc<Mutex<Option<String>>>);
+
+fn resolve_path_from_args(args: &[String], cwd: &str) -> Option<String> {
+    let path_arg = args.get(1)?;
+    if path_arg.starts_with('-') {
+        return None;
+    }
+    
+    let path = PathBuf::from(path_arg);
+    let absolute = if path.is_absolute() {
+        path
+    } else {
+        PathBuf::from(cwd).join(path)
+    };
+    
+    if absolute.is_dir() {
+        absolute.canonicalize().ok()?.to_str().map(String::from)
+    } else {
+        None
+    }
+}
 
 #[tauri::command]
 #[specta::specta]
@@ -451,11 +474,18 @@ pub fn run() {
         .output();
 
     let mut builder = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            // Focus existing window when another instance is launched
+        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+            let path = resolve_path_from_args(&args, &cwd);
             if let Some(window) = app.get_webview_window(MainWindow::LABEL) {
+                if let Some(ref p) = path {
+                    let _ = window.emit("opencode:open-path", p);
+                }
                 let _ = window.set_focus();
                 let _ = window.unminimize();
+            } else if let Some(p) = path {
+                if let Some(state) = app.try_state::<InitialPathState>() {
+                    *state.0.lock().unwrap() = Some(p);
+                }
             }
         }))
         .plugin(tauri_plugin_deep_link::init())
@@ -478,10 +508,18 @@ pub fn run() {
         .plugin(tauri_plugin_decorum::init())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
-            let app = app.handle().clone();
+            let handle = app.handle().clone();
+            
+            let initial_path = resolve_path_from_args(
+                &std::env::args().collect::<Vec<_>>(),
+                &std::env::current_dir()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default(),
+            );
+            handle.manage(InitialPathState(Arc::new(Mutex::new(initial_path))));
 
-            builder.mount_events(&app);
-            tauri::async_runtime::spawn(initialize(app));
+            builder.mount_events(&handle);
+            tauri::async_runtime::spawn(initialize(handle));
 
             Ok(())
         });
@@ -617,7 +655,11 @@ async fn initialize(app: AppHandle) {
         sleep(Duration::from_secs(1)).await;
         Some(loading_window)
     } else {
-        MainWindow::create(&app).expect("Failed to create main window");
+        let initial_path = app
+            .try_state::<InitialPathState>()
+            .and_then(|s| s.0.lock().ok()?.take());
+        MainWindow::create_with_path(&app, initial_path.as_deref())
+            .expect("Failed to create main window");
 
         None
     };
@@ -634,7 +676,11 @@ async fn initialize(app: AppHandle) {
         println!("Loading window completed");
     }
 
-    MainWindow::create(&app).expect("Failed to create main window");
+    let initial_path = app
+        .try_state::<InitialPathState>()
+        .and_then(|s| s.0.lock().ok()?.take());
+    MainWindow::create_with_path(&app, initial_path.as_deref())
+        .expect("Failed to create main window");
 
     if let Some(loading_window) = loading_window {
         let _ = loading_window.close();

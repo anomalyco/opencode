@@ -17,6 +17,8 @@ import { Store } from "@tauri-apps/plugin-store"
 import { Splash } from "@opencode-ai/ui/logo"
 import { createSignal, Show, Accessor, JSX, createResource, onMount, onCleanup } from "solid-js"
 import { invoke } from "@tauri-apps/api/core"
+import { listen } from "@tauri-apps/api/event"
+import { base64Encode } from "@opencode-ai/util/encode"
 
 import { UPDATER_ENABLED } from "./updater"
 import { initI18n, t } from "./i18n"
@@ -49,6 +51,24 @@ const listenForDeepLinks = async () => {
   const startUrls = await getCurrent().catch(() => null)
   if (startUrls?.length) emitDeepLinks(startUrls)
   await onOpenUrl((urls) => emitDeepLinks(urls)).catch(() => undefined)
+}
+
+const navigateToPath = (path: string) => {
+  const encoded = base64Encode(path)
+  window.history.pushState(null, "", `/${encoded}/session`)
+  window.dispatchEvent(new PopStateEvent("popstate"))
+}
+
+const listenForOpenPath = async () => {
+  const initialPath = window.__OPENCODE__?.initialPath
+  if (initialPath) {
+    window.__OPENCODE__!.initialPath = null
+    setTimeout(() => navigateToPath(initialPath), 100)
+  }
+
+  await listen<string>("opencode:open-path", (event) => {
+    navigateToPath(event.payload)
+  })
 }
 
 const createPlatform = (password: Accessor<string | null>): Platform => ({
@@ -381,6 +401,7 @@ createMenu((id) => {
   menuTrigger?.(id)
 })
 void listenForDeepLinks()
+void listenForOpenPath()
 
 render(() => {
   const [serverPassword, setServerPassword] = createSignal<string | null>(null)

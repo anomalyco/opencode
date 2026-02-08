@@ -1,6 +1,6 @@
 use crate::constants::{UPDATER_ENABLED, window_state_flags};
 use std::{ops::Deref, time::Duration};
-use tauri::{AppHandle, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_window_state::AppHandleExt;
 use tokio::sync::mpsc;
 
@@ -17,10 +17,17 @@ impl Deref for MainWindow {
 impl MainWindow {
     pub const LABEL: &str = "main";
 
-    pub fn create(app: &AppHandle) -> Result<Self, tauri::Error> {
+    pub fn create_with_path(app: &AppHandle, initial_path: Option<&str>) -> Result<Self, tauri::Error> {
         if let Some(window) = app.get_webview_window(Self::LABEL) {
+            if let Some(path) = initial_path {
+                let _ = window.emit("opencode:open-path", path);
+            }
             return Ok(Self(window));
         }
+
+        let initial_path_js = initial_path
+            .map(|p| format!("\"{}\"", p.replace('\\', "\\\\").replace('"', "\\\"")))
+            .unwrap_or_else(|| "null".to_string());
 
         let window_builder = base_window_config(
             WebviewWindowBuilder::new(app, Self::LABEL, WebviewUrl::App("/".into())),
@@ -36,6 +43,7 @@ impl MainWindow {
             r#"
             window.__OPENCODE__ ??= {{}};
             window.__OPENCODE__.updaterEnabled = {UPDATER_ENABLED};
+            window.__OPENCODE__.initialPath = {initial_path_js};
           "#
         ));
 
