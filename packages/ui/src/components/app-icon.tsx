@@ -6,6 +6,7 @@ import androidStudio from "../assets/icons/app/android-studio.svg"
 import antigravity from "../assets/icons/app/antigravity.svg"
 import cursor from "../assets/icons/app/cursor.svg"
 import fileExplorer from "../assets/icons/app/file-explorer.svg"
+import fileExplorerWindows from "../assets/icons/app/file-explorer-windows.svg"
 import finder from "../assets/icons/app/finder.png"
 import ghostty from "../assets/icons/app/ghostty.svg"
 import iterm2 from "../assets/icons/app/iterm2.svg"
@@ -22,6 +23,7 @@ const icons = {
   cursor,
   zed,
   "file-explorer": fileExplorer,
+  "file-explorer-windows": fileExplorerWindows,
   finder,
   terminal,
   iterm2,

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="256" height="256" viewBox="0 0 256 256" xml:space="preserve">
+<g style="stroke: none; stroke-width: 0; stroke-dasharray: none; stroke-linecap: butt; stroke-linejoin: miter; stroke-miterlimit: 10; fill: none; fill-rule: nonzero; opacity: 1;" transform="translate(1.4065934065934016 1.4065934065934016) scale(2.81 2.81)">
+	<linearGradient id="SVGID_3" gradientUnits="userSpaceOnUse" x1="44.3482" y1="16.5299" x2="42.9211" y2="8.5383">
+<stop offset="0%" style="stop-color:rgb(206,153,24);stop-opacity: 1"/>
+<stop offset="59.019999999999996%" style="stop-color:rgb(223,158,0);stop-opacity: 1"/>
+</linearGradient>
+<path d="M 34.429 12.182 l -3.618 -3.93 c -1.083 -1.176 -2.609 -1.846 -4.208 -1.846 H 2.438 C 1.091 6.406 0 7.497 0 8.844 V 25.75 l 0.121 0.013 c 0.341 -1.195 1.429 -2.074 2.733 -2.074 l 22.99 0 c 3.267 0 6.442 -1.43 8.377 -4.063 c 1.993 -2.712 5.156 -4.309 8.515 -4.309 h 44.41 c 1.576 0 2.854 1.278 2.854 2.854 v -3.354 c 0 -1.283 -1.04 -2.323 -2.323 -2.323 H 35.143 C 34.872 12.495 34.613 12.381 34.429 12.182 z" style="stroke: none; stroke-width: 1; stroke-dasharray: none; stroke-linecap: butt; stroke-linejoin: miter; stroke-miterlimit: 10; fill: url(#SVGID_3); fill-rule: nonzero; opacity: 1;" transform=" matrix(1 0 0 1 0 0) " stroke-linecap="round"/>
+	<linearGradient id="SVGID_4" gradientUnits="userSpaceOnUse" x1="62.8757" y1="69.664" x2="25.4867" y2="26.5667">
+<stop offset="0%" style="stop-color:rgb(245,181,9);stop-opacity: 1"/>
+<stop offset="100%" style="stop-color:rgb(254,206,73);stop-opacity: 1"/>
+</linearGradient>
+<path d="M 34.313 18.71 L 34.313 18.71 c -1.998 2.637 -5.115 4.186 -8.423 4.186 H 2.854 C 1.278 22.896 0 24.174 0 25.751 V 80.74 c 0 1.576 1.278 2.854 2.854 2.854 h 84.292 c 1.576 0 2.854 -1.278 2.854 -2.854 V 17.378 c 0 -1.576 -1.278 -2.854 -2.854 -2.854 h -44.41 C 39.428 14.524 36.311 16.073 34.313 18.71 z" style="stroke: none; stroke-width: 1; stroke-dasharray: none; stroke-linecap: butt; stroke-linejoin: miter; stroke-miterlimit: 10; fill: url(#SVGID_4); fill-rule: nonzero; opacity: 1;" transform=" matrix(1 0 0 1 0 0) " stroke-linecap="round"/>
+	<linearGradient id="SVGID_5" gradientUnits="userSpaceOnUse" x1="66.0576" y1="81.144" x2="10.973" y2="54.8861">
+<stop offset="0%" style="stop-color:rgb(1,97,178);stop-opacity: 1"/>
+<stop offset="100%" style="stop-color:rgb(18,145,221);stop-opacity: 1"/>
+</linearGradient>
+<path d="M 66.834 55.053 H 23.166 c -5.342 0 -9.672 4.33 -9.672 9.672 v 18.869 h 63.013 V 64.725 C 76.506 59.383 72.176 55.053 66.834 55.053 z" style="stroke: none; stroke-width: 1; stroke-dasharray: none; stroke-linecap: butt; stroke-linejoin: miter; stroke-miterlimit: 10; fill: url(#SVGID_5); fill-rule: nonzero; opacity: 1;" transform=" matrix(1 0 0 1 0 0) " stroke-linecap="round"/>
+	<path d="M 63.552 73.306 H 26.448 c -1.104 0 -2 -0.896 -2 -2 s 0.896 -2 2 -2 h 37.104 c 1.104 0 2 0.896 2 2 S 64.656 73.306 63.552 73.306 z" style="stroke: none; stroke-width: 1; stroke-dasharray: none; stroke-linecap: butt; stroke-linejoin: miter; stroke-miterlimit: 10; fill: rgb(16,73,138); fill-rule: nonzero; opacity: 1;" transform=" matrix(1 0 0 1 0 0) " stroke-linecap="round"/>
+</g>
+</svg>

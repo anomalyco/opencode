@@ -140,7 +140,7 @@ export function SessionHeader() {
 
     if (os() === "windows") {
       return [
-        { id: "finder", label: "File Explorer", icon: "file-explorer" },
+        { id: "finder", label: "File Explorer", icon: "file-explorer-windows" },
         ...WINDOWS_APPS.filter((app) => exists[app.id]),
       ] as const
     }
