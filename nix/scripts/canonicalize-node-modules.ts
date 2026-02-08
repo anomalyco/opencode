@@ -4,15 +4,6 @@ import { join, relative } from "path"
 type Entry = {
   dir: string
   version: string
-  label: string
-}
-
-async function safeReadDir(path: string) {
-  try {
-    return await readdir(path)
-  } catch {
-    return []
-  }
 }
 
 async function isDirectory(path: string) {
@@ -27,12 +18,7 @@ async function isDirectory(path: string) {
 const root = process.cwd()
 const bunRoot = join(root, "node_modules/.bun")
 const linkRoot = join(bunRoot, "node_modules")
-const directories = (await safeReadDir(bunRoot)).sort()
-
-if (directories.length === 0) {
-  console.log("[canonicalize-node-modules] no .bun directory, skipping")
-  process.exit(0)
-}
+const directories = (await readdir(bunRoot)).sort()
 
 const versions = new Map<string, Entry[]>()
 
