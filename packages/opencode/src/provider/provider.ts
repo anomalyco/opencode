@@ -94,7 +94,7 @@ export namespace Provider {
         "interleaved-thinking-2025-05-14",
         "fine-grained-tool-streaming-2025-05-14",
       ]
-      if (Flag.OPENCODE_OPUS_FAST_MODE) betas.push("research_preview_2026_02")
+      if (Flag.OPENCODE_OPUS_FAST_MODE) betas.push("research-preview-2026-02-01")
       return {
         autoload: false,
         options: {

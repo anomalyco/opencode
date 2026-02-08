@@ -2090,7 +2090,7 @@ test("anthropic-beta does not include research_preview when OPENCODE_OPUS_FAST_M
     fn: async () => {
       const providers = await Provider.list()
       const beta = providers["anthropic"].options.headers["anthropic-beta"] as string
-      expect(beta).not.toContain("research_preview_2026_02")
+      expect(beta).not.toContain("research-preview-2026-02-01")
       expect(beta).toContain("claude-code-20250219")
     },
   })
