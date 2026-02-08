@@ -515,14 +515,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         type: "builtin" as const,
       }))
 
-    const custom = sync.data.command.map((cmd) => ({
-      id: `custom.${cmd.name}`,
-      trigger: cmd.name,
-      title: cmd.name,
-      description: cmd.description,
-      type: "custom" as const,
-      source: cmd.source,
-    }))
+    const builtinTriggers = new Set(builtin.map((b) => b.trigger))
+
+    const custom = sync.data.command
+      .filter((cmd) => !builtinTriggers.has(cmd.name))
+      .map((cmd) => ({
+        id: `custom.${cmd.name}`,
+        trigger: cmd.name,
+        title: cmd.name,
+        description: cmd.description,
+        type: "custom" as const,
+        source: cmd.source,
+      }))
 
     return [...custom, ...builtin]
   })
