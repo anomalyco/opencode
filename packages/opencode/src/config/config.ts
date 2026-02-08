@@ -22,6 +22,7 @@ import {
 import { Instance } from "../project/instance"
 import { LSPServer } from "../lsp/server"
 import { BunProc } from "@/bun"
+import { Rpc } from "@/util/rpc"
 import { Installation } from "@/installation"
 import { ConfigMarkdown } from "./markdown"
 import { constants, existsSync } from "fs"
@@ -250,6 +251,8 @@ export namespace Config {
   }
 
   export async function installDependencies(dir: string) {
+    const displayDir = path.basename(path.dirname(dir)) + "/" + path.basename(dir)
+    Rpc.progress(`Installing dependencies: ${displayDir}`)
     const pkg = path.join(dir, "package.json")
     const targetVersion = Installation.isLocal() ? "*" : Installation.VERSION
 
@@ -269,6 +272,7 @@ export namespace Config {
 
     // Install any additional dependencies defined in the package.json
     // This allows local plugins and custom tools to use external packages
+    Rpc.progress(`Running bun install: ${displayDir}`)
     await BunProc.run(
       [
         "install",

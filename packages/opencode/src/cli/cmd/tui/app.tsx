@@ -2,7 +2,7 @@ import { render, useKeyboard, useRenderer, useTerminalDimensions } from "@opentu
 import { Clipboard } from "@tui/util/clipboard"
 import { TextAttributes } from "@opentui/core"
 import { RouteProvider, useRoute } from "@tui/context/route"
-import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on } from "solid-js"
+import { Switch, Match, createEffect, untrack, ErrorBoundary, createSignal, onMount, batch, Show, on, For, createMemo } from "solid-js"
 import { Installation } from "@/installation"
 import { Flag } from "@/flag/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
@@ -36,6 +36,9 @@ import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
+import { ProgressProvider, useProgress, type ProgressSource } from "./context/progress"
+import { Logo } from "@tui/component/logo"
+import { Spinner } from "@tui/component/spinner"
 
 async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
   // can't set raw mode if not a TTY
@@ -99,18 +102,22 @@ async function getTerminalBackgroundColor(): Promise<"dark" | "light"> {
 
 import type { EventSource } from "./context/sdk"
 
+export { getTerminalBackgroundColor }
+
 export function tui(input: {
   url: string
   args: Args
+  mode: "dark" | "light"
   directory?: string
   fetch?: typeof fetch
   headers?: RequestInit["headers"]
   events?: EventSource
+  progress?: ProgressSource
   onExit?: () => Promise<void>
 }) {
   // promise to prevent immediate exit
   return new Promise<void>(async (resolve) => {
-    const mode = await getTerminalBackgroundColor()
+    const mode = input.mode
     const onExit = async () => {
       await input.onExit?.()
       resolve()
@@ -134,27 +141,29 @@ export function tui(input: {
                         headers={input.headers}
                         events={input.events}
                       >
-                        <SyncProvider>
-                          <ThemeProvider mode={mode}>
-                            <LocalProvider>
-                              <KeybindProvider>
-                                <PromptStashProvider>
-                                  <DialogProvider>
-                                    <CommandProvider>
-                                      <FrecencyProvider>
-                                        <PromptHistoryProvider>
-                                          <PromptRefProvider>
-                                            <App />
-                                          </PromptRefProvider>
-                                        </PromptHistoryProvider>
-                                      </FrecencyProvider>
-                                    </CommandProvider>
-                                  </DialogProvider>
-                                </PromptStashProvider>
-                              </KeybindProvider>
-                            </LocalProvider>
-                          </ThemeProvider>
-                        </SyncProvider>
+                        <ProgressProvider source={input.progress}>
+                          <SyncProvider>
+                            <ThemeProvider mode={mode}>
+                              <LocalProvider>
+                                <KeybindProvider>
+                                  <PromptStashProvider>
+                                    <DialogProvider>
+                                      <CommandProvider>
+                                        <FrecencyProvider>
+                                          <PromptHistoryProvider>
+                                            <PromptRefProvider>
+                                              <App />
+                                            </PromptRefProvider>
+                                          </PromptHistoryProvider>
+                                        </FrecencyProvider>
+                                      </CommandProvider>
+                                    </DialogProvider>
+                                  </PromptStashProvider>
+                                </KeybindProvider>
+                              </LocalProvider>
+                            </ThemeProvider>
+                          </SyncProvider>
+                        </ProgressProvider>
                       </SDKProvider>
                     </RouteProvider>
                   </ToastProvider>
@@ -707,6 +716,9 @@ function App() {
       }}
     >
       <Switch>
+        <Match when={sync.status === "loading"}>
+          <BootLog />
+        </Match>
         <Match when={route.data.type === "home"}>
           <Home />
         </Match>
@@ -714,6 +726,47 @@ function App() {
           <Session />
         </Match>
       </Switch>
+    </box>
+  )
+}
+
+function formatBootTime(ts: number) {
+  const d = new Date(ts)
+  const h = d.getHours().toString().padStart(2, "0")
+  const m = d.getMinutes().toString().padStart(2, "0")
+  const s = d.getSeconds().toString().padStart(2, "0")
+  return `${h}:${m}:${s}`
+}
+
+function BootLog() {
+  const { theme } = useTheme()
+  const progress = useProgress()
+  const dimensions = useTerminalDimensions()
+
+  const maxLines = createMemo(() => Math.max(dimensions().height - 8, 3))
+  const visibleLogs = createMemo(() => {
+    const logs = progress.logs
+    return logs.slice(Math.max(0, logs.length - maxLines()))
+  })
+
+  return (
+    <box flexDirection="column" flexGrow={1} paddingLeft={2} paddingRight={2} paddingTop={1}>
+      <Logo />
+      <box paddingTop={1} paddingBottom={1}>
+        <Spinner>Starting OpenCode...</Spinner>
+      </box>
+      <box flexDirection="column">
+        <For each={visibleLogs()}>
+          {(log, i) => {
+            const isLast = createMemo(() => i() === visibleLogs().length - 1)
+            return (
+              <text fg={isLast() ? theme.text : theme.textMuted}>
+                [{formatBootTime(log.time)}] {log.message}
+              </text>
+            )
+          }}
+        </For>
+      </box>
     </box>
   )
 }

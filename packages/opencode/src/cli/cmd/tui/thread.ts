@@ -1,5 +1,5 @@
 import { cmd } from "@/cli/cmd/cmd"
-import { tui } from "./app"
+import { tui, getTerminalBackgroundColor } from "./app"
 import { Rpc } from "@/util/rpc"
 import { type rpc } from "./worker"
 import path from "path"
@@ -7,8 +7,10 @@ import { UI } from "@/cli/ui"
 import { iife } from "@/util/iife"
 import { Log } from "@/util/log"
 import { withNetworkOptions, resolveNetworkOptions } from "@/cli/network"
+import { logo } from "@/cli/logo"
 import type { Event } from "@opencode-ai/sdk/v2"
 import type { EventSource } from "./context/sdk"
+import type { ProgressLog, ProgressSource } from "./context/progress"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -38,6 +40,39 @@ function createEventSource(client: RpcClient): EventSource {
   return {
     on: (handler) => client.on<Event>("event", handler),
   }
+}
+
+function plainLogo(): string[] {
+  // Convert logo mark characters to plain text equivalents:
+  // _ (shadow cell) → space, ^ (letter top + shadow bottom) → ▀, ~ (shadow top only) → space
+  // ~ is pure shadow with no letter content, so it becomes invisible in plain text
+  const convert = (line: string) => line.replace(/[_~]/g, " ").replace(/[\^]/g, "▀")
+  return logo.left.map((left, i) => convert(left) + " " + convert(logo.right[i]))
+}
+
+function showSplash() {
+  const out = process.stdout
+  out.write("\x1b[2J\x1b[H") // clear screen, cursor to top-left
+  out.write("\x1b[?25l") // hide cursor
+  out.write("\n")
+  for (const line of plainLogo()) {
+    out.write("  " + line + "\n")
+  }
+  out.write("\n  \x1b[2mStarting OpenCode...\x1b[0m\n\n")
+}
+
+function writeSplashLog(message: string) {
+  const d = new Date()
+  const pad = (n: number) => n.toString().padStart(2, "0")
+  const ts = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  process.stdout.write(`  \x1b[2m[${ts}]\x1b[0m ${message}\n`)
+}
+
+function cleanupSplash() {
+  // Clear screen (\x1b[2J), scrollback (\x1b[3J), and move cursor to top-left (\x1b[H)
+  // so the main buffer is fully clean when opentui exits alternate buffer
+  process.stdout.write("\x1b[2J\x1b[3J\x1b[H")
+  process.stdout.write("\x1b[?25h") // restore cursor
 }
 
 export const TuiThreadCommand = cmd({
@@ -82,6 +117,9 @@ export const TuiThreadCommand = cmd({
       process.exit(1)
     }
 
+    // Show splash screen immediately
+    showSplash()
+
     // Resolve relative paths against PWD to preserve behavior when using --cwd flag
     const baseCwd = process.env.PWD ?? process.cwd()
     const cwd = args.project ? path.resolve(baseCwd, args.project) : process.cwd()
@@ -108,6 +146,24 @@ export const TuiThreadCommand = cmd({
       Log.Default.error(e)
     }
     const client = Rpc.client<typeof rpc>(worker)
+
+    // Collect startup progress logs from worker and stream to splash
+    let splashActive = true
+    const progressLogs: ProgressLog[] = []
+    const progressHandlers = new Set<(log: ProgressLog) => void>()
+    client.on<ProgressLog>("progress", (data) => {
+      progressLogs.push(data)
+      if (splashActive) writeSplashLog(data.message)
+      for (const handler of progressHandlers) handler(data)
+    })
+    const progressSource: ProgressSource = {
+      logs: progressLogs,
+      subscribe(handler) {
+        progressHandlers.add(handler)
+        return () => progressHandlers.delete(handler)
+      },
+    }
+
     process.on("uncaughtException", (e) => {
       Log.Default.error(e)
     })
@@ -149,10 +205,33 @@ export const TuiThreadCommand = cmd({
       events = createEventSource(client)
     }
 
+    // Warm up worker: trigger InstanceBootstrap (plugin install, LSP init, etc.)
+    // Run in parallel with terminal background color detection to save time.
+    writeSplashLog("Warming up...")
+    const warmupPromise = client
+      .call("fetch", {
+        url: "http://opencode.internal/v2/config",
+        method: "GET",
+        headers: {},
+      })
+      .catch(() => {})
+
+    const [mode] = await Promise.all([getTerminalBackgroundColor(), warmupPromise])
+    writeSplashLog("Ready")
+
+    // Stop writing to stdout before opentui takes over the alternate screen buffer
+    splashActive = false
+
+    // Clear main screen buffer before opentui enters alternate buffer,
+    // so the terminal is clean when the user exits.
+    cleanupSplash()
+
     const tuiPromise = tui({
       url,
+      mode,
       fetch: customFetch,
       events,
+      progress: progressSource,
       args: {
         continue: args.continue,
         sessionID: args.session,
