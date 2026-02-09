@@ -354,7 +354,16 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
       provider: "openai",
       async loader(getAuth, provider) {
         const auth = await getAuth()
-        if (auth.type !== "oauth") return {}
+        if (auth.type !== "oauth") {
+          // Some Codex models are only available via the ChatGPT Codex
+          // endpoint (OAuth) and not on the OpenAI API platform. Remove
+          // them for API key users to prevent 404 errors at runtime.
+          const oauthOnlyModels = ["gpt-5.3-codex"]
+          for (const modelId of oauthOnlyModels) {
+            delete provider.models[modelId]
+          }
+          return {}
+        }
 
         // Filter models to only allowed Codex models for OAuth
         const allowedModels = new Set([
