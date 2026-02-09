@@ -47,7 +47,7 @@ export function NewSessionView(props: NewSessionViewProps) {
   }
 
   return (
-    <div class="size-full flex flex-col justify-end items-start gap-4 flex-[1_0_0] self-stretch max-w-200 mx-auto px-6 pb-[calc(var(--prompt-height,11.25rem)+64px)]">
+    <div class="size-full flex flex-col justify-end items-start gap-4 flex-[1_0_0] self-stretch max-w-200 mx-auto  2xl:max-w-[1000px] px-6 pb-[calc(var(--prompt-height,11.25rem)+64px)]">
       <div class="text-20-medium text-text-weaker">{language.t("command.session.new")}</div>
       <div class="flex justify-center items-center gap-3">
         <Icon name="folder" size="small" />
