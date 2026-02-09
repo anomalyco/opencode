@@ -35,6 +35,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       Persist.global("server", ["server.v3"]),
       createStore({
         list: [] as string[],
+        currentSidecarUrl: "",
         projects: {} as Record<string, StoredProject[]>,
         lastProject: {} as Record<string, string>,
       }),
@@ -96,6 +97,11 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       const url = normalizeServerUrl(props.defaultUrl)
       if (!url) return
       batch(() => {
+        // Remove the previous startup sidecar url
+        if(store.currentSidecarUrl) {
+          remove(store.currentSidecarUrl)
+        }
+
         // Add the new sidecar url
         if (props.isSidecar && props.defaultUrl) {
           add(props.defaultUrl)
