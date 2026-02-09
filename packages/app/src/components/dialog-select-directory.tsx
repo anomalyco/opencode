@@ -4,10 +4,11 @@ import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { List } from "@opencode-ai/ui/list"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import fuzzysort from "fuzzysort"
-import { createMemo, createResource, createSignal } from "solid-js"
+import { createMemo, createResource, createSignal, Show } from "solid-js"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
+import { RecentProjectsList } from "@/components/recent-projects-list"
 import type { ListRef } from "@opencode-ai/ui/list"
 
 interface DialogSelectDirectoryProps {
@@ -28,6 +29,12 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const language = useLanguage()
 
   const [filter, setFilter] = createSignal("")
+  const recentProjects = createMemo(() =>
+    sync.data.project
+      .filter((p) => p.worktree !== "/")
+      .toSorted((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
+      .slice(0, 5),
+  )
 
   let list: ListRef | undefined
 
@@ -265,62 +272,67 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
 
   return (
     <Dialog title={props.title ?? language.t("command.project.open")}>
-      <List
-        search={{ placeholder: language.t("dialog.directory.search.placeholder"), autofocus: true }}
-        emptyMessage={language.t("dialog.directory.empty")}
-        loadingMessage={language.t("common.loading")}
-        items={items}
-        key={(x) => x.absolute}
-        filterKeys={["search"]}
-        ref={(r) => (list = r)}
-        onFilter={(value) => setFilter(clean(value))}
-        onKeyEvent={(e, item) => {
-          if (e.key !== "Tab") return
-          if (e.shiftKey) return
-          if (!item) return
+      <div class="flex flex-col">
+        <RecentProjectsList projects={recentProjects()} onSelect={resolve} />
+        <div class="flex-1 overflow-hidden">
+          <List
+            search={{ placeholder: language.t("dialog.directory.search.placeholder"), autofocus: true }}
+            emptyMessage={language.t("dialog.directory.empty")}
+            loadingMessage={language.t("common.loading")}
+            items={items}
+            key={(x) => x.absolute}
+            filterKeys={["search"]}
+            ref={(r) => (list = r)}
+            onFilter={(value) => setFilter(clean(value))}
+            onKeyEvent={(e, item) => {
+              if (e.key !== "Tab") return
+              if (e.shiftKey) return
+              if (!item) return
 
-          e.preventDefault()
-          e.stopPropagation()
+              e.preventDefault()
+              e.stopPropagation()
 
-          const value = display(item.absolute, filter())
-          list?.setFilter(value.endsWith("/") ? value : value + "/")
-        }}
-        onSelect={(path) => {
-          if (!path) return
-          resolve(path.absolute)
-        }}
-      >
-        {(item) => {
-          const path = display(item.absolute, filter())
-          if (path === "~") {
-            return (
-              <div class="w-full flex items-center justify-between rounded-md">
-                <div class="flex items-center gap-x-3 grow min-w-0">
-                  <FileIcon node={{ path: item.absolute, type: "directory" }} class="shrink-0 size-4" />
-                  <div class="flex items-center text-14-regular min-w-0">
-                    <span class="text-text-strong whitespace-nowrap">~</span>
-                    <span class="text-text-weak whitespace-nowrap">/</span>
+              const value = display(item.absolute, filter())
+              list?.setFilter(value.endsWith("/") ? value : value + "/")
+            }}
+            onSelect={(path) => {
+              if (!path) return
+              resolve(path.absolute)
+            }}
+          >
+            {(item) => {
+              const path = display(item.absolute, filter())
+              if (path === "~") {
+                return (
+                  <div class="w-full flex items-center justify-between rounded-md">
+                    <div class="flex items-center gap-x-3 grow min-w-0">
+                      <FileIcon node={{ path: item.absolute, type: "directory" }} class="shrink-0 size-4" />
+                      <div class="flex items-center text-14-regular min-w-0">
+                        <span class="text-text-strong whitespace-nowrap">~</span>
+                        <span class="text-text-weak whitespace-nowrap">/</span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              }
+              return (
+                <div class="w-full flex items-center justify-between rounded-md">
+                  <div class="flex items-center gap-x-3 grow min-w-0">
+                    <FileIcon node={{ path: item.absolute, type: "directory" }} class="shrink-0 size-4" />
+                    <div class="flex items-center text-14-regular min-w-0">
+                      <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
+                        {getDirectory(path)}
+                      </span>
+                      <span class="text-text-strong whitespace-nowrap">{getFilename(path)}</span>
+                      <span class="text-text-weak whitespace-nowrap">/</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )
-          }
-          return (
-            <div class="w-full flex items-center justify-between rounded-md">
-              <div class="flex items-center gap-x-3 grow min-w-0">
-                <FileIcon node={{ path: item.absolute, type: "directory" }} class="shrink-0 size-4" />
-                <div class="flex items-center text-14-regular min-w-0">
-                  <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
-                    {getDirectory(path)}
-                  </span>
-                  <span class="text-text-strong whitespace-nowrap">{getFilename(path)}</span>
-                  <span class="text-text-weak whitespace-nowrap">/</span>
-                </div>
-              </div>
-            </div>
-          )
-        }}
-      </List>
+              )
+            }}
+          </List>
+        </div>
+      </div>
     </Dialog>
   )
 }
