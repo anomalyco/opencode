@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 
-import { spawnSync } from "node:child_process"
-import fs from "node:fs"
-import os from "node:os"
-import path from "node:path"
-import { fileURLToPath } from "node:url"
+const childProcess = require("child_process")
+const fs = require("fs")
+const path = require("path")
+const os = require("os")
 
 function run(target) {
-  const result = spawnSync(target, process.argv.slice(2), {
+  const result = childProcess.spawnSync(target, process.argv.slice(2), {
     stdio: "inherit",
   })
   if (result.error) {
@@ -23,7 +22,7 @@ if (envPath) {
   run(envPath)
 }
 
-const scriptPath = fs.realpathSync(fileURLToPath(import.meta.url))
+const scriptPath = fs.realpathSync(__filename)
 const scriptDir = path.dirname(scriptPath)
 
 const platformMap = {
