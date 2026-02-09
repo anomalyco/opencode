@@ -49,7 +49,6 @@ import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
 import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { MorphChevron } from "./morph-chevron"
 
 interface Diagnostic {
   range: {
@@ -416,7 +415,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
               toggleExpanded()
             }}
           >
-            <MorphChevron expanded={expanded()} />
+            <Icon name="chevron-down" size="small" />
           </button>
           <div data-slot="user-message-copy-wrapper">
             <Tooltip
@@ -426,6 +425,7 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
             >
               <IconButton
                 icon={copied() ? "check" : "copy"}
+                size="small"
                 variant="secondary"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={(event) => {
@@ -695,6 +695,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
             >
               <IconButton
                 icon={copied() ? "check" : "copy"}
+                size="small"
                 variant="secondary"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={handleCopy}
@@ -875,15 +876,17 @@ ToolRegistry.register({
   render(props) {
     const data = useData()
     const i18n = useI18n()
-    const summary = () =>
-      (props.metadata.summary ?? []) as { id: string; tool: string; state: { status: string; title?: string } }[]
+    const childSessionId = () => props.metadata.sessionId as string | undefined
+    const childToolParts = createMemo(() => {
+      const sessionId = childSessionId()
+      if (!sessionId) return []
+      return getSessionToolParts(data.store, sessionId)
+    })
 
     const autoScroll = createAutoScroll({
       working: () => true,
       overflowAnchor: "auto",
     })
-
-    const childSessionId = () => props.metadata.sessionId as string | undefined
 
     const childPermission = createMemo(() => {
       const sessionId = childSessionId()
@@ -1005,15 +1008,21 @@ ToolRegistry.register({
                 data-scrollable
               >
                 <div ref={autoScroll.contentRef} data-component="task-tools">
-                  <For each={summary()}>
+                  <For each={childToolParts()}>
                     {(item) => {
-                      const info = getToolInfo(item.tool)
+                      const info = createMemo(() => getToolInfo(item.tool, item.state.input))
+                      const subtitle = createMemo(() => {
+                        if (info().subtitle) return info().subtitle
+                        if (item.state.status === "completed" || item.state.status === "running") {
+                          return item.state.title
+                        }
+                      })
                       return (
                         <div data-slot="task-tool-item">
-                          <Icon name={info.icon} size="small" />
-                          <span data-slot="task-tool-title">{info.title}</span>
-                          <Show when={item.state.title}>
-                            <span data-slot="task-tool-subtitle">{item.state.title}</span>
+                          <Icon name={info().icon} size="small" />
+                          <span data-slot="task-tool-title">{info().title}</span>
+                          <Show when={subtitle()}>
+                            <span data-slot="task-tool-subtitle">{subtitle()}</span>
                           </Show>
                         </div>
                       )

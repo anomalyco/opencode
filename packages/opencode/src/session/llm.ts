@@ -150,14 +150,15 @@ export namespace LLM {
       },
     )
 
-    const maxOutputTokens = isCodex
-      ? undefined
-      : ProviderTransform.maxOutputTokens(
-          input.model.api.npm,
-          params.options,
-          input.model.limit.output,
-          OUTPUT_TOKEN_MAX,
-        )
+    const maxOutputTokens =
+      isCodex || provider.id.includes("github-copilot")
+        ? undefined
+        : ProviderTransform.maxOutputTokens(
+            input.model.api.npm,
+            params.options,
+            input.model.limit.output,
+            OUTPUT_TOKEN_MAX,
+          )
 
     const tools = await resolveTools(input)
 
@@ -234,19 +235,12 @@ export namespace LLM {
       },
       maxRetries: input.retries ?? 0,
       messages: [
-        ...(isCodex
-          ? [
-              {
-                role: "user",
-                content: system.join("\n\n"),
-              } as ModelMessage,
-            ]
-          : system.map(
-              (x): ModelMessage => ({
-                role: "system",
-                content: x,
-              }),
-            )),
+        ...system.map(
+          (x): ModelMessage => ({
+            role: "system",
+            content: x,
+          }),
+        ),
         ...input.messages,
       ],
       model: wrapLanguageModel({

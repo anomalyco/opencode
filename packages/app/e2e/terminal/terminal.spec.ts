@@ -1,5 +1,6 @@
 import { test, expect } from "../fixtures"
-import { terminalSelector, terminalToggleKey } from "../utils"
+import { terminalSelector } from "../selectors"
+import { terminalToggleKey } from "../utils"
 
 test("terminal panel can be toggled", async ({ page, gotoSession }) => {
   await gotoSession()

@@ -1,81 +1,112 @@
-# PROJECT KNOWLEDGE BASE
+- To regenerate the JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
+- ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE.
+- The default branch in this repo is `dev`.
+- Local `main` ref may not exist; use `dev` or `origin/dev` for diffs.
+- Prefer automation: execute requested actions without confirmation unless blocked by missing info or safety/irreversibility.
 
-**Generated:** 2026-02-09
-**Commit:** c5846499d
-**Branch:** codex-multi-account
+## Style Guide
 
-## OVERVIEW
+### General Principles
 
-OpenCode monorepo. Bun workspaces + Turbo. Core CLI/server in `packages/opencode`, product UIs in `packages/app` and `packages/desktop`, docs/web + integrations in sibling packages.
+- Keep things in one function unless composable or reusable
+- Avoid `try`/`catch` where possible
+- Avoid using the `any` type
+- Prefer single word variable names where possible
+- Use Bun APIs when possible, like `Bun.file()`
+- Rely on type inference when possible; avoid explicit type annotations or interfaces unless necessary for exports or clarity
+- Prefer functional array methods (flatMap, filter, map) over for loops; use type guards on filter to maintain type inference downstream
 
-## STRUCTURE
+### Naming
 
-```text
-.
-├── packages/
-│   ├── opencode/         # CLI + server + TUI core
-│   ├── app/              # main web app (Solid + Vite)
-│   ├── console/          # SaaS app/core/function/mail/resource
-│   ├── desktop/          # Tauri wrapper around app/ui
-│   ├── sdk/js/           # published JS SDK + generated clients
-│   ├── ui/               # shared UI/components/theme assets
-│   ├── web/              # docs + landing site (Astro/Starlight)
-│   ├── enterprise/       # enterprise web app
-│   └── slack/            # Slack integration
-├── sdks/vscode/          # VS Code extension
-├── github/               # GitHub Action runtime
-├── infra/                # SST infra definitions
-└── script/               # release/generate/version scripts
+Prefer single word names for variables and functions. Only use multiple words if necessary.
+
+```ts
+// Good
+const foo = 1
+function journal(dir: string) {}
+
+// Bad
+const fooBar = 1
+function prepareJournal(dir: string) {}
 ```
 
-## WHERE TO LOOK
+Reduce total variable count by inlining when a value is only used once.
 
-| Task                        | Location                          | Notes                                                 |
-| --------------------------- | --------------------------------- | ----------------------------------------------------- |
-| CLI commands / tool runtime | `packages/opencode/src`           | deepest logic; TUI + server + tools                   |
-| Web product behavior        | `packages/app/src`                | heavy hotspots: `pages/`, `context/`                  |
-| Shared UI system            | `packages/ui/src`                 | components/theme/icons/fonts                          |
-| SDK regeneration            | `packages/sdk/js/script/build.ts` | run after API/schema changes                          |
-| CI/release flow             | `.github/workflows/` + `script/`  | `publish.yml`, `test.yml`, `version.ts`, `publish.ts` |
-| Infra/deploy topology       | `infra/` + `sst.config.ts`        | app/console/enterprise targets                        |
+```ts
+// Good
+const journal = await Bun.file(path.join(dir, "journal.json")).json()
 
-## CONVENTIONS
-
-- Default branch is `dev`.
-- Use parallel tools/agents whenever calls are independent.
-- Root `bun test` is intentionally blocked; run tests per package.
-- Formatter baseline: `semi: false`, `printWidth: 120` in `package.json`.
-- Keep code small/focused; prefer one function unless composable reuse is needed.
-- Prefer `const`, early returns, minimal destructuring, no `any`.
-
-## ANTI-PATTERNS (THIS PROJECT)
-
-- Sequential tool calls when they can run in parallel.
-- Restarting app/server processes in `packages/app` workflow.
-- Editing generated outputs manually (`DO NOT EDIT` areas, generated SDK files).
-- Adding tests that duplicate implementation logic or overuse mocks.
-- Running root-level test script and treating failure as signal.
-
-## UNIQUE STYLES
-
-- Strong preference for Bun-native tooling and scripts.
-- Single-word naming preferred where clarity remains good.
-- Avoid `let` + branch mutation patterns; use expressions.
-- Avoid `else` when early return/guard can flatten control flow.
-
-## COMMANDS
-
-```bash
-bun dev
-bun turbo typecheck
-bun run --cwd packages/app dev
-bun run --cwd packages/desktop tauri dev
-./packages/sdk/js/script/build.ts
-./script/generate.ts
+// Bad
+const journalPath = path.join(dir, "journal.json")
+const journal = await Bun.file(journalPath).json()
 ```
 
-## NOTES
+### Destructuring
 
-- CI `test.yml` seeds opencode state and starts server before app e2e.
-- Desktop release pipeline requires Rust/Tauri + platform signing secrets.
-- Use package-local AGENTS.md files first; they override this root guidance.
+Avoid unnecessary destructuring. Use dot notation to preserve context.
+
+```ts
+// Good
+obj.a
+obj.b
+
+// Bad
+const { a, b } = obj
+```
+
+### Variables
+
+Prefer `const` over `let`. Use ternaries or early returns instead of reassignment.
+
+```ts
+// Good
+const foo = condition ? 1 : 2
+
+// Bad
+let foo
+if (condition) foo = 1
+else foo = 2
+```
+
+### Control Flow
+
+Avoid `else` statements. Prefer early returns.
+
+```ts
+// Good
+function foo() {
+  if (condition) return 1
+  return 2
+}
+
+// Bad
+function foo() {
+  if (condition) return 1
+  else return 2
+}
+```
+
+### Schema Definitions (Drizzle)
+
+Use snake_case for field names so column names don't need to be redefined as strings.
+
+```ts
+// Good
+const table = sqliteTable("session", {
+  id: text().primaryKey(),
+  project_id: text().notNull(),
+  created_at: integer().notNull(),
+})
+
+// Bad
+const table = sqliteTable("session", {
+  id: text("id").primaryKey(),
+  projectID: text("project_id").notNull(),
+  createdAt: integer("created_at").notNull(),
+})
+```
+
+## Testing
+
+- Avoid mocks as much as possible
+- Test actual implementation, do not duplicate logic into tests
