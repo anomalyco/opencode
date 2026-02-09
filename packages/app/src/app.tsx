@@ -84,7 +84,6 @@ function ServerKey(props: ParentProps) {
   )
 }
 
-
 export function AppInterface(props: { defaultUrl?: string; children?: JSX.Element; isSidecar?: boolean }) {
   const platform = usePlatform()
 

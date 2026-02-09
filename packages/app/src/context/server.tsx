@@ -28,7 +28,7 @@ function projectsKey(url: string) {
 
 export const { use: useServer, provider: ServerProvider } = createSimpleContext({
   name: "Server",
-  init: (props: { defaultUrl: string, isSidecar?: boolean }) => {
+  init: (props: { defaultUrl: string; isSidecar?: boolean }) => {
     const platform = usePlatform()
 
     const [store, setStore, _, ready] = persisted(
@@ -96,9 +96,8 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       const url = normalizeServerUrl(props.defaultUrl)
       if (!url) return
       batch(() => {
-
         // Add the new sidecar url
-        if(props.isSidecar && props.defaultUrl) {
+        if (props.isSidecar && props.defaultUrl) {
           add(props.defaultUrl)
         }
 

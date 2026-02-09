@@ -404,7 +404,6 @@ render(() => {
             window.__OPENCODE__ ??= {}
             window.__OPENCODE__.serverPassword = data().password ?? undefined
 
-
             function Inner() {
               const cmd = useCommand()
 
