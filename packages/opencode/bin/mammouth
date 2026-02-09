@@ -74,7 +74,7 @@ function findBinary(startDir) {
 const resolved = findBinary(scriptDir)
 if (!resolved) {
   console.error(
-    'It seems that your package manager failed to install the right version of Mammouth CLI for your platform. You can try manually installing the "' +
+    'It seems that your package manager failed to install the right version of Mammouth Code for your platform. You can try manually installing the "' +
       base +
       '" package',
   )

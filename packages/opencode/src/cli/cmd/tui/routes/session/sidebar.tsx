@@ -284,7 +284,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                     ✕
                   </text>
                 </box>
-                <text fg={theme.textMuted}>Mammouth CLI asks for your Mammouth API key so you can start ASAP.</text>
+                <text fg={theme.textMuted}>Mammouth Code asks for your Mammouth API key so you can start ASAP.</text>
                 {/* <text fg={theme.textMuted}>
                   Commented out, Mammouth fork
                   Connect from 75+ providers to use other models, including Claude, GPT, Gemini etc
@@ -303,7 +303,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
           <text fg={theme.textMuted}>
             <span style={{ fg: theme.success }}>•</span>{" "}
             <span style={{ fg: theme.text }}>
-              <b>Mammouth CLI</b>
+              <b>Mammouth Code</b>
             </span>{" "}
             <span>{Installation.VERSION}</span>
           </text>

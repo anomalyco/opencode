@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
     inputs:
       version:
@@ -65,14 +65,14 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
-          name: Mammouth CLI v${{ steps.version.outputs.version }}
+          name: Mammouth Code v${{ steps.version.outputs.version }}
           draft: false
           prerelease: false
           files: |
             packages/opencode/dist/*.tar.gz
             packages/opencode/dist/*.zip
           body: |
-            ## Mammouth CLI v${{ steps.version.outputs.version }}
+            ## Mammouth Code v${{ steps.version.outputs.version }}
 
             ### Installation
 

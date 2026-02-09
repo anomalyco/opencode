@@ -45,7 +45,7 @@ export function DialogStatus() {
         </text>
         <text fg={theme.textMuted}>esc</text>
       </box>
-      <text fg={theme.textMuted}>Mammouth CLI v{Installation.VERSION}</text>
+      <text fg={theme.textMuted}>Mammouth Code v{Installation.VERSION}</text>
       <Show when={Object.keys(sync.data.mcp).length > 0} fallback={<text fg={theme.text}>No MCP Servers</text>}>
         <box>
           <text fg={theme.text}>{Object.keys(sync.data.mcp).length} MCP Servers</text>
@@ -76,7 +76,7 @@ export function DialogStatus() {
                       <Match when={item.status === "failed" && item}>{(val) => val().error}</Match>
                       <Match when={item.status === "disabled"}>Disabled in configuration</Match>
                       <Match when={(item.status as string) === "needs_auth"}>
-                        Needs authentication (run: mammouth-cli mcp auth {key})
+                        Needs authentication (run: mammouth mcp auth {key})
                       </Match>
                       <Match when={(item.status as string) === "needs_client_registration" && item}>
                         {(val) => (val() as { error: string }).error}
