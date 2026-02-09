@@ -420,7 +420,14 @@ export function SessionHeader() {
                         }
                       >
                         <div class="flex flex-col gap-2">
-                          <TextField value={shareUrl() ?? ""} readOnly copyable tabIndex={-1} class="w-full" />
+                          <TextField
+                            value={shareUrl() ?? ""}
+                            readOnly
+                            copyable
+                            copyKind="link"
+                            tabIndex={-1}
+                            class="w-full"
+                          />
                           <div class="grid grid-cols-2 gap-2">
                             <Button
                               size="large"

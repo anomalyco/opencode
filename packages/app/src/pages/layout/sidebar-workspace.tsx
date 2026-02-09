@@ -167,11 +167,9 @@ export const SortableWorkspace = (props: {
           openOnDblClick={false}
         />
       </Show>
-      <Icon
-        name={open() ? "chevron-down" : "chevron-right"}
-        size="small"
-        class="shrink-0 text-icon-base opacity-0 transition-opacity group-hover/workspace:opacity-100 group-focus-within/workspace:opacity-100"
-      />
+      <div class="flex items-center justify-center shrink-0 overflow-hidden w-0 opacity-0 transition-all duration-200 group-hover/workspace:w-3.5 group-hover/workspace:opacity-100 group-focus-within/workspace:w-3.5 group-focus-within/workspace:opacity-100">
+        <Icon name={open() ? "chevron-down" : "chevron-right"} size="small" class="text-icon-base" />
+      </div>
     </div>
   )
 
@@ -196,7 +194,9 @@ export const SortableWorkspace = (props: {
                 when={workspaceEditActive()}
                 fallback={
                   <Collapsible.Trigger
-                    class="flex items-center justify-between w-full pl-2 pr-16 py-1.5 rounded-md hover:bg-surface-raised-base-hover"
+                    class={`flex items-center justify-between w-full pl-2 py-1.5 rounded-md hover:bg-surface-raised-base-hover transition-[padding] duration-200 ${
+                      menu.open ? "pr-16" : "pr-2"
+                    } group-hover/workspace:pr-16 group-focus-within/workspace:pr-16`}
                     data-action="workspace-toggle"
                     data-workspace={base64Encode(props.directory)}
                   >
@@ -204,7 +204,13 @@ export const SortableWorkspace = (props: {
                   </Collapsible.Trigger>
                 }
               >
-                <div class="flex items-center justify-between w-full pl-2 pr-16 py-1.5 rounded-md">{header()}</div>
+                <div
+                  class={`flex items-center justify-between w-full pl-2 py-1.5 rounded-md transition-[padding] duration-200 ${
+                    menu.open ? "pr-16" : "pr-2"
+                  } group-hover/workspace:pr-16 group-focus-within/workspace:pr-16`}
+                >
+                  {header()}
+                </div>
               </Show>
               <div
                 class="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 transition-opacity"
