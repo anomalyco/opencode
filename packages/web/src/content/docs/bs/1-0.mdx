@@ -1,0 +1,62 @@
+---
+title: Migracija na 1.0
+description: Šta je novo u OpenCode 1.0.
+---
+
+OpenCode 1.0 je potpuna revizija TUI-ja.
+Prešli smo sa TUI zasnovanog na go+bubbletea koji je imao problema sa performansama i mogućnostima na interni okvir (OpenTUI) napisan u zig+solidjs.
+Novi TUI radi kao stari jer se povezuje na isti opencode server.
+
+---
+
+## Upgrade
+
+Ne biste trebali biti automatski nadograđeni na 1.0 ako trenutno koristite prethodnu
+verzija. Međutim, neke starije verzije OpenCode-a uvijek uzimaju najnoviju verziju.
+Za ručnu nadogradnju, pokrenite
+
+```bash
+$ opencode upgrade 1.0.0
+
+```
+
+Za vraćanje na 0.x, pokrenite
+
+```bash
+$ opencode upgrade 0.15.31
+```
+
+---
+
+## UX promjene
+
+Historija sesije je komprimovanija i prikazuje samo sve detalje alata za uređivanje i bash.
+Dodali smo komandnu traku kroz koju prolazi skoro sve. Pritisnite ctrl+p da prikažete u bilo kom kontekstu i vidite sve što možete učiniti.
+Dodatna bočna traka sesije (može se prebaciti) sa korisnim informacijama.
+Uklonili smo neke funkcije za koje nismo bili sigurni da ih neko koristi. Ako nešto važno nedostaje, otvorite problem i brzo ćemo ga dodati.
+
+---
+
+## Revolucionarne promjene
+
+### Tastature su preimenovane
+
+- povratne_poruke -> poništite_poruke
+- switch_agent -> agent_cycle
+- switch_agent_reverse -> agent_cycle_reverse
+- switch_mode -> agent_cycle
+- switch_mode_reverse -> agent_cycle_reverse
+
+### Linkovi za degustatore su uklonjeni
+
+- messages_layout_toggle
+- poruke_sljedeće
+- messages_previous
+- file_diff_toggle
+- file_search
+- file_close
+- lista_datoteka
+- app_help
+- project_init
+- detalji alata
+- razmišljanje_blokovi
