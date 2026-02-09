@@ -44,6 +44,7 @@ export const dict = {
 
   "command.session.new": "Nowa sesja",
   "command.file.open": "Otwórz plik",
+  "command.tab.close": "Zamknij kartę",
   "command.context.addSelection": "Dodaj zaznaczenie do kontekstu",
   "command.context.addSelection.description": "Dodaj zaznaczone linie z bieżącego pliku",
   "command.input.focus": "Fokus na pole wejściowe",
