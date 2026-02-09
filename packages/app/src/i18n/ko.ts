@@ -48,6 +48,7 @@ export const dict = {
 
   "command.session.new": "새 세션",
   "command.file.open": "파일 열기",
+  "command.tab.close": "탭 닫기",
   "command.context.addSelection": "선택 영역을 컨텍스트에 추가",
   "command.context.addSelection.description": "현재 파일에서 선택한 줄을 추가",
   "command.input.focus": "입력창 포커스",
@@ -237,6 +238,7 @@ export const dict = {
   "prompt.toast.shellSendFailed.title": "셸 명령 전송 실패",
   "prompt.toast.commandSendFailed.title": "명령 전송 실패",
   "prompt.toast.promptSendFailed.title": "프롬프트 전송 실패",
+  "prompt.toast.promptSendFailed.description": "세션을 가져올 수 없습니다",
 
   "dialog.mcp.title": "MCP",
   "dialog.mcp.description": "{{total}}개 중 {{enabled}}개 활성화됨",
