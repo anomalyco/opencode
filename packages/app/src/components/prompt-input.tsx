@@ -884,6 +884,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      if (event.metaKey) {
+        event.preventDefault()
+        const textLength = promptLength(prompt.current())
+        if (event.key === "ArrowUp") {
+          setCursorPosition(editorRef, 0)
+        } else {
+          setCursorPosition(editorRef, textLength)
+        }
+        return
+      }
       if (event.altKey || event.ctrlKey || event.metaKey) return
       const { collapsed } = getCaretState()
       if (!collapsed) return
