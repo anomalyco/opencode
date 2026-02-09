@@ -6,6 +6,7 @@ import { Ripgrep } from "../../file/ripgrep"
 import { LSP } from "../../lsp"
 import { Instance } from "../../project/instance"
 import { lazy } from "../../util/lazy"
+import { errors } from "../error"
 
 export const FileRoutes = lazy(() =>
   new Hono()
@@ -192,6 +193,130 @@ export const FileRoutes = lazy(() =>
       async (c) => {
         const content = await File.status()
         return c.json(content)
+      },
+    )
+    .post(
+      "/file/content",
+      describeRoute({
+        summary: "Write file",
+        description:
+          "Write content to a file, creating it and any missing parent directories if they don't exist. Supports text and base64-encoded binary content.",
+        operationId: "file.write",
+        responses: {
+          ...errors(400),
+          200: {
+            description: "File written successfully",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          path: z.string(),
+          content: z.string(),
+          encoding: z.literal("base64").optional(),
+        }),
+      ),
+      async (c) => {
+        const body = c.req.valid("json")
+        await File.write(body.path, body.content, body.encoding)
+        return c.json(true)
+      },
+    )
+    .delete(
+      "/file",
+      describeRoute({
+        summary: "Delete file",
+        description: "Delete a file or directory recursively.",
+        operationId: "file.delete",
+        responses: {
+          ...errors(400, 404),
+          200: {
+            description: "File deleted successfully",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          path: z.string(),
+        }),
+      ),
+      async (c) => {
+        const body = c.req.valid("json")
+        await File.remove(body.path)
+        return c.json(true)
+      },
+    )
+    .post(
+      "/file/mkdir",
+      describeRoute({
+        summary: "Create directory",
+        description: "Create a directory, including any missing parent directories.",
+        operationId: "file.mkdir",
+        responses: {
+          ...errors(400),
+          200: {
+            description: "Directory created successfully",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          path: z.string(),
+        }),
+      ),
+      async (c) => {
+        const body = c.req.valid("json")
+        await File.mkdir(body.path)
+        return c.json(true)
+      },
+    )
+    .post(
+      "/file/rename",
+      describeRoute({
+        summary: "Rename file",
+        description: "Rename or move a file or directory. Creates missing parent directories for the target path.",
+        operationId: "file.rename",
+        responses: {
+          ...errors(400, 404),
+          200: {
+            description: "File renamed successfully",
+            content: {
+              "application/json": {
+                schema: resolver(z.boolean()),
+              },
+            },
+          },
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          from: z.string(),
+          to: z.string(),
+        }),
+      ),
+      async (c) => {
+        const body = c.req.valid("json")
+        await File.rename(body.from, body.to)
+        return c.json(true)
       },
     ),
 )

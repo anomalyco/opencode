@@ -9,6 +9,7 @@ import ignore from "ignore"
 import { Log } from "../util/log"
 import { Filesystem } from "../util/filesystem"
 import { Instance } from "../project/instance"
+import { Bus } from "../bus"
 import { Ripgrep } from "./ripgrep"
 import fuzzysort from "fuzzysort"
 import { Global } from "../global"
@@ -539,6 +540,55 @@ export namespace File {
       }
       return a.name.localeCompare(b.name)
     })
+  }
+
+  export async function write(file: string, content: string, encoding?: "base64") {
+    using _ = log.time("write", { file })
+    const full = path.join(Instance.directory, file)
+    if (!Instance.containsPath(full)) {
+      throw new Error("Access denied: path escapes project directory")
+    }
+    await fs.promises.mkdir(path.dirname(full), { recursive: true })
+    if (encoding === "base64") {
+      await Bun.write(full, Buffer.from(content, "base64"))
+    } else {
+      await Bun.write(full, content)
+    }
+    await Bus.publish(Event.Edited, { file })
+  }
+
+  export async function remove(file: string) {
+    using _ = log.time("remove", { file })
+    const full = path.join(Instance.directory, file)
+    if (!Instance.containsPath(full)) {
+      throw new Error("Access denied: path escapes project directory")
+    }
+    const stat = await fs.promises.stat(full).catch(() => null)
+    if (!stat) throw new Error(`File not found: ${file}`)
+    await fs.promises.rm(full, { recursive: true, force: true })
+  }
+
+  export async function mkdir(dir: string) {
+    using _ = log.time("mkdir", { dir })
+    const full = path.join(Instance.directory, dir)
+    if (!Instance.containsPath(full)) {
+      throw new Error("Access denied: path escapes project directory")
+    }
+    await fs.promises.mkdir(full, { recursive: true })
+  }
+
+  export async function rename(from: string, to: string) {
+    using _ = log.time("rename", { from, to })
+    const full = path.join(Instance.directory, from)
+    const target = path.join(Instance.directory, to)
+    if (!Instance.containsPath(full) || !Instance.containsPath(target)) {
+      throw new Error("Access denied: path escapes project directory")
+    }
+    const stat = await fs.promises.stat(full).catch(() => null)
+    if (!stat) throw new Error(`File not found: ${from}`)
+    await fs.promises.mkdir(path.dirname(target), { recursive: true })
+    await fs.promises.rename(full, target)
+    await Bus.publish(Event.Edited, { file: to })
   }
 
   export async function search(input: { query: string; limit?: number; dirs?: boolean; type?: "file" | "directory" }) {
