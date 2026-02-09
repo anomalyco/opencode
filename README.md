@@ -1,136 +1,102 @@
-<p align="center">
-  <a href="https://opencode.ai">
-    <picture>
-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
-    </picture>
-  </a>
-</p>
-<p align="center">The open source AI coding agent.</p>
-<p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
-</p>
+# OpenCode (Kortix Fork)
 
-<p align="center">
-  <a href="README.md">English</a> |
-  <a href="README.zh.md">简体中文</a> |
-  <a href="README.zht.md">繁體中文</a> |
-  <a href="README.ko.md">한국어</a> |
-  <a href="README.de.md">Deutsch</a> |
-  <a href="README.es.md">Español</a> |
-  <a href="README.fr.md">Français</a> |
-  <a href="README.it.md">Italiano</a> |
-  <a href="README.da.md">Dansk</a> |
-  <a href="README.ja.md">日本語</a> |
-  <a href="README.pl.md">Polski</a> |
-  <a href="README.ru.md">Русский</a> |
-  <a href="README.bs.md">Bosanski</a> |
-  <a href="README.ar.md">العربية</a> |
-  <a href="README.no.md">Norsk</a> |
-  <a href="README.br.md">Português (Brasil)</a> |
-  <a href="README.th.md">ไทย</a> |
-  <a href="README.tr.md">Türkçe</a>
-</p>
+> **This is a fork of [anomalyco/opencode](https://github.com/anomalyco/opencode).**
+> It is not built by or affiliated with the OpenCode team.
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+This fork adds **file mutation endpoints** to the OpenCode server — upload, delete, mkdir, and rename — that are missing from upstream. The upstream server only exposes read-only file operations. These additions enable external clients (like [Kortix Computer](https://github.com/kortix-ai/computer)) to manage project files through the OpenCode API.
+
+The SDK is published to npm as [`@kortix/opencode-sdk`](https://www.npmjs.com/package/@kortix/opencode-sdk).
+
+```bash
+npm install @kortix/opencode-sdk
+```
 
 ---
 
-### Installation
+## Changelog (vs upstream `anomalyco/opencode`)
 
-```bash
-# YOLO
-curl -fsSL https://opencode.ai/install | bash
+### New REST API Endpoints
 
-# Package managers
-npm i -g opencode-ai@latest        # or bun/pnpm/yarn
-scoop install opencode             # Windows
-choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS and Linux (recommended, always up to date)
-brew install opencode              # macOS and Linux (official brew formula, updated less)
-paru -S opencode-bin               # Arch Linux
-mise use -g opencode               # Any OS
-nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev branch
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/file/upload` | Upload one or more files via `multipart/form-data`. Supports single file, batch upload, and an optional `path` field to specify a target directory. Binary-safe. |
+| `DELETE` | `/file` | Delete a file or directory recursively. JSON body: `{ "path": "relative/path" }` |
+| `POST` | `/file/mkdir` | Create a directory (recursive, idempotent). JSON body: `{ "path": "relative/path" }` |
+| `POST` | `/file/rename` | Rename or move a file/directory. Creates missing parent dirs. JSON body: `{ "from": "old", "to": "new" }` |
+
+All endpoints enforce path traversal protection via `Instance.containsPath()` and emit `file.edited` events via the bus for real-time UI updates.
+
+### New Business Logic Functions
+
+Added to `packages/opencode/src/file/index.ts` inside the `File` namespace:
+
+- **`File.upload(file, data)`** — Write a file from `ArrayBuffer | Uint8Array | Blob | string`. Auto-creates parent directories.
+- **`File.remove(file)`** — Delete a file or directory recursively. Throws on nonexistent paths.
+- **`File.mkdir(dir)`** — Create directories recursively. Idempotent.
+- **`File.rename(from, to)`** — Move/rename a file or directory. Creates target parent directories.
+
+### SDK (`@kortix/opencode-sdk`)
+
+The generated TypeScript SDK (`packages/sdk/js/`) includes matching client methods on the `File` class:
+
+```ts
+import { File } from "@kortix/opencode-sdk/v2"
+
+const client = new File({ baseUrl: "http://localhost:4096" })
+
+// Upload
+await client.upload(/* multipart form data via fetch */)
+
+// Delete
+await client.delete({ path: "src/old-file.ts" })
+
+// Mkdir
+await client.mkdir({ path: "src/new-dir" })
+
+// Rename
+await client.rename({ from: "old-name.ts", to: "new-name.ts" })
 ```
 
-> [!TIP]
-> Remove versions older than 0.1.x before installing.
+### Tests
 
-### Desktop App (BETA)
+25 end-to-end tests in `packages/opencode/test/file/write.test.ts` covering:
 
-OpenCode is also available as a desktop application. Download directly from the [releases page](https://github.com/anomalyco/opencode/releases) or [opencode.ai/download](https://opencode.ai/download).
+- `File.upload` — text, binary (ArrayBuffer), nested paths, overwrite, path traversal rejection, roundtrip with `File.read`
+- `File.remove` — file deletion, recursive directory deletion, nonexistent file error, path traversal rejection
+- `File.mkdir` — creation, recursive nesting, idempotency, path traversal rejection
+- `File.rename` — rename, move into new directory, nonexistent source error, path traversal rejection (source and target)
+- HTTP endpoint tests — `POST /file/upload` (single, batch with target dir, binary), `DELETE /file`, `POST /file/mkdir`, `POST /file/rename`
 
-| Platform              | Download                              |
-| --------------------- | ------------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-darwin-aarch64.dmg` |
-| macOS (Intel)         | `opencode-desktop-darwin-x64.dmg`     |
-| Windows               | `opencode-desktop-windows-x64.exe`    |
-| Linux                 | `.deb`, `.rpm`, or AppImage           |
+### CI / Automation
 
-```bash
-# macOS (Homebrew)
-brew install --cask opencode-desktop
-# Windows (Scoop)
-scoop bucket add extras; scoop install extras/opencode-desktop
-```
-
-#### Installation Directory
-
-The install script respects the following priority order for the installation path:
-
-1. `$OPENCODE_INSTALL_DIR` - Custom installation directory
-2. `$XDG_BIN_DIR` - XDG Base Directory Specification compliant path
-3. `$HOME/bin` - Standard user binary directory (if it exists or can be created)
-4. `$HOME/.opencode/bin` - Default fallback
-
-```bash
-# Examples
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
-```
-
-### Agents
-
-OpenCode includes two built-in agents you can switch between with the `Tab` key.
-
-- **build** - Default, full-access agent for development work
-- **plan** - Read-only agent for analysis and code exploration
-  - Denies file edits by default
-  - Asks permission before running bash commands
-  - Ideal for exploring unfamiliar codebases or planning changes
-
-Also included is a **general** subagent for complex searches and multistep tasks.
-This is used internally and can be invoked using `@general` in messages.
-
-Learn more about [agents](https://opencode.ai/docs/agents).
-
-### Documentation
-
-For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).
-
-### Contributing
-
-If you're interested in contributing to OpenCode, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.
-
-### Building on OpenCode
-
-If you are working on a project that's related to OpenCode and is using "opencode" as part of its name, for example "opencode-dashboard" or "opencode-mobile", please add a note to your README to clarify that it is not built by the OpenCode team and is not affiliated with us in any way.
-
-### FAQ
-
-#### How is this different from Claude Code?
-
-It's very similar to Claude Code in terms of capability. Here are the key differences:
-
-- 100% open source
-- Not coupled to any provider. Although we recommend the models we provide through [OpenCode Zen](https://opencode.ai/zen), OpenCode can be used with Claude, OpenAI, Google, or even local models. As models evolve, the gaps between them will close and pricing will drop, so being provider-agnostic is important.
-- Out-of-the-box LSP support
-- A focus on TUI. OpenCode is built by neovim users and the creators of [terminal.shop](https://terminal.shop); we are going to push the limits of what's possible in the terminal.
-- A client/server architecture. This, for example, can allow OpenCode to run on your computer while you drive it remotely from a mobile app, meaning that the TUI frontend is just one of the possible clients.
+- **`.github/workflows/sync-upstream.yml`** — Daily cron + manual trigger to sync from `anomalyco/opencode:dev` into the `kortix` branch.
+- **`packages/sdk/js/script/publish-kortix.ts`** — Publishes the SDK as `@kortix/opencode-sdk` to npm (rewrites the package name at publish time, preserves `@opencode-ai/sdk` internally for monorepo workspace compatibility).
 
 ---
 
-**Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+## Branch Structure
+
+| Branch | Purpose |
+|--------|---------|
+| `kortix` | Default. All Kortix additions merged here. |
+| `dev` | Upstream mirror (`anomalyco/opencode:dev`). Untouched. |
+
+---
+
+## Files Changed
+
+```
+.github/workflows/sync-upstream.yml          — upstream sync automation
+packages/opencode/src/file/index.ts           — File.upload, remove, mkdir, rename
+packages/opencode/src/server/routes/file.ts   — POST /file/upload, DELETE /file, POST /file/mkdir, POST /file/rename
+packages/opencode/test/file/write.test.ts     — 25 e2e tests
+packages/sdk/js/script/publish-kortix.ts      — @kortix/opencode-sdk publish script
+packages/sdk/js/src/v2/gen/sdk.gen.ts         — regenerated SDK with new File methods
+packages/sdk/js/src/v2/gen/types.gen.ts       — regenerated types for new endpoints
+```
+
+---
+
+## Upstream
+
+For documentation on OpenCode itself, see the upstream repo: [github.com/anomalyco/opencode](https://github.com/anomalyco/opencode) and [opencode.ai/docs](https://opencode.ai/docs).
