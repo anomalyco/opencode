@@ -7,6 +7,7 @@ import { Installation } from "@/installation"
 import { Flag } from "@/flag/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
+import { DialogAddCustomProvider } from "@tui/component/dialog-add-custom-provider"
 import { SDKProvider, useSDK } from "@tui/context/sdk"
 import { SyncProvider, useSync } from "@tui/context/sync"
 import { LocalProvider, useLocal } from "@tui/context/local"
@@ -462,6 +463,18 @@ function App() {
       },
       onSelect: () => {
         dialog.replace(() => <DialogProviderList />)
+      },
+      category: "Provider",
+    },
+    {
+      title: "Add custom provider",
+      value: "provider.add_custom",
+      slash: {
+        name: "add-provider",
+        aliases: ["addprovider", "custom-provider"],
+      },
+      onSelect: () => {
+        dialog.replace(() => <DialogAddCustomProvider />)
       },
       category: "Provider",
     },
