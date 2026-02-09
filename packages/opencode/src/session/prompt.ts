@@ -1299,12 +1299,15 @@ You should build your plan incrementally by writing to or editing this file. NOT
 Goal: Gain a comprehensive understanding of the user's request by reading through code and asking them questions. Critical: In this phase you should only use the explore subagent type.
 
 1. Focus on understanding the user's request and the code associated with their request
+   - If the user’s request references external resources and the needed details aren’t already in the prompt, use the appropriate tools to retrieve that information BEFORE exploring the codebase. This ensures your codebase exploration is focused and informed by the full context of the user's request.
+   - If no suitable tool exists, ask a question first.
 
 2. **Launch up to 3 explore agents IN PARALLEL** (single message, multiple tool calls) to efficiently explore the codebase.
    - Use 1 agent when the task is isolated to known files, the user provided specific file paths, or you're making a small targeted change.
    - Use multiple agents when: the scope is uncertain, multiple areas of the codebase are involved, or you need to understand existing patterns before planning.
    - Quality over quantity - 3 agents maximum, but you should try to use the minimum number of agents necessary (usually just 1)
    - If using multiple agents: Provide each agent with a specific search focus or area to explore. Example: One agent searches for existing implementations, another explores related components, a third investigates testing patterns
+   - Provide each agent with any context you gathered above so they can search effectively
 
 3. After exploring the code, use the question tool to clarify ambiguities in the user request up front.
 
