@@ -31,7 +31,7 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
       const dataUrl = reader.result as string
       const attachment: ImageAttachmentPart = {
         type: "image",
-        id: crypto.randomUUID(),
+        id: crypto.randomUUID?.() ?? Math.random().toString(16).slice(2),
         filename: file.name,
         mime: file.type,
         dataUrl,
