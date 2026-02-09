@@ -24,8 +24,4 @@ export const dict = {
     "CLI가 {{path}}에 설치되었습니다\n\n터미널을 다시 시작하여 'opencode' 명령을 사용하세요.",
   "desktop.cli.failed.title": "설치 실패",
   "desktop.cli.failed.message": "CLI 설치 실패: {{error}}",
-
-  "desktop.error.serverStartFailed.title": "OpenCode 시작 실패",
-  "desktop.error.serverStartFailed.description":
-    "로컬 OpenCode 서버를 시작할 수 없습니다. 앱을 다시 시작하거나 네트워크 설정(VPN/proxy)을 확인한 후 다시 시도하세요.",
 }

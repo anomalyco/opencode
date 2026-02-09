@@ -152,6 +152,14 @@ export type MessageAbortedError = {
   }
 }
 
+export type ContextOverflowError = {
+  name: "ContextOverflowError"
+  data: {
+    message: string
+    responseBody?: string
+  }
+}
+
 export type ApiError = {
   name: "APIError"
   data: {
@@ -176,7 +184,13 @@ export type AssistantMessage = {
     created: number
     completed?: number
   }
-  error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError | ApiError
+  error?:
+    | ProviderAuthError
+    | UnknownError
+    | MessageOutputLengthError
+    | MessageAbortedError
+    | ContextOverflowError
+    | ApiError
   parentID: string
   modelID: string
   providerID: string
@@ -197,6 +211,7 @@ export type AssistantMessage = {
       write: number
     }
   }
+  variant?: string
   finish?: string
 }
 
@@ -819,7 +834,13 @@ export type EventSessionError = {
   type: "session.error"
   properties: {
     sessionID?: string
-    error?: ProviderAuthError | UnknownError | MessageOutputLengthError | MessageAbortedError | ApiError
+    error?:
+      | ProviderAuthError
+      | UnknownError
+      | MessageOutputLengthError
+      | MessageAbortedError
+      | ContextOverflowError
+      | ApiError
   }
 }
 
@@ -1309,6 +1330,10 @@ export type KeybindsConfig = {
    * Toggle tips on home screen
    */
   tips_toggle?: string
+  /**
+   * Toggle thinking blocks visibility
+   */
+  display_thinking?: string
 }
 
 /**
@@ -1658,6 +1683,10 @@ export type Config = {
      * Additional paths to skill folders
      */
     paths?: Array<string>
+    /**
+     * URLs to fetch skills from (e.g., https://example.com/.well-known/skills/)
+     */
+    urls?: Array<string>
   }
   watcher?: {
     ignore?: Array<string>

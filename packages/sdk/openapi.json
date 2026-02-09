@@ -6242,6 +6242,28 @@
         },
         "required": ["name", "data"]
       },
+      "ContextOverflowError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "const": "ContextOverflowError"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "responseBody": {
+                "type": "string"
+              }
+            },
+            "required": ["message"]
+          }
+        },
+        "required": ["name", "data"]
+      },
       "APIError": {
         "type": "object",
         "properties": {
@@ -6328,6 +6350,9 @@
                 "$ref": "#/components/schemas/MessageAbortedError"
               },
               {
+                "$ref": "#/components/schemas/ContextOverflowError"
+              },
+              {
                 "$ref": "#/components/schemas/APIError"
               }
             ]
@@ -6391,6 +6416,9 @@
               }
             },
             "required": ["input", "output", "reasoning", "cache"]
+          },
+          "variant": {
+            "type": "string"
           },
           "finish": {
             "type": "string"
@@ -8092,6 +8120,9 @@
                     "$ref": "#/components/schemas/MessageAbortedError"
                   },
                   {
+                    "$ref": "#/components/schemas/ContextOverflowError"
+                  },
+                  {
                     "$ref": "#/components/schemas/APIError"
                   }
                 ]
@@ -8883,6 +8914,11 @@
             "description": "Toggle tips on home screen",
             "default": "<leader>h",
             "type": "string"
+          },
+          "display_thinking": {
+            "description": "Toggle thinking blocks visibility",
+            "default": "none",
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -9538,6 +9574,13 @@
             "properties": {
               "paths": {
                 "description": "Additional paths to skill folders",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "urls": {
+                "description": "URLs to fetch skills from (e.g., https://example.com/.well-known/skills/)",
                 "type": "array",
                 "items": {
                   "type": "string"

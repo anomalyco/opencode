@@ -1,11 +1,12 @@
 {
   "name": "@opencode-ai/app",
-  "version": "1.1.51",
+  "version": "1.1.53",
   "description": "",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./vite": "./vite.js"
+    "./vite": "./vite.js",
+    "./index.css": "./src/index.css"
   },
   "scripts": {
     "typecheck": "tsgo -b",
@@ -13,7 +14,9 @@
     "dev": "vite",
     "build": "vite build",
     "serve": "vite preview",
-    "test": "playwright test",
+    "test": "bun run test:unit",
+    "test:unit": "bun test --preload ./happydom.ts ./src",
+    "test:unit:watch": "bun test --watch --preload ./happydom.ts ./src",
     "test:e2e": "playwright test",
     "test:e2e:local": "bun script/e2e-local.ts",
     "test:e2e:ui": "playwright test --ui",
@@ -54,7 +57,7 @@
     "@thisbeyond/solid-dnd": "0.7.5",
     "diff": "catalog:",
     "fuzzysort": "catalog:",
-    "ghostty-web": "0.3.0",
+    "ghostty-web": "0.4.0",
     "luxon": "catalog:",
     "marked": "catalog:",
     "marked-shiki": "catalog:",
