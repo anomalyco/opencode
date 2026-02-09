@@ -1,17 +1,19 @@
 import "./index.css"
-import { Title, Meta, Link } from "@solidjs/meta"
+import { Title, Meta } from "@solidjs/meta"
 import { createAsync } from "@solidjs/router"
 import { Header } from "~/component/header"
 import { Footer } from "~/component/footer"
 import { Legal } from "~/component/legal"
-import { config } from "~/config"
 import { changelog } from "~/lib/changelog"
 import type { HighlightGroup } from "~/lib/changelog"
 import { For, Show, createSignal } from "solid-js"
+import { useI18n } from "~/context/i18n"
+import { useLanguage } from "~/context/language"
+import { LocaleLinks } from "~/component/locale-links"
 
-function formatDate(dateString: string) {
+function formatDate(dateString: string, locale: string) {
   const date = new Date(dateString)
-  return date.toLocaleDateString("en-US", {
+  return date.toLocaleDateString(locale, {
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -97,28 +99,31 @@ function CollapsibleSections(props: { sections: { title: string; items: string[]
 }
 
 export default function Changelog() {
+  const i18n = useI18n()
+  const language = useLanguage()
   const data = createAsync(() => changelog())
   const releases = () => data() ?? []
 
   return (
     <main data-page="changelog">
-      <Title>OpenCode | Changelog</Title>
-      <Link rel="canonical" href={`${config.baseUrl}/changelog`} />
-      <Meta name="description" content="OpenCode release notes and changelog" />
+      <Title>{i18n.t("changelog.title")}</Title>
+      <LocaleLinks path="/changelog" />
+      <Meta name="description" content={i18n.t("changelog.meta.description")} />
 
       <div data-component="container">
         <Header />
 
         <div data-component="content">
           <section data-component="changelog-hero">
-            <h1>Changelog</h1>
-            <p>New updates and improvements to OpenCode</p>
+            <h1>{i18n.t("changelog.hero.title")}</h1>
+            <p>{i18n.t("changelog.hero.subtitle")}</p>
           </section>
 
           <section data-component="releases">
             <Show when={releases().length === 0}>
               <p>
-                No changelog entries found. <a href="/changelog.json">View JSON</a>
+                {i18n.t("changelog.empty")}{" "}
+                <a href={language.route("/changelog.json")}>{i18n.t("changelog.viewJson")}</a>
               </p>
             </Show>
             <For each={releases()}>
@@ -131,7 +136,7 @@ export default function Changelog() {
                           {release.tag}
                         </a>
                       </div>
-                      <time dateTime={release.date}>{formatDate(release.date)}</time>
+                      <time dateTime={release.date}>{formatDate(release.date, language.tag(language.locale()))}</time>
                     </header>
                     <div data-slot="content">
                       <Show when={release.highlights.length > 0}>

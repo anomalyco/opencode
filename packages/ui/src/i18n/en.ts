@@ -1,11 +1,13 @@
 export const dict = {
   "ui.sessionReview.title": "Session changes",
+  "ui.sessionReview.title.lastTurn": "Last turn changes",
   "ui.sessionReview.diffStyle.unified": "Unified",
   "ui.sessionReview.diffStyle.split": "Split",
   "ui.sessionReview.expandAll": "Expand all",
   "ui.sessionReview.collapseAll": "Collapse all",
   "ui.sessionReview.change.added": "Added",
   "ui.sessionReview.change.removed": "Removed",
+  "ui.sessionReview.change.modified": "Modified",
 
   "ui.lineComment.label.prefix": "Comment on ",
   "ui.lineComment.label.suffix": "",

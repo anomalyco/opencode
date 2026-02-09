@@ -1,5 +1,6 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
+import type { Accessor } from "solid-js"
 
 export type Platform = {
   /** Platform discriminator */
@@ -13,6 +14,9 @@ export type Platform = {
 
   /** Open a URL in the default browser */
   openLink(url: string): void
+
+  /** Open a local path in a local app (desktop only) */
+  openPath?(path: string, app?: string): Promise<void>
 
   /** Restart the app  */
   restart(): Promise<void>
@@ -55,6 +59,15 @@ export type Platform = {
 
   /** Parse markdown to HTML using native parser (desktop only, returns unprocessed code blocks) */
   parseMarkdown?(markdown: string): Promise<string>
+
+  /** Webview zoom level (desktop only) */
+  webviewZoom?: Accessor<number>
+
+  /** Check if an editor app exists (desktop only) */
+  checkAppExists?(appName: string): Promise<boolean>
+
+  /** Read image from clipboard (desktop only) */
+  readClipboardImage?(): Promise<File | null>
 }
 
 export const { use: usePlatform, provider: PlatformProvider } = createSimpleContext({
