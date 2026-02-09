@@ -105,14 +105,14 @@ opencode github install
 
 OpenCode 可以由以下 GitHub 事件觸發：
 
-|事件類型 |觸發者 |詳情 |
-| ----------------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `issue_comment` |對問題或 PR 發表評論 | Mention `/opencode` or `/oc` in your comment. OpenCode 讀取上下文並可以創建分支、打開 PR 或回复。 |
-| `pull_request_review_comment` |對 PR 中的特定代碼行進行評論 |在檢查代碼時提及`/opencode` 或`/oc`。 OpenCode receives file path, line numbers, and diff context.   |
-| `issues` |問題已打開或已編輯 |創建或修改問題時自動觸發 OpenCode。需要 `prompt` 輸入。                      |
-| `pull_request` | PR 已開啟或已更新 | Automatically trigger OpenCode when PRs are opened, synchronized, or reopened.對於自動評論很有用。      |
-| `schedule` |基於 Cron 的計劃 |按計劃運行 OpenCode。需要 `prompt` 輸入。輸出進入日誌和 PR（沒有可評論的問題）。        |
-| `workflow_dispatch` |從 GitHub UI 手動觸發 |通過“操作”選項卡按需觸發 OpenCode。需要 `prompt` 輸入。輸出進入日誌和 PR。                 |
+| 事件類型                      | 觸發者                       | 詳情                                                                                               |
+| ----------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------- |
+| `issue_comment`               | 對問題或 PR 發表評論         | Mention `/opencode` or `/oc` in your comment. OpenCode 讀取上下文並可以創建分支、打開 PR 或回复。  |
+| `pull_request_review_comment` | 對 PR 中的特定代碼行進行評論 | 在檢查代碼時提及`/opencode` 或`/oc`。 OpenCode receives file path, line numbers, and diff context. |
+| `issues`                      | 問題已打開或已編輯           | 創建或修改問題時自動觸發 OpenCode。需要 `prompt` 輸入。                                            |
+| `pull_request`                | PR 已開啟或已更新            | Automatically trigger OpenCode when PRs are opened, synchronized, or reopened.對於自動評論很有用。 |
+| `schedule`                    | 基於 Cron 的計劃             | 按計劃運行 OpenCode。需要 `prompt` 輸入。輸出進入日誌和 PR（沒有可評論的問題）。                   |
+| `workflow_dispatch`           | 從 GitHub UI 手動觸發        | 通過“操作”選項卡按需觸發 OpenCode。需要 `prompt` 輸入。輸出進入日誌和 PR。                         |
 
 ### 時間表示例
 

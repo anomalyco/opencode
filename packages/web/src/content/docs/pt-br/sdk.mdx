@@ -37,13 +37,13 @@ Isso inicia tanto um servidor quanto um cliente.
 
 #### Opções
 
-| Opção      | Tipo         | Descrição                       | Padrão      |
-|------------|--------------|---------------------------------|-------------|
-| `hostname` | `string`     | Nome do host do servidor        | `127.0.0.1` |
-| `port`     | `number`     | Porta do servidor               | `4096`      |
-| `signal`   | `AbortSignal`| Sinal de abortar para cancelamento | `undefined` |
-| `timeout`  | `number`     | Tempo limite em ms para iniciar o servidor | `5000`      |
-| `config`   | `Config`     | Objeto de configuração          | `{}`        |
+| Opção      | Tipo          | Descrição                                  | Padrão      |
+| ---------- | ------------- | ------------------------------------------ | ----------- |
+| `hostname` | `string`      | Nome do host do servidor                   | `127.0.0.1` |
+| `port`     | `number`      | Porta do servidor                          | `4096`      |
+| `signal`   | `AbortSignal` | Sinal de abortar para cancelamento         | `undefined` |
+| `timeout`  | `number`      | Tempo limite em ms para iniciar o servidor | `5000`      |
+| `config`   | `Config`      | Objeto de configuração                     | `{}`        |
 
 ---
 
@@ -81,13 +81,13 @@ const client = createOpencodeClient({
 
 #### Opções
 
-| Opção          | Tipo       | Descrição                       | Padrão                     |
-|----------------|------------|---------------------------------|---------------------------|
-| `baseUrl`      | `string`   | URL do servidor                 | `http://localhost:4096`   |
-| `fetch`        | `function` | Implementação de fetch personalizada | `globalThis.fetch`        |
-| `parseAs`      | `string`   | Método de análise da resposta   | `auto`                    |
-| `responseStyle`| `string`   | Estilo de retorno: `data` ou `fields` | `fields`                  |
-| `throwOnError` | `boolean`  | Lançar erros em vez de retornar | `false`                   |
+| Opção           | Tipo       | Descrição                             | Padrão                  |
+| --------------- | ---------- | ------------------------------------- | ----------------------- |
+| `baseUrl`       | `string`   | URL do servidor                       | `http://localhost:4096` |
+| `fetch`         | `function` | Implementação de fetch personalizada  | `globalThis.fetch`      |
+| `parseAs`       | `string`   | Método de análise da resposta         | `auto`                  |
+| `responseStyle` | `string`   | Estilo de retorno: `data` ou `fields` | `fields`                |
+| `throwOnError`  | `boolean`  | Lançar erros em vez de retornar       | `false`                 |
 
 ---
 
@@ -125,9 +125,9 @@ O SDK expõe todas as APIs do servidor através de um cliente seguro em tipos.
 
 ### Global
 
-| Método            | Descrição                     | Resposta                             |
-|-------------------|-------------------------------|--------------------------------------|
-| `global.health()`  | Verificar a saúde e versão do servidor | `{ healthy: true, version: string }` |
+| Método            | Descrição                              | Resposta                             |
+| ----------------- | -------------------------------------- | ------------------------------------ |
+| `global.health()` | Verificar a saúde e versão do servidor | `{ healthy: true, version: string }` |
 
 ---
 
@@ -142,10 +142,10 @@ console.log(health.data.version)
 
 ### App
 
-| Método          | Descrição               | Resposta                                    |
-|-----------------|-------------------------|---------------------------------------------|
-| `app.log()`     | Escrever uma entrada de log | `boolean`                                   |
-| `app.agents()`  | Listar todos os agentes disponíveis | <a href={typesUrl}><code>Agent[]</code></a> |
+| Método         | Descrição                           | Resposta                                    |
+| -------------- | ----------------------------------- | ------------------------------------------- |
+| `app.log()`    | Escrever uma entrada de log         | `boolean`                                   |
+| `app.agents()` | Listar todos os agentes disponíveis | <a href={typesUrl}><code>Agent[]</code></a> |
 
 ---
 
@@ -169,10 +169,10 @@ const agents = await client.app.agents()
 
 ### Projeto
 
-| Método              | Descrição         | Resposta                                      |
-|---------------------|-------------------|-----------------------------------------------|
+| Método              | Descrição                | Resposta                                      |
+| ------------------- | ------------------------ | --------------------------------------------- |
 | `project.list()`    | Listar todos os projetos | <a href={typesUrl}><code>Project[]</code></a> |
-| `project.current()` | Obter projeto atual | <a href={typesUrl}><code>Project</code></a>   |
+| `project.current()` | Obter projeto atual      | <a href={typesUrl}><code>Project</code></a>   |
 
 ---
 
@@ -190,8 +190,8 @@ const currentProject = await client.project.current()
 
 ### Caminho
 
-| Método       | Descrição      | Resposta                                 |
-|--------------|----------------|------------------------------------------|
+| Método       | Descrição           | Resposta                                 |
+| ------------ | ------------------- | ---------------------------------------- |
 | `path.get()` | Obter caminho atual | <a href={typesUrl}><code>Path</code></a> |
 
 ---
@@ -207,10 +207,10 @@ const pathInfo = await client.path.get()
 
 ### Configuração
 
-| Método               | Descrição                       | Resposta                                                                                              |
-|----------------------|---------------------------------|-------------------------------------------------------------------------------------------------------|
-| `config.get()`       | Obter informações de configuração | <a href={typesUrl}><code>Config</code></a>                                                            |
-| `config.providers()`  | Listar provedores e modelos padrão | `{ providers: `<a href={typesUrl}><code>Provider[]</code></a>`, default: { [key: string]: string } }` |
+| Método               | Descrição                          | Resposta                                                                                              |
+| -------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `config.get()`       | Obter informações de configuração  | <a href={typesUrl}><code>Config</code></a>                                                            |
+| `config.providers()` | Listar provedores e modelos padrão | `{ providers: `<a href={typesUrl}><code>Provider[]</code></a>`, default: { [key: string]: string } }` |
 
 ---
 
@@ -226,27 +226,27 @@ const { providers, default: defaults } = await client.config.providers()
 
 ### Sessões
 
-| Método                                                     | Descrição                        | Notas                                                                                                                                          |
-|-----------------------------------------------------------|----------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------|
-| `session.list()`                                           | Listar sessões                   | Retorna <a href={typesUrl}><code>Session[]</code></a>                                                                                          |
-| `session.get({ path })`                                   | Obter sessão                     | Retorna <a href={typesUrl}><code>Session</code></a>                                                                                            |
-| `session.children({ path })`                              | Listar sessões filhas            | Retorna <a href={typesUrl}><code>Session[]</code></a>                                                                                          |
-| `session.create({ body })`                                | Criar sessão                     | Retorna <a href={typesUrl}><code>Session</code></a>                                                                                            |
-| `session.delete({ path })`                                | Deletar sessão                   | Retorna `boolean`                                                                                                                              |
-| `session.update({ path, body })`                          | Atualizar propriedades da sessão  | Retorna <a href={typesUrl}><code>Session</code></a>                                                                                            |
-| `session.init({ path, body })`                            | Analisar app e criar `AGENTS.md` | Retorna `boolean`                                                                                                                              |
-| `session.abort({ path })`                                 | Abortar uma sessão em execução   | Retorna `boolean`                                                                                                                              |
-| `session.share({ path })`                                 | Compartilhar sessão               | Retorna <a href={typesUrl}><code>Session</code></a>                                                                                            |
-| `session.unshare({ path })`                               | Descompartilhar sessão            | Retorna <a href={typesUrl}><code>Session</code></a>                                                                                            |
-| `session.summarize({ path, body })`                       | Resumir sessão                   | Retorna `boolean`                                                                                                                              |
-| `session.messages({ path })`                               | Listar mensagens em uma sessão    | Retorna `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                        |
-| `session.message({ path })`                                | Obter detalhes da mensagem        | Retorna `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                          |
-| `session.prompt({ path, body })`                           | Enviar mensagem de prompt         | `body.noReply: true` retorna UserMessage (apenas contexto). O padrão retorna <a href={typesUrl}><code>AssistantMessage</code></a> com resposta da IA |
-| `session.command({ path, body })`                          | Enviar comando para a sessão      | Retorna `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                 |
-| `session.shell({ path, body })`                            | Executar um comando shell         | Retorna <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                   |
-| `session.revert({ path, body })`                           | Reverter uma mensagem             | Retorna <a href={typesUrl}><code>Session</code></a>                                                                                            |
-| `session.unrevert({ path })`                               | Restaurar mensagens revertidas    | Retorna <a href={typesUrl}><code>Session</code></a>                                                                                            |
-| `postSessionByIdPermissionsByPermissionId({ path, body })` | Responder a um pedido de permissão | Retorna `boolean`                                                                                                                              |
+| Método                                                     | Descrição                          | Notas                                                                                                                                                |
+| ---------------------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session.list()`                                           | Listar sessões                     | Retorna <a href={typesUrl}><code>Session[]</code></a>                                                                                                |
+| `session.get({ path })`                                    | Obter sessão                       | Retorna <a href={typesUrl}><code>Session</code></a>                                                                                                  |
+| `session.children({ path })`                               | Listar sessões filhas              | Retorna <a href={typesUrl}><code>Session[]</code></a>                                                                                                |
+| `session.create({ body })`                                 | Criar sessão                       | Retorna <a href={typesUrl}><code>Session</code></a>                                                                                                  |
+| `session.delete({ path })`                                 | Deletar sessão                     | Retorna `boolean`                                                                                                                                    |
+| `session.update({ path, body })`                           | Atualizar propriedades da sessão   | Retorna <a href={typesUrl}><code>Session</code></a>                                                                                                  |
+| `session.init({ path, body })`                             | Analisar app e criar `AGENTS.md`   | Retorna `boolean`                                                                                                                                    |
+| `session.abort({ path })`                                  | Abortar uma sessão em execução     | Retorna `boolean`                                                                                                                                    |
+| `session.share({ path })`                                  | Compartilhar sessão                | Retorna <a href={typesUrl}><code>Session</code></a>                                                                                                  |
+| `session.unshare({ path })`                                | Descompartilhar sessão             | Retorna <a href={typesUrl}><code>Session</code></a>                                                                                                  |
+| `session.summarize({ path, body })`                        | Resumir sessão                     | Retorna `boolean`                                                                                                                                    |
+| `session.messages({ path })`                               | Listar mensagens em uma sessão     | Retorna `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                              |
+| `session.message({ path })`                                | Obter detalhes da mensagem         | Retorna `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                |
+| `session.prompt({ path, body })`                           | Enviar mensagem de prompt          | `body.noReply: true` retorna UserMessage (apenas contexto). O padrão retorna <a href={typesUrl}><code>AssistantMessage</code></a> com resposta da IA |
+| `session.command({ path, body })`                          | Enviar comando para a sessão       | Retorna `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                       |
+| `session.shell({ path, body })`                            | Executar um comando shell          | Retorna <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                         |
+| `session.revert({ path, body })`                           | Reverter uma mensagem              | Retorna <a href={typesUrl}><code>Session</code></a>                                                                                                  |
+| `session.unrevert({ path })`                               | Restaurar mensagens revertidas     | Retorna <a href={typesUrl}><code>Session</code></a>                                                                                                  |
+| `postSessionByIdPermissionsByPermissionId({ path, body })` | Responder a um pedido de permissão | Retorna `boolean`                                                                                                                                    |
 
 ---
 
@@ -283,13 +283,13 @@ await client.session.prompt({
 
 ### Arquivos
 
-| Método                    | Descrição                        | Resposta                                                                                    |
-|---------------------------|----------------------------------|---------------------------------------------------------------------------------------------|
-| `find.text({ query })`    | Pesquisar texto em arquivos       | Array de objetos de correspondência com `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
-| `find.files({ query })`   | Encontrar arquivos e diretórios por nome | `string[]` (caminhos)                                                                      |
-| `find.symbols({ query })` | Encontrar símbolos no workspace   | <a href={typesUrl}><code>Symbol[]</code></a>                                              |
-| `file.read({ query })`    | Ler um arquivo                    | `{ type: "raw" \| "patch", content: string }`                                             |
-| `file.status({ query? })` | Obter status para arquivos rastreados | <a href={typesUrl}><code>File[]</code></a>                                                |
+| Método                    | Descrição                                | Resposta                                                                                                |
+| ------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `find.text({ query })`    | Pesquisar texto em arquivos              | Array de objetos de correspondência com `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
+| `find.files({ query })`   | Encontrar arquivos e diretórios por nome | `string[]` (caminhos)                                                                                   |
+| `find.symbols({ query })` | Encontrar símbolos no workspace          | <a href={typesUrl}><code>Symbol[]</code></a>                                                            |
+| `file.read({ query })`    | Ler um arquivo                           | `{ type: "raw" \| "patch", content: string }`                                                           |
+| `file.status({ query? })` | Obter status para arquivos rastreados    | <a href={typesUrl}><code>File[]</code></a>                                                              |
 
 `find.files` suporta alguns campos de consulta opcionais:
 
@@ -324,17 +324,17 @@ const content = await client.file.read({
 
 ### TUI
 
-| Método                         | Descrição               | Resposta  |
-|-------------------------------|-------------------------|-----------|
-| `tui.appendPrompt({ body })`   | Adicionar texto ao prompt | `boolean` |
-| `tui.openHelp()`               | Abrir o diálogo de ajuda  | `boolean` |
+| Método                         | Descrição                  | Resposta  |
+| ------------------------------ | -------------------------- | --------- |
+| `tui.appendPrompt({ body })`   | Adicionar texto ao prompt  | `boolean` |
+| `tui.openHelp()`               | Abrir o diálogo de ajuda   | `boolean` |
 | `tui.openSessions()`           | Abrir o seletor de sessões | `boolean` |
 | `tui.openThemes()`             | Abrir o seletor de temas   | `boolean` |
-| `tui.openModels()`             | Abrir o seletor de modelos  | `boolean` |
+| `tui.openModels()`             | Abrir o seletor de modelos | `boolean` |
 | `tui.submitPrompt()`           | Enviar o prompt atual      | `boolean` |
 | `tui.clearPrompt()`            | Limpar o prompt            | `boolean` |
 | `tui.executeCommand({ body })` | Executar um comando        | `boolean` |
-| `tui.showToast({ body })`      | Mostrar notificação toast   | `boolean` |
+| `tui.showToast({ body })`      | Mostrar notificação toast  | `boolean` |
 
 ---
 
@@ -355,8 +355,8 @@ await client.tui.showToast({
 
 ### Autenticação
 
-| Método              | Descrição                    | Resposta  |
-|---------------------|------------------------------|-----------|
+| Método              | Descrição                           | Resposta  |
+| ------------------- | ----------------------------------- | --------- |
 | `auth.set({ ... })` | Definir credenciais de autenticação | `boolean` |
 
 ---
@@ -374,8 +374,8 @@ await client.auth.set({
 
 ### Eventos
 
-| Método              | Descrição               | Resposta                  |
-|---------------------|-------------------------|---------------------------|
+| Método              | Descrição                               | Resposta                                |
+| ------------------- | --------------------------------------- | --------------------------------------- |
 | `event.subscribe()` | Fluxo de eventos enviados pelo servidor | Fluxo de eventos enviados pelo servidor |
 
 ---

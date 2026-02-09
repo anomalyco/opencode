@@ -116,13 +116,13 @@ use the mcp_everything tool to add the number 3 and 4
 
 Oto wszystkie opcje lokalnego serwera MCP.
 
-| Opcja | Wpisz | Wymagane | Opis |
-| ------------- | ------- | -------- | ----------------------------------------------------------------------------------- |
-| `type` | Ciąg | Y | Typ połączenia z serwerem MCP musi być `"local"`.                                   |
-| `command` | Tablica | Y | Polecenie i argumenty uruchamiające serwer MCP.                                        |
-| `environment` | Obiekt |          | Zmienne ustawienia podczas uruchamiania serwera.                               |
-| `enabled` | Wartość logiczna |          | Włącz lub wyłącz serwer MCP podczas uruchamiania.                                        |
-| `timeout` | Numer |          | Limit czasu w ms na pobieranie narzędzia z serwera MCP. Wartość domyślna do 5000 (5 sekund). |
+| Opcja         | Wpisz            | Wymagane | Opis                                                                                         |
+| ------------- | ---------------- | -------- | -------------------------------------------------------------------------------------------- |
+| `type`        | Ciąg             | Y        | Typ połączenia z serwerem MCP musi być `"local"`.                                            |
+| `command`     | Tablica          | Y        | Polecenie i argumenty uruchamiające serwer MCP.                                              |
+| `environment` | Obiekt           |          | Zmienne ustawienia podczas uruchamiania serwera.                                             |
+| `enabled`     | Wartość logiczna |          | Włącz lub wyłącz serwer MCP podczas uruchamiania.                                            |
+| `timeout`     | Numer            |          | Limit czasu w ms na pobieranie narzędzia z serwera MCP. Wartość domyślna do 5000 (5 sekund). |
 
 ---
 
@@ -152,14 +152,14 @@ Dodaj zdalne serwery MCP, ustawiając `type` na `"remote"`.
 
 #### Opcje
 
-| Opcja | Wpisz | Wymagane | Opis |
-| --------- | ------- | -------- | ----------------------------------------------------------------------------------- |
-| `type` | Ciąg | Y | Typ połączenia z serwerem MCP musi być `"remote"`.                                  |
-| `url` | Ciąg | Y | Adres URL zdalnego serwera MCP.                                                       |
-| `enabled` | Wartość logiczna |          | Włącz lub wyłącz serwer MCP podczas uruchamiania.                                        |
-| `headers` | Obiekt |          | Nagłówki do wysłania z wprowadzenia.                                                   |
-| `oauth` | Obiekt |          | Konfiguracja uwierzytelniania OAuth. Zobacz sekcję [OAuth](#oauth) poniżej.              |
-| `timeout` | Numer |          | Limit czasu w ms na pobieranie narzędzia z serwera MCP. Wartość domyślna do 5000 (5 sekund). |
+| Opcja     | Wpisz            | Wymagane | Opis                                                                                         |
+| --------- | ---------------- | -------- | -------------------------------------------------------------------------------------------- |
+| `type`    | Ciąg             | Y        | Typ połączenia z serwerem MCP musi być `"remote"`.                                           |
+| `url`     | Ciąg             | Y        | Adres URL zdalnego serwera MCP.                                                              |
+| `enabled` | Wartość logiczna |          | Włącz lub wyłącz serwer MCP podczas uruchamiania.                                            |
+| `headers` | Obiekt           |          | Nagłówki do wysłania z wprowadzenia.                                                         |
+| `oauth`   | Obiekt           |          | Konfiguracja uwierzytelniania OAuth. Zobacz sekcję [OAuth](#oauth) poniżej.                  |
+| `timeout` | Numer            |          | Limit czasu w ms na pobieranie narzędzia z serwera MCP. Wartość domyślna do 5000 (5 sekund). |
 
 ---
 
@@ -266,12 +266,12 @@ Jeśli chcesz włączyć automatyczne OAuth dla serwera (np. dla serwerów, któ
 
 #### Opcje OAuth
 
-| Opcja | Wpisz | Opis |
-| -------------- | --------------- | -------------------------------------------------------------------------------- |
-| `oauth` | Obiekt \| fałszywe | Obiekt konfiguracyjny OAuth lub `false`, aby wyłączyć automatyczne wykrywanie OAuth.                 |
-| `clientId` | Ciąg | Identyfikator klienta OAuth. Jeżeli nie zostanie podany, zostanie podjęta próba dynamicznej rejestracji klienta. |
-| `clientSecret` | Ciąg | Sekret klienta OAuth, plik jest wymagany przez serwer autoryzacji.                    |
-| `scope` | Ciąg | Zakresy protokołu OAuth, których należy żądać podczas autoryzacji.                                    |
+| Opcja          | Wpisz              | Opis                                                                                                             |
+| -------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `oauth`        | Obiekt \| fałszywe | Obiekt konfiguracyjny OAuth lub `false`, aby wyłączyć automatyczne wykrywanie OAuth.                             |
+| `clientId`     | Ciąg               | Identyfikator klienta OAuth. Jeżeli nie zostanie podany, zostanie podjęta próba dynamicznej rejestracji klienta. |
+| `clientSecret` | Ciąg               | Sekret klienta OAuth, plik jest wymagany przez serwer autoryzacji.                                               |
+| `scope`        | Ciąg               | Zakresy protokołu OAuth, których należy żądać podczas autoryzacji.                                               |
 
 #### Debugowanie
 

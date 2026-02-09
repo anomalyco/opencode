@@ -12,6 +12,7 @@ OpenCode와 문제를 디버그하려면 로그와 로컬 데이터를 확인하
 로그 파일은 다음과 같습니다:
 
 -**macOS/리눅스**: `~/.local/share/opencode/log/`
+
 - **Windows**: 압박 `WIN+R`와 풀 `%USERPROFILE%\.local\share\opencode\log`
 
 로그 파일은 타임스탬프 (예 : `2025-01-09T123456.log`)과 가장 최근 10 로그 파일이 보관됩니다.
@@ -25,6 +26,7 @@ OpenCode와 문제를 디버그하려면 로그와 로컬 데이터를 확인하
 opencode 저장 세션 데이터 및 디스크에 다른 응용 데이터:
 
 -**macOS/리눅스**: `~/.local/share/opencode/`
+
 - **Windows**: 압박 `WIN+R`와 풀 `%USERPROFILE%\.local\share\opencode`
 
 이 디렉토리는 다음과 같습니다:
@@ -57,8 +59,8 @@ OpenCode 데스크톱은 배경에서 로컬 OpenCode 서버 (`opencode-cli` sid
 
 글로벌 설정 파일을 열고 `plugin` 키를 찾습니다.
 
--**macOS/리눅스**: `~/.config/opencode/opencode.jsonc` (또는 `~/.config/opencode/opencode.json`)
--**macOS/Linux** (외부 설치): `~/.local/share/opencode/opencode.jsonc`
+-**macOS/리눅스**: `~/.config/opencode/opencode.jsonc` (또는 `~/.config/opencode/opencode.json`) -**macOS/Linux** (외부 설치): `~/.local/share/opencode/opencode.jsonc`
+
 - **Windows**: 압박 `WIN+R`와 풀 `%USERPROFILE%\.config\opencode\opencode.jsonc`
 
 구성 된 플러그인이있는 경우, 일시적으로 키를 제거하거나 빈 배열로 설정하여 비활성화하십시오.
@@ -74,8 +76,7 @@ OpenCode 데스크톱은 배경에서 로컬 OpenCode 서버 (`opencode-cli` sid
 
 OpenCode는 디스크에서 로컬 플러그인을로드 할 수 있습니다. Temporarily 이동 이러한 방법 (또는 폴더 이름을 변경) 및 데스크톱 응용 프로그램을 다시 시작:
 
-- **글로벌 플러그인**
--**macOS/리눅스**: `~/.config/opencode/plugins/`
+- **글로벌 플러그인** -**macOS/리눅스**: `~/.config/opencode/plugins/`
 - **Windows**: 압박 `WIN+R`와 풀 `%USERPROFILE%\.config\opencode\plugins`
 - **프로젝트 플러그인** (프로젝트 설정만 사용)
 - `<your-project>/.opencode/plugins/`
@@ -92,6 +93,7 @@ OpenCode는 디스크에서 로컬 플러그인을로드 할 수 있습니다. T
 2. 캐시 디렉토리 삭제:
 
 -**macOS**: 찾기 -> `Cmd+Shift+G` -> 붙여넣기 `~/.cache/opencode`
+
 - **Linux**: `~/.cache/opencode` 삭제 (또는 `rm -rf ~/.cache/opencode` 실행)
 - **Windows**: 압박 `WIN+R`와 풀 `%USERPROFILE%\.cache\opencode`
 
@@ -164,6 +166,7 @@ OpenCode 데스크톱은 시스템 알림을 보여줍니다 :
 빠른 디렉토리를 찾을 수:
 
 -**macOS**: Finder -> `Cmd+Shift+G` -> `~/Library/Application Support` (위의 파일명 검색)
+
 - **리눅스 **: 위의 파일명에 대한 `~/.local/share`의 밑에 검색
 - **Windows**: `WIN+R` -> `%APPDATA%`를 눌러 (위의 파일 이름을 검색)
 

@@ -29,15 +29,15 @@ opencode [project]
 
 #### 旗幟
 
-|旗幟|短|描述 |
-| ------------ | ----- | ------------------------------------------ |
-| `--continue` | `-c` | 继续上期 |
-| `--session` | `-s` | 会话 ID 继续 |
-| `--prompt` |       |提示使用|
-| `--model` | `-m` |以提供者/模型形式使用的模型 |
-| `--agent` |       |代理使用|
-| `--port` |       | 监听端口 |
-| `--hostname` |       | 监听的主机名 |
+| 旗幟         | 短   | 描述                        |
+| ------------ | ---- | --------------------------- |
+| `--continue` | `-c` | 继续上期                    |
+| `--session`  | `-s` | 会话 ID 继续                |
+| `--prompt`   |      | 提示使用                    |
+| `--model`    | `-m` | 以提供者/模型形式使用的模型 |
+| `--agent`    |      | 代理使用                    |
+| `--port`     |      | 监听端口                    |
+| `--hostname` |      | 监听的主机名                |
 
 ---
 
@@ -77,10 +77,10 @@ opencode attach http://10.20.30.40:4096
 
 #### 旗幟
 
-|旗幟|短|描述 |
-| ----------- | ----- | --------------------------------- |
-| `--dir` |       |启动 TUI 的工作目录 |
-| `--session` | `-s` | 会话 ID 继续 |
+| 旗幟        | 短   | 描述                |
+| ----------- | ---- | ------------------- |
+| `--dir`     |      | 启动 TUI 的工作目录 |
+| `--session` | `-s` | 会话 ID 继续        |
 
 ---
 
@@ -186,10 +186,10 @@ opencode github run
 
 ##### 旗幟
 
-|旗幟|描述 |
-| --------- | -------------------------------------- |
+| 旗幟      | 描述                           |
+| --------- | ------------------------------ |
 | `--event` | 用于运行代理的 GitHub 模拟事件 |
-| `--token` | GitHub 个人访问令牌 |
+| `--token` | GitHub 个人访问令牌            |
 
 ---
 
@@ -295,10 +295,10 @@ opencode models anthropic
 
 #### 旗幟
 
-|旗幟|描述 |
-| ----------- | ------------------------------------------------------------ |
-| `--refresh` |来自 models.dev | 刷新模型存储
-| `--verbose` |使用更详细的模型输出（包括成本等元数据）|
+| 旗幟        | 描述                                     |
+| ----------- | ---------------------------------------- | ------------ |
+| `--refresh` | 来自 models.dev                          | 刷新模型存储 |
+| `--verbose` | 使用更详细的模型输出（包括成本等元数据） |
 
 使用`--refresh`标志来更新服务器的模型列表。当新模型已添加到提供程序并且您希望在OpenCode中查看它们时，这非常有用。
 
@@ -334,19 +334,19 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 #### 旗幟
 
-|旗幟|短|描述 |
-| ------------ | ----- | ------------------------------------------------------------------ |
-| `--command` |       | 要运行的命令，使用消息作为参数 |
-| `--continue` | `-c` | 继续上期 |
-| `--session` | `-s` | 会话 ID 继续 |
-| `--share` |       |分享会议|
-| `--model` | `-m` |以提供者/模型形式使用的模型 |
-| `--agent` |       |代理使用|
-| `--file` | `-f` |要附加到消息的文件 |
-| `--format` |       |格式：默认（格式化）或json（原始JSON事件）|
-| `--title` |       |会话标题（如果未提供值，则使用断断的提示）|
-| `--attach` |       | 连接到正在运行的 opencode 服务器（例如，http://localhost:4096）|
-| `--port` |       |本地服务器的端口（默认为随机端口） |
+| 旗幟         | 短   | 描述                                                            |
+| ------------ | ---- | --------------------------------------------------------------- |
+| `--command`  |      | 要运行的命令，使用消息作为参数                                  |
+| `--continue` | `-c` | 继续上期                                                        |
+| `--session`  | `-s` | 会话 ID 继续                                                    |
+| `--share`    |      | 分享会议                                                        |
+| `--model`    | `-m` | 以提供者/模型形式使用的模型                                     |
+| `--agent`    |      | 代理使用                                                        |
+| `--file`     | `-f` | 要附加到消息的文件                                              |
+| `--format`   |      | 格式：默认（格式化）或json（原始JSON事件）                      |
+| `--title`    |      | 会话标题（如果未提供值，则使用断断的提示）                      |
+| `--attach`   |      | 连接到正在运行的 opencode 服务器（例如，http://localhost:4096） |
+| `--port`     |      | 本地服务器的端口（默认为随机端口）                              |
 
 ---
 
@@ -362,12 +362,12 @@ opencode serve
 
 #### 旗幟
 
-|旗幟|描述 |
-| ------------ | ------------------------------------------ |
-| `--port` |监听端口|
-| `--hostname` | 监听的主机名 |
-| `--mdns` | 启用 mDNS 发现 |
-| `--cors` | 允许 CORS 的其他浏览器源 |
+| 旗幟         | 描述                     |
+| ------------ | ------------------------ |
+| `--port`     | 监听端口                 |
+| `--hostname` | 监听的主机名             |
+| `--mdns`     | 启用 mDNS 发现           |
+| `--cors`     | 允许 CORS 的其他浏览器源 |
 
 ---
 
@@ -391,10 +391,10 @@ opencode session list
 
 ##### 旗幟
 
-|旗幟|短|描述 |
-| ------------- | ----- | ------------------------------------ |
-| `--max-count` | `-n` | 限制为最近的 N 个会话 |
-| `--format` |       | 输出格式：table 或 json(table) |
+| 旗幟          | 短   | 描述                           |
+| ------------- | ---- | ------------------------------ |
+| `--max-count` | `-n` | 限制为最近的 N 个会话          |
+| `--format`    |      | 输出格式：table 或 json(table) |
 
 ---
 
@@ -408,12 +408,12 @@ opencode stats
 
 #### 旗幟
 
-|旗幟|描述 |
-| ----------- | --------------------------------------------------------------------------- |
-| `--days` | 显示过去N天（所有时间）的统计数据|
-| `--tools` | 显示工具数量（全部）|
-| `--models` | 隐藏显示模型使用情况解读（默认）。输入一个数字来显示前 N |
-| `--project` |按项目过滤（所有项目，空字符串：当前项目）|
+| 旗幟        | 描述                                                     |
+| ----------- | -------------------------------------------------------- |
+| `--days`    | 显示过去N天（所有时间）的统计数据                        |
+| `--tools`   | 显示工具数量（全部）                                     |
+| `--models`  | 隐藏显示模型使用情况解读（默认）。输入一个数字来显示前 N |
+| `--project` | 按项目过滤（所有项目，空字符串：当前项目）               |
 
 ---
 
@@ -458,12 +458,12 @@ opencode web
 
 #### 旗幟
 
-|旗幟|描述 |
-| ------------ | ------------------------------------------ |
-| `--port` |监听端口|
-| `--hostname` | 监听的主机名 |
-| `--mdns` | 启用 mDNS 发现 |
-| `--cors` | 允许 CORS 的其他浏览器源 |
+| 旗幟         | 描述                     |
+| ------------ | ------------------------ |
+| `--port`     | 监听端口                 |
+| `--hostname` | 监听的主机名             |
+| `--mdns`     | 启用 mDNS 发现           |
+| `--cors`     | 允许 CORS 的其他浏览器源 |
 
 ---
 
@@ -479,10 +479,10 @@ opencode acp
 
 #### 旗幟
 
-|旗幟|描述 |
-| ------------ | --------------------- |
-| `--cwd` |工作目录 |
-| `--port` |监听端口|
+| 旗幟         | 描述         |
+| ------------ | ------------ |
+| `--cwd`      | 工作目录     |
+| `--port`     | 监听端口     |
 | `--hostname` | 监听的主机名 |
 
 ---
@@ -497,12 +497,12 @@ opencode uninstall
 
 #### 旗幟
 
-|旗幟|短|描述 |
-| --------------- | ----- | ------------------------------------------- |
-| `--keep-config` | `-c` |保留配置文件|
-| `--keep-data` | `-d` | 保留会话数据和快照|
-| `--dry-run` |       |在显示不删除的情况下将删除的内容 |
-| `--force` | `-f` | 跳过确认提示 |
+| 旗幟            | 短   | 描述                             |
+| --------------- | ---- | -------------------------------- |
+| `--keep-config` | `-c` | 保留配置文件                     |
+| `--keep-data`   | `-d` | 保留会话数据和快照               |
+| `--dry-run`     |      | 在显示不删除的情况下将删除的内容 |
+| `--force`       | `-f` | 跳过确认提示                     |
 
 ---
 
@@ -528,9 +528,9 @@ opencode upgrade v0.1.48
 
 #### 旗幟
 
-|旗幟|短|描述 |
-| ---------- | ----- | ----------------------------------------------------------------- |
-| `--method` | `-m` |使用的安装方法；卷曲、npm、pnpm、bun、brew |
+| 旗幟       | 短   | 描述                                       |
+| ---------- | ---- | ------------------------------------------ |
+| `--method` | `-m` | 使用的安装方法；卷曲、npm、pnpm、bun、brew |
 
 ---
 
@@ -538,12 +538,12 @@ opencode upgrade v0.1.48
 
 opencode CLI采用以下全局标志。
 
-|旗幟|短|描述 |
-| -------------- | ----- | ------------------------------------ |
-| `--help` | `-h` | 显示帮助|
-| `--version` | `-v` | 打印版本号 |
-| `--print-logs` |       |将日志打印到stderr |
-| `--log-level` |       |日志级别（调试、信息、警告、错误）|
+| 旗幟           | 短   | 描述                               |
+| -------------- | ---- | ---------------------------------- |
+| `--help`       | `-h` | 显示帮助                           |
+| `--version`    | `-v` | 打印版本号                         |
+| `--print-logs` |      | 将日志打印到stderr                 |
+| `--log-level`  |      | 日志级别（调试、信息、警告、错误） |
 
 ---
 
@@ -551,32 +551,32 @@ opencode CLI采用以下全局标志。
 
 可以使用环境变量配置OpenCode。
 
-|變量|類型 |描述 |
-| ------------------------------------- | ------- | ------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE` | 布尔 | 自动共享会话 |
-| `OPENCODE_GIT_BASH_PATH` |字符串| Windows 上 Git Bash 可执行文件的路径 |
-| `OPENCODE_CONFIG` |字符串|配置文件路径 |
-| `OPENCODE_CONFIG_DIR` |字符串|配置目录的路径 |
-| `OPENCODE_CONFIG_CONTENT` |字符串|内联 json 配置内容 |
-| `OPENCODE_DISABLE_AUTOUPDATE` | 布尔 | 取消自动更新检查 |
-| `OPENCODE_DISABLE_PRUNE` | 布尔 | 取消数据的裁剪 |
-| `OPENCODE_DISABLE_TERMINAL_TITLE` | 布尔 | 取消自动终端标题更新 |
-| `OPENCODE_PERMISSION` |字符串|内联 json 权限配置 |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS` | 布尔 | 取消默认插件 |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD` | 布尔 | 禁用自动 LSP 服务器下载 |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | 布尔 | 制作实验模型 |
-| `OPENCODE_DISABLE_AUTOCOMPACT` |布尔|取消自动上下文压缩|
-| `OPENCODE_DISABLE_CLAUDE_CODE` | 布尔 | 禁止从 `.claude` 读取（提示+技巧）|
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | 布尔 | 禁用读取`~/.claude/CLAUDE.md` |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | 布尔 | 禁用加载`.claude/skills` |
-| `OPENCODE_DISABLE_MODELS_FETCH` | 布尔 | 禁止从远程源获取模型 |
-| `OPENCODE_FAKE_VCS` |字符串|用于测试目的的假 VCS 成立 |
-| `OPENCODE_DISABLE_FILETIME_CHECK` |布尔|取消文件时间检查以进行优化|
-| `OPENCODE_CLIENT` |字符串|客户端标识符（默认为`cli`）|
-| `OPENCODE_ENABLE_EXA` | 布尔 | 启用 Exa 网络搜索工具 |
-| `OPENCODE_SERVER_PASSWORD` |字符串|为 `serve`/`web` 赠送基本身份验证 |
-| `OPENCODE_SERVER_USERNAME` |字符串|覆盖基本身份验证用户名（默认`opencode`）|
-| `OPENCODE_MODELS_URL` |字符串|用于获取模型配置的自定义 URL |
+| 變量                                  | 類型   | 描述                                     |
+| ------------------------------------- | ------ | ---------------------------------------- |
+| `OPENCODE_AUTO_SHARE`                 | 布尔   | 自动共享会话                             |
+| `OPENCODE_GIT_BASH_PATH`              | 字符串 | Windows 上 Git Bash 可执行文件的路径     |
+| `OPENCODE_CONFIG`                     | 字符串 | 配置文件路径                             |
+| `OPENCODE_CONFIG_DIR`                 | 字符串 | 配置目录的路径                           |
+| `OPENCODE_CONFIG_CONTENT`             | 字符串 | 内联 json 配置内容                       |
+| `OPENCODE_DISABLE_AUTOUPDATE`         | 布尔   | 取消自动更新检查                         |
+| `OPENCODE_DISABLE_PRUNE`              | 布尔   | 取消数据的裁剪                           |
+| `OPENCODE_DISABLE_TERMINAL_TITLE`     | 布尔   | 取消自动终端标题更新                     |
+| `OPENCODE_PERMISSION`                 | 字符串 | 内联 json 权限配置                       |
+| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | 布尔   | 取消默认插件                             |
+| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | 布尔   | 禁用自动 LSP 服务器下载                  |
+| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | 布尔   | 制作实验模型                             |
+| `OPENCODE_DISABLE_AUTOCOMPACT`        | 布尔   | 取消自动上下文压缩                       |
+| `OPENCODE_DISABLE_CLAUDE_CODE`        | 布尔   | 禁止从 `.claude` 读取（提示+技巧）       |
+| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | 布尔   | 禁用读取`~/.claude/CLAUDE.md`            |
+| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | 布尔   | 禁用加载`.claude/skills`                 |
+| `OPENCODE_DISABLE_MODELS_FETCH`       | 布尔   | 禁止从远程源获取模型                     |
+| `OPENCODE_FAKE_VCS`                   | 字符串 | 用于测试目的的假 VCS 成立                |
+| `OPENCODE_DISABLE_FILETIME_CHECK`     | 布尔   | 取消文件时间检查以进行优化               |
+| `OPENCODE_CLIENT`                     | 字符串 | 客户端标识符（默认为`cli`）              |
+| `OPENCODE_ENABLE_EXA`                 | 布尔   | 启用 Exa 网络搜索工具                    |
+| `OPENCODE_SERVER_PASSWORD`            | 字符串 | 为 `serve`/`web` 赠送基本身份验证        |
+| `OPENCODE_SERVER_USERNAME`            | 字符串 | 覆盖基本身份验证用户名（默认`opencode`） |
+| `OPENCODE_MODELS_URL`                 | 字符串 | 用于获取模型配置的自定义 URL             |
 
 ---
 
@@ -584,18 +584,18 @@ opencode CLI采用以下全局标志。
 
 這些環境變量啟用可能會更改或刪除的實驗性功能。
 
-|變量|類型 |描述 |
-| ----------------------------------------------- | ------- | --------------------------------------- |
-| `OPENCODE_EXPERIMENTAL` | 布尔 | 实现所有实验性功能 |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY` | 布尔 | 新增图标发现 |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT` | 布尔 | 在 TUI 中禁用选择时复制 |
+| 變量                                            | 類型 | 描述                                |
+| ----------------------------------------------- | ---- | ----------------------------------- | --- |
+| `OPENCODE_EXPERIMENTAL`                         | 布尔 | 实现所有实验性功能                  |
+| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | 布尔 | 新增图标发现                        |
+| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | 布尔 | 在 TUI 中禁用选择时复制             |
 | `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | 数量 | bash 命令的默认超时（以毫秒为单位） |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` | 数量 | LLM 响应的最大输出令牌 | LLM
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER` | 布尔 | 为整个目录启用文件观察器 |
-| `OPENCODE_EXPERIMENTAL_OXFMT` |布尔 | 启用 oxfmt 清理程序 |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL` | 布尔 | 实现实验性 LSP 工具 |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER` | 布尔 | 禁用文件观察器 |
-| `OPENCODE_EXPERIMENTAL_EXA` |布尔 | 实现实验性Exa功能 |
-| `OPENCODE_EXPERIMENTAL_LSP_TY` |布尔 | 实现实验性 LSP 类型检查 |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN` | 布尔 | 实现实验性 Markdown 功能 |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE` |布尔 |启用计划模式 |
+| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | 数量 | LLM 响应的最大输出令牌              | LLM |
+| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | 布尔 | 为整个目录启用文件观察器            |
+| `OPENCODE_EXPERIMENTAL_OXFMT`                   | 布尔 | 启用 oxfmt 清理程序                 |
+| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | 布尔 | 实现实验性 LSP 工具                 |
+| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | 布尔 | 禁用文件观察器                      |
+| `OPENCODE_EXPERIMENTAL_EXA`                     | 布尔 | 实现实验性Exa功能                   |
+| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | 布尔 | 实现实验性 LSP 类型检查             |
+| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | 布尔 | 实现实验性 Markdown 功能            |
+| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | 布尔 | 启用计划模式                        |

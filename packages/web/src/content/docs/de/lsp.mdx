@@ -11,40 +11,40 @@ OpenCode lässt sich in Ihr Language Server Protocol (LSP) integrieren, um die I
 
 OpenCode verfügt über mehrere integrierte LSP-Server für gängige Sprachen:
 
-| LSP Server | Erweiterungen | Anforderungen |
-| ------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------ |
-| Astro | .astro | Automatische Installation für Astro-Projekte |
-| bash | .sh, .bash, .zsh, .ksh | Installiert den Bash-Language-Server | automatisch
-| klirrend | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++ | Automatische Installation für C/C++-Projekte |
-| csharp             | .cs                                                                 | `.NET SDK` installed                                         |
-| clojure-lsp | .clj, .cljs, .cljc, .edn | `clojure-lsp`-Befehl verfügbar |
-| Dart | .dart | `dart`-Befehl verfügbar |
-| deno | .ts, .tsx, .js, .jsx, .mjs | `deno`-Befehl verfügbar (automatische Erkennung von deno.json/deno.jsonc) |
-| Elixier-ls | .ex, .exs | `elixir`-Befehl verfügbar |
-| eslint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue                  | `eslint` dependency in project                               |
-| fsharp             | .fs, .fsi, .fsx, .fsscript                                          | `.NET SDK` installed                                         |
-| Glanz | .glanz | `gleam`-Befehl verfügbar |
-| gopls | .go | `go`-Befehl verfügbar |
-| hls | .hs, .lhs | `haskell-language-server-wrapper`-Befehl verfügbar |
-| jdtls | .java | `Java SDK (version 21+)` installiert |
-| kotlin-ls | .kt, .kts | Automatische Installation für Kotlin-Projekte |
-| lua-ls | .lua | Automatische Installation für Lua-Projekte |
-| nixd | .nix | `nixd`-Befehl verfügbar |
-| ocaml-lsp | .ml, .mli | `ocamllsp`-Befehl verfügbar |
-| oxlint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | `oxlint` dependency in project                               |
-| PHP Intelepense | .php | Automatische Installation für PHP-Projekte |
-| Prisma | .prisma | `prisma`-Befehl verfügbar |
-| pyright            | .py, .pyi                                                           | `pyright` dependency installed                               |
-| ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru | Befehle `ruby` und `gem` verfügbar |
-| Rost | .rs | `rust-analyzer`-Befehl verfügbar |
-| sourcekit-lsp      | .swift, .objc, .objcpp                                              | `swift` installed (`xcode` on macOS)                         |
-| schlank | .svelte | Automatische Installation für Svelte-Projekte |
-| Terraform | .tf, .tfvars | Automatische Installation von GitHub-Releases |
-| winziger Nebel | .typ, .typc | Automatische Installation von GitHub-Releases |
-| typescript         | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts                        | `typescript` dependency in project                           |
-| vue | .vue | Automatische Installation für Vue-Projekte |
-| yaml-ls | .yaml, .yml | Installiert den Red Hat Yaml-Language-Server | automatisch
-| zls | .zig, .zon | `zig`-Befehl verfügbar |
+| LSP Server         | Erweiterungen                                                       | Anforderungen                                                             |
+| ------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------------------- | ----------- |
+| Astro              | .astro                                                              | Automatische Installation für Astro-Projekte                              |
+| bash               | .sh, .bash, .zsh, .ksh                                              | Installiert den Bash-Language-Server                                      | automatisch |
+| klirrend           | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++                | Automatische Installation für C/C++-Projekte                              |
+| csharp             | .cs                                                                 | `.NET SDK` installed                                                      |
+| clojure-lsp        | .clj, .cljs, .cljc, .edn                                            | `clojure-lsp`-Befehl verfügbar                                            |
+| Dart               | .dart                                                               | `dart`-Befehl verfügbar                                                   |
+| deno               | .ts, .tsx, .js, .jsx, .mjs                                          | `deno`-Befehl verfügbar (automatische Erkennung von deno.json/deno.jsonc) |
+| Elixier-ls         | .ex, .exs                                                           | `elixir`-Befehl verfügbar                                                 |
+| eslint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue                  | `eslint` dependency in project                                            |
+| fsharp             | .fs, .fsi, .fsx, .fsscript                                          | `.NET SDK` installed                                                      |
+| Glanz              | .glanz                                                              | `gleam`-Befehl verfügbar                                                  |
+| gopls              | .go                                                                 | `go`-Befehl verfügbar                                                     |
+| hls                | .hs, .lhs                                                           | `haskell-language-server-wrapper`-Befehl verfügbar                        |
+| jdtls              | .java                                                               | `Java SDK (version 21+)` installiert                                      |
+| kotlin-ls          | .kt, .kts                                                           | Automatische Installation für Kotlin-Projekte                             |
+| lua-ls             | .lua                                                                | Automatische Installation für Lua-Projekte                                |
+| nixd               | .nix                                                                | `nixd`-Befehl verfügbar                                                   |
+| ocaml-lsp          | .ml, .mli                                                           | `ocamllsp`-Befehl verfügbar                                               |
+| oxlint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | `oxlint` dependency in project                                            |
+| PHP Intelepense    | .php                                                                | Automatische Installation für PHP-Projekte                                |
+| Prisma             | .prisma                                                             | `prisma`-Befehl verfügbar                                                 |
+| pyright            | .py, .pyi                                                           | `pyright` dependency installed                                            |
+| ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                           | Befehle `ruby` und `gem` verfügbar                                        |
+| Rost               | .rs                                                                 | `rust-analyzer`-Befehl verfügbar                                          |
+| sourcekit-lsp      | .swift, .objc, .objcpp                                              | `swift` installed (`xcode` on macOS)                                      |
+| schlank            | .svelte                                                             | Automatische Installation für Svelte-Projekte                             |
+| Terraform          | .tf, .tfvars                                                        | Automatische Installation von GitHub-Releases                             |
+| winziger Nebel     | .typ, .typc                                                         | Automatische Installation von GitHub-Releases                             |
+| typescript         | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts                        | `typescript` dependency in project                                        |
+| vue                | .vue                                                                | Automatische Installation für Vue-Projekte                                |
+| yaml-ls            | .yaml, .yml                                                         | Installiert den Red Hat Yaml-Language-Server                              | automatisch |
+| zls                | .zig, .zon                                                          | `zig`-Befehl verfügbar                                                    |
 
 LSP-Server werden automatisch aktiviert, wenn eine der oben genannten Dateierweiterungen erkannt wird und die Anforderungen erfüllt sind.
 
@@ -76,13 +76,13 @@ Sie können LSP-Server über den Abschnitt `lsp` in Ihrer Opencode-Konfiguration
 
 Jeder LSP-Server unterstützt Folgendes:
 
-| Eigentum | Geben Sie | ein Beschreibung |
-| ---------------- | -------- | ------------------------------------------------- |
-| `disabled` | boolescher Wert | Setzen Sie dies auf `true`, um den LSP-Server zu deaktivieren
-| `command` | string[] | Der Befehl zum Starten des LSP-Servers |
-| `extensions` | string[] | Dateierweiterungen, die dieser LSP-Server verarbeiten soll |
-| `env` | Objekt | Umgebungsvariablen, die beim Starten des Servers festgelegt werden |
-| `initialization` | Objekt | Initialisierungsoptionen zum Senden an den LSP-Server |
+| Eigentum         | Geben Sie       | ein Beschreibung                                                   |
+| ---------------- | --------------- | ------------------------------------------------------------------ |
+| `disabled`       | boolescher Wert | Setzen Sie dies auf `true`, um den LSP-Server zu deaktivieren      |
+| `command`        | string[]        | Der Befehl zum Starten des LSP-Servers                             |
+| `extensions`     | string[]        | Dateierweiterungen, die dieser LSP-Server verarbeiten soll         |
+| `env`            | Objekt          | Umgebungsvariablen, die beim Starten des Servers festgelegt werden |
+| `initialization` | Objekt          | Initialisierungsoptionen zum Senden an den LSP-Server              |
 
 Schauen wir uns einige Beispiele an.
 

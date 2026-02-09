@@ -8,6 +8,7 @@ OpenCode automatski formatira datoteke nakon što su napisane ili uređene pomo�
 ---
 
 ## Ugrađeno
+
 OpenCode dolazi sa nekoliko ugrađenih formatera za popularne jezike i okvire. Ispod je lista formatera, podržanih ekstenzija datoteka i naredbi ili opcija konfiguracije koje su mu potrebne.
 | Formatter | Ekstenzije | Zahtjevi || -------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | gofmt | .go | `gofmt` komanda dostupna |
@@ -37,15 +38,18 @@ Dakle, ako vaš projekat ima `prettier` u vašem `package.json`, OpenCode će ga
 ---
 
 ## Kako radi
+
 Kada OpenCode piše ili uređuje datoteku, on:
+
 1. Provjerava ekstenziju datoteke prema svim omogućenim formaterima.
 2. Pokreće odgovarajuću naredbu za formatiranje na datoteci.
 3. Automatski primjenjuje promjene formatiranja.
-Ovaj proces se događa u pozadini, osiguravajući da se vaši stilovi koda održavaju bez ikakvih ručnih koraka.
+   Ovaj proces se događa u pozadini, osiguravajući da se vaši stilovi koda održavaju bez ikakvih ručnih koraka.
 
 ---
 
 ## Konfiguriši
+
 Možete prilagoditi formatere kroz `formatter` odjeljak u vašoj OpenCode konfiguraciji.
 
 ```json title="opencode.json"
@@ -66,6 +70,7 @@ Pogledajmo neke primjere.
 ---
 
 ### Onemogućavanje formatera
+
 Da onemogućite **sve** formatere globalno, postavite `formatter` na `false`:
 
 ```json title="opencode.json" {3}
@@ -91,6 +96,7 @@ Da onemogućite **specifični** formater, postavite `disabled` na `true`:
 ---
 
 ### Prilagođeni formateri
+
 Možete nadjačati ugrađene formatere ili dodati nove navođenjem naredbe, varijabli okruženja i ekstenzija datoteke:
 
 ```json title="opencode.json" {4-14}

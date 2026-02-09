@@ -105,14 +105,14 @@ O puede configurarlo manualmente.
 
 OpenCode puede desencadenarse por los siguientes eventos GitHub:
 
-| Tipo de evento | Activado por | Detalles |
-| ----------------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `issue_comment` | Comentar sobre un tema o PR | Mencione `/opencode` o `/oc` en su comentario. OpenCode lee el contexto y puede crear ramas, abrir relaciones públicas o responder. |
-| `pull_request_review_comment` | Comente líneas de código específicas en un PR | Mencione `/opencode` o `/oc` mientras revisa el código. OpenCode recibe la ruta del archivo, los números de línea y el contexto de diferencias.   |
-| `issues` | Número abierto o editado | Activa automáticamente OpenCode cuando se crean o modifican problemas. Requiere entrada `prompt`.                      |
-| `pull_request` | PR abierto o actualizado | Activa automáticamente OpenCode cuando los PR se abren, sincronizan o vuelven a abrir. Útil para revisiones automatizadas.      |
-| `schedule` | Programación basada en cron | Ejecute OpenCode según una programación. Requiere entrada `prompt`. La salida va a registros y relaciones públicas (no hay temas que comentar).        |
-| `workflow_dispatch` | Activador manual desde GitHub UI | Active OpenCode a pedido a través de la pestaña Acciones. Requiere entrada `prompt`. La salida va a registros y relaciones públicas.                 |
+| Tipo de evento                | Activado por                                  | Detalles                                                                                                                                        |
+| ----------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `issue_comment`               | Comentar sobre un tema o PR                   | Mencione `/opencode` o `/oc` en su comentario. OpenCode lee el contexto y puede crear ramas, abrir relaciones públicas o responder.             |
+| `pull_request_review_comment` | Comente líneas de código específicas en un PR | Mencione `/opencode` o `/oc` mientras revisa el código. OpenCode recibe la ruta del archivo, los números de línea y el contexto de diferencias. |
+| `issues`                      | Número abierto o editado                      | Activa automáticamente OpenCode cuando se crean o modifican problemas. Requiere entrada `prompt`.                                               |
+| `pull_request`                | PR abierto o actualizado                      | Activa automáticamente OpenCode cuando los PR se abren, sincronizan o vuelven a abrir. Útil para revisiones automatizadas.                      |
+| `schedule`                    | Programación basada en cron                   | Ejecute OpenCode según una programación. Requiere entrada `prompt`. La salida va a registros y relaciones públicas (no hay temas que comentar). |
+| `workflow_dispatch`           | Activador manual desde GitHub UI              | Active OpenCode a pedido a través de la pestaña Acciones. Requiere entrada `prompt`. La salida va a registros y relaciones públicas.            |
 
 ### Ejemplo de programación
 

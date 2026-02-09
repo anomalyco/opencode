@@ -29,15 +29,15 @@ opencode [project]
 
 #### Flagg
 
-| Flagg | Kort | Beskrivelse |
-| ------------ | ----- | ------------------------------------------ |
-| `--continue` | `-c` | Fortsett siste økt |
-| `--session` | `-s` | Økt ID for å fortsette |
-| `--prompt` |       | Spør om å bruke |
-| `--model` | `-m` | Modell å bruke i form av tilbyder/modell |
-| `--agent` |       | Agent å bruke |
-| `--port` |       | Port å lytte på |
-| `--hostname` |       | Vertsnavn å lytte på |
+| Flagg        | Kort | Beskrivelse                              |
+| ------------ | ---- | ---------------------------------------- |
+| `--continue` | `-c` | Fortsett siste økt                       |
+| `--session`  | `-s` | Økt ID for å fortsette                   |
+| `--prompt`   |      | Spør om å bruke                          |
+| `--model`    | `-m` | Modell å bruke i form av tilbyder/modell |
+| `--agent`    |      | Agent å bruke                            |
+| `--port`     |      | Port å lytte på                          |
+| `--hostname` |      | Vertsnavn å lytte på                     |
 
 ---
 
@@ -77,10 +77,10 @@ opencode attach http://10.20.30.40:4096
 
 #### Flagg
 
-| Flagg | Kort | Beskrivelse |
-| ----------- | ----- | --------------------------------- |
-| `--dir` |       | Arbeidskatalog for å starte TUI i |
-| `--session` | `-s` | Økt ID for å fortsette |
+| Flagg       | Kort | Beskrivelse                       |
+| ----------- | ---- | --------------------------------- |
+| `--dir`     |      | Arbeidskatalog for å starte TUI i |
+| `--session` | `-s` | Økt ID for å fortsette            |
 
 ---
 
@@ -186,10 +186,10 @@ opencode github run
 
 ##### Flagg
 
-| Flagg | Beskrivelse |
-| --------- | -------------------------------------- |
+| Flagg     | Beskrivelse                               |
+| --------- | ----------------------------------------- |
 | `--event` | GitHub mock event for å kjøre agenten for |
-| `--token` | GitHub personlig tilgangstoken |
+| `--token` | GitHub personlig tilgangstoken            |
 
 ---
 
@@ -295,9 +295,9 @@ opencode models anthropic
 
 #### Flagg
 
-| Flagg | Beskrivelse |
-| ----------- | ------------------------------------------------------------ |
-| `--refresh` | Oppdater modellbufferen fra models.dev |
+| Flagg       | Beskrivelse                                                         |
+| ----------- | ------------------------------------------------------------------- |
+| `--refresh` | Oppdater modellbufferen fra models.dev                              |
 | `--verbose` | Bruk mer detaljert modellutdata (inkluderer metadata som kostnader) |
 
 Bruk `--refresh`-flagget for å oppdatere den bufrede modelllisten. Dette er nyttig når nye modeller er lagt til en leverandør og du vil se dem i OpenCode.
@@ -334,19 +334,19 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 #### Flagg
 
-| Flagg | Kort | Beskrivelse |
-| ------------ | ----- | ------------------------------------------------------------------ |
-| `--command` |       | Kommandoen for å kjøre, bruk melding for args |
-| `--continue` | `-c` | Fortsett siste økt |
-| `--session` | `-s` | Økt ID for å fortsette |
-| `--share` |       | Del økten |
-| `--model` | `-m` | Modell å bruke i form av tilbyder/modell |
-| `--agent` |       | Agent å bruke |
-| `--file` | `-f` | Fil(er) som skal legges ved melding |
-| `--format` |       | Format: standard (formatert) eller json (rå JSON hendelser) |
-| `--title` |       | Tittel for økten (bruker avkortet ledetekst hvis ingen verdi er oppgitt) |
-| `--attach` |       | Koble til en åpen kodeserver som kjører (f.eks. http://localhost:4096) |
-| `--port` |       | Port for den lokale serveren (standard til tilfeldig port) |
+| Flagg        | Kort | Beskrivelse                                                              |
+| ------------ | ---- | ------------------------------------------------------------------------ |
+| `--command`  |      | Kommandoen for å kjøre, bruk melding for args                            |
+| `--continue` | `-c` | Fortsett siste økt                                                       |
+| `--session`  | `-s` | Økt ID for å fortsette                                                   |
+| `--share`    |      | Del økten                                                                |
+| `--model`    | `-m` | Modell å bruke i form av tilbyder/modell                                 |
+| `--agent`    |      | Agent å bruke                                                            |
+| `--file`     | `-f` | Fil(er) som skal legges ved melding                                      |
+| `--format`   |      | Format: standard (formatert) eller json (rå JSON hendelser)              |
+| `--title`    |      | Tittel for økten (bruker avkortet ledetekst hvis ingen verdi er oppgitt) |
+| `--attach`   |      | Koble til en åpen kodeserver som kjører (f.eks. http://localhost:4096)   |
+| `--port`     |      | Port for den lokale serveren (standard til tilfeldig port)               |
 
 ---
 
@@ -362,12 +362,12 @@ Dette starter en HTTP-server som gir API tilgang til OpenCode-funksjonalitet ute
 
 #### Flagg
 
-| Flagg | Beskrivelse |
-| ------------ | ------------------------------------------ |
-| `--port` | Port å lytte på |
-| `--hostname` | Vertsnavn å lytte på |
-| `--mdns` | Aktiver mDNS-oppdagelse |
-| `--cors` | Ytterligere nettleseropprinnelse for å tillate CORS |
+| Flagg        | Beskrivelse                                         |
+| ------------ | --------------------------------------------------- |
+| `--port`     | Port å lytte på                                     |
+| `--hostname` | Vertsnavn å lytte på                                |
+| `--mdns`     | Aktiver mDNS-oppdagelse                             |
+| `--cors`     | Ytterligere nettleseropprinnelse for å tillate CORS |
 
 ---
 
@@ -391,10 +391,10 @@ opencode session list
 
 ##### Flagg
 
-| Flagg | Kort | Beskrivelse |
-| ------------- | ----- | ------------------------------------ |
-| `--max-count` | `-n` | Begrens til N siste økter |
-| `--format` |       | Utdataformat: tabell eller json (tabell) |
+| Flagg         | Kort | Beskrivelse                              |
+| ------------- | ---- | ---------------------------------------- |
+| `--max-count` | `-n` | Begrens til N siste økter                |
+| `--format`    |      | Utdataformat: tabell eller json (tabell) |
 
 ---
 
@@ -408,12 +408,12 @@ opencode stats
 
 #### Flagg
 
-| Flagg | Beskrivelse |
-| ----------- | --------------------------------------------------------------------------- |
-| `--days` | Vis statistikk for de siste N dagene (hele tiden) |
-| `--tools` | Antall verktøy som skal vises (alle) |
-| `--models` | Vis oversikt over modellbruk (skjult som standard). Gi et tall for å vise topp N |
-| `--project` | Filtrer etter prosjekt (alle prosjekter, tom streng: gjeldende prosjekt) |
+| Flagg       | Beskrivelse                                                                      |
+| ----------- | -------------------------------------------------------------------------------- |
+| `--days`    | Vis statistikk for de siste N dagene (hele tiden)                                |
+| `--tools`   | Antall verktøy som skal vises (alle)                                             |
+| `--models`  | Vis oversikt over modellbruk (skjult som standard). Gi et tall for å vise topp N |
+| `--project` | Filtrer etter prosjekt (alle prosjekter, tom streng: gjeldende prosjekt)         |
 
 ---
 
@@ -458,12 +458,12 @@ Dette starter en HTTP-server og åpner en nettleser for å få tilgang til OpenC
 
 #### Flagg
 
-| Flagg | Beskrivelse |
-| ------------ | ------------------------------------------ |
-| `--port` | Port å lytte på |
-| `--hostname` | Vertsnavn å lytte på |
-| `--mdns` | Aktiver mDNS-oppdagelse |
-| `--cors` | Ytterligere nettleseropprinnelse for å tillate CORS |
+| Flagg        | Beskrivelse                                         |
+| ------------ | --------------------------------------------------- |
+| `--port`     | Port å lytte på                                     |
+| `--hostname` | Vertsnavn å lytte på                                |
+| `--mdns`     | Aktiver mDNS-oppdagelse                             |
+| `--cors`     | Ytterligere nettleseropprinnelse for å tillate CORS |
 
 ---
 
@@ -479,10 +479,10 @@ Denne kommandoen starter en ACP-server som kommuniserer via stdin/stdout ved å 
 
 #### Flagg
 
-| Flagg | Beskrivelse |
-| ------------ | --------------------- |
-| `--cwd` | Arbeidskatalog |
-| `--port` | Port å lytte på |
+| Flagg        | Beskrivelse          |
+| ------------ | -------------------- |
+| `--cwd`      | Arbeidskatalog       |
+| `--port`     | Port å lytte på      |
 | `--hostname` | Vertsnavn å lytte på |
 
 ---
@@ -497,12 +497,12 @@ opencode uninstall
 
 #### Flagg
 
-| Flagg | Kort | Beskrivelse |
-| --------------- | ----- | ------------------------------------------- |
-| `--keep-config` | `-c` | Behold konfigurasjonsfiler |
-| `--keep-data` | `-d` | Behold øktdata og øyeblikksbilder |
-| `--dry-run` |       | Vis hva som ville blitt fjernet uten å fjerne |
-| `--force` | `-f` | Hopp over bekreftelsesforespørsler |
+| Flagg           | Kort | Beskrivelse                                   |
+| --------------- | ---- | --------------------------------------------- |
+| `--keep-config` | `-c` | Behold konfigurasjonsfiler                    |
+| `--keep-data`   | `-d` | Behold øktdata og øyeblikksbilder             |
+| `--dry-run`     |      | Vis hva som ville blitt fjernet uten å fjerne |
+| `--force`       | `-f` | Hopp over bekreftelsesforespørsler            |
 
 ---
 
@@ -528,8 +528,8 @@ opencode upgrade v0.1.48
 
 #### Flagg
 
-| Flagg | Kort | Beskrivelse |
-| ---------- | ----- | ----------------------------------------------------------------- |
+| Flagg      | Kort | Beskrivelse                                                         |
+| ---------- | ---- | ------------------------------------------------------------------- |
 | `--method` | `-m` | Installasjonsmetoden som ble brukt; krølle, npm, pnpm, bolle, brygg |
 
 ---
@@ -538,12 +538,12 @@ opencode upgrade v0.1.48
 
 Åpenkoden CLI tar følgende globale flagg.
 
-| Flagg | Kort | Beskrivelse |
-| -------------- | ----- | ------------------------------------ |
-| `--help` | `-h` | Vis hjelp |
-| `--version` | `-v` | Utskriftsnummer |
-| `--print-logs` |       | Skriv ut logger til stderr |
-| `--log-level` |       | Loggnivå (DEBUG, INFO, WARN, ERROR) |
+| Flagg          | Kort | Beskrivelse                         |
+| -------------- | ---- | ----------------------------------- |
+| `--help`       | `-h` | Vis hjelp                           |
+| `--version`    | `-v` | Utskriftsnummer                     |
+| `--print-logs` |      | Skriv ut logger til stderr          |
+| `--log-level`  |      | Loggnivå (DEBUG, INFO, WARN, ERROR) |
 
 ---
 
@@ -551,32 +551,32 @@ opencode upgrade v0.1.48
 
 OpenCode kan konfigureres ved hjelp av miljøvariabler.
 
-| Variabel | Skriv | Beskrivelse |
-| ------------------------------------- | ------- | ------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE` | boolsk | Del økter automatisk |
-| `OPENCODE_GIT_BASH_PATH` | streng | Path to Git Bash kjørbar på Windows |
-| `OPENCODE_CONFIG` | streng | Bane til konfigurasjonsfil |
-| `OPENCODE_CONFIG_DIR` | streng | Bane til konfigurasjonskatalog |
-| `OPENCODE_CONFIG_CONTENT` | streng | Innebygd json-konfigurasjonsinnhold |
-| `OPENCODE_DISABLE_AUTOUPDATE` | boolsk | Deaktiver automatiske oppdateringskontroller |
-| `OPENCODE_DISABLE_PRUNE` | boolsk | Deaktiver beskjæring av gamle data |
-| `OPENCODE_DISABLE_TERMINAL_TITLE` | boolsk | Deaktiver automatiske terminaltitteloppdateringer |
-| `OPENCODE_PERMISSION` | streng | Innebygd json-tillatelseskonfigurasjon |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS` | boolsk | Deaktiver standard plugins |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD` | boolsk | Deaktiver automatiske LSP servernedlastinger |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolsk | Aktiver eksperimentelle modeller |
-| `OPENCODE_DISABLE_AUTOCOMPACT` | boolsk | Deaktiver automatisk kontekstkomprimering |
-| `OPENCODE_DISABLE_CLAUDE_CODE` | boolsk | Deaktiver lesing fra `.claude` (spørsmål + ferdigheter) |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolsk | Deaktiver lesing `~/.claude/CLAUDE.md` |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolsk | Deaktiver innlasting av `.claude/skills` |
-| `OPENCODE_DISABLE_MODELS_FETCH` | boolsk | Deaktiver henting av modeller fra eksterne kilder |
-| `OPENCODE_FAKE_VCS` | streng | Falsk VCS-leverandør for testformål |
-| `OPENCODE_DISABLE_FILETIME_CHECK` | boolsk | Deaktiver filtidskontroll for optimalisering |
-| `OPENCODE_CLIENT` | streng | Klientidentifikator (standard til `cli`) |
-| `OPENCODE_ENABLE_EXA` | boolsk | Aktiver Exa-nettsøkeverktøy |
-| `OPENCODE_SERVER_PASSWORD` | streng | Aktiver grunnleggende autentisering for `serve`/`web` |
-| `OPENCODE_SERVER_USERNAME` | streng | Overstyr grunnleggende autentiseringsbrukernavn (standard `opencode`) |
-| `OPENCODE_MODELS_URL` | streng | Egendefinert URL for henting av modellkonfigurasjon |
+| Variabel                              | Skriv  | Beskrivelse                                                           |
+| ------------------------------------- | ------ | --------------------------------------------------------------------- |
+| `OPENCODE_AUTO_SHARE`                 | boolsk | Del økter automatisk                                                  |
+| `OPENCODE_GIT_BASH_PATH`              | streng | Path to Git Bash kjørbar på Windows                                   |
+| `OPENCODE_CONFIG`                     | streng | Bane til konfigurasjonsfil                                            |
+| `OPENCODE_CONFIG_DIR`                 | streng | Bane til konfigurasjonskatalog                                        |
+| `OPENCODE_CONFIG_CONTENT`             | streng | Innebygd json-konfigurasjonsinnhold                                   |
+| `OPENCODE_DISABLE_AUTOUPDATE`         | boolsk | Deaktiver automatiske oppdateringskontroller                          |
+| `OPENCODE_DISABLE_PRUNE`              | boolsk | Deaktiver beskjæring av gamle data                                    |
+| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolsk | Deaktiver automatiske terminaltitteloppdateringer                     |
+| `OPENCODE_PERMISSION`                 | streng | Innebygd json-tillatelseskonfigurasjon                                |
+| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolsk | Deaktiver standard plugins                                            |
+| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolsk | Deaktiver automatiske LSP servernedlastinger                          |
+| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolsk | Aktiver eksperimentelle modeller                                      |
+| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolsk | Deaktiver automatisk kontekstkomprimering                             |
+| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolsk | Deaktiver lesing fra `.claude` (spørsmål + ferdigheter)               |
+| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolsk | Deaktiver lesing `~/.claude/CLAUDE.md`                                |
+| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolsk | Deaktiver innlasting av `.claude/skills`                              |
+| `OPENCODE_DISABLE_MODELS_FETCH`       | boolsk | Deaktiver henting av modeller fra eksterne kilder                     |
+| `OPENCODE_FAKE_VCS`                   | streng | Falsk VCS-leverandør for testformål                                   |
+| `OPENCODE_DISABLE_FILETIME_CHECK`     | boolsk | Deaktiver filtidskontroll for optimalisering                          |
+| `OPENCODE_CLIENT`                     | streng | Klientidentifikator (standard til `cli`)                              |
+| `OPENCODE_ENABLE_EXA`                 | boolsk | Aktiver Exa-nettsøkeverktøy                                           |
+| `OPENCODE_SERVER_PASSWORD`            | streng | Aktiver grunnleggende autentisering for `serve`/`web`                 |
+| `OPENCODE_SERVER_USERNAME`            | streng | Overstyr grunnleggende autentiseringsbrukernavn (standard `opencode`) |
+| `OPENCODE_MODELS_URL`                 | streng | Egendefinert URL for henting av modellkonfigurasjon                   |
 
 ---
 
@@ -584,18 +584,18 @@ OpenCode kan konfigureres ved hjelp av miljøvariabler.
 
 Disse miljøvariablene muliggjør eksperimentelle funksjoner som kan endres eller fjernes.
 
-| Variabel | Skriv | Beskrivelse |
-| ----------------------------------------------- | ------- | --------------------------------------- |
-| `OPENCODE_EXPERIMENTAL` | boolsk | Aktiver alle eksperimentelle funksjoner |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY` | boolsk | Aktiver ikonoppdagelse |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT` | boolsk | Deaktiver kopi ved valg i TUI |
+| Variabel                                        | Skriv  | Beskrivelse                                   |
+| ----------------------------------------------- | ------ | --------------------------------------------- |
+| `OPENCODE_EXPERIMENTAL`                         | boolsk | Aktiver alle eksperimentelle funksjoner       |
+| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolsk | Aktiver ikonoppdagelse                        |
+| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolsk | Deaktiver kopi ved valg i TUI                 |
 | `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | nummer | Standard tidsavbrudd for bash-kommandoer i ms |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` | nummer | Maks utgangstokener for LLM-svar |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER` | boolsk | Aktiver filovervåker for hele dir |
-| `OPENCODE_EXPERIMENTAL_OXFMT` | boolsk | Aktiver oxfmt formatter |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL` | boolsk | Aktiver eksperimentelt LSP-verktøy |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER` | boolsk | Deaktiver filovervåking |
-| `OPENCODE_EXPERIMENTAL_EXA` | boolsk | Aktiver eksperimentelle Exa-funksjoner |
-| `OPENCODE_EXPERIMENTAL_LSP_TY` | boolsk | Aktiver eksperimentell LSP-typekontroll |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN` | boolsk | Aktiver eksperimentelle markdown-funksjoner |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE` | boolsk | Aktiver planmodus |
+| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | nummer | Maks utgangstokener for LLM-svar              |
+| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolsk | Aktiver filovervåker for hele dir             |
+| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolsk | Aktiver oxfmt formatter                       |
+| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolsk | Aktiver eksperimentelt LSP-verktøy            |
+| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolsk | Deaktiver filovervåking                       |
+| `OPENCODE_EXPERIMENTAL_EXA`                     | boolsk | Aktiver eksperimentelle Exa-funksjoner        |
+| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolsk | Aktiver eksperimentell LSP-typekontroll       |
+| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolsk | Aktiver eksperimentelle markdown-funksjoner   |
+| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolsk | Aktiver planmodus                             |

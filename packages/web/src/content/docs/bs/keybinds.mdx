@@ -106,6 +106,7 @@ OpenCode ima listu veza ključeva koje možete prilagoditi preko OpenCode konfig
 ---
 
 ## Leader key
+
 OpenCode koristi `leader` ključ za većinu povezivanja tipki. Ovo izbjegava sukobe u vašem terminalu.
 Prema zadanim postavkama, `ctrl+x` je vodeći taster i većina radnji zahtijeva da prvo pritisnete vodeći taster, a zatim i prečicu. Na primjer, da biste započeli novu sesiju, prvo pritisnite `ctrl+x`, a zatim pritisnite `n`.
 Ne morate koristiti vodeći ključ za svoje veze tipki, ali preporučujemo da to učinite.
@@ -113,6 +114,7 @@ Ne morate koristiti vodeći ključ za svoje veze tipki, ali preporučujemo da to
 ---
 
 ## Onemogući povezivanje tastera
+
 Možete onemogućiti spajanje tipki dodavanjem ključa u svoju konfiguraciju s vrijednošću "none".
 
 ```json title="opencode.json"
@@ -127,6 +129,7 @@ Možete onemogućiti spajanje tipki dodavanjem ključa u svoju konfiguraciju s v
 ---
 
 ## Prečice za radnu površinu
+
 Unos prompta aplikacije OpenCode za desktop podržava uobičajene prečice u stilu Readline/Emacs za uređivanje teksta. Oni su ugrađeni i trenutno se ne mogu konfigurirati putem `opencode.json`.
 | Prečica | Akcija || -------- | ---------------------------------------- |
 | `ctrl+a` | Prelazak na početak tekućeg reda |
@@ -146,8 +149,11 @@ Unos prompta aplikacije OpenCode za desktop podržava uobičajene prečice u sti
 ---
 
 ## Shift+Enter
+
 Neki terminali ne šalju modifikatorske tipke sa Enter prema zadanim postavkama. Možda ćete trebati konfigurirati svoj terminal da pošalje `Shift+Enter` kao escape sekvencu.
+
 ### Windows terminal
+
 Otvorite svoj `settings.json` na:
 
 ```

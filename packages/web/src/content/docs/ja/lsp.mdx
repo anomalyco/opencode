@@ -11,40 +11,40 @@ OpenCode は言語サーバー プロトコル (LSP) と統合して、LLM が�
 
 OpenCode には、一般的な言語用のいくつかの組み込み LSP サーバーが付属しています。
 
-| LSPサーバー |拡張機能 |要件 |
-| ------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------ |
-|アストロ | .astro | Astro プロジェクトの自動インストール |
-|バッシュ | .sh、.bash、.zsh、.ksh | bash-lang-server を自動インストールします。
-|クランド | .c、.cpp、.cc、.cxx、.c++、.h、.hpp、.hh、.hxx、.h++ | C/C++ プロジェクトの自動インストール |
-|シーシャープ | .cs | `.NET SDK` がインストールされました |
-| clojure-lsp | .clj、.cljs、.cljc、.edn | `clojure-lsp` コマンドが利用可能 |
-|ダーツ | .ダーツ | `dart` コマンドが利用可能 |
-|デノ | .ts、.tsx、.js、.jsx、.mjs | `deno` コマンドが利用可能 (deno.json/deno.jsonc を自動検出) |
-|エリクサーLS | .ex、.exs | `elixir` コマンドが利用可能 |
-|エスリント | .ts、.tsx、.js、.jsx、.mjs、.cjs、.mts、.cts、.vue |プロジェクト内の `eslint` 依存関係 |
-|フシャープ | .fs、.fsi、.fsx、.fsscript | `.NET SDK` がインストールされました |
-|輝く.gleam | `gleam` コマンドが利用可能 |
-|ゴップル | .go | `go` コマンドが利用可能 |
-| HLS | .hs、.lhs | `haskell-language-server-wrapper` コマンドが利用可能 |
-| jdtls | .java | `Java SDK (version 21+)` がインストールされました |
-| kotlin-ls | .kt、.kts | Kotlin プロジェクトの自動インストール |
-|ルアール | .lua | Lua プロジェクトの自動インストール |
-|ニクスド | .nix | `nixd` コマンドが利用可能 |
-| ocaml-lsp | .ml、.mli | `ocamllsp` コマンドが利用可能 |
-|オックスリント | .ts、.tsx、.js、.jsx、.mjs、.cjs、.mts、.cts、.vue、.astro、.svelte |プロジェクト内の `oxlint` 依存関係 |
-| php インテルフェンス | .php | PHP プロジェクトの自動インストール |
-|プリズマ | .プリズム | `prisma` コマンドが利用可能 |
-|著作権 | .py、.pyi | `pyright` 依存関係がインストールされました |
-| Ruby-LSP (ルボコップ) | .rb、.rake、.gemspec、.ru | `ruby` および `gem` コマンドが利用可能 |
-|さび | .rs | `rust-analyzer` コマンドが利用可能 |
-|ソースキット-lsp | .swift、.objc、.objcpp | `swift` がインストールされています (macOS では `xcode`)。
-|細い | .svelte | Svelte プロジェクトの自動インストール |
-|テラフォーム | .tf、.tfvars | GitHub リリースからの自動インストール |
-|タイニーミスト | .typ、.typc | GitHub リリースからの自動インストール |
-|タイプスクリプト | .ts、.tsx、.js、.jsx、.mjs、.cjs、.mts、.cts |プロジェクト内の `typescript` 依存関係 |
-|ビュー | .vue | Vue プロジェクトの自動インストール |
-| yaml-ls | .yaml、.yml | Red Hat yaml-lang-server を自動インストールします。
-| zls | .zig、.zon | `zig` コマンドが利用可能 |
+| LSPサーバー           | 拡張機能                                                            | 要件                                                        |
+| --------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------- |
+| アストロ              | .astro                                                              | Astro プロジェクトの自動インストール                        |
+| バッシュ              | .sh、.bash、.zsh、.ksh                                              | bash-lang-server を自動インストールします。                 |
+| クランド              | .c、.cpp、.cc、.cxx、.c++、.h、.hpp、.hh、.hxx、.h++                | C/C++ プロジェクトの自動インストール                        |
+| シーシャープ          | .cs                                                                 | `.NET SDK` がインストールされました                         |
+| clojure-lsp           | .clj、.cljs、.cljc、.edn                                            | `clojure-lsp` コマンドが利用可能                            |
+| ダーツ                | .ダーツ                                                             | `dart` コマンドが利用可能                                   |
+| デノ                  | .ts、.tsx、.js、.jsx、.mjs                                          | `deno` コマンドが利用可能 (deno.json/deno.jsonc を自動検出) |
+| エリクサーLS          | .ex、.exs                                                           | `elixir` コマンドが利用可能                                 |
+| エスリント            | .ts、.tsx、.js、.jsx、.mjs、.cjs、.mts、.cts、.vue                  | プロジェクト内の `eslint` 依存関係                          |
+| フシャープ            | .fs、.fsi、.fsx、.fsscript                                          | `.NET SDK` がインストールされました                         |
+| 輝く.gleam            | `gleam` コマンドが利用可能                                          |
+| ゴップル              | .go                                                                 | `go` コマンドが利用可能                                     |
+| HLS                   | .hs、.lhs                                                           | `haskell-language-server-wrapper` コマンドが利用可能        |
+| jdtls                 | .java                                                               | `Java SDK (version 21+)` がインストールされました           |
+| kotlin-ls             | .kt、.kts                                                           | Kotlin プロジェクトの自動インストール                       |
+| ルアール              | .lua                                                                | Lua プロジェクトの自動インストール                          |
+| ニクスド              | .nix                                                                | `nixd` コマンドが利用可能                                   |
+| ocaml-lsp             | .ml、.mli                                                           | `ocamllsp` コマンドが利用可能                               |
+| オックスリント        | .ts、.tsx、.js、.jsx、.mjs、.cjs、.mts、.cts、.vue、.astro、.svelte | プロジェクト内の `oxlint` 依存関係                          |
+| php インテルフェンス  | .php                                                                | PHP プロジェクトの自動インストール                          |
+| プリズマ              | .プリズム                                                           | `prisma` コマンドが利用可能                                 |
+| 著作権                | .py、.pyi                                                           | `pyright` 依存関係がインストールされました                  |
+| Ruby-LSP (ルボコップ) | .rb、.rake、.gemspec、.ru                                           | `ruby` および `gem` コマンドが利用可能                      |
+| さび                  | .rs                                                                 | `rust-analyzer` コマンドが利用可能                          |
+| ソースキット-lsp      | .swift、.objc、.objcpp                                              | `swift` がインストールされています (macOS では `xcode`)。   |
+| 細い                  | .svelte                                                             | Svelte プロジェクトの自動インストール                       |
+| テラフォーム          | .tf、.tfvars                                                        | GitHub リリースからの自動インストール                       |
+| タイニーミスト        | .typ、.typc                                                         | GitHub リリースからの自動インストール                       |
+| タイプスクリプト      | .ts、.tsx、.js、.jsx、.mjs、.cjs、.mts、.cts                        | プロジェクト内の `typescript` 依存関係                      |
+| ビュー                | .vue                                                                | Vue プロジェクトの自動インストール                          |
+| yaml-ls               | .yaml、.yml                                                         | Red Hat yaml-lang-server を自動インストールします。         |
+| zls                   | .zig、.zon                                                          | `zig` コマンドが利用可能                                    |
 
 上記のファイル拡張子のいずれかが検出され、要件が満たされると、LSP サーバーは自動的に有効になります。
 
@@ -76,13 +76,13 @@ Opencode 構成の `lsp` セクションを通じて LSP サーバーをカス�
 
 各 LSP サーバーは以下をサポートします。
 
-|プロパティ |タイプ |説明 |
-| ---------------- | -------- | ------------------------------------------------- |
-| `disabled` |ブール値 | LSP サーバーを無効にするには、これを `true` に設定します。
-| `command` |文字列[] | LSP サーバーを起動するコマンド |
-| `extensions` |文字列[] |この LSP サーバーが処理するファイル拡張子 |
-| `env` |オブジェクト |サーバーの起動時に設定する環境変数 |
-| `initialization` |オブジェクト | LSP サーバーに送信する初期化オプション |
+| プロパティ       | タイプ       | 説明                                                       |
+| ---------------- | ------------ | ---------------------------------------------------------- |
+| `disabled`       | ブール値     | LSP サーバーを無効にするには、これを `true` に設定します。 |
+| `command`        | 文字列[]     | LSP サーバーを起動するコマンド                             |
+| `extensions`     | 文字列[]     | この LSP サーバーが処理するファイル拡張子                  |
+| `env`            | オブジェクト | サーバーの起動時に設定する環境変数                         |
+| `initialization` | オブジェクト | LSP サーバーに送信する初期化オプション                     |
 
 いくつかの例を見てみましょう。
 

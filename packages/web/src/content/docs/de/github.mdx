@@ -105,14 +105,14 @@ Oder Sie können es manuell einrichten.
 
 OpenCode kann durch die folgenden GitHub-Ereignisse ausgelöst werden:
 
-| Ereignistyp | Ausgelöst durch | Einzelheiten |
-| ----------------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `issue_comment` | Kommentieren Sie ein Problem oder PR | Erwähnen Sie `/opencode` oder `/oc` in Ihrem Kommentar. OpenCode liest den Kontext und kann Verzweigungen erstellen, PRs öffnen oder antworten. |
-| `pull_request_review_comment` | Kommentieren Sie bestimmte Codezeilen in einem PR | Erwähnen Sie `/opencode` oder `/oc` beim Überprüfen des Codes. OpenCode empfängt Dateipfad, Zeilennummern und Diff-Kontext.   |
-| `issues` | Problem geöffnet oder bearbeitet | Lösen Sie OpenCode automatisch aus, wenn Probleme erstellt oder geändert werden. Erfordert `prompt`-Eingabe.                      |
-| `pull_request` | PR geöffnet oder aktualisiert | Lösen Sie OpenCode automatisch aus, wenn PRs geöffnet, synchronisiert oder erneut geöffnet werden. Nützlich für automatisierte Bewertungen.      |
-| `schedule` | Cron-basierter Zeitplan | Führen Sie OpenCode nach einem Zeitplan aus. Erfordert `prompt`-Eingabe. Die Ausgabe geht an Protokolle und PRs (kein Kommentar zu diesem Problem).        |
-| `workflow_dispatch` | Manueller Trigger von GitHub UI | Lösen Sie OpenCode bei Bedarf über die Registerkarte „Aktionen“ aus. Erfordert `prompt`-Eingabe. Die Ausgabe erfolgt an Protokolle und PRs.                 |
+| Ereignistyp                   | Ausgelöst durch                                   | Einzelheiten                                                                                                                                        |
+| ----------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `issue_comment`               | Kommentieren Sie ein Problem oder PR              | Erwähnen Sie `/opencode` oder `/oc` in Ihrem Kommentar. OpenCode liest den Kontext und kann Verzweigungen erstellen, PRs öffnen oder antworten.     |
+| `pull_request_review_comment` | Kommentieren Sie bestimmte Codezeilen in einem PR | Erwähnen Sie `/opencode` oder `/oc` beim Überprüfen des Codes. OpenCode empfängt Dateipfad, Zeilennummern und Diff-Kontext.                         |
+| `issues`                      | Problem geöffnet oder bearbeitet                  | Lösen Sie OpenCode automatisch aus, wenn Probleme erstellt oder geändert werden. Erfordert `prompt`-Eingabe.                                        |
+| `pull_request`                | PR geöffnet oder aktualisiert                     | Lösen Sie OpenCode automatisch aus, wenn PRs geöffnet, synchronisiert oder erneut geöffnet werden. Nützlich für automatisierte Bewertungen.         |
+| `schedule`                    | Cron-basierter Zeitplan                           | Führen Sie OpenCode nach einem Zeitplan aus. Erfordert `prompt`-Eingabe. Die Ausgabe geht an Protokolle und PRs (kein Kommentar zu diesem Problem). |
+| `workflow_dispatch`           | Manueller Trigger von GitHub UI                   | Lösen Sie OpenCode bei Bedarf über die Registerkarte „Aktionen“ aus. Erfordert `prompt`-Eingabe. Die Ausgabe erfolgt an Protokolle und PRs.         |
 
 ### Beispiel für einen Zeitplan
 
