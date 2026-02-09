@@ -1,0 +1,68 @@
+Launch and manage a team of AI agents that work together in parallel on complex tasks.
+
+The Team tool creates a coordinated group of agents ("teammates"), each with their own role, context, and model. A lead agent orchestrates the team while teammates execute tasks independently and in parallel.
+
+## When to use this tool
+
+- Large tasks that benefit from parallelism (e.g., refactoring multiple modules, building multiple features)
+- Tasks requiring specialized roles (e.g., one agent writes code while another writes tests)
+- Work that can be divided into independent subtasks with clear ownership
+
+## Actions
+
+### create
+Create a new team and start all teammates working in parallel.
+
+Required parameters:
+- `teammates`: Array of teammates, each with:
+  - `name`: Short identifier (e.g., "frontend", "backend", "tester")
+  - `role`: Description of what this teammate should do
+  - `model` (optional): Specific model to use for this teammate
+- `tasks`: Array of tasks for the team:
+  - `title`: Short task title
+  - `description`: Detailed description of what needs to be done
+  - `dependencies` (optional): Array of task titles that must complete first
+
+### status
+Check the current status of a team, including task progress, messages, and file claims.
+
+Required: `team_id`
+
+### pause
+Pause a running team. Teammates will stop after their current step.
+
+Required: `team_id`
+
+### resume
+Resume a paused team. Paused teammates will restart.
+
+Required: `team_id`
+
+### message
+Send a message to a teammate or the entire team.
+
+Required: `team_id`, `to` (teammate name or "all"), `content`
+
+## Team Discipline
+
+- Each teammate claims tasks before working on them
+- Teammates claim files before editing to avoid conflicts
+- Teammates post frequent status updates
+- The lead coordinates and aggregates results
+
+## Example
+
+```
+Team.create({
+  teammates: [
+    { name: "api", role: "Implement the REST API endpoints" },
+    { name: "ui", role: "Build the React UI components" },
+    { name: "test", role: "Write tests for the new feature" }
+  ],
+  tasks: [
+    { title: "API endpoints", description: "Create CRUD endpoints for users" },
+    { title: "UI components", description: "Build user list and form components" },
+    { title: "Integration tests", description: "Write e2e tests", dependencies: ["API endpoints", "UI components"] }
+  ]
+})
+```

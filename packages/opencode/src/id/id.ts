@@ -11,6 +11,10 @@ export namespace Identifier {
     part: "prt",
     pty: "pty",
     tool: "tool",
+    team: "tem",
+    teammate: "tmt",
+    team_task: "ttk",
+    team_message: "tmg",
   } as const
 
   export function schema(prefix: keyof typeof prefixes) {
