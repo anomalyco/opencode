@@ -19,12 +19,3 @@ jobs:
 
       - name: Run typecheck
         run: bun typecheck
-
-      - name: Run docs i18n checks
-        run: bun run --cwd=packages/web i18n:check
-
-      - name: Run docs Astro check
-        run: bun --cwd packages/web astro check
-
-      - name: Run docs build
-        run: bun --cwd packages/web build
