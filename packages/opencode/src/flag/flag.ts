@@ -40,7 +40,7 @@ export namespace Flag {
   export const OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT = truthy("OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT")
   export const OPENCODE_ENABLE_EXA =
     truthy("OPENCODE_ENABLE_EXA") || OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_EXA")
-  export const OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS = number("OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS")
+  export declare const OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS: number | undefined
   export const OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX = number("OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX")
   export const OPENCODE_EXPERIMENTAL_OXFMT = OPENCODE_EXPERIMENTAL || truthy("OPENCODE_EXPERIMENTAL_OXFMT")
   export const OPENCODE_EXPERIMENTAL_LSP_TY = truthy("OPENCODE_EXPERIMENTAL_LSP_TY")
@@ -87,6 +87,20 @@ Object.defineProperty(Flag, "OPENCODE_CONFIG_DIR", {
 Object.defineProperty(Flag, "OPENCODE_CLIENT", {
   get() {
     return process.env["OPENCODE_CLIENT"] ?? "cli"
+  },
+  enumerable: true,
+  configurable: false,
+})
+
+// Dynamic getter for OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS
+// This must be evaluated at access time, not module load time,
+// because the env var may be set after module initialization
+Object.defineProperty(Flag, "OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS", {
+  get() {
+    const value = process.env["OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS"]
+    if (!value) return undefined
+    const parsed = Number(value)
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
   },
   enumerable: true,
   configurable: false,
