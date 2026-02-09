@@ -1,11 +1,13 @@
 import type { APIEvent } from "@solidjs/start/server"
+import { Resource } from "@opencode-ai/console-resource"
 import { docs, localeFromRequest, tag } from "~/lib/language"
 
 async function handler(evt: APIEvent) {
   const req = evt.request.clone()
   const url = new URL(req.url)
   const locale = localeFromRequest(req)
-  const targetUrl = `https://docs.opencode.ai${docs(locale, `/docs${url.pathname}`)}${url.search}`
+  const host = Resource.App.stage === "production" ? "docs.opencode.ai" : "docs.dev.opencode.ai"
+  const targetUrl = `https://${host}${docs(locale, `/docs${url.pathname}`)}${url.search}`
 
   const headers = new Headers(req.headers)
   headers.set("accept-language", tag(locale))
