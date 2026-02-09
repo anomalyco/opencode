@@ -5,7 +5,9 @@ import { iife } from "@/util/iife"
 type JsonObject = Record<string, unknown>
 
 export namespace ProviderError {
-  export const overflowPatterns = [
+  // Adapted from overflow detection patterns in:
+  // https://github.com/badlogic/pi-mono/blob/main/packages/ai/src/utils/overflow.ts
+  const OVERFLOW_PATTERNS = [
     /prompt is too long/i, // Anthropic
     /input is too long for requested model/i, // Amazon Bedrock
     /exceeds the context window/i, // OpenAI (Completions + Responses API message text)
@@ -23,7 +25,7 @@ export namespace ProviderError {
     /token limit exceeded/i, // Generic fallback
   ]
 
-  export function isOpenAiErrorRetryable(e: APICallError) {
+  function isOpenAiErrorRetryable(e: APICallError) {
     const status = e.statusCode
     if (!status) return e.isRetryable
     // openai sometimes returns 404 for models that are actually available
@@ -32,8 +34,8 @@ export namespace ProviderError {
 
   // Providers not reliably handled in this function:
   // - z.ai: can accept overflow silently (needs token-count/context-window checks)
-  export function isContextOverflow(message: string) {
-    if (overflowPatterns.some((p) => p.test(message))) return true
+  function isOverflow(message: string) {
+    if (OVERFLOW_PATTERNS.some((p) => p.test(message))) return true
 
     // Providers/status patterns handled outside of regex list:
     // - Cerebras: often returns "400 (no body)" / "413 (no body)"
@@ -41,7 +43,7 @@ export namespace ProviderError {
     return /^4(00|13)\s*(status code)?\s*\(no body\)/i.test(message)
   }
 
-  export function error(providerID: string, error: APICallError) {
+  function error(providerID: string, error: APICallError) {
     let message = error.message
     if (providerID.includes("github-copilot") && error.statusCode === 403) {
       return "Please reauthenticate with the copilot provider to ensure your credentials work properly with OpenCode."
@@ -50,7 +52,7 @@ export namespace ProviderError {
     return message
   }
 
-  export function message(providerID: string, e: APICallError) {
+  function message(providerID: string, e: APICallError) {
     return iife(() => {
       let msg = e.message
       if (msg === "") {
@@ -62,7 +64,7 @@ export namespace ProviderError {
         return "Unknown error"
       }
 
-      const transformed = ProviderError.error(providerID, e)
+      const transformed = error(providerID, e)
       if (transformed !== msg) {
         return transformed
       }
@@ -175,11 +177,11 @@ export namespace ProviderError {
       }
 
   export function parseAPICallError(input: { providerID: string; error: APICallError }): ParsedAPICallError {
-    const message = ProviderError.message(input.providerID, input.error)
-    if (ProviderError.isContextOverflow(message)) {
+    const m = message(input.providerID, input.error)
+    if (isOverflow(m)) {
       return {
         type: "context_overflow",
-        message,
+        message: m,
         responseBody: input.error.responseBody,
       }
     }
@@ -187,10 +189,10 @@ export namespace ProviderError {
     const metadata = input.error.url ? { url: input.error.url } : undefined
     return {
       type: "api_error",
-      message,
+      message: m,
       statusCode: input.error.statusCode,
       isRetryable: input.providerID.startsWith("openai")
-        ? ProviderError.isOpenAiErrorRetryable(input.error)
+        ? isOpenAiErrorRetryable(input.error)
         : input.error.isRetryable,
       responseHeaders: input.error.responseHeaders,
       responseBody: input.error.responseBody,
