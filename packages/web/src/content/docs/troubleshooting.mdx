@@ -288,6 +288,10 @@ apt install -y xsel
 apt install -y wl-clipboard
 ```
 
+**For macOS:**
+
+OpenCode first attempts to use `osascript`, then falls back to `pbcopy`/`pbpaste`. If neither native command is available, it uses its built-in clipboard helper as a last resort.
+
 **For headless environments:**
 
 ```bash
