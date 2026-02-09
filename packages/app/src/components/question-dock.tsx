@@ -2,6 +2,7 @@ import { For, Show, createMemo, type Component } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
+import { Markdown } from "@opencode-ai/ui/markdown"
 import { showToast } from "@opencode-ai/ui/toast"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useLanguage } from "@/context/language"
@@ -175,10 +176,10 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
 
       <Show when={!confirm()}>
         <div data-slot="question-content">
-          <div data-slot="question-text">
-            {question()?.question}
-            {multi() ? " " + language.t("ui.question.multiHint") : ""}
-          </div>
+          <Markdown
+            data-slot="question-text"
+            text={(question()?.question ?? "") + (multi() ? " " + language.t("ui.question.multiHint") : "")}
+          />
           <div data-slot="question-options">
             <For each={options()}>
               {(opt, i) => {

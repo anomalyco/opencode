@@ -12,7 +12,7 @@ import { useDialog } from "../../ui/dialog"
 
 export function QuestionPrompt(props: { request: QuestionRequest }) {
   const sdk = useSDK()
-  const { theme } = useTheme()
+  const { theme, syntax } = useTheme()
   const keybind = useKeybind()
   const bindings = useTextareaKeybindings()
 
@@ -314,10 +314,13 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
         <Show when={!confirm()}>
           <box paddingLeft={1} gap={1}>
             <box>
-              <text fg={theme.text}>
-                {question()?.question}
-                {multi() ? " (select all that apply)" : ""}
-              </text>
+              <code
+                filetype="markdown"
+                drawUnstyledText={false}
+                syntaxStyle={syntax()}
+                content={(question()?.question ?? "") + (multi() ? " (select all that apply)" : "")}
+                fg={theme.text}
+              />
             </box>
             <box>
               <For each={options()}>
