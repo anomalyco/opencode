@@ -5,6 +5,7 @@ import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
 import { BatchTool } from "./batch"
 import { ReadTool } from "./read"
+import { ReadMultipleTool } from "./read_multiple"
 import { TaskTool } from "./task"
 import { TodoWriteTool, TodoReadTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
@@ -106,6 +107,7 @@ export namespace ToolRegistry {
       ...(["app", "cli", "desktop"].includes(Flag.OPENCODE_CLIENT) ? [QuestionTool] : []),
       BashTool,
       ReadTool,
+      ReadMultipleTool,
       GlobTool,
       GrepTool,
       EditTool,

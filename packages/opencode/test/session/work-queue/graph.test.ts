@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { TaskGraph, TaskLevel, executeTaskLevels } from "../../../src/session/work-queue/graph"
+import { TaskGraph, type TaskLevel, executeTaskLevels } from "../../../src/session/work-queue/graph"
 import { MessageV2 } from "../../../src/session/message-v2"
 
 function createSubtask(id: string, agent: string, prompt: string, dependencies: string[] = []): MessageV2.SubtaskPart {
