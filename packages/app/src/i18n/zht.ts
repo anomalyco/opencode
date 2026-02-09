@@ -48,6 +48,7 @@ export const dict = {
 
   "command.session.new": "新增工作階段",
   "command.file.open": "開啟檔案",
+  "command.tab.close": "關閉分頁",
   "command.context.addSelection": "將選取內容加入上下文",
   "command.context.addSelection.description": "加入目前檔案中選取的行",
   "command.input.focus": "聚焦輸入框",
@@ -272,6 +273,7 @@ export const dict = {
   "prompt.toast.shellSendFailed.title": "傳送 shell 命令失敗",
   "prompt.toast.commandSendFailed.title": "傳送命令失敗",
   "prompt.toast.promptSendFailed.title": "傳送提示失敗",
+  "prompt.toast.promptSendFailed.description": "無法取得工作階段",
 
   "dialog.mcp.title": "MCP",
   "dialog.mcp.description": "已啟用 {{enabled}} / {{total}}",

@@ -44,6 +44,7 @@ export const dict = {
 
   "command.session.new": "Новая сессия",
   "command.file.open": "Открыть файл",
+  "command.tab.close": "Закрыть вкладку",
   "command.context.addSelection": "Добавить выделение в контекст",
   "command.context.addSelection.description": "Добавить выбранные строки из текущего файла",
   "command.input.focus": "Фокус на поле ввода",
@@ -234,6 +235,7 @@ export const dict = {
   "prompt.toast.shellSendFailed.title": "Не удалось отправить команду оболочки",
   "prompt.toast.commandSendFailed.title": "Не удалось отправить команду",
   "prompt.toast.promptSendFailed.title": "Не удалось отправить запрос",
+  "prompt.toast.promptSendFailed.description": "Не удалось получить сессию",
 
   "dialog.mcp.title": "MCP",
   "dialog.mcp.description": "{{enabled}} из {{total}} включено",

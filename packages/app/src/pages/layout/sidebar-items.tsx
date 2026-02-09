@@ -21,8 +21,11 @@ const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
 export const ProjectIcon = (props: { project: LocalProject; class?: string; notify?: boolean }): JSX.Element => {
   const notification = useNotification()
-  const unseenCount = createMemo(() => notification.project.unseenCount(props.project.worktree))
-  const hasError = createMemo(() => notification.project.unseenHasError(props.project.worktree))
+  const dirs = createMemo(() => [props.project.worktree, ...(props.project.sandboxes ?? [])])
+  const unseenCount = createMemo(() =>
+    dirs().reduce((total, directory) => total + notification.project.unseenCount(directory), 0),
+  )
+  const hasError = createMemo(() => dirs().some((directory) => notification.project.unseenHasError(directory)))
   const name = createMemo(() => props.project.name || getFilename(props.project.worktree))
   return (
     <div class={`relative size-8 shrink-0 rounded ${props.class ?? ""}`}>
