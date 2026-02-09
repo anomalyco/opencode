@@ -266,7 +266,7 @@ This project uses [vouch](https://github.com/mitchellh/vouch) to manage contribu
 ### How it works
 
 - **Vouched users** are explicitly trusted contributors.
-- **Denounced users** are explicitly blocked. Issues from denounced users are automatically closed.
+- **Denounced users** are explicitly blocked. Issues and pull requests from denounced users are automatically closed. If you have been denounced, you can request to be unvouched by reaching out to a maintainer on [Discord](https://opencode.ai/discord)
 - **Everyone else** can participate normally — you don't need to be vouched to open issues or PRs.
 
 ### For maintainers
@@ -285,3 +285,22 @@ Changes are committed automatically to `.github/VOUCHED.td`.
 ### Denouncement policy
 
 Denouncement is reserved for users who repeatedly submit low-quality AI-generated contributions, spam, or otherwise act in bad faith. It is not used for disagreements or honest mistakes.
+
+## Issue Requirements
+
+All issues **must** use one of our issue templates:
+
+- **Bug report** — for reporting bugs (requires a description)
+- **Feature request** — for suggesting enhancements (requires verification checkbox and description)
+- **Question** — for asking questions (requires the question)
+
+Blank issues are not allowed. When a new issue is opened, an automated check verifies that it follows a template and meets our contributing guidelines. If an issue doesn't meet the requirements, you'll receive a comment explaining what needs to be fixed and have **2 hours** to edit the issue. After that, it will be automatically closed.
+
+Issues may be flagged for:
+
+- Not using a template
+- Required fields left empty or filled with placeholder text
+- AI-generated walls of text
+- Missing meaningful content
+
+If you believe your issue was incorrectly flagged, let a maintainer know.
