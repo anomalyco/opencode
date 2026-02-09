@@ -269,6 +269,149 @@ describe("ProviderTransform.maxOutputTokens", () => {
   })
 })
 
+describe("ProviderTransform.schema - gemini numeric enum stringification", () => {
+  const geminiModel = {
+    providerID: "google",
+    api: {
+      id: "gemini-3-pro",
+    },
+  } as any
+
+  test("converts numeric enum values to strings", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        level: {
+          type: "integer",
+          enum: [0, 1, 2, 3, 4],
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.level.enum).toEqual(["0", "1", "2", "3", "4"])
+    expect(result.properties.level.type).toBe("string")
+  })
+
+  test("converts numeric enum values regardless of property order", () => {
+    // Simulate a schema where "enum" appears before "type" in iteration order
+    const prop: any = {}
+    prop.enum = [1, 2, 3]
+    prop.type = "integer"
+
+    const schema = {
+      type: "object",
+      properties: {
+        priority: prop,
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.priority.enum).toEqual(["1", "2", "3"])
+    expect(result.properties.priority.type).toBe("string")
+  })
+
+  test("changes number type to string for enums", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        score: {
+          type: "number",
+          enum: [0.5, 1.0, 1.5],
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.score.enum).toEqual(["0.5", "1", "1.5"])
+    expect(result.properties.score.type).toBe("string")
+  })
+
+  test("preserves string enum values unchanged", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        color: {
+          type: "string",
+          enum: ["red", "green", "blue"],
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.color.enum).toEqual(["red", "green", "blue"])
+    expect(result.properties.color.type).toBe("string")
+  })
+
+  test("handles mixed enum values (numbers and strings)", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        value: {
+          type: "integer",
+          enum: [0, "auto", 1, "none"],
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.value.enum).toEqual(["0", "auto", "1", "none"])
+    expect(result.properties.value.type).toBe("string")
+  })
+
+  test("converts nested numeric enums", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        config: {
+          type: "object",
+          properties: {
+            mode: {
+              type: "integer",
+              enum: [1, 2, 3],
+            },
+          },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.config.properties.mode.enum).toEqual(["1", "2", "3"])
+    expect(result.properties.config.properties.mode.type).toBe("string")
+  })
+
+  test("does not affect non-gemini providers", () => {
+    const openaiModel = {
+      providerID: "openai",
+      api: {
+        id: "gpt-4",
+      },
+    } as any
+
+    const schema = {
+      type: "object",
+      properties: {
+        level: {
+          type: "integer",
+          enum: [0, 1, 2],
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(openaiModel, schema) as any
+
+    // OpenAI should keep numeric enums as-is
+    expect(result.properties.level.enum).toEqual([0, 1, 2])
+    expect(result.properties.level.type).toBe("integer")
+  })
+})
+
 describe("ProviderTransform.schema - gemini array items", () => {
   test("adds missing items for array properties", () => {
     const geminiModel = {
