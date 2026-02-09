@@ -39,6 +39,12 @@ process.on("uncaughtException", (e) => {
   })
 })
 
+// Handle SIGHUP (terminal line hangup) for graceful shutdown in container/detached environments
+process.on("SIGHUP", () => {
+  Log.Default.info("sighup", { message: "Received SIGHUP, exiting gracefully" })
+  process.exit(0)
+})
+
 const cli = yargs(hideBin(process.argv))
   .parserConfiguration({ "populate--": true })
   .scriptName("opencode")
