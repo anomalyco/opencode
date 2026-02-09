@@ -3,9 +3,9 @@ title: Strumenti
 description: Gestisci gli strumenti che un LLM puo' usare.
 ---
 
-Gli strumenti permettono all'LLM di eseguire azioni nel tuo codebase. OpenCode include un set di strumenti integrati, ma puoi estenderlo con [strumenti personalizzati](./custom-tools) o con [server MCP](./mcp-servers).
+Gli strumenti permettono all'LLM di eseguire azioni nel tuo codebase. OpenCode include un set di strumenti integrati, ma puoi estenderlo con [strumenti personalizzati](/docs/custom-tools) o con [server MCP](/docs/mcp-servers).
 
-Di default, tutti gli strumenti sono **abilitati** e non richiedono permessi per essere eseguiti. Puoi controllare il comportamento degli strumenti tramite i [permessi](./permissions).
+Di default, tutti gli strumenti sono **abilitati** e non richiedono permessi per essere eseguiti. Puoi controllare il comportamento degli strumenti tramite i [permessi](/docs/permissions).
 
 ---
 
@@ -35,7 +35,7 @@ Puoi anche usare wildcard per controllare piu' strumenti insieme. Per esempio, p
 }
 ```
 
-[Scopri di piu'](./permissions) su come configurare i permessi.
+[Scopri di piu'](/docs/permissions) su come configurare i permessi.
 
 ---
 
@@ -187,7 +187,7 @@ Questo strumento e' disponibile solo quando `OPENCODE_EXPERIMENTAL_LSP_TOOL=true
 
 Le operazioni supportate includono `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls` e `outgoingCalls`.
 
-Per configurare quali server LSP sono disponibili per il tuo progetto, vedi [LSP Servers](./lsp).
+Per configurare quali server LSP sono disponibili per il tuo progetto, vedi [LSP Servers](/docs/lsp).
 
 ---
 
@@ -214,7 +214,7 @@ Lo strumento `patch` e' controllato dal permesso `edit`, che copre tutte le modi
 
 ### skill
 
-Carica una [skill](./skills) (un file `SKILL.md`) e ne restituisce il contenuto nella conversazione.
+Carica una [skill](/docs/skills) (un file `SKILL.md`) e ne restituisce il contenuto nella conversazione.
 
 ```json title="opencode.json" {4}
 {
@@ -243,7 +243,7 @@ Gestisci todo list durante le sessioni di coding.
 Crea e aggiorna liste di task per tracciare i progressi durante operazioni complesse. L'LLM lo usa per organizzare attivita' multi-step.
 
 :::note
-Questo strumento e' disabilitato per i subagenti di default, ma puoi abilitarlo manualmente. [Scopri di piu'](./agents/#permissions)
+Questo strumento e' disabilitato per i subagenti di default, ma puoi abilitarlo manualmente. [Scopri di piu'](/docs/agents/#permissions)
 :::
 
 ---
@@ -264,7 +264,7 @@ Leggi le todo list esistenti.
 Legge lo stato corrente della todo list. Usato dall'LLM per tenere traccia di quali task sono in sospeso o completati.
 
 :::note
-Questo strumento e' disabilitato per i subagenti di default, ma puoi abilitarlo manualmente. [Scopri di piu'](./agents/#permissions)
+Questo strumento e' disabilitato per i subagenti di default, ma puoi abilitarlo manualmente. [Scopri di piu'](/docs/agents/#permissions)
 :::
 
 ---
@@ -348,7 +348,7 @@ Ogni domanda include un header, il testo della domanda e una lista di opzioni. G
 
 Gli strumenti personalizzati ti permettono di definire funzioni che l'LLM puo' chiamare. Sono definiti nel tuo file di configurazione e possono eseguire codice arbitrario.
 
-[Scopri di piu'](./custom-tools) su come creare strumenti personalizzati.
+[Scopri di piu'](/docs/custom-tools) su come creare strumenti personalizzati.
 
 ---
 
@@ -356,7 +356,7 @@ Gli strumenti personalizzati ti permettono di definire funzioni che l'LLM puo' c
 
 I server MCP (Model Context Protocol) permettono di integrare strumenti e servizi esterni. Questo include accesso a database, integrazioni API e servizi di terze parti.
 
-[Scopri di piu'](./mcp-servers) su come configurare i server MCP.
+[Scopri di piu'](/docs/mcp-servers) su come configurare i server MCP.
 
 ---
 

@@ -175,7 +175,7 @@ opencode run "Hello world"
 - `scroll_speed` - 自定义滚动速度倍增（默认值：`3`，简单：`1`）。如果`scroll_acceleration.enabled`是`true`，则忽略。
 - `diff_style` - 控制差异渲染。 `"auto"` 适应宽度，`"stacked"` 始终显示单列。
 
-[在此处了解有关使用 TUI 的更多信息](./tui)。
+[在此处了解有关使用 TUI 的更多信息](/docs/tui)。
 
 ---
 
@@ -204,7 +204,7 @@ opencode run "Hello world"
 - `mdnsDomain` - mDNS 服务的自定义域名。默认为 `opencode.local`。对于在同一个网络上运行多个实例很有用。
 - `cors` - 从基于浏览器的客户端使用 HTTP 服务器时允许 CORS 的其他来源。值必须是完整来源（方案+主机+任选端口），例如 `https://app.example.com`。
 
-[在此处了解有关服务器的更多信息](./server)。
+[在此处了解有关服务器的更多信息](/docs/server)。
 
 ---
 
@@ -222,7 +222,7 @@ opencode run "Hello world"
 }
 ```
 
-[在此处了解有关工具的更多信息](./tools)。
+[在此处了解有关工具的更多信息](/docs/tools)。
 
 ---
 
@@ -260,7 +260,7 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 - `timeout` - 请求超时以毫秒为单位（默认值：300000）。设置为 `false` 以禁用。
 - `setCacheKey` -确保始终为指定的提供者设置存储硬盘。
 
-您还可以配置[本地模型](./models#local)。[了解更多](./models)。
+您还可以配置[本地模型](/docs/models#local)。[了解更多](/docs/models)。
 
 ---
 
@@ -292,10 +292,10 @@ Amazon Bedrock 支持 AWS 特定配置：
 - `endpoint` - VPC 终端节点的自定义节点 URL。这是使用 AWS 特定术语的通用 `baseURL` 选项的别名。如果两者都指定，`endpoint` 优先。
 
 :::笔记
-承载令牌（`AWS_BEARER_TOKEN_BEDROCK` 或`/connect`）优先于基于配置文件的身份验证。详情请参见【认证优先级](./providers#authentication-precedence)。
+承载令牌（`AWS_BEARER_TOKEN_BEDROCK` 或`/connect`）优先于基于配置文件的身份验证。详情请参见【认证优先级](/docs/providers#authentication-precedence)。
 :::
 
-[了解有关 Amazon Bedrock 配置的更多信息](./providers#amazon-bedrock)。
+[了解有关 Amazon Bedrock 配置的更多信息](/docs/providers#amazon-bedrock)。
 
 ---
 
@@ -310,7 +310,7 @@ Amazon Bedrock 支持 AWS 特定配置：
 }
 ```
 
-[在这里了解更多](./themes)。
+[在这里了解更多](/docs/themes)。
 
 ---
 
@@ -336,7 +336,7 @@ Amazon Bedrock 支持 AWS 特定配置：
 }
 ```
 
-您还可以使用 `~/.config/opencode/agents/` 或 `.opencode/agents/` 中的 markdown 文件定义代理。 [在这里了解更多](./agents)。
+您还可以使用 `~/.config/opencode/agents/` 或 `.opencode/agents/` 中的 markdown 文件定义代理。 [在这里了解更多](/docs/agents)。
 
 ---
 
@@ -359,7 +359,7 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 
 ### 分享
 
-您可以通过`share`选项配置[分享](./share)功能。
+您可以通过`share`选项配置[分享](/docs/share)功能。
 
 ```json title="opencode.json"
 {
@@ -400,7 +400,7 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 }
 ```
 
-您还可以使用 `~/.config/opencode/commands/` 或 `.opencode/commands/` 中的 Markdown 文件定义命令。 [在这里了解更多](./commands)。
+您还可以使用 `~/.config/opencode/commands/` 或 `.opencode/commands/` 中的 Markdown 文件定义命令。 [在这里了解更多](/docs/commands)。
 
 ---
 
@@ -415,7 +415,7 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 }
 ```
 
-[在这里了解更多](./keybinds)。
+[在这里了解更多](/docs/keybinds)。
 
 ---
 
@@ -477,7 +477,7 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 }
 ```
 
-[在此处了解有关权限的更多信息](./permissions)。
+[在此处了解有关权限的更多信息](/docs/permissions)。
 
 ---
 
@@ -528,13 +528,13 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 }
 ```
 
-[在这里了解更多](./mcp-servers)。
+[在这里了解更多](/docs/mcp-servers)。
 
 ---
 
 ### 插件
 
-[插件](./plugins) 使用自定义工具、挂钩和集成扩展 OpenCode。
+[插件](/docs/plugins) 使用自定义工具、挂钩和集成扩展 OpenCode。
 
 将插件文件放置在`.opencode/plugins/` 或`~/.config/opencode/plugins/` 中。您还可以通过 `plugin` 选项从 npm 加载插件。
 
@@ -545,7 +545,7 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 }
 ```
 
-[在这里了解更多](./plugins)。
+[在这里了解更多](/docs/plugins)。
 
 ---
 
@@ -561,7 +561,7 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 ```
 
 這需要指令文件的路徑和全局模式數組。 [了解更多
-关于规则在这里](./rules)。
+关于规则在这里](/docs/rules)。
 
 ---
 

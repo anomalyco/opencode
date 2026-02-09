@@ -175,7 +175,7 @@ Dostępna opcja:
 - `scroll_speed` - Niestandardowy mnożnik szybkości przewijania (domyślnie: `3`, minimalnie: `1`). Ignorowane, jeśli `scroll_acceleration.enabled` do `true`.
 - `diff_style` – Sterowanie renderowaniem różnicowym. `"auto"` dostępny jest do szerokości terminala, `"stacked"` zawsze pojawia się pojedyncza kolumna.
 
-[Dowiedz się więcej o korzystaniu z TUI tutaj](./tui).
+[Dowiedz się więcej o korzystaniu z TUI tutaj](/docs/tui).
 
 ---
 
@@ -204,7 +204,7 @@ Dostępna opcja:
 - `mdnsDomain` - Niestandardowa nazwa domeny dla usług mDNS. Wartość domyślna do `opencode.local`. Przydatne do uruchomienia wielu zastosowań w tej samej sieci.
 - `cors` - Dodatkowe źródło CORS podczas korzystania z serwera HTTP z punktu końcowego. Wartość musi być dostępna dla źródeł (schemat + host + port opcjonalny), np. `https://app.example.com`.
 
-[Dowiedz się więcej o tutaj](./server).
+[Dowiedz się więcej o tutaj](/docs/server).
 
 ---
 
@@ -222,7 +222,7 @@ Dostępne narzędzia, z których można korzystać LLM, dostęp do opcji `tools`
 }
 ```
 
-[Dowiedz się więcej o narzędziach tutaj](./tools).
+[Dowiedz się więcej o narzędziach tutaj](/docs/tools).
 
 ---
 
@@ -260,7 +260,7 @@ Opcje dostawcy mogą być zainstalowane `timeout` i `setCacheKey`:
 - `timeout` - Limit czasu trwania w milisekundach (domyślnie: 300000). Ustaw na `false`, aby wyłączyć.
 - `setCacheKey` — wkrótce, że klucz pamięci podręcznej jest zawsze gotowy dla dostawcy.
 
-Możesz także mieć [model lokalny](./models#local). [Dowiedz się więcej](./models).
+Możesz także mieć [model lokalny](/docs/models#local). [Dowiedz się więcej](/docs/models).
 
 ---
 
@@ -292,10 +292,10 @@ Amazon Bedrock umożliwia podłączenie wyłącznika dla AWS:
 - `endpoint` — niestandardowy adres URL punktu końcowego dla punktów końcowych VPC. Jest to alias dla opcji ogólnej `baseURL` przy użyciu terminologii specjalnej dla AWS. Jeśli oba, pierwszeństwo ma `endpoint`.
 
 :::note
-Token okaziciela (`AWS_BEARER_TOKEN_BEDROCK` lub `/connect`) ma pierwszeństwo przed uwierzytelnianiem opartym na profilu. Aby uzyskać szczegółowe informacje, zobacz [pierwszeństwo uwierzytelniania](./providers#authentication-precedence).
+Token okaziciela (`AWS_BEARER_TOKEN_BEDROCK` lub `/connect`) ma pierwszeństwo przed uwierzytelnianiem opartym na profilu. Aby uzyskać szczegółowe informacje, zobacz [pierwszeństwo uwierzytelniania](/docs/providers#authentication-precedence).
 :::
 
-[Dowiedz się więcej o budowie Amazon Bedrock](./providers#amazon-bedrock).
+[Dowiedz się więcej o budowie Amazon Bedrock](/docs/providers#amazon-bedrock).
 
 ---
 
@@ -310,7 +310,7 @@ Urządzenie zachęcające do korzystania z urządzeń OpenCode, za pomocą sieci
 }
 ```
 
-[Dowiedz się więcej tutaj](./themes).
+[Dowiedz się więcej tutaj](/docs/themes).
 
 ---
 
@@ -336,7 +336,7 @@ Możliwość dostępności agentów do gniazd za pomocą opcji `agent`.
 }
 ```
 
-Możesz także uniknąć agentów przy użyciu plików przecen w `~/.config/opencode/agents/` lub `.opencode/agents/`. [Dowiedz się więcej tutaj](./agents).
+Możesz także uniknąć agentów przy użyciu plików przecen w `~/.config/opencode/agents/` lub `.opencode/agents/`. [Dowiedz się więcej tutaj](/docs/agents).
 
 ---
 
@@ -351,7 +351,7 @@ Domyślnego agenta można ustawić za pomocą opcji `default_agent`. Wykrywacz, 
 }
 ```
 
-Agent domyślny musi być agentem (nie subagentem). Może być agentem aplikacji, taki jak `"build"` lub `"plan"`, albo ukryty przez Ciebie [agent niestandardowy](./agents). Jeśli agent nie istnieje lub jest podagentem, OpenCode powróć do `"build"` z ostrzeżeniem.
+Agent domyślny musi być agentem (nie subagentem). Może być agentem aplikacji, taki jak `"build"` lub `"plan"`, albo ukryty przez Ciebie [agent niestandardowy](/docs/agents). Jeśli agent nie istnieje lub jest podagentem, OpenCode powróć do `"build"` z ostrzeżeniem.
 
 Dotyczy urządzeń wszystkich interfejsów: TUI, CLI (`opencode run`), aplikacji komputerowej i akcji GitHub.
 
@@ -359,7 +359,7 @@ Dotyczy urządzeń wszystkich interfejsów: TUI, CLI (`opencode run`), aplikacji
 
 ### Partycypujący
 
-Możesz udostępnić [udostępnij](./share) za pomocą opcji `share`.
+Możesz udostępnić [udostępnij](/docs/share) za pomocą opcji `share`.
 
 ```json title="opencode.json"
 {
@@ -400,7 +400,7 @@ Możesz korzystać z usług polecanych dla powtarzalnych zadań za pomocą opcji
 }
 ```
 
-Można także definiować polecenia przy użyciu plików Markdown w `~/.config/opencode/commands/` lub `.opencode/commands/`. [Dowiedz się więcej tutaj](./commands).
+Można także definiować polecenia przy użyciu plików Markdown w `~/.config/opencode/commands/` lub `.opencode/commands/`. [Dowiedz się więcej tutaj](/docs/commands).
 
 ---
 
@@ -415,7 +415,7 @@ Możliwość zmiany skrótu klawiszowego za pomocą opcji `keybinds`.
 }
 ```
 
-[Dowiedz się więcej tutaj](./keybinds).
+[Dowiedz się więcej tutaj](/docs/keybinds).
 
 ---
 
@@ -457,7 +457,7 @@ Można podać kod formacyjny za pomocą opcji `formatter`.
 }
 ```
 
-[Dowiedz się więcej o formaterach tutaj](./formatters).
+[Dowiedz się więcej o formaterach tutaj](/docs/formatters).
 
 ---
 
@@ -477,7 +477,7 @@ Na przykład, aby można było wykryć, że narzędzie `edit` i `bash` wymaga zg
 }
 ```
 
-[Dowiedz się więcej o prawach tutaj](./permissions).
+[Dowiedz się więcej o prawach tutaj](/docs/permissions).
 
 ---
 
@@ -528,13 +528,13 @@ Dostęp do serwerów MCP, których chcesz używać, za pośrednictwem sieci `mcp
 }
 ```
 
-[Dowiedz się więcej tutaj](./mcp-servers).
+[Dowiedz się więcej tutaj](/docs/mcp-servers).
 
 ---
 
 ### Wtyki
 
-[Wtyczki](./plugins) rozszerzają OpenCode o podstawowe narzędzia, hooki i integracje.
+[Wtyczki](/docs/plugins) rozszerzają OpenCode o podstawowe narzędzia, hooki i integracje.
 
 Pliki plików wtyczek w `.opencode/plugins/` lub `~/.config/opencode/plugins/`. Można także włączyć wtyczkę z npm poprzez opcję `plugin`.
 
@@ -545,7 +545,7 @@ Pliki plików wtyczek w `.opencode/plugins/` lub `~/.config/opencode/plugins/`. 
 }
 ```
 
-[Dowiedz się więcej tutaj](./plugins).
+[Dowiedz się więcej tutaj](/docs/plugins).
 
 ---
 
@@ -561,7 +561,7 @@ Instrukcja dla modelu, w której można zastosować opcję `instructions`.
 ```
 
 Pobierana do schematów i wzorców globalnych do plików graficznych. [Dowiedz się więcej
-o zasadach tutaj](./rules).
+o zasadach tutaj](/docs/rules).
 
 ---
 

@@ -63,7 +63,7 @@ Um einen bestimmten Server aus der Remote-Konfiguration Ihrer Organisation zu ak
 }
 ```
 
-Ihre lokalen Konfigurationswerte überschreiben die Remote-Standardwerte. Weitere Einzelheiten finden Sie unter [config precedence](./config#precedence-order).
+Ihre lokalen Konfigurationswerte überschreiben die Remote-Standardwerte. Weitere Einzelheiten finden Sie unter [config precedence](/docs/config#precedence-order).
 
 ---
 
@@ -348,7 +348,7 @@ Hier verwenden wir das Glob-Muster `my-mcp*`, um alle MCPs zu deaktivieren.
 Wenn Sie über eine große Anzahl von MCP-Servern verfügen, möchten Sie diese möglicherweise nur pro Agent aktivieren und global deaktivieren. Gehen Sie dazu wie folgt vor:
 
 1. Deaktivieren Sie es global als Tool.
-2. Aktivieren Sie in Ihrem [agent config](./agents#tools) den MCP-Server als Tool.
+2. Aktivieren Sie in Ihrem [agent config](/docs/agents#tools) den MCP-Server als Tool.
 
 ```json title="opencode.json" {11, 14-18}
 {
@@ -474,7 +474,7 @@ Fügen Sie `use context7` zu Ihren Eingabeaufforderungen hinzu, um den Context7 
 Configure a Cloudflare Worker script to cache JSON API responses for five minutes. use context7
 ```
 
-Alternativ können Sie so etwas zu Ihrem [AGENTS.md](./rules/) hinzufügen.
+Alternativ können Sie so etwas zu Ihrem [AGENTS.md](/docs/rules/) hinzufügen.
 
 ```md title="AGENTS.md"
 When you need to search docs, use `context7` tools.
@@ -504,7 +504,7 @@ Da wir unseren MCP-Server `gh_grep` genannt haben, können Sie `use the gh_grep 
 What's the right way to set a custom domain in an SST Astro component? use the gh_grep tool
 ```
 
-Alternativ können Sie so etwas zu Ihrem [AGENTS.md](./rules/) hinzufügen.
+Alternativ können Sie so etwas zu Ihrem [AGENTS.md](/docs/rules/) hinzufügen.
 
 ```md title="AGENTS.md"
 If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.

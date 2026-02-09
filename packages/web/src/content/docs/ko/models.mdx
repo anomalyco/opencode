@@ -11,7 +11,7 @@ OpenCode는 [AI SDK](https://ai-sdk.dev/) 및 [Models.dev](https://models.dev)�
 
 가장 인기 있는 공급자는 기본적으로 preloaded. `/connect` 명령을 통해 공급자를위한 자격 증명을 추가하면 OpenCode를 시작할 때 사용할 수 있습니다.
 
-자세히 알아보기 [providers](./providers).
+자세히 알아보기 [providers](/docs/providers).
 
 ---
 
@@ -58,9 +58,9 @@ OpenCode 설정.
 }
 ```
 
-전체 ID는 `provider_id/model_id`입니다. 예를 들어, [OpenCode Zen](./zen)을 사용한다면, GPT 5.1 Codex에 `opencode/gpt-5.1-codex`를 사용할 수 있습니다.
+전체 ID는 `provider_id/model_id`입니다. 예를 들어, [OpenCode Zen](/docs/zen)을 사용한다면, GPT 5.1 Codex에 `opencode/gpt-5.1-codex`를 사용할 수 있습니다.
 
-[custom Provider](./providers#custom)를 구성하면 `provider_id`는 구성의 `provider` 부분에서 키이며 `model_id`는 `provider.models`에서 키입니다.
+[custom Provider](/docs/providers#custom)를 구성하면 `provider_id`는 구성의 `provider` 부분에서 키이며 `model_id`는 `provider.models`에서 키입니다.
 
 ---
 
@@ -103,7 +103,7 @@ config를 통해 모델의 옵션을 구성할 수 있습니다.
 여기에 우리는 두 개의 내장 모델에 대한 글로벌 설정을 구성 : `gpt-5`를 통해 액세스 할 때 `openai` 공급자 및 `claude-sonnet-4-20250514`는 `anthropic` 공급자를 통해 액세스 할 때.
 내장 공급자 및 모델 이름은 [Models.dev](https://models.dev)에서 찾을 수 있습니다.
 
-사용중인 에이전트에 이러한 옵션을 구성할 수 있습니다. 에이전트 구성은 여기에 모든 글로벌 옵션을 overrides. [더 알아보기](./agents/#additional).
+사용중인 에이전트에 이러한 옵션을 구성할 수 있습니다. 에이전트 구성은 여기에 모든 글로벌 옵션을 overrides. [더 알아보기](/docs/agents/#additional).
 
 내장 된 것을 확장하는 사용자 정의 변형을 정의 할 수 있습니다. Variants는 중복 항목 생성 없이 동일한 모델을 위한 다른 설정을 구성할 수 있습니다:
 
@@ -197,7 +197,7 @@ OpenCode는 많은 공급자를 위한 과태 변종으로 발송합니다:
 
 ## 사이클 변형
 
-keybind `variant_cycle`를 사용하여 변형 사이 신속하게 전환합니다. [더 알아보기](./keybinds).
+keybind `variant_cycle`를 사용하여 변형 사이 신속하게 전환합니다. [더 알아보기](/docs/keybinds).
 
 ---
 

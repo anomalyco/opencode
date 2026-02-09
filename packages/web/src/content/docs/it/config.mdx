@@ -171,7 +171,7 @@ Opzioni disponibili:
 - `scroll_speed` - Moltiplicatore personalizzato della velocita di scorrimento (predefinito: `3`, minimo: `1`). Ignorato se `scroll_acceleration.enabled` e `true`.
 - `diff_style` - Controlla la resa delle diff. `"auto"` si adatta alla larghezza del terminale, `"stacked"` mostra sempre una singola colonna.
 
-[Scopri di piu sull'uso della TUI](./tui).
+[Scopri di piu sull'uso della TUI](/docs/tui).
 
 ---
 
@@ -200,7 +200,7 @@ Opzioni disponibili:
 - `mdnsDomain` - Nome di dominio personalizzato per il servizio mDNS. Predefinito: `opencode.local`. Utile per eseguire piu istanze sulla stessa rete.
 - `cors` - Origini aggiuntive da consentire per CORS quando usi il server HTTP da un client basato su browser. I valori devono essere origini complete (schema + host + porta opzionale), ad es. `https://app.example.com`.
 
-[Scopri di piu sul server](./server).
+[Scopri di piu sul server](/docs/server).
 
 ---
 
@@ -218,7 +218,7 @@ Puoi gestire gli strumenti che un LLM puo usare tramite l'opzione `tools`.
 }
 ```
 
-[Scopri di piu sugli strumenti](./tools).
+[Scopri di piu sugli strumenti](/docs/tools).
 
 ---
 
@@ -256,7 +256,7 @@ Provider options can include `timeout` and `setCacheKey`:
 - `timeout` - Timeout della richiesta in millisecondi (predefinito: 300000). Imposta a `false` per disabilitare.
 - `setCacheKey` - Assicura che venga sempre impostata una cache key per il provider indicato.
 
-Puoi anche configurare i [modelli locali](./models#local). [Scopri di piu](./models).
+Puoi anche configurare i [modelli locali](/docs/models#local). [Scopri di piu](/docs/models).
 
 ---
 
@@ -288,10 +288,10 @@ Amazon Bedrock supporta una configurazione specifica per AWS:
 - `endpoint` - URL endpoint personalizzato per gli endpoint VPC. E un alias dell'opzione generica `baseURL` usando la terminologia AWS. Se sono specificati sia `endpoint` sia `baseURL`, `endpoint` ha precedenza.
 
 :::note
-I bearer token (`AWS_BEARER_TOKEN_BEDROCK` o `/connect`) hanno precedenza sull'autenticazione basata su profilo. Vedi [ordine di precedenza dell'autenticazione](./providers#authentication-precedence) per i dettagli.
+I bearer token (`AWS_BEARER_TOKEN_BEDROCK` o `/connect`) hanno precedenza sull'autenticazione basata su profilo. Vedi [ordine di precedenza dell'autenticazione](/docs/providers#authentication-precedence) per i dettagli.
 :::
 
-[Scopri di piu sulla configurazione di Amazon Bedrock](./providers#amazon-bedrock).
+[Scopri di piu sulla configurazione di Amazon Bedrock](/docs/providers#amazon-bedrock).
 
 ---
 
@@ -306,7 +306,7 @@ Puoi configurare il tema da usare in OpenCode tramite l'opzione `theme`.
 }
 ```
 
-[Scopri di piu](./themes).
+[Scopri di piu](/docs/themes).
 
 ---
 
@@ -332,7 +332,7 @@ Puoi configurare agenti specializzati per task specifici tramite l'opzione `agen
 }
 ```
 
-Puoi anche definire agenti usando file markdown in `~/.config/opencode/agents/` o `.opencode/agents/`. [Scopri di piu](./agents).
+Puoi anche definire agenti usando file markdown in `~/.config/opencode/agents/` o `.opencode/agents/`. [Scopri di piu](/docs/agents).
 
 ---
 
@@ -347,7 +347,7 @@ Puoi impostare l'agente predefinito usando l'opzione `default_agent`. Questo det
 }
 ```
 
-L'agente predefinito deve essere un agente primary (non un subagent). Puo essere un agente integrato come `"build"` o `"plan"`, oppure un [agente personalizzato](./agents) che hai definito. Se l'agente specificato non esiste o e un subagent, OpenCode fara fallback su `"build"` mostrando un avviso.
+L'agente predefinito deve essere un agente primary (non un subagent). Puo essere un agente integrato come `"build"` o `"plan"`, oppure un [agente personalizzato](/docs/agents) che hai definito. Se l'agente specificato non esiste o e un subagent, OpenCode fara fallback su `"build"` mostrando un avviso.
 
 Questa impostazione si applica a tutte le interfacce: TUI, CLI (`opencode run`), app desktop e GitHub Action.
 
@@ -355,7 +355,7 @@ Questa impostazione si applica a tutte le interfacce: TUI, CLI (`opencode run`),
 
 ### Condivisione
 
-Puoi configurare la funzione di [condivisione](./share) tramite l'opzione `share`.
+Puoi configurare la funzione di [condivisione](/docs/share) tramite l'opzione `share`.
 
 ```json title="opencode.json"
 {
@@ -396,7 +396,7 @@ Puoi configurare comandi personalizzati per task ripetitivi tramite l'opzione `c
 }
 ```
 
-Puoi anche definire comandi usando file markdown in `~/.config/opencode/commands/` o `.opencode/commands/`. [Scopri di piu](./commands).
+Puoi anche definire comandi usando file markdown in `~/.config/opencode/commands/` o `.opencode/commands/`. [Scopri di piu](/docs/commands).
 
 ---
 
@@ -411,7 +411,7 @@ Puoi personalizzare i keybind tramite l'opzione `keybinds`.
 }
 ```
 
-[Scopri di piu](./keybinds).
+[Scopri di piu](/docs/keybinds).
 
 ---
 
@@ -453,7 +453,7 @@ Puoi configurare i formatter di codice tramite l'opzione `formatter`.
 }
 ```
 
-[Scopri di piu sui formatter](./formatters).
+[Scopri di piu sui formatter](/docs/formatters).
 
 ---
 
@@ -473,7 +473,7 @@ Per esempio, per fare in modo che gli strumenti `edit` e `bash` richiedano l'app
 }
 ```
 
-[Scopri di piu sui permessi](./permissions).
+[Scopri di piu sui permessi](/docs/permissions).
 
 ---
 
@@ -524,13 +524,13 @@ Puoi configurare i server MCP che vuoi usare tramite l'opzione `mcp`.
 }
 ```
 
-[Scopri di piu](./mcp-servers).
+[Scopri di piu](/docs/mcp-servers).
 
 ---
 
 ### Plugin
 
-[I plugin](./plugins) estendono OpenCode con strumenti personalizzati, hook e integrazioni.
+[I plugin](/docs/plugins) estendono OpenCode con strumenti personalizzati, hook e integrazioni.
 
 Metti i file dei plugin in `.opencode/plugins/` o `~/.config/opencode/plugins/`. Puoi anche caricare plugin da npm tramite l'opzione `plugin`.
 
@@ -541,7 +541,7 @@ Metti i file dei plugin in `.opencode/plugins/` o `~/.config/opencode/plugins/`.
 }
 ```
 
-[Scopri di piu](./plugins).
+[Scopri di piu](/docs/plugins).
 
 ---
 
@@ -557,7 +557,7 @@ Puoi configurare le istruzioni per il modello che stai usando tramite l'opzione 
 ```
 
 Accetta un array di percorsi e pattern glob verso file di istruzioni. [Scopri di piu
-sulle regole](./rules).
+sulle regole](/docs/rules).
 
 ---
 

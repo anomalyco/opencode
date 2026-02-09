@@ -3,9 +3,9 @@ title: Tools
 description: Zarządzaj narzędziami, z których może korzystać LLM.
 ---
 
-Narzędzia umożliwiają LLM wykonywanie działań w bazie kodu. OpenCode ma zestaw wbudowanych narzędzi, ale możesz go rozszerzyć o [narzędzia niestandardowe](./custom-tools) lub [serwery MCP](./mcp-servers).
+Narzędzia umożliwiają LLM wykonywanie działań w bazie kodu. OpenCode ma zestaw wbudowanych narzędzi, ale możesz go rozszerzyć o [narzędzia niestandardowe](/docs/custom-tools) lub [serwery MCP](/docs/mcp-servers).
 
-Domyślnie wszystkie narzędzia są **włączone** i nie wymagają pozwolenia na uruchomienie. Możesz kontrolować zachowanie narzędzia poprzez [uprawnienia](./permissions).
+Domyślnie wszystkie narzędzia są **włączone** i nie wymagają pozwolenia na uruchomienie. Możesz kontrolować zachowanie narzędzia poprzez [uprawnienia](/docs/permissions).
 
 ---
 
@@ -35,7 +35,7 @@ Możesz także używać symboli wieloznacznych do kontrolowania wielu narzędzi 
 }
 ```
 
-[Dowiedz się więcej](./permissions) o konfigurowaniu uprawnień.
+[Dowiedz się więcej](/docs/permissions) o konfigurowaniu uprawnień.
 
 ---
 
@@ -187,7 +187,7 @@ To narzędzie jest dostępne tylko wtedy, gdy `OPENCODE_EXPERIMENTAL_LSP_TOOL=tr
 
 Obsługiwane operacje obejmują `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls` i `outgoingCalls`.
 
-Aby skonfigurować, które serwery LSP są dostępne dla Twojego projektu, zobacz [Serwery LSP](./lsp).
+Aby skonfigurować, które serwery LSP są dostępne dla Twojego projektu, zobacz [Serwery LSP](/docs/lsp).
 
 ---
 
@@ -214,7 +214,7 @@ Narzędzie `patch` jest kontrolowane przez uprawnienie `edit`, które obejmuje w
 
 ### skill
 
-Załaduj [umiejętność](./skills) (plik `SKILL.md`) i zwróć jej treść w rozmowie.
+Załaduj [umiejętność](/docs/skills) (plik `SKILL.md`) i zwróć jej treść w rozmowie.
 
 ```json title="opencode.json" {4}
 {
@@ -243,7 +243,7 @@ Zarządzaj listami rzeczy do zrobienia podczas sesji kodowania.
 Tworzy i aktualizuje listy zadań w celu śledzenia postępu podczas złożonych operacji. LLM wykorzystuje to do organizowania zadań wieloetapowych.
 
 :::note
-To narzędzie jest domyślnie wyłączone dla podagentów, ale można je włączyć ręcznie. [Dowiedz się więcej](./agents/#permissions)
+To narzędzie jest domyślnie wyłączone dla podagentów, ale można je włączyć ręcznie. [Dowiedz się więcej](/docs/agents/#permissions)
 :::
 
 ---
@@ -264,7 +264,7 @@ Read existing todo lists.
 Odczytuje bieżący stan listy rzeczy do zrobienia. Używany przez LLM do śledzenia zadań oczekujących lub ukończonych.
 
 :::note
-To narzędzie jest domyślnie wyłączone dla podagentów, ale można je włączyć ręcznie. [Dowiedz się więcej](./agents/#permissions)
+To narzędzie jest domyślnie wyłączone dla podagentów, ale można je włączyć ręcznie. [Dowiedz się więcej](/docs/agents/#permissions)
 :::
 
 ---
@@ -348,7 +348,7 @@ Każde pytanie zawiera nagłówek, tekst pytania i listę opcji. Użytkownicy mo
 
 Niestandardowe narzędzia pozwalają zdefiniować własne funkcje, które LLM może wywołać. Są one zdefiniowane w pliku konfiguracyjnym i mogą wykonywać dowolny kod.
 
-[Więcej informacji](./custom-tools) o tworzeniu narzędzi niestandardowych.
+[Więcej informacji](/docs/custom-tools) o tworzeniu narzędzi niestandardowych.
 
 ---
 
@@ -356,7 +356,7 @@ Niestandardowe narzędzia pozwalają zdefiniować własne funkcje, które LLM mo
 
 Serwery MCP (Model Context Protocol) umożliwiają integrację zewnętrznych narzędzi i usług. Obejmuje to dostęp do baz danych, integracje API i usługi stron trzecich.
 
-[Dowiedz się więcej](./mcp-servers) o konfigurowaniu serwerów MCP.
+[Dowiedz się więcej](/docs/mcp-servers) o konfigurowaniu serwerów MCP.
 
 ---
 

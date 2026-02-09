@@ -9,7 +9,7 @@ description: Tekrarlanan görevler için özel komutlar oluşturulur.
 /my-command
 ```
 
-Özel komutlar, `/init`, `/undo`, `/redo`, `/share`, `/help` gibi komutlara ek olarak sunulur. [Learn more](./tui#commands).
+Özel komutlar, `/init`, `/undo`, `/redo`, `/share`, `/help` gibi komutlara ek olarak sunulur. [Learn more](/docs/tui#commands).
 
 ---
 
@@ -48,7 +48,7 @@ OpenCode işlemleri aracılığıyla veya `commands/` dizininde işaretleme dosy
 
 ### JSON
 
-OpenCode [config](./config)'deki `command` seçeneğini kullanın:
+OpenCode [config](/docs/config)'deki `command` seçeneğini kullanın:
 
 ```json title="opencode.jsonc" {4-12}
 {
@@ -163,7 +163,7 @@ Bu şunun yerini alır:
 
 ### Shell output
 
-İsteminize [bash command](./tui#bash-commands) çıktısını enjekte etmek için \__!`command`_ kullanın.
+İsteminize [bash command](/docs/tui#bash-commands) çıktısını enjekte etmek için \__!`command`_ kullanın.
 
 Örneğin, test kapsamını analiz eden özel bir komut oluşturmak için:
 
@@ -256,8 +256,8 @@ Bu, komutu yazdığınızda TUI içindeki açıklama olarak gösterilir.
 
 ### Ajan
 
-İsteğe bağlı olarak bu komutu hangi [agent](./agents)'nin yürütmesi gerektiğini belirtmek için `agent` yapılandırmasını kullanın.
-Bu bir [subagent](./agents/#subagents) ise, komut varsayılan olarak bir alt aracı çağrısını tetikleyecektir.
+İsteğe bağlı olarak bu komutu hangi [agent](/docs/agents)'nin yürütmesi gerektiğini belirtmek için `agent` yapılandırmasını kullanın.
+Bu bir [subagent](/docs/agents/#subagents) ise, komut varsayılan olarak bir alt aracı çağrısını tetikleyecektir.
 Bu davranışı devre dışı bırakmak için `subtask` öğesini `false` olarak ayarlayın.
 
 ```json title="opencode.json"
@@ -276,9 +276,9 @@ Bu **isteğe bağlı** bir yapılandırma seçeneğidir. Belirtilmemişse, varsa
 
 ### Subtask
 
-Komutu bir [subagent](./agents/#subagents) çağrısını tetiklemeye zorlamak için `subtask` boolean'ını kullanın.
+Komutu bir [subagent](/docs/agents/#subagents) çağrısını tetiklemeye zorlamak için `subtask` boolean'ını kullanın.
 Bu, komutun birincil bağlamınızı kirletmemesini ve aracıyı bir alt aracı olarak davranmaya **zorlamasını** istiyorsanız kullanışlıdır.
-`mode`, [agent](./agents) yapılandırmasında `primary` olarak ayarlanmış olsa bile.
+`mode`, [agent](/docs/agents) yapılandırmasında `primary` olarak ayarlanmış olsa bile.
 
 ```json title="opencode.json"
 {
@@ -314,7 +314,7 @@ Bu **isteğe bağlı** bir yapılandırma seçeneğidir.
 
 ## Built-in
 
-opencode, `/init`, `/undo`, `/redo`, `/share`, `/help` gibi çeşitli yerleşik komutlar içerir; [learn more](./tui#commands).
+opencode, `/init`, `/undo`, `/redo`, `/share`, `/help` gibi çeşitli yerleşik komutlar içerir; [learn more](/docs/tui#commands).
 
 :::note
 Özel komutlar yerleşik komutları geçersiz kılabilir.

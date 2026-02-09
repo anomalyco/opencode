@@ -175,7 +175,7 @@ Verfügbare Optionen:
 - `scroll_speed` – Benutzerdefinierter Scrollgeschwindigkeitsmultiplikator (Standard: `3`, Minimum: `1`). Wird ignoriert, wenn `scroll_acceleration.enabled` gleich `true` ist.
 - `diff_style` – Steuern Sie das Diff-Rendering. `"auto"` passt sich der Terminalbreite an, `"stacked"` zeigt immer eine einzelne Spalte an.
 
-[Learn more about using the TUI here](./tui).
+[Learn more about using the TUI here](/docs/tui).
 
 ---
 
@@ -204,7 +204,7 @@ Verfügbare Optionen:
 - `mdnsDomain` – Benutzerdefinierter Domänenname für den mDNS-Dienst. Standardmäßig ist `opencode.local`. Nützlich für die Ausführung mehrerer Instanzen im selben Netzwerk.
 - `cors` – Zusätzliche Ursprünge, um CORS zu ermöglichen, wenn der HTTP-Server von einem browserbasierten Client aus verwendet wird. Die Werte müssen vollständige Ursprünge haben (Schema + Host + optionaler Port), z. B. `https://app.example.com`.
 
-[Learn more about the server here](./server).
+[Learn more about the server here](/docs/server).
 
 ---
 
@@ -222,7 +222,7 @@ Sie können die Tools, die ein LLM verwenden kann, über die Option `tools` verw
 }
 ```
 
-[Learn more about tools here](./tools).
+[Learn more about tools here](/docs/tools).
 
 ---
 
@@ -260,7 +260,7 @@ Zu den Anbieteroptionen können `timeout` und `setCacheKey` gehören:
 - `timeout` – Anforderungszeitlimit in Millisekunden (Standard: 300000). Zum Deaktivieren auf `false` setzen.
 - `setCacheKey` – Stellen Sie sicher, dass immer ein Cache-Schlüssel für den angegebenen Anbieter festgelegt ist.
 
-Sie können auch [local models](./models#local) konfigurieren. [Learn more](./models).
+Sie können auch [local models](/docs/models#local) konfigurieren. [Learn more](/docs/models).
 
 ---
 
@@ -292,10 +292,10 @@ Amazon Bedrock unterstützt AWS-spezifische Konfigurationen:
 - `endpoint` – Benutzerdefinierter Endpunkt URL für VPC-Endpunkte. Dies ist ein Alias ​​​​für die generische Option `baseURL` unter Verwendung der AWS-spezifischen Terminologie. Wenn beide angegeben sind, hat `endpoint` Vorrang.
 
 :::note
-Inhabertoken (`AWS_BEARER_TOKEN_BEDROCK` oder `/connect`) haben Vorrang vor der profilbasierten Authentifizierung. Weitere Informationen finden Sie unter [authentication precedence](./providers#authentication-precedence).
+Inhabertoken (`AWS_BEARER_TOKEN_BEDROCK` oder `/connect`) haben Vorrang vor der profilbasierten Authentifizierung. Weitere Informationen finden Sie unter [authentication precedence](/docs/providers#authentication-precedence).
 :::
 
-[Learn more about Amazon Bedrock configuration](./providers#amazon-bedrock).
+[Learn more about Amazon Bedrock configuration](/docs/providers#amazon-bedrock).
 
 ---
 
@@ -310,7 +310,7 @@ Sie können das Thema, das Sie in Ihrer OpenCode-Konfiguration verwenden möchte
 }
 ```
 
-[Learn more here](./themes).
+[Learn more here](/docs/themes).
 
 ---
 
@@ -336,7 +336,7 @@ Sie können das Thema, das Sie in Ihrer OpenCode-Konfiguration verwenden möchte
 }
 ```
 
-Sie können Agenten auch mithilfe von Markdown-Dateien in `~/.config/opencode/agents/` oder `.opencode/agents/` definieren. [Learn more here](./agents).
+Sie können Agenten auch mithilfe von Markdown-Dateien in `~/.config/opencode/agents/` oder `.opencode/agents/` definieren. [Learn more here](/docs/agents).
 
 ---
 
@@ -351,7 +351,7 @@ Sie können den Standardagenten mit der Option `default_agent` festlegen. Dadurc
 }
 ```
 
-Der Standardagent muss ein Primäragent (kein Subagent) sein. Dies kann ein integrierter Agent wie `"build"` oder `"plan"` oder ein von Ihnen definierter [custom agent](./agents) sein. Wenn der angegebene Agent nicht existiert oder ein Subagent ist, greift OpenCode mit einer Warnung auf `"build"` zurück.
+Der Standardagent muss ein Primäragent (kein Subagent) sein. Dies kann ein integrierter Agent wie `"build"` oder `"plan"` oder ein von Ihnen definierter [custom agent](/docs/agents) sein. Wenn der angegebene Agent nicht existiert oder ein Subagent ist, greift OpenCode mit einer Warnung auf `"build"` zurück.
 
 Diese Einstellung gilt für alle Schnittstellen: TUI, CLI (`opencode run`), Desktop-App und GitHub Aktion.
 
@@ -359,7 +359,7 @@ Diese Einstellung gilt für alle Schnittstellen: TUI, CLI (`opencode run`), Desk
 
 ### Sharing
 
-Sie können die Funktion [share](./share) über die Option `share` konfigurieren.
+Sie können die Funktion [share](/docs/share) über die Option `share` konfigurieren.
 
 ```json title="opencode.json"
 {
@@ -400,7 +400,7 @@ Sie können benutzerdefinierte Befehle für sich wiederholende Aufgaben über di
 }
 ```
 
-Sie können Befehle auch mithilfe von Markdown-Dateien in `~/.config/opencode/commands/` oder `.opencode/commands/` definieren. [Learn more here](./commands).
+Sie können Befehle auch mithilfe von Markdown-Dateien in `~/.config/opencode/commands/` oder `.opencode/commands/` definieren. [Learn more here](/docs/commands).
 
 ---
 
@@ -415,7 +415,7 @@ Sie können Ihre Tastenkombinationen über die Option `keybinds` anpassen.
 }
 ```
 
-[Learn more here](./keybinds).
+[Learn more here](/docs/keybinds).
 
 ---
 
@@ -457,7 +457,7 @@ Sie können Codeformatierer über die Option `formatter` konfigurieren.
 }
 ```
 
-[Learn more about formatters here](./formatters).
+[Learn more about formatters here](/docs/formatters).
 
 ---
 
@@ -477,7 +477,7 @@ Um beispielsweise sicherzustellen, dass die Tools `edit` und `bash` eine Benutze
 }
 ```
 
-[Learn more about permissions here](./permissions).
+[Learn more about permissions here](/docs/permissions).
 
 ---
 
@@ -528,13 +528,13 @@ Sie können den MCP-Server, den Sie verwenden möchten, über die Option `mcp` k
 }
 ```
 
-[Learn more here](./mcp-servers).
+[Learn more here](/docs/mcp-servers).
 
 ---
 
 ### Plugins
 
-[Plugins](./plugins) erweitert OpenCode mit benutzerdefinierten Tools, Hooks und Integrationen.
+[Plugins](/docs/plugins) erweitert OpenCode mit benutzerdefinierten Tools, Hooks und Integrationen.
 
 Platzieren Sie Ihre Plugin-Dateien in `.opencode/plugins/` oder `~/.config/opencode/plugins/`. Sie können Plugins auch über die Option `plugin` von npm laden.
 
@@ -545,7 +545,7 @@ Platzieren Sie Ihre Plugin-Dateien in `.opencode/plugins/` oder `~/.config/openc
 }
 ```
 
-[Learn more here](./plugins).
+[Learn more here](/docs/plugins).
 
 ---
 
@@ -561,7 +561,7 @@ Sie können die Anweisungen für das von Ihnen verwendete Modell über die Optio
 ```
 
 Dies erfordert eine Reihe von Pfaden und Glob-Mustern zu Anweisungsdateien. [Erfahren Sie mehr
-über Regeln hier](./rules).
+über Regeln hier](/docs/rules).
 
 ---
 

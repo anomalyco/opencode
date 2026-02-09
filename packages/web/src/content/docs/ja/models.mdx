@@ -11,7 +11,7 @@ OpenCode は [AI SDK](https://ai-sdk.dev/) および [Models.dev](https://models
 
 最も一般的なプロバイダーはデフォルトでプリロードされています。 `/connect` コマンドを使用してプロバイダーの資格情報を追加した場合は、OpenCode を開始するときにそれらの資格情報を使用できるようになります。
 
-[プロバイダー](./providers).
+[プロバイダー](/docs/providers).
 
 ---
 
@@ -58,9 +58,9 @@ OpenCodeの設定。
 }
 ```
 
-ここでの完全な ID は `provider_id/model_id` です。たとえば、[OpenCode Zen](./zen) を使用している場合、GPT 5.1 Codex には `opencode/gpt-5.1-codex` を使用します。
+ここでの完全な ID は `provider_id/model_id` です。たとえば、[OpenCode Zen](/docs/zen) を使用している場合、GPT 5.1 Codex には `opencode/gpt-5.1-codex` を使用します。
 
-[カスタムプロバイダー](./providers#custom) を構成している場合、`provider_id` は構成の `provider` 部分のキーであり、`model_id` は `provider.models` のキーです。
+[カスタムプロバイダー](/docs/providers#custom) を構成している場合、`provider_id` は構成の `provider` 部分のキーであり、`model_id` は `provider.models` のキーです。
 
 ---
 
@@ -103,7 +103,7 @@ config を通じてモデルのオプションをグローバルに設定でき�
 ここでは、2 つの組み込みモデル (`openai` プロバイダー経由でアクセスする場合は `gpt-5`、`anthropic` プロバイダー経由でアクセスする場合は `claude-sonnet-4-20250514`) のグローバル設定を構成しています。
 組み込みプロバイダーとモデル名は、[Models.dev](https://models.dev).
 
-使用しているエージェントに対してこれらのオプションを構成することもできます。ここでエージェント設定はグローバル オプションをオーバーライドします。 [詳細はこちら](./agents/#additional)。
+使用しているエージェントに対してこれらのオプションを構成することもできます。ここでエージェント設定はグローバル オプションをオーバーライドします。 [詳細はこちら](/docs/agents/#additional)。
 
 組み込みバリアントを拡張するカスタム バリアントを定義することもできます。バリアントを使用すると、重複したエントリを作成せずに、同じモデルに対して異なる設定を構成できます。
 
@@ -197,7 +197,7 @@ OpenCode には、多くのプロバイダーのデフォルトのバリアン�
 
 ### サイクルのバリエーション
 
-キーバインド `variant_cycle` を使用すると、バリアントをすばやく切り替えることができます。 [詳細はこちら](./keybinds)。
+キーバインド `variant_cycle` を使用すると、バリアントをすばやく切り替えることができます。 [詳細はこちら](/docs/keybinds)。
 
 ---
 

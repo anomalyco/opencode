@@ -11,7 +11,7 @@ OpenCode 使用[人工智能軟件開發工具包](https://ai-sdk.dev/) 和[模�
 
 默認情況下會預加載大多數流行的提供程序。如果您已通過 `/connect` 命令添加了提供程序的憑據，那麼它們將在您啟動 OpenCode 時可用。
 
-了解有關[提供者](./providers) 的更多信息。
+了解有關[提供者](/docs/providers) 的更多信息。
 
 ---
 
@@ -58,9 +58,9 @@ OpenCode 使用[人工智能軟件開發工具包](https://ai-sdk.dev/) 和[模�
 }
 ```
 
-這裡完整的 ID 是`provider_id/model_id`。例如，如果您使用 [開放代碼禪](./zen)，則您將使用 `opencode/gpt-5.1-codex` 來表示 GPT 5.1 Codex。
+這裡完整的 ID 是`provider_id/model_id`。例如，如果您使用 [開放代碼禪](/docs/zen)，則您將使用 `opencode/gpt-5.1-codex` 來表示 GPT 5.1 Codex。
 
-如果您配置了[定制提供商](./providers#custom)，則`provider_id` 是配置中`provider` 部分的密鑰，`model_id` 是`provider.models` 中的密鑰。
+如果您配置了[定制提供商](/docs/providers#custom)，則`provider_id` 是配置中`provider` 部分的密鑰，`model_id` 是`provider.models` 中的密鑰。
 
 ---
 
@@ -103,7 +103,7 @@ OpenCode 使用[人工智能軟件開發工具包](https://ai-sdk.dev/) 和[模�
 在這裡，我們為兩個內置模型配置全局設置：`gpt-5`（通過 `openai` 提供程序訪問時）和 `claude-sonnet-4-20250514`（通過 `anthropic` 提供程序訪問時）。
 內置提供商和型號名稱可以在[模型.dev](https://models.dev) 上找到。
 
-您還可以為您正在使用的任何代理配置這些選項。代理配置會覆蓋此處的所有全局選項。 [了解更多](./agents/#additional)。
+您還可以為您正在使用的任何代理配置這些選項。代理配置會覆蓋此處的所有全局選項。 [了解更多](/docs/agents/#additional)。
 
 您還可以定義擴展內置變體的自定義變體。變體允許您為同一模型配置不同的設置，而無需創建重複的條目：
 
@@ -197,7 +197,7 @@ OpenCode 附帶了許多提供商的默認變體：
 
 ### 循環變體
 
-使用鍵綁定 `variant_cycle` 在變體之間快速切換。 [了解更多](./keybinds)。
+使用鍵綁定 `variant_cycle` 在變體之間快速切換。 [了解更多](/docs/keybinds)。
 
 ---
 

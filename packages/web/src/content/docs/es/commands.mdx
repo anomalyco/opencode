@@ -9,7 +9,7 @@ Los comandos personalizados le permiten especificar un mensaje que desea ejecuta
 /my-command
 ```
 
-Los comandos personalizados se suman a los comandos integrados como `/init`, `/undo`, `/redo`, `/share`, `/help`. [Más información](./tui#commands).
+Los comandos personalizados se suman a los comandos integrados como `/init`, `/undo`, `/redo`, `/share`, `/help`. [Más información](/docs/tui#commands).
 
 ---
 
@@ -48,7 +48,7 @@ Puede agregar comandos personalizados a través de la configuración OpenCode o 
 
 ### JSON
 
-Utilice la opción `command` en su OpenCode [config](./config):
+Utilice la opción `command` en su OpenCode [config](/docs/config):
 
 ```json title="opencode.jsonc" {4-12}
 {
@@ -163,7 +163,7 @@ Esto reemplaza:
 
 ### Salida del shell
 
-Utilice _!`command`_ para inyectar la salida de [comando bash](./tui#bash-commands) en su mensaje.
+Utilice _!`command`_ para inyectar la salida de [comando bash](/docs/tui#bash-commands) en su mensaje.
 
 Por ejemplo, para crear un comando personalizado que analice la cobertura de la prueba:
 
@@ -256,8 +256,8 @@ Esto se muestra como descripción en TUI cuando escribe el comando.
 
 ### Agente
 
-Utilice la configuración `agent` para especificar opcionalmente qué [agente](./agents) debe ejecutar este comando.
-Si se trata de un [subagente](./agents/#subagents), el comando activará una invocación de subagente de forma predeterminada.
+Utilice la configuración `agent` para especificar opcionalmente qué [agente](/docs/agents) debe ejecutar este comando.
+Si se trata de un [subagente](/docs/agents/#subagents), el comando activará una invocación de subagente de forma predeterminada.
 Para desactivar este comportamiento, establezca `subtask` en `false`.
 
 ```json title="opencode.json"
@@ -276,9 +276,9 @@ Esta es una opción de configuración **opcional**. Si no se especifica, el valo
 
 ### Subtarea
 
-Utilice el booleano `subtask` para forzar que el comando active una invocación de [subagente](./agents/#subagents).
+Utilice el booleano `subtask` para forzar que el comando active una invocación de [subagente](/docs/agents/#subagents).
 Esto es útil si desea que el comando no contamine su contexto principal y **obligue** al agente a actuar como subagente.
-incluso si `mode` está configurado en `primary` en la configuración de [agente](./agents).
+incluso si `mode` está configurado en `primary` en la configuración de [agente](/docs/agents).
 
 ```json title="opencode.json"
 {
@@ -314,7 +314,7 @@ Esta es una opción de configuración **opcional**.
 
 ## Incorporado
 
-opencode incluye varios comandos integrados como `/init`, `/undo`, `/redo`, `/share`, `/help`; [más información](./tui#commands).
+opencode incluye varios comandos integrados como `/init`, `/undo`, `/redo`, `/share`, `/help`; [más información](/docs/tui#commands).
 
 :::nota
 Los comandos personalizados pueden anular los comandos integrados.

@@ -63,7 +63,7 @@ Kuruluşunuzun uzak yapılandırmasından belirli bir sunucuyu etkinleştirmek i
 }
 ```
 
-Yerel yapılandırma değerleriniz uzak varsayılanları geçersiz kılar. Daha fazla ayrıntı için [config precedence](./config#precedence-order)'a bakın.
+Yerel yapılandırma değerleriniz uzak varsayılanları geçersiz kılar. Daha fazla ayrıntı için [config precedence](/docs/config#precedence-order)'a bakın.
 
 ---
 
@@ -348,7 +348,7 @@ Burada tüm MCP'leri devre dışı bırakmak için `my-mcp*` glob modelini kulla
 Çok sayıda MCP sunucunuz varsa, bunları yalnızca aracı başına etkinleştirmek ve genel olarak devre dışı bırakmak isteyebilirsiniz. Bunu yapmak için:
 
 1. Global olarak bir araç olarak devre dışı bırakın.
-2. [agent config](./agents#tools)'nizde, MCP sunucusunu bir araç olarak etkinleştirin.
+2. [agent config](/docs/agents#tools)'nizde, MCP sunucusunu bir araç olarak etkinleştirin.
 
 ```json title="opencode.json" {11, 14-18}
 {
@@ -474,7 +474,7 @@ Context7 MCP sunucunu kullanmak için isteklerinize `use context7` ekleyin.
 Configure a Cloudflare Worker script to cache JSON API responses for five minutes. use context7
 ```
 
-Alternatif olarak [AGENTS.md](./rules/)'a buna benzer bir şey ekleyebilirsiniz.
+Alternatif olarak [AGENTS.md](/docs/rules/)'a buna benzer bir şey ekleyebilirsiniz.
 
 ```md title="AGENTS.md"
 When you need to search docs, use `context7` tools.
@@ -504,7 +504,7 @@ MCP sunucumuzu `gh_grep` olarak adlandırdığımız için, aracının onu kulla
 What's the right way to set a custom domain in an SST Astro component? use the gh_grep tool
 ```
 
-Alternatif olarak [AGENTS.md](./rules/)'a buna benzer bir şey ekleyebilirsiniz.
+Alternatif olarak [AGENTS.md](/docs/rules/)'a buna benzer bir şey ekleyebilirsiniz.
 
 ```md title="AGENTS.md"
 If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.

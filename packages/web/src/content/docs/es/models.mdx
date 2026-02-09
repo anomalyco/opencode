@@ -11,7 +11,7 @@ OpenCode usa el [AI SDK](https://ai-sdk.dev/) y [Models.dev](https://models.dev)
 
 Los proveedores más populares están precargados de forma predeterminada. Si agregó las credenciales de un proveedor mediante el comando `/connect`, estarán disponibles cuando inicie OpenCode.
 
-Obtenga más información sobre [proveedores](./providers).
+Obtenga más información sobre [proveedores](/docs/providers).
 
 ---
 
@@ -58,9 +58,9 @@ OpenCode configuración.
 }
 ```
 
-Aquí el ID completo es `provider_id/model_id`. Por ejemplo, si usa [OpenCode Zen](./zen), usaría `opencode/gpt-5.1-codex` para GPT 5.1 Codex.
+Aquí el ID completo es `provider_id/model_id`. Por ejemplo, si usa [OpenCode Zen](/docs/zen), usaría `opencode/gpt-5.1-codex` para GPT 5.1 Codex.
 
-Si ha configurado un [proveedor personalizado](./providers#custom), `provider_id` es la clave de la parte `provider` de su configuración y `model_id` es la clave de `provider.models`.
+Si ha configurado un [proveedor personalizado](/docs/providers#custom), `provider_id` es la clave de la parte `provider` de su configuración y `model_id` es la clave de `provider.models`.
 
 ---
 
@@ -103,7 +103,7 @@ Puede configurar globalmente las opciones de un modelo a través de la configura
 Aquí estamos configurando ajustes globales para dos modelos integrados: `gpt-5` cuando se accede a través del proveedor `openai` y `claude-sonnet-4-20250514` cuando se accede a través del proveedor `anthropic`.
 Los nombres de modelo y proveedor integrados se pueden encontrar en [Models.dev](https://models.dev).
 
-También puede configurar estas opciones para cualquier agente que esté utilizando. La configuración del agente anula cualquier opción global aquí. [Más información](./agents/#additional).
+También puede configurar estas opciones para cualquier agente que esté utilizando. La configuración del agente anula cualquier opción global aquí. [Más información](/docs/agents/#additional).
 
 También puede definir variantes personalizadas que amplíen las integradas. Las variantes le permiten configurar diferentes ajustes para el mismo modelo sin crear entradas duplicadas:
 
@@ -197,7 +197,7 @@ Puede anular las variantes existentes o agregar las suyas propias:
 
 ### Variantes de ciclo
 
-Utilice la combinación de teclas `variant_cycle` para cambiar rápidamente entre variantes. [Más información](./keybinds).
+Utilice la combinación de teclas `variant_cycle` para cambiar rápidamente entre variantes. [Más información](/docs/keybinds).
 
 ---
 

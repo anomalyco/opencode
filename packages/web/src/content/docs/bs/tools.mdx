@@ -3,9 +3,9 @@ title: Alati
 description: Upravljajte alatima koje LLM moze koristiti.
 ---
 
-Alati omogucavaju LLM-u da izvrsava akcije u vasem kodu. OpenCode dolazi sa skupom ugradenih alata, a mozete ga prosiriti kroz [custom tools](./custom-tools) ili [MCP servers](./mcp-servers).
+Alati omogucavaju LLM-u da izvrsava akcije u vasem kodu. OpenCode dolazi sa skupom ugradenih alata, a mozete ga prosiriti kroz [custom tools](/docs/custom-tools) ili [MCP servers](/docs/mcp-servers).
 
-Po defaultu su svi alati **ukljuceni** i ne traze dozvolu za pokretanje. Ponasanje alata kontrolisete kroz [permissions](./permissions).
+Po defaultu su svi alati **ukljuceni** i ne traze dozvolu za pokretanje. Ponasanje alata kontrolisete kroz [permissions](/docs/permissions).
 
 ---
 
@@ -35,7 +35,7 @@ Mozete koristiti i wildcard obrasce da kontrolisete vise alata odjednom. Na prim
 }
 ```
 
-[Saznajte vise](./permissions) o konfigurisanju dozvola.
+[Saznajte vise](/docs/permissions) o konfigurisanju dozvola.
 
 ---
 
@@ -187,7 +187,7 @@ Ovaj alat je dostupan samo kada je `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (ili `O
 
 Podrzane operacije ukljucuju `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls` i `outgoingCalls`.
 
-Za konfiguraciju dostupnih LSP servera u projektu, pogledajte [LSP Servers](./lsp).
+Za konfiguraciju dostupnih LSP servera u projektu, pogledajte [LSP Servers](/docs/lsp).
 
 ---
 
@@ -214,7 +214,7 @@ Ovaj alat primjenjuje patch datoteke na kod. Koristan je za diffs i patch-eve iz
 
 ### skill
 
-Ucitajte [skill](./skills) (`SKILL.md` datoteku) i vratite njegov sadrzaj u razgovor.
+Ucitajte [skill](/docs/skills) (`SKILL.md` datoteku) i vratite njegov sadrzaj u razgovor.
 
 ```json title="opencode.json" {4}
 {
@@ -243,7 +243,7 @@ Upravlja todo listama tokom coding sesija.
 Kreira i azurira liste zadataka za pracenje napretka tokom slozenih operacija. LLM ovo koristi za organizaciju zadataka u vise koraka.
 
 :::note
-Ovaj alat je po defaultu iskljucen za subagente, ali ga mozete rucno ukljuciti. [Saznajte vise](./agents/#permissions)
+Ovaj alat je po defaultu iskljucen za subagente, ali ga mozete rucno ukljuciti. [Saznajte vise](/docs/agents/#permissions)
 :::
 
 ---
@@ -264,7 +264,7 @@ Cita postojece todo liste.
 Cita trenutno stanje todo liste. LLM ga koristi da prati sta je na cekanju i sta je zavrseno.
 
 :::note
-Ovaj alat je po defaultu iskljucen za subagente, ali ga mozete rucno ukljuciti. [Saznajte vise](./agents/#permissions)
+Ovaj alat je po defaultu iskljucen za subagente, ali ga mozete rucno ukljuciti. [Saznajte vise](/docs/agents/#permissions)
 :::
 
 ---
@@ -348,7 +348,7 @@ Svako pitanje ukljucuje naslov, tekst pitanja i listu opcija. Korisnici mogu iza
 
 Custom tools vam omogucavaju da definisete vlastite funkcije koje LLM moze pozivati. Definisu se u config datoteci i mogu izvrsavati proizvoljan kod.
 
-[Saznajte vise](./custom-tools) o kreiranju custom tools.
+[Saznajte vise](/docs/custom-tools) o kreiranju custom tools.
 
 ---
 
@@ -356,7 +356,7 @@ Custom tools vam omogucavaju da definisete vlastite funkcije koje LLM moze poziv
 
 MCP (Model Context Protocol) serveri omogucavaju integraciju eksternih alata i servisa. Ovo ukljucuje pristup bazama, API integracije i third-party servise.
 
-[Saznajte vise](./mcp-servers) o konfigurisanju MCP servera.
+[Saznajte vise](/docs/mcp-servers) o konfigurisanju MCP servera.
 
 ---
 

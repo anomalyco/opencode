@@ -10,7 +10,7 @@ Prilagođene komande vam omogućavaju da odredite prompt koji želite da pokrene
 
 ```
 
-Prilagođene komande su dodatak ugrađenim komandama kao što su `/init`, `/undo`, `/redo`, `/share`, `/help`. [Saznajte više](./tui#commands).
+Prilagođene komande su dodatak ugrađenim komandama kao što su `/init`, `/undo`, `/redo`, `/share`, `/help`. [Saznajte više](/docs/tui#commands).
 
 ---
 
@@ -45,7 +45,7 @@ Možete dodati prilagođene komande kroz OpenCode konfiguraciju ili kreiranjem m
 ---
 
 ### JSON
-Koristite opciju `command` u svom OpenCode [config](./config):
+Koristite opciju `command` u svom OpenCode [config](/docs/config):
 
 ```json title="opencode.jsonc" {4-12}
 {
@@ -155,7 +155,7 @@ Ovo zamjenjuje:
 ---
 
 ### Izlaz ljuske
-Koristite _!`command`_ da ubacite [bash command](./tui#bash-commands) izlaz u svoj prompt.
+Koristite _!`command`_ da ubacite [bash command](/docs/tui#bash-commands) izlaz u svoj prompt.
 Na primjer, da kreirate prilagođenu naredbu koja analizira pokrivenost testom:
 
 ```md title=".opencode/commands/analyze-coverage.md"
@@ -240,8 +240,8 @@ Ovo se prikazuje kao opis u TUI-u kada unesete naredbu.
 
 ---
 ### Agent
-Koristite `agent` konfiguraciju da opciono odredite koji [agent](./agents) treba da izvrši ovu naredbu.
-Ako je ovo [subagent](./agents/#subagents) naredba će po defaultu pokrenuti pozivanje subagenta.
+Koristite `agent` konfiguraciju da opciono odredite koji [agent](/docs/agents) treba da izvrši ovu naredbu.
+Ako je ovo [subagent](/docs/agents/#subagents) naredba će po defaultu pokrenuti pozivanje subagenta.
 Da onemogućite ovo ponašanje, postavite `subtask` na `false`.
 
 ```json title="opencode.json"
@@ -258,9 +258,9 @@ Ovo je **opciona** opcija konfiguracije. Ako nije navedeno, podrazumevano je va�
 ---
 
 ### Subdatatak
-Koristite `subtask` boolean da prisilite naredbu da pokrene [subagent](./agents/#subagents) pozivanje.
+Koristite `subtask` boolean da prisilite naredbu da pokrene [subagent](/docs/agents/#subagents) pozivanje.
 Ovo je korisno ako želite da naredba ne zagađuje vaš primarni kontekst i da će **primorati** agenta da djeluje kao subagent,
-čak i ako je `mode` postavljeno na `primary` u konfiguraciji [agent](./agents).
+čak i ako je `mode` postavljeno na `primary` u konfiguraciji [agent](/docs/agents).
 
 ```json title="opencode.json"
 {
@@ -292,7 +292,7 @@ Ovo je **opciona** opcija konfiguracije.
 ---
 
 ## Embedded
-opencode uključuje nekoliko ugrađenih naredbi kao što su `/init`, `/undo`, `/redo`, `/share`, `/help`; [saznaj više](./tui#commands).
+opencode uključuje nekoliko ugrađenih naredbi kao što su `/init`, `/undo`, `/redo`, `/share`, `/help`; [saznaj više](/docs/tui#commands).
 :::napomena
 Prilagođene komande mogu nadjačati ugrađene komande.
 :::

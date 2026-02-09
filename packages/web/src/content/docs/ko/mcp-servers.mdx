@@ -63,7 +63,7 @@ GitHub MCP 서버와 같은 특정 MCP 서버는 많은 토큰을 추가하고 �
 }
 ```
 
-로컬 설정 값은 원격 기본값을 무시합니다. 자세한 내용은 [config precedence](./config#precedence-order)를 참조하십시오.
+로컬 설정 값은 원격 기본값을 무시합니다. 자세한 내용은 [config precedence](/docs/config#precedence-order)를 참조하십시오.
 
 ---
 
@@ -348,7 +348,7 @@ MCP는 OpenCode의 도구로 사용할 수 있으며 내장 도구와 함께 사
 MCP 서버의 많은 수를 가지고 있다면 에이전트 당만 활성화하고 전 세계적으로 비활성화 할 수 있습니다. 이 작업을 수행:
 
 1. 글로벌 도구로 사용 가능.
-2. [agent config](./agents#tools)에서 MCP 서버를 도구로 사용할 수 있습니다.
+2. [agent config](/docs/agents#tools)에서 MCP 서버를 도구로 사용할 수 있습니다.
 
 ```json title="opencode.json" {11, 14-18}
 {
@@ -474,7 +474,7 @@ Context7 MCP 서버를 사용하여 `use context7`를 신속하게 추가하십�
 Configure a Cloudflare Worker script to cache JSON API responses for five minutes. use context7
 ```
 
-대안으로, 당신은이 같은 뭔가를 추가 할 수 있습니다 [AGENTS.md](./rules/).
+대안으로, 당신은이 같은 뭔가를 추가 할 수 있습니다 [AGENTS.md](/docs/rules/).
 
 ```md title="AGENTS.md"
 When you need to search docs, use `context7` tools.
@@ -504,7 +504,7 @@ MCP 서버 `gh_grep`라는 이름으로, `use the gh_grep tool`를 추가할 수
 What's the right way to set a custom domain in an SST Astro component? use the gh_grep tool
 ```
 
-대안으로, 당신은이 같은 뭔가를 추가 할 수 있습니다 [AGENTS.md](./rules/).
+대안으로, 당신은이 같은 뭔가를 추가 할 수 있습니다 [AGENTS.md](/docs/rules/).
 
 ```md title="AGENTS.md"
 If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.

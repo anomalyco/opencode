@@ -63,7 +63,7 @@ description: เพิ่มเครื่องมือ MCP ในพื้�
 }
 ```
 
-ค่าการกำหนดค่าในเครื่องของคุณจะแทนที่ค่าเริ่มต้นระยะไกล ดู [config ลำดับความสำคัญ](./config#precedence-order) สำหรับรายละเอียดเพิ่มเติม
+ค่าการกำหนดค่าในเครื่องของคุณจะแทนที่ค่าเริ่มต้นระยะไกล ดู [config ลำดับความสำคัญ](/docs/config#precedence-order) สำหรับรายละเอียดเพิ่มเติม
 
 ---
 
@@ -348,7 +348,7 @@ MCP ของคุณพร้อมใช้งานในฐานะเค�
 หากคุณมีเซิร์ฟเวอร์ MCP จำนวนมาก คุณอาจต้องการเปิดใช้งานเซิร์ฟเวอร์เหล่านี้ต่อตัวแทนเท่านั้น และปิดใช้งานเซิร์ฟเวอร์เหล่านั้นทั่วโลก เมื่อต้องการทำสิ่งนี้:
 
 1. ปิดการใช้งานเป็นเครื่องมือทั่วโลก
-2. ใน [agent config](./agents#tools) ให้เปิดใช้งานเซิร์ฟเวอร์ MCP เป็นเครื่องมือ
+2. ใน [agent config](/docs/agents#tools) ให้เปิดใช้งานเซิร์ฟเวอร์ MCP เป็นเครื่องมือ
 
 ```json title="opencode.json" {11, 14-18}
 {
@@ -474,7 +474,7 @@ Show me the latest unresolved issues in my project. use sentry
 Configure a Cloudflare Worker script to cache JSON API responses for five minutes. use context7
 ```
 
-หรือคุณสามารถเพิ่มสิ่งนี้ลงใน [AGENTS.md](./rules/) ของคุณได้
+หรือคุณสามารถเพิ่มสิ่งนี้ลงใน [AGENTS.md](/docs/rules/) ของคุณได้
 
 ```md title="AGENTS.md"
 When you need to search docs, use `context7` tools.
@@ -504,7 +504,7 @@ When you need to search docs, use `context7` tools.
 What's the right way to set a custom domain in an SST Astro component? use the gh_grep tool
 ```
 
-หรือคุณสามารถเพิ่มสิ่งนี้ลงใน [AGENTS.md](./rules/) ของคุณได้
+หรือคุณสามารถเพิ่มสิ่งนี้ลงใน [AGENTS.md](/docs/rules/) ของคุณได้
 
 ```md title="AGENTS.md"
 If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.

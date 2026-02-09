@@ -5,7 +5,7 @@ description: OpenCode CLI Optionen und Befehle.
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-Der OpenCode CLI startet standardmäßig den [TUI](./tui), wenn er ohne Argumente ausgeführt wird.
+Der OpenCode CLI startet standardmäßig den [TUI](/docs/tui), wenn er ohne Argumente ausgeführt wird.
 
 ```bash
 opencode
@@ -172,7 +172,7 @@ Installieren Sie den GitHub-Agenten in Ihrem Repository.
 opencode github install
 ```
 
-Dadurch wird der erforderliche GitHub-Aktionsworkflow eingerichtet und Sie durch den Konfigurationsprozess geführt. [Learn more](./github).
+Dadurch wird der erforderliche GitHub-Aktionsworkflow eingerichtet und Sie durch den Konfigurationsprozess geführt. [Learn more](/docs/github).
 
 ---
 
@@ -285,7 +285,7 @@ opencode models [provider]
 
 Dieser Befehl zeigt alle bei Ihren konfigurierten Anbietern verfügbaren Modelle im Format `provider/model` an.
 
-Dies ist nützlich, um die genauen Modellnamen herauszufinden, die in [your config](./config/) verwendet werden sollen.
+Dies ist nützlich, um die genauen Modellnamen herauszufinden, die in [your config](/docs/config/) verwendet werden sollen.
 
 Sie können optional einen Anbieter ID übergeben, um Modelle nach diesem Anbieter zu filtern.
 
@@ -352,7 +352,7 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 ### serve
 
-Starten Sie einen Headless-OpenCode-Server für den API-Zugriff. Sehen Sie sich [server docs](./server) für die vollständige HTTP-Schnittstelle an.
+Starten Sie einen Headless-OpenCode-Server für den API-Zugriff. Sehen Sie sich [server docs](/docs/server) für die vollständige HTTP-Schnittstelle an.
 
 ```bash
 opencode serve

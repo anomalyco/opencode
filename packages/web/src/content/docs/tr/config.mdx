@@ -175,7 +175,7 @@ Mevcut seçenekler:
 - `scroll_speed` - Özel kaydırma hızı çarpanı (varsayılan: `3`, minimum: `1`). `scroll_acceleration.enabled` `true` ise dikkate alınmaz.
 - `diff_style` - Fark oluşturmayı kontrol edin. `"auto"` terminal genişliğine uyum sağlar, `"stacked"` her zaman tek sütunu gösterir.
 
-[Learn more about using the TUI here](./tui).
+[Learn more about using the TUI here](/docs/tui).
 
 ---
 
@@ -204,7 +204,7 @@ Mevcut seçenekler:
 - `mdnsDomain` - mDNS hizmeti için özel alan adı. Varsayılan olarak `opencode.local` şeklindedir. Aynı ağda birden fazla örneği çalıştırmak için kullanışlıdır.
 - `cors` - Tarayıcı tabanlı bir istemciden HTTP sunucusunu kullanırken CORS'ye izin verecek ek kaynaklar. Değerler tam kaynaklar olmalıdır (şema + ana bilgisayar + isteğe bağlı bağlantı noktası), örneğin `https://app.example.com`.
 
-[Learn more about the server here](./server).
+[Learn more about the server here](/docs/server).
 
 ---
 
@@ -222,7 +222,7 @@ Bir LLM'nin kullanabileceği araçları `tools` seçeneği aracılığıyla yön
 }
 ```
 
-[Learn more about tools here](./tools).
+[Learn more about tools here](/docs/tools).
 
 ---
 
@@ -260,7 +260,7 @@ Sağlayıcı seçenekleri `timeout` ve `setCacheKey` içerebilir:
 - `timeout` - Milisaniye cinsinden istek zaman aşımı (varsayılan: 300000). Devre dışı bırakmak için `false` olarak ayarlayın.
 - `setCacheKey` - Belirlenen sağlayıcı için her zaman bir önbellek anahtarının ayarlandığından emin olun.
 
-Ayrıca [local models](./models#local) öğesini de yapılandırabilirsiniz. [Learn more](./models).
+Ayrıca [local models](/docs/models#local) öğesini de yapılandırabilirsiniz. [Learn more](/docs/models).
 
 ---
 
@@ -292,10 +292,10 @@ Amazon Bedrock, AWS'a özgü yapılandırmayı destekler:
 - `endpoint` - VPC uç noktaları için özel uç nokta URL. Bu, AWS'e özgü terminolojiyi kullanan genel `baseURL` seçeneğinin takma adıdır. Her ikisi de belirtilirse `endpoint` öncelikli olur.
 
 :::note
-Taşıyıcı belirteçleri (`AWS_BEARER_TOKEN_BEDROCK` veya `/connect`) profil tabanlı kimlik doğrulamaya göre önceliklidir. Ayrıntılar için [authentication precedence](./providers#authentication-precedence)'ye bakın.
+Taşıyıcı belirteçleri (`AWS_BEARER_TOKEN_BEDROCK` veya `/connect`) profil tabanlı kimlik doğrulamaya göre önceliklidir. Ayrıntılar için [authentication precedence](/docs/providers#authentication-precedence)'ye bakın.
 :::
 
-[Learn more about Amazon Bedrock configuration](./providers#amazon-bedrock).
+[Learn more about Amazon Bedrock configuration](/docs/providers#amazon-bedrock).
 
 ---
 
@@ -310,7 +310,7 @@ OpenCode yapılandırmanızda kullanmak istediğiniz temayı `theme` seçeneği 
 }
 ```
 
-[Learn more here](./themes).
+[Learn more here](/docs/themes).
 
 ---
 
@@ -336,7 +336,7 @@ OpenCode yapılandırmanızda kullanmak istediğiniz temayı `theme` seçeneği 
 }
 ```
 
-Aracıları ayrıca `~/.config/opencode/agents/` veya `.opencode/agents/` İçindeki etiketleme etiketlerini kullanarak da tanımlayabilirsiniz. [Learn more here](./agents).
+Aracıları ayrıca `~/.config/opencode/agents/` veya `.opencode/agents/` İçindeki etiketleme etiketlerini kullanarak da tanımlayabilirsiniz. [Learn more here](/docs/agents).
 
 ---
 
@@ -351,7 +351,7 @@ Aracıları ayrıca `~/.config/opencode/agents/` veya `.opencode/agents/` İçin
 }
 ```
 
-Varsayılan aracı, birincil aracı olmalıdır (alt aracı değil). Bu, `"build"` veya `"plan"` gibi yerleşik bir aracı ya da tanımladığınız bir [custom agent](./agents) olabilir. Belirtilen aracı mevcut değilse veya bir alt aracı ise, OpenCode bir uyarıyla birlikte `"build"`'ye geri döner.
+Varsayılan aracı, birincil aracı olmalıdır (alt aracı değil). Bu, `"build"` veya `"plan"` gibi yerleşik bir aracı ya da tanımladığınız bir [custom agent](/docs/agents) olabilir. Belirtilen aracı mevcut değilse veya bir alt aracı ise, OpenCode bir uyarıyla birlikte `"build"`'ye geri döner.
 
 Bu ayar tüm arayüzler için geçerlidir: TUI, CLI (`opencode run`), masaüstü uygulaması ve GitHub Action.
 
@@ -359,7 +359,7 @@ Bu ayar tüm arayüzler için geçerlidir: TUI, CLI (`opencode run`), masaüstü
 
 ### Paylaşma
 
-[share](./share) özelliği `share` seçeneğini aracılığıyla yapılandırabilirsiniz.
+[share](/docs/share) özelliği `share` seçeneğini aracılığıyla yapılandırabilirsiniz.
 
 ```json title="opencode.json"
 {
@@ -400,7 +400,7 @@ Varsayılan olarak paylaşım, `/share` yoğunluğu kullanılarak konuşmaları 
 }
 ```
 
-Komutları `~/.config/opencode/commands/` veya `.opencode/commands/` içindeki işaretleme dosyalarını kullanarak da tanımlayabilirsiniz. [Learn more here](./commands).
+Komutları `~/.config/opencode/commands/` veya `.opencode/commands/` içindeki işaretleme dosyalarını kullanarak da tanımlayabilirsiniz. [Learn more here](/docs/commands).
 
 ---
 
@@ -415,7 +415,7 @@ Tuş atamalarınızı `keybinds` seçeneği aracılığıyla özelleştirebilirs
 }
 ```
 
-[Learn more here](./keybinds).
+[Learn more here](/docs/keybinds).
 
 ---
 
@@ -457,7 +457,7 @@ Kod formatlayıcılarını `formatter` seçeneği aracılığıyla yapılandıra
 }
 ```
 
-[Learn more about formatters here](./formatters).
+[Learn more about formatters here](/docs/formatters).
 
 ---
 
@@ -477,7 +477,7 @@ Varsayılan olarak, açık kod açık bir onay gerektirmeden **tüm işlemlere i
 }
 ```
 
-[Learn more about permissions here](./permissions).
+[Learn more about permissions here](/docs/permissions).
 
 ---
 
@@ -528,13 +528,13 @@ Kullanmak istediğiniz MCP sunucularını `mcp` seçeneği aracılığıyla yap�
 }
 ```
 
-[Learn more here](./mcp-servers).
+[Learn more here](/docs/mcp-servers).
 
 ---
 
 ### Plugins
 
-[Plugins](./plugins) OpenCode'u özel araçlar, kancalar ve entegrasyonlarla genişletin.
+[Plugins](/docs/plugins) OpenCode'u özel araçlar, kancalar ve entegrasyonlarla genişletin.
 
 Eklenti dosyalarını `.opencode/plugins/` veya `~/.config/opencode/plugins/` içine yerleştirin. Ayrıca eklentileri `plugin` seçeneği aracılığıyla npm'den de yükleyebilirsiniz.
 
@@ -545,7 +545,7 @@ Eklenti dosyalarını `.opencode/plugins/` veya `~/.config/opencode/plugins/` i�
 }
 ```
 
-[Learn more here](./plugins).
+[Learn more here](/docs/plugins).
 
 ---
 
@@ -561,7 +561,7 @@ Kullandığınız modele ilişkin talimatları `instructions` seçeneği aracıl
 ```
 
 Bu, talimat dosyalarına giden bir dizi yolu ve glob desenini alır. [Daha fazla bilgi edin
-kurallar hakkında burada](./rules).
+kurallar hakkında burada](/docs/rules).
 
 ---
 

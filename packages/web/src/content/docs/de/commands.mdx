@@ -9,7 +9,7 @@ Mit benutzerdefinierten Befehlen können Sie eine Eingabeaufforderung angeben, d
 /my-command
 ```
 
-Benutzerdefinierte Befehle gibt es zusätzlich zu den integrierten Befehlen wie `/init`, `/undo`, `/redo`, `/share`, `/help`. [Learn more](./tui#commands).
+Benutzerdefinierte Befehle gibt es zusätzlich zu den integrierten Befehlen wie `/init`, `/undo`, `/redo`, `/share`, `/help`. [Learn more](/docs/tui#commands).
 
 ---
 
@@ -48,7 +48,7 @@ Sie können benutzerdefinierte Befehle über die OpenCode-Konfiguration hinzufü
 
 ### JSON
 
-Verwenden Sie die Option `command` in Ihrem OpenCode [config](./config):
+Verwenden Sie die Option `command` in Ihrem OpenCode [config](/docs/config):
 
 ```json title="opencode.jsonc" {4-12}
 {
@@ -163,7 +163,7 @@ Dies ersetzt:
 
 ### Shell-Ausgabe
 
-Verwenden Sie _!`command`_, um die Ausgabe [bash command](./tui#bash-commands) in Ihre Eingabeaufforderung einzufügen.
+Verwenden Sie _!`command`_, um die Ausgabe [bash command](/docs/tui#bash-commands) in Ihre Eingabeaufforderung einzufügen.
 
 So erstellen Sie beispielsweise einen benutzerdefinierten Befehl, der die Testabdeckung analysiert:
 
@@ -256,8 +256,8 @@ Dies wird als Beschreibung im TUI angezeigt, wenn Sie den Befehl eingeben.
 
 ### Agent
 
-Verwenden Sie die `agent`-Konfiguration, um optional anzugeben, welche [agent](./agents) diesen Befehl ausführen soll.
-Wenn es sich um einen [subagent](./agents/#subagents) handelt, löst der Befehl standardmäßig einen Subagentenaufruf aus.
+Verwenden Sie die `agent`-Konfiguration, um optional anzugeben, welche [agent](/docs/agents) diesen Befehl ausführen soll.
+Wenn es sich um einen [subagent](/docs/agents/#subagents) handelt, löst der Befehl standardmäßig einen Subagentenaufruf aus.
 Um dieses Verhalten zu deaktivieren, setzen Sie `subtask` auf `false`.
 
 ```json title="opencode.json"
@@ -276,9 +276,9 @@ Dies ist eine **optionale** Konfigurationsoption. Wenn nicht angegeben, wird sta
 
 ### Subtask
 
-Verwenden Sie den booleschen Wert `subtask`, um zu erzwingen, dass der Befehl einen [subagent](./agents/#subagents)-Aufruf auslöst.
+Verwenden Sie den booleschen Wert `subtask`, um zu erzwingen, dass der Befehl einen [subagent](/docs/agents/#subagents)-Aufruf auslöst.
 Dies ist nützlich, wenn Sie möchten, dass der Befehl Ihren primären Kontext nicht verunreinigt und den Agenten dazu zwingt, als Subagent zu fungieren.
-auch wenn `mode` in der [agent](./agents)-Konfiguration auf `primary` gesetzt ist.
+auch wenn `mode` in der [agent](/docs/agents)-Konfiguration auf `primary` gesetzt ist.
 
 ```json title="opencode.json"
 {
@@ -314,7 +314,7 @@ Dies ist eine **optionale** Konfigurationsoption.
 
 ## Eingebaut
 
-Opencode enthält mehrere integrierte Befehle wie `/init`, `/undo`, `/redo`, `/share`, `/help`; [learn more](./tui#commands).
+Opencode enthält mehrere integrierte Befehle wie `/init`, `/undo`, `/redo`, `/share`, `/help`; [learn more](/docs/tui#commands).
 
 :::note
 Benutzerdefinierte Befehle können integrierte Befehle überschreiben.

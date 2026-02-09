@@ -9,7 +9,7 @@ description: คำสั่งสร้างคำสั่งอีกคร�
 /my-command
 ```
 
-คำสั่งแบบกำหนดเองเป็นส่วนเพิ่มเติมจากคำสั่งในตัว เช่น `/init`, `/undo`, `/redo`, `/share`, `/help` [เรียนรู้เพิ่มเติม](./tui#คำสั่ง)
+คำสั่งแบบกำหนดเองเป็นส่วนเพิ่มเติมจากคำสั่งในตัว เช่น `/init`, `/undo`, `/redo`, `/share`, `/help` [เรียนรู้เพิ่มเติม](/docs/tui#คำสั่ง)
 
 ---
 
@@ -48,7 +48,7 @@ frontmatter กำหนดคุณสมบัติคำสั่งเน�
 
 ### JSON
 
-ใช้ส่วน `command` ใน OpenCode ของคุณ [config](./config):
+ใช้ส่วน `command` ใน OpenCode ของคุณ [config](/docs/config):
 
 ```json title="opencode.jsonc" {4-12}
 {
@@ -163,7 +163,7 @@ with the following content: $3
 
 ### ส่วนเชล
 
-ใช้ _!`command`_เพื่อที่จะฉีดประสิทธิภาพสูง [bash command](./tui#bash-commands) ติดตั้งพรอมต์ของคุณ
+ใช้ _!`command`_เพื่อที่จะฉีดประสิทธิภาพสูง [bash command](/docs/tui#bash-commands) ติดตั้งพรอมต์ของคุณ
 
 เพื่อเป็นคำสั่งสร้างความพยายามเพื่อวิเคราะห์การทดสอบของการทดสอบ:
 
@@ -256,8 +256,8 @@ Check for performance issues and suggest improvements.
 
 ### ตัวแทน
 
-ใช้ `agent` เพื่อระบุทางเลือกว่า [ตัวแทน](./agents) ใดควรดำเนินการคำสั่งนี้
-นี่คือ [ตัวแทนย่อย](./agents/#subagents) คำสั่งจะไม่จำเป็นต้องทำการย่อยตัวแทนย่อยตาม...
+ใช้ `agent` เพื่อระบุทางเลือกว่า [ตัวแทน](/docs/agents) ใดควรดำเนินการคำสั่งนี้
+นี่คือ [ตัวแทนย่อย](/docs/agents/#subagents) คำสั่งจะไม่จำเป็นต้องทำการย่อยตัวแทนย่อยตาม...
 เหตุผลที่ทำให้สิ่งนี้เป็นไปได้ `subtask` เป็น `false`
 
 ```json title="opencode.json"
@@ -276,9 +276,9 @@ Check for performance issues and suggest improvements.
 
 ### งานย่อย
 
-ใช้ `subtask` บูลีนเพื่อไม่จำเป็นต้องทำอะไรเลย [subagent](./agents/#subagents)
+ใช้ `subtask` บูลีนเพื่อไม่จำเป็นต้องทำอะไรเลย [subagent](/docs/agents/#subagents)
 เพราะเหตุใดจะช่วยให้คำสั่งไม่ทำให้ระบบหลักของคุณเสียหาย และจะ **บังคับ** เอเจนต์ให้ความเห็นตัวแทนย่อย
-โปรดดู `mode` เพื่อดูการตั้งค่าเป็น `primary` ในคืนนี้ [agent](./agents) แขก
+โปรดดู `mode` เพื่อดูการตั้งค่าเป็น `primary` ในคืนนี้ [agent](/docs/agents) แขก
 
 ```json title="opencode.json"
 {
@@ -314,7 +314,7 @@ Check for performance issues and suggest improvements.
 
 ## บิวท์อิน
 
-opencode มีคำสั่งในคำสั่งหลายเช่น `/init`, `/undo`, `/redo`, `/share`, `/help`; [เรียนรู้เพิ่มเติม](./tui#คำสั่ง)
+opencode มีคำสั่งในคำสั่งหลายเช่น `/init`, `/undo`, `/redo`, `/share`, `/help`; [เรียนรู้เพิ่มเติม](/docs/tui#คำสั่ง)
 
 :::note
 คำสั่งนี้สามารถดำเนินการได้ในขั้นตอนนี้

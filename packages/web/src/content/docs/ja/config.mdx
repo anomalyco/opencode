@@ -175,7 +175,7 @@ opencode run "Hello world"
 - `scroll_speed` - カスタムのスクロール速度乗数 (デフォルト: `3`、最小: `1`)。 `scroll_acceleration.enabled` が `true` の場合は無視されます。
 - `diff_style` - 差分レンダリングを制御します。 `"auto"` は端末の幅に適応し、`"stacked"` は常に 1 列を表示します。
 
-[TUI の使用方法の詳細については、こちら](./tui) をご覧ください。
+[TUI の使用方法の詳細については、こちら](/docs/tui) をご覧ください。
 
 ---
 
@@ -204,7 +204,7 @@ opencode run "Hello world"
 - `mdnsDomain` - mDNS サービスのカスタム ドメイン名。デフォルトは `opencode.local` です。同じネットワーク上で複数のインスタンスを実行する場合に便利です。
 - `cors` - ブラウザベースのクライアントから HTTP サーバーを使用するときに CORS を許可する追加のオリジン。値は完全なオリジン (スキーム + ホスト + オプションのポート) である必要があります (例: `https://app.example.com`)。
 
-[サーバーの詳細については、こちら](./server)をご覧ください。
+[サーバーの詳細については、こちら](/docs/server)をご覧ください。
 
 ---
 
@@ -222,7 +222,7 @@ LLM が使用できるツールは、`tools` オプションを通じて管理�
 }
 ```
 
-[ツールの詳細については、こちらをご覧ください](./tools)。
+[ツールの詳細については、こちらをご覧ください](/docs/tools)。
 
 ---
 
@@ -260,7 +260,7 @@ LLM が使用できるツールは、`tools` オプションを通じて管理�
 - `timeout` - リクエストのタイムアウト (ミリ秒単位) (デフォルト: 300000)。無効にするには、`false` に設定します。
 - `setCacheKey` - 指定されたプロバイダーに対してキャッシュ キーが常に設定されていることを確認します。
 
-[ローカルモデル](./models#local). [詳細はこちら](./models)。
+[ローカルモデル](/docs/models#local). [詳細はこちら](/docs/models)。
 
 ---
 
@@ -292,10 +292,10 @@ Amazon Bedrock は、AWS 固有の構成をサポートしています。
 - `endpoint` - VPC エンドポイントのカスタム エンドポイント URL。これは、AWS 固有の用語を使用した汎用 `baseURL` オプションのエイリアスです。両方を指定した場合は、`endpoint` が優先されます。
 
 :::注記
-ベアラー トークン (`AWS_BEARER_TOKEN_BEDROCK` または `/connect`) は、プロファイルベースの認証より優先されます。詳細については、「認証優先順位](./providers#authentication-precedence)」を参照してください。
+ベアラー トークン (`AWS_BEARER_TOKEN_BEDROCK` または `/connect`) は、プロファイルベースの認証より優先されます。詳細については、「認証優先順位](/docs/providers#authentication-precedence)」を参照してください。
 :::
 
-[Amazon Bedrock 構成 ](./providers#amazon-bedrock) の詳細をご覧ください。
+[Amazon Bedrock 構成 ](/docs/providers#amazon-bedrock) の詳細をご覧ください。
 
 ---
 
@@ -310,7 +310,7 @@ Amazon Bedrock は、AWS 固有の構成をサポートしています。
 }
 ```
 
-[詳細はこちら](./themes)。
+[詳細はこちら](/docs/themes)。
 
 ---
 
@@ -336,7 +336,7 @@ Amazon Bedrock は、AWS 固有の構成をサポートしています。
 }
 ```
 
-`~/.config/opencode/agents/` または `.opencode/agents/` のマークダウン ファイルを使用してエージェントを定義することもできます。 [詳細はこちら](./agents)。
+`~/.config/opencode/agents/` または `.opencode/agents/` のマークダウン ファイルを使用してエージェントを定義することもできます。 [詳細はこちら](/docs/agents)。
 
 ---
 
@@ -351,7 +351,7 @@ Amazon Bedrock は、AWS 固有の構成をサポートしています。
 }
 ```
 
-デフォルトのエージェントはプライマリ エージェントである必要があります (サブエージェントではありません)。これは、`"build"` や `"plan"` のような組み込みエージェント、または定義したカスタム Agent](./agents) にすることができます。指定されたエージェントが存在しないか、サブエージェントである場合、OpenCode は警告とともに `"build"` にフォールバックします。
+デフォルトのエージェントはプライマリ エージェントである必要があります (サブエージェントではありません)。これは、`"build"` や `"plan"` のような組み込みエージェント、または定義したカスタム Agent](/docs/agents) にすることができます。指定されたエージェントが存在しないか、サブエージェントである場合、OpenCode は警告とともに `"build"` にフォールバックします。
 
 この設定は、TUI、CLI (`opencode run`)、デスクトップ アプリ、および GitHub Action のすべてのインターフェイスに適用されます。
 
@@ -359,7 +359,7 @@ Amazon Bedrock は、AWS 固有の構成をサポートしています。
 
 ### 共有
 
-`share` オプションを使用して [share](./share) 機能を設定できます。
+`share` オプションを使用して [share](/docs/share) 機能を設定できます。
 
 ```json title="opencode.json"
 {
@@ -400,7 +400,7 @@ Amazon Bedrock は、AWS 固有の構成をサポートしています。
 }
 ```
 
-`~/.config/opencode/commands/` または `.opencode/commands/` のマークダウン ファイルを使用してコマンドを定義することもできます。 [詳細はこちら](./commands)。
+`~/.config/opencode/commands/` または `.opencode/commands/` のマークダウン ファイルを使用してコマンドを定義することもできます。 [詳細はこちら](/docs/commands)。
 
 ---
 
@@ -415,7 +415,7 @@ Amazon Bedrock は、AWS 固有の構成をサポートしています。
 }
 ```
 
-[詳細はこちら](./themes)。
+[詳細はこちら](/docs/themes)。
 
 ---
 
@@ -457,7 +457,7 @@ OpenCode は起動時に新しいアップデートを自動的にダウンロ�
 }
 ```
 
-[フォーマッタの詳細については、こちら](./formatters) をご覧ください。
+[フォーマッタの詳細については、こちら](/docs/formatters) をご覧ください。
 
 ---
 
@@ -477,7 +477,7 @@ OpenCode は起動時に新しいアップデートを自動的にダウンロ�
 }
 ```
 
-[権限の詳細については、こちら](./permissions)をご覧ください。
+[権限の詳細については、こちら](/docs/permissions)をご覧ください。
 
 ---
 
@@ -528,13 +528,13 @@ OpenCode は起動時に新しいアップデートを自動的にダウンロ�
 }
 ```
 
-[詳細はこちら](./themes)。
+[詳細はこちら](/docs/themes)。
 
 ---
 
 ### プラグイン
 
-[Plugins](./plugins) は、カスタム ツール、フック、統合を使用して OpenCode を拡張します。
+[Plugins](/docs/plugins) は、カスタム ツール、フック、統合を使用して OpenCode を拡張します。
 
 プラグインファイルを`.opencode/plugins/`または`~/.config/opencode/plugins/`に配置します。 `plugin` オプションを使用して npm からプラグインをロードすることもできます。
 
@@ -545,7 +545,7 @@ OpenCode は起動時に新しいアップデートを自動的にダウンロ�
 }
 ```
 
-[詳細はこちら](./themes)。
+[詳細はこちら](/docs/themes)。
 
 ---
 
@@ -561,7 +561,7 @@ OpenCode は起動時に新しいアップデートを自動的にダウンロ�
 ```
 
 これは、命令ファイルへのパスとグロブ パターンの配列を受け取ります。 [もっと詳しく知る
-ルールについてはこちら](./rules)。
+ルールについてはこちら](/docs/rules)。
 
 ---
 

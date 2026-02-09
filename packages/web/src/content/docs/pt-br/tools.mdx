@@ -3,9 +3,9 @@ title: Ferramentas
 description: Gerencie as ferramentas que um LLM pode usar.
 ---
 
-As ferramentas permitem que o LLM execute ações em sua base de código. O OpenCode vem com um conjunto de ferramentas integradas, mas você pode estendê-lo com [ferramentas personalizadas](./custom-tools) ou [servidores MCP](./mcp-servers).
+As ferramentas permitem que o LLM execute ações em sua base de código. O OpenCode vem com um conjunto de ferramentas integradas, mas você pode estendê-lo com [ferramentas personalizadas](/docs/custom-tools) ou [servidores MCP](/docs/mcp-servers).
 
-Por padrão, todas as ferramentas estão **ativadas** e não precisam de permissão para serem executadas. Você pode controlar o comportamento das ferramentas através de [permissões](./permissions).
+Por padrão, todas as ferramentas estão **ativadas** e não precisam de permissão para serem executadas. Você pode controlar o comportamento das ferramentas através de [permissões](/docs/permissions).
 
 ---
 
@@ -35,7 +35,7 @@ Você também pode usar curingas para controlar várias ferramentas ao mesmo tem
 }
 ```
 
-[Saiba mais](./permissions) sobre como configurar permissões.
+[Saiba mais](/docs/permissions) sobre como configurar permissões.
 
 ---
 
@@ -187,7 +187,7 @@ Esta ferramenta está disponível apenas quando `OPENCODE_EXPERIMENTAL_LSP_TOOL=
 
 As operações suportadas incluem `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls` e `outgoingCalls`.
 
-Para configurar quais servidores LSP estão disponíveis para seu projeto, veja [Servidores LSP](./lsp).
+Para configurar quais servidores LSP estão disponíveis para seu projeto, veja [Servidores LSP](/docs/lsp).
 
 ---
 
@@ -214,7 +214,7 @@ A ferramenta `patch` é controlada pela permissão `edit`, que cobre todas as mo
 
 ### skill
 
-Carregue uma [skill](./skills) (um arquivo `SKILL.md`) e retorne seu conteúdo na conversa.
+Carregue uma [skill](/docs/skills) (um arquivo `SKILL.md`) e retorne seu conteúdo na conversa.
 
 ```json title="opencode.json" {4}
 {
@@ -243,7 +243,7 @@ Gerencie listas de tarefas durante sessões de codificação.
 Cria e atualiza listas de tarefas para acompanhar o progresso durante operações complexas. O LLM usa isso para organizar tarefas de múltiplas etapas.
 
 :::note
-Esta ferramenta está desativada para subagentes por padrão, mas você pode ativá-la manualmente. [Saiba mais](./agents/#permissions)
+Esta ferramenta está desativada para subagentes por padrão, mas você pode ativá-la manualmente. [Saiba mais](/docs/agents/#permissions)
 :::
 
 ---
@@ -264,7 +264,7 @@ Leia listas de tarefas existentes.
 Lê o estado atual da lista de tarefas. Usado pelo LLM para acompanhar quais tarefas estão pendentes ou concluídas.
 
 :::note
-Esta ferramenta está desativada para subagentes por padrão, mas você pode ativá-la manualmente. [Saiba mais](./agents/#permissions)
+Esta ferramenta está desativada para subagentes por padrão, mas você pode ativá-la manualmente. [Saiba mais](/docs/agents/#permissions)
 :::
 
 ---
@@ -348,7 +348,7 @@ Cada pergunta inclui um cabeçalho, o texto da pergunta e uma lista de opções.
 
 Ferramentas personalizadas permitem que você defina suas próprias funções que o LLM pode chamar. Estas são definidas em seu arquivo de configuração e podem executar código arbitrário.
 
-[Saiba mais](./custom-tools) sobre como criar ferramentas personalizadas.
+[Saiba mais](/docs/custom-tools) sobre como criar ferramentas personalizadas.
 
 ---
 
@@ -356,7 +356,7 @@ Ferramentas personalizadas permitem que você defina suas próprias funções qu
 
 Servidores MCP (Model Context Protocol) permitem que você integre ferramentas e serviços externos. Isso inclui acesso a bancos de dados, integrações de API e serviços de terceiros.
 
-[Saiba mais](./mcp-servers) sobre como configurar servidores MCP.
+[Saiba mais](/docs/mcp-servers) sobre como configurar servidores MCP.
 
 ---
 

@@ -11,7 +11,7 @@ OpenCode bruker [AI SDK](https://ai-sdk.dev/) og [Models.dev](https://models.dev
 
 De fleste populære leverandørene er forhåndslastet som standard. Hvis du har lagt til legitimasjonen for en leverandør gjennom kommandoen `/connect`, vil den være tilgjengelig når du starter OpenCode.
 
-Finn ut mer om [leverandører](./providers).
+Finn ut mer om [leverandører](/docs/providers).
 
 ---
 
@@ -58,9 +58,9 @@ OpenCode-konfigurasjon.
 }
 ```
 
-Her er hele ID `provider_id/model_id`. For eksempel, hvis du bruker [OpenCode Zen](./zen), vil du bruke `opencode/gpt-5.1-codex` for GPT 5.1 Codex.
+Her er hele ID `provider_id/model_id`. For eksempel, hvis du bruker [OpenCode Zen](/docs/zen), vil du bruke `opencode/gpt-5.1-codex` for GPT 5.1 Codex.
 
-Hvis du har konfigurert en [egendefinert leverandør](./providers#custom), er `provider_id` nøkkelen fra `provider`-delen av konfigurasjonen din, og `model_id` er nøkkelen fra `provider.models`.
+Hvis du har konfigurert en [egendefinert leverandør](/docs/providers#custom), er `provider_id` nøkkelen fra `provider`-delen av konfigurasjonen din, og `model_id` er nøkkelen fra `provider.models`.
 
 ---
 
@@ -103,7 +103,7 @@ Du kan konfigurere en modells alternativer globalt gjennom konfigurasjonen.
 Her konfigurerer vi globale innstillinger for to innebygde modeller: `gpt-5` når de åpnes via `openai`-leverandøren, og `claude-sonnet-4-20250514` når de åpnes via `anthropic`-leverandøren.
 De innebygde leverandør- og modellnavnene finnes på [Models.dev](https://models.dev).
 
-Du kan også konfigurere disse alternativene for alle agenter du bruker. Agentkonfigurasjonen overstyrer alle globale alternativer her. [Finn ut mer](./agents/#additional).
+Du kan også konfigurere disse alternativene for alle agenter du bruker. Agentkonfigurasjonen overstyrer alle globale alternativer her. [Finn ut mer](/docs/agents/#additional).
 
 Du kan også definere tilpassede varianter som utvider de innebygde. Varianter lar deg konfigurere forskjellige innstillinger for samme modell uten å opprette dupliserte oppføringer:
 
@@ -197,7 +197,7 @@ Du kan overstyre eksisterende varianter eller legge til dine egne:
 
 ### Syklusvarianter
 
-Bruk tastebindingen `variant_cycle` for raskt å bytte mellom varianter. [Finn ut mer](./keybinds).
+Bruk tastebindingen `variant_cycle` for raskt å bytte mellom varianter. [Finn ut mer](/docs/keybinds).
 
 ---
 

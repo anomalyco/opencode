@@ -60,7 +60,7 @@ description: أضف أدوات MCP محلية وبعيدة.
 }
 ```
 
-تتغلب قيم إعداداتك المحلية على القيم الافتراضية البعيدة. راجع [أولوية الإعدادات](./config#precedence-order) لمزيد من التفاصيل.
+تتغلب قيم إعداداتك المحلية على القيم الافتراضية البعيدة. راجع [أولوية الإعدادات](/docs/config#precedence-order) لمزيد من التفاصيل.
 
 ---
 
@@ -331,7 +331,7 @@ opencode mcp debug my-oauth-server
 إذا كان لديك عدد كبير من خوادم MCP فقد ترغب في تفعيلها لكل وكيل على حدة وتعطيلها على المستوى العام. للقيام بذلك:
 
 1. عطّلها كأداة على المستوى العام.
-2. في [إعدادات الوكيل](./agents#tools)، فعّل خادم MCP كأداة.
+2. في [إعدادات الوكيل](/docs/agents#tools)، فعّل خادم MCP كأداة.
 
 ```json title="opencode.json" {11, 14-18}
 {
@@ -455,7 +455,7 @@ Show me the latest unresolved issues in my project. use sentry
 Configure a Cloudflare Worker script to cache JSON API responses for five minutes. use context7
 ```
 
-بدلا من ذلك، يمكنك إضافة شيء مثل هذا إلى [AGENTS.md](./rules/).
+بدلا من ذلك، يمكنك إضافة شيء مثل هذا إلى [AGENTS.md](/docs/rules/).
 
 ```md title="AGENTS.md"
 When you need to search docs, use `context7` tools.
@@ -485,7 +485,7 @@ When you need to search docs, use `context7` tools.
 What's the right way to set a custom domain in an SST Astro component? use the gh_grep tool
 ```
 
-بدلا من ذلك، يمكنك إضافة شيء مثل هذا إلى [AGENTS.md](./rules/).
+بدلا من ذلك، يمكنك إضافة شيء مثل هذا إلى [AGENTS.md](/docs/rules/).
 
 ```md title="AGENTS.md"
 If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.

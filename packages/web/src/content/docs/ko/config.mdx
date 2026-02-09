@@ -175,7 +175,7 @@ opencode run "Hello world"
 - `scroll_speed` - 사용자 정의 스크롤 속도 승수 (기본: `3`, 최소: `1`). `scroll_acceleration.enabled`가 `true`인 경우에 Ignored.
 - `diff_style` - 제어 디프 렌더링. `"auto"`는 맨끝 폭에, `"stacked"` 항상 단 하나 란을 보여줍니다 적응시킵니다.
 
-[TUI를 사용하여 더 자세히 알아보기](./tui).
+[TUI를 사용하여 더 자세히 알아보기](/docs/tui).
 
 ---
 
@@ -204,7 +204,7 @@ opencode run "Hello world"
 - `mdnsDomain` - mDNS 서비스에 대한 사용자 정의 도메인 이름. 기본 `opencode.local`. 동일한 네트워크에서 여러 인스턴스를 실행하는 데 유용합니다.
 - `cors` - 브라우저 기반 클라이언트에서 HTTP 서버를 사용할 때 CORS를 허용하는 추가 기원. 가치는 가득 차있는 근원이어야 합니다 (scheme + 주인 + 선택적인 항구), 예를들면 `https://app.example.com`.
 
-[서버에 대해 자세히 알아보기](./server).
+[서버에 대해 자세히 알아보기](/docs/server).
 
 ---
 
@@ -222,7 +222,7 @@ LLM은 `tools` 옵션을 통해 사용할 수 있습니다.
 }
 ```
 
-[이 도구에 대해 자세히 알아보기](./tools).
+[이 도구에 대해 자세히 알아보기](/docs/tools).
 
 ---
 
@@ -260,7 +260,7 @@ LLM은 `tools` 옵션을 통해 사용할 수 있습니다.
 - `timeout` - 밀리 초 (과태: 300000)에서 타임 아웃 요청. `false`로 분리할 수 있습니다.
 - `setCacheKey` - 캐시 키가 항상 지정된 공급자를 위해 설정됩니다.
 
-[local model](./models#local)을 구성할 수 있습니다. [더 알아보기](./models).
+[local model](/docs/models#local)을 구성할 수 있습니다. [더 알아보기](/docs/models).
 
 ---
 
@@ -292,10 +292,10 @@ Amazon Bedrock는 AWS 별 구성을 지원합니다:
 - `endpoint` - VPC 엔드 포인트에 대한 사용자 정의 엔드 포인트 URL. 이것은 AWS 별 용어를 사용하여 일반적인 `baseURL` 옵션에 대한 별명입니다. 둘 다 지정되는 경우에, `endpoint`는 전진합니다.
 
 :::note
-Bearer 토큰 (`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 프로파일 기반 인증을 통해 우선 순위를 부여합니다. 자세한 내용은 [authentication precedence](./providers#authentication-precedence)를 참조하십시오.
+Bearer 토큰 (`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 프로파일 기반 인증을 통해 우선 순위를 부여합니다. 자세한 내용은 [authentication precedence](/docs/providers#authentication-precedence)를 참조하십시오.
 :::
 
-[Amazon-bedrock에 대해 자세히 알아보기](./providers#amazon-bedrock).
+[Amazon-bedrock에 대해 자세히 알아보기](/docs/providers#amazon-bedrock).
 
 ---
 
@@ -310,7 +310,7 @@ Bearer 토큰 (`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 프로파일 기
 }
 ```
 
-[더 알아보기](./themes).
+[더 알아보기](/docs/themes).
 
 ---
 
@@ -336,7 +336,7 @@ Bearer 토큰 (`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 프로파일 기
 }
 ```
 
-`~/.config/opencode/agents/` 또는 `.opencode/agents/`에서 Markdown 파일을 사용하여 에이전트를 정의 할 수 있습니다. [더 알아보기](./시약).
+`~/.config/opencode/agents/` 또는 `.opencode/agents/`에서 Markdown 파일을 사용하여 에이전트를 정의 할 수 있습니다. [더 알아보기](/docs/시약).
 
 ---
 
@@ -359,7 +359,7 @@ Bearer 토큰 (`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 프로파일 기
 
 ## 공유
 
-`share` 옵션을 통해 [share](./share) 기능을 구성할 수 있습니다.
+`share` 옵션을 통해 [share](/docs/share) 기능을 구성할 수 있습니다.
 
 ```json title="opencode.json"
 {
@@ -400,7 +400,7 @@ Bearer 토큰 (`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 프로파일 기
 }
 ```
 
-`~/.config/opencode/commands/` 또는 `.opencode/commands/`에서 Markdown 파일을 사용하여 명령을 정의 할 수 있습니다. [더 이상](./commands).
+`~/.config/opencode/commands/` 또는 `.opencode/commands/`에서 Markdown 파일을 사용하여 명령을 정의 할 수 있습니다. [더 이상](/docs/commands).
 
 ---
 
@@ -415,7 +415,7 @@ Bearer 토큰 (`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 프로파일 기
 }
 ```
 
-[더 알아보기](./keybinds).
+[더 알아보기](/docs/keybinds).
 
 ---
 
@@ -457,7 +457,7 @@ Homebrew와 같은 패키지 관리자를 사용하여 설치되지 않은 경�
 }
 ```
 
-[출판자에 대해 자세히 알아보기](./formatters).
+[출판자에 대해 자세히 알아보기](/docs/formatters).
 
 ---
 
@@ -477,7 +477,7 @@ Homebrew와 같은 패키지 관리자를 사용하여 설치되지 않은 경�
 }
 ```
 
-[이 권한에 대해 더 알아보기](./permissions).
+[이 권한에 대해 더 알아보기](/docs/permissions).
 
 ---
 
@@ -528,13 +528,13 @@ Homebrew와 같은 패키지 관리자를 사용하여 설치되지 않은 경�
 }
 ```
 
-[더 이상](./mcp-servers).
+[더 이상](/docs/mcp-servers).
 
 ---
 
 ### 플러그인
 
-[Plugins](./plugins)는 사용자 정의 도구, 후크 및 통합으로 OpenCode를 확장합니다.
+[Plugins](/docs/plugins)는 사용자 정의 도구, 후크 및 통합으로 OpenCode를 확장합니다.
 
 `.opencode/plugins/` 또는 `~/.config/opencode/plugins/`에서 플러그인 파일을 배치하십시오. `plugin` 옵션을 통해 npm에서 플러그인을로드 할 수 있습니다.
 
@@ -545,7 +545,7 @@ Homebrew와 같은 패키지 관리자를 사용하여 설치되지 않은 경�
 }
 ```
 
-[더 이상](./plugins).
+[더 이상](/docs/plugins).
 
 ---
 

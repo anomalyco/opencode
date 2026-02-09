@@ -175,7 +175,7 @@ Tilgængelige muligheder:
 - `scroll_speed` - Brugerdefineret rullehastighedsmultiplikator (standard: `3`, minimum: `1`). Ignoreres, hvis `scroll_acceleration.enabled` er `true`.
 - `diff_style` - Kontroller diff-gengivelse. `"auto"` tilpasser sig terminalbredden, `"stacked"` viser altid en enkelt kolonne.
 
-[Learn more about using the TUI here](./tui).
+[Learn more about using the TUI here](/docs/tui).
 
 ---
 
@@ -204,7 +204,7 @@ Tilgængelige muligheder:
 - `mdnsDomain` - Brugerdefineret domænenavn til mDNS-tjeneste. Som standard er `opencode.local`. Nyttigt til at køre flere forekomster på det samme netværk.
 - `cors` - Yderligere oprindelser for at tillade CORS ved brug af HTTP-serveren fra en browserbaseret klient. Værdier skal være fulde oprindelser (skema + vært + valgfri port), f.eks. `https://app.example.com`.
 
-[Learn more about the server here](./server).
+[Learn more about the server here](/docs/server).
 
 ---
 
@@ -222,7 +222,7 @@ Du kan administrere de værktøjer, en LLM kan bruge, gennem indstillingen `tool
 }
 ```
 
-[Learn more about tools here](./tools).
+[Learn more about tools here](/docs/tools).
 
 ---
 
@@ -260,7 +260,7 @@ Udbydermuligheder kan omfatte `timeout` og `setCacheKey`:
 - `timeout` - Anmodningstimeout i millisekunder (standard: 300000). Indstil til `false` for at deaktivere.
 - `setCacheKey` - Sørg for, at en cache-nøgle altid er indstillet til den udpegede udbyder.
 
-Du kan også konfigurere [local models](./models#local). [Learn more](./models).
+Du kan også konfigurere [local models](/docs/models#local). [Learn more](/docs/models).
 
 ---
 
@@ -292,10 +292,10 @@ Amazon Bedrock understøtter AWS-specifik konfiguration:
 - `endpoint` - Brugerdefineret slutpunkt URL for VPC-endepunkter. Dette er et alias for den generiske `baseURL`-indstilling, der bruger AWS-specifik terminologi. Hvis begge er angivet, har `endpoint` forrang.
 
 :::note
-Bærer-tokens (`AWS_BEARER_TOKEN_BEDROCK` eller `/connect`) har forrang over profilbaseret godkendelse. Se [authentication precedence](./providers#authentication-precedence) for detaljer.
+Bærer-tokens (`AWS_BEARER_TOKEN_BEDROCK` eller `/connect`) har forrang over profilbaseret godkendelse. Se [authentication precedence](/docs/providers#authentication-precedence) for detaljer.
 :::
 
-[Learn more about Amazon Bedrock configuration](./providers#amazon-bedrock).
+[Learn more about Amazon Bedrock configuration](/docs/providers#amazon-bedrock).
 
 ---
 
@@ -310,7 +310,7 @@ Du kan konfigurere det tema, du vil bruge i din OpenCode-konfiguration, gennem i
 }
 ```
 
-[Learn more here](./themes).
+[Learn more here](/docs/themes).
 
 ---
 
@@ -336,7 +336,7 @@ Du kan konfigurere opgaver specialiserede agenter til specifikke indstillinger g
 }
 ```
 
-Du kan også definere agenter ved at bruge markdown-filer i `~/.config/opencode/agents/` eller `.opencode/agents/`. [Learn more here](./agents).
+Du kan også definere agenter ved at bruge markdown-filer i `~/.config/opencode/agents/` eller `.opencode/agents/`. [Learn more here](/docs/agents).
 
 ---
 
@@ -351,7 +351,7 @@ Du kan indstille standardagenten ved at bruge indstillingen `default_agent`. Det
 }
 ```
 
-Standardagenten skal være en primær agent (ikke en subagent). Dette kan være en indbygget agent som `"build"` eller `"plan"`, eller en [custom agent](./agents), du har defineret. Hvis den angivne agent ikke eksisterer eller er en underagent, vil OpenCode falde tilbage til `"build"` med en advarsel.
+Standardagenten skal være en primær agent (ikke en subagent). Dette kan være en indbygget agent som `"build"` eller `"plan"`, eller en [custom agent](/docs/agents), du har defineret. Hvis den angivne agent ikke eksisterer eller er en underagent, vil OpenCode falde tilbage til `"build"` med en advarsel.
 
 Denne indstilling gælder på tværs af alle grænseflader: TUI, CLI (`opencode run`), desktop-app og GitHub Action.
 
@@ -359,7 +359,7 @@ Denne indstilling gælder på tværs af alle grænseflader: TUI, CLI (`opencode 
 
 ### Deling
 
-Du kan konfigurere funktionen [share](./share) gennem indstillingen `share`.
+Du kan konfigurere funktionen [share](/docs/share) gennem indstillingen `share`.
 
 ```json title="opencode.json"
 {
@@ -400,7 +400,7 @@ Du kan konfigurere brugerdefinerede kommandoer til gentagne opgaver gennem indst
 }
 ```
 
-Du kan også definere kommandoer ved hjælp af markdown-filer i `~/.config/opencode/commands/` eller `.opencode/commands/`. [Learn more here](./commands).
+Du kan også definere kommandoer ved hjælp af markdown-filer i `~/.config/opencode/commands/` eller `.opencode/commands/`. [Learn more here](/docs/commands).
 
 ---
 
@@ -415,7 +415,7 @@ Du kan tilpasse dine nøglebindinger gennem indstillingen `keybinds`.
 }
 ```
 
-[Learn more here](./keybinds).
+[Learn more here](/docs/keybinds).
 
 ---
 
@@ -457,7 +457,7 @@ Du kan konfigurere kodeformatere gennem indstillingen `formatter`.
 }
 ```
 
-[Learn more about formatters here](./formatters).
+[Learn more about formatters here](/docs/formatters).
 
 ---
 
@@ -477,7 +477,7 @@ For at sikre, at værktøjerne `edit` og `bash` for eksempel kræver brugergodke
 }
 ```
 
-[Learn more about permissions here](./permissions).
+[Learn more about permissions here](/docs/permissions).
 
 ---
 
@@ -528,13 +528,13 @@ Du kan konfigurere MCP-servere, som du vil bruge, gennem indstillingen `mcp`.
 }
 ```
 
-[Learn more here](./mcp-servers).
+[Learn more here](/docs/mcp-servers).
 
 ---
 
 ### Plugins
 
-[Plugins](./plugins) udvide OpenCode med brugerdefinerede værktøjer, kroge og integrationer.
+[Plugins](/docs/plugins) udvide OpenCode med brugerdefinerede værktøjer, kroge og integrationer.
 
 Placer plugin-filer i `.opencode/plugins/` eller `~/.config/opencode/plugins/`. Du kan også indlæse plugins fra npm gennem indstillingen `plugin`.
 
@@ -545,7 +545,7 @@ Placer plugin-filer i `.opencode/plugins/` eller `~/.config/opencode/plugins/`. 
 }
 ```
 
-[Learn more here](./plugins).
+[Learn more here](/docs/plugins).
 
 ---
 
@@ -561,7 +561,7 @@ Du kan konfigurere brugervejledningen til den model, du kan gennem indstillingen
 ```
 
 Dette kræver en række stier og globmønstre til instruktionsfiler. [Læs mere
-om regler her](./rules).
+om regler her](/docs/rules).
 
 ---
 

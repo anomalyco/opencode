@@ -9,7 +9,7 @@ Polecenia ustawienia monitu, które może zostać uruchomione po uruchomieniu te
 /my-command
 ```
 
-Polecenia stanowią dodatek do dostarczonych, takich jak `/init`, `/undo`, `/redo`, `/share`, `/help`. [Dowiedz się więcej](./tui#commands).
+Polecenia stanowią dodatek do dostarczonych, takich jak `/init`, `/undo`, `/redo`, `/share`, `/help`. [Dowiedz się więcej](/docs/tui#commands).
 
 ---
 
@@ -48,7 +48,7 @@ Dostęp do sieci przez połączenie OpenCode lub udostępnia pliki w katalogu `c
 
 ### JSON
 
-opcja opcja `command` w swoim OpenCode [config](./config):
+opcja opcja `command` w swoim OpenCode [config](/docs/config):
 
 ```json title="opencode.jsonc" {4-12}
 {
@@ -163,7 +163,7 @@ Aby przechowywać:
 
 ### Wyjście z pamięci
 
-urządzenie __!`command`_, aby wstawić dane wyjściowe [polecenie bash](./tui#bash-commands) wykonaj obciążenie.
+urządzenie __!`command`_, aby wstawić dane wyjściowe [polecenie bash](/docs/tui#bash-commands) wykonaj obciążenie.
 
 Na przykład, aby sprawdzić narzędzie analityczne:
 
@@ -257,7 +257,7 @@ Jest podany jako opis w TUI po wpisaniu polecenia.
 ### Agent
 
 Zastosowanie zastosowania `agent`, aby określić, który [agent] (./agents) powinien zostać naprawiony do wyboru.
-Jeśli jest to [podagent](./agents/#subagents), rozwiązanie to ujawnione, podagenta.
+Jeśli jest to [podagent](/docs/agents/#subagents), rozwiązanie to ujawnione, podagenta.
 Aby móc, ustawa `subtask` na `false`.
 
 ```json title="opencode.json"
@@ -276,9 +276,9 @@ Jest to **opcjonalna** opcja konfiguracji. Jeśli nie jest dostępny, dostępny 
 
 ### Podzadanie
 
-Użyj wartości logicznej `subtask`, aby wymusić wywołanie [podagenta](./agents/#subagents) polecenia.
+Użyj wartości logicznej `subtask`, aby wymusić wywołanie [podagenta](/docs/agents/#subagents) polecenia.
 Jest to narzędzie, jeśli chcesz, aby decyzja nie zanieczyszczała kontekstu i **zmusiło** agenta do działania jako subagent,
-nawet jeśli `mode` jest podłączony na `primary` w konfiguracji [agent](./agents).
+nawet jeśli `mode` jest podłączony na `primary` w konfiguracji [agent](/docs/agents).
 
 ```json title="opencode.json"
 {
@@ -314,7 +314,7 @@ Jest to **opcjonalna** opcja konfiguracji.
 
 ## Wbudowany
 
-opencode zawiera kilka istniejących urządzeń, takich jak `/init`, `/undo`, `/redo`, `/share`, `/help`; [dowiedz się więcej](./tui#commands).
+opencode zawiera kilka istniejących urządzeń, takich jak `/init`, `/undo`, `/redo`, `/share`, `/help`; [dowiedz się więcej](/docs/tui#commands).
 
 :::note
 Polecenia mogą zostać usunięte.

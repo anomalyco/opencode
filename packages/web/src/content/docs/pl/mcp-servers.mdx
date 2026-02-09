@@ -63,7 +63,7 @@ Aby włączyć serwer ze zdalnej konfiguracji organizacji, dodaj go do wyłącze
 }
 ```
 
-Lokalne wartości konfiguracyjne za występujące zdalne wartości. Aby uzyskać więcej informacji, zobacz [pierwszeństwo konfiguracji](./config#precedence-order).
+Lokalne wartości konfiguracyjne za występujące zdalne wartości. Aby uzyskać więcej informacji, zobacz [pierwszeństwo konfiguracji](/docs/config#precedence-order).
 
 ---
 
@@ -348,7 +348,7 @@ Tutaj znajdziesz wzorca globalnego `my-mcp*`, aby wyłączyć wszystkie MCP.
 Jeśli masz największe serwery MCP, możesz włączyć je tylko dla poszczególnych agentów i być globalnie. Aby to zrobić:
 
 1. Wyłącz go jako narzędzie globalnie.
-2. W [konfiguracji agenta](./agents#tools) włącz serwer MCP jako narzędzie.
+2. W [konfiguracji agenta](/docs/agents#tools) włącz serwer MCP jako narzędzie.
 
 ```json title="opencode.json" {11, 14-18}
 {
@@ -474,7 +474,7 @@ Dodaj `use context7` do swoich podpowiedzi, aby skorzystać z serwera Context7 M
 Configure a Cloudflare Worker script to cache JSON API responses for five minutes. use context7
 ```
 
-Alternatywnie możesz zadać coś takiego do pliku [AGENTS.md](./rules/).
+Alternatywnie możesz zadać coś takiego do pliku [AGENTS.md](/docs/rules/).
 
 ```md title="AGENTS.md"
 When you need to search docs, use `context7` tools.
@@ -504,7 +504,7 @@ Nazwaliśmy nasz serwer MCP `gh_grep`, możesz dodać `use the gh_grep tool` do 
 What's the right way to set a custom domain in an SST Astro component? use the gh_grep tool
 ```
 
-Alternatywnie możesz zadać coś takiego do pliku [AGENTS.md](./rules/).
+Alternatywnie możesz zadać coś takiego do pliku [AGENTS.md](/docs/rules/).
 
 ```md title="AGENTS.md"
 If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.

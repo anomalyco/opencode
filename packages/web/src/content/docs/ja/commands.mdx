@@ -9,7 +9,7 @@ description: 反復的なタスク用のカスタム コマンドを作成しま
 /my-command
 ```
 
-カスタム コマンドは、`/init`、`/undo`、`/redo`、`/share`、`/help` などの組み込みコマンドに追加されます。 [詳細はこちら](./tui#commands)。
+カスタム コマンドは、`/init`、`/undo`、`/redo`、`/share`、`/help` などの組み込みコマンドに追加されます。 [詳細はこちら](/docs/tui#commands)。
 
 ---
 
@@ -48,7 +48,7 @@ Focus on the failing tests and suggest fixes.
 
 ### JSON
 
-OpenCode で `command` オプションを使用します [config](./config):
+OpenCode で `command` オプションを使用します [config](/docs/config):
 
 ```json title="opencode.jsonc" {4-12}
 {
@@ -163,7 +163,7 @@ with the following content: $3
 
 ### シェル出力
 
-_!`command`_ を使用して、[bash command](./tui#bash-commands) の出力をプロンプトに挿入します。
+_!`command`_ を使用して、[bash command](/docs/tui#bash-commands) の出力をプロンプトに挿入します。
 
 たとえば、テスト カバレッジを分析するカスタム コマンドを作成するには、次のようにします。
 
@@ -256,8 +256,8 @@ Check for performance issues and suggest improvements.
 
 ### エージェント
 
-オプションで、`agent` 設定を使用して、このコマンドを実行する [agent](./agents) を指定します。
-これが [subagent](./agents/#subagents) の場合、コマンドはデフォルトでサブエージェントの呼び出しをトリガーします。
+オプションで、`agent` 設定を使用して、このコマンドを実行する [agent](/docs/agents) を指定します。
+これが [subagent](/docs/agents/#subagents) の場合、コマンドはデフォルトでサブエージェントの呼び出しをトリガーします。
 この動作を無効にするには、`subtask` を `false` に設定します。
 
 ```json title="opencode.json"
@@ -276,9 +276,9 @@ Check for performance issues and suggest improvements.
 
 ### サブタスク
 
-`subtask` ブール値を使用して、コマンドが [subagent](./agents/#subagents) 呼び出しを強制的にトリガーします。
+`subtask` ブール値を使用して、コマンドが [subagent](/docs/agents/#subagents) 呼び出しを強制的にトリガーします。
 これは、コマンドがプライマリ コンテキストを汚染せず、エージェントがサブエージェントとして動作するように**強制**する場合に便利です。
-[agent](./agents) 設定で `mode` が `primary` に設定されている場合でも。
+[agent](/docs/agents) 設定で `mode` が `primary` に設定されている場合でも。
 
 ```json title="opencode.json"
 {
@@ -314,7 +314,7 @@ Check for performance issues and suggest improvements.
 
 ## 内蔵
 
-opencode には、`/init`、`/undo`、`/redo`、`/share`、`/help` などのいくつかの組み込みコマンドが含まれています。 [詳細はこちら](./tui#commands)。
+opencode には、`/init`、`/undo`、`/redo`、`/share`、`/help` などのいくつかの組み込みコマンドが含まれています。 [詳細はこちら](/docs/tui#commands)。
 
 :::注記
 カスタム コマンドは組み込みコマンドをオーバーライドできます。

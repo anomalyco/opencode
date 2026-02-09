@@ -9,7 +9,7 @@ description: 為重複任務創建自定義命令。
 /my-command
 ```
 
-除了`/init`、`/undo`、`/redo`、`/share`、`/help`等内置命令之外，还有自定义命令。 [了解更多](./tui#commands)。
+除了`/init`、`/undo`、`/redo`、`/share`、`/help`等内置命令之外，还有自定义命令。 [了解更多](/docs/tui#commands)。
 
 ---
 
@@ -48,7 +48,7 @@ frontmatter 定义命令属性。内容成为模板。
 
 ### JSON
 
-在 OpenCode [配置](./config) 中使用 `command` 选项：
+在 OpenCode [配置](/docs/config) 中使用 `command` 选项：
 
 ```json title="opencode.jsonc" {4-12}
 {
@@ -163,7 +163,7 @@ with the following content: $3
 
 ### 外殼輸出
 
-使用 _!`command`_ 将 [bash命令](./tui#bash-commands) 输出注入到提示符中。
+使用 _!`command`_ 将 [bash命令](/docs/tui#bash-commands) 输出注入到提示符中。
 
 例如，要創建分析測試覆蓋率的自定義命令：
 
@@ -256,8 +256,8 @@ Check for performance issues and suggest improvements.
 
 ### 代理人
 
-使用`agent`配置选择指定哪个[代理人](./agents)应执行此命令。
-如果是 [子代理](./agents/#subagents) 该命令将默认触发子代理调用。
+使用`agent`配置选择指定哪个[代理人](/docs/agents)应执行此命令。
+如果是 [子代理](/docs/agents/#subagents) 该命令将默认触发子代理调用。
 要取消此行为，则将`subtask`设置为`false`。
 
 ```json title="opencode.json"
@@ -276,9 +276,9 @@ Check for performance issues and suggest improvements.
 
 ### 子任務
 
-使用`subtask`布尔值强制命令触发[子代理](./agents/#subagents)调用。
+使用`subtask`布尔值强制命令触发[子代理](/docs/agents/#subagents)调用。
 如果您希望命令不污染您的主要上下文並且將**強制**代理充當子代理，那麼這非常有用，
-即使`mode`在[代理人](./agents)配置上设置为`primary`。
+即使`mode`在[代理人](/docs/agents)配置上设置为`primary`。
 
 ```json title="opencode.json"
 {
@@ -314,7 +314,7 @@ Check for performance issues and suggest improvements.
 
 ## 內建
 
-opencode包含`/init`、`/undo`、`/redo`、`/share`、`/help`等内置命令；【了解更多](./tui#commands)。
+opencode包含`/init`、`/undo`、`/redo`、`/share`、`/help`等内置命令；【了解更多](/docs/tui#commands)。
 
 :::笔记
 自定義命令可以覆蓋內置命令。

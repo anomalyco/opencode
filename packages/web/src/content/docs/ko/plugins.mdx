@@ -5,7 +5,7 @@ description: Write your own plugins to extend OpenCode.
 
 플러그인은 다양한 이벤트와 사용자 정의 행동으로 후킹하여 OpenCode를 확장 할 수 있습니다. 플러그인을 만들 수 있습니다 새로운 기능을 추가, 외부 서비스와 통합, 또는 OpenCode의 기본 동작을 수정.
 
-예를 들어, 커뮤니티에 의해 생성 된 [plugins](./ecosystem#plugins)를 확인하십시오.
+예를 들어, 커뮤니티에 의해 생성 된 [plugins](/docs/ecosystem#plugins)를 확인하십시오.
 
 ---
 
@@ -39,7 +39,7 @@ config 파일에 npm 패키지를 지정합니다.
 
 일반 및 범위의 npm 패키지 모두 지원됩니다.
 
-[ecosystem](./ecosystem#plugins)에서 사용할 수 있는 플러그인을 찾아보세요.
+[ecosystem](/docs/ecosystem#plugins)에서 사용할 수 있는 플러그인을 찾아보세요.
 
 ---
 
@@ -47,7 +47,7 @@ config 파일에 npm 패키지를 지정합니다.
 
 **npm 플러그인**는 시작시 Bun을 사용하여 자동으로 설치됩니다. 패키지와 그들의 의존성은 `~/.cache/opencode/node_modules/`에서 캐시됩니다.
 
-**Local 플러그인 ** 플러그인 디렉토리에서 직접로드됩니다. 외부 패키지를 사용하려면 구성 디렉토리 내 `package.json`를 작성해야 합니다 ([Dependencies](#dependencies)), 또는 플러그인을 npm에 게시하고 [config에 추가](./config#plugins).
+**Local 플러그인 ** 플러그인 디렉토리에서 직접로드됩니다. 외부 패키지를 사용하려면 구성 디렉토리 내 `package.json`를 작성해야 합니다 ([Dependencies](#dependencies)), 또는 플러그인을 npm에 게시하고 [config에 추가](/docs/config#plugins).
 
 ---
 

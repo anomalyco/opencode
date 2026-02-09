@@ -5,7 +5,7 @@ description: OpenCode CLI のオプションとコマンド。
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode CLI は、引数なしで実行すると、デフォルトで [TUI](./tui) を開始します。
+OpenCode CLI は、引数なしで実行すると、デフォルトで [TUI](/docs/tui) を開始します。
 
 ```bash
 opencode
@@ -172,7 +172,7 @@ GitHub エージェントをリポジトリにインストールします。
 opencode github install
 ```
 
-これにより、必要な GitHub Actions ワークフローが設定され、構成プロセスがガイドされます。 [詳細はこちら](./github)。
+これにより、必要な GitHub Actions ワークフローが設定され、構成プロセスがガイドされます。 [詳細はこちら](/docs/github)。
 
 ---
 
@@ -285,7 +285,7 @@ opencode models [provider]
 
 このコマンドは、構成されたプロバイダー全体で利用可能なすべてのモデルを `provider/model` の形式で表示します。
 
-これは、config](./config/) で使用する正確なモデル名を把握するのに役立ちます。
+これは、config](/docs/config/) で使用する正確なモデル名を把握するのに役立ちます。
 
 オプションでプロバイダー ID を渡して、そのプロバイダーによってモデルをフィルターできます。
 
@@ -352,7 +352,7 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 ### 仕える
 
-API アクセスのためにヘッドレス OpenCode サーバーを起動します。完全な HTTP インターフェイスについては、[server docs](./server) を確認してください。
+API アクセスのためにヘッドレス OpenCode サーバーを起動します。完全な HTTP インターフェイスについては、[server docs](/docs/server) を確認してください。
 
 ```bash
 opencode serve

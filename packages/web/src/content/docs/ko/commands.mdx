@@ -9,7 +9,7 @@ description: Create custom commands for repetitive tasks.
 /my-command
 ```
 
-사용자 정의 명령은 `/init`, `/undo`, `/redo`, `/share`, `/share`, `/help`와 같은 내장된 명령 이외에 있습니다. [더 알아보기](./tui#commands).
+사용자 정의 명령은 `/init`, `/undo`, `/redo`, `/share`, `/share`, `/help`와 같은 내장된 명령 이외에 있습니다. [더 알아보기](/docs/tui#commands).
 
 ---
 
@@ -48,7 +48,7 @@ OpenCode config를 통해 사용자 지정 명령을 추가하거나 `commands/`
 
 ### JSON 태그
 
-OpenCode [config](./config)에서 `command` 옵션을 사용하십시오:
+OpenCode [config](/docs/config)에서 `command` 옵션을 사용하십시오:
 
 ```json title="opencode.jsonc" {4-12}
 {
@@ -163,7 +163,7 @@ with the following content: $3
 
 ### 포탄 산출
 
-사용  !`command` 는 [bash command](./tui#bash-commands)를 프롬프트로 출력합니다.
+사용  !`command` 는 [bash command](/docs/tui#bash-commands)를 프롬프트로 출력합니다.
 
 예를 들어, 테스트 범위를 분석하는 사용자 정의 명령을 만들려면:
 
@@ -256,8 +256,8 @@ Check for performance issues and suggest improvements.
 
 ## 에이전트
 
-`agent` config를 선택적으로 지정합니다. [agent](./agents)는 이 명령을 실행해야 합니다.
-이 경우 [subagent](./agents/#subagents) 명령은 기본으로 시약을 트리거합니다.
+`agent` config를 선택적으로 지정합니다. [agent](/docs/agents)는 이 명령을 실행해야 합니다.
+이 경우 [subagent](/docs/agents/#subagents) 명령은 기본으로 시약을 트리거합니다.
 이 행동을 비활성화하려면 `subtask`를 `false`로 설정하십시오.
 
 ```json title="opencode.json"
@@ -276,9 +276,9 @@ Check for performance issues and suggest improvements.
 
 # # # 서브스크랩
 
-`subtask` boolean을 사용하여 명령을 강제로 [subagent](./agents/#subagents) 호출합니다.
+`subtask` boolean을 사용하여 명령을 강제로 [subagent](/docs/agents/#subagents) 호출합니다.
 이것은 당신이 명령을 원하지 않는 경우 유용합니다 당신의 기본 컨텍스트를 pollute하고 ** 에이전트는 시약으로 행동하는,
-`mode`가 [시약](./시약) 구성에 `primary`로 설정되는 경우에도.
+`mode`가 [시약](/docs/시약) 구성에 `primary`로 설정되는 경우에도.
 
 ```json title="opencode.json"
 {

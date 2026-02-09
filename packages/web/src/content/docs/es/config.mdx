@@ -175,7 +175,7 @@ Opciones disponibles:
 - `scroll_speed` - Multiplicador de velocidad de desplazamiento personalizado (predeterminado: `3`, mínimo: `1`). Se ignora si `scroll_acceleration.enabled` es `true`.
 - `diff_style` - Controla la representación de diferencias. `"auto"` se adapta al ancho del terminal, `"stacked"` siempre muestra una sola columna.
 
-[Obtenga más información sobre el uso de TUI aquí](./tui).
+[Obtenga más información sobre el uso de TUI aquí](/docs/tui).
 
 ---
 
@@ -204,7 +204,7 @@ Opciones disponibles:
 - `mdnsDomain` - Nombre de dominio personalizado para el servicio mDNS. El valor predeterminado es `opencode.local`. Útil para ejecutar múltiples instancias en la misma red.
 - `cors`: orígenes adicionales para permitir CORS cuando se utiliza el servidor HTTP desde un cliente basado en navegador. Los valores deben ser orígenes completos (esquema + host + puerto opcional), por ejemplo, `https://app.example.com`.
 
-[Obtenga más información sobre el servidor aquí](./server).
+[Obtenga más información sobre el servidor aquí](/docs/server).
 
 ---
 
@@ -222,7 +222,7 @@ Puede administrar las herramientas que un LLM puede usar a través de la opción
 }
 ```
 
-[Obtenga más información sobre las herramientas aquí](./tools).
+[Obtenga más información sobre las herramientas aquí](/docs/tools).
 
 ---
 
@@ -260,7 +260,7 @@ Las opciones de proveedores pueden incluir `timeout` y `setCacheKey`:
 - `timeout`: tiempo de espera de solicitud en milisegundos (predeterminado: 300000). Establezca en `false` para desactivar.
 - `setCacheKey`: asegúrese de que siempre haya una clave de caché configurada para el proveedor designado.
 
-También puede configurar [modelos locales](./models#local). [Más información](./models).
+También puede configurar [modelos locales](/docs/models#local). [Más información](/docs/models).
 
 ---
 
@@ -292,10 +292,10 @@ Amazon Bedrock admite la configuración específica de AWS:
 - `endpoint`: URL de punto de enlace personalizada para puntos de enlace de VPC. Este es un alias para la opción genérica `baseURL` que utiliza terminología específica de AWS. Si se especifican ambos, `endpoint` tiene prioridad.
 
 :::nota
-Los tokens de portador (`AWS_BEARER_TOKEN_BEDROCK` o `/connect`) tienen prioridad sobre la autenticación basada en perfil. Consulte [precedencia de autenticación](./providers#authentication-precedence) para obtener más detalles.
+Los tokens de portador (`AWS_BEARER_TOKEN_BEDROCK` o `/connect`) tienen prioridad sobre la autenticación basada en perfil. Consulte [precedencia de autenticación](/docs/providers#authentication-precedence) para obtener más detalles.
 :::
 
-[Obtenga más información sobre la configuración de Amazon Bedrock](./providers#amazon-bedrock).
+[Obtenga más información sobre la configuración de Amazon Bedrock](/docs/providers#amazon-bedrock).
 
 ---
 
@@ -310,7 +310,7 @@ Puede configurar el tema que desea usar en su configuración OpenCode a través 
 }
 ```
 
-[Más información aquí](./themes).
+[Más información aquí](/docs/themes).
 
 ---
 
@@ -336,7 +336,7 @@ Puedes configurar agentes especializados para tareas específicas a través de l
 }
 ```
 
-También puede definir agentes utilizando archivos de rebajas en `~/.config/opencode/agents/` o `.opencode/agents/`. [Más información aquí](./agents).
+También puede definir agentes utilizando archivos de rebajas en `~/.config/opencode/agents/` o `.opencode/agents/`. [Más información aquí](/docs/agents).
 
 ---
 
@@ -351,7 +351,7 @@ Puede configurar el agente predeterminado usando la opción `default_agent`. Est
 }
 ```
 
-El agente predeterminado debe ser un agente principal (no un subagente). Puede ser un agente integrado como `"build"` o `"plan"`, o un [agente personalizado](./agents) que haya definido. Si el agente especificado no existe o es un subagente, OpenCode recurrirá a `"build"` con una advertencia.
+El agente predeterminado debe ser un agente principal (no un subagente). Puede ser un agente integrado como `"build"` o `"plan"`, o un [agente personalizado](/docs/agents) que haya definido. Si el agente especificado no existe o es un subagente, OpenCode recurrirá a `"build"` con una advertencia.
 
 Esta configuración se aplica en todas las interfaces: TUI, CLI (`opencode run`), aplicación de escritorio y GitHub Acción.
 
@@ -359,7 +359,7 @@ Esta configuración se aplica en todas las interfaces: TUI, CLI (`opencode run`)
 
 ### Intercambio
 
-Puede configurar la función [compartir](./share) a través de la opción `share`.
+Puede configurar la función [compartir](/docs/share) a través de la opción `share`.
 
 ```json title="opencode.json"
 {
@@ -400,7 +400,7 @@ Puede configurar comandos personalizados para tareas repetitivas a través de la
 }
 ```
 
-También puede definir comandos utilizando archivos de rebajas en `~/.config/opencode/commands/` o `.opencode/commands/`. [Más información aquí](./commands).
+También puede definir comandos utilizando archivos de rebajas en `~/.config/opencode/commands/` o `.opencode/commands/`. [Más información aquí](/docs/commands).
 
 ---
 
@@ -415,7 +415,7 @@ Puede personalizar sus combinaciones de teclas a través de la opción `keybinds
 }
 ```
 
-[Más información aquí](./keybinds).
+[Más información aquí](/docs/keybinds).
 
 ---
 
@@ -457,7 +457,7 @@ Puede configurar formateadores de código a través de la opción `formatter`.
 }
 ```
 
-[Obtenga más información sobre los formateadores aquí](./formatters).
+[Obtenga más información sobre los formateadores aquí](/docs/formatters).
 
 ---
 
@@ -477,7 +477,7 @@ Por ejemplo, para garantizar que las herramientas `edit` y `bash` requieran la a
 }
 ```
 
-[Obtenga más información sobre los permisos aquí](./permissions).
+[Obtenga más información sobre los permisos aquí](/docs/permissions).
 
 ---
 
@@ -528,13 +528,13 @@ Puede configurar los servidores MCP que desee utilizar a través de la opción `
 }
 ```
 
-[Más información aquí](./mcp-servers).
+[Más información aquí](/docs/mcp-servers).
 
 ---
 
 ### Complementos
 
-Los [complementos](./plugins) amplían OpenCode con herramientas, enlaces e integraciones personalizados.
+Los [complementos](/docs/plugins) amplían OpenCode con herramientas, enlaces e integraciones personalizados.
 
 Coloque los archivos de complemento en `.opencode/plugins/` o `~/.config/opencode/plugins/`. También puedes cargar complementos desde npm a través de la opción `plugin`.
 
@@ -545,7 +545,7 @@ Coloque los archivos de complemento en `.opencode/plugins/` o `~/.config/opencod
 }
 ```
 
-[Más información aquí](./plugins).
+[Más información aquí](/docs/plugins).
 
 ---
 
@@ -561,7 +561,7 @@ Puedes configurar las instrucciones para el modelo que estás usando a través d
 ```
 
 Esto requiere una variedad de rutas y patrones globales para archivos de instrucciones. [Más información
-sobre las reglas aquí](./rules).
+sobre las reglas aquí](/docs/rules).
 
 ---
 

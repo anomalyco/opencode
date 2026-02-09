@@ -11,7 +11,7 @@ OpenCode usa o [AI SDK](https://ai-sdk.dev/) e [Models.dev](https://models.dev) 
 
 Os provedores mais populares são pré-carregados por padrão. Se você adicionou as credenciais para um provedor através do comando `/connect`, elas estarão disponíveis quando você iniciar o OpenCode.
 
-Saiba mais sobre [provedores](./providers).
+Saiba mais sobre [provedores](/docs/providers).
 
 ---
 
@@ -57,9 +57,9 @@ Para definir um desses como o modelo padrão, você pode definir a chave `model`
 }
 ```
 
-Aqui, o ID completo é `provider_id/model_id`. Por exemplo, se você estiver usando [OpenCode Zen](./zen), você usaria `opencode/gpt-5.1-codex` para GPT 5.1 Codex.
+Aqui, o ID completo é `provider_id/model_id`. Por exemplo, se você estiver usando [OpenCode Zen](/docs/zen), você usaria `opencode/gpt-5.1-codex` para GPT 5.1 Codex.
 
-Se você configurou um [provedor personalizado](./providers#custom), o `provider_id` é a chave da parte `provider` da sua configuração, e o `model_id` é a chave de `provider.models`.
+Se você configurou um [provedor personalizado](/docs/providers#custom), o `provider_id` é a chave da parte `provider` da sua configuração, e o `model_id` é a chave de `provider.models`.
 
 ---
 
@@ -102,7 +102,7 @@ Você pode configurar globalmente as opções de um modelo através da configura
 Aqui estamos configurando as configurações globais para dois modelos integrados: `gpt-5` quando acessado via o provedor `openai`, e `claude-sonnet-4-20250514` quando acessado via o provedor `anthropic`.
 Os nomes dos provedores e modelos integrados podem ser encontrados em [Models.dev](https://models.dev).
 
-Você também pode configurar essas opções para quaisquer agentes que estiver usando. A configuração do agente substitui quaisquer opções globais aqui. [Saiba mais](./agents/#additional).
+Você também pode configurar essas opções para quaisquer agentes que estiver usando. A configuração do agente substitui quaisquer opções globais aqui. [Saiba mais](/docs/agents/#additional).
 
 Você também pode definir variantes personalizadas que estendem as integradas. As variantes permitem que você configure diferentes configurações para o mesmo modelo sem criar entradas duplicadas:
 
@@ -196,7 +196,7 @@ Você pode substituir variantes existentes ou adicionar as suas:
 
 ### Ciclo de variantes
 
-Use a tecla de atalho `variant_cycle` para alternar rapidamente entre variantes. [Saiba mais](./keybinds).
+Use a tecla de atalho `variant_cycle` para alternar rapidamente entre variantes. [Saiba mais](/docs/keybinds).
 
 ---
 

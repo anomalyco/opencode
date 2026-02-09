@@ -11,7 +11,7 @@ OpenCode utilise [AI SDK](https://ai-sdk.dev/) et [Models.dev](https://models.de
 
 Les fournisseurs les plus populaires sont préchargés par défaut. Si vous avez ajouté les informations d'identification d'un fournisseur via la commande `/connect`, elles seront disponibles lorsque vous démarrerez OpenCode.
 
-En savoir plus sur [fournisseurs](./providers).
+En savoir plus sur [fournisseurs](/docs/providers).
 
 ---
 
@@ -58,9 +58,9 @@ OpenCode configuration.
 }
 ```
 
-Ici, l'identifiant complet est `provider_id/model_id`. Par exemple, si vous utilisez [OpenCode Zen](./zen), vous utiliserez `opencode/gpt-5.1-codex` pour GPT 5.1 Codex.
+Ici, l'identifiant complet est `provider_id/model_id`. Par exemple, si vous utilisez [OpenCode Zen](/docs/zen), vous utiliserez `opencode/gpt-5.1-codex` pour GPT 5.1 Codex.
 
-Si vous avez configuré un [fournisseur personnalisé](./providers#custom), le `provider_id` est la clé de la partie `provider` de votre configuration et le `model_id` est la clé de `provider.models`.
+Si vous avez configuré un [fournisseur personnalisé](/docs/providers#custom), le `provider_id` est la clé de la partie `provider` de votre configuration et le `model_id` est la clé de `provider.models`.
 
 ---
 
@@ -103,7 +103,7 @@ Vous pouvez configurer globalement les options d'un modèle via le fichier confi
 Ici, nous configurons les paramètres globaux pour deux modèles intégrés : `gpt-5` lorsqu'il est accessible via le fournisseur `openai` et `claude-sonnet-4-20250514` lorsqu'il est accessible via le fournisseur `anthropic`.
 Les noms du fournisseur intégré et des modèles peuvent être trouvés sur [Models.dev](https://models.dev).
 
-Vous pouvez également configurer ces options pour tous les agents que vous utilisez. La configuration de l'agent remplace ici toutes les options globales. [En savoir plus](./agents/#additional).
+Vous pouvez également configurer ces options pour tous les agents que vous utilisez. La configuration de l'agent remplace ici toutes les options globales. [En savoir plus](/docs/agents/#additional).
 
 Vous pouvez également définir des variantes personnalisées qui étendent celles intégrées. Les variantes vous permettent de configurer différents paramètres pour le même modèle sans créer d'entrées en double :
 
@@ -197,7 +197,7 @@ Vous pouvez remplacer les variantes existantes ou ajouter les vôtres :
 
 ### Variantes de cycles
 
-Utilisez le raccourci clavier `variant_cycle` pour basculer rapidement entre les variantes. [En savoir plus](./keybinds).
+Utilisez le raccourci clavier `variant_cycle` pour basculer rapidement entre les variantes. [En savoir plus](/docs/keybinds).
 
 ---
 

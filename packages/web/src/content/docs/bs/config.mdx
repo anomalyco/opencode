@@ -161,7 +161,7 @@ Dostupne opcije:
 - `scroll_acceleration.enabled` - Omogući ubrzanje skrolovanja u macOS stilu. **Ima prednost nad `scroll_speed`.**
 - `scroll_speed` - Prilagođeni množitelj brzine pomicanja (podrazumevano: `3`, minimalno: `1`). Zanemareno ako je `scroll_acceleration.enabled` `true`.
 - `diff_style` - Kontrola prikaza razlike. `"auto"` se prilagođava širini terminala, `"stacked"` uvijek prikazuje jednu kolonu.
-  [Ovdje saznajte više o korištenju TUI](./tui).
+  [Ovdje saznajte više o korištenju TUI](/docs/tui).
 
 ---
 
@@ -189,7 +189,7 @@ Dostupne opcije:
 - `mdns` - Omogući otkrivanje mDNS usluge. Ovo omogućava drugim uređajima na mreži da otkriju vaš OpenCode server.
 - `mdnsDomain` - Prilagođeno ime domene za mDNS uslugu. Zadano je `opencode.local`. Korisno za pokretanje više instanci na istoj mreži.
 - `cors` - Dodatni izvori koji omogućavaju CORS kada koristite HTTP server iz klijenta baziranog na pretraživaču. Vrijednosti moraju biti punog porijekla (šema + host + opcijski port), npr. `https://app.example.com`.
-  [Saznajte više o serveru](./server) ovdje.
+  [Saznajte više o serveru](/docs/server) ovdje.
 
 ---
 
@@ -207,7 +207,7 @@ Možete upravljati alatima koje LLM može koristiti putem opcije `tools`.
 }
 ```
 
-[Saznajte više o alatima](./tools) ovdje.
+[Saznajte više o alatima](/docs/tools) ovdje.
 
 ---
 
@@ -243,7 +243,7 @@ Opcije provajdera mogu uključivati ​​`timeout` i `setCacheKey`:
 
 - `timeout` - Vrijeme čekanja zahtjeva u milisekundama (podrazumevano: 300000). Postavite na `false` da onemogućite.
 - `setCacheKey` - Osigurajte da je ključ keš memorije uvijek postavljen za određenog provajdera.
-  Također možete konfigurirati [lokalni modeli](./models#local). [Saznajte više](./models).
+  Također možete konfigurirati [lokalni modeli](/docs/models#local). [Saznajte više](/docs/models).
 
 ---
 
@@ -274,9 +274,9 @@ Amazon Bedrock podržava konfiguraciju specifičnu za AWS:
 - `profile` - AWS imenovan profil od `~/.aws/credentials` (podrazumevano na `AWS_PROFILE` env var)
 - `endpoint` - URL prilagođene krajnje tačke za VPC krajnje tačke. Ovo je pseudonim za generičku opciju `baseURL` koristeći terminologiju specifičnu za AWS. Ako su oba navedena, `endpoint` ima prednost.
   :::napomena
-  Tokeni nosioca (`AWS_BEARER_TOKEN_BEDROCK` ili `/connect`) imaju prednost nad autentifikacijom zasnovanom na profilu. Pogledajte [prednost autentifikacije](./providers#authentication-precedence) za detalje.
+  Tokeni nosioca (`AWS_BEARER_TOKEN_BEDROCK` ili `/connect`) imaju prednost nad autentifikacijom zasnovanom na profilu. Pogledajte [prednost autentifikacije](/docs/providers#authentication-precedence) za detalje.
   :::
-  [Saznajte više o konfiguraciji Amazon Bedrock](./providers#amazon-bedrock).
+  [Saznajte više o konfiguraciji Amazon Bedrock](/docs/providers#amazon-bedrock).
 
 ---
 
@@ -291,7 +291,7 @@ Možete konfigurirati temu koju želite koristiti u svojoj OpenCode konfiguracij
 }
 ```
 
-[Saznajte više ovdje](./themes).
+[Saznajte više ovdje](/docs/themes).
 
 ---
 
@@ -317,7 +317,7 @@ Možete konfigurirati specijalizirane agente za određene zadatke putem opcije `
 }
 ```
 
-Također možete definirati agente koristeći mardown datoteke u `~/.config/opencode/agents/` ili `.opencode/agents/`. [Saznajte više ovdje](./agents).
+Također možete definirati agente koristeći mardown datoteke u `~/.config/opencode/agents/` ili `.opencode/agents/`. [Saznajte više ovdje](/docs/agents).
 
 ---
 
@@ -332,14 +332,14 @@ Možete postaviti zadanog agenta koristeći opciju `default_agent`. Ovo određuj
 }
 ```
 
-Zadani agent mora biti primarni agent (ne podagent). Ovo može biti ugrađeni agent kao što je `"build"` ili `"plan"`, ili [prilagođeni agent](./agents) koji ste definirali. Ako navedeni agent ne postoji ili je subagent, OpenCode će se vratiti na `"build"` s upozorenjem.
+Zadani agent mora biti primarni agent (ne podagent). Ovo može biti ugrađeni agent kao što je `"build"` ili `"plan"`, ili [prilagođeni agent](/docs/agents) koji ste definirali. Ako navedeni agent ne postoji ili je subagent, OpenCode će se vratiti na `"build"` s upozorenjem.
 Ova postavka se primjenjuje na sva sučelja: TUI, CLI (`opencode run`), desktop aplikaciju i GitHub Action.
 
 ---
 
 ### Dijeljenje
 
-Možete konfigurirati funkciju [share](./share) putem opcije `share`.
+Možete konfigurirati funkciju [share](/docs/share) putem opcije `share`.
 
 ```json title="opencode.json"
 {
@@ -379,7 +379,7 @@ Možete konfigurirati prilagođene komande za ponavljanje zadataka putem opcije 
 }
 ```
 
-Također možete definirati komande koristeći mardown fajlove u `~/.config/opencode/commands/` ili `.opencode/commands/`. [Saznajte više ovdje](./commands).
+Također možete definirati komande koristeći mardown fajlove u `~/.config/opencode/commands/` ili `.opencode/commands/`. [Saznajte više ovdje](/docs/commands).
 
 ---
 
@@ -394,7 +394,7 @@ Možete prilagoditi svoje veze ključeva putem opcije `keybinds`.
 }
 ```
 
-[Saznajte više ovdje](./keybinds).
+[Saznajte više ovdje](/docs/keybinds).
 
 ---
 
@@ -436,7 +436,7 @@ Možete konfigurirati formatere koda putem opcije `formatter`.
 }
 ```
 
-[Saznajte više o formatterima](./formatters) ovdje.
+[Saznajte više o formatterima](/docs/formatters) ovdje.
 
 ---
 
@@ -455,7 +455,7 @@ Na primjer, da osigurate da alati `edit` i `bash` zahtijevaju odobrenje korisnik
 }
 ```
 
-[Ovdje saznajte više o ](./permissions) dozvolama.
+[Ovdje saznajte više o ](/docs/permissions) dozvolama.
 
 ---
 
@@ -506,13 +506,13 @@ Možete konfigurirati MCP servere koje želite koristiti putem opcije `mcp`.
 }
 ```
 
-[Saznajte više ovdje](./mcp-servers).
+[Saznajte više ovdje](/docs/mcp-servers).
 
 ---
 
 ### Extras
 
-[Plugins](./plugins) proširuju OpenCode sa prilagođenim alatima, kukicama i integracijama.
+[Plugins](/docs/plugins) proširuju OpenCode sa prilagođenim alatima, kukicama i integracijama.
 Postavite datoteke dodataka u `.opencode/plugins/` ili `~/.config/opencode/plugins/`. Također možete učitati dodatke iz npm-a preko opcije `plugin`.
 
 ```json title="opencode.json"
@@ -522,7 +522,7 @@ Postavite datoteke dodataka u `.opencode/plugins/` ili `~/.config/opencode/plugi
 }
 ```
 
-[Saznajte više ovdje](./plugins).
+[Saznajte više ovdje](/docs/plugins).
 
 ---
 
@@ -538,7 +538,7 @@ Možete konfigurirati upute za model koji koristite putem opcije `instructions`.
 ```
 
 Ovo uzima niz putanja i uzoraka globusa do datoteka instrukcija. [Saznajte više
-o pravilima ovdje](./rules).
+o pravilima ovdje](/docs/rules).
 
 ---
 

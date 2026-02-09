@@ -4,10 +4,10 @@ description: Verwalte, welche Tools ein LLM nutzen darf.
 ---
 
 Tools erlauben dem LLM Aktionen in deiner Codebasis.
-OpenCode bringt eingebaute Tools mit und laesst sich ueber [Custom Tools](./custom-tools) oder [MCP-Server](./mcp-servers) erweitern.
+OpenCode bringt eingebaute Tools mit und laesst sich ueber [Custom Tools](/docs/custom-tools) oder [MCP-Server](/docs/mcp-servers) erweitern.
 
 Standardmaessig sind alle Tools **aktiviert** und brauchen keine Freigabe.
-Das Verhalten steuerst du ueber [Berechtigungen](./permissions).
+Das Verhalten steuerst du ueber [Berechtigungen](/docs/permissions).
 
 ---
 
@@ -39,7 +39,7 @@ Zum Beispiel, um fuer alle Tools eines MCP-Servers eine Freigabe zu verlangen:
 }
 ```
 
-[Mehr dazu](./permissions), wie du Berechtigungen konfigurierst.
+[Mehr dazu](/docs/permissions), wie du Berechtigungen konfigurierst.
 
 ---
 
@@ -194,7 +194,7 @@ This tool is only available when `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (or `OPEN
 
 Supported operations include `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls`, and `outgoingCalls`.
 
-To configure which LSP servers are available for your project, see [LSP Servers](./lsp).
+To configure which LSP servers are available for your project, see [LSP Servers](/docs/lsp).
 
 ---
 
@@ -221,7 +221,7 @@ The `patch` tool is controlled by the `edit` permission, which covers all file m
 
 ### skill
 
-Load a [skill](./skills) (a `SKILL.md` file) and return its content in the conversation.
+Load a [skill](/docs/skills) (a `SKILL.md` file) and return its content in the conversation.
 
 ```json title="opencode.json" {4}
 {
@@ -250,7 +250,7 @@ Manage todo lists during coding sessions.
 Creates and updates task lists to track progress during complex operations. The LLM uses this to organize multi-step tasks.
 
 :::note
-This tool is disabled for subagents by default, but you can enable it manually. [Learn more](./agents/#permissions)
+This tool is disabled for subagents by default, but you can enable it manually. [Learn more](/docs/agents/#permissions)
 :::
 
 ---
@@ -271,7 +271,7 @@ Read existing todo lists.
 Reads the current todo list state. Used by the LLM to track what tasks are pending or completed.
 
 :::note
-This tool is disabled for subagents by default, but you can enable it manually. [Learn more](./agents/#permissions)
+This tool is disabled for subagents by default, but you can enable it manually. [Learn more](/docs/agents/#permissions)
 :::
 
 ---
@@ -356,7 +356,7 @@ Each question includes a header, the question text, and a list of options. Users
 Mit Custom Tools definierst du eigene Funktionen, die das LLM aufrufen kann.
 Sie werden in der Konfigurationsdatei definiert und koennen beliebigen Code ausfuehren.
 
-[Mehr dazu](./custom-tools), wie du Custom Tools erstellst.
+[Mehr dazu](/docs/custom-tools), wie du Custom Tools erstellst.
 
 ---
 
@@ -365,7 +365,7 @@ Sie werden in der Konfigurationsdatei definiert und koennen beliebigen Code ausf
 MCP-Server (Model Context Protocol) binden externe Tools und Dienste ein.
 Dazu gehoeren Datenbanken, API-Integrationen und Drittanbieter-Services.
 
-[Mehr dazu](./mcp-servers), wie du MCP-Server konfigurierst.
+[Mehr dazu](/docs/mcp-servers), wie du MCP-Server konfigurierst.
 
 ---
 

@@ -3,9 +3,9 @@ title: Outils
 description: Gérez les outils qu'un LLM peut utiliser.
 ---
 
-Les outils permettent au LLM d'effectuer des actions dans votre base de code. OpenCode est livré avec un ensemble d'outils intégrés, mais vous pouvez l'étendre avec [outils personnalisés](./custom-tools) ou [serveurs MCP](./mcp-servers).
+Les outils permettent au LLM d'effectuer des actions dans votre base de code. OpenCode est livré avec un ensemble d'outils intégrés, mais vous pouvez l'étendre avec [outils personnalisés](/docs/custom-tools) ou [serveurs MCP](/docs/mcp-servers).
 
-Par défaut, tous les outils sont **activés** et n'ont pas besoin d'autorisation pour s'exécuter. Vous pouvez contrôler le comportement de l'outil via [permissions](./permissions).
+Par défaut, tous les outils sont **activés** et n'ont pas besoin d'autorisation pour s'exécuter. Vous pouvez contrôler le comportement de l'outil via [permissions](/docs/permissions).
 
 ---
 
@@ -35,7 +35,7 @@ Vous pouvez également utiliser des caractères génériques pour contrôler plu
 }
 ```
 
-[En savoir plus](./permissions) sur la configuration des autorisations.
+[En savoir plus](/docs/permissions) sur la configuration des autorisations.
 
 ---
 
@@ -187,7 +187,7 @@ Cet outil n'est disponible que lorsque `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (ou
 
 Les opérations prises en charge incluent `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls` et `outgoingCalls`.
 
-Pour configurer les serveurs LSP disponibles pour votre projet, consultez [LSP Servers](./lsp).
+Pour configurer les serveurs LSP disponibles pour votre projet, consultez [LSP Servers](/docs/lsp).
 
 ---
 
@@ -214,7 +214,7 @@ L'outil `patch` est contrôlé par l'autorisation `edit`, qui couvre toutes les 
 
 ### compétence
 
-Chargez une [skill](./skills) (un fichier `SKILL.md`) et renvoyez son contenu dans la conversation.
+Chargez une [skill](/docs/skills) (un fichier `SKILL.md`) et renvoyez son contenu dans la conversation.
 
 ```json title="opencode.json" {4}
 {
@@ -243,7 +243,7 @@ Gérez les listes de tâches pendant les sessions de codage.
 Crée et met à jour des listes de tâches pour suivre la progression lors d'opérations complexes. Le LLM l'utilise pour organiser des tâches en plusieurs étapes.
 
 :::note
-Cet outil est désactivé par défaut pour les sous-agents, mais vous pouvez l'activer manuellement. [En savoir plus](./agents/#permissions)
+Cet outil est désactivé par défaut pour les sous-agents, mais vous pouvez l'activer manuellement. [En savoir plus](/docs/agents/#permissions)
 :::
 
 ---
@@ -264,7 +264,7 @@ Lisez les listes de tâches existantes.
 Lit l'état actuel de la liste de tâches. Utilisé par le LLM pour suivre les tâches en attente ou terminées.
 
 :::note
-Cet outil est désactivé par défaut pour les sous-agents, mais vous pouvez l'activer manuellement. [En savoir plus](./agents/#permissions)
+Cet outil est désactivé par défaut pour les sous-agents, mais vous pouvez l'activer manuellement. [En savoir plus](/docs/agents/#permissions)
 :::
 
 ---
@@ -348,7 +348,7 @@ Chaque question comprend un en-tête, le texte de la question et une liste d'opt
 
 Les outils personnalisés vous permettent de définir vos propres fonctions que le LLM peut appeler. Ceux-ci sont définis dans votre fichier de configuration et peuvent exécuter du code arbitraire.
 
-[En savoir plus](./custom-tools) sur la création d'outils personnalisés.
+[En savoir plus](/docs/custom-tools) sur la création d'outils personnalisés.
 
 ---
 
@@ -356,7 +356,7 @@ Les outils personnalisés vous permettent de définir vos propres fonctions que 
 
 Les serveurs MCP (Model Context Protocol) vous permettent d'intégrer des outils et services externes. Cela inclut l'accès à la base de données, les intégrations API et les services tiers.
 
-[En savoir plus](./mcp-servers) sur la configuration des serveurs MCP.
+[En savoir plus](/docs/mcp-servers) sur la configuration des serveurs MCP.
 
 ---
 

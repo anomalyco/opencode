@@ -11,7 +11,7 @@ OpenCode bruger [AI SDK](https://ai-sdk.dev/) og [Models.dev](https://models.dev
 
 De fleste populære udbydere er forudindlæst som standard. Hvis du har tilføjet legitimationsoplysningerne for en udbyder gennem kommandoen `/connect`, vil de være tilgængelige, når du starter OpenCode.
 
-Få mere at vide om [providers](./providers).
+Få mere at vide om [providers](/docs/providers).
 
 ---
 
@@ -58,9 +58,9 @@ OpenCode konfig.
 }
 ```
 
-Her er det fulde ID `provider_id/model_id`. For eksempel, hvis du bruger [OpenCode Zen](./zen), vil du bruge `opencode/gpt-5.1-codex` til GPT 5.1 Codex.
+Her er det fulde ID `provider_id/model_id`. For eksempel, hvis du bruger [OpenCode Zen](/docs/zen), vil du bruge `opencode/gpt-5.1-codex` til GPT 5.1 Codex.
 
-Hvis du har konfigureret en [custom provider](./providers#custom), er `provider_id` nøglen fra `provider` delen af ​​din konfiguration, og `model_id` er nøglen fra `provider.models`.
+Hvis du har konfigureret en [custom provider](/docs/providers#custom), er `provider_id` nøglen fra `provider` delen af ​​din konfiguration, og `model_id` er nøglen fra `provider.models`.
 
 ---
 
@@ -103,7 +103,7 @@ Du kan konfigurere en models muligheder globalt gennem konfigurationen.
 Her konfigurerer vi globale indstillinger for to indbyggede modeller: `gpt-5` når de tilgås via `openai` udbyderen og `claude-sonnet-4-20250514` når de tilgås via `anthropic` udbyderen.
 Den indbyggede udbyder og modelnavne kan findes på [Models.dev](https://models.dev).
 
-Du kan også konfigurere disse indstillinger for alle agenter, du bruger. Agentkonfigurationen tilsidesætter alle globale muligheder her. [Learn more](./agents/#additional).
+Du kan også konfigurere disse indstillinger for alle agenter, du bruger. Agentkonfigurationen tilsidesætter alle globale muligheder her. [Learn more](/docs/agents/#additional).
 
 Du kan også definere brugerdefinerede varianter, der udvider de indbyggede. Varianter giver dig mulighed for at konfigurere forskellige indstillinger for den samme model uden at oprette duplikerede poster:
 
@@ -197,7 +197,7 @@ Du kan tilsidesætte eksisterende varianter eller tilføje dine egne:
 
 ### Cyklusvarianter
 
-Brug tastebindingen `variant_cycle` til hurtigt at skifte mellem varianter. [Learn more](./keybinds).
+Brug tastebindingen `variant_cycle` til hurtigt at skifte mellem varianter. [Learn more](/docs/keybinds).
 
 ---
 

@@ -49,7 +49,7 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve
 ### Funktionsweise
 
 Wenn du `opencode` startest, werden TUI und Server gestartet.
-Die TUI ist dabei der Client, der mit dem Server spricht; dessen OpenAPI-3.1-Endpunkt dient auch zur Generierung des [SDK](./sdk).
+Die TUI ist dabei der Client, der mit dem Server spricht; dessen OpenAPI-3.1-Endpunkt dient auch zur Generierung des [SDK](/docs/sdk).
 
 :::tip
 Nutze den opencode-Server, um opencode programmatisch anzusteuern.
@@ -65,10 +65,10 @@ Laeuft bereits eine TUI, startet `opencode serve` trotzdem eine neue Serverinsta
 #### Mit bestehendem Server verbinden
 
 Beim TUI-Start werden Port und Hostname zufaellig gewaehlt.
-Alternativ gibst du `--hostname` und `--port` als [Flags](./cli) vor und verbindest dich dann gezielt damit.
+Alternativ gibst du `--hostname` und `--port` als [Flags](/docs/cli) vor und verbindest dich dann gezielt damit.
 
 Der Endpunkt [`/tui`](#tui) kann die TUI ueber den Server steuern, etwa zum Vorbelegen oder Abschicken von Prompts.
-Dieses Muster nutzen auch die OpenCode-[IDE](./ide)-Plugins.
+Dieses Muster nutzen auch die OpenCode-[IDE](/docs/ide)-Plugins.
 
 ---
 

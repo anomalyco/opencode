@@ -9,7 +9,7 @@ description: Создавайте собственные команды для �
 /my-command
 ```
 
-Пользовательские команды дополняют встроенные команды, такие как `/init`, `/undo`, `/redo`, `/share`, `/help`. [Подробнее](./tui#commands).
+Пользовательские команды дополняют встроенные команды, такие как `/init`, `/undo`, `/redo`, `/share`, `/help`. [Подробнее](/docs/tui#commands).
 
 ---
 
@@ -48,7 +48,7 @@ Focus on the failing tests and suggest fixes.
 
 ### JSON
 
-Используйте опцию `command` в вашем OpenCode [config](./config):
+Используйте опцию `command` в вашем OpenCode [config](/docs/config):
 
 ```json title="opencode.jsonc" {4-12}
 {
@@ -163,7 +163,7 @@ with the following content: $3
 
 ### Вывод оболочки
 
-Используйте _!`command`_, чтобы ввести вывод команды bash](./tui#bash-commands) в приглашение.
+Используйте _!`command`_, чтобы ввести вывод команды bash](/docs/tui#bash-commands) в приглашение.
 
 Например, чтобы создать пользовательскую команду, которая анализирует тестовое покрытие:
 
@@ -256,8 +256,8 @@ Check for performance issues and suggest improvements.
 
 ### Агент
 
-Используйте конфигурацию `agent`, чтобы дополнительно указать, какой [агент](./agents) должен выполнить эту команду.
-Если это [subagent](./agents/#subagents), команда по умолчанию инициирует вызов субагента.
+Используйте конфигурацию `agent`, чтобы дополнительно указать, какой [агент](/docs/agents) должен выполнить эту команду.
+Если это [subagent](/docs/agents/#subagents), команда по умолчанию инициирует вызов субагента.
 Чтобы отключить это поведение, установите для `subtask` значение `false`.
 
 ```json title="opencode.json"
@@ -276,9 +276,9 @@ Check for performance issues and suggest improvements.
 
 ### Подзадача
 
-Используйте логическое значение `subtask`, чтобы заставить команду инициировать вызов [subagent](./agents/#subagents).
+Используйте логическое значение `subtask`, чтобы заставить команду инициировать вызов [subagent](/docs/agents/#subagents).
 Это полезно, если вы хотите, чтобы команда не загрязняла ваш основной контекст и **заставляла** агента действовать как субагент.
-даже если для `mode` установлено значение `primary` в конфигурации [agent](./agents).
+даже если для `mode` установлено значение `primary` в конфигурации [agent](/docs/agents).
 
 ```json title="opencode.json"
 {
@@ -314,7 +314,7 @@ Check for performance issues and suggest improvements.
 
 ## Встроенный
 
-открытый код включает несколько встроенных команд, таких как `/init`, `/undo`, `/redo`, `/share`, `/help`; [подробнее](./tui#commands).
+открытый код включает несколько встроенных команд, таких как `/init`, `/undo`, `/redo`, `/share`, `/help`; [подробнее](/docs/tui#commands).
 
 :::примечание
 Пользовательские команды могут переопределять встроенные команды.

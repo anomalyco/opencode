@@ -46,7 +46,7 @@ OPENCODE_SERVER_PASSWORD=sua-senha opencode serve
 
 ### Como funciona
 
-Quando você executa `opencode`, ele inicia um TUI e um servidor. Onde o TUI é o cliente que se comunica com o servidor. O servidor expõe um endpoint de especificação OpenAPI 3.1. Este endpoint também é usado para gerar um [SDK](./sdk).
+Quando você executa `opencode`, ele inicia um TUI e um servidor. Onde o TUI é o cliente que se comunica com o servidor. O servidor expõe um endpoint de especificação OpenAPI 3.1. Este endpoint também é usado para gerar um [SDK](/docs/sdk).
 
 :::tip
 Use o servidor opencode para interagir com o opencode programaticamente.
@@ -60,9 +60,9 @@ Você pode executar `opencode serve` para iniciar um servidor autônomo. Se voc�
 
 #### Conectar a um servidor existente
 
-Quando você inicia o TUI, ele atribui aleatoriamente uma porta e um nome de host. Você pode passar os [flags](./cli) `--hostname` e `--port`. Em seguida, use isso para se conectar ao seu servidor.
+Quando você inicia o TUI, ele atribui aleatoriamente uma porta e um nome de host. Você pode passar os [flags](/docs/cli) `--hostname` e `--port`. Em seguida, use isso para se conectar ao seu servidor.
 
-O endpoint [`/tui`](#tui) pode ser usado para controlar o TUI através do servidor. Por exemplo, você pode preencher ou executar um prompt. Essa configuração é usada pelos plugins do OpenCode [IDE](./ide).
+O endpoint [`/tui`](#tui) pode ser usado para controlar o TUI através do servidor. Por exemplo, você pode preencher ou executar um prompt. Essa configuração é usada pelos plugins do OpenCode [IDE](/docs/ide).
 
 ---
 

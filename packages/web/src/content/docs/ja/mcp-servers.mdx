@@ -63,7 +63,7 @@ MCP サーバーは、`mcp` の下の [OpenCode Config](https://opencode.ai/docs
 }
 ```
 
-ローカルの設定値はリモートのデフォルト値をオーバーライドします。詳細については、「config precedence](./config#precedence-order)」を参照してください。
+ローカルの設定値はリモートのデフォルト値をオーバーライドします。詳細については、「config precedence](/docs/config#precedence-order)」を参照してください。
 
 ---
 
@@ -348,7 +348,7 @@ MCP は、組み込みツールと並んで、OpenCode のツールとして利�
 多数の MCP サーバーがある場合は、エージェントごとにのみ有効にし、グローバルに無効にすることができます。これを行うには:
 
 1. ツールとしてグローバルに無効にします。
-2. [エージェント config](./agents#tools) で、MCP サーバーをツールとして有効にします。
+2. [エージェント config](/docs/agents#tools) で、MCP サーバーをツールとして有効にします。
 
 ```json title="opencode.json" {11, 14-18}
 {
@@ -474,7 +474,7 @@ Context7 MCP サーバーを使用するには、プロンプトに `use context
 Configure a Cloudflare Worker script to cache JSON API responses for five minutes. use context7
 ```
 
-あるいは、次のようなものを [AGENTS.md](./rules/).
+あるいは、次のようなものを [AGENTS.md](/docs/rules/).
 
 ```md title="AGENTS.md"
 When you need to search docs, use `context7` tools.
@@ -504,7 +504,7 @@ MCP サーバーに `gh_grep` という名前を付けたので、プロンプ�
 What's the right way to set a custom domain in an SST Astro component? use the gh_grep tool
 ```
 
-あるいは、次のようなものを [AGENTS.md](./rules/).
+あるいは、次のようなものを [AGENTS.md](/docs/rules/).
 
 ```md title="AGENTS.md"
 If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.

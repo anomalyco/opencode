@@ -174,7 +174,7 @@ opencode run "Hello world"
 - `scroll_speed` - مُضاعِف سرعة تمرير مخصص (الافتراضي: `3`، الحد الأدنى: `1`). يتم تجاهله إذا كان `scroll_acceleration.enabled` مساويًا لـ `true`.
 - `diff_style` - التحكم في عرض `diff`. القيمة `"auto"` تتكيف مع عرض الطرفية، و`"stacked"` تعرض عمودًا واحدًا دائمًا.
 
-[تعرف على المزيد حول استخدام TUI هنا](./tui).
+[تعرف على المزيد حول استخدام TUI هنا](/docs/tui).
 
 ---
 
@@ -203,7 +203,7 @@ opencode run "Hello world"
 - `mdnsDomain` - اسم نطاق مخصص لخدمة mDNS. القيمة الافتراضية هي `opencode.local`. مفيد لتشغيل عدة نُسخ على نفس الشبكة.
 - `cors` - أصول إضافية مسموح بها لـ CORS عند استخدام خادم HTTP من عميل يعتمد على المتصفح. يجب أن تكون القيم أصولًا كاملة (البروتوكول + المضيف + منفذ اختياري)، مثل `https://app.example.com`.
 
-[تعرف على المزيد حول الخادم هنا](./server).
+[تعرف على المزيد حول الخادم هنا](/docs/server).
 
 ---
 
@@ -221,7 +221,7 @@ opencode run "Hello world"
 }
 ```
 
-[تعرف على المزيد حول الأدوات هنا](./tools).
+[تعرف على المزيد حول الأدوات هنا](/docs/tools).
 
 ---
 
@@ -259,7 +259,7 @@ opencode run "Hello world"
 - `timeout` - مهلة الطلب بالميلي ثانية (الافتراضي: 300000). اضبطه إلى `false` لتعطيله.
 - `setCacheKey` - يضمن تعيين مفتاح التخزين المؤقت دائمًا للمزوّد المحدد.
 
-يمكنك أيضًا ضبط [النماذج المحلية](./models#local). [تعرف على المزيد](./models).
+يمكنك أيضًا ضبط [النماذج المحلية](/docs/models#local). [تعرف على المزيد](/docs/models).
 
 ---
 
@@ -291,10 +291,10 @@ opencode run "Hello world"
 - `endpoint` - عنوان URL لنقطة نهاية مخصصة لنقاط نهاية VPC. هذا اسم بديل للخيار العام `baseURL` باستخدام مصطلحات AWS. إذا تم تحديدهما معًا، تكون أولوية `endpoint` أعلى.
 
 :::note
-لرموز Bearer (`AWS_BEARER_TOKEN_BEDROCK` أو `/connect`) أولوية أعلى من المصادقة القائمة على ملف التعريف. راجع [أولوية المصادقة](./providers#authentication-precedence) للتفاصيل.
+لرموز Bearer (`AWS_BEARER_TOKEN_BEDROCK` أو `/connect`) أولوية أعلى من المصادقة القائمة على ملف التعريف. راجع [أولوية المصادقة](/docs/providers#authentication-precedence) للتفاصيل.
 :::
 
-[تعرف على المزيد حول إعداد Amazon Bedrock](./providers#amazon-bedrock).
+[تعرف على المزيد حول إعداد Amazon Bedrock](/docs/providers#amazon-bedrock).
 
 ---
 
@@ -309,7 +309,7 @@ opencode run "Hello world"
 }
 ```
 
-[تعرف على المزيد هنا](./themes).
+[تعرف على المزيد هنا](/docs/themes).
 
 ---
 
@@ -335,7 +335,7 @@ opencode run "Hello world"
 }
 ```
 
-يمكنك أيضًا تعريف الوكلاء باستخدام ملفات markdown في `~/.config/opencode/agents/` أو `.opencode/agents/`. [تعرف على المزيد هنا](./agents).
+يمكنك أيضًا تعريف الوكلاء باستخدام ملفات markdown في `~/.config/opencode/agents/` أو `.opencode/agents/`. [تعرف على المزيد هنا](/docs/agents).
 
 ---
 
@@ -350,7 +350,7 @@ opencode run "Hello world"
 }
 ```
 
-يجب أن يكون الوكيل الافتراضي وكيلًا أساسيًا (وليس وكيلًا فرعيًا). يمكن أن يكون وكيلًا مدمجًا مثل `"build"` أو `"plan"`، أو [وكيلًا مخصصًا](./agents) قمت بتعريفه. إذا لم يكن الوكيل المحدد موجودًا أو كان وكيلًا فرعيًا، فسيعود OpenCode إلى `"build"` مع تحذير.
+يجب أن يكون الوكيل الافتراضي وكيلًا أساسيًا (وليس وكيلًا فرعيًا). يمكن أن يكون وكيلًا مدمجًا مثل `"build"` أو `"plan"`، أو [وكيلًا مخصصًا](/docs/agents) قمت بتعريفه. إذا لم يكن الوكيل المحدد موجودًا أو كان وكيلًا فرعيًا، فسيعود OpenCode إلى `"build"` مع تحذير.
 
 ينطبق هذا الإعداد على جميع الواجهات: TUI وCLI (`opencode run`) وتطبيق سطح المكتب وGitHub Action.
 
@@ -358,7 +358,7 @@ opencode run "Hello world"
 
 ### المشاركة
 
-يمكنك ضبط ميزة [share](./share) عبر الخيار `share`.
+يمكنك ضبط ميزة [share](/docs/share) عبر الخيار `share`.
 
 ```json title="opencode.json"
 {
@@ -399,7 +399,7 @@ opencode run "Hello world"
 }
 ```
 
-يمكنك أيضًا تعريف الأوامر باستخدام ملفات markdown في `~/.config/opencode/commands/` أو `.opencode/commands/`. [تعرف على المزيد هنا](./commands).
+يمكنك أيضًا تعريف الأوامر باستخدام ملفات markdown في `~/.config/opencode/commands/` أو `.opencode/commands/`. [تعرف على المزيد هنا](/docs/commands).
 
 ---
 
@@ -414,7 +414,7 @@ opencode run "Hello world"
 }
 ```
 
-[تعرف على المزيد هنا](./keybinds).
+[تعرف على المزيد هنا](/docs/keybinds).
 
 ---
 
@@ -456,7 +456,7 @@ opencode run "Hello world"
 }
 ```
 
-[تعرف على المزيد حول المنسّقات هنا](./formatters).
+[تعرف على المزيد حول المنسّقات هنا](/docs/formatters).
 
 ---
 
@@ -476,7 +476,7 @@ opencode run "Hello world"
 }
 ```
 
-[تعرف على المزيد حول الأذونات هنا](./permissions).
+[تعرف على المزيد حول الأذونات هنا](/docs/permissions).
 
 ---
 
@@ -527,13 +527,13 @@ opencode run "Hello world"
 }
 ```
 
-[تعرف على المزيد هنا](./mcp-servers).
+[تعرف على المزيد هنا](/docs/mcp-servers).
 
 ---
 
 ### الإضافات
 
-[الإضافات](./plugins) توسّع OpenCode بأدوات وخُطافات وتكاملات مخصصة.
+[الإضافات](/docs/plugins) توسّع OpenCode بأدوات وخُطافات وتكاملات مخصصة.
 
 ضع ملفات الإضافات في `.opencode/plugins/` أو `~/.config/opencode/plugins/`. يمكنك أيضًا تحميل إضافات من npm عبر الخيار `plugin`.
 
@@ -544,7 +544,7 @@ opencode run "Hello world"
 }
 ```
 
-[تعرف على المزيد هنا](./plugins).
+[تعرف على المزيد هنا](/docs/plugins).
 
 ---
 
@@ -560,7 +560,7 @@ opencode run "Hello world"
 ```
 
 يقبل هذا مصفوفة من المسارات وأنماط `glob` لملفات التعليمات. [تعرف على المزيد
-حول القواعد هنا](./rules).
+حول القواعد هنا](/docs/rules).
 
 ---
 

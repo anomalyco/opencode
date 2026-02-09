@@ -11,7 +11,7 @@ OpenCode uses the [AI SDK](https://ai-sdk.dev/) and [Models.dev](https://models.
 
 Most popular providers are preloaded by default. If you've added the credentials for a provider through the `/connect` command, they'll be available when you start OpenCode.
 
-Learn more about [providers](./providers).
+Learn more about [providers](/docs/providers).
 
 ---
 
@@ -58,9 +58,9 @@ OpenCode config.
 }
 ```
 
-Here the full ID is `provider_id/model_id`. For example, if you're using [OpenCode Zen](./zen), you would use `opencode/gpt-5.1-codex` for GPT 5.1 Codex.
+Here the full ID is `provider_id/model_id`. For example, if you're using [OpenCode Zen](/docs/zen), you would use `opencode/gpt-5.1-codex` for GPT 5.1 Codex.
 
-If you've configured a [custom provider](./providers#custom), the `provider_id` is key from the `provider` part of your config, and the `model_id` is the key from `provider.models`.
+If you've configured a [custom provider](/docs/providers#custom), the `provider_id` is key from the `provider` part of your config, and the `model_id` is the key from `provider.models`.
 
 ---
 
@@ -103,7 +103,7 @@ You can globally configure a model's options through the config.
 Here we're configuring global settings for two built-in models: `gpt-5` when accessed via the `openai` provider, and `claude-sonnet-4-20250514` when accessed via the `anthropic` provider.
 The built-in provider and model names can be found on [Models.dev](https://models.dev).
 
-You can also configure these options for any agents that you are using. The agent config overrides any global options here. [Learn more](./agents/#additional).
+You can also configure these options for any agents that you are using. The agent config overrides any global options here. [Learn more](/docs/agents/#additional).
 
 You can also define custom variants that extend built-in ones. Variants let you configure different settings for the same model without creating duplicate entries:
 
@@ -197,7 +197,7 @@ You can override existing variants or add your own:
 
 ### Cycle variants
 
-Use the keybind `variant_cycle` to quickly switch between variants. [Learn more](./keybinds).
+Use the keybind `variant_cycle` to quickly switch between variants. [Learn more](/docs/keybinds).
 
 ---
 

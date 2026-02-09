@@ -3,9 +3,9 @@ title: 工具
 description: 管理法學碩士可以使用的工具。
 ---
 
-工具允許 LLM 在您的代碼庫中執行操作。 OpenCode 附帶了一組內置工具，但您可以使用[定制工具](./custom-tools) 或[MCP服務器](./mcp-servers) 對其進行擴展。
+工具允許 LLM 在您的代碼庫中執行操作。 OpenCode 附帶了一組內置工具，但您可以使用[定制工具](/docs/custom-tools) 或[MCP服務器](/docs/mcp-servers) 對其進行擴展。
 
-默認情況下，所有工具都是**啟用**並且不需要運行權限。您可以通過[權限](./permissions)控制工具行為。
+默認情況下，所有工具都是**啟用**並且不需要運行權限。您可以通過[權限](/docs/permissions)控制工具行為。
 
 ---
 
@@ -35,7 +35,7 @@ description: 管理法學碩士可以使用的工具。
 }
 ```
 
-[了解更多](./permissions) 關於配置權限。
+[了解更多](/docs/permissions) 關於配置權限。
 
 ---
 
@@ -187,7 +187,7 @@ description: 管理法學碩士可以使用的工具。
 
 支持的操作包括`goToDefinition`、`findReferences`、`hover`、`documentSymbol`、`workspaceSymbol`、`goToImplementation`、`prepareCallHierarchy`、`incomingCalls` 和`outgoingCalls`。
 
-要配置哪些 LSP 服務器可用於您的項目，請參閱[LSP服務器](./lsp)。
+要配置哪些 LSP 服務器可用於您的項目，請參閱[LSP服務器](/docs/lsp)。
 
 ---
 
@@ -214,7 +214,7 @@ description: 管理法學碩士可以使用的工具。
 
 ### skill
 
-加載[技能](./skills)（`SKILL.md` 文件）並在對話中返回其內容。
+加載[技能](/docs/skills)（`SKILL.md` 文件）並在對話中返回其內容。
 
 ```json title="opencode.json" {4}
 {
@@ -243,7 +243,7 @@ description: 管理法學碩士可以使用的工具。
 創建和更新任務列表以跟踪複雜操作期間的進度。法學碩士使用它來組織多步驟任務。
 
 :::note
-默認情況下，子代理禁用此工具，但您可以手動啟用它。 [了解更多](./agents/#permissions)
+默認情況下，子代理禁用此工具，但您可以手動啟用它。 [了解更多](/docs/agents/#permissions)
 :::
 
 ---
@@ -264,7 +264,7 @@ description: 管理法學碩士可以使用的工具。
 讀取當前待辦事項列表狀態。法學碩士用來跟踪哪些任務待處理或已完成。
 
 :::note
-默認情況下，子代理禁用此工具，但您可以手動啟用它。 [了解更多](./agents/#permissions)
+默認情況下，子代理禁用此工具，但您可以手動啟用它。 [了解更多](/docs/agents/#permissions)
 :::
 
 ---
@@ -348,7 +348,7 @@ OPENCODE_ENABLE_EXA=1 opencode
 
 自定義工具可讓您定義法學碩士可以調用的自己的函數。這些是在您的配置文件中定義的並且可以執行任意代碼。
 
-[了解更多](./custom-tools) 關於創建自定義工具。
+[了解更多](/docs/custom-tools) 關於創建自定義工具。
 
 ---
 
@@ -356,7 +356,7 @@ OPENCODE_ENABLE_EXA=1 opencode
 
 MCP（模型上下文協議）服務器允許您集成外部工具和服務。這包括數據庫訪問、API 集成和第三方服務。
 
-[了解更多](./mcp-servers) 關於配置 MCP 服務器。
+[了解更多](/docs/mcp-servers) 關於配置 MCP 服務器。
 
 ---
 

@@ -8,7 +8,7 @@ OpenCode koristi [AI SDK](https://ai-sdk.dev/) i [Models.dev](https://models.dev
 
 ## Provajderi
 Većina popularnih provajdera su unaprijed učitani prema zadanim postavkama. Ako ste dodali vjerodajnice za provajdera putem naredbe `/connect`, oni će biti dostupni kada pokrenete OpenCode.
-Saznajte više o [providers](./providers).
+Saznajte više o [providers](/docs/providers).
 ---
 
 ## Odaberite model
@@ -45,8 +45,8 @@ OpenCode config.
 }
 ```
 
-Ovdje je puni ID `provider_id/model_id`. Na primjer, ako koristite [OpenCode Zen](./zen), koristili biste `opencode/gpt-5.1-codex` za GPT 5.1 Codex.
-Ako ste konfigurirali [prilagođenog provajdera](./providers#custom), `provider_id` je ključ iz `provider` dijela vaše konfiguracije, a `model_id` je ključ iz `provider.models`.
+Ovdje je puni ID `provider_id/model_id`. Na primjer, ako koristite [OpenCode Zen](/docs/zen), koristili biste `opencode/gpt-5.1-codex` za GPT 5.1 Codex.
+Ako ste konfigurirali [prilagođenog provajdera](/docs/providers#custom), `provider_id` je ključ iz `provider` dijela vaše konfiguracije, a `model_id` je ključ iz `provider.models`.
 ---
 
 ## Konfigurišite modele
@@ -85,7 +85,7 @@ Možete globalno konfigurirati opcije modela kroz config.
 
 Ovdje konfiguriramo globalne postavke za dva ugrađena modela: `gpt-5` kada se pristupa preko `openai` provajdera i `claude-sonnet-4-20250514` kada se pristupa preko `anthropic` provajdera.
 Ugrađeni dobavljač i nazivi modela mogu se naći na [Models.dev](https://models.dev).
-Također možete konfigurirati ove opcije za sve agente koje koristite. Konfiguracija agenta poništava sve globalne opcije ovdje. [Saznajte više](./agents/#additional).
+Također možete konfigurirati ove opcije za sve agente koje koristite. Konfiguracija agenta poništava sve globalne opcije ovdje. [Saznajte više](/docs/agents/#additional).
 Također možete definirati prilagođene varijante koje proširuju ugrađene. Varijante vam omogućavaju da konfigurirate različite postavke za isti model bez stvaranja duplih unosa:
 ```jsonc title="opencode.jsonc" {6-21}
 {
@@ -163,7 +163,7 @@ Možete nadjačati postojeće varijante ili dodati svoje:
 ```
 
 ### Varijante ciklusa
-Koristite vezu `variant_cycle` za brzo prebacivanje između varijanti. [Saznajte više](./keybinds).
+Koristite vezu `variant_cycle` za brzo prebacivanje između varijanti. [Saznajte više](/docs/keybinds).
 ---
 
 ## Učitavanje modela

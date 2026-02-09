@@ -11,7 +11,7 @@ OpenCode, **75+ LLM sağlayıcısını** desteklemek için [AI SDK](https://ai-s
 
 Çoğu popüler sağlayıcı varsayılan olarak önceden yüklenmiştir. Bir sağlayıcının kimlik bilgilerini `/connect` komutu aracılığıyla eklediyseniz, bunlar OpenCode'u başlattığınızda kullanılabilir olacaktır.
 
-[providers](./providers) hakkında daha fazla bilgi edinin.
+[providers](/docs/providers) hakkında daha fazla bilgi edinin.
 
 ---
 
@@ -58,9 +58,9 @@ OpenCode yapılandırması
 }
 ```
 
-Burada tam kimlik `provider_id/model_id`'dir. Örneğin, [OpenCode Zen](./zen) kullanıyorsanız, GPT 5.1 Codex için `opencode/gpt-5.1-codex` kullanırsınız.
+Burada tam kimlik `provider_id/model_id`'dir. Örneğin, [OpenCode Zen](/docs/zen) kullanıyorsanız, GPT 5.1 Codex için `opencode/gpt-5.1-codex` kullanırsınız.
 
-Bir [custom provider](./providers#custom) yapılandırılmışsa, `provider_id`, performansınızın `provider` bölümünden gelen anahtardır ve `model_id`, `provider.models`'den gelen anahtardır.
+Bir [custom provider](/docs/providers#custom) yapılandırılmışsa, `provider_id`, performansınızın `provider` bölümünden gelen anahtardır ve `model_id`, `provider.models`'den gelen anahtardır.
 
 ---
 
@@ -103,7 +103,7 @@ Bir modelin seçeneklerini genel olarak yapılandırma aracılığıyla yapılan
 Burada iki yerleşik model için genel ayarları yapılandırıyoruz: `openai` sağlayıcısı aracılığıyla erişildiğinde `gpt-5` ve `anthropic` sağlayıcısı aracılığıyla erişildiğinde `claude-sonnet-4-20250514`.
 Yerleşik sağlayıcı ve model adları [Models.dev](https://models.dev) adresinde bulunabilir.
 
-Bu seçenekleri kullandığınız tüm aracılar için de yapılandırabilirsiniz. Aracı yapılandırması burada tüm genel seçenekleri geçersiz kılar. [Learn more](./agents/#additional).
+Bu seçenekleri kullandığınız tüm aracılar için de yapılandırabilirsiniz. Aracı yapılandırması burada tüm genel seçenekleri geçersiz kılar. [Learn more](/docs/agents/#additional).
 
 Ayrıca yerleşik çeşitleri genişleten özel varyantlar da tanımlayabilirsiniz. Varyantlar, yinelenen girişler oluşturmadan aynı model için farklı ayarları yapılandırmanıza olanak tanır:
 
@@ -197,7 +197,7 @@ Mevcut varyantları geçersiz kılabilir veya kendinizinkini ekleyebilirsiniz:
 
 ### Döngü çeşitleri
 
-Çeşitler arasında hızlı geçiş yapmak için `variant_cycle` tuş atamasını kullanın. [Learn more](./keybinds).
+Çeşitler arasında hızlı geçiş yapmak için `variant_cycle` tuş atamasını kullanın. [Learn more](/docs/keybinds).
 
 ---
 

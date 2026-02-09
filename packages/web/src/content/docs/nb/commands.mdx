@@ -9,7 +9,7 @@ Egendefinerte kommandoer lar deg spesifisere en ledetekst du vil kjøre når kom
 /my-command
 ```
 
-Egendefinerte kommandoer kommer i tillegg til de innebygde kommandoene som `/init`, `/undo`, `/redo`, `/share`, `/help`. [Finn ut mer](./tui#commands).
+Egendefinerte kommandoer kommer i tillegg til de innebygde kommandoene som `/init`, `/undo`, `/redo`, `/share`, `/help`. [Finn ut mer](/docs/tui#commands).
 
 ---
 
@@ -48,7 +48,7 @@ Du kan legge til egendefinerte kommandoer gjennom OpenCode-konfigurasjonen eller
 
 ### JSON
 
-Bruk alternativet `command` i OpenCode [config](./config):
+Bruk alternativet `command` i OpenCode [config](/docs/config):
 
 ```json title="opencode.jsonc" {4-12}
 {
@@ -163,7 +163,7 @@ Dette erstatter:
 
 ### Shell-utgang
 
-Bruk _!`command`_ for å injisere [bash-kommando](./tui#bash-commands)-utdata i ledeteksten.
+Bruk _!`command`_ for å injisere [bash-kommando](/docs/tui#bash-commands)-utdata i ledeteksten.
 
 For eksempel, for å lage en egendefinert kommando som analyserer testdekning:
 
@@ -256,8 +256,8 @@ Dette vises som beskrivelsen i TUI når du skriver inn kommandoen.
 
 ### Agent
 
-Bruk `agent`-konfigurasjonen for å spesifisere hvilken [agent](./agents) som skal utføre denne kommandoen.
-Hvis dette er en [subagent](./agents/#subagents), vil kommandoen utløse en subagent påkalling som standard.
+Bruk `agent`-konfigurasjonen for å spesifisere hvilken [agent](/docs/agents) som skal utføre denne kommandoen.
+Hvis dette er en [subagent](/docs/agents/#subagents), vil kommandoen utløse en subagent påkalling som standard.
 For å deaktivere denne virkemåten, sett `subtask` til `false`.
 
 ```json title="opencode.json"
@@ -276,9 +276,9 @@ Dette er et **valgfritt** konfigurasjonsalternativ. Hvis det ikke er spesifisert
 
 ### Deloppgave
 
-Bruk `subtask` boolsk for å tvinge kommandoen til å utløse en [subagent](./agents/#subagents) påkalling.
+Bruk `subtask` boolsk for å tvinge kommandoen til å utløse en [subagent](/docs/agents/#subagents) påkalling.
 Dette er nyttig hvis du vil at kommandoen ikke skal forurense din primære kontekst og vil **tvinge** agenten til å fungere som en underagent,
-selv om `mode` er satt til `primary` på [agent](./agents) konfigurasjonen.
+selv om `mode` er satt til `primary` på [agent](/docs/agents) konfigurasjonen.
 
 ```json title="opencode.json"
 {
@@ -314,7 +314,7 @@ Dette er et **valgfritt** konfigurasjonsalternativ.
 
 ## Innebygd
 
-opencode inkluderer flere innebygde kommandoer som `/init`, `/undo`, `/redo`, `/share`, `/help`; [finn ut mer](./tui#commands).
+opencode inkluderer flere innebygde kommandoer som `/init`, `/undo`, `/redo`, `/share`, `/help`; [finn ut mer](/docs/tui#commands).
 
 :::note
 Egendefinerte kommandoer kan overstyre innebygde kommandoer.

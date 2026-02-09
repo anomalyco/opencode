@@ -3,9 +3,9 @@ title: Araclar
 description: LLM'in kullanabilecegi araclari yonetin.
 ---
 
-Araclar, LLM'in kod tabaninizda eylem gerceklestirmesini saglar. OpenCode yerlesik bir arac setiyle gelir, ancak bunu [ozel araclarla](./custom-tools) veya [MCP sunuculariyla](./mcp-servers) genisletebilirsiniz.
+Araclar, LLM'in kod tabaninizda eylem gerceklestirmesini saglar. OpenCode yerlesik bir arac setiyle gelir, ancak bunu [ozel araclarla](/docs/custom-tools) veya [MCP sunuculariyla](/docs/mcp-servers) genisletebilirsiniz.
 
-Varsayilan olarak tum araclar **etkindir** ve calismak icin izin istemez. Arac davranisini [izinler](./permissions) uzerinden kontrol edebilirsiniz.
+Varsayilan olarak tum araclar **etkindir** ve calismak icin izin istemez. Arac davranisini [izinler](/docs/permissions) uzerinden kontrol edebilirsiniz.
 
 ---
 
@@ -35,7 +35,7 @@ Birden fazla araci ayni anda kontrol etmek icin wildcard da kullanabilirsiniz. O
 }
 ```
 
-Izin yapilandirmasi icin [daha fazla bilgi alin](./permissions).
+Izin yapilandirmasi icin [daha fazla bilgi alin](/docs/permissions).
 
 ---
 
@@ -187,7 +187,7 @@ Bu arac yalnizca `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (veya `OPENCODE_EXPERIMEN
 
 Desteklenen islemler: `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls`, `outgoingCalls`.
 
-Projeniz icin kullanilabilir LSP sunucularini ayarlamak icin [LSP Servers](./lsp) sayfasina bakin.
+Projeniz icin kullanilabilir LSP sunucularini ayarlamak icin [LSP Servers](/docs/lsp) sayfasina bakin.
 
 ---
 
@@ -214,7 +214,7 @@ Bu arac patch dosyalarini kod tabaniniza uygular. Farkli kaynaklardan gelen diff
 
 ### skill
 
-Bir [skill](./skills) (`SKILL.md` dosyasi) yukler ve icerigini konusmaya dondurur.
+Bir [skill](/docs/skills) (`SKILL.md` dosyasi) yukler ve icerigini konusmaya dondurur.
 
 ```json title="opencode.json" {4}
 {
@@ -243,7 +243,7 @@ Kodlama oturumlarinda yapilacaklar listesini yonetir.
 Karmasik islemlerde ilerlemeyi takip etmek icin gorev listeleri olusturur ve gunceller. LLM bunu cok adimli gorevleri duzenlemek icin kullanir.
 
 :::note
-Bu arac alt ajanlar icin varsayilan olarak devre disidir, ama manuel etkinlestirebilirsiniz. [Daha fazla bilgi](./agents/#permissions)
+Bu arac alt ajanlar icin varsayilan olarak devre disidir, ama manuel etkinlestirebilirsiniz. [Daha fazla bilgi](/docs/agents/#permissions)
 :::
 
 ---
@@ -264,7 +264,7 @@ Mevcut yapilacaklar listesini okur.
 Guncel todo listesi durumunu okur. LLM bunu hangi gorevlerin bekledigini veya tamamlandigini takip etmek icin kullanir.
 
 :::note
-Bu arac alt ajanlar icin varsayilan olarak devre disidir, ama manuel etkinlestirebilirsiniz. [Daha fazla bilgi](./agents/#permissions)
+Bu arac alt ajanlar icin varsayilan olarak devre disidir, ama manuel etkinlestirebilirsiniz. [Daha fazla bilgi](/docs/agents/#permissions)
 :::
 
 ---
@@ -348,7 +348,7 @@ Her soru bir baslik, soru metni ve secenek listesi icerir. Kullanicilar secenekl
 
 Ozel araclar, LLM'in cagirabilecegi kendi fonksiyonlarinizi tanimlamanizi saglar. Bunlar config dosyanizda tanimlanir ve keyfi kod calistirabilir.
 
-Ozel arac olusturma icin [daha fazla bilgi alin](./custom-tools).
+Ozel arac olusturma icin [daha fazla bilgi alin](/docs/custom-tools).
 
 ---
 
@@ -356,7 +356,7 @@ Ozel arac olusturma icin [daha fazla bilgi alin](./custom-tools).
 
 MCP (Model Context Protocol) sunuculari, harici araclari ve servisleri entegre etmenizi saglar. Buna veritabani erisimi, API entegrasyonlari ve ucuncu taraf servisler dahildir.
 
-MCP sunucularini yapilandirma icin [daha fazla bilgi alin](./mcp-servers).
+MCP sunucularini yapilandirma icin [daha fazla bilgi alin](/docs/mcp-servers).
 
 ---
 

@@ -52,7 +52,7 @@ Da omogućite određeni server iz udaljene konfiguracije vaše organizacije, dod
 }
 ```
 
-Vrijednosti vaše lokalne konfiguracije nadjačavaju udaljene zadane postavke. Pogledajte [config precedence](./config#precedence-order) za više detalja.
+Vrijednosti vaše lokalne konfiguracije nadjačavaju udaljene zadane postavke. Pogledajte [config precedence](/docs/config#precedence-order) za više detalja.
 ---
 
 ## Lokalno
@@ -291,7 +291,7 @@ Ovdje koristimo glob obrazac `my-mcp*` da onemogućimo sve MCP-ove.
 ### Po agentu
 Ako imate veliki broj MCP servera, možda ćete želeti da ih omogućite samo po agentu i da ih onemogućite globalno. Da biste to učinili:
 1. Onemogućite ga kao alat globalno.
-2. U vašem [agent config](./agents#tools), omogućite MCP server kao alat.
+2. U vašem [agent config](/docs/agents#tools), omogućite MCP server kao alat.
 ```json title="opencode.json" {11, 14-18}
 {
   "$schema": "https://opencode.ai/config.json",
@@ -400,7 +400,7 @@ Dodajte `use context7` vašim upitima za korištenje Context7 MCP servera.
 Configure a Cloudflare Worker script to cache JSON API responses for five minutes. use context7
 ```
 
-Alternativno, možete dodati nešto poput ovoga na svoj [AGENTS.md](./rules/).
+Alternativno, možete dodati nešto poput ovoga na svoj [AGENTS.md](/docs/rules/).
 ```md title="AGENTS.md"
 When you need to search docs, use `context7` tools.
 ```
@@ -426,7 +426,7 @@ Pošto smo naš MCP server nazvali `gh_grep`, možete dodati `use the gh_grep to
 What's the right way to set a custom domain in an SST Astro component? use the gh_grep tool
 ```
 
-Alternativno, možete dodati nešto poput ovoga na svoj [AGENTS.md](./rules/).
+Alternativno, možete dodati nešto poput ovoga na svoj [AGENTS.md](/docs/rules/).
 ```md title="AGENTS.md"
 If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.
 ```
