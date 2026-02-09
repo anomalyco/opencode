@@ -13,20 +13,30 @@ export type LocalPTY = {
   cols?: number
   buffer?: string
   scrollY?: number
+  tail?: string
 }
 
 const WORKSPACE_KEY = "__workspace__"
 const MAX_TERMINAL_SESSIONS = 20
 
-type TerminalSession = ReturnType<typeof createTerminalSession>
+export function getWorkspaceTerminalCacheKey(dir: string) {
+  return `${dir}:${WORKSPACE_KEY}`
+}
+
+export function getLegacyTerminalStorageKeys(dir: string, legacySessionID?: string) {
+  if (!legacySessionID) return [`${dir}/terminal.v1`]
+  return [`${dir}/terminal/${legacySessionID}.v1`, `${dir}/terminal.v1`]
+}
+
+type TerminalSession = ReturnType<typeof createWorkspaceTerminalSession>
 
 type TerminalCacheEntry = {
   value: TerminalSession
   dispose: VoidFunction
 }
 
-function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, session?: string) {
-  const legacy = session ? [`${dir}/terminal/${session}.v1`, `${dir}/terminal.v1`] : [`${dir}/terminal.v1`]
+function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, legacySessionID?: string) {
+  const legacy = getLegacyTerminalStorageKeys(dir, legacySessionID)
 
   const numberFromTitle = (title: string) => {
     const match = title.match(/^Terminal (\d+)$/)
@@ -234,8 +244,9 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       }
     }
 
-    const load = (dir: string, session?: string) => {
-      const key = `${dir}:${WORKSPACE_KEY}`
+    const loadWorkspace = (dir: string, legacySessionID?: string) => {
+      // Terminals are workspace-scoped so tabs persist while switching sessions in the same directory.
+      const key = getWorkspaceTerminalCacheKey(dir)
       const existing = cache.get(key)
       if (existing) {
         cache.delete(key)
@@ -244,7 +255,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       }
 
       const entry = createRoot((dispose) => ({
-        value: createTerminalSession(sdk, dir, session),
+        value: createWorkspaceTerminalSession(sdk, dir, legacySessionID),
         dispose,
       }))
 
@@ -253,7 +264,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       return entry.value
     }
 
-    const workspace = createMemo(() => load(params.dir!, params.id))
+    const workspace = createMemo(() => loadWorkspace(params.dir!, params.id))
 
     return {
       ready: () => workspace().ready(),

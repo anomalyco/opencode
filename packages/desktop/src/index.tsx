@@ -1,13 +1,22 @@
 // @refresh reload
 import { webviewZoom } from "./webview-zoom"
 import { render } from "solid-js/web"
-import { AppBaseProviders, AppInterface, PlatformProvider, Platform } from "@opencode-ai/app"
+import {
+  AppBaseProviders,
+  AppInterface,
+  PlatformProvider,
+  Platform,
+  DisplayBackend,
+  useCommand,
+} from "@opencode-ai/app"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link"
+import { openPath as openerOpenPath } from "@tauri-apps/plugin-opener"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { type as ostype } from "@tauri-apps/plugin-os"
 import { check, Update } from "@tauri-apps/plugin-updater"
 import { getCurrentWindow } from "@tauri-apps/api/window"
+import { invoke } from "@tauri-apps/api/core"
 import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification"
 import { relaunch } from "@tauri-apps/plugin-process"
 import { AsyncStorage } from "@solid-primitives/storage"
@@ -15,13 +24,15 @@ import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
 import { Store } from "@tauri-apps/plugin-store"
 import { Splash } from "@opencode-ai/ui/logo"
 import { createSignal, Show, Accessor, JSX, createResource, onMount, onCleanup } from "solid-js"
+import { readImage } from "@tauri-apps/plugin-clipboard-manager"
 
 import { UPDATER_ENABLED } from "./updater"
-import { createMenu } from "./menu"
 import { initI18n, t } from "./i18n"
 import pkg from "../package.json"
 import "./styles.css"
-import { commands } from "./bindings"
+import { commands, InitStep } from "./bindings"
+import { Channel } from "@tauri-apps/api/core"
+import { createMenu } from "./menu"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
@@ -29,17 +40,6 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
 }
 
 void initI18n()
-
-// Floating UI can call getComputedStyle with non-elements (e.g., null refs, virtual elements).
-// This happens on all platforms (WebView2 on Windows, WKWebView on macOS), not just Windows.
-const originalGetComputedStyle = window.getComputedStyle
-window.getComputedStyle = ((elt: Element, pseudoElt?: string | null) => {
-  if (!(elt instanceof Element)) {
-    // Fall back to a safe element when a non-element is passed.
-    return originalGetComputedStyle(document.documentElement, pseudoElt ?? undefined)
-  }
-  return originalGetComputedStyle(elt, pseudoElt ?? undefined)
-}) as typeof window.getComputedStyle
 
 let update: Update | null = null
 
@@ -96,6 +96,10 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
 
   openLink(url: string) {
     void shellOpen(url).catch(() => undefined)
+  },
+
+  openPath(path: string, app?: string) {
+    return openerOpenPath(path, app)
   },
 
   back() {
@@ -313,7 +317,6 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
       .catch(() => undefined)
   },
 
-  // @ts-expect-error
   fetch: (input, init) => {
     const pw = password()
 
@@ -343,12 +346,51 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
     await commands.setDefaultServerUrl(url)
   },
 
+  getDisplayBackend: async () => {
+    const result = await invoke<DisplayBackend | null>("get_display_backend").catch(() => null)
+    return result
+  },
+
+  setDisplayBackend: async (backend) => {
+    await invoke("set_display_backend", { backend }).catch(() => undefined)
+  },
+
   parseMarkdown: (markdown: string) => commands.parseMarkdownCommand(markdown),
 
   webviewZoom,
+
+  checkAppExists: async (appName: string) => {
+    return commands.checkAppExists(appName)
+  },
+
+  async readClipboardImage() {
+    const image = await readImage().catch(() => null)
+    if (!image) return null
+    const bytes = await image.rgba().catch(() => null)
+    if (!bytes || bytes.length === 0) return null
+    const size = await image.size().catch(() => null)
+    if (!size) return null
+    const canvas = document.createElement("canvas")
+    canvas.width = size.width
+    canvas.height = size.height
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return null
+    const imageData = ctx.createImageData(size.width, size.height)
+    imageData.data.set(bytes)
+    ctx.putImageData(imageData, 0, 0)
+    return new Promise<File | null>((resolve) => {
+      canvas.toBlob((blob) => {
+        if (!blob) return resolve(null)
+        resolve(new File([blob], `pasted-image-${Date.now()}.png`, { type: "image/png" }))
+      }, "image/png")
+    })
+  },
 })
 
-createMenu()
+let menuTrigger = null as null | ((id: string) => void)
+createMenu((id) => {
+  menuTrigger?.(id)
+})
 void listenForDeepLinks()
 
 render(() => {
@@ -379,7 +421,19 @@ render(() => {
             window.__OPENCODE__ ??= {}
             window.__OPENCODE__.serverPassword = data().password ?? undefined
 
-            return <AppInterface defaultUrl={data().url} />
+            function Inner() {
+              const cmd = useCommand()
+
+              menuTrigger = (id) => cmd.trigger(id)
+
+              return null
+            }
+
+            return (
+              <AppInterface defaultUrl={data().url} isSidecar>
+                <Inner />
+              </AppInterface>
+            )
           }}
         </ServerGate>
       </AppBaseProviders>
@@ -391,52 +445,22 @@ type ServerReadyData = { url: string; password: string | null }
 
 // Gate component that waits for the server to be ready
 function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.Element }) {
-  const [serverData] = createResource(() => commands.ensureServerReady())
+  const [serverData] = createResource(() => commands.awaitInitialization(new Channel<InitStep>() as any))
 
-  const errorMessage = () => {
-    const error = serverData.error
-    if (!error) return t("error.chain.unknown")
-    if (typeof error === "string") return error
-    if (error instanceof Error) return error.message
-    return String(error)
-  }
-
-  const restartApp = async () => {
-    await commands.killSidecar().catch(() => undefined)
-    await relaunch().catch(() => undefined)
-  }
+  if (serverData.state === "errored") throw serverData.error
 
   return (
     // Not using suspense as not all components are compatible with it (undefined refs)
     <Show
-      when={serverData.state === "errored"}
+      when={serverData.state !== "pending" && serverData()}
       fallback={
-        <Show
-          when={serverData.state !== "pending" && serverData()}
-          fallback={
-            <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
-              <Splash class="w-16 h-20 opacity-50 animate-pulse" />
-              <div data-tauri-decorum-tb class="flex flex-row absolute top-0 right-0 z-10 h-10" />
-            </div>
-          }
-        >
-          {(data) => props.children(data)}
-        </Show>
+        <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
+          <Splash class="w-16 h-20 opacity-50 animate-pulse" />
+          <div data-tauri-decorum-tb class="flex flex-row absolute top-0 right-0 z-10 h-10" />
+        </div>
       }
     >
-      <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base gap-4 px-6">
-        <div class="text-16-semibold">{t("desktop.error.serverStartFailed.title")}</div>
-        <div class="text-12-regular opacity-70 text-center max-w-xl">
-          {t("desktop.error.serverStartFailed.description")}
-        </div>
-        <div class="w-full max-w-3xl rounded border border-border bg-background-base overflow-auto max-h-64">
-          <pre class="p-3 whitespace-pre-wrap break-words text-11-regular">{errorMessage()}</pre>
-        </div>
-        <button class="px-3 py-2 rounded bg-primary text-primary-foreground" onClick={() => void restartApp()}>
-          {t("error.page.action.restart")}
-        </button>
-        <div data-tauri-decorum-tb class="flex flex-row absolute top-0 right-0 z-10 h-10" />
-      </div>
+      {(data) => props.children(data)}
     </Show>
   )
 }

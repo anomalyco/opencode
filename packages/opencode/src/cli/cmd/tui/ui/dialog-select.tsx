@@ -1,7 +1,7 @@
 import { InputRenderable, RGBA, ScrollBoxRenderable, TextAttributes } from "@opentui/core"
 import { useTheme, selectedForeground } from "@tui/context/theme"
 import { entries, filter, flatMap, groupBy, pipe, take } from "remeda"
-import { batch, createEffect, createMemo, For, Show, type JSX, on } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, For, Show, type JSX, on } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import * as fuzzysort from "fuzzysort"
@@ -49,6 +49,7 @@ export type DialogSelectRef<T> = {
 export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const dialog = useDialog()
   const { theme } = useTheme()
+  const [hover, setHover] = createSignal(false)
   const [store, setStore] = createStore({
     selected: 0,
     filter: "",
@@ -226,7 +227,16 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           <text fg={theme.text} attributes={TextAttributes.BOLD}>
             {props.title}
           </text>
-          <text fg={theme.textMuted}>esc</text>
+          <box
+            paddingLeft={1}
+            paddingRight={1}
+            backgroundColor={hover() ? theme.primary : undefined}
+            onMouseOver={() => setHover(true)}
+            onMouseOut={() => setHover(false)}
+            onMouseUp={() => dialog.clear()}
+          >
+            <text fg={hover() ? theme.selectedListItemText : theme.textMuted}>esc</text>
+          </box>
         </box>
         <box paddingTop={1}>
           <input

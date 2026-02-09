@@ -1,4 +1,4 @@
-import { test, expect, mock } from "bun:test"
+import { test, expect } from "bun:test"
 import path from "path"
 
 // Mock BunProc and default plugins to prevent actual installations during tests
@@ -13,7 +13,7 @@ mock.module("../../src/bun/index", () => ({
       throw new Error("BunProc.run should not be called in tests")
     },
     which: () => process.execPath,
-    InstallFailedError: class extends Error {},
+    InstallFailedError: class extends Error { },
   },
 }))
 

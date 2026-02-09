@@ -8,6 +8,7 @@ import {
   createMemo,
   For,
   Match,
+  on,
   Show,
   splitProps,
   Switch,
@@ -18,11 +19,47 @@ import {
 import { Dynamic } from "solid-js/web"
 import type { FileNode } from "@opencode-ai/sdk/v2"
 
+function pathToFileUrl(filepath: string): string {
+  const encodedPath = filepath
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/")
+  return `file://${encodedPath}`
+}
+
 type Kind = "add" | "del" | "mix"
 
 type Filter = {
   files: Set<string>
   dirs: Set<string>
+}
+
+export function shouldListRoot(input: { level: number; dir?: { loaded?: boolean; loading?: boolean } }) {
+  if (input.level !== 0) return false
+  if (input.dir?.loaded) return false
+  if (input.dir?.loading) return false
+  return true
+}
+
+export function shouldListExpanded(input: {
+  level: number
+  dir?: { expanded?: boolean; loaded?: boolean; loading?: boolean }
+}) {
+  if (input.level === 0) return false
+  if (!input.dir?.expanded) return false
+  if (input.dir.loaded) return false
+  if (input.dir.loading) return false
+  return true
+}
+
+export function dirsToExpand(input: {
+  level: number
+  filter?: { dirs: Set<string> }
+  expanded: (dir: string) => boolean
+}) {
+  if (input.level !== 0) return []
+  if (!input.filter) return []
+  return [...input.filter.dirs].filter((dir) => !input.expanded(dir))
 }
 
 export default function FileTree(props: {
@@ -111,19 +148,30 @@ export default function FileTree(props: {
 
   createEffect(() => {
     const current = filter()
-    if (!current) return
-    if (level !== 0) return
-
-    for (const dir of current.dirs) {
-      const expanded = untrack(() => file.tree.state(dir)?.expanded) ?? false
-      if (expanded) continue
-      file.tree.expand(dir)
-    }
+    const dirs = dirsToExpand({
+      level,
+      filter: current,
+      expanded: (dir) => untrack(() => file.tree.state(dir)?.expanded) ?? false,
+    })
+    for (const dir of dirs) file.tree.expand(dir)
   })
 
+  createEffect(
+    on(
+      () => props.path,
+      (path) => {
+        const dir = untrack(() => file.tree.state(path))
+        if (!shouldListRoot({ level, dir })) return
+        void file.tree.list(path)
+      },
+      { defer: false },
+    ),
+  )
+
   createEffect(() => {
-    const path = props.path
-    untrack(() => void file.tree.list(path))
+    const dir = file.tree.state(props.path)
+    if (!shouldListExpanded({ level, dir })) return
+    void file.tree.list(props.path)
   })
 
   const nodes = createMemo(() => {
@@ -207,7 +255,7 @@ export default function FileTree(props: {
         onDragStart={(e: DragEvent) => {
           if (!draggable()) return
           e.dataTransfer?.setData("text/plain", `file:${local.node.path}`)
-          e.dataTransfer?.setData("text/uri-list", `file://${local.node.path}`)
+          e.dataTransfer?.setData("text/uri-list", pathToFileUrl(local.node.path))
           if (e.dataTransfer) e.dataTransfer.effectAllowed = "copy"
 
           const dragImage = document.createElement("div")
@@ -241,7 +289,7 @@ export default function FileTree(props: {
               : kind === "del"
                 ? "color: var(--icon-diff-delete-base)"
                 : kind === "mix"
-                  ? "color: var(--icon-diff-modified-base)"
+                  ? "color: var(--icon-warning-active)"
                   : undefined
           return (
             <span
@@ -268,7 +316,7 @@ export default function FileTree(props: {
                 ? "color: var(--icon-diff-add-base)"
                 : kind === "del"
                   ? "color: var(--icon-diff-delete-base)"
-                  : "color: var(--icon-diff-modified-base)"
+                  : "color: var(--icon-warning-active)"
 
             return (
               <span class="shrink-0 w-4 text-center text-12-medium" style={color}>
@@ -283,7 +331,7 @@ export default function FileTree(props: {
                 ? "background-color: var(--icon-diff-add-base)"
                 : kind === "del"
                   ? "background-color: var(--icon-diff-delete-base)"
-                  : "background-color: var(--icon-diff-modified-base)"
+                  : "background-color: var(--icon-warning-active)"
 
             return <div class="shrink-0 size-1.5 mr-1.5 rounded-full" style={color} />
           }
