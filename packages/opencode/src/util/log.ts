@@ -87,11 +87,14 @@ export namespace Log {
     await Promise.all(filesToDelete.map((file) => fs.unlink(file).catch(() => {})))
   }
 
-  function formatError(error: Error, depth = 0): string {
-    const result = error.message
-    return error.cause instanceof Error && depth < 10
-      ? result + " Caused by: " + formatError(error.cause, depth + 1)
-      : result
+  function formatError(error: Error): string[] {
+    return Object.getOwnPropertyNames(error).flatMap((k) => {
+      const v = (error as any)[k]
+      if (v == null) return []
+      if (v instanceof Error) return [`${k}=${v.name}: ${v.message}`, ...formatError(v).map((s) => `${k}.${s}`)]
+      if (typeof v === "object") return [`${k}=${JSON.stringify(v)}`]
+      return [`${k}=${v}`]
+    })
   }
 
   let last = Date.now()
@@ -111,12 +114,11 @@ export namespace Log {
         ...tags,
         ...extra,
       })
-        .filter(([_, value]) => value !== undefined && value !== null)
-        .map(([key, value]) => {
-          const prefix = `${key}=`
-          if (value instanceof Error) return prefix + formatError(value)
-          if (typeof value === "object") return prefix + JSON.stringify(value)
-          return prefix + value
+        .flatMap(([key, value]) => {
+          if (value == null) return []
+          if (value instanceof Error) return formatError(value)
+          if (typeof value === "object") return [`${key}=${JSON.stringify(value)}`]
+          return [`${key}=${value}`]
         })
         .join(" ")
       const next = new Date()
