@@ -1,0 +1,60 @@
+name: Sync with upstream
+
+on:
+  schedule:
+    # Run daily at 06:00 UTC
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: kortix
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/anomalyco/opencode.git || true
+          git fetch upstream dev
+
+      - name: Check for new commits
+        id: check
+        run: |
+          BEHIND=$(git rev-list --count kortix..upstream/dev)
+          echo "behind=$BEHIND" >> $GITHUB_OUTPUT
+          echo "Kortix is $BEHIND commits behind upstream/dev"
+
+      - name: Create sync PR
+        if: steps.check.outputs.behind != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="sync/upstream-$(date +%Y%m%d)"
+          git checkout -b "$BRANCH"
+          git merge upstream/dev --no-edit || true
+
+          # Check if there are merge conflicts
+          if git diff --name-only --diff-filter=U | grep -q .; then
+            echo "::warning::Merge conflicts detected. Manual resolution required."
+            git merge --abort
+            gh issue create \
+              --title "Upstream sync: merge conflicts detected $(date +%Y-%m-%d)" \
+              --body "Automated upstream sync found merge conflicts when merging \`anomalyco/opencode:dev\` into \`kortix\`. Manual resolution required." \
+              --label "sync"
+          else
+            git push origin "$BRANCH"
+            gh pr create \
+              --base kortix \
+              --head "$BRANCH" \
+              --title "Sync upstream $(date +%Y-%m-%d)" \
+              --body "Automated sync from \`anomalyco/opencode:dev\`.\n\n${{ steps.check.outputs.behind }} new commits from upstream."
+          fi
