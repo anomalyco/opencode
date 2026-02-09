@@ -4,6 +4,7 @@ import { Config } from "../config/config"
 import { Instance } from "../project/instance"
 import { Identifier } from "../id/id"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
+import PROMPT_INSIGHTS from "./template/insights.txt"
 import PROMPT_REVIEW from "./template/review.txt"
 import { MCP } from "../mcp"
 import { Skill } from "../skill"
@@ -53,6 +54,7 @@ export namespace Command {
 
   export const Default = {
     INIT: "init",
+    INSIGHTS: "insights",
     REVIEW: "review",
   } as const
 
@@ -78,6 +80,15 @@ export namespace Command {
         },
         subtask: true,
         hints: hints(PROMPT_REVIEW),
+      },
+      [Default.INSIGHTS]: {
+        name: Default.INSIGHTS,
+        description: "generate usage insights and improvement tips",
+        source: "command",
+        get template() {
+          return PROMPT_INSIGHTS
+        },
+        hints: hints(PROMPT_INSIGHTS),
       },
     }
 
