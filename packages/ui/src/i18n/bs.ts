@@ -11,6 +11,7 @@ export const dict = {
   "ui.sessionReview.collapseAll": "Sažmi sve",
   "ui.sessionReview.change.added": "Dodano",
   "ui.sessionReview.change.removed": "Uklonjeno",
+  "ui.sessionReview.change.modified": "Izmijenjeno",
 
   "ui.lineComment.label.prefix": "Komentar na ",
   "ui.lineComment.label.suffix": "",

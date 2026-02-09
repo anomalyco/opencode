@@ -8,6 +8,7 @@ export const dict = {
 
   "ui.sessionReview.change.added": "추가됨",
   "ui.sessionReview.change.removed": "삭제됨",
+  "ui.sessionReview.change.modified": "수정됨",
   "ui.lineComment.label.prefix": "",
   "ui.lineComment.label.suffix": "에 댓글 달기",
   "ui.lineComment.editorLabel.prefix": "",
