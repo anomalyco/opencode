@@ -1,7 +1,14 @@
 // @refresh reload
 import { webviewZoom } from "./webview-zoom"
 import { render } from "solid-js/web"
-import { AppBaseProviders, AppInterface, PlatformProvider, Platform, useCommand } from "@opencode-ai/app"
+import {
+  AppBaseProviders,
+  AppInterface,
+  PlatformProvider,
+  Platform,
+  DisplayBackend,
+  useCommand,
+} from "@opencode-ai/app"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link"
 import { openPath as openerOpenPath } from "@tauri-apps/plugin-opener"
@@ -9,6 +16,7 @@ import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { type as ostype } from "@tauri-apps/plugin-os"
 import { check, Update } from "@tauri-apps/plugin-updater"
 import { getCurrentWindow } from "@tauri-apps/api/window"
+import { invoke } from "@tauri-apps/api/core"
 import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification"
 import { relaunch } from "@tauri-apps/plugin-process"
 import { AsyncStorage } from "@solid-primitives/storage"
@@ -336,6 +344,15 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
 
   setDefaultServerUrl: async (url: string | null) => {
     await commands.setDefaultServerUrl(url)
+  },
+
+  getDisplayBackend: async () => {
+    const result = await invoke<DisplayBackend | null>("get_display_backend").catch(() => null)
+    return result
+  },
+
+  setDisplayBackend: async (backend) => {
+    await invoke("set_display_backend", { backend }).catch(() => undefined)
   },
 
   parseMarkdown: (markdown: string) => commands.parseMarkdownCommand(markdown),
