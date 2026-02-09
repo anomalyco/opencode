@@ -6242,6 +6242,28 @@
         },
         "required": ["name", "data"]
       },
+      "ContextOverflowError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "const": "ContextOverflowError"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "responseBody": {
+                "type": "string"
+              }
+            },
+            "required": ["message"]
+          }
+        },
+        "required": ["name", "data"]
+      },
       "APIError": {
         "type": "object",
         "properties": {
@@ -6328,6 +6350,9 @@
                 "$ref": "#/components/schemas/MessageAbortedError"
               },
               {
+                "$ref": "#/components/schemas/ContextOverflowError"
+              },
+              {
                 "$ref": "#/components/schemas/APIError"
               }
             ]
@@ -6391,6 +6416,9 @@
               }
             },
             "required": ["input", "output", "reasoning", "cache"]
+          },
+          "variant": {
+            "type": "string"
           },
           "finish": {
             "type": "string"
@@ -8090,6 +8118,9 @@
                   },
                   {
                     "$ref": "#/components/schemas/MessageAbortedError"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ContextOverflowError"
                   },
                   {
                     "$ref": "#/components/schemas/APIError"

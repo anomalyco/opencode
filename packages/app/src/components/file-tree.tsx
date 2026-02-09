@@ -19,6 +19,14 @@ import {
 import { Dynamic } from "solid-js/web"
 import type { FileNode } from "@opencode-ai/sdk/v2"
 
+function pathToFileUrl(filepath: string): string {
+  const encodedPath = filepath
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/")
+  return `file://${encodedPath}`
+}
+
 type Kind = "add" | "del" | "mix"
 
 type Filter = {
@@ -247,7 +255,7 @@ export default function FileTree(props: {
         onDragStart={(e: DragEvent) => {
           if (!draggable()) return
           e.dataTransfer?.setData("text/plain", `file:${local.node.path}`)
-          e.dataTransfer?.setData("text/uri-list", `file://${local.node.path}`)
+          e.dataTransfer?.setData("text/uri-list", pathToFileUrl(local.node.path))
           if (e.dataTransfer) e.dataTransfer.effectAllowed = "copy"
 
           const dragImage = document.createElement("div")

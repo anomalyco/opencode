@@ -30,6 +30,22 @@ type BuildRequestPartsInput = {
 const absolute = (directory: string, path: string) =>
   path.startsWith("/") ? path : (directory + "/" + path).replace("//", "/")
 
+const encodeFilePath = (filepath: string): string => {
+  // Normalize Windows paths: convert backslashes to forward slashes
+  let normalized = filepath.replace(/\\/g, "/")
+
+  // Handle Windows absolute paths (D:/path -> /D:/path for proper file:// URLs)
+  if (/^[A-Za-z]:/.test(normalized)) {
+    normalized = "/" + normalized
+  }
+
+  // Encode each path segment (preserving forward slashes as path separators)
+  return normalized
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/")
+}
+
 const fileQuery = (selection: FileSelection | undefined) =>
   selection ? `?start=${selection.startLine}&end=${selection.endLine}` : ""
 
@@ -99,7 +115,7 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
       id: Identifier.ascending("part"),
       type: "file",
       mime: "text/plain",
-      url: `file://${path}${fileQuery(attachment.selection)}`,
+      url: `file://${encodeFilePath(path)}${fileQuery(attachment.selection)}`,
       filename: getFilename(attachment.path),
       source: {
         type: "file",
@@ -129,7 +145,7 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
   const used = new Set(files.map((part) => part.url))
   const context = input.context.flatMap((item) => {
     const path = absolute(input.sessionDirectory, item.path)
-    const url = `file://${path}${fileQuery(item.selection)}`
+    const url = `file://${encodeFilePath(path)}${fileQuery(item.selection)}`
     const comment = item.comment?.trim()
     if (!comment && used.has(url)) return []
     used.add(url)
