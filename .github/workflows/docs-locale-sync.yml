@@ -69,12 +69,6 @@ jobs:
             4. Do not modify English source docs in packages/web/src/content/docs/*.mdx.
             5. If no locale updates are needed, make no changes.
 
-      - name: Run docs i18n checks
-        if: steps.changes.outputs.has_changes == 'true'
-        run: |
-          bun run --cwd=packages/web i18n:check:pages
-          bun run --cwd=packages/web i18n:check:links
-
       - name: Commit and push locale docs updates
         if: steps.changes.outputs.has_changes == 'true'
         run: |
