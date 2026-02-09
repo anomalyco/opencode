@@ -31,7 +31,8 @@ opencode [project]
 
 #### Zastave
 
-| Zastava | Kratko | Opis || ------------ | ----- | ------------------------------------------ |
+| Zastava | Kratko | Opis
+|------------ | ----- | ------------------------------------------ |
 | `--continue` | `-c` | Nastavite posljednju sesiju |
 | `--session` | `-s` | ID sesije za nastavak |
 | `--prompt` | | Uputstvo za upotrebu |
@@ -79,7 +80,8 @@ opencode attach http://10.20.30.40:4096
 
 #### Zastave
 
-| Zastava | Kratko | Opis || ----------- | ----- | --------------------------------- |
+| Zastava | Kratko | Opis
+|----------- | ----- | --------------------------------- |
 | `--dir` | | Radni direktorij za pokretanje TUI u |
 | `--session` | `-s` | ID sesije za nastavak |
 
@@ -192,7 +194,8 @@ opencode github run
 
 ##### Zastave
 
-| Zastava | Opis || --------- | -------------------------------------- |
+| Zastava | Opis
+|--------- | -------------------------------------- |
 | `--event` | GitHub lažni događaj za pokretanje agenta za |
 | `--token` | GitHub token ličnog pristupa |
 
@@ -303,7 +306,8 @@ opencode models anthropic
 
 #### Zastave
 
-| Zastava | Opis || ----------- | ------------------------------------------------------------ |
+| Zastava | Opis
+|----------- | ------------------------------------------------------------ |
 | `--refresh` | Osvježite predmemoriju modela sa models.dev |
 | `--verbose` | Koristite detaljniji izlaz modela (uključuje metapodatke poput troškova) |
 Koristite `--refresh` zastavicu da ažurirate keširanu listu modela. Ovo je korisno kada su novi modeli dodani provajderu i želite da ih vidite u OpenCode-u.
@@ -341,7 +345,8 @@ opencode run --attach http://localhost:4096 "Objasni async/await u JavaScriptu"
 
 #### Zastave
 
-| Zastava | Kratko | Opis || ------------ | ----- | ------------------------------------------------------------------ |
+| Zastava | Kratko | Opis
+|------------ | ----- | ------------------------------------------------------------------ |
 | `--command` | | Naredba za pokretanje, koristite poruku za args |
 | `--continue` | `-c` | Nastavite posljednju sesiju |
 | `--session` | `-s` | ID sesije za nastavak |
@@ -368,7 +373,8 @@ Ovo pokreće HTTP server koji pruža API pristup funkcionalnosti otvorenog koda 
 
 #### Zastave
 
-| Zastava | Opis || ------------ | ------------------------------------------ |
+| Zastava | Opis
+|------------ | ------------------------------------------ |
 | `--port` | Port za slušanje na |
 | `--hostname` | Ime hosta za slušanje |
 | `--mdns` | Omogući mDNS otkrivanje |
@@ -397,7 +403,8 @@ opencode session list
 
 ##### Zastave
 
-| Zastava | Kratko | Opis || ------------- | ----- | ------------------------------------ |
+| Zastava | Kratko | Opis
+|------------- | ----- | ------------------------------------ |
 | `--max-count` | `-n` | Ograničenje na N najnovijih sesija |
 | `--format` | | Izlazni format: tablica ili json (tabela) |
 
@@ -414,7 +421,8 @@ opencode stats
 
 #### Zastave
 
-| Zastava | Opis || ----------- | ------------------------------------------------------------------------------------- |
+| Zastava | Opis
+|----------- | ------------------------------------------------------------------------------------- |
 | `--days` | Prikaži statistiku za zadnjih N dana (sva vremena) |
 | `--tools` | Broj alata za prikaz (svi) |
 | `--models` | Prikaži raščlambu korištenja modela (skriveno prema zadanim postavkama). Proslijedite broj za prikaz vrha N |
@@ -465,7 +473,8 @@ Ovo pokreće HTTP server i otvara web pretraživač za pristup OpenCodeu preko w
 
 #### Zastave
 
-| Zastava | Opis || ------------ | ------------------------------------------ |
+| Zastava | Opis
+|------------ | ------------------------------------------ |
 | `--port` | Port za slušanje na |
 | `--hostname` | Ime hosta za slušanje |
 | `--mdns` | Omogući mDNS otkrivanje |
@@ -485,7 +494,8 @@ Ova komanda pokreće ACP server koji komunicira preko stdin/stdout koristeći nd
 
 #### Zastave
 
-| Zastava | Opis || ------------ | --------------------- |
+| Zastava | Opis
+|------------ | --------------------- |
 | `--cwd` | Radni imenik |
 | `--port` | Port za slušanje na |
 | `--hostname` | Slušajte ime hosta |
@@ -503,7 +513,8 @@ opencode uninstall
 
 #### Zastave
 
-| Zastava | Kratko | Opis || --------------- | ----- | ------------------------------------------- |
+| Zastava | Kratko | Opis
+|--------------- | ----- | ------------------------------------------- |
 | `--keep-config` | `-c` | Čuvajte konfiguracijske datoteke |
 | `--keep-data` | `-d` | Čuvajte podatke i snimke sesije |
 | `--dry-run` | | Pokažite šta bi bilo uklonjeno bez uklanjanja |
@@ -534,7 +545,8 @@ opencode upgrade v0.1.48
 
 #### Zastave
 
-| Zastava | Kratko | Opis || ---------- | ----- | ------------------------------------------------------------------ |
+| Zastava | Kratko | Opis
+|---------- | ----- | ------------------------------------------------------------------ |
 | `--method` | `-m` | Korišteni način instalacije; curl, npm, pnpm, bun, brew |
 
 ---
@@ -542,7 +554,8 @@ opencode upgrade v0.1.48
 ## Globalne zastave
 
 CLI otvorenog koda uzima sljedeće globalne zastavice.
-| Zastava | Kratko | Opis || -------------- | ----- | ------------------------------------ |
+| Zastava | Kratko | Opis
+|-------------- | ----- | ------------------------------------ |
 | `--help` | `-h` | Prikaži pomoć |
 | `--version` | `-v` | Odštampaj broj verzije |
 | `--print-logs` | | Ispis zapisnika u stderr |
@@ -553,7 +566,8 @@ CLI otvorenog koda uzima sljedeće globalne zastavice.
 ## Varijable okruženja
 
 OpenCode se može konfigurirati pomoću varijabli okruženja.
-| Varijabilna | Vrsta | Opis || ------------------------------------- | ------- | ------------------------------------------------- |
+| Varijabilna | Vrsta | Opis
+|------------------------------------- | ------- | ------------------------------------------------- |
 | `OPENCODE_AUTO_SHARE` | boolean | Automatski dijeli sesije |
 | `OPENCODE_GIT_BASH_PATH` | string | Putanja do Git Bash izvršne datoteke na Windows |
 | `OPENCODE_CONFIG` | string | Put do konfiguracionog fajla |
@@ -584,7 +598,8 @@ OpenCode se može konfigurirati pomoću varijabli okruženja.
 ### Eksperimentalno
 
 Ove varijable okruženja omogućavaju eksperimentalne karakteristike koje se mogu promijeniti ili ukloniti.
-| Varijabilna | Vrsta | Opis || ----------------------------------------------- | ------- | --------------------------------------- |
+| Varijabilna | Vrsta | Opis
+|----------------------------------------------- | ------- | --------------------------------------- |
 | `OPENCODE_EXPERIMENTAL` | boolean | Omogući sve eksperimentalne funkcije |
 | `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY` | boolean | Omogući otkrivanje ikona |
 | `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT` | boolean | Onemogući kopiranje pri odabiru u TUI |

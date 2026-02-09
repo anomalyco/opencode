@@ -53,7 +53,7 @@ Du kan tilpasse basen URL for enhver leverandør ved å angi alternativet `baseU
 OpenCode Zen er en liste over modeller levert av OpenCode-teamet som har vært
 testet og verifisert for å fungere godt med OpenCode. [Finn ut mer](/docs/zen).
 
-:::tupp
+:::tip
 Hvis du er ny, anbefaler vi å starte med OpenCode Zen.
 :::
 
@@ -129,7 +129,7 @@ Slik bruker du Amazon Bedrock med OpenCode:
 1. Gå over til **modellkatalogen** i Amazon Bedrock-konsollen og be om
    tilgang til modellene du ønsker.
 
-   :::tupp
+   :::tip
    Du må ha tilgang til modellen du ønsker i Amazon Bedrock.
    :::
 
@@ -180,7 +180,7 @@ Slik bruker du Amazon Bedrock med OpenCode:
    - `profile` - AWS navngitt profil fra `~/.aws/credentials`
    - `endpoint` - Egendefinert endepunkt URL for VPC endepunkter (alias for generisk `baseURL`-alternativ)
 
-   :::tupp
+   :::tip
    Alternativer for konfigurasjonsfil har forrang over miljøvariabler.
    :::
 
@@ -278,7 +278,7 @@ For egendefinerte slutningsprofiler, bruk modellen og leverandørnavnet i nøkke
    /models
    ```
 
-::: info
+:::info
 Å bruke Claude Pro/Max-abonnementet ditt i OpenCode støttes ikke offisielt av [Anthropic](https://anthropic.com).
 :::
 
@@ -853,7 +853,7 @@ Slik bruker du Google Vertex AI med OpenCode:
    export VERTEX_LOCATION=global
    ```
 
-:::tupp
+:::tip
 `global`-regionen forbedrer tilgjengeligheten og reduserer feil uten ekstra kostnad. Bruk regionale endepunkter (f.eks. `us-central1`) for krav til dataopphold. [Finn ut mer](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
 :::
 
@@ -1222,7 +1222,7 @@ Slik bruker du Kimi K2 fra Moonshot AI:
 
 Du kan konfigurere opencode for å bruke lokale modeller gjennom Ollama.
 
-:::tupp
+:::tip
 Ollama kan automatisk konfigurere seg selv for OpenCode. Se [Ollama-integrasjonsdokumentene](https://docs.ollama.com/integrations/opencode) for detaljer.
 :::
 
@@ -1254,7 +1254,7 @@ I dette eksemplet:
 - `options.baseURL` er endepunktet for den lokale serveren.
 - `models` er et kart over modell-ID-er til deres konfigurasjoner. Modellnavnet vil vises i modellvalglisten.
 
-:::tupp
+:::tip
 Hvis verktøykall ikke fungerer, prøv å øke `num_ctx` i Ollama. Start rundt 16k - 32k.
 :::
 
@@ -1431,7 +1431,7 @@ SAP AI Core gir tilgang til 40+ modeller fra OpenAI, Anthropic, Google, Amazon, 
 
 1. Gå til din [SAP BTP Cockpit](https://account.hana.ondemand.com/), naviger til din SAP AI kjernetjenesteforekomst, og lag en tjenestenøkkel.
 
-   :::tupp
+   :::tip
    Tjenestenøkkelen er et JSON-objekt som inneholder `clientid`, `clientsecret`, `url` og `serviceurls.AI_API_URL`. Du finner AI kjerneforekomsten din under **Tjenester** > **Forekomster og abonnementer** i BTP cockpiten.
    :::
 
@@ -1748,7 +1748,7 @@ Noen nyttige rutealternativer:
 
 Slik legger du til en **OpenAI-kompatibel**-leverandør som ikke er oppført i `/connect`-kommandoen:
 
-:::tupp
+:::tip
 Du kan bruke hvilken som helst OpenAI-kompatibel leverandør med opencode. De fleste moderne AI-leverandører tilbyr OpenAI-kompatible APIer.
 :::
 

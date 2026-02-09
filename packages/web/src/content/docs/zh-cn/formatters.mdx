@@ -12,10 +12,10 @@ description: OpenCode 使用特定于语言的清理程序。
 OpenCode附带了多个适用于流行语言和框架的内置初始化程序。下面是格式化程序、支持的文件扩展名以及所需的命令或配置选项的列表。
 
 | 格式化程序    | 擴展                                                                                                     | 要求                                                     |
-| ------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ----------------------- |
+| ------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
 | 政府          | .go                                                                                                      | `gofmt` 命令可用                                         |
 | 混合          | .ex、.exs、.eex、.heex、.leex、.neex、.sface                                                             | `mix` 命令可用                                           |
-| 更漂亮        | .js、.jsx、.ts、.tsx、.html、.css、.md、.json、.yaml 和 [更多的](https://prettier.io/docs/en/index.html) | `package.json`                                           | `prettier` 依赖关系     |
+| 更漂亮        | .js、.jsx、.ts、.tsx、.html、.css、.md、.json、.yaml 和 [更多的](https://prettier.io/docs/en/index.html) | 在 `package.json` 中有 `prettier` 依赖                  |
 | 生物群系      | .js、.jsx、.ts、.tsx、.html、.css、.md、.json、.yaml 和 [更多的](https://biomejs.dev/)                   | `biome.json(c)` 配置文件                                 |
 | 之字形        | .zig、.zon                                                                                               | `zig` 命令可用                                           |
 | clang 格式    | .c、.cpp、.h、.hpp、.ino 和 [更多的](https://clang.llvm.org/docs/ClangFormat.html)                       | `.clang-format` 配置文件                                 |
@@ -34,8 +34,8 @@ OpenCode附带了多个适用于流行语言和框架的内置初始化程序。
 | 微光          | .gleam                                                                                                   | `gleam` 命令可用                                         |
 | 尼克斯夫MTT   | .nix                                                                                                     | `nixfmt` 命令可用                                        |
 | sfmt          | .sh、.bash                                                                                               | `shfmt` 命令可用                                         |
-| 品脱          | .php                                                                                                     | `composer.json`                                          | `laravel/pint` 依赖关系 |
-| oxfmt（实验） | .js、.jsx、.ts、.tsx                                                                                     | `package.json` 和[实验环境指标](/docs/cli/#experimental) | `oxfmt` 依赖关系        |
+| 品脱          | .php                                                                                                     | 在 `composer.json` 中有 `laravel/pint` 依赖             |
+| oxfmt（实验） | .js、.jsx、.ts、.tsx                                                                                     | 在 `package.json` 中有 `oxfmt` 依赖并启用[实验环境变量标记](/docs/cli/#experimental) |
 | 奥尔莫鲁      | .hs                                                                                                      | `ormolu` 命令可用                                        |
 
 因此，如果您的项目的`package.json`或`prettier`，OpenCode将自动使用它。

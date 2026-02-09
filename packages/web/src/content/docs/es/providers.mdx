@@ -53,7 +53,7 @@ Puede personalizar la URL base para cualquier proveedor configurando la opción 
 OpenCode Zen es una lista de modelos proporcionados por el equipo OpenCode que han sido
 probado y verificado para funcionar bien con OpenCode. [Más información](/docs/zen).
 
-:::consejo
+:::tip
 Si eres nuevo, te recomendamos comenzar con OpenCode Zen.
 :::
 
@@ -89,7 +89,7 @@ Funciona como cualquier otro proveedor en OpenCode y su uso es completamente opc
 Veamos algunos de los proveedores en detalle. Si desea agregar un proveedor a la
 lista, no dude en abrir un PR.
 
-:::nota
+:::note
 ¿No ves un proveedor aquí? Envíe un PR.
 :::
 
@@ -229,7 +229,7 @@ Para usar Amazon Bedrock con OpenCode:
    /models
    ```
 
-:::nota
+:::note
 Para perfiles de inferencia personalizados, utilice el modelo y el nombre del proveedor en la clave y establezca la propiedad `id` en arn. Esto garantiza un almacenamiento en caché correcto:
 
 ```json title="opencode.json"
@@ -278,7 +278,7 @@ Para perfiles de inferencia personalizados, utilice el modelo y el nombre del pr
    /models
    ```
 
-:::información
+:::info
 El uso de su suscripción Claude Pro/Max en OpenCode no está oficialmente respaldado por [Anthropic](https://anthropic.com).
 :::
 
@@ -292,7 +292,7 @@ O si ya tienes una clave API, puedes seleccionar **Ingresar manualmente la clave
 
 ### Azul OpenAI
 
-:::nota
+:::note
 Si encuentra errores del tipo "Lo siento, pero no puedo ayudar con esa solicitud", intente cambiar el filtro de contenido de **DefaultV2** a **Default** en su recurso de Azure.
 :::
 
@@ -556,7 +556,7 @@ Cloudflare AI Gateway le permite acceder a modelos de OpenAI, Anthropic, Workers
 
 ### Infraestructura profunda
 
-1. Dirígete al [panel de Deep Infra] (https://deepinfra.com/dash), crea una cuenta y genera una clave API.
+1. Dirígete al [panel de Deep Infra](https://deepinfra.com/dash), crea una cuenta y genera una clave API.
 
 2. Ejecute el comando `/connect` y busque **Deep Infra**.
 
@@ -677,7 +677,7 @@ GitLab Duo proporciona chat agente basado en IA con capacidades de llamada de he
    - **duo-chat-sonnet-4-5** - Rendimiento equilibrado para la mayoría de los flujos de trabajo
    - **duo-chat-opus-4-5** - Más capaz para análisis complejos
 
-:::nota
+:::note
 También puede especificar la variable de entorno 'GITLAB_TOKEN' si no desea
 para almacenar el token en el almacenamiento de autenticación opencode.
 :::
@@ -721,7 +721,7 @@ export GITLAB_AI_GATEWAY_URL=https://ai-gateway.company.com
 export GITLAB_TOKEN=glpat-...
 ```
 
-:::nota
+:::note
 Su administrador GitLab debe habilitar lo siguiente:
 
 1. [Plataforma de agente Duo](https://docs.gitlab.com/user/gitlab_duo/turn_on_off/) para el usuario, grupo o instancia
@@ -788,7 +788,7 @@ Este complemento proporciona capacidades integrales de administración del repos
 
 Para utilizar su suscripción GitHub Copilot con opencode:
 
-:::nota
+:::note
 Algunos modelos pueden necesitar un [Pro+
 suscripción](https://github.com/features/copilot/plans) para usar.
 
@@ -853,7 +853,7 @@ Para utilizar Google Vertex AI con OpenCode:
    export VERTEX_LOCATION=global
    ```
 
-:::consejo
+:::tip
 La región `global` mejora la disponibilidad y reduce los errores sin costo adicional. Utilice puntos finales regionales (por ejemplo, `us-central1`) para los requisitos de residencia de datos. [Más información](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
 :::
 
@@ -1222,7 +1222,7 @@ Para usar Kimi K2 de Moonshot AI:
 
 Puedes configurar opencode para usar modelos locales a través de Ollama.
 
-:::consejo
+:::tip
 Ollama puede configurarse automáticamente para OpenCode. Consulte los [documentos de integración de Ollama](https://docs.ollama.com/integrations/opencode) para obtener más detalles.
 :::
 
@@ -1254,7 +1254,7 @@ En este ejemplo:
 - `options.baseURL` es el punto final del servidor local.
 - `models` es un mapa de ID de modelo para sus configuraciones. El nombre del modelo se mostrará en la lista de selección de modelos.
 
-:::consejo
+:::tip
 Si las llamadas a herramientas no funcionan, intente aumentar `num_ctx` en Ollama. Comience alrededor de 16k - 32k.
 :::
 
@@ -1748,7 +1748,7 @@ Algunas opciones de enrutamiento útiles:
 
 Para agregar cualquier proveedor **compatible con OpenAI** que no aparezca en el comando `/connect`:
 
-:::consejo
+:::tip
 Puede utilizar cualquier proveedor compatible con OpenAI con opencode. La mayoría de los proveedores de IA modernos ofrecen API compatibles con OpenAI.
 :::
 

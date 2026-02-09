@@ -18,13 +18,13 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 
 #### 옵션
 
-| 플래그          | 설명                                       | 기본             |
-| --------------- | ------------------------------------------ | ---------------- | ------ |
-| `--port`        | 시포트                                     | `4096`           |
-| `--hostname`    | 듣고 싶은 이름                             | `127.0.0.1`      |
-| `--mdns`        | 보이지 않는 mDNS 발견                      | `false`          |
-| `--mdns-domain` | mDNS 서비스에 대한 사용자 정의 도메인 이름 | `opencode.local` |
-| `--cors`        | `[]`                                       | `[]`             | 한국어 |
+| 플래그          | 설명                                  | 기본값            |
+| --------------- | ------------------------------------- | ----------------- |
+| `--port`        | 수신 대기할 포트                       | `4096`            |
+| `--hostname`    | 수신 대기할 호스트명                   | `127.0.0.1`       |
+| `--mdns`        | mDNS 탐지 활성화                       | `false`           |
+| `--mdns-domain` | mDNS 서비스의 사용자 지정 도메인 이름  | `opencode.local`  |
+| `--cors`        | 허용할 추가 브라우저 origin            | `[]`              |
 
 `--cors`는 다수 시간을 통과될 수 있습니다:
 
@@ -191,14 +191,14 @@ opencode 서버는 다음과 같은 API를 노출합니다.
 
 ## 파일
 
-| 방법  | 경로                     | 설명                                  | 응답                                                                                   |
-| ----- | ------------------------ | ------------------------------------- | -------------------------------------------------------------------------------------- | ---------- |
-| `GET` | `/find?pattern=<pat>`    | 파일의 텍스트 검색                    | `path`, `lines`, `line_number`, `absolute_offset`, `submatches`와 일치하는 개체의 배열 |
-| `GET` | `/find/file?query=<q>`   | `string[]`                            | `string[]`                                                                             | `string[]` |
-| `GET` | `/find/symbol?query=<q>` | 업무공간 기호 찾기                    | <a href={typesUrl}><code>Symbol[]</code></a>                                           |
-| `GET` | `/file?path=<path>`      | 파일 목록 및 디렉토리                 | <a href={typesUrl}><code>FileNode[]</code></a>                                         |
-| `GET` | `/file/content?path=<p>` | 파일 보기                             | <a href={typesUrl}><code>FileContent</code></a>                                        |
-| `GET` | `/file/status`           | 트랙 된 파일에 대한 상태를 얻으십시오 | <a href={typesUrl}><code> 파일[]</code></a>                                            |
+| 방법  | 경로                     | 설명                              | 응답                                                                                      |
+| ----- | ------------------------ | --------------------------------- | ----------------------------------------------------------------------------------------- |
+| `GET` | `/find?pattern=<pat>`    | 파일에서 텍스트 검색               | `path`, `lines`, `line_number`, `absolute_offset`, `submatches`가 포함된 일치 객체 배열 |
+| `GET` | `/find/file?query=<q>`   | 이름으로 파일/디렉터리 찾기        | `string[]` (경로)                                                                        |
+| `GET` | `/find/symbol?query=<q>` | 워크스페이스 심볼 찾기            | <a href={typesUrl}><code>Symbol[]</code></a>                                              |
+| `GET` | `/file?path=<path>`      | 파일 및 디렉터리 목록             | <a href={typesUrl}><code>FileNode[]</code></a>                                            |
+| `GET` | `/file/content?path=<p>` | 파일 읽기                         | <a href={typesUrl}><code>FileContent</code></a>                                           |
+| `GET` | `/file/status`           | 추적 중인 파일 상태 가져오기      | <a href={typesUrl}><code>File[]</code></a>                                                |
 
 #### `/find/file` 쿼리 매개 변수
 

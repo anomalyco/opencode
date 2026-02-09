@@ -29,15 +29,16 @@ opencode [project]
 
 #### Drapeaux
 
-| Drapeau      | Court | Descriptif                                         |
-| ------------ | ----- | -------------------------------------------------- |
-| `--continue` | `-c`  | Continuer la dernière séance                       |
-| `--session`  | `-s`  | ID de session pour continuer                       |
-| `--prompt`   |       | Invite à utiliser                                  |
-| `--model`    | `-m`  | Modèle à utiliser sous forme de fournisseur/modèle |
-| `--agent`    |       | Agent à utiliser                                   |
-| `--port`     |       | Port à écouter sur                                 |
-| `--hostname` |       | Nom d'hôte sur lequel écouter                      |
+| Drapeau      | Court | Descriptif                                                                    |
+| ------------ | ----- | ----------------------------------------------------------------------------- |
+| `--continue` | `-c`  | Continuer la dernière séance                                                  |
+| `--session`  | `-s`  | ID de session pour continuer                                                  |
+| `--fork`     |       | Forker la session en continuant (à utiliser avec `--continue` ou `--session`) |
+| `--prompt`   |       | Invite à utiliser                                                             |
+| `--model`    | `-m`  | Modèle à utiliser sous forme de fournisseur/modèle                            |
+| `--agent`    |       | Agent à utiliser                                                              |
+| `--port`     |       | Port à écouter sur                                                            |
+| `--hostname` |       | Nom d'hôte sur lequel écouter                                                 |
 
 ---
 
@@ -339,6 +340,7 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | `--command`  |       | La commande à exécuter, utilisez message pour args                                             |
 | `--continue` | `-c`  | Continuer la dernière séance                                                                   |
 | `--session`  | `-s`  | ID de session pour continuer                                                                   |
+| `--fork`     |       | Forker la session en continuant (à utiliser avec `--continue` ou `--session`)                  |
 | `--share`    |       | Partager la séance                                                                             |
 | `--model`    | `-m`  | Modèle à utiliser sous forme de fournisseur/modèle                                             |
 | `--agent`    |       | Agent à utiliser                                                                               |

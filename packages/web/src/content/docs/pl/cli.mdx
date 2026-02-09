@@ -553,30 +553,30 @@ OpenCode można wykryć za pomocą czyszczenia alternatywnych.
 
 | Zmienna                               | Wpisz            | Opis                                                                    |
 | ------------------------------------- | ---------------- | ----------------------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | wartość logiczna | Automatycznie udostępniaj sesje                                         |
-| `OPENCODE_GIT_BASH_PATH`              | ciąg             | Ścieżka do pliku wykonywalnego Git Bash w systemie Windows              |
-| `OPENCODE_CONFIG`                     | ciąg             | Ścieżka do pliku konfiguracyjnego                                       |
-| `OPENCODE_CONFIG_DIR`                 | ciąg             | Ścieżka do katalogu konfiguracyjnego                                    |
-| `OPENCODE_CONFIG_CONTENT`             | ciąg             | Wbudowana treść konstrukcji JSON                                        |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | wartość logiczna | Wyłącz automatyczne sprawdzanie aktualizacji                            |
-| `OPENCODE_DISABLE_PRUNE`              | wartość logiczna | Wyłączenie regulowane                                                   |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | wartość logiczna | Wyłącz automatycznie tytuł terminala                                    |
-| `OPENCODE_PERMISSION`                 | ciąg             | Wbudowane prawo JSON                                                    |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | wartość logiczna | Wyłączenie wtyczki                                                      |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | wartość logiczna | Wyłącz automatyczne pobieranie z serwera LSP                            |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | wartość logiczna | Włącz modele eksperymentalne                                            |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | wartość logiczna | Wyłącz automatyczne zagęszczanie kontekstu                              |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | wartość logiczna | Wyłączenie gry z `.claude` (podpowiedź + podłączenie)                   |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | wartość logiczna | Wyłącz czytanie `~/.claude/CLAUDE.md`                                   |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | wartość logiczna | Wyłącz ładowanie `.claude/skills`                                       |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | wartość logiczna | Wyłączenie modeli pobierania ze źródeł niedostępnych                    |
-| `OPENCODE_FAKE_VCS`                   | ciąg             | Fałszywy sprzedawca VCS do celów testowych                              |
-| `OPENCODE_DISABLE_FILETIME_CHECK`     | wartość logiczna | Wyłączone sprawdzanie pliku w celu optymalizacji                        |
-| `OPENCODE_CLIENT`                     | ciąg             | Identyfikator klienta (domyślnie `cli`)                                 |
-| `OPENCODE_ENABLE_EXA`                 | wartość logiczna | Włącz narzędzie wyszukiwania internetowego Exa                          |
-| `OPENCODE_SERVER_PASSWORD`            | ciąg             | Włącz uwierzytelnianie podstawowe dla `serve`/`web`                     |
-| `OPENCODE_SERVER_USERNAME`            | ciąg             | Zakończenie stosowania użytkownika z autoryzacją (domyślnie `opencode`) |
-| `OPENCODE_MODELS_URL`                 | ciąg             | Niestandardowy adres URL do pobrania konfiguracji modeli                |
+| `OPENCODE_AUTO_SHARE`                 | boolean          | Automatycznie udostępniaj sesje                                         |
+| `OPENCODE_GIT_BASH_PATH`              | string           | Ścieżka do pliku wykonywalnego Git Bash w systemie Windows              |
+| `OPENCODE_CONFIG`                     | string           | Ścieżka do pliku konfiguracyjnego                                       |
+| `OPENCODE_CONFIG_DIR`                 | string           | Ścieżka do katalogu konfiguracyjnego                                    |
+| `OPENCODE_CONFIG_CONTENT`             | string           | Wbudowana treść konstrukcji JSON                                        |
+| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean          | Wyłącz automatyczne sprawdzanie aktualizacji                            |
+| `OPENCODE_DISABLE_PRUNE`              | boolean          | Wyłączenie regulowane                                                   |
+| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean          | Wyłącz automatycznie tytuł terminala                                    |
+| `OPENCODE_PERMISSION`                 | string           | Wbudowane prawo JSON                                                    |
+| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean          | Wyłączenie wtyczki                                                      |
+| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean          | Wyłącz automatyczne pobieranie z serwera LSP                            |
+| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean          | Włącz modele eksperymentalne                                            |
+| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean          | Wyłącz automatyczne zagęszczanie kontekstu                              |
+| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean          | Wyłączenie gry z `.claude` (podpowiedź + podłączenie)                   |
+| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean          | Wyłącz czytanie `~/.claude/CLAUDE.md`                                   |
+| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean          | Wyłącz ładowanie `.claude/skills`                                       |
+| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean          | Wyłączenie modeli pobierania ze źródeł niedostępnych                    |
+| `OPENCODE_FAKE_VCS`                   | string           | Fałszywy sprzedawca VCS do celów testowych                              |
+| `OPENCODE_DISABLE_FILETIME_CHECK`     | boolean          | Wyłączone sprawdzanie pliku w celu optymalizacji                        |
+| `OPENCODE_CLIENT`                     | string           | Identyfikator klienta (domyślnie `cli`)                                 |
+| `OPENCODE_ENABLE_EXA`                 | boolean          | Włącz narzędzie wyszukiwania internetowego Exa                          |
+| `OPENCODE_SERVER_PASSWORD`            | string           | Włącz uwierzytelnianie podstawowe dla `serve`/`web`                     |
+| `OPENCODE_SERVER_USERNAME`            | string           | Zakończenie stosowania użytkownika z autoryzacją (domyślnie `opencode`) |
+| `OPENCODE_MODELS_URL`                 | string           | Niestandardowy adres URL do pobrania konfiguracji modeli                |
 
 ---
 
@@ -586,16 +586,16 @@ Te zmienne możliwości użycia funkcji eksperymentalnych, które mogą zostać 
 
 | Zmienna                                         | Wpisz            | Opis                                           |
 | ----------------------------------------------- | ---------------- | ---------------------------------------------- |
-| `OPENCODE_EXPERIMENTAL`                         | wartość logiczna | Włącz wszystkie funkcje eksperymentalne        |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | wartość logiczna | Włącz wykrywanie ikon                          |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | wartość logiczna | Wyłączenie kopiowania przy wyborze w TUI       |
+| `OPENCODE_EXPERIMENTAL`                         | boolean          | Włącz wszystkie funkcje eksperymentalne        |
+| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean          | Włącz wykrywanie ikon                          |
+| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean          | Wyłączenie kopiowania przy wyborze w TUI       |
 | `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | numer            | Domyślny limit czasu dla ukrytego bash w ms    |
 | `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | numer            | Maksymalne tokeny wyjściowe dla odpowiedzi LLM |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | wartość logiczna | Włącz obserwatora plików dla całego katalogu   |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | wartość logiczna | Włącz formater oxfmt                           |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | wartość logiczna | Włącz eksperymentalne narzędzie LSP            |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | wartość logiczna | Wyłącz obserwatora plików                      |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | wartość logiczna | Włącz funkcje eksperymentalne Exa              |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | wartość logiczna | Włącz eksperymentalne sprawdzanie typu LSP     |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | wartość logiczna | Włącz funkcje eksperymentalne przecen          |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | wartość logiczna | Włącz tryb planu                               |
+| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean          | Włącz obserwatora plików dla całego katalogu   |
+| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean          | Włącz formater oxfmt                           |
+| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean          | Włącz eksperymentalne narzędzie LSP            |
+| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean          | Wyłącz obserwatora plików                      |
+| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean          | Włącz funkcje eksperymentalne Exa              |
+| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean          | Włącz eksperymentalne sprawdzanie typu LSP     |
+| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolean          | Włącz funkcje eksperymentalne przecen          |
+| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean          | Włącz tryb planu                               |

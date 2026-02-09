@@ -8,11 +8,10 @@ export const email = `mailto:${config.email}`
 
 OpenCode Enterprise は、コードとデータがインフラストラクチャから決して流出しないようにしたい組織を対象としています。これは、SSO および内部 AI ゲートウェイと統合された一元化された構成を使用することで実現できます。
 
-:::注記
+:::note
 OpenCode は、コードやコンテキスト データを一切保存しません。
 :::
-
-OpenCode Enterprise を始めるには:
+To Enterprise を始めるには:
 
 1. チーム内でトライアルを実施してください。
 2. 価格や実装オプションについては、**<a href={email}>お問い合わせ</a>**ください。
@@ -154,11 +153,10 @@ npm login --registry=https://your-company.jfrog.io/api/npm/npm-virtual/
 これにより、認証の詳細を含む `~/.npmrc` が作成されます。 OpenCode は自動的に
 これを拾ってください。
 
-:::注意
+:::caution
 OpenCode を実行する前に、プライベート レジストリにログインする必要があります。
 :::
-
-あるいは、`.npmrc` ファイルを手動で構成することもできます。
+Alternatively, ファイルを手動で構成することもできます。
 
 ```bash title="~/.npmrc"
 registry=https://your-company.jfrog.io/api/npm/npm-virtual/

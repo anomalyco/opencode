@@ -39,11 +39,11 @@ const { client } = await createOpencode()
 
 | Вариант | Тип   | Описание                         | По умолчанию |
 | ------- | ----- | -------------------------------- | ------------ |
-| ХХ0ГГ   | ХХ0ГГ | Имя хоста сервера                | `127.0.0.1`  |
-| ХХ0ГГ   | ХХ0ГГ | Порт сервера                     | `4096`       |
-| ХХ0ГГ   | ХХ0ГГ | Сигнал отмены для отмены         | ХХ0ГГ        |
-| ХХ0ГГ   | ХХ0ГГ | Таймаут в мс для запуска сервера | `5000`       |
-| ХХ0ГГ   | ХХ0ГГ | Объект конфигурации              | `{}`         |
+| `hostname` | `string`      | Server hostname                | `127.0.0.1` |
+| `port`     | `number`      | Server port                    | `4096`      |
+| `signal`   | `AbortSignal` | Abort signal for cancellation  | `undefined` |
+| `timeout`  | `number`      | Timeout in ms for server start | `5000`      |
+| `config`   | `Config`      | Configuration object           | `{}`        |
 
 ---
 
@@ -83,11 +83,11 @@ const client = createOpencodeClient({
 
 | Вариант | Тип   | Описание                             | По умолчанию |
 | ------- | ----- | ------------------------------------ | ------------ |
-| ХХ0ГГ   | ХХ0ГГ | URL-адрес сервера                    | ХХ0ГГ        |
-| ХХ0ГГ   | ХХ0ГГ | Пользовательская реализация выборки  | ХХ0ГГ        |
-| ХХ0ГГ   | ХХ0ГГ | Метод анализа ответа                 | ХХ0ГГ        |
-| ХХ0ГГ   | ХХ0ГГ | Стиль возврата: `data` или `fields`. | ХХ0ГГ        |
-| ХХ0ГГ   | ХХ0ГГ | Выдавать ошибки вместо возврата      | ХХ0ГГ        |
+| `baseUrl`       | `string`   | URL of the server                | `http://localhost:4096` |
+| `fetch`         | `function` | Custom fetch implementation      | `globalThis.fetch`      |
+| `parseAs`       | `string`   | Response parsing method          | `auto`                  |
+| `responseStyle` | `string`   | Return style: `data` or `fields` | `fields`                |
+| `throwOnError`  | `boolean`  | Throw errors instead of return   | `false`                 |
 
 ---
 
@@ -127,7 +127,7 @@ SDK предоставляет все серверные API через типо
 
 | Метод | Описание                                     | Ответ |
 | ----- | -------------------------------------------- | ----- |
-| ХХ0ГГ | Проверьте работоспособность и версию сервера | ХХ0ГГ |
+| `global.health()` | Check server health and version | `{ healthy: true, version: string }` |
 
 ---
 
@@ -144,8 +144,8 @@ console.log(health.data.version)
 
 | Метод | Описание                      | Ответ                                       |
 | ----- | ----------------------------- | ------------------------------------------- |
-| ХХ0ГГ | Написать запись в журнале     | ХХ0ГГ                                       |
-| ХХ0ГГ | Список всех доступных агентов | <a href={typesUrl}><code>Агент[]</code></a> |
+| `app.log()`    | Write a log entry         | `boolean`                                   |
+| `app.agents()` | List all available agents | <a href={typesUrl}><code>Agent[]</code></a> |
 
 ---
 
@@ -171,8 +171,8 @@ const agents = await client.app.agents()
 
 | Метод | Описание                | Ответ                                        |
 | ----- | ----------------------- | -------------------------------------------- |
-| ХХ0ГГ | Список всех проектов    | <a href={typesUrl}><code>Проект[]</code></a> |
-| ХХ0ГГ | Получить текущий проект | <a href={typesUrl}><code>Проект</code></a>   |
+| `project.list()`    | List all projects   | <a href={typesUrl}><code>Project[]</code></a> |
+| `project.current()` | Get current project | <a href={typesUrl}><code>Project</code></a>   |
 
 ---
 
@@ -192,7 +192,7 @@ const currentProject = await client.project.current()
 
 | Метод | Описание              | Ответ                                    |
 | ----- | --------------------- | ---------------------------------------- |
-| ХХ0ГГ | Получить текущий путь | <a href={typesUrl}><code>Путь</code></a> |
+| `path.get()` | Get current path | <a href={typesUrl}><code>Path</code></a> |
 
 ---
 
@@ -209,8 +209,8 @@ const pathInfo = await client.path.get()
 
 | Метод | Описание                                  | Ответ                                                                                                 |
 | ----- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| ХХ0ГГ | Получить информацию о конфигурации        | <a href={typesUrl}><code>Config</code></a>                                                            |
-| ХХ0ГГ | Список поставщиков и моделей по умолчанию | `{ providers: `<a href={typesUrl}><code>Provider[]</code></a>`, default: { [key: string]: string } }` |
+| `config.get()`       | Get config info                   | <a href={typesUrl}><code>Config</code></a>                                                            |
+| `config.providers()` | List providers and default models | `{ providers: `<a href={typesUrl}><code>Provider[]</code></a>`, default: { [key: string]: string } }` |
 
 ---
 
@@ -228,25 +228,25 @@ const { providers, default: defaults } = await client.config.providers()
 
 | Метод | Описание                                           | Примечания                                                                                                                                                  |
 | ----- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ХХ0ГГ | Получение списка сеансов                           | Возвращает <a href={typesUrl}><code>Session[]</code></a>                                                                                                    |
-| ХХ0ГГ | Получить сеанс                                     | Возвращает <a href={typesUrl}><code>Session</code></a>                                                                                                      |
-| ХХ0ГГ | Список дочерних сеансов                            | Возвращает <a href={typesUrl}><code>Session[]</code></a>                                                                                                    |
-| ХХ0ГГ | Создать сеанс                                      | Возвращает <a href={typesUrl}><code>Session</code></a>                                                                                                      |
-| ХХ0ГГ | Удалить сеанс                                      | Возвращает `boolean`                                                                                                                                        |
-| ХХ0ГГ | Обновить свойства сеанса                           | Возвращает <a href={typesUrl}><code>Session</code></a>                                                                                                      |
-| ХХ0ГГ | Проанализируйте приложение и создайте `AGENTS.md`. | Возвращает `boolean`                                                                                                                                        |
-| ХХ0ГГ | Прервать текущий сеанс                             | Возвращает `boolean`                                                                                                                                        |
-| ХХ0ГГ | Поделиться сеансом                                 | Возвращает <a href={typesUrl}><code>Session</code></a>                                                                                                      |
-| ХХ0ГГ | Отменить общий доступ к сеансу                     | Возвращает <a href={typesUrl}><code>Session</code></a>                                                                                                      |
-| ХХ0ГГ | Подведение итогов сессии                           | Возвращает `boolean`                                                                                                                                        |
-| ХХ0ГГ | Список сообщений в сеансе                          | Возвращает `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                                  |
-| ХХ0ГГ | Получить подробную информацию о сообщении          | Возвращает `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                    |
-| ХХ0ГГ | Отправить оперативное сообщение                    | `body.noReply: true` возвращает UserMessage (только контекст). По умолчанию возвращается <a href={typesUrl}><code>AssistantMessage</code></a> с ответом AI. |
-| ХХ0ГГ | Отправить команду в сеанс                          | Возвращает `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                           |
-| ХХ0ГГ | Запустите команду оболочки                         | Возвращает <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                             |
-| ХХ0ГГ | Отменить сообщение                                 | Возвращает <a href={typesUrl}><code>Session</code></a>                                                                                                      |
-| ХХ0ГГ | Восстановить восстановленные сообщения             | Возвращает <a href={typesUrl}><code>Session</code></a>                                                                                                      |
-| ХХ0ГГ | Ответ на запрос разрешения                         | Возвращает `boolean`                                                                                                                                        |
+| `session.list()`                                           | List sessions                      | Returns <a href={typesUrl}><code>Session[]</code></a>                                                                                          |
+| `session.get({ path })`                                    | Get session                        | Returns <a href={typesUrl}><code>Session</code></a>                                                                                            |
+| `session.children({ path })`                               | List child sessions                | Returns <a href={typesUrl}><code>Session[]</code></a>                                                                                          |
+| `session.create({ body })`                                 | Create session                     | Returns <a href={typesUrl}><code>Session</code></a>                                                                                            |
+| `session.delete({ path })`                                 | Delete session                     | Returns `boolean`                                                                                                                              |
+| `session.update({ path, body })`                           | Update session properties          | Returns <a href={typesUrl}><code>Session</code></a>                                                                                            |
+| `session.init({ path, body })`                             | Analyze app and create `AGENTS.md` | Returns `boolean`                                                                                                                              |
+| `session.abort({ path })`                                  | Abort a running session            | Returns `boolean`                                                                                                                              |
+| `session.share({ path })`                                  | Share session                      | Returns <a href={typesUrl}><code>Session</code></a>                                                                                            |
+| `session.unshare({ path })`                                | Unshare session                    | Returns <a href={typesUrl}><code>Session</code></a>                                                                                            |
+| `session.summarize({ path, body })`                        | Summarize session                  | Returns `boolean`                                                                                                                              |
+| `session.messages({ path })`                               | List messages in a session         | Returns `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                        |
+| `session.message({ path })`                                | Get message details                | Returns `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                          |
+| `session.prompt({ path, body })`                           | Send prompt message                | `body.noReply: true` returns UserMessage (context only). Default returns <a href={typesUrl}><code>AssistantMessage</code></a> with AI response |
+| `session.command({ path, body })`                          | Send command to session            | Returns `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                 |
+| `session.shell({ path, body })`                            | Run a shell command                | Returns <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                   |
+| `session.revert({ path, body })`                           | Revert a message                   | Returns <a href={typesUrl}><code>Session</code></a>                                                                                            |
+| `session.unrevert({ path })`                               | Restore reverted messages          | Returns <a href={typesUrl}><code>Session</code></a>                                                                                            |
+| `postSessionByIdPermissionsByPermissionId({ path, body })` | Respond to a permission request    | Returns `boolean`                                                                                                                              |
 
 ---
 
@@ -285,11 +285,11 @@ await client.session.prompt({
 
 | Метод | Описание                             | Ответ                                                                                         |
 | ----- | ------------------------------------ | --------------------------------------------------------------------------------------------- |
-| ХХ0ГГ | Поиск текста в файлах                | Массив объектов соответствия `path`, `lines`, `line_number`, `absolute_offset`, `submatches`. |
-| ХХ0ГГ | Поиск файлов и каталогов по имени    | `string[]` (пути)                                                                             |
-| ХХ0ГГ | Найдите символы рабочей области      | <a href={typesUrl}><code>Символ[]</code></a>                                                  |
-| ХХ0ГГ | Чтение файла                         | `{ type: "raw" \| "patch", content: string }`                                                 |
-| ХХ0ГГ | Получить статус отслеживаемых файлов | <a href={typesUrl}><code>Файл[]</code></a>                                                    |
+| `find.text({ query })`    | Search for text in files           | Array of match objects with `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
+| `find.files({ query })`   | Find files and directories by name | `string[]` (paths)                                                                          |
+| `find.symbols({ query })` | Find workspace symbols             | <a href={typesUrl}><code>Symbol[]</code></a>                                                |
+| `file.read({ query })`    | Read a file                        | `{ type: "raw" \| "patch", content: string }`                                               |
+| `file.status({ query? })` | Get status for tracked files       | <a href={typesUrl}><code>File[]</code></a>                                                  |
 
 `find.files` поддерживает несколько дополнительных полей запроса:
 
@@ -326,15 +326,15 @@ const content = await client.file.read({
 
 | Метод | Описание                         | Ответ |
 | ----- | -------------------------------- | ----- |
-| ХХ0ГГ | Добавить текст в приглашение     | ХХ0ГГ |
-| ХХ0ГГ | Открыть диалоговое окно справки  | ХХ0ГГ |
-| ХХ0ГГ | Откройте селектор сеансов        | ХХ0ГГ |
-| ХХ0ГГ | Откройте выбор темы              | ХХ0ГГ |
-| ХХ0ГГ | Откройте выбор модели            | ХХ0ГГ |
-| ХХ0ГГ | Отправить текущий запрос         | ХХ0ГГ |
-| ХХ0ГГ | Очистить подсказку               | ХХ0ГГ |
-| ХХ0ГГ | Выполнить команду                | ХХ0ГГ |
-| ХХ0ГГ | Показать всплывающее уведомление | ХХ0ГГ |
+| `tui.appendPrompt({ body })`   | Append text to the prompt | `boolean` |
+| `tui.openHelp()`               | Open the help dialog      | `boolean` |
+| `tui.openSessions()`           | Open the session selector | `boolean` |
+| `tui.openThemes()`             | Open the theme selector   | `boolean` |
+| `tui.openModels()`             | Open the model selector   | `boolean` |
+| `tui.submitPrompt()`           | Submit the current prompt | `boolean` |
+| `tui.clearPrompt()`            | Clear the prompt          | `boolean` |
+| `tui.executeCommand({ body })` | Execute a command         | `boolean` |
+| `tui.showToast({ body })`      | Show toast notification   | `boolean` |
 
 ---
 
@@ -357,7 +357,7 @@ await client.tui.showToast({
 
 | Метод | Описание                                     | Ответ |
 | ----- | -------------------------------------------- | ----- |
-| ХХ0ГГ | Установите учетные данные для аутентификации | ХХ0ГГ |
+| `auth.set({ ... })` | Set authentication credentials | `boolean` |
 
 ---
 
@@ -376,7 +376,7 @@ await client.auth.set({
 
 | Метод | Описание                             | Ответ                                |
 | ----- | ------------------------------------ | ------------------------------------ |
-| ХХ0ГГ | Поток событий, отправленных сервером | Поток событий, отправленных сервером |
+| `event.subscribe()` | Server-sent events stream | Server-sent events stream |
 
 ---
 

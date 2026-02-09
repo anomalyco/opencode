@@ -185,7 +185,7 @@ OpenCode权限由工具名称和一些安全防护措施决定：
 
 您可以覆盖每个代理的权限。代理权限与全局​​配置合并，代理规则优先。 [了解更多](/docs/agents#permissions)关于代理权限。
 
-:::笔记
+:::note
 有关更详细的模式匹配示例，请参见上面的 [粒度规则（对象语法）](#granular-rules-object-syntax) 部分。
 :::
 
@@ -232,6 +232,6 @@ permission:
 Only analyze code and suggest changes.
 ```
 
-:::提示
+:::tip
 对参数的命令使用模式匹配。 `"grep *"` 允许 `grep pattern file.txt`，而 `"grep"` 单独会阻止它。像 `git status` 这样的命令适用于默认行为，但在传递参数时需要显式许可（如 `"git status *"`）。
 :::

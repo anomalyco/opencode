@@ -33,8 +33,9 @@ opencode [projeto]
 | ------------ | ----- | ---------------------------------------------- |
 | `--continue` | `-c`  | Continue a última sessão                       |
 | `--session`  | `-s`  | ID da sessão para continuar                    |
+| `--fork`     |       | Criar um fork da sessão ao continuar (use com `--continue` ou `--session`) |
 | `--prompt`   |       | Prompt a ser usado                             |
-| `--model`    | `-m`  | Modelo a ser usado na forma de provedor/modelo |
+| `--model`    | `-m`  | Modelo a ser usado na forma de provider/model |
 | `--agent`    |       | Agente a ser usado                             |
 | `--port`     |       | Porta para escutar                             |
 | `--hostname` |       | Nome do host para escutar                      |
@@ -283,7 +284,7 @@ Liste todos os modelos disponíveis dos provedores configurados.
 opencode models [provedor]
 ```
 
-Este comando exibe todos os modelos disponíveis entre seus provedores configurados no formato `provedor/modelo`.
+Este comando exibe todos os modelos disponíveis entre seus provedores configurados no formato `provider/model`.
 
 Isso é útil para descobrir o nome exato do modelo a ser usado em [sua configuração](/docs/config/).
 
@@ -339,8 +340,9 @@ opencode run --attach http://localhost:4096 "Explique async/await em JavaScript"
 | `--command`  |       | O comando a ser executado, use mensagem para argumentos                       |
 | `--continue` | `-c`  | Continue a última sessão                                                      |
 | `--session`  | `-s`  | ID da sessão para continuar                                                   |
+| `--fork`     |       | Criar um fork da sessão ao continuar (use com `--continue` ou `--session`)   |
 | `--share`    |       | Compartilhe a sessão                                                          |
-| `--model`    | `-m`  | Modelo a ser usado na forma de provedor/modelo                                |
+| `--model`    | `-m`  | Modelo a ser usado na forma de provider/model                                 |
 | `--agent`    |       | Agente a ser usado                                                            |
 | `--file`     | `-f`  | Arquivo(s) a serem anexados à mensagem                                        |
 | `--format`   |       | Formato: padrão (formatado) ou json (eventos JSON brutos)                     |

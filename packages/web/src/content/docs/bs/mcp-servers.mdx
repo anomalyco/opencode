@@ -105,7 +105,8 @@ use the mcp_everything tool to add the number 3 and 4
 #### Opcije
 
 Ovdje su sve opcije za konfiguriranje lokalnog MCP servera.
-| Opcija | Vrsta | Obavezno | Opis || ------------- | ------- | -------- | ----------------------------------------------------------------------------------- |
+| Opcija | Vrsta | Obavezno | Opis
+|------------- | ------- | -------- | ----------------------------------------------------------------------------------- |
 | `type` | String | Y | Tip veze sa MCP serverom, mora biti `"local"`. |
 | `command` | Niz | Y | Naredba i argumenti za pokretanje MCP servera. |
 | `environment` | Objekt | | Varijable okruženja koje treba postaviti prilikom pokretanja servera. |
@@ -138,7 +139,8 @@ Dodajte udaljene MCP servere postavljanjem `type` na `"remote"`.
 
 #### Opcije
 
-| Opcija | Vrsta | Obavezno | Opis || --------- | ------- | -------- | ----------------------------------------------------------------------------------- |
+| Opcija | Vrsta | Obavezno | Opis
+|--------- | ------- | -------- | ----------------------------------------------------------------------------------- |
 | `type` | String | Y | Tip veze sa MCP serverom, mora biti `"remote"`. |
 | `url` | String | Y | URL udaljenog MCP servera. |
 | `enabled` | Boolean | | Omogućite ili onemogućite MCP server pri pokretanju. |
@@ -246,7 +248,8 @@ Ako želite onemogućiti automatski OAuth za server (npr. za servere koji umjest
 
 #### OAuth opcije
 
-| Opcija | Vrsta | Opis || -------------- | --------------- | -------------------------------------------------------------------------------- |
+| Opcija | Vrsta | Opis
+|-------------- | --------------- | -------------------------------------------------------------------------------- |
 | `oauth` | Objekt \| false | OAuth konfiguracijski objekt, ili `false` da onemogućite automatsko otkrivanje OAuth. |
 | `clientId` | String | ID OAuth klijenta. Ako nije navedeno, pokušat će se izvršiti dinamička registracija klijenta. |
 | `clientSecret` | String | Tajna OAuth klijenta, ako to zahtijeva autorizacijski server. |
@@ -355,7 +358,7 @@ Uzorak glob koristi jednostavne šablone globbiranja regularnih izraza:
 - `*` odgovara nuli ili više bilo kojeg znaka (npr. `"my-mcp*"` odgovara `my-mcp_search`, `my-mcp_list`, itd.)
 - `?` odgovara tačno jednom znaku
 - Svi ostali likovi se bukvalno podudaraju
-  :::napomena
+  :::note
   MCP serverski alati se registruju sa imenom servera kao prefiksom, tako da onemogućite sve alate za server jednostavno koristite:
 
 ```

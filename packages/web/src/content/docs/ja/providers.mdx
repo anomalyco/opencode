@@ -53,7 +53,7 @@ config.
 OpenCode Zen は、OpenCode チームが提供するモデルのリストです。
 OpenCode で適切に動作することがテストおよび検証されています。 [詳細はこちら](/docs/zen)。
 
-:::ヒント
+:::tip
 初めての方は、OpenCode Zen から始めることをお勧めします。
 :::
 
@@ -89,7 +89,7 @@ OpenCode で適切に動作することがテストおよび検証されてい�
 いくつかのプロバイダーを詳しく見てみましょう。プロバイダーを追加したい場合は、
 リストにある場合は、お気軽に PR を開いてください。
 
-:::注記
+:::note
 ここにプロバイダーが表示されない場合は、 PRを送信してください。
 :::
 
@@ -129,7 +129,7 @@ OpenCode で Amazon Bedrock を使用するには:
 1. Amazon Bedrock コンソールの **モデル カタログ** に移動してリクエストします。
    必要なモデルにアクセスします。
 
-:::ヒント
+:::tip
 Amazon Bedrock で必要なモデルにアクセスできる必要があります。
 :::
 
@@ -181,7 +181,7 @@ export AWS_REGION=us-east-1
 - `profile` - `~/.aws/credentials` からの AWS 名前付きプロファイル
 - `endpoint` - VPC エンドポイントのカスタム エンドポイント URL (汎用 `baseURL` オプションのエイリアス)
 
-:::ヒント
+:::tip
 構成ファイルのオプションは環境変数より優先されます。
 :::
 
@@ -204,7 +204,7 @@ Bedrock の VPC エンドポイントを使用している場合:
 }
 ```
 
-:::注記
+:::note
 `endpoint` オプションは、AWS 固有の用語を使用した汎用の `baseURL` オプションのエイリアスです。 `endpoint` と `baseURL` の両方が指定された場合は、`endpoint` が優先されます。
 :::
 
@@ -222,7 +222,7 @@ Amazon Bedrock は次の認証優先度を使用します。
 1.  **ベアラー トークン** - `AWS_BEARER_TOKEN_BEDROCK` 環境変数または `/connect` コマンドからのトークン
 2.  **AWS 認証情報チェーン** - プロファイル、アクセス キー、共有認証情報、IAM ロール、Web ID トークン (EKS IRSA)、インスタンス メタデータ
 
-:::注記
+:::note
 ベアラー トークンが (`/connect` または `AWS_BEARER_TOKEN_BEDROCK` 経由で) 設定されると、設定されたプロファイルを含むすべての AWS 認証情報方法よりも優先されます。
 :::
 
@@ -232,7 +232,7 @@ Amazon Bedrock は次の認証優先度を使用します。
    /models
    ```
 
-:::注記
+:::note
 カスタム推論プロファイルの場合、キーでモデルとプロバイダー名を使用し、`id` プロパティを arn に設定します。これにより、正しいキャッシュが保証されます。
 
 ```json title="opencode.json"
@@ -281,7 +281,7 @@ Amazon Bedrock は次の認証優先度を使用します。
    /models
    ```
 
-:::情報
+:::info
 OpenCode での Claude Pro/Max サブスクリプションの使用は、[Anthropic](https://anthropic.com).
 :::
 
@@ -295,7 +295,7 @@ Pro/Max サブスクリプションをお持ちでない場合は、[**API キ�
 
 ### Azure OpenAI
 
-:::注記
+:::note
 「申し訳ありませんが、そのリクエストには対応できません」エラーが発生した場合は、Azure リソースのコンテンツ フィルターを **DefaultV2** から **Default** に変更してみてください。
 :::
 
@@ -305,7 +305,7 @@ Pro/Max サブスクリプションをお持ちでない場合は、[**API キ�
 
 2. [Azure AI Foundry](https://ai.azure.com/) に移動し、モデルをデプロイします。
 
-:::注記
+:::note
 オープンコードが正しく動作するには、デプロイメント名がモデル名と一致する必要があります。
 :::
 
@@ -352,7 +352,7 @@ export AZURE_RESOURCE_NAME=XXX
 
 2. [Azure AI Foundry](https://ai.azure.com/) に移動し、モデルをデプロイします。
 
-:::注記
+:::note
 オープンコードが正しく動作するには、デプロイメント名がモデル名と一致する必要があります。
 :::
 
@@ -682,7 +682,7 @@ GitLab Duo は、GitLab の Anthropic プロキシを介したネイティブ �
 - **duo-chat-sonnet-4-5** - ほとんどのワークフローでバランスの取れたパフォーマンス
 - **duo-chat-opus-4-5** - 複雑な分析に最も適した能力
 
-:::注記
+:::note
 必要がない場合は、「GITLAB_TOKEN」環境変数を指定することもできます。
 トークンをオープンコード認証ストレージに保存します。
 :::
@@ -726,7 +726,7 @@ export GITLAB_AI_GATEWAY_URL=https://ai-gateway.company.com
 export GITLAB_TOKEN=glpat-...
 ```
 
-:::注記
+:::note
 GitLab 管理者は以下を有効にする必要があります。
 
 1. [Duo Agent Platform](https://docs.gitlab.com/user/gitlab_duo/turn_on_off/) (ユーザー、グループ、またはインスタンス用)
@@ -793,7 +793,7 @@ GitLab ツール (マージ リクエスト、問題、パイプライン、CI/C
 
 GitHub Copilot サブスクリプションをオープンコードで使用するには:
 
-:::注記
+:::note
 一部のモデルでは [Pro+] が必要になる場合があります。
 subscription](https://github.com/features/copilot/plans) を使用します。
 
@@ -833,7 +833,7 @@ OpenCode で Google Vertex AI を使用するには:
 1. Google Cloud Console の **Model Garden** に移動し、
    お住まいの地域で利用可能なモデル。
 
-:::注記
+:::note
 Vertex AI API が有効になっている Google Cloud プロジェクトが必要です。
 :::
 
@@ -858,7 +858,7 @@ export GOOGLE_CLOUD_PROJECT=your-project-id
 export VERTEX_LOCATION=global
 ```
 
-:::ヒント
+:::tip
 `global` 領域は、追加コストなしで可用性を向上させ、エラーを削減します。データ常駐要件には、リージョン エンドポイント (`us-central1` など) を使用します。 [詳細はこちら](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
 :::
 
@@ -1227,7 +1227,7 @@ Moonshot AI の Kim K2 を使用するには:
 
 Ollama を通じてローカル モデルを使用するようにオープンコードを構成できます。
 
-:::ヒント
+:::tip
 Ollama は OpenCode 用に自動的に構成できます。詳細については、「Ollama 統合 docs](https://docs.ollama.com/integrations/opencode)」を参照してください。
 :::
 
@@ -1259,7 +1259,7 @@ Ollama は OpenCode 用に自動的に構成できます。詳細については
 - `options.baseURL` はローカル サーバーのエンドポイントです。
 - `models` は、モデル ID とその構成のマップです。機種選択リストに機種名が表示されます。
 
-:::ヒント
+:::tip
 ツール呼び出しが機能しない場合は、Ollama の `num_ctx` を増やしてみてください。 16k〜32kあたりから始めてください。
 :::
 
@@ -1436,7 +1436,7 @@ SAP AI コアは、統合プラットフォームを通じて、OpenAI、Anthrop
 
 1. [SAP BTP Cockpit](https://account.hana.ondemand.com/) に移動し、SAP AI コア サービス インスタンスに移動して、サービス キーを作成します。
 
-:::ヒント
+:::tip
 サービス キーは、`clientid`、`clientsecret`、`url`、および `serviceurls.AI_API_URL` を含む JSON オブジェクトです。 AI コア インスタンスは、BTP コックピットの **サービス** > **インスタンスとサブスクリプション** で見つかります。
 :::
 
@@ -1473,7 +1473,7 @@ export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","s
    AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group opencode
    ```
 
-:::注記
+:::note
 これらの設定はオプションであり、SAP AI コアのセットアップに従って構成する必要があります。
 :::
 
@@ -1753,7 +1753,7 @@ Vercel AI Gateway を使用すると、統合エンドポイントを通じて O
 
 `/connect` コマンドにリストされていない **OpenAI 互換**プロバイダーを追加するには:
 
-:::ヒント
+:::tip
 OpenAI と互換性のある任意のプロバイダーをオープンコードで使用できます。最新の AI プロバイダーのほとんどは、OpenAI 互換の API を提供しています。
 :::
 
@@ -1782,7 +1782,7 @@ OpenAI と互換性のある任意のプロバイダーをオープンコード�
    └
    ```
 
-:::注記
+:::note
 覚えやすい ID を選択してください。これを構成ファイルで使用します。
 :::
 

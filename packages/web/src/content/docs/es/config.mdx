@@ -28,7 +28,7 @@ OpenCode admite los formatos **JSON** y **JSONC** (JSON con comentarios).
 Puedes colocar tu configuración en un par de ubicaciones diferentes y tienen un
 diferente orden de precedencia.
 
-:::nota
+:::note
 Los archivos de configuración se **fusionan**, no se reemplazan.
 :::
 
@@ -51,7 +51,7 @@ Las fuentes de configuración se cargan en este orden (las fuentes posteriores a
 
 Esto significa que las configuraciones del proyecto pueden anular los valores predeterminados globales y las configuraciones globales pueden anular los valores predeterminados de la organización remota.
 
-:::nota
+:::note
 Los directorios `.opencode` y `~/.config/opencode` usan **nombres en plural** para los subdirectorios: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` y `themes/`. También se admiten nombres singulares (por ejemplo, `agent/`) para compatibilidad con versiones anteriores.
 :::
 
@@ -105,7 +105,7 @@ La configuración global anula los valores predeterminados de la organización r
 
 Agregue `opencode.json` en la raíz de su proyecto. La configuración del proyecto tiene la mayor prioridad entre los archivos de configuración estándar: anula las configuraciones globales y remotas.
 
-:::consejo
+:::tip
 Coloque la configuración específica del proyecto en la raíz de su proyecto.
 :::
 
@@ -291,7 +291,7 @@ Amazon Bedrock admite la configuración específica de AWS:
 - `profile` - AWS perfil con nombre de `~/.aws/credentials` (el valor predeterminado es `AWS_PROFILE` var env)
 - `endpoint`: URL de punto de enlace personalizada para puntos de enlace de VPC. Este es un alias para la opción genérica `baseURL` que utiliza terminología específica de AWS. Si se especifican ambos, `endpoint` tiene prioridad.
 
-:::nota
+:::note
 Los tokens de portador (`AWS_BEARER_TOKEN_BEDROCK` o `/connect`) tienen prioridad sobre la autenticación basada en perfil. Consulte [precedencia de autenticación](/docs/providers#authentication-precedence) para obtener más detalles.
 :::
 
@@ -576,7 +576,7 @@ Puede deshabilitar proveedores que se cargan automáticamente a través de la op
 }
 ```
 
-:::nota
+:::note
 El `disabled_providers` tiene prioridad sobre `enabled_providers`.
 :::
 
@@ -601,7 +601,7 @@ Puede especificar una lista de proveedores permitidos a través de la opción `e
 
 Esto es útil cuando desea restringir OpenCode para que utilice únicamente proveedores específicos en lugar de deshabilitarlos uno por uno.
 
-:::nota
+:::note
 El `disabled_providers` tiene prioridad sobre `enabled_providers`.
 :::
 
@@ -620,7 +620,7 @@ La clave `experimental` contiene opciones que se encuentran en desarrollo activo
 }
 ```
 
-:::precaución
+:::caution
 Las opciones experimentales no son estables. Pueden cambiar o eliminarse sin previo aviso.
 :::
 

@@ -94,7 +94,7 @@ This tool allows the LLM to run terminal commands like `npm install`, `git statu
 
 使用它允许 LLM 创建新文件。如果现有文件已经存在，将会覆盖它们。
 
-:::笔记
+:::note
 `write`工具由`edit`许可权控制，该许可权主题所有文件修改（`edit`、`write`、`patch`、`multiedit`）。
 :::
 
@@ -172,7 +172,7 @@ This tool allows the LLM to run terminal commands like `npm install`, `git statu
 
 与您配置的LSP服务器交互，通知计划码智慧功能，例如定义、引用、悬停资讯和呼叫层次结构。
 
-:::笔记
+:::note
 This tool is only available when `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (or `OPENCODE_EXPERIMENTAL=true`).
 :::
 
@@ -206,7 +206,7 @@ To configure which LSP servers are available for your project, see [LSP Servers]
 
 該工具將補丁檔案應用到您的程式碼庫。對於應用來自各種來源的差異和補丁很有用。
 
-:::笔记
+:::note
 `patch`工具由`edit`许可权控制，该许可权主题所有文件修改（`edit`、`write`、`patch`、`multiedit`）。
 :::
 
@@ -242,7 +242,7 @@ To configure which LSP servers are available for your project, see [LSP Servers]
 
 建立和更新任务列表以跟踪复杂操作期间的详细信息。LLM 使用它来组织多步骤任务。
 
-:::笔记
+:::note
 默认情况下，子代理取消此工具，但您可以手动启用它。 [了解更多](/docs/agents/#permissions)
 :::
 
@@ -263,7 +263,7 @@ To configure which LSP servers are available for your project, see [LSP Servers]
 
 读取当前完成待办事项列表状态。由 LLM 用于跟踪哪些任务待处理或已已。
 
-:::笔记
+:::note
 默认情况下，子代理取消此工具，但您可以手动启用它。 [了解更多](/docs/agents/#permissions)
 :::
 
@@ -290,7 +290,7 @@ To configure which LSP servers are available for your project, see [LSP Servers]
 
 在網路上搜尋資訊。
 
-:::笔记
+:::note
 仅当使用 OpenCode 提供或 `OPENCODE_ENABLE_EXA` 程序环境变量设置为任何真值（例如 `true` 或 `1`）时，此工具才可用。
 
 要在启动 OpenCode 时启用：
@@ -314,7 +314,7 @@ OPENCODE_ENABLE_EXA=1 opencode
 
 不需要 API 金钥匙 — 该工具消耗身份验证即可直接连线到 Exa AI 的托管 MCP 服务。
 
-:::提示
+:::tip
 当您需要查询资讯（发现）时，请使用 `websearch`；当您需要从特定 URL 检索内容（搜索）时，请使用 `webfetch`。
 :::
 

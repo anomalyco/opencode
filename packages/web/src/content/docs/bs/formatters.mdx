@@ -10,7 +10,8 @@ OpenCode automatski formatira datoteke nakon što su napisane ili uređene pomo�
 ## Ugrađeno
 
 OpenCode dolazi sa nekoliko ugrađenih formatera za popularne jezike i okvire. Ispod je lista formatera, podržanih ekstenzija datoteka i naredbi ili opcija konfiguracije koje su mu potrebne.
-| Formatter | Ekstenzije | Zahtjevi || -------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Formatter | Ekstenzije | Zahtjevi
+|-------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | gofmt | .go | `gofmt` komanda dostupna |
 | mix | .ex, .exs, .eex, .heex, .leex, .neex, .sface | `mix` komanda dostupna |
 | ljepše | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml i [više](https://prettier.io/docs/en/index.html) | `prettier` zavisnost u `package.json` |
@@ -60,7 +61,8 @@ Možete prilagoditi formatere kroz `formatter` odjeljak u vašoj OpenCode konfig
 ```
 
 Svaka konfiguracija formatera podržava sljedeće:
-| Nekretnine | Vrsta | Opis || ------------- | -------- | ------------------------------------------------------- |
+| Nekretnine | Vrsta | Opis
+|------------- | -------- | ------------------------------------------------------- |
 | `disabled` | boolean | Postavite ovo na `true` da onemogućite formater |
 | `command` | string[] | Naredba za pokretanje za formatiranje |
 | `environment` | objekt | Varijable okruženja koje treba postaviti prilikom pokretanja formatera |

@@ -28,7 +28,7 @@ OpenCode 支持 **JSON** 和 **JSONC**（带注释的 JSON）格式。
 您可以將配置放置在幾個不同的位置，它們有一個
 不同的優先順序。
 
-:::笔记
+:::note
 配置文件**合併在一起**，而不是替換。
 :::
 
@@ -51,7 +51,7 @@ OpenCode 支持 **JSON** 和 **JSONC**（带注释的 JSON）格式。
 
 這意味著項目配置可以覆蓋全局默認值，全局配置可以覆蓋遠程組織默認值。
 
-:::笔记
+:::note
 `.opencode` 和`~/.config/opencode` 目录对子目录使用**复数名称**：`agents/`、`commands/`、`modes/`、`plugins/`、`skills/`、`tools/` 和`themes/`。为了坚固兼容，还支持单数名称（例如`agent/`）。
 :::
 
@@ -105,7 +105,7 @@ OpenCode 支持 **JSON** 和 **JSONC**（带注释的 JSON）格式。
 
 在项目根目录中添加`opencode.json`。项目配置在标准配置文件中具有最高优先级 - 它覆盖全局配置和远程配置。
 
-:::提示
+:::tip
 將項目特定配置放在項目的根目錄中。
 :::
 
@@ -291,7 +291,7 @@ Amazon Bedrock 支持 AWS 特定配置：
 - `profile` - 来自 `~/.aws/credentials` 的 AWS 命名配置文件（默认为 `AWS_PROFILE` env var）
 - `endpoint` - VPC 终端节点的自定义节点 URL。这是使用 AWS 特定术语的通用 `baseURL` 选项的别名。如果两者都指定，`endpoint` 优先。
 
-:::笔记
+:::note
 承载令牌（`AWS_BEARER_TOKEN_BEDROCK` 或`/connect`）优先于基于配置文件的身份验证。详情请参见【认证优先级](/docs/providers#authentication-precedence)。
 :::
 
@@ -576,7 +576,7 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 }
 ```
 
-:::笔记
+:::note
 `disabled_providers` 优先于`enabled_providers`。
 :::
 
@@ -601,7 +601,7 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 
 当您想要限制 OpenCode 仅使用特定的提供程序而不是一一禁止它们时，这非常有用。
 
-:::笔记
+:::note
 `disabled_providers` 优先于`enabled_providers`。
 :::
 
@@ -620,7 +620,7 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 }
 ```
 
-:::警告
+:::caution
 實驗選項不穩定。它們可能會更改或被刪除，恕不另行通知。
 :::
 

@@ -185,10 +185,9 @@ OpenCode が承認を求めるプロンプトを表示すると、UI は 3 つ�
 
 エージェントごとに権限をオーバーライドできます。エージェントの権限はグローバル設定とマージされ、エージェント ルールが優先されます。 [エージェントの権限について詳しくは、](/docs/agents#permissions) をご覧ください。
 
-:::注記
+:::note
 パターン マッチングの詳細な例については、上記の「粒度ルール (オブジェクト構文)](#granular-rules-object-syntax)」セクションを参照してください。
 :::
-
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
@@ -232,6 +231,6 @@ permission:
 Only analyze code and suggest changes.
 ```
 
-:::ヒント
+:::tip
 引数のあるコマンドにはパターン マッチングを使用します。 `"grep *"` は `grep pattern file.txt` を許可しますが、`"grep"` だけではブロックされます。 `git status` のようなコマンドはデフォルトの動作で機能しますが、引数を渡すときに明示的な許可 (`"git status *"` など) が必要です。
 :::
