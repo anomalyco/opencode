@@ -83,6 +83,16 @@ export namespace SessionRetry {
       if (!json || typeof json !== "object") return undefined
       const code = typeof json.code === "string" ? json.code : ""
 
+      // Some providers surface context overflow as a JSON error string (instead of a typed ContextOverflowError).
+      // Do not retry in that case.
+      if ((json as Record<string, unknown>).type === "error") {
+        const err = (json as Record<string, unknown>).error
+        if (typeof err === "object" && err !== null) {
+          const ecode = (err as Record<string, unknown>).code
+          if (typeof ecode === "string" && ecode.includes("context_length_exceeded")) return undefined
+        }
+      }
+
       if (json.type === "error" && json.error?.type === "too_many_requests") {
         return "Too Many Requests"
       }

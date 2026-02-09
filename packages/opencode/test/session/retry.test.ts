@@ -92,6 +92,11 @@ describe("session.retry.retryable", () => {
     expect(SessionRetry.retryable(error)).toBe("Too Many Requests")
   })
 
+  test("does not retry context_length_exceeded json messages", () => {
+    const error = wrap(JSON.stringify({ type: "error", error: { code: "context_length_exceeded" } }))
+    expect(SessionRetry.retryable(error)).toBeUndefined()
+  })
+
   test("maps overloaded provider codes", () => {
     const error = wrap(JSON.stringify({ code: "resource_exhausted" }))
     expect(SessionRetry.retryable(error)).toBe("Provider is overloaded")

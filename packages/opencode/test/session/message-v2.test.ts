@@ -805,6 +805,25 @@ describe("session.message-v2.fromError", () => {
     })
   })
 
+  test("serializes context_length_exceeded when wrapped in Error message", () => {
+    const input = {
+      type: "error",
+      error: {
+        code: "context_length_exceeded",
+      },
+    }
+    const err = new Error(JSON.stringify(input))
+    const result = MessageV2.fromError(err, { providerID: "test" })
+
+    expect(result).toStrictEqual({
+      name: "ContextOverflowError",
+      data: {
+        message: "Input exceeds context window of this model",
+        responseBody: JSON.stringify(input),
+      },
+    })
+  })
+
   test("serializes response error codes", () => {
     const cases = [
       {

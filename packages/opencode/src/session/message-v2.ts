@@ -772,9 +772,34 @@ export namespace MessageV2 {
             metadata: parsed.metadata,
           },
           { cause: e },
-        ).toObject()
+          ).toObject()
       case e instanceof Error:
-        return new NamedError.Unknown({ message: e.toString() }, { cause: e }).toObject()
+        return iife(() => {
+          // Some providers (and some SDK wrappers) throw `Error` where `message` is a JSON-encoded stream error.
+          // Try to parse it so we can correctly classify context overflow and avoid retry doom loops.
+          const parsed = ProviderError.parseStreamError(e.message)
+          if (parsed) {
+            if (parsed.type === "context_overflow") {
+              return new MessageV2.ContextOverflowError(
+                {
+                  message: parsed.message,
+                  responseBody: parsed.responseBody,
+                },
+                { cause: e },
+              ).toObject()
+            }
+            return new MessageV2.APIError(
+              {
+                message: parsed.message,
+                isRetryable: parsed.isRetryable,
+                responseBody: parsed.responseBody,
+              },
+              { cause: e },
+            ).toObject()
+          }
+
+          return new NamedError.Unknown({ message: e.toString() }, { cause: e }).toObject()
+        })
       default:
         try {
           const parsed = ProviderError.parseStreamError(e)
