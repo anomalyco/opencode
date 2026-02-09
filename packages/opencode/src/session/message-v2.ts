@@ -35,6 +35,10 @@ export namespace MessageV2 {
     }),
   )
   export type APIError = z.infer<typeof APIError.Schema>
+  export const ContextOverflowError = NamedError.create(
+    "ContextOverflowError",
+    z.object({ message: z.string(), responseBody: z.string().optional() }),
+  )
 
   const PartBase = z.object({
     id: z.string(),
@@ -361,6 +365,7 @@ export namespace MessageV2 {
         NamedError.Unknown.Schema,
         OutputLengthError.Schema,
         AbortedError.Schema,
+        ContextOverflowError.Schema,
         APIError.Schema,
       ])
       .optional(),
@@ -718,6 +723,38 @@ export namespace MessageV2 {
     return status === 404 || e.isRetryable
   }
 
+  // Adapted from overflow detection patterns in:
+  // https://github.com/badlogic/pi-mono/blob/main/packages/ai/src/utils/overflow.ts
+  const overflowPatterns = [
+    /prompt is too long/i, // Anthropic
+    /input is too long for requested model/i, // Amazon Bedrock
+    /exceeds the context window/i, // OpenAI (Completions + Responses API message text)
+    /input token count.*exceeds the maximum/i, // Google (Gemini)
+    /maximum prompt length is \d+/i, // xAI (Grok)
+    /reduce the length of the messages/i, // Groq
+    /maximum context length is \d+ tokens/i, // OpenRouter
+    /exceeds the limit of \d+/i, // GitHub Copilot
+    /exceeds the available context size/i, // llama.cpp server
+    /greater than the context length/i, // LM Studio
+    /context window exceeds limit/i, // MiniMax
+    /exceeded model token limit/i, // Kimi For Coding
+    /context[_ ]length[_ ]exceeded/i, // Generic fallback
+    /too many tokens/i, // Generic fallback
+    /token limit exceeded/i, // Generic fallback
+  ]
+
+  // Providers not reliably handled in this function:
+  // - z.ai: can accept overflow silently (needs token-count/context-window checks)
+
+  function isContextOverflow(message: string) {
+    if (overflowPatterns.some((p) => p.test(message))) return true
+
+    // Providers/status patterns handled outside of regex list:
+    // - Cerebras: often returns "400 (no body)" / "413 (no body)"
+    // - Mistral: often returns "400 (no body)" / "413 (no body)"
+    return /^4(00|13)\s*(status code)?\s*\(no body\)/i.test(message)
+  }
+
   export function fromError(e: unknown, ctx: { providerID: string }) {
     switch (true) {
       case e instanceof DOMException && e.name === "AbortError":
@@ -780,6 +817,15 @@ export namespace MessageV2 {
 
           return `${msg}: ${e.responseBody}`
         }).trim()
+        if (isContextOverflow(message)) {
+          return new MessageV2.ContextOverflowError(
+            {
+              message,
+              responseBody: e.responseBody,
+            },
+            { cause: e },
+          ).toObject()
+        }
 
         const metadata = e.url ? { url: e.url } : undefined
         return new MessageV2.APIError(
@@ -817,15 +863,12 @@ export namespace MessageV2 {
             if (json?.type === "error") {
               switch (json?.error?.code) {
                 case "context_length_exceeded":
-                  return new MessageV2.APIError(
+                  return new MessageV2.ContextOverflowError(
                     {
                       message: "Input exceeds context window of this model",
-                      isRetryable: false,
                       responseBody,
                     },
-                    {
-                      cause: e,
-                    },
+                    { cause: e },
                   ).toObject()
                 case "insufficient_quota":
                   return new MessageV2.APIError(
