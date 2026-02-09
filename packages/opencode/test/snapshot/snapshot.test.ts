@@ -3,6 +3,7 @@ import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
 import { Snapshot } from "../../src/snapshot"
+import { Global } from "../../src/global"
 import { Instance } from "../../src/project/instance"
 import { Filesystem } from "../../src/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
@@ -34,6 +35,13 @@ async function bootstrap() {
 async function writeLarge(file: string) {
   await Bun.write(file, "")
   await fs.truncate(file, 1024 * 1024 * 1024 + 1)
+}
+
+async function exists(file: string) {
+  return fs
+    .stat(file)
+    .then(() => true)
+    .catch(() => false)
 }
 
 test("tracks deleted files correctly", async () => {
@@ -373,6 +381,46 @@ test("diffFull ignores files larger than snapshot threshold", async () => {
       expect(diffs.length).toBe(1)
       expect(diffs[0].file).toBe("small.txt")
       expect(await Bun.file(big).exists()).toBe(true)
+    },
+  })
+})
+
+test("cleanup keeps snapshot dir when no oversized objects are found", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      expect(await Snapshot.track()).toBeTruthy()
+      const git = path.join(Global.Path.data, "snapshot", Instance.project.id)
+      expect(await exists(git)).toBe(true)
+
+      await Snapshot.cleanup()
+
+      expect(await exists(git)).toBe(true)
+    },
+  })
+})
+
+test("cleanup resets snapshot dir when oversized objects are detected", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      expect(await Snapshot.track()).toBeTruthy()
+      const git = path.join(Global.Path.data, "snapshot", Instance.project.id)
+      expect(await exists(git)).toBe(true)
+
+      await Snapshot.cleanup({
+        findOversized: async () => ({
+          failed: false,
+          count: 1,
+          sample: ["1111111111111111111111111111111111111111:1073741825"],
+        }),
+      })
+
+      expect(await exists(git)).toBe(false)
+      expect(await Snapshot.track()).toBeTruthy()
+      expect(await exists(git)).toBe(true)
     },
   })
 })

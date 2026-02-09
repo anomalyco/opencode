@@ -15,6 +15,11 @@ export namespace Snapshot {
   const prune = "7.days"
   const sizeThreshold = 1 * 1024 * 1024 * 1024 // 1 GB
   type Env = Record<string, string | undefined>
+  type Oversized = {
+    failed: boolean
+    count: number
+    sample: string[]
+  }
 
   function gitenv(git = gitdir()): Env {
     return {
@@ -106,6 +111,48 @@ export namespace Snapshot {
     await fs.writeFile(exclude, `${base}${added.join("\n")}\n`)
   }
 
+  async function findOversizedObjects(env: Env): Promise<Oversized> {
+    const proc = Bun.spawn(
+      ["git", "cat-file", "--batch-all-objects", "--batch-check=%(objectname) %(objecttype) %(objectsize)"],
+      {
+        cwd: Instance.directory,
+        env,
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    )
+    const out = await Bun.readableStreamToText(proc.stdout)
+    const err = await Bun.readableStreamToText(proc.stderr)
+    const code = await proc.exited
+
+    if (code !== 0) {
+      log.warn("git cat-file failed", { exitCode: code, stderr: err })
+      return {
+        failed: true,
+        count: 0,
+        sample: [] as string[],
+      }
+    }
+
+    let count = 0
+    const sample: string[] = []
+    for (const line of out.split("\n")) {
+      if (!line) continue
+      const [hash, type, raw] = line.trim().split(" ")
+      if (!hash || type !== "blob" || !raw) continue
+      const size = Number.parseInt(raw, 10)
+      if (!Number.isFinite(size) || size <= sizeThreshold) continue
+      count += 1
+      if (sample.length < 5) sample.push(`${hash}:${size}`)
+    }
+
+    return {
+      failed: false,
+      count,
+      sample,
+    }
+  }
+
   /**
    * Escape gitignore metacharacters so file paths are matched literally.
    * Replaces backslashes, glob chars (* ? [ ]), trailing spaces, and leading #/!.
@@ -119,7 +166,7 @@ export namespace Snapshot {
     return escaped
   }
 
-  export async function cleanup() {
+  export async function cleanup(input?: { findOversized?: (env: Env) => Promise<Oversized> }) {
     if (Instance.project.vcs !== "git" || Flag.OPENCODE_CLIENT === "acp") return
     const cfg = await Config.get()
     if (cfg.snapshot === false) return
@@ -130,6 +177,25 @@ export namespace Snapshot {
       .then(() => true)
       .catch(() => false)
     if (!exists) return
+    const oversized = await (input?.findOversized ?? findOversizedObjects)(env)
+    if (oversized.failed) return
+    if (oversized.count > 0) {
+      log.warn("cleanup reset snapshot due to oversized objects", {
+        count: oversized.count,
+        threshold: sizeThreshold,
+        sample: oversized.sample,
+      })
+      const removed = await fs
+        .rm(git, { recursive: true, force: true })
+        .then(() => true)
+        .catch((error) => {
+          log.warn("cleanup failed to reset snapshot", { error })
+          return false
+        })
+      if (!removed) return
+      log.info("cleanup reset snapshot")
+      return
+    }
     // git gc --prune can run very slowly and use lots of memory when snapshot repos bloat with unfiltered large files.
     const proc = Bun.spawn(["git", "gc", `--prune=${prune}`], {
       cwd: Instance.directory,
