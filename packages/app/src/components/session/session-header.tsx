@@ -327,14 +327,14 @@ export function SessionHeader() {
                     }
                   >
                     <div class="flex items-center">
-                      <div class="flex items-center rounded-md border border-border-base bg-surface-panel overflow-hidden">
+                      <div class="flex h-[24px] box-border items-center rounded-md border border-border-base bg-surface-panel overflow-hidden">
                         <Button
                           variant="ghost"
-                          class="rounded-none h-[24px] py-1.5 pr-4 pl-3 gap-2 border-none shadow-none"
+                          class="rounded-none h-full py-0 pr-3 pl-2 gap-1.5 border-none shadow-none"
                           onClick={() => openDir(current().id)}
                           aria-label={language.t("session.header.open.ariaLabel", { app: current().label })}
                         >
-                          <AppIcon id={current().icon} class="size-5" />
+                          <AppIcon id={current().icon} class="size-4" />
                           <span class="text-12-regular text-text-strong">Open</span>
                         </Button>
                         <div class="self-stretch w-px bg-border-base/70" />
@@ -343,7 +343,7 @@ export function SessionHeader() {
                             as={IconButton}
                             icon="chevron-down"
                             variant="ghost"
-                            class="rounded-none h-[24px] w-auto px-2 border-none shadow-none data-[expanded]:bg-surface-raised-base-active"
+                            class="rounded-none h-full w-[24px] p-0 border-none shadow-none data-[expanded]:bg-surface-raised-base-active"
                             aria-label={language.t("session.header.open.menu")}
                           />
                           <DropdownMenu.Portal>
