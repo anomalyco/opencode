@@ -35,6 +35,7 @@ import { Persist, persisted } from "@/utils/persist"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
 import { createPromptAttachments, ACCEPTED_FILE_TYPES } from "./prompt-input/attachments"
 import { navigatePromptHistory, prependHistoryEntry, promptLength } from "./prompt-input/history"
@@ -97,6 +98,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const command = useCommand()
   const permission = usePermission()
   const language = useLanguage()
+  const platform = usePlatform()
   let editorRef!: HTMLDivElement
   let fileInputRef!: HTMLInputElement
   let scrollRef!: HTMLDivElement
@@ -205,7 +207,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     historyIndex: number
     savedPrompt: Prompt | null
     placeholder: number
-    dragging: boolean
+    draggingType: "image" | "@mention" | null
     mode: "normal" | "shell"
     applyingHistory: boolean
   }>({
@@ -213,7 +215,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     historyIndex: -1,
     savedPrompt: null,
     placeholder: Math.floor(Math.random() * EXAMPLES.length),
-    dragging: false,
+    draggingType: null,
     mode: "normal",
     applyingHistory: false,
   })
@@ -413,7 +415,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   } = useFilteredList<SlashCommand>({
     items: slashCommands,
     key: (x) => x?.id,
-    filterKeys: ["trigger", "title", "description"],
+    filterKeys: ["trigger", "title"],
     onSelect: handleSlashSelect,
   })
 
@@ -760,8 +762,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     editor: () => editorRef,
     isFocused,
     isDialogActive: () => !!dialog.active,
-    setDragging: (value) => setStore("dragging", value),
+    setDraggingType: (type) => setStore("draggingType", type),
+    focusEditor: () => {
+      editorRef.focus()
+      setCursorPosition(editorRef, promptLength(prompt.current()))
+    },
     addPart,
+    readClipboardImage: platform.readClipboardImage,
   })
 
   const { abort, handleSubmit } = createPromptSubmit({
@@ -946,11 +953,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           "group/prompt-input": true,
           "bg-surface-raised-stronger-non-alpha shadow-xs-border relative": true,
           "rounded-[14px] overflow-clip focus-within:shadow-xs-border": true,
-          "border-icon-info-active border-dashed": store.dragging,
+          "border-icon-info-active border-dashed": store.draggingType !== null,
           [props.class ?? ""]: !!props.class,
         }}
       >
-        <PromptDragOverlay dragging={store.dragging} label={language.t("prompt.dropzone.label")} />
+        <PromptDragOverlay
+          type={store.draggingType}
+          label={language.t(store.draggingType === "@mention" ? "prompt.dropzone.file.label" : "prompt.dropzone.label")}
+        />
         <PromptContextItems
           items={prompt.context.items()}
           active={(item) => {
@@ -983,6 +993,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             aria-multiline="true"
             aria-label={placeholder()}
             contenteditable="true"
+            autocapitalize="off"
+            autocorrect="off"
+            spellcheck={false}
             onInput={handleInput}
             onPaste={handlePaste}
             onCompositionStart={() => setComposing(true)}
