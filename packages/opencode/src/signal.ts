@@ -7,6 +7,7 @@ const SIGNAL_EXIT_CODES: Record<string, number> = {
   SIGTERM: 128 + 15,
   SIGINT: 128 + 2,
   SIGHUP: 128 + 1,
+  SIGQUIT: 128 + 3,
 }
 
 let shuttingDown = false
@@ -25,6 +26,7 @@ async function gracefulShutdown(signal: string) {
     })
     process.exit(SIGNAL_EXIT_CODES[signal] ?? 1)
   }, SHUTDOWN_TIMEOUT_MS)
+  timeout.unref()
 
   try {
     await Instance.disposeAll()
@@ -37,7 +39,7 @@ async function gracefulShutdown(signal: string) {
 }
 
 export function registerSignalHandlers() {
-  for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"]) {
+  for (const signal of ["SIGTERM", "SIGINT", "SIGHUP", "SIGQUIT"]) {
     process.on(signal, () => {
       void gracefulShutdown(signal)
     })
