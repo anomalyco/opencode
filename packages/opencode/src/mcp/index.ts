@@ -116,15 +116,56 @@ export namespace MCP {
     })
   }
 
+  // AJV-recognized formats; non-standard ones (e.g. "uint64" from Google APIs) are stripped to suppress warnings
+  const KNOWN_FORMATS = new Set([
+    "date-time",
+    "date",
+    "time",
+    "duration",
+    "email",
+    "idn-email",
+    "hostname",
+    "idn-hostname",
+    "ipv4",
+    "ipv6",
+    "uri",
+    "uri-reference",
+    "iri",
+    "iri-reference",
+    "uri-template",
+    "json-pointer",
+    "relative-json-pointer",
+    "regex",
+    "uuid",
+    "int32",
+    "int64",
+    "float",
+    "double",
+    "byte",
+    "binary",
+    "password",
+  ])
+
+  function stripUnknownFormats(obj: unknown): unknown {
+    if (Array.isArray(obj)) return obj.map(stripUnknownFormats)
+    if (obj === null || typeof obj !== "object") return obj
+    const result: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+      if (k === "format" && typeof v === "string" && !KNOWN_FORMATS.has(v)) continue
+      result[k] = stripUnknownFormats(v)
+    }
+    return result
+  }
+
   // Convert MCP tool definition to AI SDK Tool type
   async function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number): Promise<Tool> {
     const inputSchema = mcpTool.inputSchema
 
     // Spread first, then override type to ensure it's always "object"
     const schema: JSONSchema7 = {
-      ...(inputSchema as JSONSchema7),
+      ...(stripUnknownFormats(inputSchema) as JSONSchema7),
       type: "object",
-      properties: (inputSchema.properties ?? {}) as JSONSchema7["properties"],
+      properties: (stripUnknownFormats(inputSchema.properties ?? {}) as JSONSchema7["properties"]),
       additionalProperties: false,
     }
 
