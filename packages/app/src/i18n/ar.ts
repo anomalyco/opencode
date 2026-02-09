@@ -44,6 +44,7 @@ export const dict = {
 
   "command.session.new": "جلسة جديدة",
   "command.file.open": "فتح ملف",
+  "command.tab.closeOthers": "إغلاق علامات التبويب الأخرى",
   "command.context.addSelection": "إضافة التحديد إلى السياق",
   "command.context.addSelection.description": "إضافة الأسطر المحددة من الملف الحالي",
   "command.input.focus": "التركيز على حقل الإدخال",

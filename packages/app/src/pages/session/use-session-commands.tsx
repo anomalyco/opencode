@@ -1,6 +1,6 @@
 import { createMemo } from "solid-js"
 import { useNavigate, useParams } from "@solidjs/router"
-import { useCommand } from "@/context/command"
+import { useCommand, type CommandOption } from "@/context/command"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useFile, selectionFromLines, type FileSelection } from "@/context/file"
 import { useLanguage } from "@/context/language"
@@ -61,17 +61,19 @@ export const useSessionCommands = (input: {
     },
   ])
 
-  const fileCommands = createMemo(() => [
-    {
-      id: "file.open",
-      title: input.language.t("command.file.open"),
-      description: input.language.t("palette.search.placeholder"),
-      category: input.language.t("command.category.file"),
-      keybind: "mod+p",
-      slash: "open",
-      onSelect: () => input.dialog.show(() => <DialogSelectFile onOpenFile={input.showAllFiles} />),
-    },
-    {
+  const fileCommands = createMemo((): CommandOption[] => {
+    const commands: CommandOption[] = [
+      {
+        id: "file.open",
+        title: input.language.t("command.file.open"),
+        description: input.language.t("palette.search.placeholder"),
+        category: input.language.t("command.category.file"),
+        keybind: "mod+p",
+        slash: "open",
+        disabled: false,
+        onSelect: () => input.dialog.show(() => <DialogSelectFile onOpenFile={input.showAllFiles} />),
+      },
+      {
       id: "tab.close",
       title: input.language.t("command.tab.close"),
       category: input.language.t("command.category.file"),
@@ -83,7 +85,26 @@ export const useSessionCommands = (input: {
         input.tabs().close(active)
       },
     },
-  ])
+    ]
+    if (input.tabs().all().length > 1) {
+      commands.push({
+        id: "tab.closeOthers",
+        title: input.language.t("command.tab.closeOthers"),
+        category: input.language.t("command.category.file"),
+        keybind: "mod+shift+w",
+        disabled: !input.tabs().active(),
+        onSelect: () => {
+          const active = input.tabs().active()
+          if (!active) return
+          const all = input.tabs().all()
+          all.forEach((tab) => {
+            if (tab !== active) input.tabs().close(tab)
+          })
+        },
+      })
+    }
+    return commands
+  })
 
   const contextCommands = createMemo(() => [
     {

@@ -44,6 +44,7 @@ export const dict = {
 
   "command.session.new": "Ny session",
   "command.file.open": "Åbn fil",
+  "command.tab.closeOthers": "Luk andre faner",
   "command.context.addSelection": "Tilføj markering til kontekst",
   "command.context.addSelection.description": "Tilføj markerede linjer fra den aktuelle fil",
   "command.input.focus": "Fokuser inputfelt",
