@@ -762,7 +762,11 @@ export const SessionRoutes = lazy(() =>
         return stream(c, async () => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
-          SessionPrompt.prompt({ ...body, sessionID })
+          SessionStatus.set(sessionID, { type: "busy" })
+          SessionPrompt.prompt({ ...body, sessionID }).catch((error) => {
+            log.error("prompt_async failed", { sessionID, error })
+            SessionStatus.set(sessionID, { type: "idle" })
+          })
         })
       },
     )

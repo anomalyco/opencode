@@ -840,7 +840,9 @@ export namespace SessionPrompt {
   }
 
   async function createUserMessage(input: PromptInput) {
-    const agent = await Agent.get(input.agent ?? (await Agent.defaultAgent()))
+    const agentName = input.agent ?? (await Agent.defaultAgent())
+    const agent = await Agent.get(agentName)
+    if (!agent) throw new Error(`Agent not found: "${agentName}"`)
 
     const model = input.model ?? agent.model ?? (await lastModel(input.sessionID))
     const full =
