@@ -24,7 +24,7 @@ const pkg = await import("../package.json").then((m) => m.default)
 const original = JSON.parse(JSON.stringify(pkg))
 
 // Rewrite for publishing
-pkg.name = "@kortix-ai/opencode-sdk"
+pkg.name = "@kortix/opencode-sdk"
 pkg.version = process.env.KORTIX_SDK_VERSION || "0.1.0"
 pkg.description = "Kortix fork of the OpenCode SDK — adds file write, delete, mkdir, and rename endpoints"
 pkg.repository = {
