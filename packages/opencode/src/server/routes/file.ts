@@ -195,39 +195,6 @@ export const FileRoutes = lazy(() =>
         return c.json(content)
       },
     )
-    .post(
-      "/file/content",
-      describeRoute({
-        summary: "Write file",
-        description:
-          "Write content to a file, creating it and any missing parent directories if they don't exist. Supports text and base64-encoded binary content.",
-        operationId: "file.write",
-        responses: {
-          ...errors(400),
-          200: {
-            description: "File written successfully",
-            content: {
-              "application/json": {
-                schema: resolver(z.boolean()),
-              },
-            },
-          },
-        },
-      }),
-      validator(
-        "json",
-        z.object({
-          path: z.string(),
-          content: z.string(),
-          encoding: z.literal("base64").optional(),
-        }),
-      ),
-      async (c) => {
-        const body = c.req.valid("json")
-        await File.write(body.path, body.content, body.encoding)
-        return c.json(true)
-      },
-    )
     .delete(
       "/file",
       describeRoute({
@@ -317,6 +284,60 @@ export const FileRoutes = lazy(() =>
         const body = c.req.valid("json")
         await File.rename(body.from, body.to)
         return c.json(true)
+      },
+    )
+    .post(
+      "/file/upload",
+      describeRoute({
+        summary: "Upload files",
+        description:
+          "Upload one or more files via multipart/form-data. Each file field should use the relative path as the field name (e.g., 'src/image.png'). Alternatively, include a 'path' field to specify a target directory — uploaded files will be placed there using their original filenames.",
+        operationId: "file.upload",
+        responses: {
+          ...errors(400),
+          200: {
+            description: "Upload results",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.array(
+                    z.object({
+                      path: z.string(),
+                      size: z.number(),
+                    }),
+                  ),
+                ),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const body = await c.req.parseBody({ all: true })
+        const targetDir = typeof body["path"] === "string" ? body["path"] : undefined
+        const results: { path: string; size: number }[] = []
+
+        for (const [key, value] of Object.entries(body)) {
+          if (key === "path") continue
+          const files = Array.isArray(value) ? value : [value]
+          for (const file of files) {
+            if (typeof file === "string") continue
+            if (!(file instanceof globalThis.File)) continue
+            const dest = targetDir
+              ? targetDir + "/" + file.name
+              : key === "file" || key === "file[]"
+                ? file.name
+                : key
+            const buffer = await file.arrayBuffer()
+            await File.upload(dest, buffer)
+            results.push({ path: dest, size: buffer.byteLength })
+          }
+        }
+
+        if (!results.length) {
+          throw new Error("No files found in request body")
+        }
+        return c.json(results)
       },
     ),
 )

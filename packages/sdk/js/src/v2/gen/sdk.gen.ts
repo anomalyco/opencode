@@ -36,8 +36,8 @@ import type {
   FileRenameErrors,
   FileRenameResponses,
   FileStatusResponses,
-  FileWriteErrors,
-  FileWriteResponses,
+  FileUploadErrors,
+  FileUploadResponses,
   FindFilesResponses,
   FindSymbolsResponses,
   FindTextResponses,
@@ -2364,45 +2364,6 @@ export class File extends HeyApiClient {
   }
 
   /**
-   * Write file
-   *
-   * Write content to a file, creating it and any missing parent directories if they don't exist. Supports text and base64-encoded binary content.
-   */
-  public write<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      path?: string
-      content?: string
-      encoding?: "base64"
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "body", key: "path" },
-            { in: "body", key: "content" },
-            { in: "body", key: "encoding" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<FileWriteResponses, FileWriteErrors, ThrowOnError>({
-      url: "/file/content",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
    * Get file status
    *
    * Get the git status of all files in the project.
@@ -2490,6 +2451,25 @@ export class File extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Upload files
+   *
+   * Upload one or more files via multipart/form-data. Each file field should use the relative path as the field name (e.g., 'src/image.png'). Alternatively, include a 'path' field to specify a target directory — uploaded files will be placed there using their original filenames.
+   */
+  public upload<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).post<FileUploadResponses, FileUploadErrors, ThrowOnError>({
+      url: "/file/upload",
+      ...options,
+      ...params,
     })
   }
 }

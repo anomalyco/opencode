@@ -542,18 +542,14 @@ export namespace File {
     })
   }
 
-  export async function write(file: string, content: string, encoding?: "base64") {
-    using _ = log.time("write", { file })
+  export async function upload(file: string, data: ArrayBuffer | Uint8Array | Blob | string) {
+    using _ = log.time("upload", { file })
     const full = path.join(Instance.directory, file)
     if (!Instance.containsPath(full)) {
       throw new Error("Access denied: path escapes project directory")
     }
     await fs.promises.mkdir(path.dirname(full), { recursive: true })
-    if (encoding === "base64") {
-      await Bun.write(full, Buffer.from(content, "base64"))
-    } else {
-      await Bun.write(full, content)
-    }
+    await Bun.write(full, data)
     await Bus.publish(Event.Edited, { file })
   }
 
