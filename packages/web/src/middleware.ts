@@ -1,5 +1,5 @@
 import { defineMiddleware } from "astro:middleware"
-import { matchLocale } from "./i18n/locales"
+import { exactLocale, matchLocale } from "./i18n/locales"
 
 function docsAlias(pathname: string) {
   const hit = /^\/docs\/([^/]+)(\/.*)?$/.exec(pathname)
@@ -7,12 +7,12 @@ function docsAlias(pathname: string) {
 
   const value = hit[1] ?? ""
   const tail = hit[2] ?? ""
-  const locale = matchLocale(value)
+  const locale = exactLocale(value)
   if (!locale) return null
-  if (locale === "root") return `/docs${tail}`
-  if (value === locale) return null
 
-  return `/docs/${locale}${tail}`
+  const next = locale === "root" ? `/docs${tail}` : `/docs/${locale}${tail}`
+  if (next === pathname) return null
+  return next
 }
 
 function localeFromCookie(header: string | null) {
