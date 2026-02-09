@@ -591,7 +591,7 @@ export default function Page() {
   const newSessionWorktree = createMemo(() => {
     if (store.newSessionWorktree === "create") return "create"
     const project = sync.project
-    if (project && sync.data.path.directory !== project.worktree) return sync.data.path.directory
+    if (project && sdk.directory !== project.worktree) return sdk.directory
     return "main"
   })
 
@@ -1647,7 +1647,7 @@ export default function Page() {
 
                     const target = value === "main" ? sync.project?.worktree : value
                     if (!target) return
-                    if (target === sync.data.path.directory) return
+                    if (target === sdk.directory) return
                     layout.projects.open(target)
                     navigate(`/${base64Encode(target)}/session`)
                   }}
