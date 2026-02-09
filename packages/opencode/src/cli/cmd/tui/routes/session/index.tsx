@@ -1,3 +1,27 @@
+import type { AssistantMessage, Part, ReasoningPart, TextPart, ToolPart, UserMessage } from "@opencode-ai/sdk/v2"
+import {
+  addDefaultParsers,
+  type BoxRenderable,
+  MacOSScrollAccel,
+  RGBA,
+  type ScrollAcceleration,
+  type ScrollBoxRenderable,
+  TextAttributes,
+} from "@opentui/core"
+import { type JSX, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
+import { SplitBorder } from "@tui/component/border"
+import { useCommandDialog } from "@tui/component/dialog-command"
+import { Prompt, type PromptRef } from "@tui/component/prompt"
+import { Spinner } from "@tui/component/spinner"
+import { useKeybind } from "@tui/context/keybind"
+import { useLocal } from "@tui/context/local"
+import { useRoute, useRouteData } from "@tui/context/route"
+import { useSDK } from "@tui/context/sdk"
+import { useSync } from "@tui/context/sync"
+import { useTheme } from "@tui/context/theme"
+import { DialogConfirm } from "@tui/ui/dialog-confirm"
+import { parsePatch } from "diff"
+import path from "path"
 import {
   batch,
   createContext,
@@ -12,72 +36,49 @@ import {
   useContext,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import path from "path"
-import { useRoute, useRouteData } from "@tui/context/route"
-import { useSync } from "@tui/context/sync"
-import { SplitBorder } from "@tui/component/border"
-import { Spinner } from "@tui/component/spinner"
-import { useTheme } from "@tui/context/theme"
-import {
-  BoxRenderable,
-  ScrollBoxRenderable,
-  addDefaultParsers,
-  MacOSScrollAccel,
-  type ScrollAcceleration,
-  TextAttributes,
-  RGBA,
-} from "@opentui/core"
-import { Prompt, type PromptRef } from "@tui/component/prompt"
-import type { AssistantMessage, Part, ToolPart, UserMessage, TextPart, ReasoningPart } from "@opencode-ai/sdk/v2"
-import { useLocal } from "@tui/context/local"
-import { Locale } from "@/util/locale"
-import type { Tool } from "@/tool/tool"
-import type { ReadTool } from "@/tool/read"
-import type { WriteTool } from "@/tool/write"
-import { BashTool } from "@/tool/bash"
+import stripAnsi from "strip-ansi"
+import { UI } from "@/cli/ui.ts"
+import { calculateTPS, formatTPS, getMessageTPS } from "@/core/tokens"
+import { Flag } from "@/flag/flag"
+import { Global } from "@/global"
+import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
+import type { ApplyPatchTool } from "@/tool/apply_patch"
+import type { BashTool } from "@/tool/bash"
+import type { EditTool } from "@/tool/edit"
 import type { GlobTool } from "@/tool/glob"
-import { TodoWriteTool } from "@/tool/todo"
 import type { GrepTool } from "@/tool/grep"
 import type { ListTool } from "@/tool/ls"
-import type { EditTool } from "@/tool/edit"
-import type { ApplyPatchTool } from "@/tool/apply_patch"
-import type { WebFetchTool } from "@/tool/webfetch"
-import type { TaskTool } from "@/tool/task"
 import type { QuestionTool } from "@/tool/question"
+import type { ReadTool } from "@/tool/read"
 import type { SkillTool } from "@/tool/skill"
-import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
-import { useSDK } from "@tui/context/sdk"
-import { useCommandDialog } from "@tui/component/dialog-command"
-import { useKeybind } from "@tui/context/keybind"
-import { Header } from "./header"
-import { parsePatch } from "diff"
-import { useDialog } from "../../ui/dialog"
-import { TodoItem } from "../../component/todo-item"
-import { DialogMessage } from "./dialog-message"
-import type { PromptInfo } from "../../component/prompt/history"
-import { DialogConfirm } from "@tui/ui/dialog-confirm"
-import { DialogTimeline } from "./dialog-timeline"
-import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
-import { DialogSessionRename } from "../../component/dialog-session-rename"
-import { Sidebar } from "./sidebar"
-import { Flag } from "@/flag/flag"
-import { LANGUAGE_EXTENSIONS } from "@/lsp/language"
-import parsers from "../../../../../../parsers-config.ts"
-import { Clipboard } from "../../util/clipboard"
-import { Toast, useToast } from "../../ui/toast"
-import { useKV } from "../../context/kv.tsx"
-import { Editor } from "../../util/editor"
-import stripAnsi from "strip-ansi"
-import { Footer } from "./footer.tsx"
-import { usePromptRef } from "../../context/prompt"
-import { useExit } from "../../context/exit"
+import type { TaskTool } from "@/tool/task"
+import type { TodoWriteTool } from "@/tool/todo"
+import type { Tool } from "@/tool/tool"
+import type { WebFetchTool } from "@/tool/webfetch"
+import type { WriteTool } from "@/tool/write"
 import { Filesystem } from "@/util/filesystem"
-import { Global } from "@/global"
+import { Locale } from "@/util/locale"
+import parsers from "../../../../../../parsers-config.ts"
+import { DialogSessionRename } from "../../component/dialog-session-rename"
+import type { PromptInfo } from "../../component/prompt/history"
+import { TodoItem } from "../../component/todo-item"
+import { useExit } from "../../context/exit"
+import { useKV } from "../../context/kv.tsx"
+import { usePromptRef } from "../../context/prompt"
+import { useDialog } from "../../ui/dialog"
+import { DialogExportOptions } from "../../ui/dialog-export-options"
+import { Toast, useToast } from "../../ui/toast"
+import { Clipboard } from "../../util/clipboard"
+import { Editor } from "../../util/editor"
+import { formatTranscript } from "../../util/transcript"
+import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
+import { DialogMessage } from "./dialog-message"
+import { DialogTimeline } from "./dialog-timeline"
+import { Footer } from "./footer.tsx"
+import { Header } from "./header"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
-import { DialogExportOptions } from "../../ui/dialog-export-options"
-import { formatTranscript } from "../../util/transcript"
-import { UI } from "@/cli/ui.ts"
+import { Sidebar } from "./sidebar"
 
 addDefaultParsers(parsers.parsers)
 
@@ -200,7 +201,7 @@ export function Session() {
     }
   })
 
-  let lastSwitch: string | undefined = undefined
+  let lastSwitch: string | undefined
   sdk.event.on("message.part.updated", (evt) => {
     const part = evt.properties.part
     if (part.type !== "tool") return
@@ -983,7 +984,7 @@ export function Session() {
                 {(message, index) => (
                   <Switch>
                     <Match when={message.id === revert()?.messageID}>
-                      {(function () {
+                      {(() => {
                         const command = useCommandDialog()
                         const [hover, setHover] = createSignal(false)
                         const dialog = useDialog()
@@ -1254,6 +1255,14 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     return props.message.time.completed - user.time.created
   })
 
+  const tpsResult = createMemo(() => {
+    return getMessageTPS({
+      finish: props.message.finish,
+      tokens: props.message.tokens,
+      time: props.message.time,
+    })
+  })
+
   return (
     <>
       <For each={props.parts}>
@@ -1303,6 +1312,9 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
               <span style={{ fg: theme.textMuted }}> · {props.message.modelID}</span>
               <Show when={duration()}>
                 <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
+              </Show>
+              <Show when={tpsResult()}>
+                <span style={{ fg: theme.textMuted }}> · {formatTPS(tpsResult()!)}</span>
               </Show>
               <Show when={props.message.error?.name === "MessageAbortedError"}>
                 <span style={{ fg: theme.textMuted }}> · interrupted</span>
