@@ -1,13 +1,13 @@
 import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
-import { ContextMenu } from "@opencode-ai/ui/context-menu"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import {
   createEffect,
   createMemo,
+  createResource,
   For,
   Match,
   on,
@@ -18,7 +18,7 @@ import {
   type ComponentProps,
   type ParentProps,
 } from "solid-js"
-import { Dynamic } from "solid-js/web"
+import { Dynamic, isServer } from "solid-js/web"
 import type { FileNode } from "@opencode-ai/sdk/v2"
 
 function pathToFileUrl(filepath: string): string {
@@ -27,6 +27,43 @@ function pathToFileUrl(filepath: string): string {
     .map((segment) => encodeURIComponent(segment))
     .join("/")
   return `file://${encodedPath}`
+}
+
+function FileContextMenu(
+  props: ParentProps<{ onMention?: () => void; onOpen?: () => void; mentionLabel?: string; openLabel?: string }>,
+) {
+  if (isServer) return props.children
+
+  const [mod] = createResource(async () => {
+    const m = await import("@opencode-ai/ui/context-menu")
+    return m.ContextMenu
+  })
+
+  return (
+    <Show when={mod()}>
+      {(ContextMenu) => (
+        <Dynamic component={ContextMenu()}>
+          <Dynamic component={ContextMenu().Trigger} as="div">
+            {props.children}
+          </Dynamic>
+          <Dynamic component={ContextMenu().Portal}>
+            <Dynamic component={ContextMenu().Content}>
+              <Show when={props.onOpen}>
+                <Dynamic component={ContextMenu().Item} onSelect={props.onOpen}>
+                  <Dynamic component={ContextMenu().ItemLabel}>{props.openLabel}</Dynamic>
+                </Dynamic>
+              </Show>
+              <Show when={props.onMention}>
+                <Dynamic component={ContextMenu().Item} onSelect={props.onMention}>
+                  <Dynamic component={ContextMenu().ItemLabel}>{props.mentionLabel}</Dynamic>
+                </Dynamic>
+              </Show>
+            </Dynamic>
+          </Dynamic>
+        </Dynamic>
+      )}
+    </Show>
+  )
 }
 
 type Kind = "add" | "del" | "mix"
@@ -419,8 +456,11 @@ export default function FileTree(props: {
                   open={expanded()}
                   onOpenChange={(open) => (open ? file.tree.expand(node.path) : file.tree.collapse(node.path))}
                 >
-                  <ContextMenu>
-                    <Collapsible.Trigger as={ContextMenu.Trigger}>
+                  <FileContextMenu
+                    onMention={props.onFileMention ? () => props.onFileMention!(node) : undefined}
+                    mentionLabel={language.t("session.files.mention")}
+                  >
+                    <Collapsible.Trigger>
                       <Wrapper>
                         <Node node={node}>
                           <div class="size-4 flex items-center justify-center text-icon-weak">
@@ -429,16 +469,7 @@ export default function FileTree(props: {
                         </Node>
                       </Wrapper>
                     </Collapsible.Trigger>
-                    <ContextMenu.Portal>
-                      <ContextMenu.Content>
-                        <Show when={props.onFileMention}>
-                          <ContextMenu.Item onSelect={() => props.onFileMention?.(node)}>
-                            <ContextMenu.ItemLabel>{language.t("session.files.mention")}</ContextMenu.ItemLabel>
-                          </ContextMenu.Item>
-                        </Show>
-                      </ContextMenu.Content>
-                    </ContextMenu.Portal>
-                  </ContextMenu>
+                  </FileContextMenu>
                   <Collapsible.Content class="relative pt-0.5">
                     <div
                       classList={{
@@ -468,28 +499,19 @@ export default function FileTree(props: {
                 </Collapsible>
               </Match>
               <Match when={node.type === "file"}>
-                <ContextMenu>
-                  <ContextMenu.Trigger as="div">
-                    <Wrapper>
-                      <Node node={node} as="button" type="button" onClick={() => props.onFileClick?.(node)}>
-                        <div class="w-4 shrink-0" />
-                        <FileIcon node={node} class="text-icon-weak size-4" />
-                      </Node>
-                    </Wrapper>
-                  </ContextMenu.Trigger>
-                  <ContextMenu.Portal>
-                    <ContextMenu.Content>
-                      <ContextMenu.Item onSelect={() => props.onFileClick?.(node)}>
-                        <ContextMenu.ItemLabel>{language.t("common.open")}</ContextMenu.ItemLabel>
-                      </ContextMenu.Item>
-                      <Show when={props.onFileMention}>
-                        <ContextMenu.Item onSelect={() => props.onFileMention?.(node)}>
-                          <ContextMenu.ItemLabel>{language.t("session.files.mention")}</ContextMenu.ItemLabel>
-                        </ContextMenu.Item>
-                      </Show>
-                    </ContextMenu.Content>
-                  </ContextMenu.Portal>
-                </ContextMenu>
+                <FileContextMenu
+                  onOpen={props.onFileClick ? () => props.onFileClick!(node) : undefined}
+                  onMention={props.onFileMention ? () => props.onFileMention!(node) : undefined}
+                  openLabel={language.t("common.open")}
+                  mentionLabel={language.t("session.files.mention")}
+                >
+                  <Wrapper>
+                    <Node node={node} as="button" type="button" onClick={() => props.onFileClick?.(node)}>
+                      <div class="w-4 shrink-0" />
+                      <FileIcon node={node} class="text-icon-weak size-4" />
+                    </Node>
+                  </Wrapper>
+                </FileContextMenu>
               </Match>
             </Switch>
           )
