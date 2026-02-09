@@ -1,8 +1,9 @@
-import { batch, createMemo, createRoot, onCleanup } from "solid-js"
-import { createStore } from "solid-js/store"
+import { batch, createEffect, createMemo, createRoot, onCleanup } from "solid-js"
+import { createStore, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useParams } from "@solidjs/router"
 import { Persist, persisted } from "@/utils/persist"
+import { createScopedCache } from "@/utils/scoped-cache"
 import type { SelectedLineRange } from "@/context/file"
 
 export type LineComment = {
@@ -18,28 +19,28 @@ type CommentFocus = { file: string; id: string }
 const WORKSPACE_KEY = "__workspace__"
 const MAX_COMMENT_SESSIONS = 20
 
-type CommentSession = ReturnType<typeof createCommentSession>
-
-type CommentCacheEntry = {
-  value: CommentSession
-  dispose: VoidFunction
+type CommentStore = {
+  comments: Record<string, LineComment[]>
 }
 
-function createCommentSession(dir: string, id: string | undefined) {
-  const legacy = `${dir}/comments${id ? "/" + id : ""}.v1`
+function aggregate(comments: Record<string, LineComment[]>) {
+  return Object.keys(comments)
+    .flatMap((file) => comments[file] ?? [])
+    .slice()
+    .sort((a, b) => a.time - b.time)
+}
 
-  const [store, setStore, _, ready] = persisted(
-    Persist.scoped(dir, id, "comments", [legacy]),
-    createStore<{
-      comments: Record<string, LineComment[]>
-    }>({
-      comments: {},
-    }),
-  )
+function insert(items: LineComment[], next: LineComment) {
+  const index = items.findIndex((item) => item.time > next.time)
+  if (index < 0) return [...items, next]
+  return [...items.slice(0, index), next, ...items.slice(index)]
+}
 
+function createCommentSessionState(store: Store<CommentStore>, setStore: SetStoreFunction<CommentStore>) {
   const [state, setState] = createStore({
     focus: null as CommentFocus | null,
     active: null as CommentFocus | null,
+    all: aggregate(store.comments),
   })
 
   const setFocus = (value: CommentFocus | null | ((value: CommentFocus | null) => CommentFocus | null)) =>
@@ -59,6 +60,7 @@ function createCommentSession(dir: string, id: string | undefined) {
 
     batch(() => {
       setStore("comments", input.file, (items) => [...(items ?? []), next])
+      setState("all", (items) => insert(items, next))
       setFocus({ file: input.file, id: next.id })
     })
 
@@ -66,37 +68,72 @@ function createCommentSession(dir: string, id: string | undefined) {
   }
 
   const remove = (file: string, id: string) => {
-    setStore("comments", file, (items) => (items ?? []).filter((x) => x.id !== id))
-    setFocus((current) => (current?.id === id ? null : current))
+    batch(() => {
+      setStore("comments", file, (items) => (items ?? []).filter((item) => item.id !== id))
+      setState("all", (items) => items.filter((item) => !(item.file === file && item.id === id)))
+      setFocus((current) => (current?.id === id ? null : current))
+    })
   }
 
   const clear = () => {
     batch(() => {
-      setStore("comments", {})
+      setStore("comments", reconcile({}))
+      setState("all", [])
       setFocus(null)
       setActive(null)
     })
   }
 
-  const all = createMemo(() => {
-    const files = Object.keys(store.comments)
-    const items = files.flatMap((file) => store.comments[file] ?? [])
-    return items.slice().sort((a, b) => a.time - b.time)
+  return {
+    list,
+    all: () => state.all,
+    add,
+    remove,
+    clear,
+    focus: () => state.focus,
+    setFocus,
+    clearFocus: () => setFocus(null),
+    active: () => state.active,
+    setActive,
+    clearActive: () => setActive(null),
+    reindex: () => setState("all", aggregate(store.comments)),
+  }
+}
+
+export function createCommentSessionForTest(comments: Record<string, LineComment[]> = {}) {
+  const [store, setStore] = createStore<CommentStore>({ comments })
+  return createCommentSessionState(store, setStore)
+}
+
+function createCommentSession(dir: string, id: string | undefined) {
+  const legacy = `${dir}/comments${id ? "/" + id : ""}.v1`
+
+  const [store, setStore, _, ready] = persisted(
+    Persist.scoped(dir, id, "comments", [legacy]),
+    createStore<CommentStore>({
+      comments: {},
+    }),
+  )
+  const session = createCommentSessionState(store, setStore)
+
+  createEffect(() => {
+    if (!ready()) return
+    session.reindex()
   })
 
   return {
     ready,
-    list,
-    all,
-    add,
-    remove,
-    clear,
-    focus: createMemo(() => state.focus),
-    setFocus,
-    clearFocus: () => setFocus(null),
-    active: createMemo(() => state.active),
-    setActive,
-    clearActive: () => setActive(null),
+    list: session.list,
+    all: session.all,
+    add: session.add,
+    remove: session.remove,
+    clear: session.clear,
+    focus: session.focus,
+    setFocus: session.setFocus,
+    clearFocus: session.clearFocus,
+    active: session.active,
+    setActive: session.setActive,
+    clearActive: session.clearActive,
   }
 }
 
@@ -105,44 +142,27 @@ export const { use: useComments, provider: CommentsProvider } = createSimpleCont
   gate: false,
   init: () => {
     const params = useParams()
-    const cache = new Map<string, CommentCacheEntry>()
+    const cache = createScopedCache(
+      (key) => {
+        const split = key.lastIndexOf("\n")
+        const dir = split >= 0 ? key.slice(0, split) : key
+        const id = split >= 0 ? key.slice(split + 1) : WORKSPACE_KEY
+        return createRoot((dispose) => ({
+          value: createCommentSession(dir, id === WORKSPACE_KEY ? undefined : id),
+          dispose,
+        }))
+      },
+      {
+        maxEntries: MAX_COMMENT_SESSIONS,
+        dispose: (entry) => entry.dispose(),
+      },
+    )
 
-    const disposeAll = () => {
-      for (const entry of cache.values()) {
-        entry.dispose()
-      }
-      cache.clear()
-    }
-
-    onCleanup(disposeAll)
-
-    const prune = () => {
-      while (cache.size > MAX_COMMENT_SESSIONS) {
-        const first = cache.keys().next().value
-        if (!first) return
-        const entry = cache.get(first)
-        entry?.dispose()
-        cache.delete(first)
-      }
-    }
+    onCleanup(() => cache.clear())
 
     const load = (dir: string, id: string | undefined) => {
-      const key = `${dir}:${id ?? WORKSPACE_KEY}`
-      const existing = cache.get(key)
-      if (existing) {
-        cache.delete(key)
-        cache.set(key, existing)
-        return existing.value
-      }
-
-      const entry = createRoot((dispose) => ({
-        value: createCommentSession(dir, id),
-        dispose,
-      }))
-
-      cache.set(key, entry)
-      prune()
-      return entry.value
+      const key = `${dir}\n${id ?? WORKSPACE_KEY}`
+      return cache.get(key).value
     }
 
     const session = createMemo(() => load(params.dir!, params.id))

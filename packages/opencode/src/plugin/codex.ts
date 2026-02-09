@@ -371,7 +371,7 @@ export async function CodexAuthPlugin(input: PluginInput): Promise<Hooks> {
           }
         }
 
-        if (!provider.models["gpt-5.3-codex"] || true) {
+        if (!provider.models["gpt-5.3-codex"]) {
           const model = {
             id: "gpt-5.3-codex",
             providerID: "openai",

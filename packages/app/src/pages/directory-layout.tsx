@@ -25,7 +25,7 @@ export default function Layout(props: ParentProps) {
     showToast({
       variant: "error",
       title: language.t("common.requestFailed"),
-      description: "Invalid directory in URL.",
+      description: language.t("directory.error.invalidUrl"),
     })
     navigate("/")
   })

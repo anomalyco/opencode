@@ -1,73 +1,36 @@
 import { describe, expect, test } from "bun:test"
-import { createRoot } from "solid-js"
-import { createStore } from "solid-js/store"
-import { makePersisted, type SyncStorage } from "@solid-primitives/storage"
 import { createScrollPersistence } from "./layout-scroll"
 
 describe("createScrollPersistence", () => {
-  test.skip("debounces persisted scroll writes", async () => {
-    const key = "layout-scroll.test"
-    const data = new Map<string, string>()
-    const writes: string[] = []
-    const stats = { flushes: 0 }
-
-    const storage = {
-      getItem: (k: string) => data.get(k) ?? null,
-      setItem: (k: string, v: string) => {
-        data.set(k, v)
-        if (k === key) writes.push(v)
+  test("debounces persisted scroll writes", async () => {
+    const snapshot = {
+      session: {
+        review: { x: 0, y: 0 },
       },
-      removeItem: (k: string) => {
-        data.delete(k)
+    } as Record<string, Record<string, { x: number; y: number }>>
+    const writes: Array<Record<string, { x: number; y: number }>> = []
+    const scroll = createScrollPersistence({
+      debounceMs: 10,
+      getSnapshot: (sessionKey) => snapshot[sessionKey],
+      onFlush: (sessionKey, next) => {
+        snapshot[sessionKey] = next
+        writes.push(next)
       },
-    } as SyncStorage
-
-    await new Promise<void>((resolve, reject) => {
-      createRoot((dispose) => {
-        const [raw, setRaw] = createStore({
-          sessionView: {} as Record<string, { scroll: Record<string, { x: number; y: number }> }>,
-        })
-
-        const [store, setStore] = makePersisted([raw, setRaw], { name: key, storage })
-
-        const scroll = createScrollPersistence({
-          debounceMs: 30,
-          getSnapshot: (sessionKey) => store.sessionView[sessionKey]?.scroll,
-          onFlush: (sessionKey, next) => {
-            stats.flushes += 1
-
-            const current = store.sessionView[sessionKey]
-            if (!current) {
-              setStore("sessionView", sessionKey, { scroll: next })
-              return
-            }
-            setStore("sessionView", sessionKey, "scroll", (prev) => ({ ...(prev ?? {}), ...next }))
-          },
-        })
-
-        const run = async () => {
-          await new Promise((r) => setTimeout(r, 0))
-          writes.length = 0
-
-          for (const i of Array.from({ length: 100 }, (_, n) => n)) {
-            scroll.setScroll("session", "review", { x: 0, y: i })
-          }
-
-          await new Promise((r) => setTimeout(r, 120))
-
-          expect(stats.flushes).toBeGreaterThanOrEqual(1)
-          expect(writes.length).toBeGreaterThanOrEqual(1)
-          expect(writes.length).toBeLessThanOrEqual(2)
-        }
-
-        void run()
-          .then(resolve)
-          .catch(reject)
-          .finally(() => {
-            scroll.dispose()
-            dispose()
-          })
-      })
     })
+
+    for (const i of Array.from({ length: 30 }, (_, n) => n + 1)) {
+      scroll.setScroll("session", "review", { x: 0, y: i })
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 40))
+
+    expect(writes).toHaveLength(1)
+    expect(writes[0]?.review).toEqual({ x: 0, y: 30 })
+
+    scroll.setScroll("session", "review", { x: 0, y: 30 })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    expect(writes).toHaveLength(1)
+    scroll.dispose()
   })
 })

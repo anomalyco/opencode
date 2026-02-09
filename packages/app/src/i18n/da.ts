@@ -28,8 +28,8 @@ export const dict = {
   "command.settings.open": "Åbn indstillinger",
   "command.session.previous": "Forrige session",
   "command.session.next": "Næste session",
-  "command.session.previous.unseen": "Previous unread session",
-  "command.session.next.unseen": "Next unread session",
+  "command.session.previous.unseen": "Forrige ulæste session",
+  "command.session.next.unseen": "Næste ulæste session",
   "command.session.archive": "Arkivér session",
 
   "command.palette": "Kommandopalette",

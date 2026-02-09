@@ -76,6 +76,26 @@ const LOCALES: readonly Locale[] = [
   "th",
 ]
 
+type ParityKey = "command.session.previous.unseen" | "command.session.next.unseen"
+const PARITY_CHECK: Record<Exclude<Locale, "en">, Record<ParityKey, string>> = {
+  zh,
+  zht,
+  ko,
+  de,
+  es,
+  fr,
+  da,
+  ja,
+  pl,
+  ru,
+  ar,
+  no,
+  br,
+  th,
+  bs,
+}
+void PARITY_CHECK
+
 function detectLocale(): Locale {
   if (typeof navigator !== "object") return "en"
 
