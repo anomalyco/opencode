@@ -745,6 +745,37 @@ test("merges plugin arrays from global and local configs", async () => {
   })
 })
 
+test("skips plugin test/spec files from plugin directories", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const pluginDir = path.join(dir, ".opencode", "plugin")
+      await fs.mkdir(pluginDir, { recursive: true })
+
+      await Bun.write(path.join(pluginDir, "real-plugin-ts.ts"), "export default async () => ({})\n")
+      await Bun.write(path.join(pluginDir, "real-plugin-js.js"), "export default async () => ({})\n")
+      await Bun.write(path.join(pluginDir, "skillc-generated-guard.test.ts"), "export default async () => ({})\n")
+      await Bun.write(path.join(pluginDir, "skillc-generated-guard.spec.ts"), "export default async () => ({})\n")
+      await Bun.write(path.join(pluginDir, "skillc-generated-guard.test.js"), "export default async () => ({})\n")
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      const loadedPluginFiles = (config.plugin ?? [])
+        .filter((plugin) => plugin.startsWith("file://"))
+        .map((plugin) => path.basename(new URL(plugin).pathname))
+
+      expect(loadedPluginFiles).toContain("real-plugin-ts.ts")
+      expect(loadedPluginFiles).toContain("real-plugin-js.js")
+      expect(loadedPluginFiles).not.toContain("skillc-generated-guard.test.ts")
+      expect(loadedPluginFiles).not.toContain("skillc-generated-guard.spec.ts")
+      expect(loadedPluginFiles).not.toContain("skillc-generated-guard.test.js")
+    },
+  })
+})
+
 test("does not error when only custom agent is a subagent", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

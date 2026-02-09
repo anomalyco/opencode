@@ -456,6 +456,7 @@ export namespace Config {
   }
 
   const PLUGIN_GLOB = new Bun.Glob("{plugin,plugins}/*.{ts,js}")
+  const PLUGIN_TEST_FILE_RE = /\.(test|spec)\.(ts|js)$/
   async function loadPlugin(dir: string) {
     const plugins: string[] = []
 
@@ -465,6 +466,10 @@ export namespace Config {
       dot: true,
       cwd: dir,
     })) {
+      if (PLUGIN_TEST_FILE_RE.test(path.basename(item))) {
+        log.debug("skipping plugin test file", { path: item })
+        continue
+      }
       plugins.push(pathToFileURL(item).href)
     }
     return plugins
