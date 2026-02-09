@@ -55,8 +55,6 @@ webkit2gtk = "=2.0.2"
 objc2 = "0.6"
 objc2-web-kit = "0.3"
 
-[features]
-default = ["tauri/devtools"]
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = [
