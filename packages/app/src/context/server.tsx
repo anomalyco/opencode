@@ -98,7 +98,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       if (!url) return
       batch(() => {
         // Remove the previous startup sidecar url
-        if(store.currentSidecarUrl) {
+        if (store.currentSidecarUrl) {
           remove(store.currentSidecarUrl)
         }
 
