@@ -1,5 +1,5 @@
 import type { APIEvent } from "@solidjs/start/server"
-import { LOCALE_HEADER, localeFromCookieHeader, parseLocale, tag } from "~/lib/language"
+import { localeFromRequest, tag } from "~/lib/language"
 
 async function handler(evt: APIEvent) {
   const req = evt.request.clone()
@@ -7,8 +7,7 @@ async function handler(evt: APIEvent) {
   const targetUrl = `https://docs.opencode.ai${url.pathname}${url.search}`
 
   const headers = new Headers(req.headers)
-  const locale = parseLocale(req.headers.get(LOCALE_HEADER)) ?? localeFromCookieHeader(req.headers.get("cookie"))
-  if (locale) headers.set("accept-language", tag(locale))
+  headers.set("accept-language", tag(localeFromRequest(req)))
 
   const response = await fetch(targetUrl, {
     method: req.method,

@@ -1,0 +1,391 @@
+---
+title: SDK
+description: Типобезопасный JS-клиент для сервера открытого кода.
+---
+
+import config from "../../../../config.mjs"
+export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
+
+SDK JS/TS с открытым кодом предоставляет типобезопасный клиент для взаимодействия с сервером.
+Используйте его для создания интеграции и программного управления открытым кодом.
+
+[Узнайте больше](/docs/server) о том, как работает сервер. Примеры можно найти в [projects](/docs/ecosystem#projects), созданном сообществом.
+
+---
+
+## Установить
+
+Установите SDK из npm:
+
+```bash
+npm install @opencode-ai/sdk
+```
+
+---
+
+## Создать клиента
+
+Создайте экземпляр открытого кода:
+
+```javascript
+import { createOpencode } from "@opencode-ai/sdk"
+
+const { client } = await createOpencode()
+```
+
+Это запускает и сервер, и клиент.
+
+#### Параметры
+
+| Вариант | Тип   | Описание                         | По умолчанию |
+| ------- | ----- | -------------------------------- | ------------ |
+| ХХ0ГГ   | ХХ0ГГ | Имя хоста сервера                | `127.0.0.1`  |
+| ХХ0ГГ   | ХХ0ГГ | Порт сервера                     | `4096`       |
+| ХХ0ГГ   | ХХ0ГГ | Сигнал отмены для отмены         | ХХ0ГГ        |
+| ХХ0ГГ   | ХХ0ГГ | Таймаут в мс для запуска сервера | `5000`       |
+| ХХ0ГГ   | ХХ0ГГ | Объект конфигурации              | `{}`         |
+
+---
+
+## Конфигурация
+
+Вы можете передать объект конфигурации для настройки поведения. Экземпляр по-прежнему получает ваш `opencode.json`, но вы можете переопределить или добавить встроенную конфигурацию:
+
+```javascript
+import { createOpencode } from "@opencode-ai/sdk"
+
+const opencode = await createOpencode({
+  hostname: "127.0.0.1",
+  port: 4096,
+  config: {
+    model: "anthropic/claude-3-5-sonnet-20241022",
+  },
+})
+
+console.log(`Server running at ${opencode.server.url}`)
+
+opencode.server.close()
+```
+
+## Только клиент
+
+Если у вас уже есть работающий экземпляр открытого кода, вы можете создать экземпляр клиента для подключения к нему:
+
+```javascript
+import { createOpencodeClient } from "@opencode-ai/sdk"
+
+const client = createOpencodeClient({
+  baseUrl: "http://localhost:4096",
+})
+```
+
+#### Параметры
+
+| Вариант | Тип   | Описание                             | По умолчанию |
+| ------- | ----- | ------------------------------------ | ------------ |
+| ХХ0ГГ   | ХХ0ГГ | URL-адрес сервера                    | ХХ0ГГ        |
+| ХХ0ГГ   | ХХ0ГГ | Пользовательская реализация выборки  | ХХ0ГГ        |
+| ХХ0ГГ   | ХХ0ГГ | Метод анализа ответа                 | ХХ0ГГ        |
+| ХХ0ГГ   | ХХ0ГГ | Стиль возврата: `data` или `fields`. | ХХ0ГГ        |
+| ХХ0ГГ   | ХХ0ГГ | Выдавать ошибки вместо возврата      | ХХ0ГГ        |
+
+---
+
+## Типы
+
+SDK включает определения TypeScript для всех типов API. Импортируйте их напрямую:
+
+```typescript
+import type { Session, Message, Part } from "@opencode-ai/sdk"
+```
+
+Все типы генерируются на основе спецификации OpenAPI сервера и доступны в файле <a href={typesUrl}>types</a>.
+
+---
+
+## Ошибки
+
+SDK может выдавать ошибки, которые вы можете отловить и обработать:
+
+```typescript
+try {
+  await client.session.get({ path: { id: "invalid-id" } })
+} catch (error) {
+  console.error("Failed to get session:", (error as Error).message)
+}
+```
+
+---
+
+## API
+
+SDK предоставляет все серверные API через типобезопасный клиент.
+
+---
+
+### Глобальный
+
+| Метод | Описание                                     | Ответ |
+| ----- | -------------------------------------------- | ----- |
+| ХХ0ГГ | Проверьте работоспособность и версию сервера | ХХ0ГГ |
+
+---
+
+#### Примеры
+
+```javascript
+const health = await client.global.health()
+console.log(health.data.version)
+```
+
+---
+
+### Приложение
+
+| Метод | Описание                      | Ответ                                       |
+| ----- | ----------------------------- | ------------------------------------------- |
+| ХХ0ГГ | Написать запись в журнале     | ХХ0ГГ                                       |
+| ХХ0ГГ | Список всех доступных агентов | <a href={typesUrl}><code>Агент[]</code></a> |
+
+---
+
+#### Примеры
+
+```javascript
+// Write a log entry
+await client.app.log({
+  body: {
+    service: "my-app",
+    level: "info",
+    message: "Operation completed",
+  },
+})
+
+// List available agents
+const agents = await client.app.agents()
+```
+
+---
+
+### Проект
+
+| Метод | Описание                | Ответ                                        |
+| ----- | ----------------------- | -------------------------------------------- |
+| ХХ0ГГ | Список всех проектов    | <a href={typesUrl}><code>Проект[]</code></a> |
+| ХХ0ГГ | Получить текущий проект | <a href={typesUrl}><code>Проект</code></a>   |
+
+---
+
+#### Примеры
+
+```javascript
+// List all projects
+const projects = await client.project.list()
+
+// Get current project
+const currentProject = await client.project.current()
+```
+
+---
+
+### Путь
+
+| Метод | Описание              | Ответ                                    |
+| ----- | --------------------- | ---------------------------------------- |
+| ХХ0ГГ | Получить текущий путь | <a href={typesUrl}><code>Путь</code></a> |
+
+---
+
+#### Примеры
+
+```javascript
+// Get current path information
+const pathInfo = await client.path.get()
+```
+
+---
+
+### Конфигурация
+
+| Метод | Описание                                  | Ответ                                                                                                 |
+| ----- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| ХХ0ГГ | Получить информацию о конфигурации        | <a href={typesUrl}><code>Config</code></a>                                                            |
+| ХХ0ГГ | Список поставщиков и моделей по умолчанию | `{ providers: `<a href={typesUrl}><code>Provider[]</code></a>`, default: { [key: string]: string } }` |
+
+---
+
+#### Примеры
+
+```javascript
+const config = await client.config.get()
+
+const { providers, default: defaults } = await client.config.providers()
+```
+
+---
+
+### Сессии
+
+| Метод | Описание                                           | Примечания                                                                                                                                                  |
+| ----- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ХХ0ГГ | Получение списка сеансов                           | Возвращает <a href={typesUrl}><code>Session[]</code></a>                                                                                                    |
+| ХХ0ГГ | Получить сеанс                                     | Возвращает <a href={typesUrl}><code>Session</code></a>                                                                                                      |
+| ХХ0ГГ | Список дочерних сеансов                            | Возвращает <a href={typesUrl}><code>Session[]</code></a>                                                                                                    |
+| ХХ0ГГ | Создать сеанс                                      | Возвращает <a href={typesUrl}><code>Session</code></a>                                                                                                      |
+| ХХ0ГГ | Удалить сеанс                                      | Возвращает `boolean`                                                                                                                                        |
+| ХХ0ГГ | Обновить свойства сеанса                           | Возвращает <a href={typesUrl}><code>Session</code></a>                                                                                                      |
+| ХХ0ГГ | Проанализируйте приложение и создайте `AGENTS.md`. | Возвращает `boolean`                                                                                                                                        |
+| ХХ0ГГ | Прервать текущий сеанс                             | Возвращает `boolean`                                                                                                                                        |
+| ХХ0ГГ | Поделиться сеансом                                 | Возвращает <a href={typesUrl}><code>Session</code></a>                                                                                                      |
+| ХХ0ГГ | Отменить общий доступ к сеансу                     | Возвращает <a href={typesUrl}><code>Session</code></a>                                                                                                      |
+| ХХ0ГГ | Подведение итогов сессии                           | Возвращает `boolean`                                                                                                                                        |
+| ХХ0ГГ | Список сообщений в сеансе                          | Возвращает `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                                  |
+| ХХ0ГГ | Получить подробную информацию о сообщении          | Возвращает `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                    |
+| ХХ0ГГ | Отправить оперативное сообщение                    | `body.noReply: true` возвращает UserMessage (только контекст). По умолчанию возвращается <a href={typesUrl}><code>AssistantMessage</code></a> с ответом AI. |
+| ХХ0ГГ | Отправить команду в сеанс                          | Возвращает `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                           |
+| ХХ0ГГ | Запустите команду оболочки                         | Возвращает <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                             |
+| ХХ0ГГ | Отменить сообщение                                 | Возвращает <a href={typesUrl}><code>Session</code></a>                                                                                                      |
+| ХХ0ГГ | Восстановить восстановленные сообщения             | Возвращает <a href={typesUrl}><code>Session</code></a>                                                                                                      |
+| ХХ0ГГ | Ответ на запрос разрешения                         | Возвращает `boolean`                                                                                                                                        |
+
+---
+
+#### Примеры
+
+```javascript
+// Create and manage sessions
+const session = await client.session.create({
+  body: { title: "My session" },
+})
+
+const sessions = await client.session.list()
+
+// Send a prompt message
+const result = await client.session.prompt({
+  path: { id: session.id },
+  body: {
+    model: { providerID: "anthropic", modelID: "claude-3-5-sonnet-20241022" },
+    parts: [{ type: "text", text: "Hello!" }],
+  },
+})
+
+// Inject context without triggering AI response (useful for plugins)
+await client.session.prompt({
+  path: { id: session.id },
+  body: {
+    noReply: true,
+    parts: [{ type: "text", text: "You are a helpful assistant." }],
+  },
+})
+```
+
+---
+
+### Файлы
+
+| Метод | Описание                             | Ответ                                                                                         |
+| ----- | ------------------------------------ | --------------------------------------------------------------------------------------------- |
+| ХХ0ГГ | Поиск текста в файлах                | Массив объектов соответствия `path`, `lines`, `line_number`, `absolute_offset`, `submatches`. |
+| ХХ0ГГ | Поиск файлов и каталогов по имени    | `string[]` (пути)                                                                             |
+| ХХ0ГГ | Найдите символы рабочей области      | <a href={typesUrl}><code>Символ[]</code></a>                                                  |
+| ХХ0ГГ | Чтение файла                         | `{ type: "raw" \| "patch", content: string }`                                                 |
+| ХХ0ГГ | Получить статус отслеживаемых файлов | <a href={typesUrl}><code>Файл[]</code></a>                                                    |
+
+`find.files` поддерживает несколько дополнительных полей запроса:
+
+- `type`: `"file"` или `"directory"`
+- `directory`: переопределить корень проекта для поиска.
+- `limit`: максимальное количество результатов (1–200)
+
+---
+
+#### Примеры
+
+```javascript
+// Search and read files
+const textResults = await client.find.text({
+  query: { pattern: "function.*opencode" },
+})
+
+const files = await client.find.files({
+  query: { query: "*.ts", type: "file" },
+})
+
+const directories = await client.find.files({
+  query: { query: "packages", type: "directory", limit: 20 },
+})
+
+const content = await client.file.read({
+  query: { path: "src/index.ts" },
+})
+```
+
+---
+
+### ТУИ
+
+| Метод | Описание                         | Ответ |
+| ----- | -------------------------------- | ----- |
+| ХХ0ГГ | Добавить текст в приглашение     | ХХ0ГГ |
+| ХХ0ГГ | Открыть диалоговое окно справки  | ХХ0ГГ |
+| ХХ0ГГ | Откройте селектор сеансов        | ХХ0ГГ |
+| ХХ0ГГ | Откройте выбор темы              | ХХ0ГГ |
+| ХХ0ГГ | Откройте выбор модели            | ХХ0ГГ |
+| ХХ0ГГ | Отправить текущий запрос         | ХХ0ГГ |
+| ХХ0ГГ | Очистить подсказку               | ХХ0ГГ |
+| ХХ0ГГ | Выполнить команду                | ХХ0ГГ |
+| ХХ0ГГ | Показать всплывающее уведомление | ХХ0ГГ |
+
+---
+
+#### Примеры
+
+```javascript
+// Control TUI interface
+await client.tui.appendPrompt({
+  body: { text: "Add this to prompt" },
+})
+
+await client.tui.showToast({
+  body: { message: "Task completed", variant: "success" },
+})
+```
+
+---
+
+### Авторизация
+
+| Метод | Описание                                     | Ответ |
+| ----- | -------------------------------------------- | ----- |
+| ХХ0ГГ | Установите учетные данные для аутентификации | ХХ0ГГ |
+
+---
+
+#### Примеры
+
+```javascript
+await client.auth.set({
+  path: { id: "anthropic" },
+  body: { type: "api", key: "your-api-key" },
+})
+```
+
+---
+
+### События
+
+| Метод | Описание                             | Ответ                                |
+| ----- | ------------------------------------ | ------------------------------------ |
+| ХХ0ГГ | Поток событий, отправленных сервером | Поток событий, отправленных сервером |
+
+---
+
+#### Примеры
+
+```javascript
+// Listen to real-time events
+const events = await client.event.subscribe()
+for await (const event of events.stream) {
+  console.log("Event:", event.type, event.properties)
+}
+```
