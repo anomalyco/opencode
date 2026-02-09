@@ -28,8 +28,8 @@ export const dict = {
   "command.settings.open": "Otwórz ustawienia",
   "command.session.previous": "Poprzednia sesja",
   "command.session.next": "Następna sesja",
-  "command.session.previous.unseen": "Previous unread session",
-  "command.session.next.unseen": "Next unread session",
+  "command.session.previous.unseen": "Poprzednia nieprzeczytana sesja",
+  "command.session.next.unseen": "Następna nieprzeczytana sesja",
   "command.session.archive": "Zarchiwizuj sesję",
 
   "command.palette": "Paleta poleceń",
@@ -44,8 +44,10 @@ export const dict = {
 
   "command.session.new": "Nowa sesja",
   "command.file.open": "Otwórz plik",
+  "command.tab.close": "Zamknij kartę",
   "command.context.addSelection": "Dodaj zaznaczenie do kontekstu",
   "command.context.addSelection.description": "Dodaj zaznaczone linie z bieżącego pliku",
+  "command.input.focus": "Fokus na pole wejściowe",
   "command.terminal.toggle": "Przełącz terminal",
   "command.fileTree.toggle": "Przełącz drzewo plików",
   "command.review.toggle": "Przełącz przegląd",
@@ -211,6 +213,7 @@ export const dict = {
   "prompt.popover.emptyResults": "Brak pasujących wyników",
   "prompt.popover.emptyCommands": "Brak pasujących poleceń",
   "prompt.dropzone.label": "Upuść obrazy lub pliki PDF tutaj",
+  "prompt.dropzone.file.label": "Upuść, aby @wspomnieć plik",
   "prompt.slash.badge.custom": "własne",
   "prompt.slash.badge.skill": "skill",
   "prompt.slash.badge.mcp": "mcp",
@@ -232,6 +235,7 @@ export const dict = {
   "prompt.toast.shellSendFailed.title": "Nie udało się wysłać polecenia powłoki",
   "prompt.toast.commandSendFailed.title": "Nie udało się wysłać polecenia",
   "prompt.toast.promptSendFailed.title": "Nie udało się wysłać zapytania",
+  "prompt.toast.promptSendFailed.description": "Nie udało się pobrać sesji",
 
   "dialog.mcp.title": "MCP",
   "dialog.mcp.description": "{{enabled}} z {{total}} włączone",

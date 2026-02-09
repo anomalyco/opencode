@@ -193,6 +193,25 @@ test("handles file inclusion substitution", async () => {
   })
 })
 
+test("handles file inclusion with replacement tokens", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(path.join(dir, "included.md"), "const out = await Bun.$`echo hi`")
+      await writeConfig(dir, {
+        $schema: "https://opencode.ai/config.json",
+        theme: "{file:included.md}",
+      })
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const config = await Config.get()
+      expect(config.theme).toBe("const out = await Bun.$`echo hi`")
+    },
+  })
+})
+
 test("validates config schema and throws on invalid fields", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

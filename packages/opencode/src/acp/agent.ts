@@ -29,6 +29,7 @@ import {
 } from "@agentclientprotocol/sdk"
 
 import { Log } from "../util/log"
+import { pathToFileURL } from "bun"
 import { ACPSessionManager } from "./session"
 import type { ACPConfig } from "./types"
 import { Provider } from "../provider/provider"
@@ -986,7 +987,7 @@ export namespace ACP {
                       type: "image",
                       mimeType: effectiveMime,
                       data: base64Data,
-                      uri: `file://${filename}`,
+                      uri: pathToFileURL(filename).href,
                     },
                   },
                 })
@@ -996,13 +997,14 @@ export namespace ACP {
             } else {
               // Non-image: text types get decoded, binary types stay as blob
               const isText = effectiveMime.startsWith("text/") || effectiveMime === "application/json"
+              const fileUri = pathToFileURL(filename).href
               const resource = isText
                 ? {
-                    uri: `file://${filename}`,
+                    uri: fileUri,
                     mimeType: effectiveMime,
                     text: Buffer.from(base64Data, "base64").toString("utf-8"),
                   }
-                : { uri: `file://${filename}`, mimeType: effectiveMime, blob: base64Data }
+                : { uri: fileUri, mimeType: effectiveMime, blob: base64Data }
 
               await this.connection
                 .sessionUpdate({
@@ -1544,7 +1546,7 @@ export namespace ACP {
           const name = path.split("/").pop() || path
           return {
             type: "file",
-            url: `file://${path}`,
+            url: pathToFileURL(path).href,
             filename: name,
             mime: "text/plain",
           }
