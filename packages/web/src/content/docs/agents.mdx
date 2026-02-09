@@ -46,7 +46,7 @@ OpenCode comes with two built-in primary agents and two built-in subagents.
 
 ---
 
-### Use build
+### `build`
 
 _Mode_: `primary`
 
@@ -54,7 +54,7 @@ Build is the **default** primary agent with all tools enabled. This is the stand
 
 ---
 
-### Use plan
+### `plan`
 
 _Mode_: `primary`
 
@@ -68,7 +68,7 @@ This agent is useful when you want the LLM to analyze code, suggest changes, or 
 
 ---
 
-### Use general
+### `general`
 
 _Mode_: `subagent`
 
@@ -76,7 +76,7 @@ A general-purpose agent for researching complex questions and executing multi-st
 
 ---
 
-### Use explore
+### `explore`
 
 _Mode_: `subagent`
 
@@ -84,7 +84,7 @@ A fast, read-only agent for exploring codebases. Cannot modify files. Use this w
 
 ---
 
-### Use compaction
+### `compaction`
 
 _Mode_: `primary`
 
@@ -92,7 +92,7 @@ Hidden system agent that compacts long context into a smaller summary. It runs a
 
 ---
 
-### Use title
+### `title`
 
 _Mode_: `primary`
 
@@ -100,7 +100,7 @@ Hidden system agent that generates short session titles. It runs automatically a
 
 ---
 
-### Use summary
+### `summary`
 
 _Mode_: `primary`
 
@@ -207,6 +207,7 @@ Provide constructive feedback without making direct changes.
 ```
 
 The markdown file name becomes the agent name. For example, `review.md` creates a `review` agent.
+`build.md` and `plan.md` configure the built-in primary agents.
 
 ---
 
