@@ -116,13 +116,13 @@ use the mcp_everything tool to add the number 3 and 4
 
 Aquí están todas las opciones para configurar un servidor MCP local.
 
-| Opción | Tipo | Requerido | Descripción |
-| ------------- | ------- | -------- | ----------------------------------------------------------------------------------- |
-| `type` | Cadena | Y | El tipo de conexión del servidor MCP debe ser `"local"`.                                   |
-| `command` | Matriz | Y | Comando y argumentos para ejecutar el servidor MCP.                                        |
-| `environment` | Objeto |          | Variables de entorno para configurar al ejecutar el servidor.                               |
-| `enabled` | booleano |          | Habilite o deshabilite el servidor MCP al inicio.                                        |
-| `timeout` | Número |          | Tiempo de espera en ms para recuperar herramientas del servidor MCP. El valor predeterminado es 5000 (5 segundos). |
+| Opción        | Tipo     | Requerido | Descripción                                                                                                        |
+| ------------- | -------- | --------- | ------------------------------------------------------------------------------------------------------------------ |
+| `type`        | Cadena   | Y         | El tipo de conexión del servidor MCP debe ser `"local"`.                                                           |
+| `command`     | Matriz   | Y         | Comando y argumentos para ejecutar el servidor MCP.                                                                |
+| `environment` | Objeto   |           | Variables de entorno para configurar al ejecutar el servidor.                                                      |
+| `enabled`     | booleano |           | Habilite o deshabilite el servidor MCP al inicio.                                                                  |
+| `timeout`     | Número   |           | Tiempo de espera en ms para recuperar herramientas del servidor MCP. El valor predeterminado es 5000 (5 segundos). |
 
 ---
 
@@ -152,14 +152,14 @@ Agregue servidores MCP remotos configurando `type` en `"remote"`.
 
 #### Opciones
 
-| Opción | Tipo | Requerido | Descripción |
-| --------- | ------- | -------- | ----------------------------------------------------------------------------------- |
-| `type` | Cadena | Y | El tipo de conexión del servidor MCP debe ser `"remote"`.                                  |
-| `url` | Cadena | Y | URL del servidor MCP remoto.                                                       |
-| `enabled` | booleano |          | Habilite o deshabilite el servidor MCP al inicio.                                        |
-| `headers` | Objeto |          | Encabezados para enviar con la solicitud.                                                   |
-| `oauth` | Objeto |          | OAuth configuración de autenticación. Consulte la sección [OAuth](#oauth) a continuación.              |
-| `timeout` | Número |          | Tiempo de espera en ms para recuperar herramientas del servidor MCP. El valor predeterminado es 5000 (5 segundos). |
+| Opción    | Tipo     | Requerido | Descripción                                                                                                        |
+| --------- | -------- | --------- | ------------------------------------------------------------------------------------------------------------------ |
+| `type`    | Cadena   | Y         | El tipo de conexión del servidor MCP debe ser `"remote"`.                                                          |
+| `url`     | Cadena   | Y         | URL del servidor MCP remoto.                                                                                       |
+| `enabled` | booleano |           | Habilite o deshabilite el servidor MCP al inicio.                                                                  |
+| `headers` | Objeto   |           | Encabezados para enviar con la solicitud.                                                                          |
+| `oauth`   | Objeto   |           | OAuth configuración de autenticación. Consulte la sección [OAuth](#oauth) a continuación.                          |
+| `timeout` | Número   |           | Tiempo de espera en ms para recuperar herramientas del servidor MCP. El valor predeterminado es 5000 (5 segundos). |
 
 ---
 
@@ -266,12 +266,12 @@ Si desea deshabilitar el OAuth automático para un servidor (por ejemplo, para s
 
 #### OAuth Opciones
 
-| Opción | Tipo | Descripción |
-| -------------- | --------------- | -------------------------------------------------------------------------------- |
-| `oauth` | Objeto \| falso | OAuth objeto de configuración, o `false` para deshabilitar la detección automática de OAuth.                 |
-| `clientId` | Cadena | OAuth ID de cliente. Si no se proporciona, se intentará el registro dinámico del cliente. |
-| `clientSecret` | Cadena | OAuth secreto del cliente, si lo requiere el servidor de autorización.                    |
-| `scope` | Cadena | OAuth alcances para solicitar durante la autorización.                                    |
+| Opción         | Tipo            | Descripción                                                                                  |
+| -------------- | --------------- | -------------------------------------------------------------------------------------------- |
+| `oauth`        | Objeto \| falso | OAuth objeto de configuración, o `false` para deshabilitar la detección automática de OAuth. |
+| `clientId`     | Cadena          | OAuth ID de cliente. Si no se proporciona, se intentará el registro dinámico del cliente.    |
+| `clientSecret` | Cadena          | OAuth secreto del cliente, si lo requiere el servidor de autorización.                       |
+| `scope`        | Cadena          | OAuth alcances para solicitar durante la autorización.                                       |
 
 #### Depuración
 

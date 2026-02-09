@@ -290,11 +290,10 @@ How is auth handled in @packages/functions/src/api/index.ts?
 Команды `/editor` и `/export` используют редактор, указанный в переменной среды `EDITOR`.
 
 ХХ0ГГ
-  ХХ0ГГ
-    ```bash
-    # Example for nano or vim
-    export EDITOR=nano
-    export EDITOR=vim
+ХХ0ГГ
+```bash # Example for nano or vim
+export EDITOR=nano
+export EDITOR=vim
 
     # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
     # include --wait
@@ -304,11 +303,11 @@ How is auth handled in @packages/functions/src/api/index.ts?
     Чтобы сделать его постоянным, добавьте это в свой профиль оболочки;
     `~/.bashrc`, `~/.zshrc` и т. д.
 
-  ХХ0ГГ
+ХХ0ГГ
 
-  ХХ0ГГ
-    ```bash
-    set EDITOR=notepad
+ХХ0ГГ
+```bash
+set EDITOR=notepad
 
     # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
     # include --wait
@@ -318,11 +317,11 @@ How is auth handled in @packages/functions/src/api/index.ts?
     Чтобы сделать его постоянным, используйте **Свойства системы** > **Среда.
     Переменные**.
 
-  ХХ0ГГ
+ХХ0ГГ
 
-  ХХ0ГГ
-    ```powershell
-    $env:EDITOR = "notepad"
+ХХ0ГГ
+```powershell
+$env:EDITOR = "notepad"
 
     # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
     # include --wait
@@ -331,7 +330,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
     Чтобы сделать его постоянным, добавьте его в свой профиль PowerShell.
 
-  ХХ0ГГ
+ХХ0ГГ
 ХХ0ГГ
 
 Популярные варианты редактора включают в себя:

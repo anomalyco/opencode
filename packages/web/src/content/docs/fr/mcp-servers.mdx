@@ -116,13 +116,13 @@ use the mcp_everything tool to add the number 3 and 4
 
 Voici toutes les options pour configurer un serveur MCP local.
 
-| Options | Tapez | Obligatoire | Descriptif |
-| ------------- | ------- | -------- | ----------------------------------------------------------------------------------- |
-| `type` | Chaîne | Oui | Le type de connexion au serveur MCP doit être `"local"`.                                   |
-| `command` | Tableau | Oui | Commande et arguments pour exécuter le serveur MCP.                                        |
-| `environment` | Objet |          | Variables d'environnement à définir lors de l'exécution du serveur.                               |
-| `enabled` | Booléen |          | Activez ou désactivez le serveur MCP au démarrage.                                        |
-| `timeout` | Numéro |          | Délai d'expiration en ms pour la récupération des outils depuis le serveur MCP. La valeur par défaut est 5 000 (5 secondes). |
+| Options       | Tapez   | Obligatoire | Descriptif                                                                                                                   |
+| ------------- | ------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `type`        | Chaîne  | Oui         | Le type de connexion au serveur MCP doit être `"local"`.                                                                     |
+| `command`     | Tableau | Oui         | Commande et arguments pour exécuter le serveur MCP.                                                                          |
+| `environment` | Objet   |             | Variables d'environnement à définir lors de l'exécution du serveur.                                                          |
+| `enabled`     | Booléen |             | Activez ou désactivez le serveur MCP au démarrage.                                                                           |
+| `timeout`     | Numéro  |             | Délai d'expiration en ms pour la récupération des outils depuis le serveur MCP. La valeur par défaut est 5 000 (5 secondes). |
 
 ---
 
@@ -152,14 +152,14 @@ Le `url` est le URL du serveur distant MCP et avec l'option `headers` vous pouve
 
 #### Possibilités
 
-| Options | Tapez | Obligatoire | Descriptif |
-| --------- | ------- | -------- | ----------------------------------------------------------------------------------- |
-| `type` | Chaîne | Oui | Le type de connexion au serveur MCP doit être `"remote"`.                                  |
-| `url` | Chaîne | Oui | URL du serveur MCP distant.                                                       |
-| `enabled` | Booléen |          | Activez ou désactivez le serveur MCP au démarrage.                                        |
-| `headers` | Objet |          | En-têtes à envoyer avec la demande.                                                   |
-| `oauth` | Objet |          | Configuration de l'authentification OAuth. Voir la section [OAuth](#oauth) ci-dessous.              |
-| `timeout` | Numéro |          | Délai d'expiration en ms pour la récupération des outils depuis le serveur MCP. La valeur par défaut est 5 000 (5 secondes). |
+| Options   | Tapez   | Obligatoire | Descriptif                                                                                                                   |
+| --------- | ------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `type`    | Chaîne  | Oui         | Le type de connexion au serveur MCP doit être `"remote"`.                                                                    |
+| `url`     | Chaîne  | Oui         | URL du serveur MCP distant.                                                                                                  |
+| `enabled` | Booléen |             | Activez ou désactivez le serveur MCP au démarrage.                                                                           |
+| `headers` | Objet   |             | En-têtes à envoyer avec la demande.                                                                                          |
+| `oauth`   | Objet   |             | Configuration de l'authentification OAuth. Voir la section [OAuth](#oauth) ci-dessous.                                       |
+| `timeout` | Numéro  |             | Délai d'expiration en ms pour la récupération des outils depuis le serveur MCP. La valeur par défaut est 5 000 (5 secondes). |
 
 ---
 
@@ -266,12 +266,12 @@ Si vous souhaitez désactiver le OAuth automatique pour un serveur (par exemple,
 
 #### Options OAuth
 
-| Options | Tapez | Descriptif |
-| -------------- | --------------- | -------------------------------------------------------------------------------- |
-| `oauth` | Objet \| faux | Objet de configuration OAuth, ou `false` pour désactiver la détection automatique OAuth.                 |
-| `clientId` | Chaîne | ID client OAuth. S’il n’est pas fourni, l’enregistrement dynamique du client sera tenté. |
-| `clientSecret` | Chaîne | OAuth secret client, si requis par le serveur d'autorisation.                    |
-| `scope` | Chaîne | OAuth scopes à demander lors de l'autorisation.                                    |
+| Options        | Tapez         | Descriptif                                                                               |
+| -------------- | ------------- | ---------------------------------------------------------------------------------------- |
+| `oauth`        | Objet \| faux | Objet de configuration OAuth, ou `false` pour désactiver la détection automatique OAuth. |
+| `clientId`     | Chaîne        | ID client OAuth. S’il n’est pas fourni, l’enregistrement dynamique du client sera tenté. |
+| `clientSecret` | Chaîne        | OAuth secret client, si requis par le serveur d'autorisation.                            |
+| `scope`        | Chaîne        | OAuth scopes à demander lors de l'autorisation.                                          |
 
 #### Débogage
 

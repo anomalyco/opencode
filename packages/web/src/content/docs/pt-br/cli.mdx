@@ -29,15 +29,15 @@ opencode [projeto]
 
 #### Flags
 
-| Flag         | Curto | Descrição                                   |
-| ------------ | ----- | ------------------------------------------- |
-| `--continue` | `-c`  | Continue a última sessão                    |
-| `--session`  | `-s`  | ID da sessão para continuar                 |
-| `--prompt`   |       | Prompt a ser usado                          |
+| Flag         | Curto | Descrição                                      |
+| ------------ | ----- | ---------------------------------------------- |
+| `--continue` | `-c`  | Continue a última sessão                       |
+| `--session`  | `-s`  | ID da sessão para continuar                    |
+| `--prompt`   |       | Prompt a ser usado                             |
 | `--model`    | `-m`  | Modelo a ser usado na forma de provedor/modelo |
-| `--agent`    |       | Agente a ser usado                         |
-| `--port`     |       | Porta para escutar                          |
-| `--hostname` |       | Nome do host para escutar                  |
+| `--agent`    |       | Agente a ser usado                             |
+| `--port`     |       | Porta para escutar                             |
+| `--hostname` |       | Nome do host para escutar                      |
 
 ---
 
@@ -77,10 +77,10 @@ opencode attach http://10.20.30.40:4096
 
 #### Flags
 
-| Flag        | Curto | Descrição                        |
-| ----------- | ----- | -------------------------------- |
+| Flag        | Curto | Descrição                                |
+| ----------- | ----- | ---------------------------------------- |
 | `--dir`     |       | Diretório de trabalho para iniciar o TUI |
-| `--session` | `-s`  | ID da sessão para continuar      |
+| `--session` | `-s`  | ID da sessão para continuar              |
 
 ---
 
@@ -186,10 +186,10 @@ opencode github run
 
 ##### Flags
 
-| Flag      | Descrição                             |
-| --------- | ------------------------------------- |
+| Flag      | Descrição                                        |
+| --------- | ------------------------------------------------ |
 | `--event` | Evento simulado do GitHub para executar o agente |
-| `--token` | Token de acesso pessoal do GitHub     |
+| `--token` | Token de acesso pessoal do GitHub                |
 
 ---
 
@@ -295,9 +295,9 @@ opencode models anthropic
 
 #### Flags
 
-| Flag        | Descrição                                                  |
-| ----------- | ---------------------------------------------------------- |
-| `--refresh` | Atualiza o cache de modelos a partir do models.dev        |
+| Flag        | Descrição                                                             |
+| ----------- | --------------------------------------------------------------------- |
+| `--refresh` | Atualiza o cache de modelos a partir do models.dev                    |
 | `--verbose` | Use uma saída de modelo mais detalhada (inclui metadados como custos) |
 
 Use a flag `--refresh` para atualizar a lista de modelos em cache. Isso é útil quando novos modelos foram adicionados a um provedor e você deseja vê-los no OpenCode.
@@ -334,19 +334,19 @@ opencode run --attach http://localhost:4096 "Explique async/await em JavaScript"
 
 #### Flags
 
-| Flag         | Curto | Descrição                                                        |
-| ------------ | ----- | ---------------------------------------------------------------- |
-| `--command`  |       | O comando a ser executado, use mensagem para argumentos          |
-| `--continue` | `-c`  | Continue a última sessão                                         |
-| `--session`  | `-s`  | ID da sessão para continuar                                      |
-| `--share`    |       | Compartilhe a sessão                                             |
-| `--model`    | `-m`  | Modelo a ser usado na forma de provedor/modelo                  |
-| `--agent`    |       | Agente a ser usado                                              |
-| `--file`     | `-f`  | Arquivo(s) a serem anexados à mensagem                          |
-| `--format`   |       | Formato: padrão (formatado) ou json (eventos JSON brutos)      |
-| `--title`    |       | Título para a sessão (usa o prompt truncado se nenhum valor for fornecido) |
+| Flag         | Curto | Descrição                                                                     |
+| ------------ | ----- | ----------------------------------------------------------------------------- |
+| `--command`  |       | O comando a ser executado, use mensagem para argumentos                       |
+| `--continue` | `-c`  | Continue a última sessão                                                      |
+| `--session`  | `-s`  | ID da sessão para continuar                                                   |
+| `--share`    |       | Compartilhe a sessão                                                          |
+| `--model`    | `-m`  | Modelo a ser usado na forma de provedor/modelo                                |
+| `--agent`    |       | Agente a ser usado                                                            |
+| `--file`     | `-f`  | Arquivo(s) a serem anexados à mensagem                                        |
+| `--format`   |       | Formato: padrão (formatado) ou json (eventos JSON brutos)                     |
+| `--title`    |       | Título para a sessão (usa o prompt truncado se nenhum valor for fornecido)    |
 | `--attach`   |       | Anexe a um servidor opencode em execução (por exemplo, http://localhost:4096) |
-| `--port`     |       | Porta para o servidor local (padrão para porta aleatória)       |
+| `--port`     |       | Porta para o servidor local (padrão para porta aleatória)                     |
 
 ---
 
@@ -362,11 +362,11 @@ Isso inicia um servidor HTTP que fornece acesso à funcionalidade do opencode se
 
 #### Flags
 
-| Flag         | Descrição                                   |
-| ------------ | ------------------------------------------- |
-| `--port`     | Porta para escutar                          |
-| `--hostname` | Nome do host para escutar                  |
-| `--mdns`     | Habilitar descoberta mDNS                   |
+| Flag         | Descrição                                             |
+| ------------ | ----------------------------------------------------- |
+| `--port`     | Porta para escutar                                    |
+| `--hostname` | Nome do host para escutar                             |
+| `--mdns`     | Habilitar descoberta mDNS                             |
 | `--cors`     | Origem(ns) de navegador adicionais para permitir CORS |
 
 ---
@@ -391,9 +391,9 @@ opencode session list
 
 ##### Flags
 
-| Flag          | Curto | Descrição                          |
-| ------------- | ----- | ---------------------------------- |
-| `--max-count` | `-n`  | Limitar às N sessões mais recentes |
+| Flag          | Curto | Descrição                                 |
+| ------------- | ----- | ----------------------------------------- |
+| `--max-count` | `-n`  | Limitar às N sessões mais recentes        |
 | `--format`    |       | Formato de saída: tabela ou json (tabela) |
 
 ---
@@ -408,12 +408,12 @@ opencode stats
 
 #### Flags
 
-| Flag        | Descrição                                                                 |
-| ----------- | ------------------------------------------------------------------------- |
-| `--days`    | Mostre estatísticas dos últimos N dias (todo o tempo)                    |
-| `--tools`   | Número de ferramentas a serem mostradas (todas)                          |
+| Flag        | Descrição                                                                                            |
+| ----------- | ---------------------------------------------------------------------------------------------------- |
+| `--days`    | Mostre estatísticas dos últimos N dias (todo o tempo)                                                |
+| `--tools`   | Número de ferramentas a serem mostradas (todas)                                                      |
 | `--models`  | Mostre a divisão do uso de modelos (oculto por padrão). Passe um número para mostrar os N principais |
-| `--project` | Filtrar por projeto (todos os projetos, string vazia: projeto atual)     |
+| `--project` | Filtrar por projeto (todos os projetos, string vazia: projeto atual)                                 |
 
 ---
 
@@ -458,11 +458,11 @@ Isso inicia um servidor HTTP e abre um navegador para acessar o OpenCode atravé
 
 #### Flags
 
-| Flag         | Descrição                                   |
-| ------------ | ------------------------------------------- |
-| `--port`     | Porta para escutar                          |
-| `--hostname` | Nome do host para escutar                  |
-| `--mdns`     | Habilitar descoberta mDNS                   |
+| Flag         | Descrição                                             |
+| ------------ | ----------------------------------------------------- |
+| `--port`     | Porta para escutar                                    |
+| `--hostname` | Nome do host para escutar                             |
+| `--mdns`     | Habilitar descoberta mDNS                             |
 | `--cors`     | Origem(ns) de navegador adicionais para permitir CORS |
 
 ---
@@ -479,10 +479,10 @@ Este comando inicia um servidor ACP que se comunica via stdin/stdout usando nd-J
 
 #### Flags
 
-| Flag         | Descrição           |
-| ------------ | ------------------- |
-| `--cwd`      | Diretório de trabalho |
-| `--port`     | Porta para escutar   |
+| Flag         | Descrição                 |
+| ------------ | ------------------------- |
+| `--cwd`      | Diretório de trabalho     |
+| `--port`     | Porta para escutar        |
 | `--hostname` | Nome do host para escutar |
 
 ---
@@ -497,12 +497,12 @@ opencode uninstall
 
 #### Flags
 
-| Flag            | Curto | Descrição                                 |
-| --------------- | ----- | ----------------------------------------- |
-| `--keep-config` | `-c`  | Manter arquivos de configuração           |
+| Flag            | Curto | Descrição                                |
+| --------------- | ----- | ---------------------------------------- |
+| `--keep-config` | `-c`  | Manter arquivos de configuração          |
 | `--keep-data`   | `-d`  | Manter dados de sessão e snapshots       |
 | `--dry-run`     |       | Mostrar o que seria removido sem remover |
-| `--force`       | `-f`  | Pular prompts de confirmação              |
+| `--force`       | `-f`  | Pular prompts de confirmação             |
 
 ---
 
@@ -528,8 +528,8 @@ opencode upgrade v0.1.48
 
 #### Flags
 
-| Flag       | Curto | Descrição                                                       |
-| ---------- | ----- | --------------------------------------------------------------- |
+| Flag       | Curto | Descrição                                                        |
+| ---------- | ----- | ---------------------------------------------------------------- |
 | `--method` | `-m`  | O método de instalação que foi usado; curl, npm, pnpm, bun, brew |
 
 ---
@@ -538,11 +538,11 @@ opencode upgrade v0.1.48
 
 A CLI do opencode aceita as seguintes flags globais.
 
-| Flag           | Curto | Descrição                          |
-| -------------- | ----- | ---------------------------------- |
-| `--help`       | `-h`  | Exibir ajuda                       |
-| `--version`    | `-v`  | Imprimir número da versão          |
-| `--print-logs` |       | Imprimir logs no stderr            |
+| Flag           | Curto | Descrição                               |
+| -------------- | ----- | --------------------------------------- |
+| `--help`       | `-h`  | Exibir ajuda                            |
+| `--version`    | `-v`  | Imprimir número da versão               |
+| `--print-logs` |       | Imprimir logs no stderr                 |
 | `--log-level`  |       | Nível de log (DEBUG, INFO, WARN, ERROR) |
 
 ---
@@ -551,32 +551,32 @@ A CLI do opencode aceita as seguintes flags globais.
 
 O OpenCode pode ser configurado usando variáveis de ambiente.
 
-| Variável                              | Tipo    | Descrição                                       |
-| ------------------------------------- | ------- | ------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | boolean | Compartilhar sessões automaticamente             |
-| `OPENCODE_GIT_BASH_PATH`              | string  | Caminho para o executável do Git Bash no Windows |
-| `OPENCODE_CONFIG`                     | string  | Caminho para o arquivo de configuração           |
-| `OPENCODE_CONFIG_DIR`                 | string  | Caminho para o diretório de configuração        |
-| `OPENCODE_CONFIG_CONTENT`             | string  | Conteúdo de configuração json inline             |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | Desabilitar verificações de atualização automática |
-| `OPENCODE_DISABLE_PRUNE`              | boolean | Desabilitar a poda de dados antigos              |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | Desabilitar atualizações automáticas do título do terminal |
-| `OPENCODE_PERMISSION`                 | string  | Configuração de permissões json inline           |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | Desabilitar plugins padrão                        |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | Desabilitar downloads automáticos do servidor LSP |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | Habilitar modelos experimentais                   |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | Desabilitar compactação automática de contexto    |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | Desabilitar leitura de `.claude` (prompt + habilidades) |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | Desabilitar leitura de `~/.claude/CLAUDE.md`     |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | Desabilitar carregamento de `.claude/skills`     |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | Desabilitar busca de modelos de fontes remotas    |
-| `OPENCODE_FAKE_VCS`                   | string  | Provedor VCS falso para fins de teste            |
-| `OPENCODE_DISABLE_FILETIME_CHECK`     | boolean | Desabilitar verificação de tempo de arquivo para otimização |
-| `OPENCODE_CLIENT`                     | string  | Identificador do cliente (padrão é `cli`)       |
-| `OPENCODE_ENABLE_EXA`                 | boolean | Habilitar ferramentas de busca web Exa           |
-| `OPENCODE_SERVER_PASSWORD`            | string  | Habilitar autenticação básica para `serve`/`web` |
+| Variável                              | Tipo    | Descrição                                                             |
+| ------------------------------------- | ------- | --------------------------------------------------------------------- |
+| `OPENCODE_AUTO_SHARE`                 | boolean | Compartilhar sessões automaticamente                                  |
+| `OPENCODE_GIT_BASH_PATH`              | string  | Caminho para o executável do Git Bash no Windows                      |
+| `OPENCODE_CONFIG`                     | string  | Caminho para o arquivo de configuração                                |
+| `OPENCODE_CONFIG_DIR`                 | string  | Caminho para o diretório de configuração                              |
+| `OPENCODE_CONFIG_CONTENT`             | string  | Conteúdo de configuração json inline                                  |
+| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | Desabilitar verificações de atualização automática                    |
+| `OPENCODE_DISABLE_PRUNE`              | boolean | Desabilitar a poda de dados antigos                                   |
+| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | Desabilitar atualizações automáticas do título do terminal            |
+| `OPENCODE_PERMISSION`                 | string  | Configuração de permissões json inline                                |
+| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | Desabilitar plugins padrão                                            |
+| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | Desabilitar downloads automáticos do servidor LSP                     |
+| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | Habilitar modelos experimentais                                       |
+| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | Desabilitar compactação automática de contexto                        |
+| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | Desabilitar leitura de `.claude` (prompt + habilidades)               |
+| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | Desabilitar leitura de `~/.claude/CLAUDE.md`                          |
+| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | Desabilitar carregamento de `.claude/skills`                          |
+| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | Desabilitar busca de modelos de fontes remotas                        |
+| `OPENCODE_FAKE_VCS`                   | string  | Provedor VCS falso para fins de teste                                 |
+| `OPENCODE_DISABLE_FILETIME_CHECK`     | boolean | Desabilitar verificação de tempo de arquivo para otimização           |
+| `OPENCODE_CLIENT`                     | string  | Identificador do cliente (padrão é `cli`)                             |
+| `OPENCODE_ENABLE_EXA`                 | boolean | Habilitar ferramentas de busca web Exa                                |
+| `OPENCODE_SERVER_PASSWORD`            | string  | Habilitar autenticação básica para `serve`/`web`                      |
 | `OPENCODE_SERVER_USERNAME`            | string  | Substituir nome de usuário de autenticação básica (padrão `opencode`) |
-| `OPENCODE_MODELS_URL`                 | string  | URL personalizada para buscar configuração de modelos |
+| `OPENCODE_MODELS_URL`                 | string  | URL personalizada para buscar configuração de modelos                 |
 
 ---
 
@@ -584,18 +584,18 @@ O OpenCode pode ser configurado usando variáveis de ambiente.
 
 Essas variáveis de ambiente habilitam recursos experimentais que podem mudar ou ser removidos.
 
-| Variável                                        | Tipo    | Descrição                             |
-| ----------------------------------------------- | ------- | ------------------------------------- |
-| `OPENCODE_EXPERIMENTAL`                         | boolean | Habilitar todos os recursos experimentais |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Habilitar descoberta de ícones       |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | Desabilitar cópia ao selecionar no TUI |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | Tempo limite padrão para comandos bash em ms |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | Máximo de tokens de saída para respostas LLM |
+| Variável                                        | Tipo    | Descrição                                                 |
+| ----------------------------------------------- | ------- | --------------------------------------------------------- |
+| `OPENCODE_EXPERIMENTAL`                         | boolean | Habilitar todos os recursos experimentais                 |
+| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Habilitar descoberta de ícones                            |
+| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | Desabilitar cópia ao selecionar no TUI                    |
+| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | number  | Tempo limite padrão para comandos bash em ms              |
+| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | number  | Máximo de tokens de saída para respostas LLM              |
 | `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | Habilitar monitoramento de arquivos para todo o diretório |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | Habilitar formatador oxfmt          |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | Habilitar ferramenta LSP experimental |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | Desabilitar monitoramento de arquivos |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | Habilitar recursos experimentais do Exa |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | Habilitar verificação de tipo LSP experimental |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolean | Habilitar recursos experimentais de markdown |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Habilitar modo de plano              |
+| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | Habilitar formatador oxfmt                                |
+| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | Habilitar ferramenta LSP experimental                     |
+| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | Desabilitar monitoramento de arquivos                     |
+| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | Habilitar recursos experimentais do Exa                   |
+| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | Habilitar verificação de tipo LSP experimental            |
+| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolean | Habilitar recursos experimentais de markdown              |
+| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Habilitar modo de plano                                   |

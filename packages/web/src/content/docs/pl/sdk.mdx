@@ -37,13 +37,13 @@ Spowoduje to uruchomienie zarówno serwera, jak i klienta
 
 #### Options
 
-| Opcja | Wpisz | Opis | Domyślne |
-| ---------- | ------------- | ------------------------------ | ----------- |
-| `hostname` | `string` | Nazwa hosta serwera | `127.0.0.1` |
-| `port` | `number` | Port serwera | `4096` |
-| `signal` | `AbortSignal` | Sygnał przerwania w celu anulowania | `undefined` |
-| `timeout` | `number` | Limit czasu w ms dla uruchomienia serwera | `5000` |
-| `config`   | `Config`      | Configuration object           | `{}`        |
+| Opcja      | Wpisz         | Opis                                      | Domyślne    |
+| ---------- | ------------- | ----------------------------------------- | ----------- |
+| `hostname` | `string`      | Nazwa hosta serwera                       | `127.0.0.1` |
+| `port`     | `number`      | Port serwera                              | `4096`      |
+| `signal`   | `AbortSignal` | Sygnał przerwania w celu anulowania       | `undefined` |
+| `timeout`  | `number`      | Limit czasu w ms dla uruchomienia serwera | `5000`      |
+| `config`   | `Config`      | Configuration object                      | `{}`        |
 
 ---
 
@@ -81,9 +81,9 @@ const client = createOpencodeClient({
 
 #### Options
 
-| Opcja | Wpisz | Opis | Domyślne |
+| Opcja           | Wpisz      | Opis                             | Domyślne                |
 | --------------- | ---------- | -------------------------------- | ----------------------- |
-| `baseUrl` | `string` | Adres URL serwera | `http://localhost:4096` |
+| `baseUrl`       | `string`   | Adres URL serwera                | `http://localhost:4096` |
 | `fetch`         | `function` | Custom fetch implementation      | `globalThis.fetch`      |
 | `parseAs`       | `string`   | Response parsing method          | `auto`                  |
 | `responseStyle` | `string`   | Return style: `data` or `fields` | `fields`                |
@@ -125,8 +125,8 @@ Zestaw SDK udostępnia wszystkie interfejsy API serwera za pośrednictwem klient
 
 ### Global
 
-| Method            | Description                     | Response                             |
-| ----------------- | ------------------------------- | ------------------------------------ |
+| Method            | Description                   | Response                             |
+| ----------------- | ----------------------------- | ------------------------------------ |
 | `global.health()` | Sprawdź stan i wersję serwera | `{ healthy: true, version: string }` |
 
 ---
@@ -142,9 +142,9 @@ console.log(health.data.version)
 
 ### App
 
-| Method         | Description               | Response                                    |
-| -------------- | ------------------------- | ------------------------------------------- |
-| `app.log()`    | Write a log entry         | `boolean`                                   |
+| Method         | Description                         | Response                                    |
+| -------------- | ----------------------------------- | ------------------------------------------- |
+| `app.log()`    | Write a log entry                   | `boolean`                                   |
 | `app.agents()` | Lista wszystkich dostępnych agentów | <a href={typesUrl}><code>Agent[]</code></a> |
 
 ---
@@ -169,10 +169,10 @@ const agents = await client.app.agents()
 
 ### Project
 
-| Method              | Description         | Response                                      |
-| ------------------- | ------------------- | --------------------------------------------- |
-| `project.list()` | Lista wszystkich projektów | <a href={typesUrl}><code>Projekt[]</code></a> |
-| `project.current()` | Get current project | <a href={typesUrl}><code>Project</code></a>   |
+| Method              | Description                | Response                                      |
+| ------------------- | -------------------------- | --------------------------------------------- |
+| `project.list()`    | Lista wszystkich projektów | <a href={typesUrl}><code>Projekt[]</code></a> |
+| `project.current()` | Get current project        | <a href={typesUrl}><code>Project</code></a>   |
 
 ---
 
@@ -207,9 +207,9 @@ const pathInfo = await client.path.get()
 
 ### Config
 
-| Method               | Description                       | Response                                                                                              |
-| -------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `config.get()`       | Get config info                   | <a href={typesUrl}><code>Config</code></a>                                                            |
+| Method               | Description                         | Response                                                                                              |
+| -------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `config.get()`       | Get config info                     | <a href={typesUrl}><code>Config</code></a>                                                            |
 | `config.providers()` | Lista dostawców i modeli domyślnych | `{ providers: `<a href={typesUrl}><code>Dostawca[]</code></a>`, default: { [key: string]: string } }` |
 
 ---
@@ -226,27 +226,27 @@ const { providers, default: defaults } = await client.config.providers()
 
 ### Sessions
 
-| Method                                                     | Description                        | Notes                                                                                                                                          |
-| ---------------------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `session.list()` | Lista sesji | Zwraca <a href={typesUrl}><code>Sesja[]</code></a> |
-| `session.get({ path })` | Uzyskaj sesję | Zwraca <a href={typesUrl}><code>Sesja</code></a> |
-| `session.children({ path })` | Lista sesji podrzędnych | Zwraca <a href={typesUrl}><code>Sesja[]</code></a> |
-| `session.create({ body })` | Utwórz sesję | Zwraca <a href={typesUrl}><code>Sesja</code></a> |
-| `session.delete({ path })` | Usuń sesję | Zwraca `boolean` |
-| `session.update({ path, body })` | Aktualizuj właściwości sesji | Zwraca <a href={typesUrl}><code>Sesja</code></a> |
-| `session.init({ path, body })` | Przeanalizuj aplikację i utwórz `AGENTS.md` | Zwraca `boolean` |
-| `session.abort({ path })` | Przerwij trwającą sesję | Zwraca `boolean` |
-| `session.share({ path })` | Udostępnij sesję | Zwraca <a href={typesUrl}><code>Sesja</code></a> |
-| `session.unshare({ path })` | Cofnij udostępnianie sesji | Zwraca <a href={typesUrl}><code>Sesja</code></a> |
-| `session.summarize({ path, body })` | Podsumowanie sesji | Zwraca `boolean` |
-| `session.messages({ path })` | Lista wiadomości w sesji | Zwraca `{ info: `<a href={typesUrl}><code>Wiadomość</code></a>`, parts: `<a href={typesUrl}><code>Część[]</code></a>`}[]` |
-| `session.message({ path })` | Uzyskaj szczegóły wiadomości | Zwraca `{ info: `<a href={typesUrl}><code>Wiadomość</code></a>`, parts: `<a href={typesUrl}><code>Część[]</code></a>`}` |
-| `session.prompt({ path, body })` | Wyślij wiadomość | `body.noReply: true` zwraca UserMessage (tylko kontekst). Domyślnie zwraca <a href={typesUrl}><code>AssistantMessage</code></a> z odpowiedzią AI |
-| `session.command({ path, body })` | Wyślij polecenie do sesji | Zwraca `{ info: `<a href={typesUrl}><code>Wiadomość Asystenta</code></a>`, parts: `<a href={typesUrl}><code>Część[]</code></a>`}` |
-| `session.shell({ path, body })` | Uruchom polecenie powłoki | Zwraca <a href={typesUrl}><code>Wiadomość Asystenta</code></a> |
-| `session.revert({ path, body })` | Przywróć wiadomość | Zwraca <a href={typesUrl}><code>Sesja</code></a> |
-| `session.unrevert({ path })` | Przywróć przywrócone wiadomości | Zwraca <a href={typesUrl}><code>Sesja</code></a> |
-| `postSessionByIdPermissionsByPermissionId({ path, body })` | Respond to a permission request    | Returns `boolean`                                                                                                                              |
+| Method                                                     | Description                                 | Notes                                                                                                                                            |
+| ---------------------------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `session.list()`                                           | Lista sesji                                 | Zwraca <a href={typesUrl}><code>Sesja[]</code></a>                                                                                               |
+| `session.get({ path })`                                    | Uzyskaj sesję                               | Zwraca <a href={typesUrl}><code>Sesja</code></a>                                                                                                 |
+| `session.children({ path })`                               | Lista sesji podrzędnych                     | Zwraca <a href={typesUrl}><code>Sesja[]</code></a>                                                                                               |
+| `session.create({ body })`                                 | Utwórz sesję                                | Zwraca <a href={typesUrl}><code>Sesja</code></a>                                                                                                 |
+| `session.delete({ path })`                                 | Usuń sesję                                  | Zwraca `boolean`                                                                                                                                 |
+| `session.update({ path, body })`                           | Aktualizuj właściwości sesji                | Zwraca <a href={typesUrl}><code>Sesja</code></a>                                                                                                 |
+| `session.init({ path, body })`                             | Przeanalizuj aplikację i utwórz `AGENTS.md` | Zwraca `boolean`                                                                                                                                 |
+| `session.abort({ path })`                                  | Przerwij trwającą sesję                     | Zwraca `boolean`                                                                                                                                 |
+| `session.share({ path })`                                  | Udostępnij sesję                            | Zwraca <a href={typesUrl}><code>Sesja</code></a>                                                                                                 |
+| `session.unshare({ path })`                                | Cofnij udostępnianie sesji                  | Zwraca <a href={typesUrl}><code>Sesja</code></a>                                                                                                 |
+| `session.summarize({ path, body })`                        | Podsumowanie sesji                          | Zwraca `boolean`                                                                                                                                 |
+| `session.messages({ path })`                               | Lista wiadomości w sesji                    | Zwraca `{ info: `<a href={typesUrl}><code>Wiadomość</code></a>`, parts: `<a href={typesUrl}><code>Część[]</code></a>`}[]`                        |
+| `session.message({ path })`                                | Uzyskaj szczegóły wiadomości                | Zwraca `{ info: `<a href={typesUrl}><code>Wiadomość</code></a>`, parts: `<a href={typesUrl}><code>Część[]</code></a>`}`                          |
+| `session.prompt({ path, body })`                           | Wyślij wiadomość                            | `body.noReply: true` zwraca UserMessage (tylko kontekst). Domyślnie zwraca <a href={typesUrl}><code>AssistantMessage</code></a> z odpowiedzią AI |
+| `session.command({ path, body })`                          | Wyślij polecenie do sesji                   | Zwraca `{ info: `<a href={typesUrl}><code>Wiadomość Asystenta</code></a>`, parts: `<a href={typesUrl}><code>Część[]</code></a>`}`                |
+| `session.shell({ path, body })`                            | Uruchom polecenie powłoki                   | Zwraca <a href={typesUrl}><code>Wiadomość Asystenta</code></a>                                                                                   |
+| `session.revert({ path, body })`                           | Przywróć wiadomość                          | Zwraca <a href={typesUrl}><code>Sesja</code></a>                                                                                                 |
+| `session.unrevert({ path })`                               | Przywróć przywrócone wiadomości             | Zwraca <a href={typesUrl}><code>Sesja</code></a>                                                                                                 |
+| `postSessionByIdPermissionsByPermissionId({ path, body })` | Respond to a permission request             | Returns `boolean`                                                                                                                                |
 
 ---
 
@@ -283,13 +283,13 @@ await client.session.prompt({
 
 ### Files
 
-| Method                    | Description                        | Response                                                                                    |
-| ------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------- |
-| `find.text({ query })` | Szukaj tekstu w plikach | Tablica obiektów dopasowania z `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
-| `find.files({ query })` | Znajdź pliki i katalogi według nazwy | `string[]` (ścieżki) |
-| `find.symbols({ query })` | Find workspace symbols             | <a href={typesUrl}><code>Symbol[]</code></a>                                                |
-| `file.read({ query })`    | Read a file                        | `{ type: "raw" \| "patch", content: string }`                                               |
-| `file.status({ query? })` | Uzyskaj status śledzonych plików | <a href={typesUrl}><code>Plik[]</code></a> |
+| Method                    | Description                          | Response                                                                                       |
+| ------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| `find.text({ query })`    | Szukaj tekstu w plikach              | Tablica obiektów dopasowania z `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
+| `find.files({ query })`   | Znajdź pliki i katalogi według nazwy | `string[]` (ścieżki)                                                                           |
+| `find.symbols({ query })` | Find workspace symbols               | <a href={typesUrl}><code>Symbol[]</code></a>                                                   |
+| `file.read({ query })`    | Read a file                          | `{ type: "raw" \| "patch", content: string }`                                                  |
+| `file.status({ query? })` | Uzyskaj status śledzonych plików     | <a href={typesUrl}><code>Plik[]</code></a>                                                     |
 
 `find.files` supports a few optional query fields:
 
@@ -324,17 +324,17 @@ const content = await client.file.read({
 
 ### TUI
 
-| Method                         | Description               | Response  |
-| ------------------------------ | ------------------------- | --------- |
-| `tui.appendPrompt({ body })` | Dołącz tekst do zachęty | `boolean` |
-| `tui.openHelp()` | Otwórz okno pomocy | `boolean` |
-| `tui.openSessions()` | Otwórz selektor sesji | `boolean` |
-| `tui.openThemes()` | Otwórz selektor motywów | `boolean` |
-| `tui.openModels()` | Otwórz selektor modelu | `boolean` |
-| `tui.submitPrompt()` | Prześlij bieżący monit | `boolean` |
-| `tui.clearPrompt()` | Wyczyść monit | `boolean` |
-| `tui.executeCommand({ body })` | Wykonaj polecenie | `boolean` |
-| `tui.showToast({ body })` | Pokaż powiadomienie tostowe | `boolean` |
+| Method                         | Description                 | Response  |
+| ------------------------------ | --------------------------- | --------- |
+| `tui.appendPrompt({ body })`   | Dołącz tekst do zachęty     | `boolean` |
+| `tui.openHelp()`               | Otwórz okno pomocy          | `boolean` |
+| `tui.openSessions()`           | Otwórz selektor sesji       | `boolean` |
+| `tui.openThemes()`             | Otwórz selektor motywów     | `boolean` |
+| `tui.openModels()`             | Otwórz selektor modelu      | `boolean` |
+| `tui.submitPrompt()`           | Prześlij bieżący monit      | `boolean` |
+| `tui.clearPrompt()`            | Wyczyść monit               | `boolean` |
+| `tui.executeCommand({ body })` | Wykonaj polecenie           | `boolean` |
+| `tui.showToast({ body })`      | Pokaż powiadomienie tostowe | `boolean` |
 
 ---
 
@@ -374,8 +374,8 @@ await client.auth.set({
 
 ### Events
 
-| Method              | Description               | Response                  |
-| ------------------- | ------------------------- | ------------------------- |
+| Method              | Description                             | Response                                |
+| ------------------- | --------------------------------------- | --------------------------------------- |
 | `event.subscribe()` | Strumień zdarzeń wysłanych przez serwer | Strumień zdarzeń wysłanych przez serwer |
 
 ---

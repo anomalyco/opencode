@@ -8,18 +8,22 @@ Prilagođeni alati su funkcije koje kreirate i koje LLM može pozvati tokom razg
 ---
 
 ## Kreiranje alata
+
 Alati su definisani kao **TypeScript** ili **JavaScript** datoteke. Međutim, definicija alata može pozvati skripte napisane na **bilo kom jeziku** — TypeScript ili JavaScript se koriste samo za samu definiciju alata.
 
 ---
 
 ### Lokacija
+
 Mogu se definisati:
+
 - Lokalno postavljanjem u `.opencode/tools/` direktorij vašeg projekta.
 - Ili globalno, postavljanjem u `~/.config/opencode/tools/`.
 
 ---
 
 ### Struktura
+
 Najlakši način za kreiranje alata je korištenje pomoćnika `tool()` koji pruža sigurnost tipa i validaciju.
 
 ```ts title=".opencode/tools/database.ts" {1}
@@ -42,6 +46,7 @@ export default tool({
 ---
 
 #### Više alata po datoteci
+
 Također možete izvesti više alata iz jedne datoteke. Svaki izvoz postaje **poseban alat** pod nazivom **`<filename>_<exportname>`**:
 
 ```ts title=".opencode/tools/math.ts"
@@ -75,6 +80,7 @@ Ovo stvara dva alata: `math_add` i `math_multiply`.
 ---
 
 ### Argumenti
+
 Možete koristiti `tool.schema`, što je samo [Zod](https://zod.dev), da definirate tipove argumenata.
 
 ```ts "tool.schema"
@@ -103,6 +109,7 @@ export default {
 ---
 
 ### Kontekst
+
 Alati primaju kontekst o trenutnoj sesiji:
 
 ```ts title=".opencode/tools/project.ts" {8}
@@ -125,7 +132,9 @@ Koristite `context.worktree` za korijen git radnog stabla.
 ---
 
 ## Primjeri
+
 ### Napišite alat u Python-u
+
 Možete pisati svoje alate na bilo kom jeziku koji želite. Evo primjera koji zbraja dva broja koristeći Python.
 Prvo kreirajte alat kao Python skriptu:
 
@@ -157,4 +166,4 @@ export default tool({
 })
 ```
 
-Ovdje koristimo [`Bun.$`_](https://bun.com/docs/runtime/shell) uslužni program za pokretanje Python skripte.
+Ovdje koristimo [`Bun.$`\_](https://bun.com/docs/runtime/shell) uslužni program za pokretanje Python skripte.

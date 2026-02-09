@@ -116,13 +116,13 @@ use the mcp_everything tool to add the number 3 and 4
 
 Her er alle alternativene for å konfigurere en lokal MCP-server.
 
-| Alternativ | Skriv | Påkrevd | Beskrivelse |
-| ------------- | ------- | -------- | ----------------------------------------------------------------------------------- |
-| `type` | String | Y | Type MCP servertilkobling, må være `"local"`.                                   |
-| `command` | Array | Y | Kommando og argumenter for å kjøre MCP-serveren.                                        |
-| `environment` | Objekt |          | Miljøvariabler som skal angis når serveren kjøres.                               |
-| `enabled` | Boolsk |          | Aktiver eller deaktiver MCP-serveren ved oppstart.                                        |
-| `timeout` | Nummer |          | Tidsavbrudd i ms for henting av verktøy fra MCP-serveren. Standard er 5000 (5 sekunder). |
+| Alternativ    | Skriv  | Påkrevd | Beskrivelse                                                                              |
+| ------------- | ------ | ------- | ---------------------------------------------------------------------------------------- |
+| `type`        | String | Y       | Type MCP servertilkobling, må være `"local"`.                                            |
+| `command`     | Array  | Y       | Kommando og argumenter for å kjøre MCP-serveren.                                         |
+| `environment` | Objekt |         | Miljøvariabler som skal angis når serveren kjøres.                                       |
+| `enabled`     | Boolsk |         | Aktiver eller deaktiver MCP-serveren ved oppstart.                                       |
+| `timeout`     | Nummer |         | Tidsavbrudd i ms for henting av verktøy fra MCP-serveren. Standard er 5000 (5 sekunder). |
 
 ---
 
@@ -152,14 +152,14 @@ Legg til eksterne MCP-servere ved å sette `type` til `"remote"`.
 
 #### Alternativer
 
-| Alternativ | Skriv | Påkrevd | Beskrivelse |
-| --------- | ------- | -------- | ----------------------------------------------------------------------------------- |
-| `type` | String | Y | Type MCP servertilkobling, må være `"remote"`.                                  |
-| `url` | String | Y | URL av den eksterne MCP-serveren.                                                       |
-| `enabled` | Boolsk |          | Aktiver eller deaktiver MCP-serveren ved oppstart.                                        |
-| `headers` | Objekt |          | Overskrifter å sende med forespørselen.                                                   |
-| `oauth` | Objekt |          | OAuth-autentiseringskonfigurasjon. Se delen [OAuth](#oauth) nedenfor.              |
-| `timeout` | Nummer |          | Tidsavbrudd i ms for henting av verktøy fra MCP-serveren. Standard er 5000 (5 sekunder). |
+| Alternativ | Skriv  | Påkrevd | Beskrivelse                                                                              |
+| ---------- | ------ | ------- | ---------------------------------------------------------------------------------------- |
+| `type`     | String | Y       | Type MCP servertilkobling, må være `"remote"`.                                           |
+| `url`      | String | Y       | URL av den eksterne MCP-serveren.                                                        |
+| `enabled`  | Boolsk |         | Aktiver eller deaktiver MCP-serveren ved oppstart.                                       |
+| `headers`  | Objekt |         | Overskrifter å sende med forespørselen.                                                  |
+| `oauth`    | Objekt |         | OAuth-autentiseringskonfigurasjon. Se delen [OAuth](#oauth) nedenfor.                    |
+| `timeout`  | Nummer |         | Tidsavbrudd i ms for henting av verktøy fra MCP-serveren. Standard er 5000 (5 sekunder). |
 
 ---
 
@@ -266,12 +266,12 @@ Hvis du vil deaktivere automatisk OAuth for en server (f.eks. for servere som br
 
 #### OAuth-alternativer
 
-| Alternativ | Skriv inn | Beskrivelse |
-| -------------- | --------------- | -------------------------------------------------------------------------------- |
-| `oauth` | Objekt \| usant | OAuth-konfigurasjonsobjekt, eller `false` for å deaktivere automatisk OAuth-deteksjon.                 |
-| `clientId` | String | OAuth-klient ID. Hvis ikke oppgitt, vil dynamisk klientregistrering bli forsøkt. |
-| `clientSecret` | String | OAuth-klienthemmelighet, hvis det kreves av autorisasjonsserveren.                    |
-| `scope` | String | OAuth-omfang å be om under autorisasjon.                                    |
+| Alternativ     | Skriv inn       | Beskrivelse                                                                            |
+| -------------- | --------------- | -------------------------------------------------------------------------------------- |
+| `oauth`        | Objekt \| usant | OAuth-konfigurasjonsobjekt, eller `false` for å deaktivere automatisk OAuth-deteksjon. |
+| `clientId`     | String          | OAuth-klient ID. Hvis ikke oppgitt, vil dynamisk klientregistrering bli forsøkt.       |
+| `clientSecret` | String          | OAuth-klienthemmelighet, hvis det kreves av autorisasjonsserveren.                     |
+| `scope`        | String          | OAuth-omfang å be om under autorisasjon.                                               |
 
 #### Feilsøking
 

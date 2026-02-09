@@ -14,6 +14,7 @@ OpenCode를 사용하면 여러 내장 테마 중 하나에서 선택할 수 있
 자신의 풀 컬러 팔레트로 올바르게 표시하려면 터미널을 지원해야합니다 ** truecolor** (24 비트 색상). 대부분의 현대 맨끝은 기본적으로 이것을 지원합니다, 그러나 당신은 그것을 가능하게 할 필요가 있을지도 모릅니다:
 
 -**체크 지원**: `echo $COLORTERM` - 그것은 `truecolor` 또는 `24bit`를 출력해야 합니다
+
 - ** truecolor 사용 가능**: 쉘 프로파일에서 환경 변수 `COLORTERM=truecolor`를 설정
 - **Terminal 호환성 **: 터미널 에뮬레이터 지원 24 비트 색상 (iTerm2, Alacritty, Kitty, Windows Terminal 및 GNOME Terminal의 최신 버전)
 
@@ -25,19 +26,19 @@ truecolor 지원 없이, 테마는 감소된 색깔 정확도로 나타날지도
 
 OpenCode는 여러 내장 테마와 함께 제공됩니다.
 
-| 이름 | 설명 |
-| ---------------------- | ---------------------------------------------------------------------------- |
-| `system` | 단말기의 배경 색상에 적응 |
-| `tokyonight` | 【도쿄의 밤】(https://github.com/folke/tokyonight.nvim) 테마 |
-| `everforest` | [Everforest]에 근거|(https://github.com/sainnhe/everforest) 테마|
-| `ayu` | 【Ayu】(https://github.com/ayu-theme) 다크 테마 |
-| `catppuccin` | [Catppuccin](https://github.com/catppuccin) 테마에 따라 다름 |
-| `catppuccin-macchiato` | [Catppuccin](https://github.com/catppuccin) 테마에 따라 다름 |
-| `gruvbox` | [Gruvbox]에 근거|(https://github.com/morhetz/gruvbox) 테마|
-| `kanagawa` | 가나가와현에 기반을 두고 있습니다(https://github.com/rebelot/kanagawa.nvim) 테마 |
-| `nord` | [Nord](https://github.com/nordtheme/nord) 테마에 근거|
-| `matrix` | 블랙 테마의 해커 스타일 그린 |
-| `one-dark` | [Atom One]을 기반으로 합니다(https://github.com/Th3Whit3Wolf/one-nvim) 다크 테마 |
+| 이름                   | 설명                                                                             |
+| ---------------------- | -------------------------------------------------------------------------------- | -------------------------------------------- |
+| `system`               | 단말기의 배경 색상에 적응                                                        |
+| `tokyonight`           | 【도쿄의 밤】(https://github.com/folke/tokyonight.nvim) 테마                     |
+| `everforest`           | [Everforest]에 근거                                                              | (https://github.com/sainnhe/everforest) 테마 |
+| `ayu`                  | 【Ayu】(https://github.com/ayu-theme) 다크 테마                                  |
+| `catppuccin`           | [Catppuccin](https://github.com/catppuccin) 테마에 따라 다름                     |
+| `catppuccin-macchiato` | [Catppuccin](https://github.com/catppuccin) 테마에 따라 다름                     |
+| `gruvbox`              | [Gruvbox]에 근거                                                                 | (https://github.com/morhetz/gruvbox) 테마    |
+| `kanagawa`             | 가나가와현에 기반을 두고 있습니다(https://github.com/rebelot/kanagawa.nvim) 테마 |
+| `nord`                 | [Nord](https://github.com/nordtheme/nord) 테마에 근거                            |
+| `matrix`               | 블랙 테마의 해커 스타일 그린                                                     |
+| `one-dark`             | [Atom One]을 기반으로 합니다(https://github.com/Th3Whit3Wolf/one-nvim) 다크 테마 |
 
 그리고 더, 우리는 끊임없이 새로운 테마를 추가하고 있습니다.
 
@@ -45,7 +46,7 @@ OpenCode는 여러 내장 테마와 함께 제공됩니다.
 
 ## 시스템 테마
 
-`system` 테마는 맨끝의 색깔 계획에 자동적으로 적응시키기 위하여 디자인됩니다. 고정 색상을 사용하는 전통적인 테마와 달리,  system  테마:
+`system` 테마는 맨끝의 색깔 계획에 자동적으로 적응시키기 위하여 디자인됩니다. 고정 색상을 사용하는 전통적인 테마와 달리, system 테마:
 
 - ** 회색 가늠자 **: 터미널의 배경 색상을 기반으로 사용자 정의 회색 가늠자를 만들고 최적의 대조를 보장합니다.
 - ** ANSI 색상 사용 ** : 터미널의 색상 팔레트를 존중하는 구문 강조 및 UI 요소에 대한 표준 ANSI 색상 (0-15).
@@ -82,10 +83,7 @@ OpenCode는 사용자가 쉽게 테마를 만들 수 있도록 유연한 JSON �
 
 테마는 다음과 같은 순서에서 여러 디렉토리에서로드됩니다. 나중에 감독은 이전 것을 무시합니다.
 
-1.**Built-in themes** - 이것은 바이너리에 내장되어 있습니다.
-2. **사용자 설정 디렉토리 ** - `~/.config/opencode/themes/*.json` 또는 `$XDG_CONFIG_HOME/opencode/themes/*.json`에서 정의
-3. ** 루트 디렉토리 ** - `<project-root>/.opencode/themes/*.json`에서 정의
-4. **현재 작업 디렉토리 ** - `./.opencode/themes/*.json`에서 정의
+1.**Built-in themes** - 이것은 바이너리에 내장되어 있습니다. 2. **사용자 설정 디렉토리 ** - `~/.config/opencode/themes/*.json` 또는 `$XDG_CONFIG_HOME/opencode/themes/*.json`에서 정의 3. ** 루트 디렉토리 ** - `<project-root>/.opencode/themes/*.json`에서 정의 4. **현재 작업 디렉토리 ** - `./.opencode/themes/*.json`에서 정의
 
 여러 디렉토리가 같은 이름을 가진 테마를 포함한다면, 더 높은 우선 순위를 가진 디렉토리의 테마가 사용됩니다.
 
@@ -116,6 +114,7 @@ vim .opencode/themes/my-theme.json
 테마는 유연한 JSON 형식을 사용하여 지원:
 
 -**Hex 색상**: `"#ffffff"`
+
 - ** ANSI 색상**: `3` (0-255)
 - ** 색상 참조 ** : `"primary"` 또는 사용자 정의 정의
 - ** 어두운 / 조명 변형 ** : `{"dark": "#000", "light": "#fff"}`

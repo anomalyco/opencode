@@ -105,14 +105,14 @@ Eller du kan sette den opp manuelt.
 
 OpenCode kan utløses av følgende GitHub-hendelser:
 
-| Hendelsestype | Utløst av | Detaljer |
-| ----------------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `issue_comment` | Kommenter et problem eller PR | Nevn `/opencode` eller `/oc` i kommentaren din. OpenCode leser kontekst og kan opprette grener, åpne PR-er eller svare. |
-| `pull_request_review_comment` | Kommenter spesifikke kodelinjer i en PR | Nevn `/opencode` eller `/oc` mens du ser gjennom koden. OpenCode mottar filbane, linjenummer og diff-kontekst.   |
-| `issues` | Utgave åpnet eller redigert | Utløs OpenCode automatisk når problemer opprettes eller endres. Krever `prompt` inngang.                      |
-| `pull_request` | PR åpnet eller oppdatert | Utløs OpenCode automatisk når PR-er åpnes, synkroniseres eller gjenåpnes. Nyttig for automatiserte anmeldelser.      |
-| `schedule` | Cron-basert tidsplan | Kjør OpenCode etter en tidsplan. Krever `prompt` inngang. Utdata går til logger og PR (ingen problem å kommentere).        |
-| `workflow_dispatch` | Manuell utløser fra GitHub UI | Utløs OpenCode på forespørsel via fanen Handlinger. Krever `prompt` inngang. Utdata går til logger og PR-er.                 |
+| Hendelsestype                 | Utløst av                               | Detaljer                                                                                                                |
+| ----------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `issue_comment`               | Kommenter et problem eller PR           | Nevn `/opencode` eller `/oc` i kommentaren din. OpenCode leser kontekst og kan opprette grener, åpne PR-er eller svare. |
+| `pull_request_review_comment` | Kommenter spesifikke kodelinjer i en PR | Nevn `/opencode` eller `/oc` mens du ser gjennom koden. OpenCode mottar filbane, linjenummer og diff-kontekst.          |
+| `issues`                      | Utgave åpnet eller redigert             | Utløs OpenCode automatisk når problemer opprettes eller endres. Krever `prompt` inngang.                                |
+| `pull_request`                | PR åpnet eller oppdatert                | Utløs OpenCode automatisk når PR-er åpnes, synkroniseres eller gjenåpnes. Nyttig for automatiserte anmeldelser.         |
+| `schedule`                    | Cron-basert tidsplan                    | Kjør OpenCode etter en tidsplan. Krever `prompt` inngang. Utdata går til logger og PR (ingen problem å kommentere).     |
+| `workflow_dispatch`           | Manuell utløser fra GitHub UI           | Utløs OpenCode på forespørsel via fanen Handlinger. Krever `prompt` inngang. Utdata går til logger og PR-er.            |
 
 ### Tidsplan Eksempel
 

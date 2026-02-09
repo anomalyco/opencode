@@ -105,14 +105,14 @@ Można też uszkodzić to rozwiązanie.
 
 OpenCode może zostać wywołany przez zdarzenie GitHub:
 
-| Typ zdarzenia | Wywołane przez | Szczegóły |
-| ----------------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `issue_comment` | Skomentuj problem lub PR | Wspomnij o `/opencode` lub `/oc` w swoim komentarzu. OpenCode odczytuje kontekst i może być częścią składową, otwieraną przez PR lub odpowiedzialną. |
-| `pull_request_review_comment` | Komentarz określonym kodem w PR | Wspomnij o `/opencode` lub `/oc` podczas przeglądania kodu. OpenCode źródło pochodzenia, numery linii i kontekst różnicowy.   |
-| `issues` | Wydanie otwarte lub edytowane | Automatycznie wyzwalaj OpenCode po utworzeniu lub zmodyfikowaniu problemów. Wymaga wejścia `prompt`.                      |
-| `pull_request` | PR otwarty lub zaktualizowany | Automatycznie wyzwalaj OpenCode, gdy PR są otwierane, synchronizowane lub ponownie otwierane. Przydatne w przypadku automatycznych znajomych.      |
-| `schedule` | Harmonogram oparty na Cron | Uruchom OpenCode zgodnie z harmonogramem. Wymagane wejście `prompt`. Dane wejściowe trafiają do dzienników i trafiań PR (nie ma problemu z recenzją).        |
-| `workflow_dispatch` | Ręczny wyłącznik z interfejsu użytkownika GitHub | Uruchom OpenCode na karcie Akcje. Wymagane wejście `prompt`. Dane wejściowe trafiają do dzienników i odbiorców PR.                 |
+| Typ zdarzenia                 | Wywołane przez                                   | Szczegóły                                                                                                                                             |
+| ----------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `issue_comment`               | Skomentuj problem lub PR                         | Wspomnij o `/opencode` lub `/oc` w swoim komentarzu. OpenCode odczytuje kontekst i może być częścią składową, otwieraną przez PR lub odpowiedzialną.  |
+| `pull_request_review_comment` | Komentarz określonym kodem w PR                  | Wspomnij o `/opencode` lub `/oc` podczas przeglądania kodu. OpenCode źródło pochodzenia, numery linii i kontekst różnicowy.                           |
+| `issues`                      | Wydanie otwarte lub edytowane                    | Automatycznie wyzwalaj OpenCode po utworzeniu lub zmodyfikowaniu problemów. Wymaga wejścia `prompt`.                                                  |
+| `pull_request`                | PR otwarty lub zaktualizowany                    | Automatycznie wyzwalaj OpenCode, gdy PR są otwierane, synchronizowane lub ponownie otwierane. Przydatne w przypadku automatycznych znajomych.         |
+| `schedule`                    | Harmonogram oparty na Cron                       | Uruchom OpenCode zgodnie z harmonogramem. Wymagane wejście `prompt`. Dane wejściowe trafiają do dzienników i trafiań PR (nie ma problemu z recenzją). |
+| `workflow_dispatch`           | Ręczny wyłącznik z interfejsu użytkownika GitHub | Uruchom OpenCode na karcie Akcje. Wymagane wejście `prompt`. Dane wejściowe trafiają do dzienników i odbiorców PR.                                    |
 
 ### Przykład harmonogramu
 

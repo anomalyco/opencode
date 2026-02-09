@@ -16,17 +16,20 @@ export const console = config.console
 ---
 
 ### بيانات الاعتماد
+
 عند إضافة مفاتيح API الخاصة بمزوّد عبر الأمر `/connect`، يتم تخزينها
 في `~/.local/share/opencode/auth.json`.
 
 ---
 
 ### الإعدادات
+
 يمكنك تخصيص المزوّدات عبر قسم `provider` في ملف إعدادات OpenCode.
 
 ---
 
 #### عنوان URL الأساسي
+
 يمكنك تخصيص عنوان URL الأساسي لأي مزوّد عبر خيار `baseURL`. يفيد ذلك عند استخدام خدمات وسيطة (proxy) أو نقاط نهاية مخصّصة.
 
 ```json title="opencode.json" {6}
@@ -81,6 +84,7 @@ OpenCode Zen هي قائمة نماذج يوفّرها فريق OpenCode وقد 
 ---
 
 ## الدليل
+
 لنلقِ نظرة على بعض المزوّدات بالتفصيل. إذا رغبت في إضافة مزوّد إلى القائمة،
 فلا تتردد في فتح PR.
 
@@ -131,6 +135,7 @@ OpenCode Zen هي قائمة نماذج يوفّرها فريق OpenCode وقد 
 2. **اضبط المصادقة** باستخدام إحدى الطرق التالية:
 
    #### متغيرات البيئة (بدء سريع)
+
    عيّن أحد متغيرات البيئة التالية أثناء تشغيل opencode:
 
    ```bash
@@ -152,6 +157,7 @@ OpenCode Zen هي قائمة نماذج يوفّرها فريق OpenCode وقد 
    ```
 
    #### ملف الإعدادات (موصى به)
+
    للإعداد الخاص بالمشروع أو الإعداد الدائم، استخدم `opencode.json`:
 
    ```json title="opencode.json"
@@ -178,6 +184,7 @@ OpenCode Zen هي قائمة نماذج يوفّرها فريق OpenCode وقد 
    :::
 
    #### متقدم: نقاط نهاية VPC
+
    إذا كنت تستخدم نقاط نهاية VPC لـ Bedrock:
 
    ```json title="opencode.json"
@@ -199,12 +206,13 @@ OpenCode Zen هي قائمة نماذج يوفّرها فريق OpenCode وقد 
    خيار `endpoint` هو اسم بديل لخيار `baseURL` العام باستخدام مصطلحات AWS. إذا تم تحديد كل من `endpoint` و`baseURL`، فستكون الأولوية لـ `endpoint`.
    :::
 
-   #### طرق المصادقة   - **`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`**: أنشئ مستخدم IAM وأنشئ مفاتيح وصول من AWS Console
+   #### طرق المصادقة - **`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`**: أنشئ مستخدم IAM وأنشئ مفاتيح وصول من AWS Console
    - **`AWS_PROFILE`**: استخدم ملفات تعريف مسمّاة من `~/.aws/credentials`. اضبط أولا عبر `aws configure --profile my-profile` أو `aws sso login`
    - **`AWS_BEARER_TOKEN_BEDROCK`**: أنشئ مفاتيح API طويلة الأجل من Amazon Bedrock console
    - **`AWS_WEB_IDENTITY_TOKEN_FILE` / `AWS_ROLE_ARN`**: لـ EKS IRSA (IAM Roles for Service Accounts) أو بيئات Kubernetes أخرى مع اتحاد OIDC. يتم حقن متغيرات البيئة هذه تلقائيا بواسطة Kubernetes عند استخدام تعليقات حساب الخدمة.
 
    #### أولوية المصادقة
+
    يستخدم Amazon Bedrock أولوية المصادقة التالية:
    1. **Bearer Token** - متغير البيئة `AWS_BEARER_TOKEN_BEDROCK` أو الرمز من الأمر `/connect`
    2. **AWS Credential Chain** - الملف الشخصي، مفاتيح الوصول، بيانات الاعتماد المشتركة، أدوار IAM، رموز Web Identity (EKS IRSA)، بيانات تعريف المثيل
@@ -273,6 +281,7 @@ OpenCode Zen هي قائمة نماذج يوفّرها فريق OpenCode وقد 
 :::
 
 ##### استخدام مفاتيح API
+
 يمكنك أيضا اختيار **Create an API Key** إذا لم يكن لديك اشتراك Pro/Max. سيفتح ذلك المتصفح أيضا ويطلب منك تسجيل الدخول إلى Anthropic ويعطيك رمزا يمكنك لصقه في الطرفية.
 
 أو إذا كان لديك مفتاح API بالفعل، يمكنك اختيار **Manually enter API Key** ولصقه في الطرفية.
@@ -645,9 +654,10 @@ OpenCode Zen هي قائمة نماذج يوفّرها فريق OpenCode وقد 
    ```
 
    #### استخدام OAuth (موصى به)
+
    اختر **OAuth** وسيفتح المتصفح لإتمام التفويض.
 
-   #### استخدام Personal Access Token   1. اذهب إلى [GitLab User Settings > Access Tokens](https://gitlab.com/-/user_settings/personal_access_tokens)
+   #### استخدام Personal Access Token 1. اذهب إلى [GitLab User Settings > Access Tokens](https://gitlab.com/-/user_settings/personal_access_tokens)
    2. انقر **Add new token**
    3. Name: `OpenCode`، Scopes: `api`
    4. انسخ الرمز (يبدأ بـ `glpat-`)
@@ -670,6 +680,7 @@ OpenCode Zen هي قائمة نماذج يوفّرها فريق OpenCode وقد 
 :::
 
 ##### GitLab مستضاف ذاتيا
+
 :::note[ملاحظة امتثال]
 يستخدم OpenCode نموذجا صغيرا لبعض مهام الذكاء الاصطناعي مثل إنشاء عنوان الجلسة.
 تم ضبطه لاستخدام gpt-5-nano افتراضيا، مستضافا عبر Zen. لحصر OpenCode
@@ -717,6 +728,7 @@ export GITLAB_TOKEN=glpat-...
      :::
 
 ##### OAuth للمثيلات المستضافة ذاتيا
+
 لكي يعمل Oauth مع مثيلك المستضاف ذاتيا، تحتاج إلى إنشاء
 تطبيق جديد (Settings → Applications) مع
 callback URL ‏`http://127.0.0.1:8080/callback` ونطاقات الصلاحيات التالية:
@@ -734,6 +746,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 مزيد من التوثيق على صفحة [opencode-gitlab-auth](https://www.npmjs.com/package/@gitlab/opencode-gitlab-auth).
 
 ##### التهيئة
+
 خصّص عبر `opencode.json`:
 
 ```json title="opencode.json"
@@ -754,6 +767,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 ```
 
 ##### أدوات GitLab API (اختياري، لكن موصى به بشدة)
+
 للوصول إلى أدوات GitLab (merge requests وissues وpipelines وCI/CD وغيرها):
 
 ```json title="opencode.json"
@@ -933,6 +947,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 لمزيد من المزوّدات والميزات المتقدمة مثل التخزين المؤقت (caching) وتحديد المعدّل (rate limiting)، راجع [توثيق Helicone](https://docs.helicone.ai).
 
 #### إعدادات اختيارية
+
 إذا رأيت ميزة أو نموذجا في Helicone لم يتم ضبطه تلقائيا عبر opencode، فيمكنك دائما ضبطه بنفسك.
 
 هذه هي [Helicone's Model Directory](https://helicone.ai/models)، وستحتاجها للحصول على IDs الخاصة بالنماذج التي تريد إضافتها.
@@ -962,6 +977,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 ```
 
 #### ترويسات مخصّصة
+
 تدعم Helicone ترويسات مخصّصة لميزات مثل التخزين المؤقت وتتبع المستخدم وإدارة الجلسات. أضفها إلى إعداد المزوّد عبر `options.headers`:
 
 ```jsonc title="~/.config/opencode/opencode.jsonc"
@@ -984,6 +1000,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 ```
 
 ##### تتبع الجلسات
+
 تتيح ميزة [Sessions](https://docs.helicone.ai/features/sessions) في Helicone تجميع طلبات LLM المرتبطة معا. استخدم ملحق [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) لتسجيل كل محادثة OpenCode تلقائيا كجلسة في Helicone.
 
 ```bash
@@ -1001,6 +1018,7 @@ npm install -g opencode-helicone-session
 يقوم الملحق بحقن ترويسات `Helicone-Session-Id` و`Helicone-Session-Name` ضمن طلباتك. في صفحة Sessions داخل Helicone، سترى كل محادثة OpenCode مدرجة كجلسة مستقلة.
 
 ##### ترويسات Helicone الشائعة
+
 | Header                     | الوصف                                                    |
 | -------------------------- | -------------------------------------------------------- |
 | `Helicone-Cache-Enabled`   | تفعيل التخزين المؤقت للاستجابات (`true`/`false`)         |
@@ -1305,6 +1323,7 @@ npm install -g opencode-helicone-session
    ```
 
 ##### استخدام مفاتيح API
+
 إذا كان لديك مفتاح API بالفعل، يمكنك اختيار **Manually enter API Key** ولصقه في الطرفية.
 
 ---
@@ -1722,6 +1741,7 @@ OpenCode Zen هي قائمة من النماذج التي تم اختبارها 
 ---
 
 ## موفّر مخصّص
+
 لإضافة أي مزوّد **OpenAI-compatible** غير موجود ضمن الأمر `/connect`:
 
 :::tip
@@ -1808,6 +1828,7 @@ OpenCode Zen هي قائمة من النماذج التي تم اختبارها 
 ---
 
 ##### مثال
+
 إليك مثالا يضبط خيارات `apiKey` و`headers` وخيارات `limit` الخاصة بالنموذج.
 
 ```json title="opencode.json" {9,11,17-20}
@@ -1850,6 +1871,7 @@ OpenCode Zen هي قائمة من النماذج التي تم اختبارها 
 ---
 
 ## استكشاف الأخطاء وإصلاحها
+
 إذا كنت تواجه مشكلة في تهيئة مزوّد، فتحقق مما يلي:
 
 1. **تحقق من إعداد auth**: شغّل `opencode auth list` لمعرفة ما إذا كانت بيانات الاعتماد

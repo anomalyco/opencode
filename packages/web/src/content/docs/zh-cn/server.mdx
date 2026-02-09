@@ -18,13 +18,13 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 
 #### 選項
 
-| 旗幟            | 描述                  | 預設             |
-| --------------- | --------------------- | ---------------- |
-| `--port`        | 监听音频              | `4096`           |
-| `--hostname`    | 监听的主机名          | `127.0.0.1`      |
-| `--mdns`        | 启用 mDNS 发现        | `false`          |
+| 旗幟            | 描述                                | 預設             |
+| --------------- | ----------------------------------- | ---------------- |
+| `--port`        | 监听音频                            | `4096`           |
+| `--hostname`    | 监听的主机名                        | `127.0.0.1`      |
+| `--mdns`        | 启用 mDNS 发现                      | `false`          |
 | `--mdns-domain` | Custom domain name for mDNS service | `opencode.local` |
-| `--cors`        | 允许的其他浏览器来源  | `[]`             |
+| `--cors`        | 允许的其他浏览器来源                | `[]`             |
 
 `--cors` 可以多次交付：
 
@@ -145,26 +145,26 @@ opencode服务器公开以下API。
 
 ### 會議
 
-| 方法     | 路徑                                     | 描述                          | 筆記                                                                             |
-| -------- | ---------------------------------------- | ----------------------------- | -------------------------------------------------------------------------------- |
-| `GET`    | `/session`                               | 列出所有會話                  | 返回 <a href={typesUrl}><code>Session[]</code></a>                               |
-| `POST`   | `/session`                               | 建立新會話                    | 正文： `{ parentID?, title? }`，返回 <a href={typesUrl}><code>Session</code></a> |
-| `GET`    | `/session/status`                        | 獲取所有會話的會話狀態        | 返回 `{ [sessionID: string]: `<a href={typesUrl}>SessionStatus</a>` }`           |
-| `GET`    | `/session/:id`                           | 獲取會話詳細資訊              | 返回<a href={typesUrl}><code>會話</code></a>                                     |
-| `DELETE` | `/session/:id`                           | 删除会话及所有资料            | 返回`boolean`                                                                    |
-| `PATCH`  | `/session/:id`                           | 更新會話屬性                  | 正文： `{ title? }`，返回 <a href={typesUrl}><code>Session</code></a>            |
-| `GET`    | `/session/:id/children`                  | 獲取會話的子會話              | 返回 <a href={typesUrl}><code>Session[]</code></a>                               |
-| `GET`    | `/session/:id/todo`                      | 獲取會話的待辦事項列表        | 返回 <a href={typesUrl}><code>Todo[]</code></a>                                  |
-| `POST`   | `/session/:id/init`                      | Analyze app and create `AGENTS.md`    | body: `{ messageID, providerID, modelID }`, returns `boolean`                      |
-| `POST`   | `/session/:id/fork`                      | 在訊息中分叉現有會話          | 正文： `{ messageID? }`，返回 <a href={typesUrl}><code>Session</code></a>        |
-| `POST`   | `/session/:id/abort`                     | 中止正在执行的会话            | 返回`boolean`                                                                    |
-| `POST`   | `/session/:id/share`                     | 分享會議                      | 返回<a href={typesUrl}><code>會話</code></a>                                     |
-| `DELETE` | `/session/:id/share`                     | 取消共享會話                  | 返回<a href={typesUrl}><code>會話</code></a>                                     |
-| `GET`    | `/session/:id/diff`                      | 獲取本次會話的差異            | 查詢：`messageID?`，返回 <a href={typesUrl}><code>FileDiff[]</code></a>          |
-| `POST`   | `/session/:id/summarize`                 | 会议总结                      | 正文：`{ providerID, modelID }`，返回 `boolean`                                  |
-| `POST`   | `/session/:id/revert`                    | 回覆讯息                      | 正文：`{ messageID, partID? }`，返回 `boolean`                                   |
-| `POST`   | `/session/:id/unrevert`                  | 恢复所有已恢复的消息          | 返回`boolean`                                                                    |
-| `POST`   | `/session/:id/permissions/:permissionID` | 回复许可权限请求              | 正文：`{ response, remember? }`，返回 `boolean`                                  |
+| 方法     | 路徑                                     | 描述                               | 筆記                                                                             |
+| -------- | ---------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------- |
+| `GET`    | `/session`                               | 列出所有會話                       | 返回 <a href={typesUrl}><code>Session[]</code></a>                               |
+| `POST`   | `/session`                               | 建立新會話                         | 正文： `{ parentID?, title? }`，返回 <a href={typesUrl}><code>Session</code></a> |
+| `GET`    | `/session/status`                        | 獲取所有會話的會話狀態             | 返回 `{ [sessionID: string]: `<a href={typesUrl}>SessionStatus</a>` }`           |
+| `GET`    | `/session/:id`                           | 獲取會話詳細資訊                   | 返回<a href={typesUrl}><code>會話</code></a>                                     |
+| `DELETE` | `/session/:id`                           | 删除会话及所有资料                 | 返回`boolean`                                                                    |
+| `PATCH`  | `/session/:id`                           | 更新會話屬性                       | 正文： `{ title? }`，返回 <a href={typesUrl}><code>Session</code></a>            |
+| `GET`    | `/session/:id/children`                  | 獲取會話的子會話                   | 返回 <a href={typesUrl}><code>Session[]</code></a>                               |
+| `GET`    | `/session/:id/todo`                      | 獲取會話的待辦事項列表             | 返回 <a href={typesUrl}><code>Todo[]</code></a>                                  |
+| `POST`   | `/session/:id/init`                      | Analyze app and create `AGENTS.md` | body: `{ messageID, providerID, modelID }`, returns `boolean`                    |
+| `POST`   | `/session/:id/fork`                      | 在訊息中分叉現有會話               | 正文： `{ messageID? }`，返回 <a href={typesUrl}><code>Session</code></a>        |
+| `POST`   | `/session/:id/abort`                     | 中止正在执行的会话                 | 返回`boolean`                                                                    |
+| `POST`   | `/session/:id/share`                     | 分享會議                           | 返回<a href={typesUrl}><code>會話</code></a>                                     |
+| `DELETE` | `/session/:id/share`                     | 取消共享會話                       | 返回<a href={typesUrl}><code>會話</code></a>                                     |
+| `GET`    | `/session/:id/diff`                      | 獲取本次會話的差異                 | 查詢：`messageID?`，返回 <a href={typesUrl}><code>FileDiff[]</code></a>          |
+| `POST`   | `/session/:id/summarize`                 | 会议总结                           | 正文：`{ providerID, modelID }`，返回 `boolean`                                  |
+| `POST`   | `/session/:id/revert`                    | 回覆讯息                           | 正文：`{ messageID, partID? }`，返回 `boolean`                                   |
+| `POST`   | `/session/:id/unrevert`                  | 恢复所有已恢复的消息               | 返回`boolean`                                                                    |
+| `POST`   | `/session/:id/permissions/:permissionID` | 回复许可权限请求                   | 正文：`{ response, remember? }`，返回 `boolean`                                  |
 
 ---
 

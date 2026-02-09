@@ -11,32 +11,32 @@ OpenCode formatiert Dateien automatisch, nachdem sie mit sprachspezifischen Form
 
 OpenCode verfügt über mehrere integrierte Formatierer für gängige Sprachen und Frameworks. Nachfolgend finden Sie eine Liste der Formatierer, unterstützten Dateierweiterungen und benötigten Befehle oder Konfigurationsoptionen.
 
-| Formatierer | Erweiterungen | Anforderungen |
-| -------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| gofmt | .go | `gofmt`-Befehl verfügbar |
-| mischen | .ex, .exs, .eex, .heex, .leex, .neex, .sface | `mix`-Befehl verfügbar |
-| hübscher | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml und [more](https://prettier.io/docs/en/index.html) | `prettier`-Abhängigkeit in `package.json` |
-| Biom | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml und [more](https://biomejs.dev/) | `biome.json(c)` Konfigurationsdatei |
-| Zickzack | .zig, .zon | `zig`-Befehl verfügbar |
-| clang-format | .c, .cpp, .h, .hpp, .ino und [more](https://clang.llvm.org/docs/ClangFormat.html) | `.clang-format` Konfigurationsdatei |
-| ktlint | .kt, .kts | `ktlint`-Befehl verfügbar |
-| Halskrause | .py, .pyi | `ruff`-Befehl verfügbar mit config |
-| rustfmt | .rs | `rustfmt`-Befehl verfügbar |
-| frachtfmt | .rs | `cargo fmt`-Befehl verfügbar |
-| UV | .py, .pyi | `uv`-Befehl verfügbar |
-| rubocop | .rb, .rake, .gemspec, .ru | `rubocop`-Befehl verfügbar |
-| standardrb | .rb, .rake, .gemspec, .ru | `standardrb`-Befehl verfügbar |
-| htmlbeautifier | .erb, .html.erb | `htmlbeautifier`-Befehl verfügbar |
-| Luft | .R | `air`-Befehl verfügbar |
-| Dart | .dart | `dart`-Befehl verfügbar |
-| ocamlformat | .ml, .mli | `ocamlformat` Befehl verfügbar und `.ocamlformat` Konfigurationsdatei |
-| Terraform | .tf, .tfvars | `terraform`-Befehl verfügbar |
-| Glanz | .glanz | `gleam`-Befehl verfügbar |
-| nixfmt | .nix | `nixfmt`-Befehl verfügbar |
-| shfmt | .sh, .bash | `shfmt`-Befehl verfügbar |
-| Pint | .php | `laravel/pint`-Abhängigkeit in `composer.json` |
-| oxfmt (Experimentell) | .js, .jsx, .ts, .tsx | `oxfmt`-Abhängigkeit in `package.json` und einer [experimental env variable flag](/docs/cli/#experimental) |
-| Ormolu | .hs | `ormolu`-Befehl verfügbar |
+| Formatierer           | Erweiterungen                                                                                           | Anforderungen                                                                                              |
+| --------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| gofmt                 | .go                                                                                                     | `gofmt`-Befehl verfügbar                                                                                   |
+| mischen               | .ex, .exs, .eex, .heex, .leex, .neex, .sface                                                            | `mix`-Befehl verfügbar                                                                                     |
+| hübscher              | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml und [more](https://prettier.io/docs/en/index.html) | `prettier`-Abhängigkeit in `package.json`                                                                  |
+| Biom                  | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml und [more](https://biomejs.dev/)                   | `biome.json(c)` Konfigurationsdatei                                                                        |
+| Zickzack              | .zig, .zon                                                                                              | `zig`-Befehl verfügbar                                                                                     |
+| clang-format          | .c, .cpp, .h, .hpp, .ino und [more](https://clang.llvm.org/docs/ClangFormat.html)                       | `.clang-format` Konfigurationsdatei                                                                        |
+| ktlint                | .kt, .kts                                                                                               | `ktlint`-Befehl verfügbar                                                                                  |
+| Halskrause            | .py, .pyi                                                                                               | `ruff`-Befehl verfügbar mit config                                                                         |
+| rustfmt               | .rs                                                                                                     | `rustfmt`-Befehl verfügbar                                                                                 |
+| frachtfmt             | .rs                                                                                                     | `cargo fmt`-Befehl verfügbar                                                                               |
+| UV                    | .py, .pyi                                                                                               | `uv`-Befehl verfügbar                                                                                      |
+| rubocop               | .rb, .rake, .gemspec, .ru                                                                               | `rubocop`-Befehl verfügbar                                                                                 |
+| standardrb            | .rb, .rake, .gemspec, .ru                                                                               | `standardrb`-Befehl verfügbar                                                                              |
+| htmlbeautifier        | .erb, .html.erb                                                                                         | `htmlbeautifier`-Befehl verfügbar                                                                          |
+| Luft                  | .R                                                                                                      | `air`-Befehl verfügbar                                                                                     |
+| Dart                  | .dart                                                                                                   | `dart`-Befehl verfügbar                                                                                    |
+| ocamlformat           | .ml, .mli                                                                                               | `ocamlformat` Befehl verfügbar und `.ocamlformat` Konfigurationsdatei                                      |
+| Terraform             | .tf, .tfvars                                                                                            | `terraform`-Befehl verfügbar                                                                               |
+| Glanz                 | .glanz                                                                                                  | `gleam`-Befehl verfügbar                                                                                   |
+| nixfmt                | .nix                                                                                                    | `nixfmt`-Befehl verfügbar                                                                                  |
+| shfmt                 | .sh, .bash                                                                                              | `shfmt`-Befehl verfügbar                                                                                   |
+| Pint                  | .php                                                                                                    | `laravel/pint`-Abhängigkeit in `composer.json`                                                             |
+| oxfmt (Experimentell) | .js, .jsx, .ts, .tsx                                                                                    | `oxfmt`-Abhängigkeit in `package.json` und einer [experimental env variable flag](/docs/cli/#experimental) |
+| Ormolu                | .hs                                                                                                     | `ormolu`-Befehl verfügbar                                                                                  |
 
 Wenn Ihr Projekt auch `prettier` in Ihrem `package.json` hat, wird OpenCode automatisch verwendet.
 
@@ -67,12 +67,12 @@ Sie können Formatierer über den Abschnitt `formatter` in Ihrer OpenCode-Konfig
 
 Jede Formatierungskonfiguration unterstützt Folgendes:
 
-| Eigentum | Geben Sie | eine Beschreibung |
-| ------------- | -------- | ------------------------------------------------------- |
-| `disabled` | boolescher Wert | Setzen Sie dies auf `true`, um den Formatierer | zu deaktivieren
-| `command` | string[] | Der zum Formatieren auszuführende Befehl |
-| `environment` | Objekt | Umgebungsvariablen, die beim Ausführen des Formatierers | festgelegt werden sollen
-| `extensions` | string[] | Dateierweiterungen, die dieser Formatierer verarbeiten soll |
+| Eigentum      | Geben Sie       | eine Beschreibung                                           |
+| ------------- | --------------- | ----------------------------------------------------------- | ------------------------ |
+| `disabled`    | boolescher Wert | Setzen Sie dies auf `true`, um den Formatierer              | zu deaktivieren          |
+| `command`     | string[]        | Der zum Formatieren auszuführende Befehl                    |
+| `environment` | Objekt          | Umgebungsvariablen, die beim Ausführen des Formatierers     | festgelegt werden sollen |
+| `extensions`  | string[]        | Dateierweiterungen, die dieser Formatierer verarbeiten soll |
 
 Schauen wir uns einige Beispiele an.
 

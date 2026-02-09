@@ -116,13 +116,13 @@ use the mcp_everything tool to add the number 3 and 4
 
 Hier finden Sie alle Optionen zum Konfigurieren eines lokalen MCP-Servers.
 
-| Option | Geben Sie | ein Erforderlich | Beschreibung |
-| ------------- | ------- | -------- | ----------------------------------------------------------------------------------- |
-| `type` | Zeichenfolge | Y | Typ der MCP-Serververbindung, muss `"local"` sein.                                   |
-| `command` | Array | Y | Befehl und Argumente zum Ausführen des MCP-Servers.                                        |
-| `environment` | Objekt |          | Umgebungsvariablen, die beim Ausführen des Servers festgelegt werden sollen.                               |
-| `enabled` | Boolescher Wert |          | Aktivieren oder deaktivieren Sie den MCP-Server beim Start.                                        |
-| `timeout` | Nummer |          | Timeout in ms für das Abrufen von Tools vom MCP-Server. Standardmäßig ist 5000 (5 Sekunden). |
+| Option        | Geben Sie       | ein Erforderlich | Beschreibung                                                                                 |
+| ------------- | --------------- | ---------------- | -------------------------------------------------------------------------------------------- |
+| `type`        | Zeichenfolge    | Y                | Typ der MCP-Serververbindung, muss `"local"` sein.                                           |
+| `command`     | Array           | Y                | Befehl und Argumente zum Ausführen des MCP-Servers.                                          |
+| `environment` | Objekt          |                  | Umgebungsvariablen, die beim Ausführen des Servers festgelegt werden sollen.                 |
+| `enabled`     | Boolescher Wert |                  | Aktivieren oder deaktivieren Sie den MCP-Server beim Start.                                  |
+| `timeout`     | Nummer          |                  | Timeout in ms für das Abrufen von Tools vom MCP-Server. Standardmäßig ist 5000 (5 Sekunden). |
 
 ---
 
@@ -152,14 +152,14 @@ Der `url` ist der URL des Remote-Servers MCP und mit der Option `headers` könne
 
 #### Options
 
-| Option | Geben Sie | ein Erforderlich | Beschreibung |
-| --------- | ------- | -------- | ----------------------------------------------------------------------------------- |
-| `type` | Zeichenfolge | Y | Typ der MCP-Serververbindung, muss `"remote"` sein.                                  |
-| `url` | Zeichenfolge | Y | URL des Remote-Servers MCP.                                                       |
-| `enabled` | Boolescher Wert |          | Aktivieren oder deaktivieren Sie den MCP-Server beim Start.                                        |
-| `headers` | Objekt |          | Header, die mit der Anfrage gesendet werden sollen.                                                   |
-| `oauth` | Objekt |          | OAuth-Authentifizierungskonfiguration. Siehe Abschnitt [OAuth](#oauth) unten.              |
-| `timeout` | Nummer |          | Timeout in ms für das Abrufen von Tools vom MCP-Server. Standardmäßig ist 5000 (5 Sekunden). |
+| Option    | Geben Sie       | ein Erforderlich | Beschreibung                                                                                 |
+| --------- | --------------- | ---------------- | -------------------------------------------------------------------------------------------- |
+| `type`    | Zeichenfolge    | Y                | Typ der MCP-Serververbindung, muss `"remote"` sein.                                          |
+| `url`     | Zeichenfolge    | Y                | URL des Remote-Servers MCP.                                                                  |
+| `enabled` | Boolescher Wert |                  | Aktivieren oder deaktivieren Sie den MCP-Server beim Start.                                  |
+| `headers` | Objekt          |                  | Header, die mit der Anfrage gesendet werden sollen.                                          |
+| `oauth`   | Objekt          |                  | OAuth-Authentifizierungskonfiguration. Siehe Abschnitt [OAuth](#oauth) unten.                |
+| `timeout` | Nummer          |                  | Timeout in ms für das Abrufen von Tools vom MCP-Server. Standardmäßig ist 5000 (5 Sekunden). |
 
 ---
 
@@ -266,12 +266,12 @@ Wenn Sie automatisches OAuth für einen Server deaktivieren möchten (e.g., für
 
 #### OAuth-Optionen
 
-| Option | Geben Sie | ein Beschreibung |
-| -------------- | --------------- | -------------------------------------------------------------------------------- |
-| `oauth` | Objekt \| falsch | OAuth-Konfigurationsobjekt oder `false`, um die automatische OAuth-Erkennung zu deaktivieren.                 |
-| `clientId` | Zeichenfolge | OAuth-Client ID. Wenn nicht angegeben, wird eine dynamische Client-Registrierung versucht. |
-| `clientSecret` | Zeichenfolge | OAuth-Client-Geheimnis, falls vom Autorisierungsserver erforderlich.                    |
-| `scope` | Zeichenfolge | OAuth-Bereiche, die während der Autorisierung angefordert werden sollen.                                    |
+| Option         | Geben Sie        | ein Beschreibung                                                                              |
+| -------------- | ---------------- | --------------------------------------------------------------------------------------------- |
+| `oauth`        | Objekt \| falsch | OAuth-Konfigurationsobjekt oder `false`, um die automatische OAuth-Erkennung zu deaktivieren. |
+| `clientId`     | Zeichenfolge     | OAuth-Client ID. Wenn nicht angegeben, wird eine dynamische Client-Registrierung versucht.    |
+| `clientSecret` | Zeichenfolge     | OAuth-Client-Geheimnis, falls vom Autorisierungsserver erforderlich.                          |
+| `scope`        | Zeichenfolge     | OAuth-Bereiche, die während der Autorisierung angefordert werden sollen.                      |
 
 #### Debugging
 

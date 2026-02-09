@@ -12,34 +12,44 @@ Režimi u otvorenom kodu omogućavaju vam da prilagodite ponašanje, alate i upi
 Dolazi sa dva ugrađena načina rada: **gradite** i **planirajte**. Možete prilagoditi
 ove ili konfigurirajte svoje putem opencode config.
 Možete se prebacivati ​​između režima tokom sesije ili ih konfigurisati u svom konfiguracionom fajlu.
+
 ---
 
 ## Ugrađeno
-opencode dolazi sa dva ugrađena načina rada.
----
+
+## opencode dolazi sa dva ugrađena načina rada.
 
 ### Build
-Izrada je **podrazumevani** režim sa svim omogućenim alatima. Ovo je standardni način rada na razvoju gdje vam je potreban pun pristup operacijama datoteka i sistemskim komandama.
----
+
+## Izrada je **podrazumevani** režim sa svim omogućenim alatima. Ovo je standardni način rada na razvoju gdje vam je potreban pun pristup operacijama datoteka i sistemskim komandama.
 
 ### Plan
+
 Ograničeni način rada dizajniran za planiranje i analizu. U načinu plana, sljedeći alati su onemogućeni prema zadanim postavkama:
+
 - `write` - Ne mogu kreirati nove fajlove
 - `edit` - Ne mogu modificirati postojeće fajlove, osim fajlova koji se nalaze na `.opencode/plans/*.md` radi detaljiziranja samog plana
 - `patch` - Ne mogu primijeniti zakrpe
 - `bash` - Ne mogu izvršiti naredbe ljuske
-Ovaj način rada je koristan kada želite da AI analizira kod, predlaže promjene ili kreira planove bez ikakvih stvarnih modifikacija u vašoj bazi kodova.
+  Ovaj način rada je koristan kada želite da AI analizira kod, predlaže promjene ili kreira planove bez ikakvih stvarnih modifikacija u vašoj bazi kodova.
+
 ---
 
 ## Prebacivanje
+
 Možete se prebacivati ​​između načina rada tokom sesije pomoću tipke _Tab_. Ili vaše konfigurirano `switch_mode` spajanje tipki.
 Vidi također: [Formatters](/docs/formatters) za informacije o konfiguraciji formatiranja koda.
+
 ---
 
 ## Konfiguriši
+
 Možete prilagoditi ugrađene načine rada ili kreirati vlastite kroz konfiguraciju. Modovi se mogu konfigurirati na dva načina:
+
 ### JSON konfiguracija
+
 Konfigurirajte načine rada u svom `opencode.json` konfiguracijskom fajlu:
+
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
@@ -66,9 +76,12 @@ Konfigurirajte načine rada u svom `opencode.json` konfiguracijskom fajlu:
 ```
 
 ### Markdown konfiguracija
+
 Također možete definirati načine rada koristeći mardown datoteke. Postavite ih u:
+
 - Globalno: `~/.config/opencode/modes/`
 - Projekat: `.opencode/modes/`
+
 ```markdown title="~/.config/opencode/modes/review.md"
 ---
 model: anthropic/claude-sonnet-4-20250514
@@ -91,10 +104,13 @@ Provide constructive feedback without making direct changes.
 
 Naziv datoteke s uštedom postaje naziv načina (npr. `review.md` kreira `review` način rada).
 Pogledajmo ove opcije konfiguracije detaljno.
+
 ---
 
 ### Model
+
 Koristite `model` konfiguraciju da nadjačate zadani model za ovaj način rada. Korisno za korištenje različitih modela optimiziranih za različite zadatke. Na primjer, brži model za planiranje, sposobniji model za implementaciju.
+
 ```json title="opencode.json"
 {
   "mode": {
@@ -108,7 +124,9 @@ Koristite `model` konfiguraciju da nadjačate zadani model za ovaj način rada. 
 ---
 
 ### Temperatura
+
 Kontrolišite slučajnost i kreativnost odgovora AI pomoću `temperature` konfiguracije. Niže vrijednosti čine odgovore fokusiranijim i determinističkim, dok veće vrijednosti povećavaju kreativnost i varijabilnost.
+
 ```json title="opencode.json"
 {
   "mode": {
@@ -123,9 +141,11 @@ Kontrolišite slučajnost i kreativnost odgovora AI pomoću `temperature` konfig
 ```
 
 Vrijednosti temperature obično se kreću od 0,0 do 1,0:
+
 - **0,0-0,2**: Vrlo fokusirani i deterministički odgovori, idealni za analizu i planiranje koda
 - **0,3-0,5**: Uravnoteženi odgovori sa malo kreativnosti, dobro za opšte razvojne zadatke
 - **0,6-1,0**: kreativniji i raznovrsniji odgovori, korisni za razmišljanje i istraživanje
+
 ```json title="opencode.json"
 {
   "mode": {
@@ -144,11 +164,12 @@ Vrijednosti temperature obično se kreću od 0,0 do 1,0:
 }
 ```
 
-Ako temperatura nije navedena, opencode koristi zadane postavke specifične za model (obično 0 za većinu modela, 0,55 za Qwen modele).
----
+## Ako temperatura nije navedena, opencode koristi zadane postavke specifične za model (obično 0 za većinu modela, 0,55 za Qwen modele).
 
 ### Prompt
+
 Navedite prilagođenu sistemsku datoteku prompta za ovaj način rada s konfiguracijom `prompt`. Datoteka s promptom treba da sadrži upute specifične za svrhu načina rada.
+
 ```json title="opencode.json"
 {
   "mode": {
@@ -161,10 +182,13 @@ Navedite prilagođenu sistemsku datoteku prompta za ovaj način rada s konfigura
 
 Ova putanja je relativna u odnosu na mjesto gdje se nalazi konfiguracijski fajl. Dakle, ovo radi za
 i globalnu konfiguraciju otvorenog koda i konfiguraciju specifične za projekat.
+
 ---
 
 ### Alati
+
 Kontrolirajte koji su alati dostupni u ovom načinu rada pomoću `tools` konfiguracije. Možete omogućiti ili onemogućiti određene alate tako što ćete ih postaviti na `true` ili `false`.
+
 ```json
 {
   "mode": {
@@ -182,10 +206,10 @@ Kontrolirajte koji su alati dostupni u ovom načinu rada pomoću `tools` konfigu
 }
 ```
 
-Ako nijedan alat nije specificiran, svi alati su omogućeni prema zadanim postavkama.
----
+## Ako nijedan alat nije specificiran, svi alati su omogućeni prema zadanim postavkama.
 
 #### Dostupni alati
+
 Ovdje su svi alati koji se mogu kontrolirati kroz konfiguraciju načina rada.
 | Alat | Opis || ----------- | ----------------------- |
 | `bash` | Izvrši naredbe ljuske |
@@ -199,11 +223,15 @@ Ovdje su svi alati koji se mogu kontrolirati kroz konfiguraciju načina rada.
 | `todowrite` | Upravljanje listama zadataka |
 | `todoread` | Pročitajte liste obaveza |
 | `webfetch` | Dohvati web sadržaj |
+
 ---
 
 ## Prilagođeni načini rada
+
 Možete kreirati vlastite prilagođene modove tako što ćete ih dodati u konfiguraciju. Evo primjera koji koriste oba pristupa:
+
 ### Korištenje JSON konfiguracije
+
 ```json title="opencode.json" {4-14}
 {
   "$schema": "https://opencode.ai/config.json",
@@ -224,7 +252,9 @@ Možete kreirati vlastite prilagođene modove tako što ćete ih dodati u konfig
 ```
 
 ### Korištenje mardown fajlova
+
 Kreirajte fajlove načina u `.opencode/modes/` za specifične načine rada ili `~/.config/opencode/modes/` za globalne načine:
+
 ```markdown title=".opencode/modes/debug.md"
 ---
 temperature: 0.1
@@ -274,10 +304,12 @@ Priorities:
 ---
 
 ### Slučajevi upotrebe
+
 Evo nekoliko uobičajenih slučajeva upotrebe za različite načine rada.
+
 - **Način izgradnje**: Potpuni razvojni rad sa svim omogućenim alatima
 - **Način planiranja**: Analiza i planiranje bez izmjena
 - **Review mode**: Pregled koda sa pristupom samo za čitanje plus alati za dokumentaciju
 - **Režim za otklanjanje grešaka**: Fokusiran na istragu sa omogućenim bash i alatima za čitanje
 - **Režim dokumenata**: Pisanje dokumentacije sa operacijama datoteka, ali bez sistemskih naredbi
-Možda ćete također otkriti da su različiti modeli dobri za različite slučajeve upotrebe.
+  Možda ćete također otkriti da su različiti modeli dobri za različite slučajeve upotrebe.

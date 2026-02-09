@@ -116,13 +116,13 @@ use the mcp_tudo tool to add the number 3 and 4
 
 Aqui estão todas as opções para configurar um servidor MCP local.
 
-| Opção        | Tipo    | Requerido | Descrição                                                                         |
-| ------------ | ------- | --------- | --------------------------------------------------------------------------------- |
-| `type`       | String  | S         | Tipo de conexão do servidor MCP, deve ser `"local"`.                             |
-| `command`    | Array   | S         | Comando e argumentos para executar o servidor MCP.                                |
-| `environment`| Object  |           | Variáveis de ambiente a serem definidas ao executar o servidor.                  |
-| `enabled`    | Boolean |           | Habilitar ou desabilitar o servidor MCP na inicialização.                        |
-| `timeout`    | Number  |           | Tempo limite em ms para buscar ferramentas do servidor MCP. O padrão é 5000 (5 segundos). |
+| Opção         | Tipo    | Requerido | Descrição                                                                                 |
+| ------------- | ------- | --------- | ----------------------------------------------------------------------------------------- |
+| `type`        | String  | S         | Tipo de conexão do servidor MCP, deve ser `"local"`.                                      |
+| `command`     | Array   | S         | Comando e argumentos para executar o servidor MCP.                                        |
+| `environment` | Object  |           | Variáveis de ambiente a serem definidas ao executar o servidor.                           |
+| `enabled`     | Boolean |           | Habilitar ou desabilitar o servidor MCP na inicialização.                                 |
+| `timeout`     | Number  |           | Tempo limite em ms para buscar ferramentas do servidor MCP. O padrão é 5000 (5 segundos). |
 
 ---
 
@@ -152,14 +152,14 @@ O `url` é a URL do servidor MCP remoto e com a opção `headers` você pode pas
 
 #### Opções
 
-| Opção    | Tipo    | Requerido | Descrição                                                                         |
-| -------- | ------- | --------- | --------------------------------------------------------------------------------- |
-| `type`   | String  | S         | Tipo de conexão do servidor MCP, deve ser `"remote"`.                            |
-| `url`    | String  | S         | URL do servidor MCP remoto.                                                       |
-| `enabled`| Boolean |           | Habilitar ou desabilitar o servidor MCP na inicialização.                        |
-| `headers`| Object  |           | Cabeçalhos a serem enviados com a solicitação.                                   |
-| `oauth`  | Object  |           | Configuração de autenticação OAuth. Veja a seção [OAuth](#oauth) abaixo.         |
-| `timeout`| Number  |           | Tempo limite em ms para buscar ferramentas do servidor MCP. O padrão é 5000 (5 segundos). |
+| Opção     | Tipo    | Requerido | Descrição                                                                                 |
+| --------- | ------- | --------- | ----------------------------------------------------------------------------------------- |
+| `type`    | String  | S         | Tipo de conexão do servidor MCP, deve ser `"remote"`.                                     |
+| `url`     | String  | S         | URL do servidor MCP remoto.                                                               |
+| `enabled` | Boolean |           | Habilitar ou desabilitar o servidor MCP na inicialização.                                 |
+| `headers` | Object  |           | Cabeçalhos a serem enviados com a solicitação.                                            |
+| `oauth`   | Object  |           | Configuração de autenticação OAuth. Veja a seção [OAuth](#oauth) abaixo.                  |
+| `timeout` | Number  |           | Tempo limite em ms para buscar ferramentas do servidor MCP. O padrão é 5000 (5 segundos). |
 
 ---
 
@@ -266,12 +266,12 @@ Se você quiser desabilitar o OAuth automático para um servidor (por exemplo, p
 
 #### Opções de OAuth
 
-| Opção          | Tipo              | Descrição                                                                       |
-| -------------- | ----------------- | ------------------------------------------------------------------------------- |
-| `oauth`        | Object \| false   | Objeto de configuração OAuth, ou `false` para desabilitar a detecção automática de OAuth. |
-| `clientId`     | String            | ID do cliente OAuth. Se não fornecido, o registro dinâmico do cliente será tentado. |
-| `clientSecret` | String            | Segredo do cliente OAuth, se necessário pelo servidor de autorização.           |
-| `scope`        | String            | Escopos OAuth a serem solicitados durante a autorização.                       |
+| Opção          | Tipo            | Descrição                                                                                 |
+| -------------- | --------------- | ----------------------------------------------------------------------------------------- |
+| `oauth`        | Object \| false | Objeto de configuração OAuth, ou `false` para desabilitar a detecção automática de OAuth. |
+| `clientId`     | String          | ID do cliente OAuth. Se não fornecido, o registro dinâmico do cliente será tentado.       |
+| `clientSecret` | String          | Segredo do cliente OAuth, se necessário pelo servidor de autorização.                     |
+| `scope`        | String          | Escopos OAuth a serem solicitados durante a autorização.                                  |
 
 #### Depuração
 

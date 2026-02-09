@@ -11,40 +11,40 @@ OpenCode는 언어 서버 프로토콜 (LSP)과 통합하여 LLM은 코드베이
 
 OpenCode는 인기있는 언어로 여러 내장 LSP 서버와 함께 제공됩니다.
 
-| LSP 서버 | 연장 | 요구사항 |
-| ------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------ |
-| astro | .astro | Astro 프로젝트 자동 설치 |
-| bash | .sh, .bash, .zsh, .ksh | 자동 설치 bash-language-server |
-| clangd | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++ | C/C++ 프로젝트용 자동 설치 |
-| csharp | .cs | `.NET SDK` 설치 |
-| clojure-lsp | .clj, .cljs, .cljc, .edn | `clojure-lsp` 명령 가능 |
-| 다트 | 다트 | `dart` 명령 |
-| deno | .ts, .tsx, .js, .jsx, .mjs | `deno` 명령 가능(자동검출 deno.json/deno.jsonc) |
-| elixir-ls | .ex, .exs | `elixir` 명령 가능 |
-| eslint | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue | 프로젝트의 `eslint` 의존성 |
-| fsharp | .fs, .fsi, .fsx, .fsscript | `.NET SDK` 설치 |
-| gleam | .gleam | `gleam` 명령 가능 |
-| gopls | .go | `go` 명령 가능 |
-| hls | .hs, .lhs | `haskell-language-server-wrapper` 명령 가능 |
-| jdtls | .java | `Java SDK (version 21+)` 설치 |
-| kotlin-ls | .kt, .kts | Kotlin 프로젝트용 자동 설치 |
-| lua-ls | .lua | 루아 사업용 자동설치 |
-| nixd | .nix | `nixd` 명령 가능 |
-| ocaml-lsp | .ml, .mli | `ocamllsp` 명령 가능 |
-| oxlint | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .ct, .vue, .astro, .svelte | 프로젝트의 `oxlint` 신뢰성 |
-| PHP intelephense | .php | PHP 프로젝트 자동 설치 |
-| 프리즘 | .prisma | `prisma` 명령 가능 |
-| pyright | .py, .pyi | `pyright` 의존성 설치 |
-| 루비-lsp(rubocop) | .rb, .rake, .gemspec, .ru | `ruby` 및 `gem` 명령 사용 가능 |
-| 녹 | .rs | `rust-analyzer` 명령 가능 |
-| sourcekit-lsp | .swift, .objc, .objcpp | `swift` 설치 (MacOS의 `xcode`) |
-| svelte | .svelte | Svelte 프로젝트 자동 설치 |
-| 지형 | .tf, .tfvars | GitHub 릴리스의 자동 설치 |
-| 작문 | .typ, .typc | GitHub 릴리스의 자동 설치 |
-인가정보 | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts | 프로젝트의 `typescript` 의존성 |
-| vue | .vue | Vue 프로젝트 자동 설치 |
-| yaml-ls | .yaml, .yml | 자동 설치 Red Hat yaml-language-server |
-| zls | .zig, .zon | `zig` 명령 가능 |
+| LSP 서버          | 연장                                                               | 요구사항                                        |
+| ----------------- | ------------------------------------------------------------------ | ----------------------------------------------- |
+| astro             | .astro                                                             | Astro 프로젝트 자동 설치                        |
+| bash              | .sh, .bash, .zsh, .ksh                                             | 자동 설치 bash-language-server                  |
+| clangd            | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++               | C/C++ 프로젝트용 자동 설치                      |
+| csharp            | .cs                                                                | `.NET SDK` 설치                                 |
+| clojure-lsp       | .clj, .cljs, .cljc, .edn                                           | `clojure-lsp` 명령 가능                         |
+| 다트              | 다트                                                               | `dart` 명령                                     |
+| deno              | .ts, .tsx, .js, .jsx, .mjs                                         | `deno` 명령 가능(자동검출 deno.json/deno.jsonc) |
+| elixir-ls         | .ex, .exs                                                          | `elixir` 명령 가능                              |
+| eslint            | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue                 | 프로젝트의 `eslint` 의존성                      |
+| fsharp            | .fs, .fsi, .fsx, .fsscript                                         | `.NET SDK` 설치                                 |
+| gleam             | .gleam                                                             | `gleam` 명령 가능                               |
+| gopls             | .go                                                                | `go` 명령 가능                                  |
+| hls               | .hs, .lhs                                                          | `haskell-language-server-wrapper` 명령 가능     |
+| jdtls             | .java                                                              | `Java SDK (version 21+)` 설치                   |
+| kotlin-ls         | .kt, .kts                                                          | Kotlin 프로젝트용 자동 설치                     |
+| lua-ls            | .lua                                                               | 루아 사업용 자동설치                            |
+| nixd              | .nix                                                               | `nixd` 명령 가능                                |
+| ocaml-lsp         | .ml, .mli                                                          | `ocamllsp` 명령 가능                            |
+| oxlint            | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .ct, .vue, .astro, .svelte | 프로젝트의 `oxlint` 신뢰성                      |
+| PHP intelephense  | .php                                                               | PHP 프로젝트 자동 설치                          |
+| 프리즘            | .prisma                                                            | `prisma` 명령 가능                              |
+| pyright           | .py, .pyi                                                          | `pyright` 의존성 설치                           |
+| 루비-lsp(rubocop) | .rb, .rake, .gemspec, .ru                                          | `ruby` 및 `gem` 명령 사용 가능                  |
+| 녹                | .rs                                                                | `rust-analyzer` 명령 가능                       |
+| sourcekit-lsp     | .swift, .objc, .objcpp                                             | `swift` 설치 (MacOS의 `xcode`)                  |
+| svelte            | .svelte                                                            | Svelte 프로젝트 자동 설치                       |
+| 지형              | .tf, .tfvars                                                       | GitHub 릴리스의 자동 설치                       |
+| 작문              | .typ, .typc                                                        | GitHub 릴리스의 자동 설치                       |
+| 인가정보          | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts                       | 프로젝트의 `typescript` 의존성                  |
+| vue               | .vue                                                               | Vue 프로젝트 자동 설치                          |
+| yaml-ls           | .yaml, .yml                                                        | 자동 설치 Red Hat yaml-language-server          |
+| zls               | .zig, .zon                                                         | `zig` 명령 가능                                 |
 
 LSP 서버는 위의 파일 확장자 중 하나가 감지되고 요구 사항은 자동으로 활성화됩니다.
 
@@ -76,13 +76,13 @@ opencode가 파일을 열 때, 그것은:
 
 각 LSP 서버는 다음을 지원합니다:
 
-| 재산 | 유형 | 묘사 |
-| ---------------- | -------- | ------------------------------------------------- |
-| `disabled` | 불린 | LSP 서버를 비활성화하려면 `true`로 설정 |
-| `command` | 문자열[] | LSP 서버를 시작하는 명령 |
-| `extensions` | string[] | 이 LSP 서버 확장 |
-| `env` | 객체 | 서버 시작시 설정할 환경 변수 |
-| `initialization` | 객체 | LSP 서버에 보내는 초기화 옵션 |
+| 재산             | 유형     | 묘사                                    |
+| ---------------- | -------- | --------------------------------------- |
+| `disabled`       | 불린     | LSP 서버를 비활성화하려면 `true`로 설정 |
+| `command`        | 문자열[] | LSP 서버를 시작하는 명령                |
+| `extensions`     | string[] | 이 LSP 서버 확장                        |
+| `env`            | 객체     | 서버 시작시 설정할 환경 변수            |
+| `initialization` | 객체     | LSP 서버에 보내는 초기화 옵션           |
 
 몇 가지 예제를 살펴 보자.
 

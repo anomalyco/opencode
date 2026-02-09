@@ -10,8 +10,7 @@ OpenCode는 GitHub 워크플로우와 통합됩니다. Mention `/opencode` 또�
 ## 특징
 
 - **문제**: OpenCode가 문제점을 보고 당신을 설명합니다.
-- **Fix 및 구현 **: 이슈를 수정하거나 기능을 구현하려면 OpenCode에 문의하십시오. 그리고 새로운 지점에서 일하고 모든 변경으로 PR을 제출합니다.
--**Secure**: OpenCode는 GitHub의 런너 내부에서 실행됩니다.
+- **Fix 및 구현 **: 이슈를 수정하거나 기능을 구현하려면 OpenCode에 문의하십시오. 그리고 새로운 지점에서 일하고 모든 변경으로 PR을 제출합니다. -**Secure**: OpenCode는 GitHub의 런너 내부에서 실행됩니다.
 
 ---
 
@@ -39,39 +38,39 @@ GitHub 앱을 설치하고 워크플로를 만들고 비밀을 설정할 수 있
 
 저장소에 `.github/workflows/opencode.yml`에 다음 작업 흐름 파일을 추가합니다. 적절한 `model`를 설정하고 `env`의 API 키가 필요합니다.
 
-   ```yml title=".github/workflows/opencode.yml" {24,26}
-   name: opencode
+```yml title=".github/workflows/opencode.yml" {24,26}
+name: opencode
 
-   on:
-     issue_comment:
-       types: [created]
-     pull_request_review_comment:
-       types: [created]
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
 
-   jobs:
-     opencode:
-       if: |
-         contains(github.event.comment.body, '/oc') ||
-         contains(github.event.comment.body, '/opencode')
-       runs-on: ubuntu-latest
-       permissions:
-         id-token: write
-       steps:
-          - name: Checkout repository
-            uses: actions/checkout@v6
-            with:
-              fetch-depth: 1
-              persist-credentials: false
+jobs:
+  opencode:
+    if: |
+      contains(github.event.comment.body, '/oc') ||
+      contains(github.event.comment.body, '/opencode')
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+       - name: Checkout repository
+         uses: actions/checkout@v6
+         with:
+           fetch-depth: 1
+           persist-credentials: false
 
-          - name: Run OpenCode
-           uses: anomalyco/opencode/github@latest
-           env:
-             ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-           with:
-             model: anthropic/claude-sonnet-4-20250514
-             # share: true
-             # github_token: xxxx
-   ```
+       - name: Run OpenCode
+        uses: anomalyco/opencode/github@latest
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        with:
+          model: anthropic/claude-sonnet-4-20250514
+          # share: true
+          # github_token: xxxx
+```
 
 3. ** 비밀의 API 키 저장 **
 
@@ -89,13 +88,13 @@ GitHub 앱을 설치하고 워크플로를 만들고 비밀을 설정할 수 있
 
 대안으로, GitHub Action runner의 [붙박이 `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github token)을 사용하여 OpenCode GitHub 앱을 설치하지 않고 사용할 수 있습니다. 워크플로우에서 필요한 권한을 부여하는 것을 확인하십시오.
 
-  ```yaml
-  permissions:
-    id-token: write
-    contents: write
-    pull-requests: write
-    issues: write
-  ```
+```yaml
+permissions:
+  id-token: write
+  contents: write
+  pull-requests: write
+  issues: write
+```
 
 또한 [개인 액세스 토큰](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)(PAT)를 사용할 수 있습니다.
 
@@ -105,14 +104,14 @@ GitHub 앱을 설치하고 워크플로를 만들고 비밀을 설정할 수 있
 
 OpenCode는 다음 GitHub 이벤트에 의해 트리거 될 수 있습니다:
 
-| 이벤트 타입 | Triggered by | 상세 |
-| ----------------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `issue_comment` | 발행 또는 PR에 대한 의견 | 멘션 `/opencode` 또는 `/oc` 당신의 의견. OpenCode는 컨텍스트를 읽고, 지점을 만들 수 있습니다, 열린 PR, 또는 대답. ·
-| `pull_request_review_comment` | PR의 특정 코드 라인에 대한 의견 | Mention `/opencode` 또는 `/oc` 코드 검토 중. OpenCode는 파일 경로, 줄 번호 및 diff 컨텍스트를 수신합니다. ·
-| `issues` | 이슈가 열리고 편집되었습니다 | 이슈가 생성되거나 수정될 때 자동으로 OpenCode를 트리거합니다. `prompt` 입력이 필요합니다. |
-| `pull_request` | PR 오픈 또는 업데이트 | PR이 열릴 때 자동 트리거 OpenCode 자동 리뷰에 대한 유용한 정보 |
-| `schedule` | 크론 기반 일정 | 일정에 오픈코드를 실행합니다. `prompt` 입력을 요구합니다. 출력 로그 및 PR에 간다 (댓글이 없습니다). |
-| `workflow_dispatch` | GitHub UI에서 수동 트리거 | 액션 탭을 통해 까다로운 Trigger OpenCode. `prompt` 입력을 요구합니다. 출력 로그 및 PR에 간다. |
+| 이벤트 타입                   | Triggered by                    | 상세                                                                                                                |
+| ----------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `issue_comment`               | 발행 또는 PR에 대한 의견        | 멘션 `/opencode` 또는 `/oc` 당신의 의견. OpenCode는 컨텍스트를 읽고, 지점을 만들 수 있습니다, 열린 PR, 또는 대답. · |
+| `pull_request_review_comment` | PR의 특정 코드 라인에 대한 의견 | Mention `/opencode` 또는 `/oc` 코드 검토 중. OpenCode는 파일 경로, 줄 번호 및 diff 컨텍스트를 수신합니다. ·         |
+| `issues`                      | 이슈가 열리고 편집되었습니다    | 이슈가 생성되거나 수정될 때 자동으로 OpenCode를 트리거합니다. `prompt` 입력이 필요합니다.                           |
+| `pull_request`                | PR 오픈 또는 업데이트           | PR이 열릴 때 자동 트리거 OpenCode 자동 리뷰에 대한 유용한 정보                                                      |
+| `schedule`                    | 크론 기반 일정                  | 일정에 오픈코드를 실행합니다. `prompt` 입력을 요구합니다. 출력 로그 및 PR에 간다 (댓글이 없습니다).                 |
+| `workflow_dispatch`           | GitHub UI에서 수동 트리거       | 액션 탭을 통해 까다로운 Trigger OpenCode. `prompt` 입력을 요구합니다. 출력 로그 및 PR에 간다.                       |
 
 ### 일정 예
 
@@ -277,9 +276,9 @@ GitHub에서 OpenCode를 사용할 수있는 몇 가지 예입니다.
 
 GitHub 문제에서 이 의견 추가.
 
-  ```
-  /opencode explain this issue
-  ```
+```
+/opencode explain this issue
+```
 
 OpenCode는 모든 코멘트를 포함하여 전체 스레드를 읽고, 명확한 설명과 대답.
 
@@ -287,9 +286,9 @@ OpenCode는 모든 코멘트를 포함하여 전체 스레드를 읽고, 명확�
 
 GitHub 문제에서:
 
-  ```
-  /opencode fix this
-  ```
+```
+/opencode fix this
+```
 
 OpenCode는 새로운 지점을 만들 것이며 변경 사항을 실행하고 PR을 변경합니다.
 
@@ -297,9 +296,9 @@ OpenCode는 새로운 지점을 만들 것이며 변경 사항을 실행하고 P
 
 GitHub PR에 다음 댓글을 남겨주세요.
 
-  ```
-  Delete the attachment from S3 when the note is removed /oc
-  ```
+```
+Delete the attachment from S3 when the note is removed /oc
+```
 
 OpenCode는 요청한 변경을 구현하고 동일한 PR에 커밋합니다.
 
@@ -307,12 +306,13 @@ OpenCode는 요청한 변경을 구현하고 동일한 PR에 커밋합니다.
 
 PR의 "Files" 탭의 코드 라인에 직접 댓글을 남겨주세요. OpenCode는 파일, 줄 번호 및 diff 컨텍스트를 자동으로 감지하여 정확한 응답을 제공합니다.
 
-  ```
-  [Comment on specific lines in Files tab]
-  /oc add error handling here
-  ```
+```
+[Comment on specific lines in Files tab]
+/oc add error handling here
+```
 
 특정 라인에 대한 의견이 있을 때, OpenCode는 다음과 같습니다.
+
 - 검토되는 정확한 파일
 - 코드의 특정 라인
 - 주변 diff 컨텍스트

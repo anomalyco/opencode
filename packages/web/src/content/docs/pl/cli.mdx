@@ -29,15 +29,15 @@ opencode [project]
 
 #### Flagi
 
-| Flaga | Krótkie | Opis |
-| ------------ | ----- | ------------------------------------------ |
-| `--continue` | `-c` | Kontynuuj ostatnią datę |
-| `--session` | `-s` | Identyfikator sesji, aby kontynuować |
-| `--prompt` |       | Monituj o zastosowanie |
-| `--model` | `-m` | Model wykorzystania w postaci dostawcy/modelu |
-| `--agent` |       | Agent do użycia |
-| `--port` |       | Port do słuchania |
-| `--hostname` |       | Nazwa hosta, która jest częścią składową |
+| Flaga        | Krótkie | Opis                                          |
+| ------------ | ------- | --------------------------------------------- |
+| `--continue` | `-c`    | Kontynuuj ostatnią datę                       |
+| `--session`  | `-s`    | Identyfikator sesji, aby kontynuować          |
+| `--prompt`   |         | Monituj o zastosowanie                        |
+| `--model`    | `-m`    | Model wykorzystania w postaci dostawcy/modelu |
+| `--agent`    |         | Agent do użycia                               |
+| `--port`     |         | Port do słuchania                             |
+| `--hostname` |         | Nazwa hosta, która jest częścią składową      |
 
 ---
 
@@ -77,10 +77,10 @@ opencode attach http://10.20.30.40:4096
 
 #### Flagi
 
-| Flaga | Krótkie | Opis |
-| ----------- | ----- | --------------------------------- |
-| `--dir` |       | Katalog roboczy do uruchomienia TUI w |
-| `--session` | `-s` | Identyfikator sesji, aby kontynuować |
+| Flaga       | Krótkie | Opis                                  |
+| ----------- | ------- | ------------------------------------- |
+| `--dir`     |         | Katalog roboczy do uruchomienia TUI w |
+| `--session` | `-s`    | Identyfikator sesji, aby kontynuować  |
 
 ---
 
@@ -186,10 +186,10 @@ opencode github run
 
 ##### Flagi
 
-| Flaga | Opis |
-| --------- | -------------------------------------- |
+| Flaga     | Opis                                              |
+| --------- | ------------------------------------------------- |
 | `--event` | Zdarzenie próbne GitHub, aby sprawdzić agenta dla |
-| `--token` | Osobisty token dostępu GitHub |
+| `--token` | Osobisty token dostępu GitHub                     |
 
 ---
 
@@ -295,9 +295,9 @@ opencode models anthropic
 
 #### Flagi
 
-| Flaga | Opis |
-| ----------- | ------------------------------------------------------------ |
-| `--refresh` | Odśwież pamięć podręczną modele z models.dev |
+| Flaga       | Opis                                                                            |
+| ----------- | ------------------------------------------------------------------------------- |
+| `--refresh` | Odśwież pamięć podręczną modele z models.dev                                    |
 | `--verbose` | Bardziej szczegółowe dane wyjściowe modelu (zawiera metadane, takie jak koszty) |
 
 flagi `--refresh`, aby znaleźć listę modeli w pamięci podręcznej. Jest to wymagane, gdy dostawca dodano nowe modele, które chcesz zobaczyć w OpenCode.
@@ -334,19 +334,19 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 #### Flagi
 
-| Flaga | Krótkie | Opis |
-| ------------ | ----- | ------------------------------------------------------------------ |
-| `--command` |       | Polecenie do uruchomienia, komunikatu dla argumentów |
-| `--continue` | `-c` | Kontynuuj ostatnią datę |
-| `--session` | `-s` | Identyfikator sesji, aby kontynuować |
-| `--share` |       | Udostępnij sesję |
-| `--model` | `-m` | Model wykorzystania w postaci dostawcy/modelu |
-| `--agent` |       | Agent do użycia |
-| `--file` | `-f` | Pliki do załączenia do wiadomości |
-| `--format` |       | Format: domyślny (sformatowany) lub json (surowe rozwiązanie JSON) |
-| `--title` |       | Tytuł sesji (używany skróconego monitu, jeśli nie podano wartości) |
-| `--attach` |       | Dołącz do skutecznego serwera opencode (np. http://localhost:4096) |
-| `--port` |       | Port dla serwera lokalnego (domyślnie jest do portu losowego) |
+| Flaga        | Krótkie | Opis                                                               |
+| ------------ | ------- | ------------------------------------------------------------------ |
+| `--command`  |         | Polecenie do uruchomienia, komunikatu dla argumentów               |
+| `--continue` | `-c`    | Kontynuuj ostatnią datę                                            |
+| `--session`  | `-s`    | Identyfikator sesji, aby kontynuować                               |
+| `--share`    |         | Udostępnij sesję                                                   |
+| `--model`    | `-m`    | Model wykorzystania w postaci dostawcy/modelu                      |
+| `--agent`    |         | Agent do użycia                                                    |
+| `--file`     | `-f`    | Pliki do załączenia do wiadomości                                  |
+| `--format`   |         | Format: domyślny (sformatowany) lub json (surowe rozwiązanie JSON) |
+| `--title`    |         | Tytuł sesji (używany skróconego monitu, jeśli nie podano wartości) |
+| `--attach`   |         | Dołącz do skutecznego serwera opencode (np. http://localhost:4096) |
+| `--port`     |         | Port dla serwera lokalnego (domyślnie jest do portu losowego)      |
 
 ---
 
@@ -362,12 +362,12 @@ Spowoduje dostęp do serwera HTTP, który zapewnia dostęp do API opencode bez i
 
 #### Flagi
 
-| Flaga | Opis |
-| ------------ | ------------------------------------------ |
-| `--port` | Port do słuchania |
+| Flaga        | Opis                                     |
+| ------------ | ---------------------------------------- |
+| `--port`     | Port do słuchania                        |
 | `--hostname` | Nazwa hosta, która jest częścią składową |
-| `--mdns` | Włącz wykrywanie mDNS |
-| `--cors` | Dodatkowe źródło użytkownika CORS |
+| `--mdns`     | Włącz wykrywanie mDNS                    |
+| `--cors`     | Dodatkowe źródło użytkownika CORS        |
 
 ---
 
@@ -391,10 +391,10 @@ opencode session list
 
 ##### Flagi
 
-| Flaga | Krótkie | Opis |
-| ------------- | ----- | ------------------------------------ |
-| `--max-count` | `-n` | Ograniczony do ostatniego sesji |
-| `--format` |       | Format wyjściowy: tabela lub json (tabela) |
+| Flaga         | Krótkie | Opis                                       |
+| ------------- | ------- | ------------------------------------------ |
+| `--max-count` | `-n`    | Ograniczony do ostatniego sesji            |
+| `--format`    |         | Format wyjściowy: tabela lub json (tabela) |
 
 ---
 
@@ -408,12 +408,12 @@ opencode stats
 
 #### Flagi
 
-| Flaga | Opis |
-| ----------- | --------------------------------------------------------------------------- |
-| `--days` | Pokaż statystyki z ostatnich N dni (cały czas) |
-| `--tools` | Liczba narzędzi do po specyfikacji (wszystkie) |
-| `--models` | Pokaż podział modelu wykorzystania (domyślnie ukryty). Podajnik usługowy, aby górne N |
-| `--project` | Filtruj według projektu (wszystkie projekty, pusty ciąg: dostęp projekt) |
+| Flaga       | Opis                                                                                  |
+| ----------- | ------------------------------------------------------------------------------------- |
+| `--days`    | Pokaż statystyki z ostatnich N dni (cały czas)                                        |
+| `--tools`   | Liczba narzędzi do po specyfikacji (wszystkie)                                        |
+| `--models`  | Pokaż podział modelu wykorzystania (domyślnie ukryty). Podajnik usługowy, aby górne N |
+| `--project` | Filtruj według projektu (wszystkie projekty, pusty ciąg: dostęp projekt)              |
 
 ---
 
@@ -458,12 +458,12 @@ Spowoduje dostęp do serwera HTTP i otwarcie dostępu do OpenCode przez interfej
 
 #### Flagi
 
-| Flaga | Opis |
-| ------------ | ------------------------------------------ |
-| `--port` | Port do słuchania |
+| Flaga        | Opis                                     |
+| ------------ | ---------------------------------------- |
+| `--port`     | Port do słuchania                        |
 | `--hostname` | Nazwa hosta, która jest częścią składową |
-| `--mdns` | Włącz wykrywanie mDNS |
-| `--cors` | Dodatkowe źródło użytkownika CORS |
+| `--mdns`     | Włącz wykrywanie mDNS                    |
+| `--cors`     | Dodatkowe źródło użytkownika CORS        |
 
 ---
 
@@ -479,10 +479,10 @@ Aby udostępnić serwer ACP, który komunikuje się poprzez stdin/stdout przy u�
 
 #### Flagi
 
-| Flaga | Opis |
-| ------------ | --------------------- |
-| `--cwd` | Katalog roboczy |
-| `--port` | Port do słuchania |
+| Flaga        | Opis                                     |
+| ------------ | ---------------------------------------- |
+| `--cwd`      | Katalog roboczy                          |
+| `--port`     | Port do słuchania                        |
 | `--hostname` | Nazwa hosta, która jest częścią składową |
 
 ---
@@ -497,12 +497,12 @@ opencode uninstall
 
 #### Flagi
 
-| Flaga | Krótkie | Opis |
-| --------------- | ----- | ------------------------------------------- |
-| `--keep-config` | `-c` | Zachowaj pliki konfiguracyjne |
-| `--keep-data` | `-d` | Przechowuj dane sesji i szczepionek |
-| `--dry-run` |       | Pokaż, wykluczy bez usuwania |
-| `--force` | `-f` | Pomiń monity o potwierdzenie |
+| Flaga           | Krótkie | Opis                                |
+| --------------- | ------- | ----------------------------------- |
+| `--keep-config` | `-c`    | Zachowaj pliki konfiguracyjne       |
+| `--keep-data`   | `-d`    | Przechowuj dane sesji i szczepionek |
+| `--dry-run`     |         | Pokaż, wykluczy bez usuwania        |
+| `--force`       | `-f`    | Pomiń monity o potwierdzenie        |
 
 ---
 
@@ -528,9 +528,9 @@ opencode upgrade v0.1.48
 
 #### Flagi
 
-| Flaga | Krótkie | Opis |
-| ---------- | ----- | ----------------------------------------------------------------- |
-| `--method` | `-m` | Zastosowana metoda instalacji; curl, npm, pnpm, kok, napar |
+| Flaga      | Krótkie | Opis                                                       |
+| ---------- | ------- | ---------------------------------------------------------- |
+| `--method` | `-m`    | Zastosowana metoda instalacji; curl, npm, pnpm, kok, napar |
 
 ---
 
@@ -538,12 +538,12 @@ opencode upgrade v0.1.48
 
 Interfejs CLI kod opencode przyjmuje flagi globalne.
 
-| Flaga | Krótkie | Opis |
-| -------------- | ----- | ------------------------------------ |
-| `--help` | `-h` | Wyświetl pomoc |
-| `--version` | `-v` | Drukuj numer wersji |
-| `--print-logs` |       | Wydrukuj logi na stderr |
-| `--log-level` |       | Poziom dziennika (DEBUG, INFO, OSTRZEŻ, BŁĄD) |
+| Flaga          | Krótkie | Opis                                          |
+| -------------- | ------- | --------------------------------------------- |
+| `--help`       | `-h`    | Wyświetl pomoc                                |
+| `--version`    | `-v`    | Drukuj numer wersji                           |
+| `--print-logs` |         | Wydrukuj logi na stderr                       |
+| `--log-level`  |         | Poziom dziennika (DEBUG, INFO, OSTRZEŻ, BŁĄD) |
 
 ---
 
@@ -551,32 +551,32 @@ Interfejs CLI kod opencode przyjmuje flagi globalne.
 
 OpenCode można wykryć za pomocą czyszczenia alternatywnych.
 
-| Zmienna | Wpisz | Opis |
-| ------------------------------------- | ------- | ------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE` | wartość logiczna | Automatycznie udostępniaj sesje |
-| `OPENCODE_GIT_BASH_PATH` | ciąg | Ścieżka do pliku wykonywalnego Git Bash w systemie Windows |
-| `OPENCODE_CONFIG` | ciąg | Ścieżka do pliku konfiguracyjnego |
-| `OPENCODE_CONFIG_DIR` | ciąg | Ścieżka do katalogu konfiguracyjnego |
-| `OPENCODE_CONFIG_CONTENT` | ciąg | Wbudowana treść konstrukcji JSON |
-| `OPENCODE_DISABLE_AUTOUPDATE` | wartość logiczna | Wyłącz automatyczne sprawdzanie aktualizacji |
-| `OPENCODE_DISABLE_PRUNE` | wartość logiczna | Wyłączenie regulowane |
-| `OPENCODE_DISABLE_TERMINAL_TITLE` | wartość logiczna | Wyłącz automatycznie tytuł terminala |
-| `OPENCODE_PERMISSION` | ciąg | Wbudowane prawo JSON |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS` | wartość logiczna | Wyłączenie wtyczki |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD` | wartość logiczna | Wyłącz automatyczne pobieranie z serwera LSP |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | wartość logiczna | Włącz modele eksperymentalne |
-| `OPENCODE_DISABLE_AUTOCOMPACT` | wartość logiczna | Wyłącz automatyczne zagęszczanie kontekstu |
-| `OPENCODE_DISABLE_CLAUDE_CODE` | wartość logiczna | Wyłączenie gry z `.claude` (podpowiedź + podłączenie) |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | wartość logiczna | Wyłącz czytanie `~/.claude/CLAUDE.md` |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | wartość logiczna | Wyłącz ładowanie `.claude/skills` |
-| `OPENCODE_DISABLE_MODELS_FETCH` | wartość logiczna | Wyłączenie modeli pobierania ze źródeł niedostępnych |
-| `OPENCODE_FAKE_VCS` | ciąg | Fałszywy sprzedawca VCS do celów testowych |
-| `OPENCODE_DISABLE_FILETIME_CHECK` | wartość logiczna | Wyłączone sprawdzanie pliku w celu optymalizacji |
-| `OPENCODE_CLIENT` | ciąg | Identyfikator klienta (domyślnie `cli`) |
-| `OPENCODE_ENABLE_EXA` | wartość logiczna | Włącz narzędzie wyszukiwania internetowego Exa |
-| `OPENCODE_SERVER_PASSWORD` | ciąg | Włącz uwierzytelnianie podstawowe dla `serve`/`web` |
-| `OPENCODE_SERVER_USERNAME` | ciąg | Zakończenie stosowania użytkownika z autoryzacją (domyślnie `opencode`) |
-| `OPENCODE_MODELS_URL` | ciąg | Niestandardowy adres URL do pobrania konfiguracji modeli |
+| Zmienna                               | Wpisz            | Opis                                                                    |
+| ------------------------------------- | ---------------- | ----------------------------------------------------------------------- |
+| `OPENCODE_AUTO_SHARE`                 | wartość logiczna | Automatycznie udostępniaj sesje                                         |
+| `OPENCODE_GIT_BASH_PATH`              | ciąg             | Ścieżka do pliku wykonywalnego Git Bash w systemie Windows              |
+| `OPENCODE_CONFIG`                     | ciąg             | Ścieżka do pliku konfiguracyjnego                                       |
+| `OPENCODE_CONFIG_DIR`                 | ciąg             | Ścieżka do katalogu konfiguracyjnego                                    |
+| `OPENCODE_CONFIG_CONTENT`             | ciąg             | Wbudowana treść konstrukcji JSON                                        |
+| `OPENCODE_DISABLE_AUTOUPDATE`         | wartość logiczna | Wyłącz automatyczne sprawdzanie aktualizacji                            |
+| `OPENCODE_DISABLE_PRUNE`              | wartość logiczna | Wyłączenie regulowane                                                   |
+| `OPENCODE_DISABLE_TERMINAL_TITLE`     | wartość logiczna | Wyłącz automatycznie tytuł terminala                                    |
+| `OPENCODE_PERMISSION`                 | ciąg             | Wbudowane prawo JSON                                                    |
+| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | wartość logiczna | Wyłączenie wtyczki                                                      |
+| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | wartość logiczna | Wyłącz automatyczne pobieranie z serwera LSP                            |
+| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | wartość logiczna | Włącz modele eksperymentalne                                            |
+| `OPENCODE_DISABLE_AUTOCOMPACT`        | wartość logiczna | Wyłącz automatyczne zagęszczanie kontekstu                              |
+| `OPENCODE_DISABLE_CLAUDE_CODE`        | wartość logiczna | Wyłączenie gry z `.claude` (podpowiedź + podłączenie)                   |
+| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | wartość logiczna | Wyłącz czytanie `~/.claude/CLAUDE.md`                                   |
+| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | wartość logiczna | Wyłącz ładowanie `.claude/skills`                                       |
+| `OPENCODE_DISABLE_MODELS_FETCH`       | wartość logiczna | Wyłączenie modeli pobierania ze źródeł niedostępnych                    |
+| `OPENCODE_FAKE_VCS`                   | ciąg             | Fałszywy sprzedawca VCS do celów testowych                              |
+| `OPENCODE_DISABLE_FILETIME_CHECK`     | wartość logiczna | Wyłączone sprawdzanie pliku w celu optymalizacji                        |
+| `OPENCODE_CLIENT`                     | ciąg             | Identyfikator klienta (domyślnie `cli`)                                 |
+| `OPENCODE_ENABLE_EXA`                 | wartość logiczna | Włącz narzędzie wyszukiwania internetowego Exa                          |
+| `OPENCODE_SERVER_PASSWORD`            | ciąg             | Włącz uwierzytelnianie podstawowe dla `serve`/`web`                     |
+| `OPENCODE_SERVER_USERNAME`            | ciąg             | Zakończenie stosowania użytkownika z autoryzacją (domyślnie `opencode`) |
+| `OPENCODE_MODELS_URL`                 | ciąg             | Niestandardowy adres URL do pobrania konfiguracji modeli                |
 
 ---
 
@@ -584,18 +584,18 @@ OpenCode można wykryć za pomocą czyszczenia alternatywnych.
 
 Te zmienne możliwości użycia funkcji eksperymentalnych, które mogą zostać lub usunięte.
 
-| Zmienna | Wpisz | Opis |
-| ----------------------------------------------- | ------- | --------------------------------------- |
-| `OPENCODE_EXPERIMENTAL` | wartość logiczna | Włącz wszystkie funkcje eksperymentalne |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY` | wartość logiczna | Włącz wykrywanie ikon |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT` | wartość logiczna | Wyłączenie kopiowania przy wyborze w TUI |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | numer | Domyślny limit czasu dla ukrytego bash w ms |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` | numer | Maksymalne tokeny wyjściowe dla odpowiedzi LLM |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER` | wartość logiczna | Włącz obserwatora plików dla całego katalogu |
-| `OPENCODE_EXPERIMENTAL_OXFMT` | wartość logiczna | Włącz formater oxfmt |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL` | wartość logiczna | Włącz eksperymentalne narzędzie LSP |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER` | wartość logiczna | Wyłącz obserwatora plików |
-| `OPENCODE_EXPERIMENTAL_EXA` | wartość logiczna | Włącz funkcje eksperymentalne Exa |
-| `OPENCODE_EXPERIMENTAL_LSP_TY` | wartość logiczna | Włącz eksperymentalne sprawdzanie typu LSP |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN` | wartość logiczna | Włącz funkcje eksperymentalne przecen |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE` | wartość logiczna | Włącz tryb planu |
+| Zmienna                                         | Wpisz            | Opis                                           |
+| ----------------------------------------------- | ---------------- | ---------------------------------------------- |
+| `OPENCODE_EXPERIMENTAL`                         | wartość logiczna | Włącz wszystkie funkcje eksperymentalne        |
+| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | wartość logiczna | Włącz wykrywanie ikon                          |
+| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | wartość logiczna | Wyłączenie kopiowania przy wyborze w TUI       |
+| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | numer            | Domyślny limit czasu dla ukrytego bash w ms    |
+| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | numer            | Maksymalne tokeny wyjściowe dla odpowiedzi LLM |
+| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | wartość logiczna | Włącz obserwatora plików dla całego katalogu   |
+| `OPENCODE_EXPERIMENTAL_OXFMT`                   | wartość logiczna | Włącz formater oxfmt                           |
+| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | wartość logiczna | Włącz eksperymentalne narzędzie LSP            |
+| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | wartość logiczna | Wyłącz obserwatora plików                      |
+| `OPENCODE_EXPERIMENTAL_EXA`                     | wartość logiczna | Włącz funkcje eksperymentalne Exa              |
+| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | wartość logiczna | Włącz eksperymentalne sprawdzanie typu LSP     |
+| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | wartość logiczna | Włącz funkcje eksperymentalne przecen          |
+| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | wartość logiczna | Włącz tryb planu                               |

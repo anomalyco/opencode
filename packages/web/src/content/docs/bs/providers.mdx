@@ -59,11 +59,9 @@ Ako ste novi, preporučujemo da počnete sa OpenCode Zen.
 
 1. Pokrenite naredbu `/connect` u TUI-u, odaberite opencode i idite na [opencode.ai/auth](https://opencode.ai/auth).
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
@@ -71,24 +69,20 @@ Ako ste novi, preporučujemo da počnete sa OpenCode Zen.
 
 3. Zalijepite svoj API ključ.
 
-   
-
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
 4. Pokrenite `/models` u TUI da vidite listu modela koje preporučujemo.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -113,34 +107,28 @@ Ne vidite provajdera ovdje? Pošaljite PR.
 
 2. Pokrenite naredbu `/connect` i potražite **302.AI**.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 3. Unesite svoj 302.AI API ključ.
-
-   
 
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
 4. Pokrenite naredbu `/models` da odaberete model.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -163,8 +151,6 @@ Da biste koristili Amazon Bedrock s OpenCodeom:
 
    Postavite jednu od ovih varijabli okruženja dok pokrećete opencode:
 
-   
-
 ```bash
    # Option 1: Using AWS access keys
    AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY opencode
@@ -174,102 +160,93 @@ Da biste koristili Amazon Bedrock s OpenCodeom:
 
    # Option 3: Using Bedrock bearer token
    AWS_BEARER_TOKEN_BEDROCK=XXX opencode
-   
+
 
 ```
 
-   Ili ih dodajte na svoj bash profil:
-
-   
+Ili ih dodajte na svoj bash profil:
 
 ```bash title="~/.bash_profile"
    export AWS_PROFILE=my-dev-profile
    export AWS_REGION=us-east-1
-   
+
 
 ```
 
-   #### Konfiguracijski fajl (preporučeno)
+#### Konfiguracijski fajl (preporučeno)
 
-   Za konfiguraciju specifičnu za projekat ili trajnu konfiguraciju, koristite `opencode.json`:
-
-   
+Za konfiguraciju specifičnu za projekat ili trajnu konfiguraciju, koristite `opencode.json`:
 
 ```json title="opencode.json"
-   {
-     "$schema": "https://opencode.ai/config.json",
-     "provider": {
-       "amazon-bedrock": {
-         "options": {
-           "region": "us-east-1",
-           "profile": "my-aws-profile"
-         }
-       }
-     }
-   }
-   
-
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "amazon-bedrock": {
+      "options": {
+        "region": "us-east-1",
+        "profile": "my-aws-profile"
+      }
+    }
+  }
+}
 ```
 
-   **Dostupne opcije:**
-   - `region` - ​​AWS regija (npr. `us-east-1`, `eu-west-1`)
-   - `profile` - ​​AWS je imenovao profil od `~/.aws/credentials`
-   - `endpoint` - ​​URL prilagođene krajnje tačke za VPC krajnje tačke (pseudonim za generičku opciju `baseURL`)
+**Dostupne opcije:**
 
-   :::tip
-   Opcije konfiguracijske datoteke imaju prednost nad varijablama okruženja.
-   :::
+- `region` - ​​AWS regija (npr. `us-east-1`, `eu-west-1`)
+- `profile` - ​​AWS je imenovao profil od `~/.aws/credentials`
+- `endpoint` - ​​URL prilagođene krajnje tačke za VPC krajnje tačke (pseudonim za generičku opciju `baseURL`)
 
-   #### Napredno: VPC krajnje tačke
+:::tip
+Opcije konfiguracijske datoteke imaju prednost nad varijablama okruženja.
+:::
 
-   Ako koristite VPC krajnje tačke za Bedrock:
+#### Napredno: VPC krajnje tačke
 
-   
+Ako koristite VPC krajnje tačke za Bedrock:
 
 ```json title="opencode.json"
-   {
-     "$schema": "https://opencode.ai/config.json",
-     "provider": {
-       "amazon-bedrock": {
-         "options": {
-           "region": "us-east-1",
-           "profile": "production",
-           "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
-         }
-       }
-     }
-   }
-   
-
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "amazon-bedrock": {
+      "options": {
+        "region": "us-east-1",
+        "profile": "production",
+        "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
+      }
+    }
+  }
+}
 ```
 
-   :::note
-   Opcija `endpoint` je pseudonim za generičku opciju `baseURL`, koristeći terminologiju specifičnu za AWS. Ako su specificirani i `endpoint` i `baseURL`, `endpoint` ima prednost.
-   :::
+:::note
+Opcija `endpoint` je pseudonim za generičku opciju `baseURL`, koristeći terminologiju specifičnu za AWS. Ako su specificirani i `endpoint` i `baseURL`, `endpoint` ima prednost.
+:::
 
-   #### Metode provjere autentičnosti
-   - **`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`**: Kreirajte IAM korisnika i generirajte pristupne ključeve u AWS konzoli
-   - **`AWS_PROFILE`**: Koristite imenovane profile od `~/.aws/credentials`. Prvo konfigurirajte sa `aws configure --profile my-profile` ili `aws sso login`
-   - **`AWS_BEARER_TOKEN_BEDROCK`**: Generirajte dugoročne API ključeve sa Amazon Bedrock konzole
-   - **`AWS_WEB_IDENTITY_TOKEN_FILE` / `AWS_ROLE_ARN`**: Za EKS IRSA (IAM uloge za servisne naloge) ili druga Kubernetes okruženja sa OIDC federacijom. Kubernetes automatski ubacuje ove varijable okruženja kada se koriste napomene naloga usluge.
+#### Metode provjere autentičnosti
 
-   #### Prioritet autentifikacije
+- **`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`**: Kreirajte IAM korisnika i generirajte pristupne ključeve u AWS konzoli
+- **`AWS_PROFILE`**: Koristite imenovane profile od `~/.aws/credentials`. Prvo konfigurirajte sa `aws configure --profile my-profile` ili `aws sso login`
+- **`AWS_BEARER_TOKEN_BEDROCK`**: Generirajte dugoročne API ključeve sa Amazon Bedrock konzole
+- **`AWS_WEB_IDENTITY_TOKEN_FILE` / `AWS_ROLE_ARN`**: Za EKS IRSA (IAM uloge za servisne naloge) ili druga Kubernetes okruženja sa OIDC federacijom. Kubernetes automatski ubacuje ove varijable okruženja kada se koriste napomene naloga usluge.
 
-   Amazon Bedrock koristi sljedeći prioritet autentifikacije:
-   1. **Token nosioca** - `AWS_BEARER_TOKEN_BEDROCK` varijabla okruženja ili token iz naredbe `/connect`
-   2. **AWS lanac vjerodajnica** - profil, pristupni ključevi, dijeljeni vjerodajnici, IAM uloge, tokeni web identiteta (EKS IRSA), metapodaci instance
+#### Prioritet autentifikacije
 
-   :::note
-   Kada se postavi token nosioca (putem `/connect` ili `AWS_BEARER_TOKEN_BEDROCK`), on ima prednost nad svim AWS metodama akreditiva uključujući konfigurirane profile.
-   :::
+Amazon Bedrock koristi sljedeći prioritet autentifikacije:
+
+1.  **Token nosioca** - `AWS_BEARER_TOKEN_BEDROCK` varijabla okruženja ili token iz naredbe `/connect`
+2.  **AWS lanac vjerodajnica** - profil, pristupni ključevi, dijeljeni vjerodajnici, IAM uloge, tokeni web identiteta (EKS IRSA), metapodaci instance
+
+:::note
+Kada se postavi token nosioca (putem `/connect` ili `AWS_BEARER_TOKEN_BEDROCK`), on ima prednost nad svim AWS metodama akreditiva uključujući konfigurirane profile.
+:::
 
 3. Pokrenite naredbu `/models` da odaberete model koji želite.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -300,18 +277,14 @@ Za prilagođene profile zaključivanja, koristite ime modela i dobavljača u klj
 
 1. Nakon što ste se prijavili, pokrenite naredbu `/connect` i odaberite Anthropic.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 2. Ovdje možete odabrati opciju **Claude Pro/Max** i ona će otvoriti vaš pretraživač
    i traži od vas da se autentifikujete.
-
-   
 
 ```txt
    ┌ Select auth method
@@ -320,17 +293,15 @@ Za prilagođene profile zaključivanja, koristite ime modela i dobavljača u klj
    │ Create an API Key
    │ Manually enter API Key
    └
-   
+
 
 ```
 
 3. Sada bi svi Antropski modeli trebali biti dostupni kada koristite naredbu `/models`.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -364,54 +335,44 @@ Ako naiđete na greške "Žao mi je, ali ne mogu pomoći s tim zahtjevom", poku�
 
 3. Pokrenite naredbu `/connect` i potražite **Azure**.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 4. Unesite svoj API ključ.
-
-   
 
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
 5. Postavite ime vašeg resursa kao varijablu okruženja:
 
-   
-
 ```bash
    AZURE_RESOURCE_NAME=XXX opencode
-   
+
 
 ```
 
-   Ili ga dodajte na svoj bash profil:
-
-   
+Ili ga dodajte na svoj bash profil:
 
 ```bash title="~/.bash_profile"
    export AZURE_RESOURCE_NAME=XXX
-   
+
 
 ```
 
 6. Pokrenite naredbu `/models` da odaberete svoj raspoređeni model.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -431,54 +392,44 @@ Ako naiđete na greške "Žao mi je, ali ne mogu pomoći s tim zahtjevom", poku�
 
 3. Pokrenite naredbu `/connect` i potražite **Azure kognitivne usluge**.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 4. Unesite svoj API ključ.
-
-   
 
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
 5. Postavite ime vašeg resursa kao varijablu okruženja:
 
-   
-
 ```bash
    AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX opencode
-   
+
 
 ```
 
-   Ili ga dodajte na svoj bash profil:
-
-   
+Ili ga dodajte na svoj bash profil:
 
 ```bash title="~/.bash_profile"
    export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
-   
+
 
 ```
 
 6. Pokrenite naredbu `/models` da odaberete svoj raspoređeni model.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -490,34 +441,28 @@ Ako naiđete na greške "Žao mi je, ali ne mogu pomoći s tim zahtjevom", poku�
 
 2. Pokrenite naredbu `/connect` i potražite **Baseten**.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 3. Unesite svoj Baseten API ključ.
-
-   
 
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
 4. Pokrenite naredbu `/models` da odaberete model.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -529,34 +474,28 @@ Ako naiđete na greške "Žao mi je, ali ne mogu pomoći s tim zahtjevom", poku�
 
 2. Pokrenite naredbu `/connect` i potražite **Cerebras**.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 3. Unesite svoj Cerebras API ključ.
-
-   
 
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
 4. Pokrenite naredbu `/models` da odaberete model kao što je _Qwen 3 Coder 480B_.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -570,76 +509,62 @@ Cloudflare AI Gateway vam omogućava da pristupite modelima iz OpenAI, Anthropic
 
 2. Postavite svoj ID naloga i ID pristupnika kao varijable okruženja.
 
-   
-
 ```bash title="~/.bash_profile"
    export CLOUDFLARE_ACCOUNT_ID=your-32-character-account-id
    export CLOUDFLARE_GATEWAY_ID=your-gateway-id
-   
+
 
 ```
 
 3. Pokrenite naredbu `/connect` i potražite **Cloudflare AI Gateway**.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 4. Unesite svoj Cloudflare API token.
-
-   
 
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
-   Ili ga postavite kao varijablu okruženja.
-
-   
+Ili ga postavite kao varijablu okruženja.
 
 ```bash title="~/.bash_profile"
    export CLOUDFLARE_API_TOKEN=your-api-token
-   
+
 
 ```
 
 5. Pokrenite naredbu `/models` da odaberete model.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
-   Također možete dodati modele kroz svoju opencode konfiguraciju.
-
-   
+Također možete dodati modele kroz svoju opencode konfiguraciju.
 
 ```json title="opencode.json"
-   {
-     "$schema": "https://opencode.ai/config.json",
-     "provider": {
-       "cloudflare-ai-gateway": {
-         "models": {
-           "openai/gpt-4o": {},
-           "anthropic/claude-sonnet-4": {}
-         }
-       }
-     }
-   }
-   
-
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "cloudflare-ai-gateway": {
+      "models": {
+        "openai/gpt-4o": {},
+        "anthropic/claude-sonnet-4": {}
+      }
+    }
+  }
+}
 ```
 
 ---
@@ -650,34 +575,28 @@ Cloudflare AI Gateway vam omogućava da pristupite modelima iz OpenAI, Anthropic
 
 2. Pokrenite naredbu `/connect` i potražite **Cortecs**.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 3. Unesite svoj Cortecs API ključ.
-
-   
 
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
 4. Pokrenite naredbu `/models` da odaberete model kao što je _Kimi K2 Instruct_.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -689,34 +608,28 @@ Cloudflare AI Gateway vam omogućava da pristupite modelima iz OpenAI, Anthropic
 
 2. Pokrenite naredbu `/connect` i potražite **DeepSeek**.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 3. Unesite svoj DeepSeek API ključ.
-
-   
 
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
 4. Pokrenite naredbu `/models` da odaberete DeepSeek model kao što je _DeepSeek Reasoner_.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -728,34 +641,28 @@ Cloudflare AI Gateway vam omogućava da pristupite modelima iz OpenAI, Anthropic
 
 2. Pokrenite naredbu `/connect` i potražite **Deep Infra**.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 3. Unesite svoj Deep Infra API ključ.
-
-   
 
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
 4. Pokrenite naredbu `/models` da odaberete model.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -767,34 +674,28 @@ Cloudflare AI Gateway vam omogućava da pristupite modelima iz OpenAI, Anthropic
 
 2. Pokrenite naredbu `/connect` i potražite **Firmware**.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 3. Unesite svoj Firmware API ključ.
-
-   
 
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
 4. Pokrenite naredbu `/models` da odaberete model.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -806,34 +707,28 @@ Cloudflare AI Gateway vam omogućava da pristupite modelima iz OpenAI, Anthropic
 
 2. Pokrenite naredbu `/connect` i potražite **Fireworks AI**.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 3. Unesite svoj Fireworks AI API ključ.
-
-   
 
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
 4. Pokrenite naredbu `/models` da odaberete model kao što je _Kimi K2 Instruct_.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -845,17 +740,13 @@ GitLab Duo pruža agentsko ćaskanje sa AI-om sa izvornim mogućnostima pozivanj
 
 1. Pokrenite naredbu `/connect` i odaberite GitLab.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 2. Odaberite svoj način autentifikacije:
-
-   
 
 ```txt
    ┌ Select auth method
@@ -863,35 +754,35 @@ GitLab Duo pruža agentsko ćaskanje sa AI-om sa izvornim mogućnostima pozivanj
    │ OAuth (Recommended)
    │ Personal Access Token
    └
-   
+
 
 ```
 
-   #### Korištenje OAuth-a (preporučeno)
+#### Korištenje OAuth-a (preporučeno)
 
-   Odaberite **OAuth** i vaš pretraživač će se otvoriti za autorizaciju.
+Odaberite **OAuth** i vaš pretraživač će se otvoriti za autorizaciju.
 
-   #### Korištenje tokena ličnog pristupa
-   1. Idite na [GitLab korisničke postavke > Pristupni tokeni](https://gitlab.com/-/user_settings/personal_access_tokens)
-   2. Kliknite **Dodaj novi token**
-   3. Naziv: `OpenCode`, opseg: `api`
-   4. Kopirajte token (počinje sa `glpat-`)
-   5. Unesite ga u terminal
+#### Korištenje tokena ličnog pristupa
 
-3. Pokrenite naredbu `/models` da vidite dostupne modele.
+1.  Idite na [GitLab korisničke postavke > Pristupni tokeni](https://gitlab.com/-/user_settings/personal_access_tokens)
+2.  Kliknite **Dodaj novi token**
+3.  Naziv: `OpenCode`, opseg: `api`
+4.  Kopirajte token (počinje sa `glpat-`)
+5.  Unesite ga u terminal
 
-   
+6.  Pokrenite naredbu `/models` da vidite dostupne modele.
 
 ```txt
    /models
-   
+
 
 ```
 
-   Dostupna su tri modela bazirana na Claudeu:
-   - **duo-chat-haiku-4-5** (zadano) - Brzi odgovori za brze zadatke
-   - **duo-chat-sonnet-4-5** - Uravnotežene performanse za većinu tokova posla
-   - **duo-chat-opus-4-5** - Najsposobniji za kompleksnu analizu
+Dostupna su tri modela bazirana na Claudeu:
+
+- **duo-chat-haiku-4-5** (zadano) - Brzi odgovori za brze zadatke
+- **duo-chat-sonnet-4-5** - Uravnotežene performanse za većinu tokova posla
+- **duo-chat-opus-4-5** - Najsposobniji za kompleksnu analizu
 
 :::note
 Također možete odrediti 'GITLAB_TOKEN' varijablu okruženja ako ne želite
@@ -1013,17 +904,13 @@ Neki modeli moraju biti ručno omogućeni u vašim [postavkama GitHub Copilot](h
 
 1. Pokrenite naredbu `/connect` i potražite GitHub Copilot.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 2. Idite na [github.com/login/device](https://github.com/login/device) i unesite kod.
-
-   
 
 ```txt
    ┌ Login with GitHub Copilot
@@ -1033,17 +920,15 @@ Neki modeli moraju biti ručno omogućeni u vašim [postavkama GitHub Copilot](h
    │ Enter code: 8F43-6FCF
    │
    └ Waiting for authorization...
-   
+
 
 ```
 
 3. Sada pokrenite naredbu `/models` da odaberete model koji želite.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -1069,23 +954,19 @@ Za korištenje Google Vertex AI s OpenCodeom:
 
    Postavite ih dok se pokreće opencode.
 
-   
-
 ```bash
    GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
-   
+
 
 ```
 
-   Ili ih dodajte svom bash profilu.
-
-   
+Ili ih dodajte svom bash profilu.
 
 ```bash title="~/.bash_profile"
    export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
    export GOOGLE_CLOUD_PROJECT=your-project-id
    export VERTEX_LOCATION=global
-   
+
 
 ```
 
@@ -1095,11 +976,9 @@ Regija `global` poboljšava dostupnost i smanjuje greške bez dodatnih troškova
 
 3. Pokrenite naredbu `/models` da odaberete model koji želite.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -1111,34 +990,28 @@ Regija `global` poboljšava dostupnost i smanjuje greške bez dodatnih troškova
 
 2. Pokrenite naredbu `/connect` i potražite Groq.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 3. Unesite API ključ za provajdera.
-
-   
 
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
 4. Pokrenite naredbu `/models` da odaberete onu koju želite.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -1152,34 +1025,28 @@ Regija `global` poboljšava dostupnost i smanjuje greške bez dodatnih troškova
 
 2. Pokrenite naredbu `/connect` i potražite **Hugging Face**.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 3. Unesite svoj token Hugging Face.
-
-   
 
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
 4. Pokrenite naredbu `/models` da odaberete model kao što je _Kimi-K2-Instruct_ ili _GLM-4.6_.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -1193,34 +1060,28 @@ Regija `global` poboljšava dostupnost i smanjuje greške bez dodatnih troškova
 
 2. Pokrenite naredbu `/connect` i potražite **Helicone**.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 3. Unesite svoj Helicone API ključ.
-
-   
 
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
 4. Pokrenite naredbu `/models` da odaberete model.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -1299,12 +1160,12 @@ Dodatak ubacuje zaglavlja `Helicone-Session-Id` i `Helicone-Session-Name` u vaš
 
 ##### Uobičajena Helicone zaglavlja
 
-| Header | Opis |
-| -------------------------- | ------------------------------------------------------------- |
-| `Helicone-Cache-Enabled` | Omogući keširanje odgovora (`true`/`false`) |
-| `Helicone-User-Id` | Pratite metriku po korisniku |
+| Header                     | Opis                                                                |
+| -------------------------- | ------------------------------------------------------------------- |
+| `Helicone-Cache-Enabled`   | Omogući keširanje odgovora (`true`/`false`)                         |
+| `Helicone-User-Id`         | Pratite metriku po korisniku                                        |
 | `Helicone-Property-[Name]` | Dodajte prilagođena svojstva (npr. `Helicone-Property-Environment`) |
-| `Helicone-Prompt-Id` | Povezivanje zahtjeva sa brzim verzijama |
+| `Helicone-Prompt-Id`       | Povezivanje zahtjeva sa brzim verzijama                             |
 
 Pogledajte [Helicone Header Directory](https://docs.helicone.ai/helicone-headers/header-directory) za sva dostupna zaglavlja.
 
@@ -1356,34 +1217,28 @@ IO.NET nudi 17 modela optimiziranih za različite slučajeve upotrebe:
 
 2. Pokrenite naredbu `/connect` i potražite **IO.NET**.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 3. Unesite svoj IO.NET API ključ.
-
-   
 
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
 4. Pokrenite naredbu `/models` da odaberete model.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -1431,34 +1286,28 @@ Da biste koristili Kimi K2 iz Moonshot AI:
 
 2. Pokrenite naredbu `/connect` i potražite **Moonshot AI**.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 3. Unesite svoj Moonshot API ključ.
-
-   
 
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
 4. Pokrenite naredbu `/models` da odaberete _Kimi K2_.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -1470,34 +1319,28 @@ Da biste koristili Kimi K2 iz Moonshot AI:
 
 2. Pokrenite naredbu `/connect` i potražite **MiniMax**.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 3. Unesite svoj MiniMax API ključ.
-
-   
 
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
 4. Pokrenite naredbu `/models` da odaberete model kao što je _M2.1_.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -1509,34 +1352,28 @@ Da biste koristili Kimi K2 iz Moonshot AI:
 
 2. Pokrenite naredbu `/connect` i potražite **Nebius Token Factory**.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 3. Unesite svoj Nebius Token Factory API ključ.
-
-   
 
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
 4. Pokrenite naredbu `/models` da odaberete model kao što je _Kimi K2 Instruct_.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -1596,44 +1433,36 @@ Da biste koristili Ollama Cloud s OpenCodeom:
 
 4. Pokrenite naredbu `/connect` i potražite **Ollama Cloud**.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 5. Unesite svoj Ollama Cloud API ključ.
-
-   
 
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
 6. **Važno**: Prije upotrebe modela oblaka u OpenCodeu, morate lokalno povući informacije o modelu:
 
-   
-
 ```bash
    ollama pull gpt-oss:20b-cloud
-   
+
 
 ```
 
 7. Pokrenite naredbu `/models` da odaberete svoj model Ollama Cloud.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -1645,18 +1474,14 @@ Preporučujemo da se prijavite za [ChatGPT Plus ili Pro](https://chatgpt.com/pri
 
 1. Nakon što ste se prijavili, pokrenite naredbu `/connect` i odaberite OpenAI.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 2. Ovdje možete odabrati opciju **ChatGPT Plus/Pro** i ona će otvoriti vaš pretraživač
    i traži od vas da se autentifikujete.
-
-   
 
 ```txt
    ┌ Select auth method
@@ -1664,17 +1489,15 @@ Preporučujemo da se prijavite za [ChatGPT Plus ili Pro](https://chatgpt.com/pri
    │ ChatGPT Plus/Pro
    │ Manually enter API Key
    └
-   
+
 
 ```
 
 3. Sada bi svi OpenAI modeli trebali biti dostupni kada koristite naredbu `/models`.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -1692,34 +1515,28 @@ OpenCode Zen je lista testiranih i verifikovanih modela koju je obezbedio OpenCo
 
 2. Pokrenite naredbu `/connect` i potražite **OpenCode Zen**.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 3. Unesite svoj OpenCode API ključ.
-
-   
 
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
 4. Pokrenite naredbu `/models` da odaberete model kao što je _Qwen 3 Coder 480B_.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -1731,80 +1548,66 @@ OpenCode Zen je lista testiranih i verifikovanih modela koju je obezbedio OpenCo
 
 2. Pokrenite naredbu `/connect` i potražite OpenRouter.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 3. Unesite API ključ za provajdera.
-
-   
 
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
 4. Mnogi OpenRouter modeli su unapred učitani po defaultu, pokrenite naredbu `/models` da odaberete onaj koji želite.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
-   Također možete dodati dodatne modele putem vaše opencode konfiguracije.
-
-   
+Također možete dodati dodatne modele putem vaše opencode konfiguracije.
 
 ```json title="opencode.json" {6}
-   {
-     "$schema": "https://opencode.ai/config.json",
-     "provider": {
-       "openrouter": {
-         "models": {
-           "somecoolnewmodel": {}
-         }
-       }
-     }
-   }
-   
-
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openrouter": {
+      "models": {
+        "somecoolnewmodel": {}
+      }
+    }
+  }
+}
 ```
 
 5. Također ih možete prilagoditi putem vaše opencode konfiguracije. Evo primjera navođenja provajdera
 
-   
-
 ```json title="opencode.json"
-   {
-     "$schema": "https://opencode.ai/config.json",
-     "provider": {
-       "openrouter": {
-         "models": {
-           "moonshotai/kimi-k2": {
-             "options": {
-               "provider": {
-                 "order": ["baseten"],
-                 "allow_fallbacks": false
-               }
-             }
-           }
-         }
-       }
-     }
-   }
-   
-
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openrouter": {
+      "models": {
+        "moonshotai/kimi-k2": {
+          "options": {
+            "provider": {
+              "order": ["baseten"],
+              "allow_fallbacks": false
+            }
+          }
+        }
+      }
+    }
+  }
+}
 ```
 
 ---
@@ -1821,68 +1624,56 @@ SAP AI Core omogućava pristup preko 40+ modela iz OpenAI, Anthropic, Google, Am
 
 2. Pokrenite naredbu `/connect` i potražite **SAP AI Core**.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 3. Unesite JSON svoj servisni ključ.
-
-   
 
 ```txt
    ┌ Service key
    │
    │
    └ enter
-   
+
 
 ```
 
-   Ili postavite varijablu okruženja `AICORE_SERVICE_KEY`:
-
-   
+Ili postavite varijablu okruženja `AICORE_SERVICE_KEY`:
 
 ```bash
    AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
-   
+
 
 ```
 
-   Ili ga dodajte na svoj bash profil:
-
-   
+Ili ga dodajte na svoj bash profil:
 
 ```bash title="~/.bash_profile"
    export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}'
-   
+
 
 ```
 
 4. Opciono postavite ID implementacije i grupu resursa:
 
-   
-
 ```bash
    AICORE_DEPLOYMENT_ID=your-deployment-id AICORE_RESOURCE_GROUP=your-resource-group opencode
-   
+
 
 ```
 
-   :::note
-   Ove postavke su opcione i treba ih konfigurirati u skladu s vašim SAP AI Core postavkama.
-   :::
+:::note
+Ove postavke su opcione i treba ih konfigurirati u skladu s vašim SAP AI Core postavkama.
+:::
 
 5. Pokrenite naredbu `/models` da odaberete između 40+ dostupnih modela.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -1894,34 +1685,28 @@ SAP AI Core omogućava pristup preko 40+ modela iz OpenAI, Anthropic, Google, Am
 
 2. Pokrenite naredbu `/connect` i potražite **OVHcloud AI krajnje točke**.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 3. Unesite svoj OVHcloud AI Endpoints API ključ.
-
-   
 
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
 4. Pokrenite naredbu `/models` da odaberete model kao što je _gpt-oss-120b_.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -1935,34 +1720,28 @@ Da biste koristili [Scaleway Generative APIs](https://www.scaleway.com/en/docs/g
 
 2. Pokrenite naredbu `/connect` i potražite **Scaleway**.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 3. Unesite svoj Scaleway API ključ.
-
-   
 
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
 4. Pokrenite naredbu `/models` da odaberete model kao što je _devstral-2-123b-instruct-2512_ ili _gpt-oss-120b_.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -1974,34 +1753,28 @@ Da biste koristili [Scaleway Generative APIs](https://www.scaleway.com/en/docs/g
 
 2. Pokrenite naredbu `/connect` i potražite **Zajedno AI**.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 3. Unesite svoj Together AI API ključ.
-
-   
 
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
 4. Pokrenite naredbu `/models` da odaberete model kao što je _Kimi K2 Instruct_.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -2013,34 +1786,28 @@ Da biste koristili [Scaleway Generative APIs](https://www.scaleway.com/en/docs/g
 
 2. Pokrenite naredbu `/connect` i potražite **Venice AI**.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 3. Unesite svoj Venice AI API ključ.
-
-   
 
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
 4. Pokrenite naredbu `/models` da odaberete model kao što je _Llama 3.3 70B_.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -2054,34 +1821,28 @@ Vercel AI Gateway vam omogućava da pristupite modelima iz OpenAI, Anthropic, Go
 
 2. Pokrenite naredbu `/connect` i potražite **Vercel AI Gateway**.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 3. Unesite svoj Vercel AI Gateway API ključ.
-
-   
 
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
 4. Pokrenite naredbu `/models` da odaberete model.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -2106,10 +1867,10 @@ Također možete prilagoditi modele kroz svoju opencode konfiguraciju. Evo primj
 
 Neke korisne opcije rutiranja:
 
-| Opcija | Opis |
-| ------------------- | ---------------------------------------------------- |
-| `order` | Redoslijed dobavljača za pokušaj |
-| `only` | Ograničiti na određene provajdere |
+| Opcija              | Opis                                                               |
+| ------------------- | ------------------------------------------------------------------ |
+| `order`             | Redoslijed dobavljača za pokušaj                                   |
+| `only`              | Ograničiti na određene provajdere                                  |
 | `zeroDataRetention` | Koristite samo provajdere sa nultom politikom zadržavanja podataka |
 
 ---
@@ -2120,34 +1881,28 @@ Neke korisne opcije rutiranja:
 
 2. Pokrenite naredbu `/connect` i potražite **xAI**.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 3. Unesite svoj xAI API ključ.
-
-   
 
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
 4. Pokrenite naredbu `/models` da odaberete model kao što je _Grok Beta_.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -2159,36 +1914,30 @@ Neke korisne opcije rutiranja:
 
 2. Pokrenite naredbu `/connect` i potražite **Z.AI**.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
-   Ako ste pretplaćeni na **GLM plan kodiranja**, odaberite **Z.AI plan kodiranja**.
+Ako ste pretplaćeni na **GLM plan kodiranja**, odaberite **Z.AI plan kodiranja**.
 
 3. Unesite svoj Z.AI API ključ.
-
-   
 
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
 4. Pokrenite naredbu `/models` da odaberete model kao što je _GLM-4.7_.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
@@ -2200,54 +1949,44 @@ Neke korisne opcije rutiranja:
 
 2. Pokrenite naredbu `/connect` i potražite ZenMux.
 
-   
-
 ```txt
    /connect
-   
+
 
 ```
 
 3. Unesite API ključ za provajdera.
-
-   
 
 ```txt
    ┌ API key
    │
    │
    └ enter
-   
+
 
 ```
 
 4. Mnogi ZenMux modeli su unaprijed učitani po defaultu, pokrenite naredbu `/models` da odaberete onaj koji želite.
 
-   
-
 ```txt
    /models
-   
+
 
 ```
 
-   Također možete dodati dodatne modele putem vaše opencode konfiguracije.
-
-   
+Također možete dodati dodatne modele putem vaše opencode konfiguracije.
 
 ```json title="opencode.json" {6}
-   {
-     "$schema": "https://opencode.ai/config.json",
-     "provider": {
-       "zenmux": {
-         "models": {
-           "somecoolnewmodel": {}
-         }
-       }
-     }
-   }
-   
-
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "zenmux": {
+      "models": {
+        "somecoolnewmodel": {}
+      }
+    }
+  }
+}
 ```
 
 ---
@@ -2262,8 +2001,6 @@ Možete koristiti bilo kojeg OpenAI kompatibilnog provajdera s opencode-om. Već
 
 1. Pokrenite naredbu `/connect` i pomaknite se prema dolje do **Ostalo**.
 
-   
-
 ```bash
    $ /connect
 
@@ -2273,13 +2010,11 @@ Možete koristiti bilo kojeg OpenAI kompatibilnog provajdera s opencode-om. Već
    │  ...
    │  ● Other
    └
-   
+
 
 ```
 
 2. Unesite jedinstveni ID za provajdera.
-
-   
 
 ```bash
    $ /connect
@@ -2289,17 +2024,15 @@ Možete koristiti bilo kojeg OpenAI kompatibilnog provajdera s opencode-om. Već
    ◇  Enter provider id
    │  myprovider
    └
-   
+
 
 ```
 
-   :::note
-   Odaberite ID koji se pamti, to ćete koristiti u svom konfiguracijskom fajlu.
-   :::
+:::note
+Odaberite ID koji se pamti, to ćete koristiti u svom konfiguracijskom fajlu.
+:::
 
 3. Unesite svoj API ključ za provajdera.
-
-   
 
 ```bash
    $ /connect
@@ -2311,45 +2044,42 @@ Možete koristiti bilo kojeg OpenAI kompatibilnog provajdera s opencode-om. Već
    ◇  Enter your API key
    │  sk-...
    └
-   
+
 
 ```
 
 4. Kreirajte ili ažurirajte svoju `opencode.json` datoteku u direktoriju projekta:
 
-   
-
 ```json title="opencode.json" ""myprovider"" {5-15}
-   {
-     "$schema": "https://opencode.ai/config.json",
-     "provider": {
-       "myprovider": {
-         "npm": "@ai-sdk/openai-compatible",
-         "name": "My AI ProviderDisplay Name",
-         "options": {
-           "baseURL": "https://api.myprovider.com/v1"
-         },
-         "models": {
-           "my-model-name": {
-             "name": "My Model Display Name"
-           }
-         }
-       }
-     }
-   }
-   
-
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "myprovider": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "My AI ProviderDisplay Name",
+      "options": {
+        "baseURL": "https://api.myprovider.com/v1"
+      },
+      "models": {
+        "my-model-name": {
+          "name": "My Model Display Name"
+        }
+      }
+    }
+  }
+}
 ```
 
-   Evo opcija konfiguracije:
-   - **npm**: AI SDK paket za korištenje, `@ai-sdk/openai-compatible` za OpenAI-kompatibilne provajdere
-   - **name**: Ime za prikaz u korisničkom sučelju.
-   - **modeli**: Dostupni modeli.
-   - **options.baseURL**: URL krajnje tačke API-ja.
-   - **options.apiKey**: Opciono postavite API ključ, ako ne koristite auth.
-   - **options.headers**: Opciono postavite prilagođena zaglavlja.
+Evo opcija konfiguracije:
 
-   Više o naprednim opcijama u primjeru ispod.
+- **npm**: AI SDK paket za korištenje, `@ai-sdk/openai-compatible` za OpenAI-kompatibilne provajdere
+- **name**: Ime za prikaz u korisničkom sučelju.
+- **modeli**: Dostupni modeli.
+- **options.baseURL**: URL krajnje tačke API-ja.
+- **options.apiKey**: Opciono postavite API ključ, ako ne koristite auth.
+- **options.headers**: Opciono postavite prilagođena zaglavlja.
+
+Više o naprednim opcijama u primjeru ispod.
 
 5. Pokrenite naredbu `/models` i vaš prilagođeni provajder i modeli će se pojaviti na listi izbora.
 

@@ -29,7 +29,7 @@ OpenCode는 **JSON** 및 **JSONC** (JSON with Comments) 형식을 지원합니�
 precedence의 다른 순서.
 
 :::note
-구성 파일은 ** 함께, 대체되지 않습니다.
+구성 파일은 \*\* 함께, 대체되지 않습니다.
 :::
 
 구성 파일은 함께 결합되어 대체되지 않습니다. 다음 구성 위치에서 설정이 결합됩니다. 나중에 configs override 이전 하나만 충돌 키. 모든 구성에서 설정이 보존됩니다.
@@ -42,12 +42,11 @@ precedence의 다른 순서.
 
 Config 소스는 이 순서에서 적재됩니다 (더 많은 소스는 더 이른 것 삭제합니다):
 
-1. ** 원격 설정** (`.well-known/opencode`에서) - 조직 기본
-2.**Global config** (`~/.config/opencode/opencode.json`) - 사용자 선호도
-3. ** 사용자 정의 설정** (`OPENCODE_CONFIG` env var) - 사용자 정의 overrides
-4. ** 프로젝트 별 설정** (`opencode.json`) - 프로젝트 별 설정
-5. **`.opencode` 디렉토리 ** - 에이전트, 명령, 플러그인
-6. ** 인라인 설정** (`OPENCODE_CONFIG_CONTENT` env var) - 런타임 오버라이드
+1. ** 원격 설정** (`.well-known/opencode`에서) - 조직 기본 2.**Global config** (`~/.config/opencode/opencode.json`) - 사용자 선호도
+2. ** 사용자 정의 설정** (`OPENCODE_CONFIG` env var) - 사용자 정의 overrides
+3. ** 프로젝트 별 설정** (`opencode.json`) - 프로젝트 별 설정
+4. **`.opencode` 디렉토리 ** - 에이전트, 명령, 플러그인
+5. ** 인라인 설정** (`OPENCODE_CONFIG_CONTENT` env var) - 런타임 오버라이드
 
 이것은 프로젝트 구성은 글로벌 디폴트를 override 할 수 있으며, 글로벌 구성은 원격 조직 디폴트를 override 할 수 있습니다.
 
@@ -140,7 +139,7 @@ export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
 ```
 
-사용자 정의 디렉토리는 글로벌 구성 및 `.opencode` 디렉토리 후로드됩니다. ** 설정할 수 있습니다.
+사용자 정의 디렉토리는 글로벌 구성 및 `.opencode` 디렉토리 후로드됩니다. \*\* 설정할 수 있습니다.
 
 ---
 
@@ -152,7 +151,7 @@ opencode run "Hello world"
 
 ---
 
-# # # # TUI # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # TUI
 
 `tui` 옵션을 통해 TUI-specific 설정을 구성할 수 있습니다.
 

@@ -112,15 +112,16 @@ Codebases를 탐구하는 빠르고, 읽기 전용 에이전트. 파일을 수�
 
 1. 1 차적인 대리인을 위해, **Tab ** 열쇠를 사용하여 세션 도중 주기. 구성 된 `switch_agent` keybind도 사용할 수 있습니다.
 
-2. 시약은 invoked 일 수 있습니다:
--**Automatically** 그들의 설명에 근거를 둔 특화된 업무를 위한 1 차적인 대리인에 의하여.
-- 메시지에 대한 하위 시약**. 예를 들어.
+2. 시약은 invoked 일 수 있습니다: -**Automatically** 그들의 설명에 근거를 둔 특화된 업무를 위한 1 차적인 대리인에 의하여.
 
-     ```txt frame="none"
-     @general help me search for this function
-     ```
+- 메시지에 대한 하위 시약\*\*. 예를 들어.
+
+  ```txt frame="none"
+  @general help me search for this function
+  ```
 
 3. ** 세션 간의 편차 **: 하위 시약은 자신의 자녀 세션을 만들 때, 부모 세션과 모든 어린이 세션을 사용하여 탐색 할 수 있습니다.
+
 - **\<Leader>+Right** (또는 부모 → Child1 → Child2 →를 통해 전달하기 위해 설정된 `session_child_cycle` keybind)
 - **\<Leader>+Left** (또는 `session_child_cycle_reverse` keybind) 부모를 통해 돌아 가기 위해 ← child1 ← child2 ← ... ← 부모
 
@@ -230,7 +231,7 @@ markdown 파일 이름은 대리인 이름입니다. 예를 들어, `review.md`�
 }
 ```
 
-** config 옵션이 필요합니다.
+\*\* config 옵션이 필요합니다.
 
 ---
 
@@ -255,8 +256,7 @@ markdown 파일 이름은 대리인 이름입니다. 예를 들어, `review.md`�
 
 온도 값은 일반적으로 0.0에서 1.0에 배열합니다:
 
-- **0.0-0.2**: 매우 집중하고 신중한 응답, 코드 분석 및 계획에 이상
--**0.3-0.5**: 일부 창의력과 균형 잡힌 응답, 일반 개발 작업에 좋은
+- **0.0-0.2**: 매우 집중하고 신중한 응답, 코드 분석 및 계획에 이상 -**0.3-0.5**: 일부 창의력과 균형 잡힌 응답, 일반 개발 작업에 좋은
 - **0.6-1.0**: 더 창조적이고 다양한 응답, 뇌하수 및 탐험에 유용한
 
 ```json title="opencode.json"
