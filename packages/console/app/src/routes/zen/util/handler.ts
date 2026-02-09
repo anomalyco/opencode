@@ -79,7 +79,7 @@ export async function handler(
     const dataDumper = createDataDumper(sessionId, requestId, projectId)
     const trialLimiter = createTrialLimiter(modelInfo.trial, ip, ocClient)
     const isTrial = await trialLimiter?.isTrial()
-    const rateLimiter = createRateLimiter(modelInfo.rateLimit, ip)
+    const rateLimiter = createRateLimiter(modelInfo.rateLimit, ip, input.request.headers)
     await rateLimiter?.check()
     const stickyTracker = createStickyTracker(modelInfo.stickyProvider, sessionId)
     const stickyProvider = await stickyTracker?.get()
@@ -118,6 +118,9 @@ export async function handler(
           providerInfo.modifyHeaders(headers, body, providerInfo.apiKey)
           Object.entries(providerInfo.headerMappings ?? {}).forEach(([k, v]) => {
             headers.set(k, headers.get(v)!)
+          })
+          Object.entries(providerInfo.headers ?? {}).forEach(([k, v]) => {
+            headers.set(k, v)
           })
           headers.delete("host")
           headers.delete("content-length")
@@ -250,13 +253,18 @@ export async function handler(
                 part = part.trim()
                 usageParser.parse(part)
 
-                if (providerInfo.format !== opts.format) {
+                if (providerInfo.bodyModifier) {
+                  for (const [k, v] of Object.entries(providerInfo.bodyModifier)) {
+                    part = part.replace(k, v)
+                  }
+                  c.enqueue(encoder.encode(part + "\n\n"))
+                } else if (providerInfo.format !== opts.format) {
                   part = streamConverter(part)
                   c.enqueue(encoder.encode(part + "\n\n"))
                 }
               }
 
-              if (providerInfo.format === opts.format) {
+              if (!providerInfo.bodyModifier && providerInfo.format === opts.format) {
                 c.enqueue(value)
               }
 

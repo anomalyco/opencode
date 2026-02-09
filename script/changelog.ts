@@ -1,22 +1,9 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
-import { createOpencode } from "@opencode-ai/sdk"
+import { createOpencode } from "@opencode-ai/sdk/v2"
 import { parseArgs } from "util"
-
-export const team = [
-  "actions-user",
-  "opencode",
-  "rekram1-node",
-  "thdxr",
-  "kommander",
-  "jayair",
-  "fwang",
-  "adamdotdevin",
-  "iamdavidhill",
-  "opencode-agent[bot]",
-  "R44VC0RP",
-]
+import { Script } from "@opencode-ai/script"
 
 type Release = {
   tag_name: string
@@ -153,9 +140,9 @@ async function summarizeCommit(opencode: Awaited<ReturnType<typeof createOpencod
   console.log("summarizing commit:", message)
   const session = await opencode.client.session.create()
   const result = await opencode.client.session
-    .prompt({
-      path: { id: session.data!.id },
-      body: {
+    .prompt(
+      {
+        sessionID: session.data!.id,
         model: { providerID: "opencode", modelID: "claude-sonnet-4-5" },
         tools: {
           "*": false,
@@ -169,8 +156,10 @@ Commit: ${message}`,
           },
         ],
       },
-      signal: AbortSignal.timeout(120_000),
-    })
+      {
+        signal: AbortSignal.timeout(120_000),
+      },
+    )
     .then((x) => x.data?.parts?.find((y) => y.type === "text")?.text ?? message)
   return result.trim()
 }
@@ -189,7 +178,7 @@ export async function generateChangelog(commits: Commit[], opencode: Awaited<Ret
   for (let i = 0; i < commits.length; i++) {
     const commit = commits[i]!
     const section = getSection(commit.areas)
-    const attribution = commit.author && !team.includes(commit.author) ? ` (@${commit.author})` : ""
+    const attribution = commit.author && !Script.team.includes(commit.author) ? ` (@${commit.author})` : ""
     const entry = `- ${summaries[i]}${attribution}`
 
     if (!grouped.has(section)) grouped.set(section, [])
@@ -220,7 +209,7 @@ export async function getContributors(from: string, to: string) {
     const title = message.split("\n")[0] ?? ""
     if (title.match(/^(ignore:|test:|chore:|ci:|release:)/i)) continue
 
-    if (login && !team.includes(login)) {
+    if (login && !Script.team.includes(login)) {
       if (!contributors.has(login)) contributors.set(login, new Set())
       contributors.get(login)!.add(title)
     }
@@ -238,7 +227,7 @@ export async function buildNotes(from: string, to: string) {
 
   console.log("generating changelog since " + from)
 
-  const opencode = await createOpencode({ port: 5044 })
+  const opencode = await createOpencode({ port: 0 })
   const notes: string[] = []
 
   try {
@@ -258,8 +247,9 @@ export async function buildNotes(from: string, to: string) {
       throw error
     }
   } finally {
-    opencode.server.close()
+    await opencode.server.close()
   }
+  console.log("changelog generation complete")
 
   const contributors = await getContributors(from, to)
 
