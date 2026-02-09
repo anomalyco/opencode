@@ -142,9 +142,9 @@ console.log(health.data.version)
 
 ### Aplicación
 
-| Método         | Descripción                          | Respuesta                                    |
-| -------------- | ------------------------------------ | -------------------------------------------- |
-| `app.log()`    | Escribe una entrada de registro      | `boolean`                                    |
+| Método         | Descripción                          | Respuesta                                   |
+| -------------- | ------------------------------------ | ------------------------------------------- |
+| `app.log()`    | Escribe una entrada de registro      | `boolean`                                   |
 | `app.agents()` | Listar todos los agentes disponibles | <a href={typesUrl}><code>Agent[]</code></a> |
 
 ---
@@ -169,8 +169,8 @@ const agents = await client.app.agents()
 
 ### Proyecto
 
-| Método              | Descripción                | Respuesta                                      |
-| ------------------- | -------------------------- | ---------------------------------------------- |
+| Método              | Descripción                | Respuesta                                     |
+| ------------------- | -------------------------- | --------------------------------------------- |
 | `project.list()`    | Listar todos los proyectos | <a href={typesUrl}><code>Project[]</code></a> |
 | `project.current()` | Obtener proyecto actual    | <a href={typesUrl}><code>Project</code></a>   |
 
@@ -207,9 +207,9 @@ const pathInfo = await client.path.get()
 
 ### Configuración
 
-| Método               | Descripción                                    | Respuesta                                                                                              |
-| -------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `config.get()`       | Obtener información de configuración           | <a href={typesUrl}><code>Config</code></a>                                                      |
+| Método               | Descripción                                    | Respuesta                                                                                             |
+| -------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `config.get()`       | Obtener información de configuración           | <a href={typesUrl}><code>Config</code></a>                                                            |
 | `config.providers()` | Lista de proveedores y modelos predeterminados | `{ providers: `<a href={typesUrl}><code>Provider[]</code></a>`, default: { [key: string]: string } }` |
 
 ---
@@ -228,24 +228,24 @@ const { providers, default: defaults } = await client.config.providers()
 
 | Método                                                     | Descripción                             | Notas                                                                                                                                                                |
 | ---------------------------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `session.list()`                                           | Listar sesiones                         | Devuelve <a href={typesUrl}><code>Session[]</code></a>                                                                                                                |
-| `session.get({ path })`                                    | Obtener sesión                          | Devuelve <a href={typesUrl}><code>Session</code></a>                                                                                                                  |
-| `session.children({ path })`                               | Listar sesiones infantiles              | Devuelve <a href={typesUrl}><code>Session[]</code></a>                                                                                                                |
-| `session.create({ body })`                                 | Crear sesión                            | Devuelve <a href={typesUrl}><code>Session</code></a>                                                                                                                  |
+| `session.list()`                                           | Listar sesiones                         | Devuelve <a href={typesUrl}><code>Session[]</code></a>                                                                                                               |
+| `session.get({ path })`                                    | Obtener sesión                          | Devuelve <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
+| `session.children({ path })`                               | Listar sesiones infantiles              | Devuelve <a href={typesUrl}><code>Session[]</code></a>                                                                                                               |
+| `session.create({ body })`                                 | Crear sesión                            | Devuelve <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
 | `session.delete({ path })`                                 | Eliminar sesión                         | Devuelve `boolean`                                                                                                                                                   |
-| `session.update({ path, body })`                           | Actualizar propiedades de sesión        | Devuelve <a href={typesUrl}><code>Session</code></a>                                                                                                                  |
+| `session.update({ path, body })`                           | Actualizar propiedades de sesión        | Devuelve <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
 | `session.init({ path, body })`                             | Analizar aplicación y crear `AGENTS.md` | Devuelve `boolean`                                                                                                                                                   |
 | `session.abort({ path })`                                  | Cancelar una sesión en ejecución        | Devuelve `boolean`                                                                                                                                                   |
-| `session.share({ path })`                                  | Compartir sesión                        | Devuelve <a href={typesUrl}><code>Session</code></a>                                                                                                                  |
-| `session.unshare({ path })`                                | Dejar de compartir sesión               | Devuelve <a href={typesUrl}><code>Session</code></a>                                                                                                                  |
+| `session.share({ path })`                                  | Compartir sesión                        | Devuelve <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
+| `session.unshare({ path })`                                | Dejar de compartir sesión               | Devuelve <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
 | `session.summarize({ path, body })`                        | Resumir sesión                          | Devuelve `boolean`                                                                                                                                                   |
-| `session.messages({ path })`                               | Listar mensajes en una sesión           | Devuelve `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                                            |
-| `session.message({ path })`                                | Obtener detalles del mensaje            | Devuelve `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                              |
+| `session.messages({ path })`                               | Listar mensajes en una sesión           | Devuelve `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                                             |
+| `session.message({ path })`                                | Obtener detalles del mensaje            | Devuelve `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                               |
 | `session.prompt({ path, body })`                           | Enviar mensaje rápido                   | `body.noReply: true` devuelve UserMessage (solo contexto). El valor predeterminado devuelve <a href={typesUrl}><code>AssistantMessage</code></a> con respuesta de IA |
-| `session.command({ path, body })`                          | Enviar comando a la sesión              | Devuelve `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                     |
+| `session.command({ path, body })`                          | Enviar comando a la sesión              | Devuelve `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                      |
 | `session.shell({ path, body })`                            | Ejecute un comando de shell             | Devuelve <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                                        |
-| `session.revert({ path, body })`                           | Revertir un mensaje                     | Devuelve <a href={typesUrl}><code>Session</code></a>                                                                                                                  |
-| `session.unrevert({ path })`                               | Restaurar mensajes revertidos           | Devuelve <a href={typesUrl}><code>Session</code></a>                                                                                                                  |
+| `session.revert({ path, body })`                           | Revertir un mensaje                     | Devuelve <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
+| `session.unrevert({ path })`                               | Restaurar mensajes revertidos           | Devuelve <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
 | `postSessionByIdPermissionsByPermissionId({ path, body })` | Responder a una solicitud de permiso    | Devuelve `boolean`                                                                                                                                                   |
 
 ---
@@ -287,9 +287,9 @@ await client.session.prompt({
 | ------------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | `find.text({ query })`    | Buscar texto en archivos                     | Matriz de objetos coincidentes con `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
 | `find.files({ query })`   | Buscar archivos y directorios por nombre     | `string[]` (rutas)                                                                                 |
-| `find.symbols({ query })` | Buscar símbolos del espacio de trabajo       | <a href={typesUrl}><code>Symbol[]</code></a>                                                      |
+| `find.symbols({ query })` | Buscar símbolos del espacio de trabajo       | <a href={typesUrl}><code>Symbol[]</code></a>                                                       |
 | `file.read({ query })`    | Leer un archivo                              | `{ type: "raw" \| "patch", content: string }`                                                      |
-| `file.status({ query? })` | Obtener el estado de los archivos rastreados | <a href={typesUrl}><code>File[]</code></a>                                                      |
+| `file.status({ query? })` | Obtener el estado de los archivos rastreados | <a href={typesUrl}><code>File[]</code></a>                                                         |
 
 `find.files` admite algunos campos de consulta opcionales:
 

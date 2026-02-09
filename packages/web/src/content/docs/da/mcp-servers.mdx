@@ -120,7 +120,7 @@ Her er alle muligheder for at konfigurere en lokal MCP-server.
 | ------------- | ------- | -------- | ------------------------------------------------------------------------------------ |
 | `type`        | String  | Y        | Type MCP serverforbindelse, skal være `"local"`.                                     |
 | `command`     | Array   | Y        | Kommando og argumenter til at køre MCP-serveren.                                     |
-| `environment` | Object |          | Miljøvariabler, der skal indstilles, når serveren kører.                             |
+| `environment` | Object  |          | Miljøvariabler, der skal indstilles, når serveren kører.                             |
 | `enabled`     | Boolean |          | Aktiver eller deaktiver MCP-serveren ved opstart.                                    |
 | `timeout`     | Nummer  |          | Timeout i ms for at hente værktøjer fra MCP-serveren. Standard er 5000 (5 sekunder). |
 
@@ -157,8 +157,8 @@ Tilføj ekstern MCP-server ved at indstille `type` til `"remote"`.
 | `type`    | String  | Y        | Type MCP serverforbindelse, skal være `"remote"`.                                    |
 | `url`     | String  | Y        | URL af den eksterne MCP-server.                                                      |
 | `enabled` | Boolean |          | Aktiver eller deaktiver MCP-serveren ved opstart.                                    |
-| `headers` | Object |          | Overskrifter til at sende med anmodningen.                                           |
-| `oauth`   | Object |          | OAuth-godkendelseskonfiguration. Se afsnittet [OAuth](#oauth) nedenfor.              |
+| `headers` | Object  |          | Overskrifter til at sende med anmodningen.                                           |
+| `oauth`   | Object  |          | OAuth-godkendelseskonfiguration. Se afsnittet [OAuth](#oauth) nedenfor.              |
 | `timeout` | Nummer  |          | Timeout i ms for at hente værktøjer fra MCP-serveren. Standard er 5000 (5 sekunder). |
 
 ---

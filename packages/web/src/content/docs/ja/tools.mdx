@@ -97,6 +97,7 @@ OpenCode で利用可能なすべての組み込みツールを次に示しま�
 :::note
 `write` ツールは、すべてのファイル変更 (`edit`、`write`、`patch`、`multiedit`) をカバーする `edit` 権限によって制御されます。
 :::
+
 ---
 
 ### 読む
@@ -174,6 +175,7 @@ OpenCode で利用可能なすべての組み込みツールを次に示しま�
 :::note
 このツールは、`OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (または `OPENCODE_EXPERIMENTAL=true`) の場合にのみ使用できます。
 :::
+
 ```json title="opencode.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
@@ -207,6 +209,7 @@ OpenCode で利用可能なすべての組み込みツールを次に示しま�
 :::note
 `write` ツールは、すべてのファイル変更 (`edit`、`write`、`patch`、`multiedit`) をカバーする `edit` 権限によって制御されます。
 :::
+
 ---
 
 ### スキル
@@ -242,6 +245,7 @@ OpenCode で利用可能なすべての組み込みツールを次に示しま�
 :::note
 このツールはデフォルトではサブエージェントに対して無効になっていますが、手動で有効にすることができます。 [詳細はこちら](/docs/agents/#permissions)
 :::
+
 ---
 
 ### トドリード
@@ -262,6 +266,7 @@ OpenCode で利用可能なすべての組み込みツールを次に示しま�
 :::note
 このツールはデフォルトではサブエージェントに対して無効になっていますが、手動で有効にすることができます。 [詳細はこちら](/docs/agents/#permissions)
 :::
+
 ---
 
 ### ウェブフェッチ
@@ -295,6 +300,7 @@ OPENCODE_ENABLE_EXA=1 opencode
 ```
 
 :::
+
 ```json title="opencode.json" {4}
 {
   "$schema": "https://opencode.ai/config.json",
@@ -311,6 +317,7 @@ API キーは必要ありません。ツールは認証なしで Exa AI のホ�
 :::tip
 情報を見つける必要がある場合 (検出)、`websearch` を使用し、特定の URL からコンテンツを取得する必要がある場合 (取得) は `webfetch` を使用します。
 :::
+
 ---
 
 ### 質問

@@ -10,6 +10,7 @@ OpenCode は Windows で直接実行できますが、より快適に使うに�
 :::tip[WSL を使う理由]
 WSL を使うと、ファイルシステム性能、端末サポート、OpenCode が依存する開発ツールとの互換性が向上します。
 :::
+
 ---
 
 ## セットアップ
@@ -67,7 +68,8 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
 ```
 
 :::
-```bash
+
+````bash
 
 ## Web クライアント + WSL
 
@@ -77,7 +79,7 @@ Windows で Web 利用を快適にするには:
 
    ```bash
    opencode web --hostname 0.0.0.0
-   ```
+````
 
 2. **Windows のブラウザーからアクセスする**
 
@@ -105,6 +107,7 @@ opencode
 :::tip
 よりスムーズに使うには、リポジトリを WSL のファイルシステム（例: `~/code/`）にクローンまたはコピーして、そこで OpenCode を実行することをおすすめします。
 :::
+
 ---
 
 ## ヒント

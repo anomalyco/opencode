@@ -551,17 +551,17 @@ opencode CLI tager følgende globale flag.
 
 OpenCode kan konfigureres ved hjælp af miljøvariabler.
 
-| Variabel                              | Skriv  | Beskrivelse                                                           |
-| ------------------------------------- | ------ | --------------------------------------------------------------------- |
+| Variabel                              | Skriv   | Beskrivelse                                                           |
+| ------------------------------------- | ------- | --------------------------------------------------------------------- |
 | `OPENCODE_AUTO_SHARE`                 | boolean | Del automatisk session                                                |
-| `OPENCODE_GIT_BASH_PATH`              | string | Sti til Git Bash eksekverbar på Windows                               |
-| `OPENCODE_CONFIG`                     | string | Sti til konfigurationsfil                                             |
-| `OPENCODE_CONFIG_DIR`                 | string | Sti til konfigurationsmappe                                           |
-| `OPENCODE_CONFIG_CONTENT`             | string | Indbygget json-konfigurationsindhold                                  |
+| `OPENCODE_GIT_BASH_PATH`              | string  | Sti til Git Bash eksekverbar på Windows                               |
+| `OPENCODE_CONFIG`                     | string  | Sti til konfigurationsfil                                             |
+| `OPENCODE_CONFIG_DIR`                 | string  | Sti til konfigurationsmappe                                           |
+| `OPENCODE_CONFIG_CONTENT`             | string  | Indbygget json-konfigurationsindhold                                  |
 | `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | Deaktiver automatisk opdateringskontrol                               |
 | `OPENCODE_DISABLE_PRUNE`              | boolean | Deaktiver beskæring af gamle data                                     |
 | `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | Deaktiver automatisk opdatering af terminaltitel                      |
-| `OPENCODE_PERMISSION`                 | string | Indbygget json-tilladelseskonfiguration                               |
+| `OPENCODE_PERMISSION`                 | string  | Indbygget json-tilladelseskonfiguration                               |
 | `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | Deaktiver standard plugins                                            |
 | `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | Deaktiver automatisk LSP-serverdownloads                              |
 | `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | Aktive eksperimentelle modeller                                       |
@@ -570,13 +570,13 @@ OpenCode kan konfigureres ved hjælp af miljøvariabler.
 | `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | Deaktiver læsning `~/.claude/CLAUDE.md`                               |
 | `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | Deaktiver indlæsning af `.claude/skills`                              |
 | `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | Deaktivering af modeller fra eksterne kilder                          |
-| `OPENCODE_FAKE_VCS`                   | string | Falsk VCS-udbyder til testformål                                      |
+| `OPENCODE_FAKE_VCS`                   | string  | Falsk VCS-udbyder til testformål                                      |
 | `OPENCODE_DISABLE_FILETIME_CHECK`     | boolean | Deaktiver filtidskontrol for optimering                               |
-| `OPENCODE_CLIENT`                     | string | Klient-id (standard til `cli`)                                        |
+| `OPENCODE_CLIENT`                     | string  | Klient-id (standard til `cli`)                                        |
 | `OPENCODE_ENABLE_EXA`                 | boolean | Aktiver Exa-websøgeværktøjer                                          |
-| `OPENCODE_SERVER_PASSWORD`            | string | Aktiver grundlæggende godkendelse for `serve`/`web`                   |
-| `OPENCODE_SERVER_USERNAME`            | string | Tilsidesæt grundlæggende godkendelsesbrugernavn (standard `opencode`) |
-| `OPENCODE_MODELS_URL`                 | string | Brugerdefineret URL til hentning af modelkonfiguration                |
+| `OPENCODE_SERVER_PASSWORD`            | string  | Aktiver grundlæggende godkendelse for `serve`/`web`                   |
+| `OPENCODE_SERVER_USERNAME`            | string  | Tilsidesæt grundlæggende godkendelsesbrugernavn (standard `opencode`) |
+| `OPENCODE_MODELS_URL`                 | string  | Brugerdefineret URL til hentning af modelkonfiguration                |
 
 ---
 
@@ -584,13 +584,13 @@ OpenCode kan konfigureres ved hjælp af miljøvariabler.
 
 Disse miljøvariabler muliggør eksperimentelle funktioner, der kan ændres eller fjernes.
 
-| Variabel                                        | Skriv  | Beskrivelse                                |
-| ----------------------------------------------- | ------ | ------------------------------------------ |
+| Variabel                                        | Skriv   | Beskrivelse                                |
+| ----------------------------------------------- | ------- | ------------------------------------------ |
 | `OPENCODE_EXPERIMENTAL`                         | boolean | Aktiver alle eksperimentelle funktioner    |
 | `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Aktiver ikonopdagelse                      |
 | `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | Deaktiver kopi ved valg i TUI              |
-| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | nummer | Standard timeout for bash-kommandoer i ms  |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | nummer | Maks. output-tokens for LLM-svar           |
+| `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | nummer  | Standard timeout for bash-kommandoer i ms  |
+| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | nummer  | Maks. output-tokens for LLM-svar           |
 | `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | Aktiver filovervågning for hele dir        |
 | `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | Aktiver oxfmt formatter                    |
 | `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | Aktive eksperimenter LSP værktøj           |
