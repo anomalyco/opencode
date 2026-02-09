@@ -44,7 +44,7 @@ export const dict = {
 
   "command.session.new": "Nova sesija",
   "command.file.open": "Otvori datoteku",
-  "command.tab.close": "Close tab",
+  "command.tab.close": "Zatvori karticu",
   "command.tab.closeOthers": "Zatvori ostale kartice",
   "command.context.addSelection": "Dodaj odabir u kontekst",
   "command.context.addSelection.description": "Dodaj odabrane linije iz trenutne datoteke",
