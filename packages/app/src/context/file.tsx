@@ -7,6 +7,7 @@ import { getFilename } from "@opencode-ai/util/path"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 import { useLanguage } from "@/context/language"
+import { useLayout } from "@/context/layout"
 import { createPathHelpers } from "./file/path"
 import {
   approxBytes,
@@ -50,9 +51,11 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     useSync()
     const params = useParams()
     const language = useLanguage()
+    const layout = useLayout()
 
     const scope = createMemo(() => sdk.directory)
     const path = createPathHelpers(scope)
+    const tabs = layout.tabs(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
 
     const inflight = new Map<string, Promise<void>>()
     const [store, setStore] = createStore<{
@@ -183,6 +186,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       invalidateFromWatcher(e.details, {
         normalize: path.normalize,
         hasFile: (file) => Boolean(store.file[file]),
+        isOpen: (file) => tabs.all().some((tab) => path.pathFromTab(tab) === file),
         loadFile: (file) => {
           void load(file, { force: true })
         },

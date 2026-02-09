@@ -3,6 +3,7 @@ import { ComponentProps, createEffect, createSignal, onCleanup, onMount, splitPr
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { monoFontFamily, useSettings } from "@/context/settings"
+import { parseKeybind, matchKeybind } from "@/context/command"
 import { SerializeAddon } from "@/addons/serialize"
 import { LocalPTY } from "@/context/terminal"
 import { resolveThemeVariant, useTheme, withAlpha, type HexColor } from "@opencode-ai/ui/theme"
@@ -10,6 +11,8 @@ import { useLanguage } from "@/context/language"
 import { showToast } from "@opencode-ai/ui/toast"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
 
+const TOGGLE_TERMINAL_ID = "terminal.toggle"
+const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
   onSubmit?: () => void
@@ -237,12 +240,11 @@ export const Terminal = (props: TerminalProps) => {
           return true
         }
 
-        // allow for ctrl-` to toggle terminal in parent
-        if (event.ctrlKey && key === "`") {
-          return true
-        }
+        // allow for toggle terminal keybinds in parent
+        const config = settings.keybinds.get(TOGGLE_TERMINAL_ID) ?? DEFAULT_TOGGLE_TERMINAL_KEYBIND
+        const keybinds = parseKeybind(config)
 
-        return false
+        return matchKeybind(keybinds, event)
       })
 
       const fit = new mod.FitAddon()
