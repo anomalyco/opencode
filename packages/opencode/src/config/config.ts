@@ -956,6 +956,12 @@ export namespace Config {
         .record(
           z.string(),
           ModelsDev.Model.partial().extend({
+            use_models_dev: z
+              .string()
+              .optional()
+              .describe(
+                "Inherit model metadata from models.dev using provider/model format (e.g. openrouter/provider/model)",
+              ),
             variants: z
               .record(
                 z.string(),
@@ -1000,6 +1006,7 @@ export namespace Config {
       ref: "ProviderConfig",
     })
   export type Provider = z.infer<typeof Provider>
+  export type Model = NonNullable<Provider["models"]> extends Record<string, infer T> ? T : never
 
   export const Info = z
     .object({

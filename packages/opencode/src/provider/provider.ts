@@ -720,6 +720,30 @@ export namespace Provider {
 
     const configProviders = Object.entries(config.provider ?? {})
 
+    function resolveInheritedModel(
+      use_models_dev: string | undefined,
+      providerID: string,
+      modelID: string,
+    ): Model | undefined {
+      if (!use_models_dev) return undefined
+      const [sourceProviderID, ...sourceModelParts] = use_models_dev.split("/")
+      const sourceModelID = sourceModelParts.join("/")
+
+      if (!sourceProviderID || !sourceModelID) {
+        log.warn("invalid use_models_dev reference", { providerID, modelID, use_models_dev })
+        return undefined
+      }
+
+      const sourceProvider = modelsDev[sourceProviderID]
+      const sourceModel = sourceProvider?.models?.[sourceModelID]
+      if (!sourceProvider || !sourceModel) {
+        log.warn("use_models_dev model not found", { providerID, modelID, use_models_dev })
+        return undefined
+      }
+
+      return fromModelsDevModel(sourceProvider, sourceModel)
+    }
+
     // Add GitHub Copilot Enterprise provider that inherits from GitHub Copilot
     if (database["github-copilot"]) {
       const githubCopilot = database["github-copilot"]
@@ -747,6 +771,174 @@ export namespace Provider {
       providers[providerID] = mergeDeep(match, provider)
     }
 
+    function mergeModel(
+      modelID: string,
+      model: Config.Model,
+      provider: Config.Provider,
+      providerID: string,
+      inheritedModel: Model | undefined,
+      existingModel: Model | undefined,
+    ): Model {
+      const merge = <T>(...values: (T | undefined)[]): T => values.find((v) => v !== undefined) as T
+
+      const inputModalities = model.modalities?.input
+      const outputModalities = model.modalities?.output
+
+      const parsedModel: Model = {
+        id: modelID,
+        api: {
+          id: merge(model.id, inheritedModel?.api.id, existingModel?.api.id, modelID),
+          npm: merge(
+            model.provider?.npm,
+            provider.npm,
+            inheritedModel?.api.npm,
+            existingModel?.api.npm,
+            modelsDev[providerID]?.npm,
+            "@ai-sdk/openai-compatible",
+          ),
+          url: merge(provider?.api, inheritedModel?.api.url, existingModel?.api.url, modelsDev[providerID]?.api),
+        },
+        status: merge(model.status, inheritedModel?.status, existingModel?.status, "active"),
+        name:
+          model.name ||
+          (model.id && model.id !== modelID
+            ? modelID
+            : merge(undefined, inheritedModel?.name, existingModel?.name, modelID)),
+        providerID,
+        capabilities: {
+          temperature: merge(
+            model.temperature,
+            inheritedModel?.capabilities.temperature,
+            existingModel?.capabilities.temperature,
+            false,
+          ),
+          reasoning: merge(
+            model.reasoning,
+            inheritedModel?.capabilities.reasoning,
+            existingModel?.capabilities.reasoning,
+            false,
+          ),
+          attachment: merge(
+            model.attachment,
+            inheritedModel?.capabilities.attachment,
+            existingModel?.capabilities.attachment,
+            false,
+          ),
+          toolcall: merge(
+            model.tool_call,
+            inheritedModel?.capabilities.toolcall,
+            existingModel?.capabilities.toolcall,
+            true,
+          ),
+          input: {
+            text: merge(
+              inputModalities?.includes("text"),
+              inheritedModel?.capabilities.input.text,
+              existingModel?.capabilities.input.text,
+              true,
+            ),
+            audio: merge(
+              inputModalities?.includes("audio"),
+              inheritedModel?.capabilities.input.audio,
+              existingModel?.capabilities.input.audio,
+              false,
+            ),
+            image: merge(
+              inputModalities?.includes("image"),
+              inheritedModel?.capabilities.input.image,
+              existingModel?.capabilities.input.image,
+              false,
+            ),
+            video: merge(
+              inputModalities?.includes("video"),
+              inheritedModel?.capabilities.input.video,
+              existingModel?.capabilities.input.video,
+              false,
+            ),
+            pdf: merge(
+              inputModalities?.includes("pdf"),
+              inheritedModel?.capabilities.input.pdf,
+              existingModel?.capabilities.input.pdf,
+              false,
+            ),
+          },
+          output: {
+            text: merge(
+              outputModalities?.includes("text"),
+              inheritedModel?.capabilities.output.text,
+              existingModel?.capabilities.output.text,
+              true,
+            ),
+            audio: merge(
+              outputModalities?.includes("audio"),
+              inheritedModel?.capabilities.output.audio,
+              existingModel?.capabilities.output.audio,
+              false,
+            ),
+            image: merge(
+              outputModalities?.includes("image"),
+              inheritedModel?.capabilities.output.image,
+              existingModel?.capabilities.output.image,
+              false,
+            ),
+            video: merge(
+              outputModalities?.includes("video"),
+              inheritedModel?.capabilities.output.video,
+              existingModel?.capabilities.output.video,
+              false,
+            ),
+            pdf: merge(
+              outputModalities?.includes("pdf"),
+              inheritedModel?.capabilities.output.pdf,
+              existingModel?.capabilities.output.pdf,
+              false,
+            ),
+          },
+          interleaved: merge(
+            model.interleaved,
+            inheritedModel?.capabilities.interleaved,
+            existingModel?.capabilities.interleaved,
+            false,
+          ),
+        },
+        cost: {
+          input: merge(model?.cost?.input, inheritedModel?.cost?.input, existingModel?.cost?.input, 0),
+          output: merge(model?.cost?.output, inheritedModel?.cost?.output, existingModel?.cost?.output, 0),
+          cache: {
+            read: merge(model?.cost?.cache_read, inheritedModel?.cost?.cache.read, existingModel?.cost?.cache.read, 0),
+            write: merge(
+              model?.cost?.cache_write,
+              inheritedModel?.cost?.cache.write,
+              existingModel?.cost?.cache.write,
+              0,
+            ),
+          },
+        },
+        options: mergeDeep(mergeDeep(existingModel?.options ?? {}, inheritedModel?.options ?? {}), model.options ?? {}),
+        limit: {
+          context: merge(model.limit?.context, inheritedModel?.limit?.context, existingModel?.limit?.context, 0),
+          output: merge(model.limit?.output, inheritedModel?.limit?.output, existingModel?.limit?.output, 0),
+        },
+        headers: mergeDeep(mergeDeep(existingModel?.headers ?? {}, inheritedModel?.headers ?? {}), model.headers ?? {}),
+        family: merge(model.family, inheritedModel?.family, existingModel?.family, ""),
+        release_date: merge(model.release_date, inheritedModel?.release_date, existingModel?.release_date, ""),
+        variants: {},
+      }
+
+      parsedModel.variants = mapValues(
+        pickBy(
+          mergeDeep(
+            mergeDeep(existingModel?.variants ?? {}, inheritedModel?.variants ?? {}),
+            mergeDeep(ProviderTransform.variants(parsedModel), model.variants ?? {}),
+          ),
+          (v: any) => !v.disabled,
+        ),
+        (v: any) => omit(v, ["disabled"]),
+      )
+
+      return parsedModel
+    }
+
     // extend database from config
     for (const [providerID, provider] of configProviders) {
       const existing = database[providerID]
@@ -760,72 +952,9 @@ export namespace Provider {
       }
 
       for (const [modelID, model] of Object.entries(provider.models ?? {})) {
+        const inheritedModel = resolveInheritedModel(model.use_models_dev, providerID, modelID)
         const existingModel = parsed.models[model.id ?? modelID]
-        const name = iife(() => {
-          if (model.name) return model.name
-          if (model.id && model.id !== modelID) return modelID
-          return existingModel?.name ?? modelID
-        })
-        const parsedModel: Model = {
-          id: modelID,
-          api: {
-            id: model.id ?? existingModel?.api.id ?? modelID,
-            npm:
-              model.provider?.npm ??
-              provider.npm ??
-              existingModel?.api.npm ??
-              modelsDev[providerID]?.npm ??
-              "@ai-sdk/openai-compatible",
-            url: provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api,
-          },
-          status: model.status ?? existingModel?.status ?? "active",
-          name,
-          providerID,
-          capabilities: {
-            temperature: model.temperature ?? existingModel?.capabilities.temperature ?? false,
-            reasoning: model.reasoning ?? existingModel?.capabilities.reasoning ?? false,
-            attachment: model.attachment ?? existingModel?.capabilities.attachment ?? false,
-            toolcall: model.tool_call ?? existingModel?.capabilities.toolcall ?? true,
-            input: {
-              text: model.modalities?.input?.includes("text") ?? existingModel?.capabilities.input.text ?? true,
-              audio: model.modalities?.input?.includes("audio") ?? existingModel?.capabilities.input.audio ?? false,
-              image: model.modalities?.input?.includes("image") ?? existingModel?.capabilities.input.image ?? false,
-              video: model.modalities?.input?.includes("video") ?? existingModel?.capabilities.input.video ?? false,
-              pdf: model.modalities?.input?.includes("pdf") ?? existingModel?.capabilities.input.pdf ?? false,
-            },
-            output: {
-              text: model.modalities?.output?.includes("text") ?? existingModel?.capabilities.output.text ?? true,
-              audio: model.modalities?.output?.includes("audio") ?? existingModel?.capabilities.output.audio ?? false,
-              image: model.modalities?.output?.includes("image") ?? existingModel?.capabilities.output.image ?? false,
-              video: model.modalities?.output?.includes("video") ?? existingModel?.capabilities.output.video ?? false,
-              pdf: model.modalities?.output?.includes("pdf") ?? existingModel?.capabilities.output.pdf ?? false,
-            },
-            interleaved: model.interleaved ?? false,
-          },
-          cost: {
-            input: model?.cost?.input ?? existingModel?.cost?.input ?? 0,
-            output: model?.cost?.output ?? existingModel?.cost?.output ?? 0,
-            cache: {
-              read: model?.cost?.cache_read ?? existingModel?.cost?.cache.read ?? 0,
-              write: model?.cost?.cache_write ?? existingModel?.cost?.cache.write ?? 0,
-            },
-          },
-          options: mergeDeep(existingModel?.options ?? {}, model.options ?? {}),
-          limit: {
-            context: model.limit?.context ?? existingModel?.limit?.context ?? 0,
-            output: model.limit?.output ?? existingModel?.limit?.output ?? 0,
-          },
-          headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
-          family: model.family ?? existingModel?.family ?? "",
-          release_date: model.release_date ?? existingModel?.release_date ?? "",
-          variants: {},
-        }
-        const merged = mergeDeep(ProviderTransform.variants(parsedModel), model.variants ?? {})
-        parsedModel.variants = mapValues(
-          pickBy(merged, (v) => !v.disabled),
-          (v) => omit(v, ["disabled"]),
-        )
-        parsed.models[modelID] = parsedModel
+        parsed.models[modelID] = mergeModel(modelID, model, provider, providerID, inheritedModel, existingModel)
       }
       database[providerID] = parsed
     }

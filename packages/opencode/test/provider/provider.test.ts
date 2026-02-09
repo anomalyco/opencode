@@ -1810,6 +1810,94 @@ test("custom model inherits api.url from models.dev provider", async () => {
   })
 })
 
+test("custom model can inherit metadata from models.dev using use_models_dev", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            custom: {
+              env: ["CUSTOM_API_KEY"],
+              models: {
+                "my-model": {
+                  use_models_dev: "anthropic/claude-sonnet-4-20250514",
+                  name: "My Model",
+                  limit: { context: 12345, output: 4321 },
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("CUSTOM_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const model = providers["custom"].models["my-model"]
+      expect(model).toBeDefined()
+
+      // inherited from models.dev reference
+      expect(model.api.id).toBe("claude-sonnet-4-20250514")
+      expect(model.providerID).toBe("custom")
+      expect(model.limit.output).toBeGreaterThan(0)
+      expect(model.cost.input).toBeGreaterThan(0)
+      expect(model.capabilities.reasoning).toBe(true)
+
+      // explicit config overrides inherited metadata
+      expect(model.name).toBe("My Model")
+      expect(model.limit.context).toBe(12345)
+    },
+  })
+})
+
+test("invalid use_models_dev reference does not crash and keeps manual config", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          provider: {
+            custom: {
+              env: ["CUSTOM_API_KEY"],
+              models: {
+                "my-model": {
+                  use_models_dev: "openrouter/does-not-exist",
+                  name: "Manual Model",
+                  tool_call: true,
+                  limit: { context: 7777, output: 1111 },
+                },
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("CUSTOM_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      const model = providers["custom"].models["my-model"]
+      expect(model).toBeDefined()
+      expect(model.name).toBe("Manual Model")
+      expect(model.limit.context).toBe(7777)
+      expect(model.limit.output).toBe(1111)
+      expect(model.capabilities.toolcall).toBe(true)
+    },
+  })
+})
+
 test("model variants are generated for reasoning models", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
