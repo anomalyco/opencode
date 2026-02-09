@@ -145,67 +145,67 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 #### Командные события
 
-- ХХ0ГГ
+- `command.executed`
 
 #### События файла
 
-- ХХ0ГГ
-- ХХ0ГГ
+- `file.edited`
+- `file.watcher.updated`
 
 #### События установки
 
-- ХХ0ГГ
+- `installation.updated`
 
 #### События ЛСП
 
-- ХХ0ГГ
-- ХХ0ГГ
+- `lsp.client.diagnostics`
+- `lsp.updated`
 
 #### События сообщений
 
-- ХХ0ГГ
-- ХХ0ГГ
-- ХХ0ГГ
-- ХХ0ГГ
+- `message.part.removed`
+- `message.part.updated`
+- `message.removed`
+- `message.updated`
 
 #### События разрешения
 
-- ХХ0ГГ
-- ХХ0ГГ
+- `permission.asked`
+- `permission.replied`
 
 #### События сервера
 
-- ХХ0ГГ
+- `server.connected`
 
 #### События сессии
 
-- ХХ0ГГ
-- ХХ0ГГ
-- ХХ0ГГ
-- ХХ0ГГ
-- ХХ0ГГ
-- ХХ0ГГ
-- ХХ0ГГ
-- ХХ0ГГ
+- `session.created`
+- `session.compacted`
+- `session.deleted`
+- `session.diff`
+- `session.error`
+- `session.idle`
+- `session.status`
+- `session.updated`
 
 #### События
 
-- ХХ0ГГ
+- `todo.updated`
 
 #### События оболочки
 
-- ХХ0ГГ
+- `shell.env`
 
 #### События инструмента
 
-- ХХ0ГГ
-- ХХ0ГГ
+- `tool.execute.after`
+- `tool.execute.before`
 
 #### Мероприятия ТУИ
 
-- ХХ0ГГ
-- ХХ0ГГ
-- ХХ0ГГ
+- `tui.prompt.append`
+- `tui.command.execute`
+- `tui.toast.show`
 
 ---
 
@@ -234,7 +234,7 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 
 Мы используем `osascript` для запуска AppleScript на macOS. Здесь мы используем его для отправки уведомлений.
 
-:::примечание
+:::note
 Если вы используете настольное приложение OpenCode, оно может автоматически отправлять системные уведомления, когда ответ готов или когда возникает ошибка сеанса.
 :::
 

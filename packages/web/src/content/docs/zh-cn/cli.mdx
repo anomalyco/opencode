@@ -296,8 +296,8 @@ opencode models anthropic
 #### 旗幟
 
 | 旗幟        | 描述                                     |
-| ----------- | ---------------------------------------- | ------------ |
-| `--refresh` | 来自 models.dev                          | 刷新模型存储 |
+| ----------- | ---------------------------------------- |
+| `--refresh` | 从 models.dev 刷新模型缓存               |
 | `--verbose` | 使用更详细的模型输出（包括成本等元数据） |
 
 使用`--refresh`标志来更新服务器的模型列表。当新模型已添加到提供程序并且您希望在OpenCode中查看它们时，这非常有用。
@@ -585,12 +585,12 @@ opencode CLI采用以下全局标志。
 這些環境變量啟用可能會更改或刪除的實驗性功能。
 
 | 變量                                            | 類型 | 描述                                |
-| ----------------------------------------------- | ---- | ----------------------------------- | --- |
+| ----------------------------------------------- | ---- | ----------------------------------- |
 | `OPENCODE_EXPERIMENTAL`                         | 布尔 | 实现所有实验性功能                  |
 | `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | 布尔 | 新增图标发现                        |
 | `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | 布尔 | 在 TUI 中禁用选择时复制             |
 | `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | 数量 | bash 命令的默认超时（以毫秒为单位） |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | 数量 | LLM 响应的最大输出令牌              | LLM |
+| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | 数量 | LLM 响应的最大输出令牌              |
 | `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | 布尔 | 为整个目录启用文件观察器            |
 | `OPENCODE_EXPERIMENTAL_OXFMT`                   | 布尔 | 启用 oxfmt 清理程序                 |
 | `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | 布尔 | 实现实验性 LSP 工具                 |

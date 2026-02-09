@@ -5,7 +5,7 @@ description: Konfigurer og bruk spesialiserte agenter.
 
 Agenter er spesialiserte AI-assistenter som kan konfigureres for spesifikke oppgaver og arbeidsflyter. De lar deg lage fokuserte verktøy med tilpassede meldinger, modeller og verktøytilgang.
 
-:::tupp
+:::tip
 Bruk planagenten til å analysere kode og gjennomgå forslag uten å gjøre noen kodeendringer.
 :::
 
@@ -23,7 +23,7 @@ Det er to typer agenter i OpenCode; primære agenter og subagenter.
 
 Primæragenter er de viktigste assistentene du samhandler direkte med. Du kan bla gjennom dem ved å bruke **Tab**-tasten, eller din konfigurerte `switch_agent`-tastebinding. Disse agentene håndterer hovedsamtalen din. Verktøytilgang konfigureres via tillatelser - for eksempel har Build alle verktøy aktivert mens Plan er begrenset.
 
-:::tupp
+:::tip
 Du kan bruke **Tab**-tasten for å bytte mellom primære agenter under en økt.
 :::
 
@@ -301,7 +301,7 @@ Hvis dette ikke er satt, vil agenten fortsette å iterere til modellen velger å
 
 Når grensen er nådd, mottar agenten en spesiell systemmelding som instruerer den om å svare med en oppsummering av arbeidet og anbefalte gjenværende oppgaver.
 
-:::forsiktighet
+:::caution
 Det gamle `maxSteps`-feltet er avviklet. Bruk `steps` i stedet.
 :::
 
@@ -345,7 +345,7 @@ Denne banen er i forhold til hvor konfigurasjonsfilen er plassert. Så dette fun
 
 Bruk `model`-konfigurasjonen for å overstyre modellen for denne agenten. Nyttig for bruk av ulike modeller optimalisert for ulike oppgaver. For eksempel en raskere modell for planlegging, en mer kapabel modell for implementering.
 
-:::tupp
+:::tip
 Hvis du ikke spesifiserer en modell, bruker primæragenter [modell globalt konfigurert](/docs/config#models) mens subagenter vil bruke modellen til primæragenten som påkalte subagenten.
 :::
 
@@ -586,11 +586,11 @@ Kontroller hvilke subagenter en agent kan påkalle via oppgaveverktøyet med `pe
 
 Når den er satt til `deny`, fjernes subagenten fullstendig fra oppgaveverktøybeskrivelsen, så modellen vil ikke forsøke å starte den.
 
-:::tupp
+:::tip
 Reglene evalueres i rekkefølge, og den **siste samsvarsregelen vinner**. I eksemplet ovenfor samsvarer `orchestrator-planner` med både `*` (avslå) og `orchestrator-*` (tillat), men siden `orchestrator-*` kommer etter `*`, er resultatet `allow`.
 :::
 
-:::tupp
+:::tip
 Brukere kan alltid starte en hvilken som helst underagent direkte via `@` autofullføringsmenyen, selv om agentens oppgavetillatelser ville nekte det.
 :::
 
@@ -656,7 +656,7 @@ For eksempel, med OpenAIs resonneringsmodeller kan du kontrollere resonnementinn
 
 Disse tilleggsalternativene er modell- og leverandørspesifikke. Sjekk leverandørens dokumentasjon for tilgjengelige parametere.
 
-:::tupp
+:::tip
 Kjør `opencode models` for å se en liste over tilgjengelige modeller.
 :::
 
@@ -696,7 +696,7 @@ Her er noen vanlige brukstilfeller for forskjellige agenter.
 
 Her er noen eksempler på agenter du kan finne nyttige.
 
-:::tupp
+:::tip
 Har du en agent du vil dele? [Send inn en PR](https://github.com/anomalyco/opencode).
 :::
 

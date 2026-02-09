@@ -22,11 +22,10 @@ export HTTP_PROXY=http://proxy.example.com:8080
 export NO_PROXY=localhost,127.0.0.1
 ```
 
-:::注意
+:::caution
 TUI はローカル HTTP サーバーと通信します。ルーティング ループを防ぐには、この接続のプロキシをバイパスする必要があります。
 :::
-
-サーバーのポートとホスト名は、[CLI flags](/docs/cli#run).
+You[CLI flags](/docs/cli#run).
 
 ---
 
@@ -38,11 +37,10 @@ TUI はローカル HTTP サーバーと通信します。ルーティング ル
 export HTTPS_PROXY=http://username:password@proxy.example.com:8080
 ```
 
-:::注意
+:::caution
 パスワードのハードコーディングは避けてください。環境変数または安全な認証情報ストレージを使用します。
 :::
-
-NTLM や Kerberos などの高度な認証を必要とするプロキシの場合は、認証方法をサポートする LLM ゲートウェイの使用を検討してください。
+For や Kerberos などの高度な認証を必要とするプロキシの場合は、認証方法をサポートする LLM ゲートウェイの使用を検討してください。
 
 ---
 

@@ -100,8 +100,8 @@ Serwer opencode udostępnia następujące interfejsy API.
 
 | Method | Path               | Description                | Response                                      |
 | ------ | ------------------ | -------------------------- | --------------------------------------------- |
-| `GET`  | `/project`         | Lista wszystkich projektów | <a href={typesUrl}><code>Projekt[]</code></a> |
-| `GET`  | `/project/current` | Pobierz bieżący projekt    | <a href={typesUrl}><code>Projekt</code></a>   |
+| `GET`  | `/project`         | Lista wszystkich projektów | <a href={typesUrl}><code>Project[]</code></a> |
+| `GET`  | `/project/current` | Pobierz bieżący projekt    | <a href={typesUrl}><code>Project</code></a>   |
 
 ---
 
@@ -109,7 +109,7 @@ Serwer opencode udostępnia następujące interfejsy API.
 
 | Method | Path    | Description                                   | Response                                    |
 | ------ | ------- | --------------------------------------------- | ------------------------------------------- |
-| `GET`  | `/path` | Pobierz bieżącą ścieżkę                       | <a href={typesUrl}><code>Ścieżka</code></a> |
+| `GET`  | `/path` | Pobierz bieżącą ścieżkę                       | <a href={typesUrl}><code>Path</code></a>    |
 | `GET`  | `/vcs`  | Uzyskaj informacje VCS dla bieżącego projektu | <a href={typesUrl}><code>VcsInfo</code></a> |
 
 ---
@@ -145,26 +145,26 @@ Serwer opencode udostępnia następujące interfejsy API.
 
 ### Sessions
 
-| Method   | Path                                     | Description                                 | Notes                                                                            |
-| -------- | ---------------------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------- |
-| `GET`    | `/session`                               | Lista wszystkich sesji                      | Zwraca <a href={typesUrl}><code>Sesja[]</code></a>                               |
-| `POST`   | `/session`                               | Utwórz nową sesję                           | treść: `{ parentID?, title? }`, zwraca <a href={typesUrl}><code>Sesja</code></a> |
-| `GET`    | `/session/status`                        | Uzyskaj status sesji dla wszystkich sesji   | Zwraca `{ [sessionID: string]: `<a href={typesUrl}>Status sesji</a>` }`          |
-| `GET`    | `/session/:id`                           | Uzyskaj szczegóły sesji                     | Zwraca <a href={typesUrl}><code>Sesja</code></a>                                 |
-| `DELETE` | `/session/:id`                           | Usuń sesję i wszystkie jej dane             | Zwraca `boolean`                                                                 |
-| `PATCH`  | `/session/:id`                           | Aktualizuj właściwości sesji                | treść: `{ title? }`, zwraca <a href={typesUrl}><code>Sesja</code></a>            |
-| `GET`    | `/session/:id/children`                  | Pobierz sesje podrzędne sesji               | Zwraca <a href={typesUrl}><code>Sesja[]</code></a>                               |
-| `GET`    | `/session/:id/todo`                      | Pobierz listę rzeczy do zrobienia dla sesji | Zwraca <a href={typesUrl}><code>Do zrobienia[]</code></a>                        |
-| `POST`   | `/session/:id/init`                      | Przeanalizuj aplikację i utwórz `AGENTS.md` | treść: `{ messageID, providerID, modelID }`, zwraca `boolean`                    |
-| `POST`   | `/session/:id/fork`                      | Rozwiń istniejącą sesję w wiadomości        | treść: `{ messageID? }`, zwraca <a href={typesUrl}><code>Sesja</code></a>        |
-| `POST`   | `/session/:id/abort`                     | Przerwij trwającą sesję                     | Zwraca `boolean`                                                                 |
-| `POST`   | `/session/:id/share`                     | Udostępnij sesję                            | Zwraca <a href={typesUrl}><code>Sesja</code></a>                                 |
-| `DELETE` | `/session/:id/share`                     | Anuluj udostępnianie sesji                  | Zwraca <a href={typesUrl}><code>Sesja</code></a>                                 |
-| `GET`    | `/session/:id/diff`                      | Pobierz różnicę dla tej sesji               | zapytanie: `messageID?`, zwraca <a href={typesUrl}><code>FileDiff[]</code></a>   |
-| `POST`   | `/session/:id/summarize`                 | Podsumuj sesję                              | treść: `{ providerID, modelID }`, zwraca `boolean`                               |
-| `POST`   | `/session/:id/revert`                    | Przywróć wiadomość                          | treść: `{ messageID, partID? }`, zwraca `boolean`                                |
-| `POST`   | `/session/:id/unrevert`                  | Przywróć wszystkie przywrócone wiadomości   | Zwraca `boolean`                                                                 |
-| `POST`   | `/session/:id/permissions/:permissionID` | Odpowiedz na prośbę o pozwolenie            | treść: `{ response, remember? }`, zwraca `boolean`                               |
+| Method   | Path                                     | Description                                 | Notes                                                                              |
+| -------- | ---------------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `GET`    | `/session`                               | Lista wszystkich sesji                      | Zwraca <a href={typesUrl}><code>Session[]</code></a>                               |
+| `POST`   | `/session`                               | Utwórz nową sesję                           | treść: `{ parentID?, title? }`, zwraca <a href={typesUrl}><code>Session</code></a> |
+| `GET`    | `/session/status`                        | Uzyskaj status sesji dla wszystkich sesji   | Zwraca `{ [sessionID: string]: `<a href={typesUrl}>Status sesji</a>` }`            |
+| `GET`    | `/session/:id`                           | Uzyskaj szczegóły sesji                     | Zwraca <a href={typesUrl}><code>Session</code></a>                                 |
+| `DELETE` | `/session/:id`                           | Usuń sesję i wszystkie jej dane             | Zwraca `boolean`                                                                   |
+| `PATCH`  | `/session/:id`                           | Aktualizuj właściwości sesji                | treść: `{ title? }`, zwraca <a href={typesUrl}><code>Session</code></a>            |
+| `GET`    | `/session/:id/children`                  | Pobierz sesje podrzędne sesji               | Zwraca <a href={typesUrl}><code>Session[]</code></a>                               |
+| `GET`    | `/session/:id/todo`                      | Pobierz listę rzeczy do zrobienia dla sesji | Zwraca <a href={typesUrl}><code>Todo[]</code></a>                                  |
+| `POST`   | `/session/:id/init`                      | Przeanalizuj aplikację i utwórz `AGENTS.md` | treść: `{ messageID, providerID, modelID }`, zwraca `boolean`                      |
+| `POST`   | `/session/:id/fork`                      | Rozwiń istniejącą sesję w wiadomości        | treść: `{ messageID? }`, zwraca <a href={typesUrl}><code>Session</code></a>        |
+| `POST`   | `/session/:id/abort`                     | Przerwij trwającą sesję                     | Zwraca `boolean`                                                                   |
+| `POST`   | `/session/:id/share`                     | Udostępnij sesję                            | Zwraca <a href={typesUrl}><code>Session</code></a>                                 |
+| `DELETE` | `/session/:id/share`                     | Anuluj udostępnianie sesji                  | Zwraca <a href={typesUrl}><code>Session</code></a>                                 |
+| `GET`    | `/session/:id/diff`                      | Pobierz różnicę dla tej sesji               | zapytanie: `messageID?`, zwraca <a href={typesUrl}><code>FileDiff[]</code></a>     |
+| `POST`   | `/session/:id/summarize`                 | Podsumuj sesję                              | treść: `{ providerID, modelID }`, zwraca `boolean`                                 |
+| `POST`   | `/session/:id/revert`                    | Przywróć wiadomość                          | treść: `{ messageID, partID? }`, zwraca `boolean`                                  |
+| `POST`   | `/session/:id/unrevert`                  | Przywróć wszystkie przywrócone wiadomości   | Zwraca `boolean`                                                                   |
+| `POST`   | `/session/:id/permissions/:permissionID` | Odpowiedz na prośbę o pozwolenie            | treść: `{ response, remember? }`, zwraca `boolean`                                 |
 
 ---
 
@@ -183,9 +183,9 @@ Serwer opencode udostępnia następujące interfejsy API.
 
 ### Komendy
 
-| Metoda | Ścieżka    | Opis                     | Odpowiedź                                       |
-| ------ | ---------- | ------------------------ | ----------------------------------------------- |
-| `GET`  | `/command` | Lista wszystkich poleceń | <a href={typesUrl}><code>Polecenie[]</code></a> |
+| Metoda | Ścieżka    | Opis                     | Odpowiedź                                     |
+| ------ | ---------- | ------------------------ | --------------------------------------------- |
+| `GET`  | `/command` | Lista wszystkich poleceń | <a href={typesUrl}><code>Command[]</code></a> |
 
 ---
 
@@ -198,7 +198,7 @@ Serwer opencode udostępnia następujące interfejsy API.
 | `GET`  | `/find/symbol?query=<q>` | Find workspace symbols               | <a href={typesUrl}><code>Symbol[]</code></a>                                                   |
 | `GET`  | `/file?path=<path>`      | Lista plików i katalogów             | <a href={typesUrl}><code>FileNode[]</code></a>                                                 |
 | `GET`  | `/file/content?path=<p>` | Read a file                          | <a href={typesUrl}><code>FileContent</code></a>                                                |
-| `GET`  | `/file/status`           | Uzyskaj status śledzonych plików     | <a href={typesUrl}><code>Plik[]</code></a>                                                     |
+| `GET`  | `/file/status`           | Uzyskaj status śledzonych plików     | <a href={typesUrl}><code>File[]</code></a>                                                     |
 
 #### `/find/file` query parameters
 
@@ -212,10 +212,10 @@ Serwer opencode udostępnia następujące interfejsy API.
 
 ### Tools (Experimental)
 
-| Method | Path                                        | Description                                  | Response                                                    |
-| ------ | ------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------- |
-| `GET`  | `/experimental/tool/ids`                    | Lista wszystkich identyfikatorów narzędzi    | <a href={typesUrl}><code>Identyfikatory narzędzi</code></a> |
-| `GET`  | `/experimental/tool?provider=<p>&model=<m>` | Lista narzędzi ze schematami JSON dla modelu | <a href={typesUrl}><code>Lista narzędzi</code></a>          |
+| Method | Path                                        | Description                                  | Response                                     |
+| ------ | ------------------------------------------- | -------------------------------------------- | -------------------------------------------- |
+| `GET`  | `/experimental/tool/ids`                    | Lista wszystkich identyfikatorów narzędzi    | <a href={typesUrl}><code>ToolIDs</code></a>  |
+| `GET`  | `/experimental/tool?provider=<p>&model=<m>` | Lista narzędzi ze schematami JSON dla modelu | <a href={typesUrl}><code>ToolList</code></a> |
 
 ---
 

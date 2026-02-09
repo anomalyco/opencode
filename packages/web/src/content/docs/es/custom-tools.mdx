@@ -3,7 +3,7 @@ title: Herramientas personalizadas
 description: Cree herramientas que LLM pueda llamar en opencode.
 ---
 
-Las herramientas personalizadas son funciones que usted crea y que el LLM puede llamar durante las conversaciones. Trabajan junto con las [herramientas integradas] (./tools) de opencode como `read`, `write` y `bash`.
+Las herramientas personalizadas son funciones que usted crea y que el LLM puede llamar durante las conversaciones. Trabajan junto con las [herramientas integradas](/docs/tools) de opencode como `read`, `write` y `bash`.
 
 ---
 
@@ -81,7 +81,7 @@ Esto crea dos herramientas: `math_add` y `math_multiply`.
 
 ### Argumentos
 
-Puedes usar `tool.schema`, que es simplemente [Zod](/docs/tools), para definir tipos de argumentos.
+Puedes usar `tool.schema`, que es simplemente [Zod](https://zod.dev), para definir tipos de argumentos.
 
 ```ts "tool.schema"
 args: {
@@ -167,4 +167,4 @@ export default tool({
 })
 ```
 
-Aquí estamos usando la utilidad [`Bun.$`](https://zod.dev) para ejecutar el script Python.
+Aquí estamos usando la utilidad [`Bun.$`](https://bun.com/docs/runtime/shell) para ejecutar el script Python.

@@ -169,10 +169,10 @@ const agents = await client.app.agents()
 
 ### Projet
 
-| Méthode             | Descriptif                 | Réponse                                      |
-| ------------------- | -------------------------- | -------------------------------------------- |
-| `project.list()`    | Lister tous les projets    | <a href={typesUrl}><code>Projet[]</code></a> |
-| `project.current()` | Obtenir le projet en cours | <a href={typesUrl}><code>Projet</code></a>   |
+| Méthode             | Descriptif                 | Réponse                                       |
+| ------------------- | -------------------------- | --------------------------------------------- |
+| `project.list()`    | Lister tous les projets    | <a href={typesUrl}><code>Project[]</code></a> |
+| `project.current()` | Obtenir le projet en cours | <a href={typesUrl}><code>Project</code></a>   |
 
 ---
 
@@ -190,9 +190,9 @@ const currentProject = await client.project.current()
 
 ### Chemin
 
-| Méthode      | Descriptif               | Réponse                                    |
-| ------------ | ------------------------ | ------------------------------------------ |
-| `path.get()` | Obtenir le chemin actuel | <a href={typesUrl}><code>Chemin</code></a> |
+| Méthode      | Descriptif               | Réponse                                  |
+| ------------ | ------------------------ | ---------------------------------------- |
+| `path.get()` | Obtenir le chemin actuel | <a href={typesUrl}><code>Path</code></a> |
 
 ---
 
@@ -207,10 +207,10 @@ const pathInfo = await client.path.get()
 
 ### Configuration
 
-| Méthode              | Descriptif                                   | Réponse                                                                                                  |
-| -------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `config.get()`       | Obtenir des informations de configuration    | <a href={typesUrl}><code>Configuration</code></a>                                                        |
-| `config.providers()` | Liste des fournisseurs et modèles par défaut | `{ providers: `<a href={typesUrl}><code>Fournisseur[]</code></a>`, default: { [key: string]: string } }` |
+| Méthode              | Descriptif                                   | Réponse                                                                                               |
+| -------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `config.get()`       | Obtenir des informations de configuration    | <a href={typesUrl}><code>Config</code></a>                                                            |
+| `config.providers()` | Liste des fournisseurs et modèles par défaut | `{ providers: `<a href={typesUrl}><code>Provider[]</code></a>`, default: { [key: string]: string } }` |
 
 ---
 
@@ -287,9 +287,9 @@ await client.session.prompt({
 | ------------------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | `find.text({ query })`    | Rechercher du texte dans des fichiers              | Tableau d'objets correspondant avec `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
 | `find.files({ query })`   | Rechercher des fichiers et des répertoires par nom | `string[]` (chemins)                                                                                |
-| `find.symbols({ query })` | Rechercher des symboles d'espace de travail        | <a href={typesUrl}><code>Symbole[]</code></a>                                                       |
+| `find.symbols({ query })` | Rechercher des symboles d'espace de travail        | <a href={typesUrl}><code>Symbol[]</code></a>                                                        |
 | `file.read({ query })`    | Lire un fichier                                    | `{ type: "raw" \| "patch", content: string }`                                                       |
-| `file.status({ query? })` | Obtenir le statut des fichiers suivis              | <a href={typesUrl}><code>Fichier[]</code></a>                                                       |
+| `file.status({ query? })` | Obtenir le statut des fichiers suivis              | <a href={typesUrl}><code>File[]</code></a>                                                          |
 
 `find.files` prend en charge quelques champs de requête facultatifs :
 

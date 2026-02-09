@@ -283,13 +283,13 @@ await client.session.prompt({
 
 ### ファイル
 
-| 方法                      | 説明                                     | 応答                                                                                     |
-| ------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `find.text({ query })`    | ファイル内のテキストを検索               | `path`、`lines`、`line_number`、`absolute_offset`、`submatches` の一致オブジェクトの配列 |
-| `find.files({ query })`   | ファイルとディレクトリを名前で検索する   | `string[]` (パス)                                                                        |
-| `find.symbols({ query })` | ワークスペースのシンボルを検索する       | <a href={typesUrl}><code>シンボル[]</code></a>                                           |
-| `file.read({ query })`    | ファイルを読む                           | `{ type: "raw" \| "patch", content: string }`                                            |
-| `file.status({ query? })` | 追跡されたファイルのステータスを取得する | <a href={typesUrl}><code>ファイル[]</code></a>                                           |
+| Method                    | Description                        | Response                                                                                    |
+| ------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------- |
+| `find.text({ query })`    | Search for text in files           | Array of match objects with `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
+| `find.files({ query })`   | Find files and directories by name | `string[]` (paths)                                                                          |
+| `find.symbols({ query })` | Find workspace symbols             | <a href={typesUrl}><code>Symbol[]</code></a>                                                |
+| `file.read({ query })`    | Read a file                        | `{ type: "raw" \| "patch", content: string }`                                               |
+| `file.status({ query? })` | Get status for tracked files       | <a href={typesUrl}><code>File[]</code></a>                                                  |
 
 `find.files` は、いくつかのオプションのクエリ フィールドをサポートしています。
 
