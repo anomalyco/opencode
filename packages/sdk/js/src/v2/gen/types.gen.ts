@@ -4377,7 +4377,16 @@ export type FileRenameResponses = {
 export type FileRenameResponse = FileRenameResponses[keyof FileRenameResponses]
 
 export type FileUploadData = {
-  body?: never
+  body: {
+    /**
+     * Optional target directory
+     */
+    path?: string
+    /**
+     * File to upload
+     */
+    file?: Blob | File
+  }
   path?: never
   query?: {
     directory?: string

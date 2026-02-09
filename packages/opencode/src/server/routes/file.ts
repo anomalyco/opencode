@@ -293,6 +293,27 @@ export const FileRoutes = lazy(() =>
         description:
           "Upload one or more files via multipart/form-data. Each file field should use the relative path as the field name (e.g., 'src/image.png'). Alternatively, include a 'path' field to specify a target directory — uploaded files will be placed there using their original filenames.",
         operationId: "file.upload",
+        requestBody: {
+          required: true,
+          content: {
+            "multipart/form-data": {
+              schema: {
+                type: "object",
+                properties: {
+                  path: {
+                    type: "string",
+                    description: "Optional target directory for uploaded files",
+                  },
+                  file: {
+                    type: "string",
+                    format: "binary",
+                    description: "File to upload (use relative path as field name, or 'file' with a path field)",
+                  },
+                },
+              },
+            },
+          },
+        },
         responses: {
           ...errors(400),
           200: {
