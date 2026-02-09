@@ -5,7 +5,6 @@ import { useDialog } from "@tui/ui/dialog"
 import { useSync } from "@tui/context/sync"
 import { For, Match, Switch, Show, createMemo, createSignal } from "solid-js"
 import { Installation } from "@/installation"
-import { useDialog } from "@tui/ui/dialog"
 
 export type DialogStatusProps = {}
 
