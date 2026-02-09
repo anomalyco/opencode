@@ -1,0 +1,22 @@
+---
+title: SDK
+description: opencode serveri icin type-safe JS istemcisi.
+---
+
+OpenCode JS/TS SDK, sunucu ile etkilesmek icin type-safe bir istemci saglar.
+
+[Sunucu](/docs/server) sayfasinda mimariyi gorebilir, topluluk ornekleri icin [projects](/docs/ecosystem#projects) bolumune bakabilirsiniz.
+
+## Kurulum
+
+```bash
+npm install @opencode-ai/sdk
+```
+
+## Baslangic
+
+```javascript
+import { createOpencode } from "@opencode-ai/sdk"
+
+const { client } = await createOpencode()
+```
