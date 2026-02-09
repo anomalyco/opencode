@@ -30,11 +30,21 @@ type BuildRequestPartsInput = {
 const absolute = (directory: string, path: string) =>
   path.startsWith("/") ? path : (directory + "/" + path).replace("//", "/")
 
-const encodeFilePath = (filepath: string): string =>
-  filepath
+const encodeFilePath = (filepath: string): string => {
+  // Normalize Windows paths: convert backslashes to forward slashes
+  let normalized = filepath.replace(/\\/g, "/")
+
+  // Handle Windows absolute paths (D:/path -> /D:/path for proper file:// URLs)
+  if (/^[A-Za-z]:/.test(normalized)) {
+    normalized = "/" + normalized
+  }
+
+  // Encode each path segment (preserving forward slashes as path separators)
+  return normalized
     .split("/")
     .map((segment) => encodeURIComponent(segment))
     .join("/")
+}
 
 const fileQuery = (selection: FileSelection | undefined) =>
   selection ? `?start=${selection.startLine}&end=${selection.endLine}` : ""
