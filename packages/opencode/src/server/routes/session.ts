@@ -759,7 +759,13 @@ export const SessionRoutes = lazy(() =>
         return stream(c, async () => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
-          SessionPrompt.prompt({ ...body, sessionID })
+          void SessionPrompt.prompt({ ...body, sessionID }).catch((error) => {
+            if (error instanceof DOMException && error.name === "AbortError") {
+              log.info("prompt async aborted", { sessionID })
+              return
+            }
+            log.error("prompt async failed", { sessionID, error })
+          })
         })
       },
     )
