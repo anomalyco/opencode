@@ -15,6 +15,7 @@ export default function Layout(props: ParentProps) {
   const params = useParams()
   const navigate = useNavigate()
   const language = useLanguage()
+  let invalid = ""
   const directory = createMemo(() => {
     return decode64(params.dir) ?? ""
   })
@@ -22,12 +23,14 @@ export default function Layout(props: ParentProps) {
   createEffect(() => {
     if (!params.dir) return
     if (directory()) return
+    if (invalid === params.dir) return
+    invalid = params.dir
     showToast({
       variant: "error",
       title: language.t("common.requestFailed"),
       description: language.t("directory.error.invalidUrl"),
     })
-    navigate("/")
+    navigate("/", { replace: true })
   })
   return (
     <Show when={directory()}>
