@@ -325,6 +325,18 @@ export namespace SessionProcessor {
                   currentText = undefined
                   break
 
+                case "file":
+                  await Session.updatePart({
+                    id: Identifier.ascending("part"),
+                    messageID: input.assistantMessage.id,
+                    sessionID: input.assistantMessage.sessionID,
+                    type: "file",
+                    mime: value.mediaType,
+                    url: value.url,
+                    filename: value.filename,
+                  })
+                  break
+
                 case "finish":
                   break
 
