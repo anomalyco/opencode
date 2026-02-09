@@ -85,7 +85,61 @@ export namespace Provider {
     autoload: boolean
     getModel?: CustomModelLoader
     options?: Record<string, any>
+    key?: string
   }>
+
+  /**
+   * Helper to create Google Vertex AI loaders for both standard and Anthropic variants.
+   * Reduces duplication between google-vertex and google-vertex-anthropic loaders.
+   */
+  async function createGoogleVertexLoader(providerID: string, defaultLocation: string) {
+    // Check for stored auth credentials first (service account JSON)
+    const auth = await Auth.get(providerID)
+    if (auth?.type === "api") {
+      try {
+        const creds = JSON.parse(auth.key)
+        if (creds.client_email && creds.private_key && creds.project_id) {
+          return {
+            autoload: true,
+            key: undefined,
+            options: {
+              apiKey: null,
+              project: creds.project_id,
+              location: creds.location || defaultLocation,
+              googleAuthOptions: {
+                credentials: {
+                  client_email: creds.client_email,
+                  private_key: creds.private_key,
+                },
+              },
+            },
+            async getModel(sdk: { languageModel: (id: string) => unknown }, modelID: string) {
+              return sdk.languageModel(String(modelID).trim())
+            },
+          }
+        }
+      } catch {
+        // Invalid JSON in stored credentials, fall through to env var check
+      }
+    }
+    // Fall back to environment variables (uses ADC or GOOGLE_APPLICATION_CREDENTIALS)
+    const project = Env.get("GOOGLE_CLOUD_PROJECT") ?? Env.get("GCP_PROJECT") ?? Env.get("GCLOUD_PROJECT")
+    const location = Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? defaultLocation
+    const autoload = Boolean(project)
+    if (!autoload) return { autoload: false }
+    return {
+      autoload: true,
+      key: undefined,
+      options: {
+        apiKey: null,
+        project,
+        location,
+      },
+      async getModel(sdk: { languageModel: (id: string) => unknown }, modelID: string) {
+        return sdk.languageModel(String(modelID).trim())
+      },
+    }
+  }
 
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
     async anthropic() {
@@ -346,40 +400,8 @@ export namespace Provider {
         },
       }
     },
-    "google-vertex": async () => {
-      const project = Env.get("GOOGLE_CLOUD_PROJECT") ?? Env.get("GCP_PROJECT") ?? Env.get("GCLOUD_PROJECT")
-      const location = Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? "us-east5"
-      const autoload = Boolean(project)
-      if (!autoload) return { autoload: false }
-      return {
-        autoload: true,
-        options: {
-          project,
-          location,
-        },
-        async getModel(sdk: any, modelID: string) {
-          const id = String(modelID).trim()
-          return sdk.languageModel(id)
-        },
-      }
-    },
-    "google-vertex-anthropic": async () => {
-      const project = Env.get("GOOGLE_CLOUD_PROJECT") ?? Env.get("GCP_PROJECT") ?? Env.get("GCLOUD_PROJECT")
-      const location = Env.get("GOOGLE_CLOUD_LOCATION") ?? Env.get("VERTEX_LOCATION") ?? "global"
-      const autoload = Boolean(project)
-      if (!autoload) return { autoload: false }
-      return {
-        autoload: true,
-        options: {
-          project,
-          location,
-        },
-        async getModel(sdk: any, modelID) {
-          const id = String(modelID).trim()
-          return sdk.languageModel(id)
-        },
-      }
-    },
+    "google-vertex": () => createGoogleVertexLoader("google-vertex", "us-east5"),
+    "google-vertex-anthropic": () => createGoogleVertexLoader("google-vertex-anthropic", "global"),
     "sap-ai-core": async () => {
       const auth = await Auth.get("sap-ai-core")
       // TODO: Using process.env directly because Env.set only updates a shallow copy (not process.env),
@@ -912,6 +934,13 @@ export namespace Provider {
         if (result.getModel) modelLoaders[providerID] = result.getModel
         const opts = result.options ?? {}
         const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
+        // Pass key from custom loader if explicitly set (e.g., undefined for google-vertex)
+        // to override any key previously set from Auth storage
+        if (result.key !== undefined) {
+          patch.key = result.key
+        } else if ("key" in result) {
+          patch.key = undefined
+        }
         mergeProvider(providerID, patch)
       }
     }

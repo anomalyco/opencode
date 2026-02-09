@@ -27,10 +27,17 @@ process.env["XDG_CONFIG_HOME"] = path.join(dir, "config")
 process.env["XDG_STATE_HOME"] = path.join(dir, "state")
 process.env["OPENCODE_MODELS_PATH"] = path.join(import.meta.dir, "tool", "fixtures", "models-api.json")
 
-// Write the cache version file to prevent global/index.ts from clearing the cache
+// Pre-fetch models.json so tests don't need the macro fallback
+// Also write the cache version file to prevent global/index.ts from clearing the cache
 const cacheDir = path.join(dir, "cache", "opencode")
 await fs.mkdir(cacheDir, { recursive: true })
-await fs.writeFile(path.join(cacheDir, "version"), "14")
+await fs.writeFile(path.join(cacheDir, "version"), "19")
+const response = await fetch("https://models.dev/api.json")
+if (response.ok) {
+  await fs.writeFile(path.join(cacheDir, "models.json"), await response.text())
+}
+// Disable models.dev refresh to avoid race conditions during tests
+process.env["OPENCODE_DISABLE_MODELS_FETCH"] = "true"
 
 // Clear provider env vars to ensure clean test state
 delete process.env["ANTHROPIC_API_KEY"]

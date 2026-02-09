@@ -10,6 +10,7 @@ import { Config } from "../../config/config"
 import { Global } from "../../global"
 import { Plugin } from "../../plugin"
 import { Instance } from "../../project/instance"
+import { PROVIDER_DISPLAY_NAMES } from "../../provider/display-names"
 import type { Hooks } from "@opencode-ai/plugin"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
@@ -274,8 +275,10 @@ export const AuthLoginCommand = cmd({
           "github-copilot": 2,
           openai: 3,
           google: 4,
-          openrouter: 5,
-          vercel: 6,
+          "google-vertex": 5,
+          "google-vertex-anthropic": 6,
+          openrouter: 7,
+          vercel: 8,
         }
         let provider = await prompts.autocomplete({
           message: "Select provider",
@@ -289,12 +292,14 @@ export const AuthLoginCommand = cmd({
                 (x) => x.name ?? x.id,
               ),
               map((x) => ({
-                label: x.name,
+                label: PROVIDER_DISPLAY_NAMES[x.id] ?? x.name,
                 value: x.id,
                 hint: {
                   opencode: "recommended",
                   anthropic: "Claude Max or API key",
                   openai: "ChatGPT Plus/Pro or API key",
+                  "google-vertex": "Service Account",
+                  "google-vertex-anthropic": "Service Account",
                 }[x.id],
               })),
             ),
@@ -350,6 +355,52 @@ export const AuthLoginCommand = cmd({
 
         if (provider === "vercel") {
           prompts.log.info("You can create an api key at https://vercel.link/ai-gateway-token")
+        }
+
+        if (provider === "google-vertex" || provider === "google-vertex-anthropic") {
+          prompts.log.info("Paste your service account JSON below.")
+          prompts.log.info("Download from https://console.cloud.google.com/iam-admin/serviceaccounts")
+
+          const serviceAccountJson = await prompts.text({
+            message: "Service Account JSON",
+            placeholder: '{"type": "service_account", ...}',
+            validate: (x) => {
+              if (!x) return "Required"
+              try {
+                const json = JSON.parse(x)
+                if (json.type !== "service_account") return "Invalid: 'type' must be 'service_account'"
+                if (!json.client_email) return "Invalid: missing 'client_email' field"
+                if (!json.private_key) return "Invalid: missing 'private_key' field"
+                if (!json.project_id) return "Invalid: missing 'project_id' field"
+                return undefined
+              } catch (e) {
+                return `Invalid JSON: ${e instanceof Error ? e.message : "parse error"}`
+              }
+            },
+          })
+          if (prompts.isCancel(serviceAccountJson)) throw new UI.CancelledError()
+
+          const json = JSON.parse(serviceAccountJson)
+
+          const defaultLocation = provider === "google-vertex-anthropic" ? "global" : "us-east5"
+          const location = await prompts.text({
+            message: `Location (default: ${defaultLocation})`,
+            placeholder: defaultLocation,
+          })
+          if (prompts.isCancel(location)) throw new UI.CancelledError()
+
+          await Auth.set(provider, {
+            type: "api",
+            key: JSON.stringify({
+              client_email: json.client_email,
+              private_key: json.private_key,
+              project_id: json.project_id,
+              location: location || defaultLocation,
+            }),
+          })
+
+          prompts.outro("Done")
+          return
         }
 
         if (["cloudflare", "cloudflare-ai-gateway"].includes(provider)) {

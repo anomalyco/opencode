@@ -5,6 +5,7 @@ import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
 import { Env } from "../../src/env"
+import { Auth } from "../../src/auth"
 
 test("provider loaded from env variable", async () => {
   await using tmp = await tmpdir({
@@ -2124,6 +2125,456 @@ test("custom model with variants enabled and disabled", async () => {
       expect(model.variants!["low"].disabled).toBeUndefined()
       expect(model.variants!["medium"].disabled).toBeUndefined()
       expect(model.variants!["custom"].disabled).toBeUndefined()
+    },
+  })
+})
+
+// Google Vertex AI Service Account Authentication Tests
+
+test("google-vertex loads from stored service account credentials", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      // Store service account credentials
+      await Auth.set("google-vertex", {
+        type: "api",
+        key: JSON.stringify({
+          client_email: "test@project.iam.gserviceaccount.com",
+          private_key: "-----BEGIN PRIVATE KEY-----\nMIItest\n-----END PRIVATE KEY-----\n",
+          project_id: "my-gcp-project",
+          location: "us-central1",
+        }),
+      })
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["google-vertex"]).toBeDefined()
+      expect(providers["google-vertex"].options.project).toBe("my-gcp-project")
+      expect(providers["google-vertex"].options.location).toBe("us-central1")
+      expect(providers["google-vertex"].options.googleAuthOptions).toBeDefined()
+      expect(providers["google-vertex"].options.googleAuthOptions.credentials.client_email).toBe(
+        "test@project.iam.gserviceaccount.com",
+      )
+      // Ensure apiKey is null (not set from service account JSON)
+      expect(providers["google-vertex"].options.apiKey).toBeNull()
+      // Ensure key is undefined (service account JSON should not be exposed as key)
+      expect(providers["google-vertex"].key).toBeUndefined()
+    },
+  })
+})
+
+test("google-vertex-anthropic loads from stored service account credentials", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      // Store service account credentials
+      await Auth.set("google-vertex-anthropic", {
+        type: "api",
+        key: JSON.stringify({
+          client_email: "anthropic-sa@project.iam.gserviceaccount.com",
+          private_key: "-----BEGIN PRIVATE KEY-----\nMIItest\n-----END PRIVATE KEY-----\n",
+          project_id: "my-anthropic-project",
+          location: "global",
+        }),
+      })
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["google-vertex-anthropic"]).toBeDefined()
+      expect(providers["google-vertex-anthropic"].options.project).toBe("my-anthropic-project")
+      expect(providers["google-vertex-anthropic"].options.location).toBe("global")
+      expect(providers["google-vertex-anthropic"].options.googleAuthOptions).toBeDefined()
+      expect(providers["google-vertex-anthropic"].options.googleAuthOptions.credentials.client_email).toBe(
+        "anthropic-sa@project.iam.gserviceaccount.com",
+      )
+      // Ensure apiKey is null (not set from service account JSON)
+      expect(providers["google-vertex-anthropic"].options.apiKey).toBeNull()
+      // Ensure key is undefined (service account JSON should not be exposed as key)
+      expect(providers["google-vertex-anthropic"].key).toBeUndefined()
+    },
+  })
+})
+
+test("google-vertex uses default location when not specified in credentials", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      // Store service account credentials without location
+      await Auth.set("google-vertex", {
+        type: "api",
+        key: JSON.stringify({
+          client_email: "test@project.iam.gserviceaccount.com",
+          private_key: "-----BEGIN PRIVATE KEY-----\nMIItest\n-----END PRIVATE KEY-----\n",
+          project_id: "my-gcp-project",
+          // no location specified
+        }),
+      })
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["google-vertex"]).toBeDefined()
+      expect(providers["google-vertex"].options.location).toBe("us-east5") // default location
+      expect(providers["google-vertex"].options.apiKey).toBeNull()
+      expect(providers["google-vertex"].key).toBeUndefined()
+    },
+  })
+})
+
+test("google-vertex-anthropic uses default location 'global' when not specified", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      // Store service account credentials without location
+      await Auth.set("google-vertex-anthropic", {
+        type: "api",
+        key: JSON.stringify({
+          client_email: "test@project.iam.gserviceaccount.com",
+          private_key: "-----BEGIN PRIVATE KEY-----\nMIItest\n-----END PRIVATE KEY-----\n",
+          project_id: "my-gcp-project",
+          // no location specified
+        }),
+      })
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["google-vertex-anthropic"]).toBeDefined()
+      expect(providers["google-vertex-anthropic"].options.location).toBe("global") // default location for anthropic
+      expect(providers["google-vertex-anthropic"].options.apiKey).toBeNull()
+      expect(providers["google-vertex-anthropic"].key).toBeUndefined()
+    },
+  })
+})
+
+test("google-vertex falls back to env vars when no stored credentials", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      // Remove any existing auth
+      await Auth.remove("google-vertex")
+      // Set env vars instead of stored credentials
+      Env.set("GOOGLE_CLOUD_PROJECT", "env-project")
+      Env.set("VERTEX_LOCATION", "europe-west1")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["google-vertex"]).toBeDefined()
+      expect(providers["google-vertex"].options.project).toBe("env-project")
+      expect(providers["google-vertex"].options.location).toBe("europe-west1")
+      // No googleAuthOptions when using env vars
+      expect(providers["google-vertex"].options.googleAuthOptions).toBeUndefined()
+      // apiKey should still be null to prevent fallback to other API keys
+      expect(providers["google-vertex"].options.apiKey).toBeNull()
+      expect(providers["google-vertex"].key).toBeUndefined()
+    },
+  })
+})
+
+test("google-vertex not loaded when neither credentials nor env vars set", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      // Clean up any existing auth and env vars
+      await Auth.remove("google-vertex")
+      // Clear the env vars that the custom loader checks
+      Env.set("GOOGLE_CLOUD_PROJECT", "")
+      Env.set("GCP_PROJECT", "")
+      Env.set("GCLOUD_PROJECT", "")
+      // Also clear the env vars that the database env loader checks
+      Env.set("GOOGLE_VERTEX_PROJECT", "")
+      Env.set("GOOGLE_VERTEX_LOCATION", "")
+      Env.set("GOOGLE_APPLICATION_CREDENTIALS", "")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["google-vertex"]).toBeUndefined()
+    },
+  })
+})
+
+test("google-vertex ignores incomplete stored credentials", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      // Store incomplete credentials (missing private_key)
+      await Auth.set("google-vertex", {
+        type: "api",
+        key: JSON.stringify({
+          client_email: "test@project.iam.gserviceaccount.com",
+          // missing private_key
+          project_id: "my-gcp-project",
+        }),
+      })
+      // Also set env vars as fallback
+      Env.set("GOOGLE_CLOUD_PROJECT", "fallback-project")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["google-vertex"]).toBeDefined()
+      // Should fall back to env vars
+      expect(providers["google-vertex"].options.project).toBe("fallback-project")
+      expect(providers["google-vertex"].options.googleAuthOptions).toBeUndefined()
+    },
+  })
+})
+
+test("google-vertex ignores invalid JSON in stored credentials", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      // Store invalid JSON
+      await Auth.set("google-vertex", {
+        type: "api",
+        key: "not valid json",
+      })
+      // Also set env vars as fallback
+      Env.set("GOOGLE_CLOUD_PROJECT", "fallback-project")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["google-vertex"]).toBeDefined()
+      // Should fall back to env vars
+      expect(providers["google-vertex"].options.project).toBe("fallback-project")
+    },
+  })
+})
+
+test("google-vertex stored credentials take priority over env vars", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      // Store service account credentials
+      await Auth.set("google-vertex", {
+        type: "api",
+        key: JSON.stringify({
+          client_email: "stored@project.iam.gserviceaccount.com",
+          private_key: "-----BEGIN PRIVATE KEY-----\nMIItest\n-----END PRIVATE KEY-----\n",
+          project_id: "stored-project",
+          location: "stored-location",
+        }),
+      })
+      // Also set env vars
+      Env.set("GOOGLE_CLOUD_PROJECT", "env-project")
+      Env.set("VERTEX_LOCATION", "env-location")
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+      expect(providers["google-vertex"]).toBeDefined()
+      // Stored credentials should take priority
+      expect(providers["google-vertex"].options.project).toBe("stored-project")
+      expect(providers["google-vertex"].options.location).toBe("stored-location")
+      expect(providers["google-vertex"].options.googleAuthOptions).toBeDefined()
+      // Ensure apiKey is null even when env vars are set
+      expect(providers["google-vertex"].options.apiKey).toBeNull()
+      expect(providers["google-vertex"].key).toBeUndefined()
+    },
+  })
+})
+
+test("google-vertex and google (Gemini) providers are completely separate", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      // Set up google (Gemini) with API key
+      Env.set("GOOGLE_GENERATIVE_AI_API_KEY", "my-gemini-api-key")
+
+      // Set up google-vertex with service account credentials
+      await Auth.set("google-vertex", {
+        type: "api",
+        key: JSON.stringify({
+          client_email: "vertex@project.iam.gserviceaccount.com",
+          private_key: "-----BEGIN PRIVATE KEY-----\nMIItest\n-----END PRIVATE KEY-----\n",
+          project_id: "vertex-project",
+          location: "us-central1",
+        }),
+      })
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+
+      // Both providers should be loaded
+      expect(providers["google"]).toBeDefined()
+      expect(providers["google-vertex"]).toBeDefined()
+
+      // google (Gemini) is loaded from env var (google has multiple env vars so key isn't stored directly)
+      expect(providers["google"].source).toBe("env")
+
+      // google-vertex should NOT use the Gemini API key
+      expect(providers["google-vertex"].key).toBeUndefined()
+      expect(providers["google-vertex"].options.apiKey).toBeNull()
+
+      // google-vertex should use service account auth
+      expect(providers["google-vertex"].options.project).toBe("vertex-project")
+      expect(providers["google-vertex"].options.googleAuthOptions).toBeDefined()
+      expect(providers["google-vertex"].options.googleAuthOptions.credentials.client_email).toBe(
+        "vertex@project.iam.gserviceaccount.com",
+      )
+    },
+  })
+})
+
+test("google-vertex-anthropic is separate from google and google-vertex", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      // Set up all three providers
+      Env.set("GOOGLE_GENERATIVE_AI_API_KEY", "gemini-key")
+
+      await Auth.set("google-vertex", {
+        type: "api",
+        key: JSON.stringify({
+          client_email: "vertex@project.iam.gserviceaccount.com",
+          private_key: "-----BEGIN PRIVATE KEY-----\nMIItest\n-----END PRIVATE KEY-----\n",
+          project_id: "vertex-project",
+          location: "us-central1",
+        }),
+      })
+
+      await Auth.set("google-vertex-anthropic", {
+        type: "api",
+        key: JSON.stringify({
+          client_email: "anthropic@project.iam.gserviceaccount.com",
+          private_key: "-----BEGIN PRIVATE KEY-----\nMIItest2\n-----END PRIVATE KEY-----\n",
+          project_id: "anthropic-project",
+          location: "global",
+        }),
+      })
+    },
+    fn: async () => {
+      const providers = await Provider.list()
+
+      // All three should be separate
+      expect(providers["google"]).toBeDefined()
+      expect(providers["google-vertex"]).toBeDefined()
+      expect(providers["google-vertex-anthropic"]).toBeDefined()
+
+      // google is loaded from env var (google has multiple env vars so key isn't stored directly)
+      expect(providers["google"].source).toBe("env")
+
+      // google-vertex uses its own service account
+      expect(providers["google-vertex"].options.project).toBe("vertex-project")
+      expect(providers["google-vertex"].options.googleAuthOptions.credentials.client_email).toBe(
+        "vertex@project.iam.gserviceaccount.com",
+      )
+      expect(providers["google-vertex"].key).toBeUndefined()
+      expect(providers["google-vertex"].options.apiKey).toBeNull()
+
+      // google-vertex-anthropic uses its own separate service account
+      expect(providers["google-vertex-anthropic"].options.project).toBe("anthropic-project")
+      expect(providers["google-vertex-anthropic"].options.googleAuthOptions.credentials.client_email).toBe(
+        "anthropic@project.iam.gserviceaccount.com",
+      )
+      expect(providers["google-vertex-anthropic"].key).toBeUndefined()
+      expect(providers["google-vertex-anthropic"].options.apiKey).toBeNull()
     },
   })
 })
