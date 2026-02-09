@@ -42,17 +42,16 @@ export namespace ProviderError {
   }
 
   function error(providerID: string, error: APICallError) {
-    let message = error.message
     if (providerID.includes("github-copilot") && error.statusCode === 403) {
       return "Please reauthenticate with the copilot provider to ensure your credentials work properly with OpenCode."
     }
 
-    return message
+    return error.message
   }
 
   function message(providerID: string, e: APICallError) {
     return iife(() => {
-      let msg = e.message
+      const msg = e.message
       if (msg === "") {
         if (e.responseBody) return e.responseBody
         if (e.statusCode) {
