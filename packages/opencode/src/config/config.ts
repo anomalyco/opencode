@@ -33,6 +33,8 @@ import { proxied } from "@/util/proxied"
 import { iife } from "@/util/iife"
 
 export namespace Config {
+  const ModelId = z.string().meta({ $ref: "https://models.dev/model-schema.json#/$defs/Model" })
+
   const log = Log.create({ service: "config" })
 
   // Managed settings directory for enterprise deployments (highest priority, admin-controlled)
@@ -249,28 +251,21 @@ export namespace Config {
 
   export async function installDependencies(dir: string) {
     const pkg = path.join(dir, "package.json")
-    const targetVersion = Installation.isLocal() ? "latest" : Installation.VERSION
+    const targetVersion = Installation.isLocal() ? "*" : Installation.VERSION
 
-    if (!(await Bun.file(pkg).exists())) {
-      await Bun.write(pkg, "{}")
+    const json = await Bun.file(pkg)
+      .json()
+      .catch(() => ({}))
+    json.dependencies = {
+      ...json.dependencies,
+      "@opencode-ai/plugin": targetVersion,
     }
+    await Bun.write(pkg, JSON.stringify(json, null, 2))
+    await new Promise((resolve) => setTimeout(resolve, 3000))
 
     const gitignore = path.join(dir, ".gitignore")
     const hasGitIgnore = await Bun.file(gitignore).exists()
     if (!hasGitIgnore) await Bun.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
-
-    await BunProc.run(
-      [
-        "add",
-        `@opencode-ai/plugin@${targetVersion}`,
-        "--exact",
-        // TODO: get rid of this case (see: https://github.com/oven-sh/bun/issues/19936)
-        ...(proxied() ? ["--no-cache"] : []),
-      ],
-      {
-        cwd: dir,
-      },
-    ).catch(() => {})
 
     // Install any additional dependencies defined in the package.json
     // This allows local plugins and custom tools to use external packages
@@ -660,19 +655,23 @@ export namespace Config {
     template: z.string(),
     description: z.string().optional(),
     agent: z.string().optional(),
-    model: z.string().optional(),
+    model: ModelId.optional(),
     subtask: z.boolean().optional(),
   })
   export type Command = z.infer<typeof Command>
 
   export const Skills = z.object({
     paths: z.array(z.string()).optional().describe("Additional paths to skill folders"),
+    urls: z
+      .array(z.string())
+      .optional()
+      .describe("URLs to fetch skills from (e.g., https://example.com/.well-known/skills/)"),
   })
   export type Skills = z.infer<typeof Skills>
 
   export const Agent = z
     .object({
-      model: z.string().optional(),
+      model: ModelId.optional(),
       variant: z
         .string()
         .optional()
@@ -1043,11 +1042,10 @@ export namespace Config {
         .array(z.string())
         .optional()
         .describe("When set, ONLY these providers will be enabled. All other providers will be ignored"),
-      model: z.string().describe("Model to use in the format of provider/model, eg anthropic/claude-2").optional(),
-      small_model: z
-        .string()
-        .describe("Small model to use for tasks like title generation in the format of provider/model")
-        .optional(),
+      model: ModelId.describe("Model to use in the format of provider/model, eg anthropic/claude-2").optional(),
+      small_model: ModelId.describe(
+        "Small model to use for tasks like title generation in the format of provider/model",
+      ).optional(),
       default_agent: z
         .string()
         .optional()
@@ -1274,7 +1272,7 @@ export namespace Config {
             })
         ).trim()
         // escape newlines/quotes, strip outer quotes
-        text = text.replace(match, JSON.stringify(fileContent).slice(1, -1))
+        text = text.replace(match, () => JSON.stringify(fileContent).slice(1, -1))
       }
     }
 

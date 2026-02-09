@@ -3066,6 +3066,7 @@ name = "opencode-desktop"
 version = "0.0.0"
 dependencies = [
  "comrak",
+ "dirs",
  "futures",
  "gtk",
  "listeners",
@@ -4549,7 +4550,7 @@ dependencies = [
 [[package]]
 name = "specta"
 version = "2.0.0-rc.22"
-source = "git+https://github.com/specta-rs/specta?rev=106425eac4964d8ff34d3a02f1612e33117b08bb#106425eac4964d8ff34d3a02f1612e33117b08bb"
+source = "git+https://github.com/specta-rs/specta?rev=591a5f3ddc78348abf4cbb541d599d65306d92b9#591a5f3ddc78348abf4cbb541d599d65306d92b9"
 dependencies = [
  "paste",
  "rustc_version",
@@ -4559,7 +4560,7 @@ dependencies = [
 [[package]]
 name = "specta-macros"
 version = "2.0.0-rc.18"
-source = "git+https://github.com/specta-rs/specta?rev=106425eac4964d8ff34d3a02f1612e33117b08bb#106425eac4964d8ff34d3a02f1612e33117b08bb"
+source = "git+https://github.com/specta-rs/specta?rev=591a5f3ddc78348abf4cbb541d599d65306d92b9#591a5f3ddc78348abf4cbb541d599d65306d92b9"
 dependencies = [
  "Inflector",
  "proc-macro2",
@@ -4570,7 +4571,7 @@ dependencies = [
 [[package]]
 name = "specta-serde"
 version = "0.0.9"
-source = "git+https://github.com/specta-rs/specta?rev=106425eac4964d8ff34d3a02f1612e33117b08bb#106425eac4964d8ff34d3a02f1612e33117b08bb"
+source = "git+https://github.com/specta-rs/specta?rev=591a5f3ddc78348abf4cbb541d599d65306d92b9#591a5f3ddc78348abf4cbb541d599d65306d92b9"
 dependencies = [
  "specta",
 ]
@@ -4578,7 +4579,7 @@ dependencies = [
 [[package]]
 name = "specta-typescript"
 version = "0.0.9"
-source = "git+https://github.com/specta-rs/specta?rev=106425eac4964d8ff34d3a02f1612e33117b08bb#106425eac4964d8ff34d3a02f1612e33117b08bb"
+source = "git+https://github.com/specta-rs/specta?rev=591a5f3ddc78348abf4cbb541d599d65306d92b9#591a5f3ddc78348abf4cbb541d599d65306d92b9"
 dependencies = [
  "specta",
  "specta-serde",

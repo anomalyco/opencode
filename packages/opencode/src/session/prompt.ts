@@ -32,7 +32,7 @@ import { Flag } from "../flag/flag"
 import { ulid } from "ulid"
 import { spawn } from "child_process"
 import { Command } from "../command"
-import { $, fileURLToPath } from "bun"
+import { $, fileURLToPath, pathToFileURL } from "bun"
 import { ConfigMarkdown } from "../config/markdown"
 import { SessionSummary } from "./summary"
 import { NamedError } from "@opencode-ai/util/error"
@@ -71,9 +71,6 @@ export namespace SessionPrompt {
     async (current) => {
       for (const item of Object.values(current)) {
         item.abort.abort()
-        for (const callback of item.callbacks) {
-          callback.reject(new DOMException("Aborted", "AbortError"))
-        }
       }
     },
   )
@@ -177,7 +174,7 @@ export namespace SessionPrompt {
       return message
     }
 
-    return loop(input.sessionID)
+    return loop({ sessionID: input.sessionID })
   })
 
   export async function resolvePromptParts(template: string): Promise<PromptInput["parts"]> {
@@ -213,7 +210,7 @@ export namespace SessionPrompt {
         if (stats.isDirectory()) {
           parts.push({
             type: "file",
-            url: `file://${filepath}`,
+            url: pathToFileURL(filepath).href,
             filename: name,
             mime: "application/x-directory",
           })
@@ -222,7 +219,7 @@ export namespace SessionPrompt {
 
         parts.push({
           type: "file",
-          url: `file://${filepath}`,
+          url: pathToFileURL(filepath).href,
           filename: name,
           mime: "text/plain",
         })
@@ -242,6 +239,13 @@ export namespace SessionPrompt {
     return controller.signal
   }
 
+  function resume(sessionID: string) {
+    const s = state()
+    if (!s[sessionID]) return
+
+    return s[sessionID].abort.signal
+  }
+
   export function cancel(sessionID: string) {
     log.info("cancel", { sessionID })
     const s = state()
@@ -251,16 +255,19 @@ export namespace SessionPrompt {
       return
     }
     match.abort.abort()
-    for (const item of match.callbacks) {
-      item.reject(new DOMException("Aborted", "AbortError"))
-    }
     delete s[sessionID]
     SessionStatus.set(sessionID, { type: "idle" })
     return
   }
 
-  export const loop = fn(Identifier.schema("session"), async (sessionID) => {
-    const abort = start(sessionID)
+  export const LoopInput = z.object({
+    sessionID: Identifier.schema("session"),
+    resume_existing: z.boolean().optional(),
+  })
+  export const loop = fn(LoopInput, async (input) => {
+    const { sessionID, resume_existing } = input
+
+    const abort = resume_existing ? resume(sessionID) : start(sessionID)
     if (!abort) {
       return new Promise<MessageV2.WithParts>((resolve, reject) => {
         const callbacks = state()[sessionID].callbacks
@@ -329,6 +336,7 @@ export namespace SessionPrompt {
           sessionID,
           mode: task.agent,
           agent: task.agent,
+          variant: lastUser.variant,
           path: {
             cwd: Instance.directory,
             root: Instance.worktree,
@@ -532,6 +540,7 @@ export namespace SessionPrompt {
           role: "assistant",
           mode: agent.name,
           agent: agent.name,
+          variant: lastUser.variant,
           path: {
             cwd: Instance.directory,
             root: Instance.worktree,
@@ -1372,7 +1381,19 @@ NOTE: At any point in time through this workflow you should feel free to ask the
     if (!abort) {
       throw new Session.BusyError(input.sessionID)
     }
-    using _ = defer(() => cancel(input.sessionID))
+
+    using _ = defer(() => {
+      // If no queued callbacks, cancel (the default)
+      const callbacks = state()[input.sessionID]?.callbacks ?? []
+      if (callbacks.length === 0) {
+        cancel(input.sessionID)
+      } else {
+        // Otherwise, trigger the session loop to process queued items
+        loop({ sessionID: input.sessionID, resume_existing: true }).catch((error) => {
+          log.error("session loop failed to resume after shell command", { sessionID: input.sessionID, error })
+        })
+      }
+    })
 
     const session = await Session.get(input.sessionID)
     if (session.revert) {

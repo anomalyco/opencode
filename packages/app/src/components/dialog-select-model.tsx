@@ -87,11 +87,13 @@ const ModelList: Component<{
   )
 }
 
-export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
+type ModelSelectorTriggerProps = Omit<ComponentProps<typeof Kobalte.Trigger>, "as" | "ref">
+
+export function ModelSelectorPopover(props: {
   provider?: string
   children?: JSX.Element
-  triggerAs?: T
-  triggerProps?: ComponentProps<T>
+  triggerAs?: ValidComponent
+  triggerProps?: ModelSelectorTriggerProps
 }) {
   const [store, setStore] = createStore<{
     open: boolean
@@ -176,11 +178,7 @@ export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
       placement="top-start"
       gutter={8}
     >
-      <Kobalte.Trigger
-        ref={(el) => setStore("trigger", el)}
-        as={props.triggerAs ?? "div"}
-        {...(props.triggerProps as any)}
-      >
+      <Kobalte.Trigger ref={(el) => setStore("trigger", el)} as={props.triggerAs ?? "div"} {...props.triggerProps}>
         {props.children}
       </Kobalte.Trigger>
       <Kobalte.Portal>
