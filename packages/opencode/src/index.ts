@@ -26,6 +26,7 @@ import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
+import { registerSignalHandlers } from "./signal"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -38,6 +39,8 @@ process.on("uncaughtException", (e) => {
     e: e instanceof Error ? e.message : e,
   })
 })
+
+registerSignalHandlers()
 
 const cli = yargs(hideBin(process.argv))
   .parserConfiguration({ "populate--": true })
