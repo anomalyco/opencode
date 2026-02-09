@@ -44,6 +44,7 @@ export const dict = {
 
   "command.session.new": "Nouvelle session",
   "command.file.open": "Ouvrir un fichier",
+  "command.tab.close": "Fermer l'onglet",
   "command.context.addSelection": "Ajouter la sélection au contexte",
   "command.context.addSelection.description": "Ajouter les lignes sélectionnées du fichier actuel",
   "command.input.focus": "Focus input",
@@ -234,6 +235,7 @@ export const dict = {
   "prompt.toast.shellSendFailed.title": "Échec de l'envoi de la commande shell",
   "prompt.toast.commandSendFailed.title": "Échec de l'envoi de la commande",
   "prompt.toast.promptSendFailed.title": "Échec de l'envoi du message",
+  "prompt.toast.promptSendFailed.description": "Impossible de récupérer la session",
 
   "dialog.mcp.title": "MCPs",
   "dialog.mcp.description": "{{enabled}} sur {{total}} activés",
