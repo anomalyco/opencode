@@ -112,21 +112,35 @@ export function SessionHeader() {
 
   const [exists, setExists] = createStore<Partial<Record<OpenApp, boolean>>>({ finder: true })
 
+  const apps = createMemo(() => {
+    if (os() === "macos") return MAC_APPS
+    if (os() === "windows") return WINDOWS_APPS
+    return LINUX_APPS
+  })
+
+  const fileManager = createMemo(() => {
+    if (os() === "macos") return { label: "Finder", icon: "finder" as const }
+    if (os() === "windows") return { label: "File Explorer", icon: "file-explorer" as const }
+    return { label: "File Manager", icon: "finder" as const }
+  })
+
   createEffect(() => {
     if (platform.platform !== "desktop") return
     if (!platform.checkAppExists) return
 
-    const list = os()
-    const apps = list === "macos" ? MAC_APPS : list === "windows" ? WINDOWS_APPS : list === "linux" ? LINUX_APPS : []
-    if (apps.length === 0) return
+    const list = apps()
+
+    setExists(Object.fromEntries(list.map((app) => [app.id, undefined])) as Partial<Record<OpenApp, boolean>>)
 
     void Promise.all(
-      apps.map((app) =>
-        Promise.resolve(platform.checkAppExists?.(app.openWith)).then((value) => {
-          const ok = Boolean(value)
-          console.debug(`[session-header] App "${app.label}" (${app.openWith}): ${ok ? "exists" : "does not exist"}`)
-          return [app.id, ok] as const
-        }),
+      list.map((app) =>
+        Promise.resolve(platform.checkAppExists?.(app.openWith))
+          .then((value) => Boolean(value))
+          .catch(() => false)
+          .then((ok) => {
+            console.debug(`[session-header] App "${app.label}" (${app.openWith}): ${ok ? "exists" : "does not exist"}`)
+            return [app.id, ok] as const
+          }),
       ),
     ).then((entries) => {
       setExists(Object.fromEntries(entries) as Partial<Record<OpenApp, boolean>>)
@@ -134,21 +148,21 @@ export function SessionHeader() {
   })
 
   const options = createMemo(() => {
-    if (os() === "macos") {
-      return [{ id: "finder", label: "Finder", icon: "finder" }, ...MAC_APPS.filter((app) => exists[app.id])] as const
-    }
-
-    if (os() === "windows") {
-      return [
-        { id: "finder", label: "File Explorer", icon: "file-explorer" },
-        ...WINDOWS_APPS.filter((app) => exists[app.id]),
-      ] as const
-    }
-
     return [
-      { id: "finder", label: "File Manager", icon: "finder" },
-      ...LINUX_APPS.filter((app) => exists[app.id]),
+      { id: "finder", label: fileManager().label, icon: fileManager().icon },
+      ...apps().filter((app) => exists[app.id]),
     ] as const
+  })
+
+  type OpenIcon = OpenApp | "file-explorer"
+  const base = new Set<OpenIcon>(["finder", "vscode", "cursor", "zed"])
+  const size = (id: OpenIcon) => (base.has(id) ? "size-4" : "size-[19px]")
+
+  const checksReady = createMemo(() => {
+    if (platform.platform !== "desktop") return true
+    if (!platform.checkAppExists) return true
+    const list = apps()
+    return list.every((app) => exists[app.id] !== undefined)
   })
 
   const [prefs, setPrefs] = persisted(Persist.global("open.app"), createStore({ app: "finder" as OpenApp }))
@@ -158,6 +172,7 @@ export function SessionHeader() {
 
   createEffect(() => {
     if (platform.platform !== "desktop") return
+    if (!checksReady()) return
     const value = prefs.app
     if (options().some((o) => o.id === value)) return
     setPrefs("app", options()[0]?.id ?? "finder")
@@ -334,11 +349,13 @@ export function SessionHeader() {
                           onClick={() => openDir(current().id)}
                           aria-label={language.t("session.header.open.ariaLabel", { app: current().label })}
                         >
-                          <AppIcon id={current().icon} class="size-4" />
+                          <div class="flex size-5 shrink-0 items-center justify-center">
+                            <AppIcon id={current().icon} class="size-4" />
+                          </div>
                           <span class="text-12-regular text-text-strong">Open</span>
                         </Button>
                         <div class="self-stretch w-px bg-border-base/70" />
-                        <DropdownMenu>
+                        <DropdownMenu gutter={6} placement="bottom-end">
                           <DropdownMenu.Trigger
                             as={IconButton}
                             icon="chevron-down"
@@ -347,7 +364,7 @@ export function SessionHeader() {
                             aria-label={language.t("session.header.open.menu")}
                           />
                           <DropdownMenu.Portal>
-                            <DropdownMenu.Content placement="bottom-end" gutter={6}>
+                            <DropdownMenu.Content>
                               <DropdownMenu.Group>
                                 <DropdownMenu.GroupLabel>{language.t("session.header.openIn")}</DropdownMenu.GroupLabel>
                                 <DropdownMenu.RadioGroup
@@ -359,7 +376,9 @@ export function SessionHeader() {
                                 >
                                   {options().map((o) => (
                                     <DropdownMenu.RadioItem value={o.id} onSelect={() => openDir(o.id)}>
-                                      <AppIcon id={o.icon} class="size-5" />
+                                      <div class="flex size-5 shrink-0 items-center justify-center">
+                                        <AppIcon id={o.icon} class={size(o.icon)} />
+                                      </div>
                                       <DropdownMenu.ItemLabel>{o.label}</DropdownMenu.ItemLabel>
                                       <DropdownMenu.ItemIndicator>
                                         <Icon name="check-small" size="small" class="text-icon-weak" />
@@ -370,7 +389,9 @@ export function SessionHeader() {
                               </DropdownMenu.Group>
                               <DropdownMenu.Separator />
                               <DropdownMenu.Item onSelect={copyPath}>
-                                <Icon name="copy" size="small" class="text-icon-weak" />
+                                <div class="flex size-5 shrink-0 items-center justify-center">
+                                  <Icon name="copy" size="small" class="text-icon-weak" />
+                                </div>
                                 <DropdownMenu.ItemLabel>
                                   {language.t("session.header.open.copyPath")}
                                 </DropdownMenu.ItemLabel>
