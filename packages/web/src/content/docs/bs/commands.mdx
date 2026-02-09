@@ -83,7 +83,7 @@ Također možete definirati komande koristeći mardown datoteke. Stavite ih u:
 - Globalno: `~/.config/opencode/commands/`
 - Po projektu: `.opencode/commands/
 
-````markdown title="~/.config/opencode/commands/test.md"
+```markdown title="~/.config/opencode/commands/test.md"
 ---
 description: Run tests with coverage
 agent: build
@@ -92,8 +92,7 @@ model: anthropic/claude-3-5-sonnet-20241022
 
 Run the full test suite with coverage report and show any failures.
 Focus on the failing tests and suggest fixes.
-
-````
+```
 
 Ime datoteke za označavanje postaje ime naredbe. Na primjer, `test.md` dozvoljava
 pokrećeš:
@@ -101,7 +100,7 @@ pokrećeš:
 ```bash frame="none"
 /test
 
-````
+```
 
 ---
 
@@ -320,4 +319,7 @@ opencode uključuje nekoliko ugrađenih naredbi kao što su `/init`, `/undo`, `/
 Prilagođene komande mogu nadjačati ugrađene komande.
 :::
 Ako definirate prilagođenu naredbu s istim imenom, ona će nadjačati ugrađenu naredbu.
-````
+
+```
+
+```

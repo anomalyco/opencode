@@ -172,7 +172,7 @@ Također možete definirati agente koristeći mardown datoteke. Stavite ih u:
 - Globalno: `~/.config/opencode/agents/`
 - Po projektu: `.opencode/agents/
 
-````markdown title="~/.config/opencode/agents/review.md"
+```markdown title="~/.config/opencode/agents/review.md"
 ---
 opis: Recenzira kod za kvalitet i najbolje prakse
 način rada: subagent
@@ -191,19 +191,20 @@ Nalazite se u načinu pregleda koda. Fokusirajte se na:
 - Implikacije na performanse
 - Sigurnosna pitanja
   Dajte konstruktivne povratne informacije bez direktnih promjena.
-
-````
+```
 
 Ime marginalne datoteke postaje ime agenta. Na primjer, `review.md` kreira `review` agenta.
 
 ---
 
 ## Opcije
+
 Pogledajmo ove opcije konfiguracije detaljno.
 
 ---
 
 ### Opis
+
 Koristite opciju `description` da pružite kratak opis onoga što agent radi i kada ga koristiti.
 
 ```json title="opencode.json"
@@ -214,7 +215,7 @@ Koristite opciju `description` da pružite kratak opis onoga što agent radi i k
     }
   }
 }
-````
+```
 
 Ovo je **obavezna** opcija konfiguracije.
 
@@ -714,4 +715,7 @@ Look for:
 - Dependency vulnerabilities
 - Configuration security issues
 ```
-````
+
+```
+
+```
