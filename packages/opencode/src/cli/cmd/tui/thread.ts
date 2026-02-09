@@ -34,15 +34,9 @@ function createWorkerFetch(client: RpcClient): typeof fetch {
   return fn as typeof fetch
 }
 
-function createEventSource(client: RpcClient, directory: string): EventSource {
+function createEventSource(client: RpcClient): EventSource {
   return {
-    on: (handler) =>
-      client.on<Event>("event", (event) => {
-        handler(event)
-        if (event.type === "server.instance.disposed") {
-          client.call("subscribe", { directory }).catch(() => {})
-        }
-      }),
+    on: (handler) => client.on<Event>("event", handler),
   }
 }
 
@@ -70,6 +64,10 @@ export const TuiThreadCommand = cmd({
         type: "string",
         describe: "session id to continue",
       })
+      .option("fork", {
+        type: "boolean",
+        describe: "fork the session when continuing (use with --continue or --session)",
+      })
       .option("prompt", {
         type: "string",
         describe: "prompt to use",
@@ -79,6 +77,11 @@ export const TuiThreadCommand = cmd({
         describe: "agent to use",
       }),
   handler: async (args) => {
+    if (args.fork && !args.continue && !args.session) {
+      UI.error("--fork requires --continue or --session")
+      process.exit(1)
+    }
+
     // Resolve relative paths against PWD to preserve behavior when using --cwd flag
     const baseCwd = process.env.PWD ?? process.cwd()
     const cwd = args.project ? path.resolve(baseCwd, args.project) : process.cwd()
@@ -131,9 +134,6 @@ export const TuiThreadCommand = cmd({
       networkOpts.port !== 0 ||
       networkOpts.hostname !== "127.0.0.1"
 
-    // Subscribe to events from worker
-    await client.call("subscribe", { directory: cwd })
-
     let url: string
     let customFetch: typeof fetch | undefined
     let events: EventSource | undefined
@@ -146,7 +146,7 @@ export const TuiThreadCommand = cmd({
       // Use direct RPC communication (no HTTP)
       url = "http://opencode.internal"
       customFetch = createWorkerFetch(client)
-      events = createEventSource(client, cwd)
+      events = createEventSource(client)
     }
 
     const tuiPromise = tui({
@@ -159,6 +159,7 @@ export const TuiThreadCommand = cmd({
         agent: args.agent,
         model: args.model,
         prompt,
+        fork: args.fork,
       },
       onExit: async () => {
         await client.call("shutdown", undefined)

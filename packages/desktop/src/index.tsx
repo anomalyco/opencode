@@ -1,43 +1,70 @@
 // @refresh reload
+import { webviewZoom } from "./webview-zoom"
 import { render } from "solid-js/web"
-import { AppBaseProviders, AppInterface, PlatformProvider, Platform } from "@opencode-ai/app"
+import { AppBaseProviders, AppInterface, PlatformProvider, Platform, useCommand } from "@opencode-ai/app"
 import { open, save } from "@tauri-apps/plugin-dialog"
+import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link"
+import { openPath as openerOpenPath } from "@tauri-apps/plugin-opener"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { type as ostype } from "@tauri-apps/plugin-os"
 import { check, Update } from "@tauri-apps/plugin-updater"
-import { invoke } from "@tauri-apps/api/core"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification"
 import { relaunch } from "@tauri-apps/plugin-process"
 import { AsyncStorage } from "@solid-primitives/storage"
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
 import { Store } from "@tauri-apps/plugin-store"
-import { Logo } from "@opencode-ai/ui/logo"
-import { Suspense, createResource, ParentProps } from "solid-js"
+import { Splash } from "@opencode-ai/ui/logo"
+import { createSignal, Show, Accessor, JSX, createResource, onMount, onCleanup } from "solid-js"
+import { readImage } from "@tauri-apps/plugin-clipboard-manager"
 
 import { UPDATER_ENABLED } from "./updater"
-import { createMenu } from "./menu"
+import { initI18n, t } from "./i18n"
 import pkg from "../package.json"
-import { Show } from "solid-js"
+import "./styles.css"
+import { commands, InitStep } from "./bindings"
+import { Channel } from "@tauri-apps/api/core"
+import { createMenu } from "./menu"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
-  throw new Error(
-    "Root element not found. Did you forget to add it to your index.html? Or maybe the id attribute got misspelled?",
-  )
+  throw new Error(t("error.dev.rootNotFound"))
 }
+
+void initI18n()
 
 let update: Update | null = null
 
-const platform: Platform = {
+const deepLinkEvent = "opencode:deep-link"
+
+const emitDeepLinks = (urls: string[]) => {
+  if (urls.length === 0) return
+  window.__OPENCODE__ ??= {}
+  const pending = window.__OPENCODE__.deepLinks ?? []
+  window.__OPENCODE__.deepLinks = [...pending, ...urls]
+  window.dispatchEvent(new CustomEvent(deepLinkEvent, { detail: { urls } }))
+}
+
+const listenForDeepLinks = async () => {
+  const startUrls = await getCurrent().catch(() => null)
+  if (startUrls?.length) emitDeepLinks(startUrls)
+  await onOpenUrl((urls) => emitDeepLinks(urls)).catch(() => undefined)
+}
+
+const createPlatform = (password: Accessor<string | null>): Platform => ({
   platform: "desktop",
+  os: (() => {
+    const type = ostype()
+    if (type === "macos" || type === "windows" || type === "linux") return type
+    return undefined
+  })(),
   version: pkg.version,
 
   async openDirectoryPickerDialog(opts) {
     const result = await open({
       directory: true,
       multiple: opts?.multiple ?? false,
-      title: opts?.title ?? "Choose a folder",
+      title: opts?.title ?? t("desktop.dialog.chooseFolder"),
     })
     return result
   },
@@ -46,14 +73,14 @@ const platform: Platform = {
     const result = await open({
       directory: false,
       multiple: opts?.multiple ?? false,
-      title: opts?.title ?? "Choose a file",
+      title: opts?.title ?? t("desktop.dialog.chooseFile"),
     })
     return result
   },
 
   async saveFilePickerDialog(opts) {
     const result = await save({
-      title: opts?.title ?? "Save file",
+      title: opts?.title ?? t("desktop.dialog.saveFile"),
       defaultPath: opts?.defaultPath,
     })
     return result
@@ -61,6 +88,18 @@ const platform: Platform = {
 
   openLink(url: string) {
     void shellOpen(url).catch(() => undefined)
+  },
+
+  openPath(path: string, app?: string) {
+    return openerOpenPath(path, app)
+  },
+
+  back() {
+    window.history.back()
+  },
+
+  forward() {
+    window.history.forward()
   },
 
   storage: (() => {
@@ -78,6 +117,21 @@ const platform: Platform = {
     const storeCache = new Map<string, Promise<StoreLike>>()
     const apiCache = new Map<string, AsyncStorage & { flush: () => Promise<void> }>()
     const memoryCache = new Map<string, StoreLike>()
+
+    const flushAll = async () => {
+      const apis = Array.from(apiCache.values())
+      await Promise.all(apis.map((api) => api.flush().catch(() => undefined)))
+    }
+
+    if ("addEventListener" in globalThis) {
+      const handleVisibility = () => {
+        if (document.visibilityState !== "hidden") return
+        void flushAll()
+      }
+
+      window.addEventListener("pagehide", () => void flushAll())
+      document.addEventListener("visibilitychange", handleVisibility)
+    }
 
     const createMemoryStore = () => {
       const data = new Map<string, string>()
@@ -216,12 +270,12 @@ const platform: Platform = {
 
   update: async () => {
     if (!UPDATER_ENABLED || !update) return
-    if (ostype() === "windows") await invoke("kill_sidecar").catch(() => undefined)
+    if (ostype() === "windows") await commands.killSidecar().catch(() => undefined)
     await update.install().catch(() => undefined)
   },
 
   restart: async () => {
-    await invoke("kill_sidecar").catch(() => undefined)
+    await commands.killSidecar().catch(() => undefined)
     await relaunch()
   },
 
@@ -238,7 +292,7 @@ const platform: Platform = {
       .then(() => {
         const notification = new Notification(title, {
           body: description ?? "",
-          icon: "https://opencode.ai/favicon-96x96.png",
+          icon: "https://opencode.ai/favicon-96x96-v3.png",
         })
         notification.onclick = () => {
           const win = getCurrentWindow()
@@ -255,62 +309,141 @@ const platform: Platform = {
       .catch(() => undefined)
   },
 
-  // @ts-expect-error
-  fetch: tauriFetch,
+  fetch: (input, init) => {
+    const pw = password()
+
+    const addHeader = (headers: Headers, password: string) => {
+      headers.append("Authorization", `Basic ${btoa(`opencode:${password}`)}`)
+    }
+
+    if (input instanceof Request) {
+      if (pw) addHeader(input.headers, pw)
+      return tauriFetch(input)
+    } else {
+      const headers = new Headers(init?.headers)
+      if (pw) addHeader(headers, pw)
+      return tauriFetch(input, {
+        ...(init as any),
+        headers: headers,
+      })
+    }
+  },
 
   getDefaultServerUrl: async () => {
-    const result = await invoke<string | null>("get_default_server_url").catch(() => null)
+    const result = await commands.getDefaultServerUrl().catch(() => null)
     return result
   },
 
   setDefaultServerUrl: async (url: string | null) => {
-    await invoke("set_default_server_url", { url })
+    await commands.setDefaultServerUrl(url)
   },
-}
 
-createMenu()
+  parseMarkdown: (markdown: string) => commands.parseMarkdownCommand(markdown),
 
-// Stops mousewheel events from reaching Tauri's pinch-to-zoom handler
-root?.addEventListener("mousewheel", (e) => {
-  e.stopPropagation()
+  webviewZoom,
+
+  checkAppExists: async (appName: string) => {
+    return commands.checkAppExists(appName)
+  },
+
+  async readClipboardImage() {
+    const image = await readImage().catch(() => null)
+    if (!image) return null
+    const bytes = await image.rgba().catch(() => null)
+    if (!bytes || bytes.length === 0) return null
+    const size = await image.size().catch(() => null)
+    if (!size) return null
+    const canvas = document.createElement("canvas")
+    canvas.width = size.width
+    canvas.height = size.height
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return null
+    const imageData = ctx.createImageData(size.width, size.height)
+    imageData.data.set(bytes)
+    ctx.putImageData(imageData, 0, 0)
+    return new Promise<File | null>((resolve) => {
+      canvas.toBlob((blob) => {
+        if (!blob) return resolve(null)
+        resolve(new File([blob], `pasted-image-${Date.now()}.png`, { type: "image/png" }))
+      }, "image/png")
+    })
+  },
 })
 
+let menuTrigger = null as null | ((id: string) => void)
+createMenu((id) => {
+  menuTrigger?.(id)
+})
+void listenForDeepLinks()
+
 render(() => {
+  const [serverPassword, setServerPassword] = createSignal<string | null>(null)
+  const platform = createPlatform(() => serverPassword())
+
+  function handleClick(e: MouseEvent) {
+    const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
+    if (link?.href) {
+      e.preventDefault()
+      platform.openLink(link.href)
+    }
+  }
+
+  onMount(() => {
+    document.addEventListener("click", handleClick)
+    onCleanup(() => {
+      document.removeEventListener("click", handleClick)
+    })
+  })
+
   return (
     <PlatformProvider value={platform}>
-      {ostype() === "macos" && (
-        <div class="mx-px bg-background-base border-b border-border-weak-base h-8" data-tauri-drag-region />
-      )}
       <AppBaseProviders>
         <ServerGate>
-          <AppInterface />
+          {(data) => {
+            setServerPassword(data().password)
+            window.__OPENCODE__ ??= {}
+            window.__OPENCODE__.serverPassword = data().password ?? undefined
+
+            function Inner() {
+              const cmd = useCommand()
+
+              menuTrigger = (id) => cmd.trigger(id)
+
+              return null
+            }
+
+            return (
+              <AppInterface defaultUrl={data().url}>
+                <Inner />
+              </AppInterface>
+            )
+          }}
         </ServerGate>
       </AppBaseProviders>
     </PlatformProvider>
   )
 }, root!)
 
+type ServerReadyData = { url: string; password: string | null }
+
 // Gate component that waits for the server to be ready
-function ServerGate(props: ParentProps) {
-  const [status] = createResource(async () => {
-    if (window.__OPENCODE__?.serverReady) return
-    return await invoke("ensure_server_started")
-  })
+function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.Element }) {
+  const [serverData] = createResource(() => commands.awaitInitialization(new Channel<InitStep>() as any))
+
+  if (serverData.state === "errored") throw serverData.error
 
   return (
     // Not using suspense as not all components are compatible with it (undefined refs)
     <Show
-      when={status.state !== "pending"}
+      when={serverData.state !== "pending" && serverData()}
       fallback={
         <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
-          <Logo class="w-xl opacity-12 animate-pulse" />
-          <div class="mt-8 text-14-regular text-text-weak">Starting server...</div>
+          <Splash class="w-16 h-20 opacity-50 animate-pulse" />
+          <div data-tauri-decorum-tb class="flex flex-row absolute top-0 right-0 z-10 h-10" />
         </div>
       }
     >
-      {/* Trigger error boundary without rendering the returned value */}
-      {(status(), null)}
-      {props.children}
+      {(data) => props.children(data)}
     </Show>
   )
 }

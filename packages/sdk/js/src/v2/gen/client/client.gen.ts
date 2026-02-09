@@ -162,10 +162,16 @@ export const createClient = (config: Config = {}): Client => {
         case "arrayBuffer":
         case "blob":
         case "formData":
-        case "json":
         case "text":
           data = await response[parseAs]()
           break
+        case "json": {
+          // Some servers return 200 with no Content-Length and empty body.
+          // response.json() would throw; read as text and parse if non-empty.
+          const text = await response.text()
+          data = text ? JSON.parse(text) : {}
+          break
+        }
         case "stream":
           return opts.responseStyle === "data"
             ? response.body
@@ -244,6 +250,7 @@ export const createClient = (config: Config = {}): Client => {
         }
         return request
       },
+      serializedBody: getValidRequestBody(opts) as BodyInit | null | undefined,
       url,
     })
   }

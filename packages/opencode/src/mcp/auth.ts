@@ -1,5 +1,4 @@
 import path from "path"
-import fs from "fs/promises"
 import z from "zod"
 import { Global } from "../global"
 
@@ -65,16 +64,14 @@ export namespace McpAuth {
     if (serverUrl) {
       entry.serverUrl = serverUrl
     }
-    await Bun.write(file, JSON.stringify({ ...data, [mcpName]: entry }, null, 2))
-    await fs.chmod(file.name!, 0o600)
+    await Bun.write(file, JSON.stringify({ ...data, [mcpName]: entry }, null, 2), { mode: 0o600 })
   }
 
   export async function remove(mcpName: string): Promise<void> {
     const file = Bun.file(filepath)
     const data = await all()
     delete data[mcpName]
-    await Bun.write(file, JSON.stringify(data, null, 2))
-    await fs.chmod(file.name!, 0o600)
+    await Bun.write(file, JSON.stringify(data, null, 2), { mode: 0o600 })
   }
 
   export async function updateTokens(mcpName: string, tokens: Tokens, serverUrl?: string): Promise<void> {
