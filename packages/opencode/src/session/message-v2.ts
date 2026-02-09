@@ -796,7 +796,76 @@ export namespace MessageV2 {
       case e instanceof Error:
         return new NamedError.Unknown({ message: e.toString() }, { cause: e }).toObject()
       default:
-        return new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e })
+        try {
+          const json = iife(() => {
+            if (typeof e === "string") {
+              try {
+                return JSON.parse(e)
+              } catch {
+                return undefined
+              }
+            }
+
+            if (typeof e === "object" && e !== null) {
+              return e
+            }
+            return undefined
+          })
+          if (json) {
+            const responseBody = JSON.stringify(json)
+            // Handle Responses API mid stream style errors
+            if (json?.type === "error") {
+              switch (json?.error?.code) {
+                case "context_length_exceeded":
+                  return new MessageV2.APIError(
+                    {
+                      message: "Input exceeds context window of this model",
+                      isRetryable: false,
+                      responseBody,
+                    },
+                    {
+                      cause: e,
+                    },
+                  ).toObject()
+                case "insufficient_quota":
+                  return new MessageV2.APIError(
+                    {
+                      message: "Quota exceeded. Check your plan and billing details.",
+                      isRetryable: false,
+                      responseBody,
+                    },
+                    {
+                      cause: e,
+                    },
+                  ).toObject()
+                case "usage_not_included":
+                  return new MessageV2.APIError(
+                    {
+                      message:
+                        "To use Codex with your ChatGPT plan, upgrade to Plus: https://chatgpt.com/explore/plus.",
+                      isRetryable: false,
+                      responseBody,
+                    },
+                    {
+                      cause: e,
+                    },
+                  ).toObject()
+                case "invalid_prompt":
+                  return new MessageV2.APIError(
+                    {
+                      message: json?.error?.message || "Invalid prompt.",
+                      isRetryable: false,
+                      responseBody,
+                    },
+                    {
+                      cause: e,
+                    },
+                  ).toObject()
+              }
+            }
+          }
+        } catch {}
+        return new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e }).toObject()
     }
   }
 }
