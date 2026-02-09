@@ -784,3 +784,57 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 })
+
+describe("session.message-v2.fromError", () => {
+  test("serializes response error codes", () => {
+    const cases = [
+      {
+        code: "context_length_exceeded",
+        message: "Input exceeds context window of this model",
+      },
+      {
+        code: "insufficient_quota",
+        message: "Quota exceeded. Check your plan and billing details.",
+      },
+      {
+        code: "usage_not_included",
+        message: "To use Codex with your ChatGPT plan, upgrade to Plus: https://chatgpt.com/explore/plus.",
+      },
+      {
+        code: "invalid_prompt",
+        message: "Invalid prompt from test",
+      },
+    ]
+
+    cases.forEach((item) => {
+      const input = {
+        type: "error",
+        error: {
+          code: item.code,
+          message: item.code === "invalid_prompt" ? item.message : undefined,
+        },
+      }
+      const result = MessageV2.fromError(input, { providerID: "test" })
+
+      expect(result).toStrictEqual({
+        name: "APIError",
+        data: {
+          message: item.message,
+          isRetryable: false,
+          responseBody: JSON.stringify(input),
+        },
+      })
+    })
+  })
+
+  test("serializes unknown inputs", () => {
+    const result = MessageV2.fromError(123, { providerID: "test" })
+
+    expect(result).toStrictEqual({
+      name: "UnknownError",
+      data: {
+        message: "123",
+      },
+    })
+  })
+})
