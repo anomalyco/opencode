@@ -29,15 +29,16 @@ opencode [project]
 
 #### 플래그
 
-| 간선         | 간선 | Description             |
-| ------------ | ---- | ----------------------- | --------- |
-| `--continue` | `-c` | 마지막 세션             |
-| `--session`  | `-s` | 세션 ID                 |
-| `--prompt`   |      |                         | 사용 허가 |
-| `--model`    | `-m` | `-m`의 형태로 사용 가능 |
-| `--agent`    |      | 에이전트                |
-| `--port`     |      |                         | 꾸라 안내 |
-| `--hostname` |      | 들러 주세요             |
+| 플래그       | 짧은 이름 | 설명                                                            |
+| ------------ | --------- | --------------------------------------------------------------- |
+| `--continue` | `-c`      | 마지막 세션 계속하기                                            |
+| `--session`  | `-s`      | 계속할 세션 ID                                                  |
+| `--fork`     |           | 계속 시 세션 포크하기 (`--continue` 또는 `--session`과 함께 사용) |
+| `--prompt`   |           | 사용할 프롬프트                                                 |
+| `--model`    | `-m`      | `provider/model` 형식의 모델                                    |
+| `--agent`    |           | 사용할 에이전트                                                 |
+| `--port`     |           | 수신 대기할 포트                                                |
+| `--hostname` |           | 수신 대기할 호스트명                                            |
 
 ---
 
@@ -154,7 +155,7 @@ opencode auth logout
 
 ---
 
-# # # # github에
+#### github에
 
 저장소 자동화를 위한 GitHub 에이전트 관리.
 
@@ -193,7 +194,7 @@ opencode github run
 
 ---
 
-# # # # mcp를
+#### mcp를
 
 Model Context Protocol 서버 관리
 
@@ -231,7 +232,7 @@ opencode mcp ls
 
 ---
 
-# # # # # # # 오
+###### 오
 
 OAuth-enabled MCP 서버 인증
 
@@ -334,16 +335,16 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 #### 플래그
 
-| 간선         | 간선                                             | Description                                           |
-| ------------ | ------------------------------------------------ | ----------------------------------------------------- |
-| `--command`  | 실행중인 명령, args의 메시지 사용                |
+| 플래그       | 짧은 이름 | 설명                                                |
+| ------------ | --------- | --------------------------------------------------- |
+| `--command`  |           | 실행 중인 명령 사용(미지정 시 args의 메시지 사용)  |
 | `--continue` | `-c`                                             | 마지막 세션                                           |
 | `--session`  | `-s`                                             | 세션 ID                                               |
-| `--share`    | 세션 공유                                        |
+| `--share`    |           | 세션 공유                                           |
 | `--model`    | `-m`                                             | `-m`의 형태로 사용 가능                               |
 | `--agent`    |                                                  | 에이전트                                              |
 | `--file`     | `-f`                                             | 메시지 첨부 파일                                      |
-| `--format`   | 체재: 기본(formatted) 또는 json(raw JSON 이벤트) |
+| `--format`   |           | 출력 형식: formatted 또는 json(raw JSON 이벤트)     |
 | `--title`    |                                                  | 세션의 제목(제공되지 않은 경우 truncated prompt 사용) |
 | `--attach`   |                                                  | 운영 개시 서버(예: http://localhost:4096)             |
 | `--port`     |                                                  | 현지 서버 포트                                        |
@@ -391,10 +392,10 @@ opencode session list
 
 ##### 플래그
 
-| 간선          | 간선                                 | Description      |
-| ------------- | ------------------------------------ | ---------------- |
+| 플래그        | 짧은 이름 | 설명                     |
+| ------------- | --------- | ------------------------ |
 | `--max-count` | `-n`                                 | 최근 세션에 제한 |
-| `--format`    | 산출 체재: 테이블 또는 json (테이블) |
+| `--format`    |           | 출력 형식: table 또는 json         |
 
 ---
 
@@ -446,7 +447,7 @@ opencode import https://opncd.ai/s/abc123
 
 ---
 
-# # # # 웹
+#### 웹
 
 웹 인터페이스로 headless OpenCode 서버를 시작합니다.
 
@@ -467,7 +468,7 @@ HTTP 서버를 시작하고 웹 인터페이스를 통해 OpenCode에 액세스�
 
 ---
 
-# # # # 아프
+#### 아프
 
 ACP(Agent Client Protocol) 서버를 시작합니다.
 
@@ -538,12 +539,12 @@ opencode upgrade v0.1.48
 
 opencode CLI는 다음의 글로벌 플래그를 사용합니다.
 
-| 간선           | 간선                                | Description       |
-| -------------- | ----------------------------------- | ----------------- |
+| 플래그         | 짧은 이름 | 설명              |
+| -------------- | --------- | ----------------- |
 | `--help`       | `-h`                                | 디스플레이 도움말 |
 | `--version`    | `-v`                                | 인쇄판 번호       |
 | `--print-logs` |                                     | 스터디로 로그인   |
-| `--log-level`  | 로그 레벨(DEBUG, INFO, WARN, ERROR) |
+| `--log-level`  |                                     | 로그 레벨(DEBUG, INFO, WARN, ERROR) |
 
 ---
 

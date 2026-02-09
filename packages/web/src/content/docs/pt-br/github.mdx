@@ -87,7 +87,7 @@ Ou você pode configurá-lo manualmente.
 - `prompt`: Prompt personalizado opcional para substituir o comportamento padrão. Use isso para personalizar como o OpenCode processa solicitações.
 - `token`: Token de acesso do GitHub opcional para realizar operações como criar comentários, confirmar alterações e abrir pull requests. Por padrão, o OpenCode usa o token de acesso da instalação do aplicativo GitHub OpenCode, então commits, comentários e pull requests aparecem como se fossem da aplicação.
 
-  Alternativamente, você pode usar o [GITHUB_TOKEN](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) embutido do runner do GitHub Action sem instalar o aplicativo GitHub OpenCode. Apenas certifique-se de conceder as permissões necessárias em seu fluxo de trabalho:
+  Alternativamente, você pode usar o [`GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) embutido do runner do GitHub Action sem instalar o aplicativo GitHub OpenCode. Apenas certifique-se de conceder as permissões necessárias em seu fluxo de trabalho:
 
   ```yaml
   permissions:

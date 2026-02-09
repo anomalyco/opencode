@@ -13,11 +13,10 @@ MCP ツールを追加すると、組み込みツールとともに LLM で自�
 
 MCP サーバーを使用すると、コンテキストが追加されます。多くのツールがある場合、これはすぐに増加する可能性があります。したがって、使用する MCP サーバーには注意することをお勧めします。
 
-:::ヒント
+:::tip
 MCP サーバーはコンテキストに追加されるため、どのサーバーを有効にするかには注意してください。
 :::
-
-GitHub MCP サーバーなどの特定の MCP サーバーは、大量のトークンを追加する傾向があり、コンテキスト制限を簡単に超える可能性があります。
+Certain MCP サーバーなどの特定の MCP サーバーは、大量のトークンを追加する傾向があり、コンテキスト制限を簡単に超える可能性があります。
 
 ---
 
@@ -266,12 +265,12 @@ opencode mcp logout my-oauth-server
 
 #### OAuth オプション
 
-| オプション     | タイプ            | 説明                                                                             |
-| -------------- | ----------------- | -------------------------------------------------------------------------------- |
-| `oauth`        | オブジェクト \|偽 | OAuth 構成オブジェクト、または `false` を使用して OAuth 自動検出を無効にします。 |
-| `clientId`     | 文字列            | OAuth クライアント ID。指定しない場合は、動的クライアント登録が試行されます。    |
-| `clientSecret` | 文字列            | OAuth クライアント シークレット (認可サーバーで必要な場合)。                     |
-| `scope`        | 文字列            | 認可中にリクエストする OAuth スコープ。                                          |
+| Option         | Type            | Description                                                                      |
+| -------------- | --------------- | -------------------------------------------------------------------------------- |
+| `oauth`        | Object \| false | OAuth config object, or `false` to disable OAuth auto-detection.                 |
+| `clientId`     | String          | OAuth client ID. If not provided, dynamic client registration will be attempted. |
+| `clientSecret` | String          | OAuth client secret, if required by the authorization server.                    |
+| `scope`        | String          | OAuth scopes to request during authorization.                                    |
 
 #### デバッグ
 
@@ -383,7 +382,7 @@ MCP は、組み込みツールと並んで、OpenCode のツールとして利�
 - `?` は 1 つの文字に正確に一致します
 - 他のすべての文字は文字通り一致します
 
-:::注記
+:::note
 MCP サーバー ツールはサーバー名をプレフィックスとして登録されているため、サーバーのすべてのツールを無効にするには、次のコマンドを使用するだけです。
 
 ```
@@ -391,7 +390,6 @@ MCP サーバー ツールはサーバー名をプレフィックスとして登
 ```
 
 :::
-
 ---
 
 ## 例

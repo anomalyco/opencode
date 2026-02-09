@@ -15,9 +15,10 @@ OpenCode podržava i **JSON** i **JSONC** (JSON sa komentarima) formate.
 {
 "$schema": "https://opencode.ai/config.json",
   // Konfiguracija teme
-  "tema": "otvoreni kod",
-  "model": "antropski/claude-sonnet-4-5",
-  "automatsko ažuriranje": istina,}
+  "theme": "opencode",
+  "model": "anthropic/claude-sonnet-4-5",
+  "autoupdate": true,
+}
 ```
 
 ---
@@ -26,7 +27,7 @@ OpenCode podržava i **JSON** i **JSONC** (JSON sa komentarima) formate.
 
 Možete postaviti svoju konfiguraciju na nekoliko različitih lokacija i one imaju a
 drugačiji redosled prioriteta.
-:::napomena
+:::note
 Konfiguracijski fajlovi su **spojeni zajedno**, a ne zamijenjeni.
 :::
 Konfiguracijski fajlovi se spajaju, ne zamjenjuju. Kombiniraju se postavke sa sljedećih konfiguracijskih lokacija. Kasnije konfiguracije poništavaju prethodne samo za konfliktne ključeve. Nekonfliktne postavke iz svih konfiguracija su sačuvane.
@@ -45,7 +46,7 @@ Izvori konfiguracije se učitavaju ovim redoslijedom (kasniji izvori poništavaj
 5. **`.opencode` direktoriji** - agenti, komande, dodaci
 6. **Inline config** (`OPENCODE_CONFIG_CONTENT` env var) - runtime nadjačava
    To znači da konfiguracije projekta mogu nadjačati globalne zadane postavke, a globalne konfiguracije mogu nadjačati postavke udaljene organizacije.
-   :::napomena
+   :::note
    Direktoriji `.opencode` i `~/.config/opencode` koriste **imena u množini** za poddirektorije: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/` i `themes/`. Pojedinačna imena (npr. `agent/`) su također podržana za kompatibilnost unatrag.
    :::
 
@@ -75,9 +76,10 @@ Možete omogućiti određene servere u vašoj lokalnoj konfiguraciji:
 {
 "mcp": {
     "jira": {
-      "tip": "daljinski",
+      "type": "remote",
       "url": "https://jira.example.com/mcp",
-      "omogućeno": istina    }
+      "enabled": true
+    }
   }
 }
 ```
@@ -94,7 +96,7 @@ Globalna konfiguracija poništava zadane postavke udaljene organizacije.
 ### Nakon projekta
 
 Dodajte `opencode.json` u korijen projekta. Konfiguracija projekta ima najveći prioritet među standardnim konfiguracijskim datotekama - ona nadjačava globalne i udaljene konfiguracije.
-::: tip
+:::tip
 Postavite specifičnu konfiguraciju projekta u korijen vašeg projekta.
 :::
 Kada se OpenCode pokrene, traži konfiguracijsku datoteku u trenutnom direktoriju ili prelazi do najbližeg Git direktorija.
@@ -273,7 +275,7 @@ Amazon Bedrock podržava konfiguraciju specifičnu za AWS:
 - `region` - AWS regija za Bedrock (zadano na `AWS_REGION` env var ili `us-east-1`)
 - `profile` - AWS imenovan profil od `~/.aws/credentials` (podrazumevano na `AWS_PROFILE` env var)
 - `endpoint` - URL prilagođene krajnje tačke za VPC krajnje tačke. Ovo je pseudonim za generičku opciju `baseURL` koristeći terminologiju specifičnu za AWS. Ako su oba navedena, `endpoint` ima prednost.
-  :::napomena
+  :::note
   Tokeni nosioca (`AWS_BEARER_TOKEN_BEDROCK` ili `/connect`) imaju prednost nad autentifikacijom zasnovanom na profilu. Pogledajte [prednost autentifikacije](/docs/providers#authentication-precedence) za detalje.
   :::
   [Saznajte više o konfiguraciji Amazon Bedrock](/docs/providers#amazon-bedrock).
@@ -553,7 +555,7 @@ Možete onemogućiti dobavljače koji se automatski učitavaju preko opcije `dis
 }
 ```
 
-:::napomena
+:::note
 `disabled_providers` ima prioritet nad `enabled_providers`.
 :::
 Opcija `disabled_providers` prihvata niz ID-ova provajdera. Kada je provajder onemogućen:
@@ -576,7 +578,7 @@ Možete odrediti listu dozvoljenih dobavljača putem opcije `enabled_providers`.
 ```
 
 Ovo je korisno kada želite da ograničite OpenCode da koristi samo određene provajdere umesto da ih onemogućavate jednog po jednog.
-:::napomena
+:::note
 `disabled_providers` ima prioritet nad `enabled_providers`.
 :::
 Ako se provajder pojavljuje i u `enabled_providers` i `disabled_providers`, `disabled_providers` ima prioritet za kompatibilnost unatrag.
@@ -594,7 +596,7 @@ Ključ `experimental` sadrži opcije koje su u aktivnom razvoju.
 }
 ```
 
-:::oprez
+:::caution
 Eksperimentalne opcije nisu stabilne. Mogu se promijeniti ili ukloniti bez prethodne najave.
 :::
 

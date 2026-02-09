@@ -20,7 +20,7 @@ Postoje dvije vrste agenata u OpenCode-u; primarni agensi i subagensi.
 ### Primarni agenti
 
 Primarni agenti su glavni pomoćnici s kojima direktno komunicirate. Možete se kretati kroz njih pomoću tipke **Tab** ili vašeg konfigurisanog povezivanja tipki `switch_agent`. Ovi agenti vode vaš glavni razgovor. Pristup alatima se konfiguriše putem dozvola — na primjer, Build ima omogućene sve alate dok je Plan ograničen.
-::: tip
+:::tip
 Možete koristiti tipku **Tab** za prebacivanje između primarnih agenata tokom sesije.
 :::
 OpenCode dolazi sa dva ugrađena primarna agenta, **Build** i **Plan**. Hoćemo
@@ -174,14 +174,14 @@ Također možete definirati agente koristeći mardown datoteke. Stavite ih u:
 
 ```markdown title="~/.config/opencode/agents/review.md"
 ---
-opis: Recenzira kod za kvalitet i najbolje prakse
-način rada: subagent
+description: Reviews code for quality and best practices
+mode: subagent
 model: anthropic/claude-sonnet-4-20250514
-temperatura: 0.1
-alati:
-  napisati: netačno
+temperature: 0.1
+tools:
+  write: false
   edit: false
-  bash: lažno
+  bash: false
 ---
 
 Nalazite se u načinu pregleda koda. Fokusirajte se na:
@@ -283,7 +283,7 @@ Ako ovo nije postavljeno, agent će nastaviti iterirati sve dok model ne odluči
 ```
 
 Kada se dostigne ograničenje, agent prima poseban sistemski prompt koji ga upućuje da odgovori sa rezimeom svog rada i preporučenim preostalim zadacima.
-:::oprez
+:::caution
 Naslijeđeno polje `maxSteps` je zastarjelo. Umjesto toga koristite `steps`.
 :::
 
@@ -366,7 +366,7 @@ Kontrolirajte koji su alati dostupni u ovom agentu koristeći konfiguraciju `too
 }
 ```
 
-:::napomena
+:::note
 Konfiguracija specifična za agenta poništava globalnu konfiguraciju.
 :::
 Također možete koristiti zamjenske znakove za kontrolu više alata odjednom. Na primjer, da onemogućite sve alate sa MCP servera:
@@ -375,11 +375,12 @@ Također možete koristiti zamjenske znakove za kontrolu više alata odjednom. N
 {
 "$schema": "https://opencode.ai/config.json",
   "agent": {
-    "samo za čitanje": {
-      "alati": {
-        "mymcp_*": lažno,
-        "pisati": lažno,
-        "uredi": netačno      }
+    "plan": {
+      "tools": {
+        "mymcp_*": false,
+        "write": false,
+        "edit": false
+      }
     }
   }
 }
@@ -411,13 +412,13 @@ Možete nadjačati ove dozvole po agentu.
 ```json title="opencode.json" {3-5,8-10}
 {
   "$schema": "https://opencode.ai/config.json",
-  "dozvola": {
-    "edit": "odbiti"
+  "permission": {
+    "edit": "deny"
   },
   "agent": {
     "build": {
-      "dozvola": {
-        "uredi": "pitaj"
+      "permission": {
+        "edit": "ask"
       }
     }
   }
@@ -450,10 +451,10 @@ Možete postaviti dozvole za određene bash komande.
   "$schema": "https://opencode.ai/config.json",
   "agent": {
     "build": {
-      "dozvola": {
+      "permission": {
         "bash": {
-          "git push": "pitaj",
-          "grep *": "dozvoli"
+          "git push": "ask",
+          "grep *": "allow"
         }
       }
     }
@@ -486,10 +487,10 @@ Budući da posljednje podudarno pravilo ima prednost, prvo postavite zamjenski z
   "$schema": "https://opencode.ai/config.json",
   "agent": {
     "build": {
-      "dozvola": {
+      "permission": {
         "bash": {
-          "*": "pitaj",
-          "git status *": "dozvoli"
+          "*": "ask",
+          "git status *": "allow"
         }
       }
     }
@@ -526,15 +527,16 @@ Sakrij podagenta iz `@` menija za automatsko dovršavanje sa `hidden: true`. Kor
 ```json title="opencode.json"
 {
 "agent": {
-    "interni-pomoćnik": {
+    "internal-helper": {
       "mode": "subagent",
-      "skriveno": istina    }
+      "hidden": true
+    }
   }
 }
 ```
 
 Ovo utiče samo na vidljivost korisnika u meniju za automatsko dovršavanje. Model i dalje može pozvati skrivene agente putem alata Zadatak ako dozvole dozvoljavaju.
-:::napomena
+:::note
 Odnosi se samo na `mode: subagent` agente.
 :::
 
@@ -667,7 +669,7 @@ Evo nekoliko uobičajenih slučajeva upotrebe različitih agenata.
 ## Primjeri
 
 Evo nekoliko primjera agenata koji bi vam mogli biti korisni.
-::: momak
+:::tip
 Imate li agenta kojeg biste željeli podijeliti? [Pošalji PR](https://github.com/anomalyco/opencode).
 :::
 
@@ -677,10 +679,10 @@ Imate li agenta kojeg biste željeli podijeliti? [Pošalji PR](https://github.co
 
 ```markdown title="~/.config/opencode/agents/docs-writer.md"
 ---
-opis: Piše i vodi projektnu dokumentaciju
-način rada: subagent
-alati:
-  bash: lažno
+description: Writes and maintains project documentation
+mode: subagent
+tools:
+  bash: false
 ---
 
 Vi ste tehnički pisac. Kreirajte jasnu, sveobuhvatnu dokumentaciju.

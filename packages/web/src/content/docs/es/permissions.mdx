@@ -185,7 +185,7 @@ La herramienta proporciona el conjunto de patrones que `always` aprobaría (por 
 
 Puede anular los permisos por agente. Los permisos del agente se combinan con la configuración global y las reglas del agente tienen prioridad. [Más información](/docs/agents#permissions) sobre los permisos de los agentes.
 
-:::nota
+:::note
 Consulte la sección [Reglas granulares (sintaxis de objeto)](#granular-rules-object-syntax) anterior para obtener ejemplos de coincidencia de patrones más detallados.
 :::
 
@@ -232,6 +232,6 @@ permission:
 Only analyze code and suggest changes.
 ```
 
-:::consejo
+:::tip
 Utilice la coincidencia de patrones para comandos con argumentos. `"grep *"` permite `grep pattern file.txt`, mientras que `"grep"` solo lo bloquearía. Los comandos como `git status` funcionan para el comportamiento predeterminado pero requieren permiso explícito (como `"git status *"`) cuando se pasan argumentos.
 :::

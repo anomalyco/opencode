@@ -22,7 +22,7 @@ OpenCode는 [AI SDK](https://ai-sdk.dev/) 및 [Models.dev](https://models.dev)�
 
 ---
 
-# # # # 콘피그
+#### 콘피그
 
 OpenCode의 `provider` 섹션을 통해 공급자를 사용자 정의 할 수 있습니다.
 설정.
@@ -95,7 +95,7 @@ OpenCode의 다른 공급자와 같이 작동하고 사용하기에 완전히 �
 
 ---
 
-# # # 302. 사이트맵
+### 302. 사이트맵
 
 1. [302.AI 콘솔](https://302.ai/)에 머리, 계정을 만들고 API 키를 생성합니다.
 
@@ -256,7 +256,7 @@ custom inference profiles를 위해, 열쇠에 있는 모형 그리고 공급자
 
 ---
 
-# # # # 안토픽
+#### 안토픽
 
 1. 가입하면 `/connect` 명령을 실행하고 Anthropic을 선택합니다.
 
@@ -282,7 +282,7 @@ custom inference profiles를 위해, 열쇠에 있는 모형 그리고 공급자
    /models
    ```
 
-:::정보
+:::info
 OpenCode의 Claude Pro/Max 구독을 사용하여 [Anthropic](https://anthropic.com)에서 공식적으로 지원되지 않습니다.
 :::
 
@@ -297,7 +297,7 @@ Pro/Max 구독이 없는 경우 **Create an API Key**를 선택할 수 있습니
 ### Azure 오픈AI
 
 :::note
-"나는 미안 해요, 하지만 나는 그 요청을 지원할 수 없습니다" 오류, 에서 콘텐츠 필터를 변경 시도 ** defaultV2** 에 ** 과태** 당신의 Azure 자원에.
+"나는 미안 해요, 하지만 나는 그 요청을 지원할 수 없습니다" 오류, 에서 콘텐츠 필터를 변경 시도 **DefaultV2**에서 **Default**로 당신의 Azure 자원에.
 :::
 
 1. [Azure 포털](https://portal.azure.com/) 이상으로 머리와 **Azure OpenAI** 리소스를 만듭니다. 당신은 필요로 할 것이다:
@@ -394,7 +394,7 @@ export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
 
 ---
 
-# # # # 기본
+#### 기본
 
 1. [Baseten] (https://app.baseten.co/)에 머리는, 계정을 만들고, API 열쇠를 생성합니다.
 
@@ -421,7 +421,7 @@ export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
 
 ---
 
-# # # # Cerebras의
+#### Cerebras의
 
 1. [Cerebras 콘솔] (https://inference.cerebras.ai/)에 머리, 계정을 만들고 API 키를 생성합니다.
 
@@ -506,7 +506,7 @@ Opencode config를 통해 모델을 추가할 수 있습니다.
 
 ---
 
-# # # # 코텍
+#### 코텍
 
 1. [Cortecs 콘솔] (https://cortecs.ai/)에 머리, 계정을 만들고 API 키를 생성합니다.
 
@@ -688,7 +688,7 @@ opencode auth 저장소에 토큰을 저장합니다.
 
 #### 셀프 호스팅 GitLab
 
-:::노트[컴포지션 노트]
+:::note[compliance note]
 OpenCode는 세션 제목을 생성하고 같은 일부 AI 작업을 위해 작은 모델을 사용합니다.
 기본적으로 gpt-5-nano를 사용하도록 구성되며 Zen에서 호스팅됩니다. OpenCode를 잠금
 자신의 GitLab-hosted 인스턴스를 사용하여 다음을 추가하십시오.
@@ -871,7 +871,7 @@ export VERTEX_LOCATION=global
 
 ---
 
-# # # # # Groq
+##### Groq
 
 1. [Groq 콘솔](https://console.groq.com/)에 머리, click **Create API Key**, 키 복사.
 
@@ -986,7 +986,7 @@ export VERTEX_LOCATION=global
 }
 ```
 
-# # # # # 사용자 정의 헤더
+##### 사용자 정의 헤더
 
 Helicone는 캐싱, 사용자 추적 및 세션 관리와 같은 기능을 위한 사용자 정의 헤더를 지원합니다. `options.headers`를 사용하여 공급자 구성에 추가하십시오:
 
@@ -1027,7 +1027,7 @@ npm install -g opencode-helicone-session
 
 플러그인은 `Helicone-Session-Id` 및 `Helicone-Session-Name` 헤더를 귀하의 요청에 주사합니다. Helicone의 세션 페이지에서는 별도의 세션으로 나열된 각 OpenCode 대화를 볼 수 있습니다.
 
-# # # # # # 공통 헬리콥터
+###### 공통 헬리콥터
 
 | 헤드러                     | Description                                                |
 | -------------------------- | ---------------------------------------------------------- |
@@ -1040,7 +1040,7 @@ npm install -g opencode-helicone-session
 
 ---
 
-# # # # llama.cpp를
+#### llama.cpp를
 
 [llama.cpp's](https://github.com/ggml-org/llama.cpp) llama-server 유틸리티를 통해 로컬 모델을 사용할 수 있습니다.
 
@@ -1078,7 +1078,7 @@ npm install -g opencode-helicone-session
 
 ---
 
-# # # # # # IO.NET
+###### IO.NET
 
 IO.NET은 다양한 사용 사례에 최적화된 17개의 모델을 제공합니다:
 
@@ -1224,7 +1224,7 @@ Moonshot AI에서 Kimi K2 사용 :
 
 ---
 
-# # # # 오라마
+#### 오라마
 
 Ollama를 통해 로컬 모델을 사용할 수 있습니다.
 
@@ -1679,7 +1679,7 @@ Opencode config를 통해 모델을 사용자 정의 할 수 있습니다. 공�
 
 ---
 
-# # # # Z.AI
+#### Z.AI
 
 1. [Z.AI API 콘솔](https://z.ai/manage-apikey/apikey-list)에 머리, 계정을 만들고, **새로운 API 키**를 클릭합니다.
 

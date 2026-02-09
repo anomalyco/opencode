@@ -5,10 +5,9 @@ description: ACP 互換エディターで OpenCode を使用します。
 
 OpenCode は [Agent Client Protocol](https://agentclientprotocol.com) または (ACP) をサポートしているため、互換性のあるエディターや IDE で直接使用できます。
 
-:::ヒント
+:::tip
 ACP をサポートするエディターとツールのリストについては、[ACP progress report](https://zed.dev/blog/acp-progress-report#available-now).
 :::
-
 ACP は、コード エディターと AI コーディング エージェント間の通信を標準化するオープン プロトコルです。
 
 ---
@@ -144,10 +143,9 @@ require("codecompanion").setup({
 
 OpenCode は、ACP 経由でもターミナル内で動作するのと同じように動作します。すべての機能がサポートされています。
 
-:::注記
+:::note
 `/undo` や `/redo` などの一部の組み込みスラッシュ コマンドは現在サポートされていません。
 :::
-
 - 組み込みツール (ファイル操作、ターミナルコマンドなど)
 - カスタムツールとスラッシュコマンド
 - OpenCode 構成で構成された MCP サーバー

@@ -553,30 +553,30 @@ OpenCode kan konfigureres ved hjælp af miljøvariabler.
 
 | Variabel                              | Skriv  | Beskrivelse                                                           |
 | ------------------------------------- | ------ | --------------------------------------------------------------------- |
-| `OPENCODE_AUTO_SHARE`                 | boolsk | Del automatisk session                                                |
-| `OPENCODE_GIT_BASH_PATH`              | styrke | Sti til Git Bash eksekverbar på Windows                               |
-| `OPENCODE_CONFIG`                     | styrke | Sti til konfigurationsfil                                             |
-| `OPENCODE_CONFIG_DIR`                 | styrke | Sti til konfigurationsmappe                                           |
-| `OPENCODE_CONFIG_CONTENT`             | styrke | Indbygget json-konfigurationsindhold                                  |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | boolsk | Deaktiver automatisk opdateringskontrol                               |
-| `OPENCODE_DISABLE_PRUNE`              | boolsk | Deaktiver beskæring af gamle data                                     |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolsk | Deaktiver automatisk opdatering af terminaltitel                      |
-| `OPENCODE_PERMISSION`                 | styrke | Indbygget json-tilladelseskonfiguration                               |
-| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolsk | Deaktiver standard plugins                                            |
-| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolsk | Deaktiver automatisk LSP-serverdownloads                              |
-| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolsk | Aktive eksperimentelle modeller                                       |
-| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolsk | Deaktiver automatisk kontekstkomprimering                             |
-| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolsk | Deaktiver læsning fra `.claude` (prompt + færdigheder)                |
-| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolsk | Deaktiver læsning `~/.claude/CLAUDE.md`                               |
-| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolsk | Deaktiver indlæsning af `.claude/skills`                              |
-| `OPENCODE_DISABLE_MODELS_FETCH`       | boolsk | Deaktivering af modeller fra eksterne kilder                          |
-| `OPENCODE_FAKE_VCS`                   | styrke | Falsk VCS-udbyder til testformål                                      |
-| `OPENCODE_DISABLE_FILETIME_CHECK`     | boolsk | Deaktiver filtidskontrol for optimering                               |
-| `OPENCODE_CLIENT`                     | styrke | Klient-id (standard til `cli`)                                        |
-| `OPENCODE_ENABLE_EXA`                 | boolsk | Aktiver Exa-websøgeværktøjer                                          |
-| `OPENCODE_SERVER_PASSWORD`            | styrke | Aktiver grundlæggende godkendelse for `serve`/`web`                   |
-| `OPENCODE_SERVER_USERNAME`            | styrke | Tilsidesæt grundlæggende godkendelsesbrugernavn (standard `opencode`) |
-| `OPENCODE_MODELS_URL`                 | styrke | Brugerdefineret URL til hentning af modelkonfiguration                |
+| `OPENCODE_AUTO_SHARE`                 | boolean | Del automatisk session                                                |
+| `OPENCODE_GIT_BASH_PATH`              | string | Sti til Git Bash eksekverbar på Windows                               |
+| `OPENCODE_CONFIG`                     | string | Sti til konfigurationsfil                                             |
+| `OPENCODE_CONFIG_DIR`                 | string | Sti til konfigurationsmappe                                           |
+| `OPENCODE_CONFIG_CONTENT`             | string | Indbygget json-konfigurationsindhold                                  |
+| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | Deaktiver automatisk opdateringskontrol                               |
+| `OPENCODE_DISABLE_PRUNE`              | boolean | Deaktiver beskæring af gamle data                                     |
+| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | Deaktiver automatisk opdatering af terminaltitel                      |
+| `OPENCODE_PERMISSION`                 | string | Indbygget json-tilladelseskonfiguration                               |
+| `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | Deaktiver standard plugins                                            |
+| `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | Deaktiver automatisk LSP-serverdownloads                              |
+| `OPENCODE_ENABLE_EXPERIMENTAL_MODELS` | boolean | Aktive eksperimentelle modeller                                       |
+| `OPENCODE_DISABLE_AUTOCOMPACT`        | boolean | Deaktiver automatisk kontekstkomprimering                             |
+| `OPENCODE_DISABLE_CLAUDE_CODE`        | boolean | Deaktiver læsning fra `.claude` (prompt + færdigheder)                |
+| `OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` | boolean | Deaktiver læsning `~/.claude/CLAUDE.md`                               |
+| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` | boolean | Deaktiver indlæsning af `.claude/skills`                              |
+| `OPENCODE_DISABLE_MODELS_FETCH`       | boolean | Deaktivering af modeller fra eksterne kilder                          |
+| `OPENCODE_FAKE_VCS`                   | string | Falsk VCS-udbyder til testformål                                      |
+| `OPENCODE_DISABLE_FILETIME_CHECK`     | boolean | Deaktiver filtidskontrol for optimering                               |
+| `OPENCODE_CLIENT`                     | string | Klient-id (standard til `cli`)                                        |
+| `OPENCODE_ENABLE_EXA`                 | boolean | Aktiver Exa-websøgeværktøjer                                          |
+| `OPENCODE_SERVER_PASSWORD`            | string | Aktiver grundlæggende godkendelse for `serve`/`web`                   |
+| `OPENCODE_SERVER_USERNAME`            | string | Tilsidesæt grundlæggende godkendelsesbrugernavn (standard `opencode`) |
+| `OPENCODE_MODELS_URL`                 | string | Brugerdefineret URL til hentning af modelkonfiguration                |
 
 ---
 
@@ -586,16 +586,16 @@ Disse miljøvariabler muliggør eksperimentelle funktioner, der kan ændres elle
 
 | Variabel                                        | Skriv  | Beskrivelse                                |
 | ----------------------------------------------- | ------ | ------------------------------------------ |
-| `OPENCODE_EXPERIMENTAL`                         | boolsk | Aktiver alle eksperimentelle funktioner    |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolsk | Aktiver ikonopdagelse                      |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolsk | Deaktiver kopi ved valg i TUI              |
+| `OPENCODE_EXPERIMENTAL`                         | boolean | Aktiver alle eksperimentelle funktioner    |
+| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolean | Aktiver ikonopdagelse                      |
+| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolean | Deaktiver kopi ved valg i TUI              |
 | `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | nummer | Standard timeout for bash-kommandoer i ms  |
 | `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | nummer | Maks. output-tokens for LLM-svar           |
-| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolsk | Aktiver filovervågning for hele dir        |
-| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolsk | Aktiver oxfmt formatter                    |
-| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolsk | Aktive eksperimenter LSP værktøj           |
-| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolsk | Deaktiver filovervågning                   |
-| `OPENCODE_EXPERIMENTAL_EXA`                     | boolsk | Aktive eksperimenter Exa-funktioner        |
-| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolsk | Aktive forsøg LSP typekontrol              |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolsk | Aktive eksperimentelle markdown-funktioner |
-| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolsk | Aktiver plantilstand                       |
+| `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolean | Aktiver filovervågning for hele dir        |
+| `OPENCODE_EXPERIMENTAL_OXFMT`                   | boolean | Aktiver oxfmt formatter                    |
+| `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | boolean | Aktive eksperimenter LSP værktøj           |
+| `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | Deaktiver filovervågning                   |
+| `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | Aktive eksperimenter Exa-funktioner        |
+| `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | Aktive forsøg LSP typekontrol              |
+| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolean | Aktive eksperimentelle markdown-funktioner |
+| `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Aktiver plantilstand                       |

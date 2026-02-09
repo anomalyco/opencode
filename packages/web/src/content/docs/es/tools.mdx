@@ -94,7 +94,7 @@ Cree nuevos archivos o sobrescriba los existentes.
 
 Utilice esto para permitir que LLM cree nuevos archivos. Sobrescribirá los archivos existentes si ya existen.
 
-:::nota
+:::note
 La herramienta `write` está controlada por el permiso `edit`, que cubre todas las modificaciones de archivos (`edit`, `write`, `patch`, `multiedit`).
 :::
 
@@ -172,7 +172,7 @@ Esta herramienta enumera el contenido del directorio. Acepta patrones globales p
 
 Interactúe con sus servidores LSP configurados para obtener funciones de inteligencia de código como definiciones, referencias, información de desplazamiento y jerarquía de llamadas.
 
-:::nota
+:::note
 Esta herramienta solo está disponible cuando `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (o `OPENCODE_EXPERIMENTAL=true`).
 :::
 
@@ -206,7 +206,7 @@ Aplicar parches a los archivos.
 
 Esta herramienta aplica archivos de parche a su código base. Útil para aplicar diferencias y parches de diversas fuentes.
 
-:::nota
+:::note
 La herramienta `patch` está controlada por el permiso `edit`, que cubre todas las modificaciones de archivos (`edit`, `write`, `patch`, `multiedit`).
 :::
 
@@ -242,7 +242,7 @@ Administre listas de tareas pendientes durante las sesiones de codificación.
 
 Crea y actualiza listas de tareas para realizar un seguimiento del progreso durante operaciones complejas. El LLM usa esto para organizar tareas de varios pasos.
 
-:::nota
+:::note
 Esta herramienta está deshabilitada para los subagentes de forma predeterminada, pero puede habilitarla manualmente. [Más información](/docs/agents/#permissions)
 :::
 
@@ -263,7 +263,7 @@ Leer listas de tareas pendientes existentes.
 
 Lee el estado actual de la lista de tareas pendientes. Utilizado por LLM para rastrear qué tareas están pendientes o completadas.
 
-:::nota
+:::note
 Esta herramienta está deshabilitada para los subagentes de forma predeterminada, pero puede habilitarla manualmente. [Más información](/docs/agents/#permissions)
 :::
 
@@ -290,7 +290,7 @@ Permite que LLM busque y lea páginas web. Útil para buscar documentación o in
 
 Busque información en la web.
 
-:::nota
+:::note
 Esta herramienta solo está disponible cuando se utiliza el proveedor OpenCode o cuando la variable de entorno `OPENCODE_ENABLE_EXA` está configurada en cualquier valor verdadero (por ejemplo, `true` o `1`).
 
 Para habilitar al iniciar OpenCode:
@@ -314,7 +314,7 @@ Realiza búsquedas web utilizando Exa AI para encontrar información relevante e
 
 No se requiere ninguna clave API: la herramienta se conecta directamente al servicio MCP alojado de Exa AI sin autenticación.
 
-:::consejo
+:::tip
 Utilice `websearch` cuando necesite encontrar información (descubrimiento) y `webfetch` cuando necesite recuperar contenido de una URL específica (recuperación).
 :::
 

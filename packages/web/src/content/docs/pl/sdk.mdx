@@ -171,7 +171,7 @@ const agents = await client.app.agents()
 
 | Method              | Description                | Response                                      |
 | ------------------- | -------------------------- | --------------------------------------------- |
-| `project.list()`    | Lista wszystkich projektów | <a href={typesUrl}><code>Projekt[]</code></a> |
+| `project.list()`    | Lista wszystkich projektów | <a href={typesUrl}><code>Project[]</code></a> |
 | `project.current()` | Get current project        | <a href={typesUrl}><code>Project</code></a>   |
 
 ---
@@ -210,7 +210,7 @@ const pathInfo = await client.path.get()
 | Method               | Description                         | Response                                                                                              |
 | -------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | `config.get()`       | Get config info                     | <a href={typesUrl}><code>Config</code></a>                                                            |
-| `config.providers()` | Lista dostawców i modeli domyślnych | `{ providers: `<a href={typesUrl}><code>Dostawca[]</code></a>`, default: { [key: string]: string } }` |
+| `config.providers()` | Lista dostawców i modeli domyślnych | `{ providers: `<a href={typesUrl}><code>Provider[]</code></a>`, default: { [key: string]: string } }` |
 
 ---
 
@@ -228,24 +228,24 @@ const { providers, default: defaults } = await client.config.providers()
 
 | Method                                                     | Description                                 | Notes                                                                                                                                            |
 | ---------------------------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `session.list()`                                           | Lista sesji                                 | Zwraca <a href={typesUrl}><code>Sesja[]</code></a>                                                                                               |
-| `session.get({ path })`                                    | Uzyskaj sesję                               | Zwraca <a href={typesUrl}><code>Sesja</code></a>                                                                                                 |
-| `session.children({ path })`                               | Lista sesji podrzędnych                     | Zwraca <a href={typesUrl}><code>Sesja[]</code></a>                                                                                               |
-| `session.create({ body })`                                 | Utwórz sesję                                | Zwraca <a href={typesUrl}><code>Sesja</code></a>                                                                                                 |
+| `session.list()`                                           | Lista sesji                                 | Zwraca <a href={typesUrl}><code>Session[]</code></a>                                                                                             |
+| `session.get({ path })`                                    | Uzyskaj sesję                               | Zwraca <a href={typesUrl}><code>Session</code></a>                                                                                               |
+| `session.children({ path })`                               | Lista sesji podrzędnych                     | Zwraca <a href={typesUrl}><code>Session[]</code></a>                                                                                             |
+| `session.create({ body })`                                 | Utwórz sesję                                | Zwraca <a href={typesUrl}><code>Session</code></a>                                                                                               |
 | `session.delete({ path })`                                 | Usuń sesję                                  | Zwraca `boolean`                                                                                                                                 |
-| `session.update({ path, body })`                           | Aktualizuj właściwości sesji                | Zwraca <a href={typesUrl}><code>Sesja</code></a>                                                                                                 |
+| `session.update({ path, body })`                           | Aktualizuj właściwości sesji                | Zwraca <a href={typesUrl}><code>Session</code></a>                                                                                               |
 | `session.init({ path, body })`                             | Przeanalizuj aplikację i utwórz `AGENTS.md` | Zwraca `boolean`                                                                                                                                 |
 | `session.abort({ path })`                                  | Przerwij trwającą sesję                     | Zwraca `boolean`                                                                                                                                 |
-| `session.share({ path })`                                  | Udostępnij sesję                            | Zwraca <a href={typesUrl}><code>Sesja</code></a>                                                                                                 |
-| `session.unshare({ path })`                                | Cofnij udostępnianie sesji                  | Zwraca <a href={typesUrl}><code>Sesja</code></a>                                                                                                 |
+| `session.share({ path })`                                  | Udostępnij sesję                            | Zwraca <a href={typesUrl}><code>Session</code></a>                                                                                               |
+| `session.unshare({ path })`                                | Cofnij udostępnianie sesji                  | Zwraca <a href={typesUrl}><code>Session</code></a>                                                                                               |
 | `session.summarize({ path, body })`                        | Podsumowanie sesji                          | Zwraca `boolean`                                                                                                                                 |
-| `session.messages({ path })`                               | Lista wiadomości w sesji                    | Zwraca `{ info: `<a href={typesUrl}><code>Wiadomość</code></a>`, parts: `<a href={typesUrl}><code>Część[]</code></a>`}[]`                        |
-| `session.message({ path })`                                | Uzyskaj szczegóły wiadomości                | Zwraca `{ info: `<a href={typesUrl}><code>Wiadomość</code></a>`, parts: `<a href={typesUrl}><code>Część[]</code></a>`}`                          |
+| `session.messages({ path })`                               | Lista wiadomości w sesji                    | Zwraca `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                           |
+| `session.message({ path })`                                | Uzyskaj szczegóły wiadomości                | Zwraca `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                             |
 | `session.prompt({ path, body })`                           | Wyślij wiadomość                            | `body.noReply: true` zwraca UserMessage (tylko kontekst). Domyślnie zwraca <a href={typesUrl}><code>AssistantMessage</code></a> z odpowiedzią AI |
-| `session.command({ path, body })`                          | Wyślij polecenie do sesji                   | Zwraca `{ info: `<a href={typesUrl}><code>Wiadomość Asystenta</code></a>`, parts: `<a href={typesUrl}><code>Część[]</code></a>`}`                |
-| `session.shell({ path, body })`                            | Uruchom polecenie powłoki                   | Zwraca <a href={typesUrl}><code>Wiadomość Asystenta</code></a>                                                                                   |
-| `session.revert({ path, body })`                           | Przywróć wiadomość                          | Zwraca <a href={typesUrl}><code>Sesja</code></a>                                                                                                 |
-| `session.unrevert({ path })`                               | Przywróć przywrócone wiadomości             | Zwraca <a href={typesUrl}><code>Sesja</code></a>                                                                                                 |
+| `session.command({ path, body })`                          | Wyślij polecenie do sesji                   | Zwraca `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                    |
+| `session.shell({ path, body })`                            | Uruchom polecenie powłoki                   | Zwraca <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                      |
+| `session.revert({ path, body })`                           | Przywróć wiadomość                          | Zwraca <a href={typesUrl}><code>Session</code></a>                                                                                               |
+| `session.unrevert({ path })`                               | Przywróć przywrócone wiadomości             | Zwraca <a href={typesUrl}><code>Session</code></a>                                                                                               |
 | `postSessionByIdPermissionsByPermissionId({ path, body })` | Respond to a permission request             | Returns `boolean`                                                                                                                                |
 
 ---
@@ -289,7 +289,7 @@ await client.session.prompt({
 | `find.files({ query })`   | Znajdź pliki i katalogi według nazwy | `string[]` (ścieżki)                                                                           |
 | `find.symbols({ query })` | Find workspace symbols               | <a href={typesUrl}><code>Symbol[]</code></a>                                                   |
 | `file.read({ query })`    | Read a file                          | `{ type: "raw" \| "patch", content: string }`                                                  |
-| `file.status({ query? })` | Uzyskaj status śledzonych plików     | <a href={typesUrl}><code>Plik[]</code></a>                                                     |
+| `file.status({ query? })` | Uzyskaj status śledzonych plików     | <a href={typesUrl}><code>File[]</code></a>                                                     |
 
 `find.files` supports a few optional query fields:
 

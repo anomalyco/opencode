@@ -5,7 +5,7 @@ description: Configurar y utilizar agentes especializados.
 
 Los agentes son asistentes de IA especializados que se pueden configurar para tareas y flujos de trabajo específicos. Le permiten crear herramientas enfocadas con indicaciones, modelos y acceso a herramientas personalizados.
 
-:::consejo
+:::tip
 Utilice el agente del plan para analizar el código y revisar sugerencias sin realizar ningún cambio en el código.
 :::
 
@@ -23,7 +23,7 @@ Hay dos tipos de agentes en OpenCode; agentes primarios y subagentes.
 
 Los agentes primarios son los asistentes principales con los que interactúas directamente. Puede recorrerlos usando la tecla **Tab** o la combinación de teclas `switch_agent` configurada. Estos agentes manejan su conversación principal. El acceso a las herramientas se configura mediante permisos; por ejemplo, Build tiene todas las herramientas habilitadas mientras que Plan está restringido.
 
-:::consejo
+:::tip
 Puede utilizar la tecla **Tab** para cambiar entre agentes principales durante una sesión.
 :::
 
@@ -301,7 +301,7 @@ Si no se establece esto, el agente continuará iterando hasta que el modelo deci
 
 Cuando se alcanza el límite, el agente recibe un mensaje especial del sistema que le indica que responda con un resumen de su trabajo y las tareas restantes recomendadas.
 
-:::precaución
+:::caution
 El campo heredado `maxSteps` está en desuso. Utilice `steps` en su lugar.
 :::
 
@@ -345,7 +345,7 @@ Esta ruta es relativa a donde se encuentra el archivo de configuración. Entonce
 
 Utilice la configuración `model` para anular el modelo de este agente. Útil para utilizar diferentes modelos optimizados para diferentes tareas. Por ejemplo, un modelo más rápido de planificación, un modelo más capaz de implementación.
 
-:::consejo
+:::tip
 Si no especifica un modelo, los agentes primarios usarán el [modelo configurado globalmente](/docs/config#models), mientras que los subagentes usarán el modelo del agente primario que invocó al subagente.
 :::
 
@@ -385,7 +385,7 @@ Controle qué herramientas están disponibles en este agente con la configuraci�
 }
 ```
 
-:::nota
+:::note
 La configuración específica del agente anula la configuración global.
 :::
 
@@ -557,7 +557,7 @@ Oculte un subagente del menú de autocompletar `@` con `hidden: true`. Útil par
 
 Esto sólo afecta la visibilidad del usuario en el menú de autocompletar. El modelo aún puede invocar agentes ocultos a través de la herramienta Tarea si los permisos lo permiten.
 
-:::nota
+:::note
 Sólo aplica para agentes `mode: subagent`.
 :::
 
@@ -586,11 +586,11 @@ Controle qué subagentes puede invocar un agente a través de la herramienta Tar
 
 Cuando se establece en `deny`, el subagente se elimina por completo de la descripción de la herramienta Tarea, por lo que el modelo no intentará invocarlo.
 
-:::consejo
+:::tip
 Las reglas se evalúan en orden y la **última regla coincidente gana**. En el ejemplo anterior, `orchestrator-planner` coincide con `*` (denegar) y `orchestrator-*` (permitir), pero como `orchestrator-*` viene después de `*`, el resultado es `allow`.
 :::
 
-:::consejo
+:::tip
 Los usuarios siempre pueden invocar cualquier subagente directamente a través del menú de autocompletar `@`, incluso si los permisos de tarea del agente lo niegan.
 :::
 
@@ -656,7 +656,7 @@ Por ejemplo, con los modelos de razonamiento de OpenAI, puedes controlar el esfu
 
 Estas opciones adicionales son específicas del modelo y del proveedor. Consulte la documentación de su proveedor para conocer los parámetros disponibles.
 
-:::consejo
+:::tip
 Ejecute `opencode models` para ver una lista de los modelos disponibles.
 :::
 
@@ -696,7 +696,7 @@ A continuación se muestran algunos casos de uso comunes para diferentes agentes
 
 A continuación se muestran algunos agentes de ejemplo que pueden resultarle útiles.
 
-:::consejo
+:::tip
 ¿Tiene un agente que le gustaría compartir? [Enviar un PR](https://github.com/anomalyco/opencode).
 :::
 

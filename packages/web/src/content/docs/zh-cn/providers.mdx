@@ -53,7 +53,7 @@ in `~/.local/share/opencode/auth.json`.
 OpenCode Zen 是OpenCode团队提供的模型列表，这些模型已被
 经测试和验证可与OpenCode良好配合。 [了解更多](/docs/zen)。
 
-:::提示
+:::tip
 如果您是新手，我们建议您从 OpenCode Zen 开始。
 :::
 
@@ -89,7 +89,7 @@ OpenCode Zen 是OpenCode团队提供的模型列表，这些模型已被
 讓我們詳細瞭解一些提供商。如果您想將提供商新增到
 列表，请随时开启PR。
 
-:::笔记
+:::note
 在这里没有看到成功？提交 PR。
 :::
 
@@ -229,7 +229,7 @@ OpenCode Zen 是OpenCode团队提供的模型列表，这些模型已被
    /models
    ```
 
-:::笔记
+:::note
 对于自定义推理配置文件，请在按键中使用模型并提供程序名称，并将 `id` 属性设置为 arn。这确保了正确的快取：
 
 ```json title="opencode.json"
@@ -278,7 +278,7 @@ OpenCode Zen 是OpenCode团队提供的模型列表，这些模型已被
    /models
    ```
 
-:::信息
+:::info
 Using your Claude Pro/Max subscription in OpenCode is not officially supported by [Anthropic](https://anthropic.com).
 :::
 
@@ -292,7 +292,7 @@ Using your Claude Pro/Max subscription in OpenCode is not officially supported b
 
 ### 天蓝色 OpenAI
 
-:::笔记
+:::note
 如果遇到“抱歉，但我无法协助该请求”错误，请尝试将 Azure 资源中的内容筛选器从 **DefaultV2** 更改为 **Default**。
 :::
 
@@ -677,7 +677,7 @@ GitLab Duo 通过 GitLab 的人工代理提供具有本机工具呼叫功能的�
    - **duo-chat-sonnet-4-5** - 大多数工作流程的平衡失败
    - **duo-chat-opus-4-5** - 最有能力进行复杂分析
 
-:::笔记
+:::note
 如果您不愿意，也可以指定“GITLAB_TOKEN”环境变量
 将令牌存储在opencode身份验证存储中。
 :::
@@ -721,7 +721,7 @@ export GITLAB_AI_GATEWAY_URL=https://ai-gateway.company.com
 export GITLAB_TOKEN=glpat-...
 ```
 
-:::笔记
+:::note
 您的 GitLab 管理员必须启用以下功能：
 
 1. [Duo Agent Platform](https://docs.gitlab.com/user/gitlab_duo/turn_on_off/) for the user, group, or instance
@@ -788,7 +788,7 @@ Customize through `opencode.json`:
 
 相当于您的 GitHub Copilot 订阅与 opencode 一起使用：
 
-:::笔记
+:::note
 某些型号可能需要 [Pro+
 订阅](https://github.com/features/copilot/plans)使用。
 
@@ -853,7 +853,7 @@ Google Vertex AI 与 OpenCode 结合使用：
    export VERTEX_LOCATION=global
    ```
 
-:::提示
+:::tip
 The `global` region improves availability and reduces errors at no extra cost. Use regional endpoints (e.g., `us-central1`) for data residency requirements. [Learn more](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
 :::
 
@@ -1222,7 +1222,7 @@ IO.NET提供了17种针对各种例子进行优化的模型：
 
 您可以使用 Ollama 配置 opencode 本地模型。
 
-:::提示
+:::tip
 Ollama can automatically configure itself for OpenCode. See the [Ollama integration docs](https://docs.ollama.com/integrations/opencode) for details.
 :::
 
@@ -1254,7 +1254,7 @@ Ollama can automatically configure itself for OpenCode. See the [Ollama integrat
 - `options.baseURL` 是本地服务器器的端点。
 - `models` 是型号 ID 以及配置的对应映射。型号名称将显示在型号选择列表中。
 
-:::提示
+:::tip
 如果工具暂停，请尝试增加 Ollama 中的 `num_ctx`。从 16k - 32k 左右开始。
 :::
 
@@ -1748,7 +1748,7 @@ Vercel AI Gateway 可以让您跨统一端点访问来自 OpenAI、Anthropic、G
 
 要新增 `/connect` 命令中未列出的任何 **OpenAI 相容**提供程式：
 
-:::提示
+:::tip
 您可以将任何 OpenAI 相容的提供方案与 opencode 一起使用。大多数人工现代智慧工厂都提供 OpenAI 相容 API。
 :::
 

@@ -50,7 +50,7 @@ Cuando ejecuta `opencode`, inicia un TUI y un servidor. Donde el TUI es el
 Cliente que habla con el servidor. El servidor expone una especificación OpenAPI 3.1
 punto final. Este punto final también se utiliza para generar un [SDK](/docs/sdk).
 
-:::consejo
+:::tip
 Utilice el servidor opencode para interactuar con opencode mediante programación.
 :::
 
@@ -100,8 +100,8 @@ El servidor opencode expone las siguientes API.
 
 | Método | Camino             | Descripción                | Respuesta                                      |
 | ------ | ------------------ | -------------------------- | ---------------------------------------------- |
-| `GET`  | `/project`         | Listar todos los proyectos | <a href={typesUrl}><code>Proyecto[]</code></a> |
-| `GET`  | `/project/current` | Obtener el proyecto actual | <a href={typesUrl}><code>Proyecto</code></a>   |
+| `GET`  | `/project`         | Listar todos los proyectos | <a href={typesUrl}><code>Project[]</code></a> |
+| `GET`  | `/project/current` | Obtener el proyecto actual | <a href={typesUrl}><code>Project</code></a>   |
 
 ---
 
@@ -109,7 +109,7 @@ El servidor opencode expone las siguientes API.
 
 | Método | Camino  | Descripción                                        | Respuesta                                   |
 | ------ | ------- | -------------------------------------------------- | ------------------------------------------- |
-| `GET`  | `/path` | Obtener la ruta actual                             | <a href={typesUrl}><code>Ruta</code></a>    |
+| `GET`  | `/path` | Obtener la ruta actual                             | <a href={typesUrl}><code>Path</code></a>    |
 | `GET`  | `/vcs`  | Obtenga información de VCS para el proyecto actual | <a href={typesUrl}><code>VcsInfo</code></a> |
 
 ---
@@ -126,8 +126,8 @@ El servidor opencode expone las siguientes API.
 
 | Método  | Camino              | Descripción                                    | Respuesta                                                                                 |
 | ------- | ------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `GET`   | `/config`           | Obtener información de configuración           | <a href={typesUrl}><code>Configuración</code></a>                                         |
-| `PATCH` | `/config`           | Actualizar configuración                       | <a href={typesUrl}><code>Configuración</code></a>                                         |
+| `GET`   | `/config`           | Obtener información de configuración           | <a href={typesUrl}><code>Config</code></a>                                         |
+| `PATCH` | `/config`           | Actualizar configuración                       | <a href={typesUrl}><code>Config</code></a>                                         |
 | `GET`   | `/config/providers` | Lista de proveedores y modelos predeterminados | `{ providers: `<a href={typesUrl}>Proveedor[]</a>`, default: { [key: string]: string } }` |
 
 ---
@@ -147,19 +147,19 @@ El servidor opencode expone las siguientes API.
 
 | Método   | Camino                                   | Descripción                                            | Notas                                                                                |
 | -------- | ---------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| `GET`    | `/session`                               | Listar todas las sesiones                              | Devuelve <a href={typesUrl}><code>Sesión[]</code></a>                                |
-| `POST`   | `/session`                               | Crear una nueva sesión                                 | cuerpo: `{ parentID?, title? }`, devuelve <a href={typesUrl}><code>Sesión</code></a> |
-| `GET`    | `/session/status`                        | Obtener el estado de la sesión para todas las sesiones | Devuelve `{ [sessionID: string]: `<a href={typesUrl}>Estado de sesión</a>` }`        |
-| `GET`    | `/session/:id`                           | Obtener detalles de la sesión                          | Devuelve <a href={typesUrl}><code>Sesión</code></a>                                  |
+| `GET`    | `/session`                               | Listar todas las sesiones                              | Devuelve <a href={typesUrl}><code>Session[]</code></a>                                |
+| `POST`   | `/session`                               | Crear una nueva sesión                                 | cuerpo: `{ parentID?, title? }`, devuelve <a href={typesUrl}><code>Session</code></a> |
+| `GET`    | `/session/status`                        | Obtener el estado de la sesión para todas las sesiones | Devuelve `{ [sessionID: string]: `<a href={typesUrl}>SessionStatus</a>` }`        |
+| `GET`    | `/session/:id`                           | Obtener detalles de la sesión                          | Devuelve <a href={typesUrl}><code>Session</code></a>                                  |
 | `DELETE` | `/session/:id`                           | Eliminar una sesión y todos sus datos                  | Devuelve `boolean`                                                                   |
-| `PATCH`  | `/session/:id`                           | Actualizar propiedades de sesión                       | cuerpo: `{ title? }`, devuelve <a href={typesUrl}><code>Sesión</code></a>            |
-| `GET`    | `/session/:id/children`                  | Obtener las sesiones secundarias de una sesión         | Devuelve <a href={typesUrl}><code>Sesión[]</code></a>                                |
+| `PATCH`  | `/session/:id`                           | Actualizar propiedades de sesión                       | cuerpo: `{ title? }`, devuelve <a href={typesUrl}><code>Session</code></a>            |
+| `GET`    | `/session/:id/children`                  | Obtener las sesiones secundarias de una sesión         | Devuelve <a href={typesUrl}><code>Session[]</code></a>                                |
 | `GET`    | `/session/:id/todo`                      | Obtener la lista de tareas pendientes para una sesión  | Devuelve <a href={typesUrl}><code>Todo[]</code></a>                                  |
 | `POST`   | `/session/:id/init`                      | Analizar aplicación y crear `AGENTS.md`                | cuerpo: `{ messageID, providerID, modelID }`, devuelve `boolean`                     |
-| `POST`   | `/session/:id/fork`                      | Bifurca una sesión existente en un mensaje             | cuerpo: `{ messageID? }`, devuelve <a href={typesUrl}><code>Sesión</code></a>        |
+| `POST`   | `/session/:id/fork`                      | Bifurca una sesión existente en un mensaje             | cuerpo: `{ messageID? }`, devuelve <a href={typesUrl}><code>Session</code></a>        |
 | `POST`   | `/session/:id/abort`                     | Cancelar una sesión en ejecución                       | Devuelve `boolean`                                                                   |
-| `POST`   | `/session/:id/share`                     | Compartir una sesión                                   | Devuelve <a href={typesUrl}><code>Sesión</code></a>                                  |
-| `DELETE` | `/session/:id/share`                     | Dejar de compartir una sesión                          | Devuelve <a href={typesUrl}><code>Sesión</code></a>                                  |
+| `POST`   | `/session/:id/share`                     | Compartir una sesión                                   | Devuelve <a href={typesUrl}><code>Session</code></a>                                  |
+| `DELETE` | `/session/:id/share`                     | Dejar de compartir una sesión                          | Devuelve <a href={typesUrl}><code>Session</code></a>                                  |
 | `GET`    | `/session/:id/diff`                      | Obtenga la diferencia para esta sesión                 | consulta: `messageID?`, devuelve <a href={typesUrl}><code>FileDiff[]</code></a>      |
 | `POST`   | `/session/:id/summarize`                 | Resumir la sesión                                      | cuerpo: `{ providerID, modelID }`, devuelve `boolean`                                |
 | `POST`   | `/session/:id/revert`                    | Revertir un mensaje                                    | cuerpo: `{ messageID, partID? }`, devuelve `boolean`                                 |
@@ -185,7 +185,7 @@ El servidor opencode expone las siguientes API.
 
 | Método | Camino     | Descripción               | Respuesta                                     |
 | ------ | ---------- | ------------------------- | --------------------------------------------- |
-| `GET`  | `/command` | Listar todos los comandos | <a href={typesUrl}><code>Comando[]</code></a> |
+| `GET`  | `/command` | Listar todos los comandos | <a href={typesUrl}><code>Command[]</code></a> |
 
 ---
 
@@ -195,10 +195,10 @@ El servidor opencode expone las siguientes API.
 | ------ | ------------------------ | -------------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | `GET`  | `/find?pattern=<pat>`    | Buscar texto en archivos                     | Matriz de objetos coincidentes con `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
 | `GET`  | `/find/file?query=<q>`   | Buscar archivos y directorios por nombre     | `string[]` (caminos)                                                                               |
-| `GET`  | `/find/symbol?query=<q>` | Buscar símbolos del espacio de trabajo       | <a href={typesUrl}><code>Símbolo[]</code></a>                                                      |
+| `GET`  | `/find/symbol?query=<q>` | Buscar símbolos del espacio de trabajo       | <a href={typesUrl}><code>Symbol[]</code></a>                                                      |
 | `GET`  | `/file?path=<path>`      | Listar archivos y directorios                | <a href={typesUrl}><code>FileNode[]</code></a>                                                     |
-| `GET`  | `/file/content?path=<p>` | Leer un archivo                              | <a href={typesUrl}><code>Contenido del archivo</code></a>                                          |
-| `GET`  | `/file/status`           | Obtener el estado de los archivos rastreados | <a href={typesUrl}><code>Archivo[]</code></a>                                                      |
+| `GET`  | `/file/content?path=<p>` | Leer un archivo                              | <a href={typesUrl}><code>FileContent</code></a>                                          |
+| `GET`  | `/file/status`           | Obtener el estado de los archivos rastreados | <a href={typesUrl}><code>File[]</code></a>                                                      |
 
 #### `/find/file` parámetros de consulta
 
@@ -214,8 +214,8 @@ El servidor opencode expone las siguientes API.
 
 | Método | Camino                                      | Descripción                                          | Respuesta                                                 |
 | ------ | ------------------------------------------- | ---------------------------------------------------- | --------------------------------------------------------- |
-| `GET`  | `/experimental/tool/ids`                    | Listar todos los ID de herramientas                  | <a href={typesUrl}><code>ID de herramientas</code></a>    |
-| `GET`  | `/experimental/tool?provider=<p>&model=<m>` | Listar herramientas con esquemas JSON para un modelo | <a href={typesUrl}><code>Lista de herramientas</code></a> |
+| `GET`  | `/experimental/tool/ids`                    | Listar todos los ID de herramientas                  | <a href={typesUrl}><code>ToolIDs</code></a>    |
+| `GET`  | `/experimental/tool?provider=<p>&model=<m>` | Listar herramientas con esquemas JSON para un modelo | <a href={typesUrl}><code>ToolList</code></a> |
 
 ---
 
@@ -234,7 +234,7 @@ El servidor opencode expone las siguientes API.
 
 | Método | Camino   | Descripción                          | Respuesta                                    |
 | ------ | -------- | ------------------------------------ | -------------------------------------------- |
-| `GET`  | `/agent` | Listar todos los agentes disponibles | <a href={typesUrl}><code>Agente[]</code></a> |
+| `GET`  | `/agent` | Listar todos los agentes disponibles | <a href={typesUrl}><code>Agent[]</code></a> |
 
 ---
 

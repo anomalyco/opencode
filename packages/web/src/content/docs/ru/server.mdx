@@ -20,11 +20,11 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 
 | Флаг  | Описание                                       | По умолчанию |
 | ----- | ---------------------------------------------- | ------------ |
-| ХХ0ГГ | Порт для прослушивания                         | `4096`       |
-| ХХ0ГГ | Имя хоста для прослушивания                    | `127.0.0.1`  |
-| ХХ0ГГ | Включить обнаружение mDNS                      | ХХ0ГГ        |
-| ХХ0ГГ | Пользовательское доменное имя для службы mDNS  | ХХ0ГГ        |
-| ХХ0ГГ | Дополнительные источники браузера, позволяющие | `[]`         |
+| `--port`        | Port to listen on                   | `4096`           |
+| `--hostname`    | Hostname to listen on               | `127.0.0.1`      |
+| `--mdns`        | Enable mDNS discovery               | `false`          |
+| `--mdns-domain` | Custom domain name for mDNS service | `opencode.local` |
+| `--cors`        | Additional browser origins to allow | `[]`             |
 
 `--cors` можно передать несколько раз:
 
@@ -50,7 +50,7 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve
 клиент, который общается с сервером. Сервер предоставляет спецификацию OpenAPI 3.1.
 конечная точка. Эта конечная точка также используется для создания файла [SDK](/docs/sdk).
 
-:::кончик
+:::tip
 Используйте сервер открытого кода для программного взаимодействия с открытым кодом.
 :::
 
@@ -77,7 +77,7 @@ TUI с открытым кодом запущен, `opencode serve` запуст
 http://<hostname>:<port>/doc
 ```
 
-Например, ХХ0ГГ. Используйте спецификацию для создания клиентов или проверки типов запросов и ответов. Или просмотрите его в обозревателе Swagger.
+For example, `http://localhost:4096/doc`. Use the spec to generate clients or inspect request and response types. Or view it in a Swagger explorer.
 
 ---
 
@@ -91,8 +91,8 @@ http://<hostname>:<port>/doc
 
 | Метод | Путь  | Описание                                         | Ответ              |
 | ----- | ----- | ------------------------------------------------ | ------------------ |
-| ХХ0ГГ | ХХ0ГГ | Получить информацию о состоянии и версии сервера | ХХ0ГГ              |
-| ХХ0ГГ | ХХ0ГГ | Получить глобальные события (поток SSE)          | Трансляция событий |
+| `GET`  | `/global/health` | Get server health and version  | `{ healthy: true, version: string }` |
+| `GET`  | `/global/event`  | Get global events (SSE stream) | Event stream                         |
 
 ---
 
@@ -100,8 +100,8 @@ http://<hostname>:<port>/doc
 
 | Метод | Путь  | Описание                | Ответ                                        |
 | ----- | ----- | ----------------------- | -------------------------------------------- |
-| ХХ0ГГ | ХХ0ГГ | Список всех проектов    | <a href={typesUrl}><code>Проект[]</code></a> |
-| ХХ0ГГ | ХХ0ГГ | Получить текущий проект | <a href={typesUrl}><code>Проект</code></a>   |
+| `GET`  | `/project`         | List all projects       | <a href={typesUrl}><code>Project[]</code></a> |
+| `GET`  | `/project/current` | Get the current project | <a href={typesUrl}><code>Project</code></a>   |
 
 ---
 
@@ -109,8 +109,8 @@ http://<hostname>:<port>/doc
 
 | Метод | Путь  | Описание                                     | Ответ                                       |
 | ----- | ----- | -------------------------------------------- | ------------------------------------------- |
-| ХХ0ГГ | ХХ0ГГ | Получить текущий путь                        | <a href={typesUrl}><code>Путь</code></a>    |
-| ХХ0ГГ | ХХ0ГГ | Получить информацию VCS для текущего проекта | <a href={typesUrl}><code>VcsInfo</code></a> |
+| `GET`  | `/path` | Get the current path                 | <a href={typesUrl}><code>Path</code></a>    |
+| `GET`  | `/vcs`  | Get VCS info for the current project | <a href={typesUrl}><code>VcsInfo</code></a> |
 
 ---
 
@@ -118,7 +118,7 @@ http://<hostname>:<port>/doc
 
 | Метод | Путь  | Описание                  | Ответ |
 | ----- | ----- | ------------------------- | ----- |
-| ХХ0ГГ | ХХ0ГГ | Удалить текущий экземпляр | ХХ0ГГ |
+| `POST` | `/instance/dispose` | Dispose the current instance | `boolean` |
 
 ---
 
@@ -126,9 +126,9 @@ http://<hostname>:<port>/doc
 
 | Метод | Путь  | Описание                                  | Ответ                                                                                    |
 | ----- | ----- | ----------------------------------------- | ---------------------------------------------------------------------------------------- |
-| ХХ0ГГ | ХХ0ГГ | Получить информацию о конфигурации        | <a href={typesUrl}><code>Config</code></a>                                               |
-| ХХ0ГГ | ХХ0ГГ | Обновить конфигурацию                     | <a href={typesUrl}><code>Config</code></a>                                               |
-| ХХ0ГГ | ХХ0ГГ | Список поставщиков и моделей по умолчанию | `{ providers: `<a href={typesUrl}>Provider[]</a>`, default: { [key: string]: string } }` |
+| `GET`   | `/config`           | Get config info                   | <a href={typesUrl}><code>Config</code></a>                                               |
+| `PATCH` | `/config`           | Update config                     | <a href={typesUrl}><code>Config</code></a>                                               |
+| `GET`   | `/config/providers` | List providers and default models | `{ providers: `<a href={typesUrl}>Provider[]</a>`, default: { [key: string]: string } }` |
 
 ---
 
@@ -136,10 +136,10 @@ http://<hostname>:<port>/doc
 
 | Метод | Путь  | Описание                                        | Ответ                                                                               |
 | ----- | ----- | ----------------------------------------------- | ----------------------------------------------------------------------------------- |
-| ХХ0ГГ | ХХ0ГГ | Список всех поставщиков                         | `{ all: `<a href={typesUrl}>Provider[]</a>`, default: {...}, connected: string[] }` |
-| ХХ0ГГ | ХХ0ГГ | Получить методы аутентификации поставщика       | `{ [providerID: string]: `<a href={typesUrl}>ProviderAuthMethod[]</a>` }`           |
-| ХХ0ГГ | ХХ0ГГ | Авторизуйте провайдера с помощью OAuth          | <a href={typesUrl}><code>ProviderAuthAuthorization</code></a>                       |
-| ХХ0ГГ | ХХ0ГГ | Обработка обратного вызова OAuth для провайдера | ХХ0ГГ                                                                               |
+| `GET`  | `/provider`                      | List all providers                   | `{ all: `<a href={typesUrl}>Provider[]</a>`, default: {...}, connected: string[] }` |
+| `GET`  | `/provider/auth`                 | Get provider authentication methods  | `{ [providerID: string]: `<a href={typesUrl}>ProviderAuthMethod[]</a>` }`           |
+| `POST` | `/provider/{id}/oauth/authorize` | Authorize a provider using OAuth     | <a href={typesUrl}><code>ProviderAuthAuthorization</code></a>                       |
+| `POST` | `/provider/{id}/oauth/callback`  | Handle OAuth callback for a provider | `boolean`                                                                           |
 
 ---
 
@@ -147,24 +147,24 @@ http://<hostname>:<port>/doc
 
 | Метод | Путь  | Описание                                           | Примечания                                                                            |
 | ----- | ----- | -------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| ХХ0ГГ | ХХ0ГГ | Список всех сессий                                 | Возвращает <a href={typesUrl}><code>Session[]</code></a>                              |
-| ХХ0ГГ | ХХ0ГГ | Создать новый сеанс                                | тело: `{ parentID?, title? }`, возвращает <a href={typesUrl}><code>Session</code></a> |
-| ХХ0ГГ | ХХ0ГГ | Получить статус сеанса для всех сеансов            | Возвращает `{ [sessionID: string]: `<a href={typesUrl}>SessionStatus</a>` }`          |
-| ХХ0ГГ | ХХ0ГГ | Получить подробную информацию о сеансе             | Возвращает <a href={typesUrl}><code>Session</code></a>                                |
-| ХХ0ГГ | ХХ0ГГ | Удалить сеанс и все его данные                     | Возвращает `boolean`                                                                  |
-| ХХ0ГГ | ХХ0ГГ | Обновить свойства сеанса                           | тело: `{ title? }`, возвращает <a href={typesUrl}><code>Session</code></a>            |
-| ХХ0ГГ | ХХ0ГГ | Получить дочерние сеансы сеанса                    | Возвращает <a href={typesUrl}><code>Session[]</code></a>                              |
-| ХХ0ГГ | ХХ0ГГ | Получить список дел для сеанса                     | Возвращает <a href={typesUrl}><code>Todo[]</code></a>                                 |
-| ХХ0ГГ | ХХ0ГГ | Проанализируйте приложение и создайте `AGENTS.md`. | тело: `{ messageID, providerID, modelID }`, возвращает `boolean`                      |
-| ХХ0ГГ | ХХ0ГГ | Разветвить существующий сеанс по сообщению         | тело: `{ messageID? }`, возвращает <a href={typesUrl}><code>Session</code></a>        |
-| ХХ0ГГ | ХХ0ГГ | Прервать текущий сеанс                             | Возвращает `boolean`                                                                  |
-| ХХ0ГГ | ХХ0ГГ | Поделиться сеансом                                 | Возвращает <a href={typesUrl}><code>Session</code></a>                                |
-| ХХ0ГГ | ХХ0ГГ | Отменить общий доступ к сеансу                     | Возвращает <a href={typesUrl}><code>Session</code></a>                                |
-| ХХ0ГГ | ХХ0ГГ | Получить разницу для этой сессии                   | запрос: `messageID?`, возвращает <a href={typesUrl}><code>FileDiff[]</code></a>       |
-| ХХ0ГГ | ХХ0ГГ | Подведите итоги сессии                             | тело: `{ providerID, modelID }`, возвращает `boolean`                                 |
-| ХХ0ГГ | ХХ0ГГ | Отменить сообщение                                 | тело: `{ messageID, partID? }`, возвращает `boolean`                                  |
-| ХХ0ГГ | ХХ0ГГ | Восстановить все восстановленные сообщения         | Возвращает `boolean`                                                                  |
-| ХХ0ГГ | ХХ0ГГ | Ответ на запрос разрешения                         | тело: `{ response, remember? }`, возвращает `boolean`                                 |
+| `GET`    | `/session`                               | List all sessions                     | Returns <a href={typesUrl}><code>Session[]</code></a>                              |
+| `POST`   | `/session`                               | Create a new session                  | body: `{ parentID?, title? }`, returns <a href={typesUrl}><code>Session</code></a> |
+| `GET`    | `/session/status`                        | Get session status for all sessions   | Returns `{ [sessionID: string]: `<a href={typesUrl}>SessionStatus</a>` }`          |
+| `GET`    | `/session/:id`                           | Get session details                   | Returns <a href={typesUrl}><code>Session</code></a>                                |
+| `DELETE` | `/session/:id`                           | Delete a session and all its data     | Returns `boolean`                                                                  |
+| `PATCH`  | `/session/:id`                           | Update session properties             | body: `{ title? }`, returns <a href={typesUrl}><code>Session</code></a>            |
+| `GET`    | `/session/:id/children`                  | Get a session's child sessions        | Returns <a href={typesUrl}><code>Session[]</code></a>                              |
+| `GET`    | `/session/:id/todo`                      | Get the todo list for a session       | Returns <a href={typesUrl}><code>Todo[]</code></a>                                 |
+| `POST`   | `/session/:id/init`                      | Analyze app and create `AGENTS.md`    | body: `{ messageID, providerID, modelID }`, returns `boolean`                      |
+| `POST`   | `/session/:id/fork`                      | Fork an existing session at a message | body: `{ messageID? }`, returns <a href={typesUrl}><code>Session</code></a>        |
+| `POST`   | `/session/:id/abort`                     | Abort a running session               | Returns `boolean`                                                                  |
+| `POST`   | `/session/:id/share`                     | Share a session                       | Returns <a href={typesUrl}><code>Session</code></a>                                |
+| `DELETE` | `/session/:id/share`                     | Unshare a session                     | Returns <a href={typesUrl}><code>Session</code></a>                                |
+| `GET`    | `/session/:id/diff`                      | Get the diff for this session         | query: `messageID?`, returns <a href={typesUrl}><code>FileDiff[]</code></a>        |
+| `POST`   | `/session/:id/summarize`                 | Summarize the session                 | body: `{ providerID, modelID }`, returns `boolean`                                 |
+| `POST`   | `/session/:id/revert`                    | Revert a message                      | body: `{ messageID, partID? }`, returns `boolean`                                  |
+| `POST`   | `/session/:id/unrevert`                  | Restore all reverted messages         | Returns `boolean`                                                                  |
+| `POST`   | `/session/:id/permissions/:permissionID` | Respond to a permission request       | body: `{ response, remember? }`, returns `boolean`                                 |
 
 ---
 
@@ -172,12 +172,12 @@ http://<hostname>:<port>/doc
 
 | Метод | Путь  | Описание                                      | Примечания                                                                                                                                                               |
 | ----- | ----- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| ХХ0ГГ | ХХ0ГГ | Список сообщений в сеансе                     | запрос: `limit?`, возвращает `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}[]`                                                       |
-| ХХ0ГГ | ХХ0ГГ | Отправьте сообщение и дождитесь ответа        | тело: `{ messageID?, model?, agent?, noReply?, system?, tools?, parts }`, возвращает `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}` |
-| ХХ0ГГ | ХХ0ГГ | Получить подробную информацию о сообщении     | Возвращает `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                                                           |
-| ХХ0ГГ | ХХ0ГГ | Отправить сообщение асинхронно (без ожидания) | тело: то же, что и `/session/:id/message`, возвращает `204 No Content`.                                                                                                  |
-| ХХ0ГГ | ХХ0ГГ | Выполнить команду косой черты                 | тело: `{ messageID?, agent?, model?, command, arguments }`, возвращает `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`               |
-| ХХ0ГГ | ХХ0ГГ | Запустите команду оболочки                    | тело: `{ agent, model?, command }`, возвращает `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                       |
+| `GET`  | `/session/:id/message`            | List messages in a session              | query: `limit?`, returns `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}[]`                                                        |
+| `POST` | `/session/:id/message`            | Send a message and wait for response    | body: `{ messageID?, model?, agent?, noReply?, system?, tools?, parts }`, returns `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}` |
+| `GET`  | `/session/:id/message/:messageID` | Get message details                     | Returns `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                                                           |
+| `POST` | `/session/:id/prompt_async`       | Send a message asynchronously (no wait) | body: same as `/session/:id/message`, returns `204 No Content`                                                                                                        |
+| `POST` | `/session/:id/command`            | Execute a slash command                 | body: `{ messageID?, agent?, model?, command, arguments }`, returns `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`               |
+| `POST` | `/session/:id/shell`              | Run a shell command                     | body: `{ agent, model?, command }`, returns `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                       |
 
 ---
 
@@ -185,7 +185,7 @@ http://<hostname>:<port>/doc
 
 | Метод | Путь  | Описание           | Ответ                                         |
 | ----- | ----- | ------------------ | --------------------------------------------- |
-| ХХ0ГГ | ХХ0ГГ | Список всех команд | <a href={typesUrl}><code>Команда[]</code></a> |
+| `GET`  | `/command` | List all commands | <a href={typesUrl}><code>Command[]</code></a> |
 
 ---
 
@@ -193,12 +193,12 @@ http://<hostname>:<port>/doc
 
 | Метод | Путь  | Описание                             | Ответ                                                                                         |
 | ----- | ----- | ------------------------------------ | --------------------------------------------------------------------------------------------- |
-| ХХ0ГГ | ХХ0ГГ | Поиск текста в файлах                | Массив объектов соответствия `path`, `lines`, `line_number`, `absolute_offset`, `submatches`. |
-| ХХ0ГГ | ХХ0ГГ | Поиск файлов и каталогов по имени    | `string[]` (пути)                                                                             |
-| ХХ0ГГ | ХХ0ГГ | Найдите символы рабочей области      | <a href={typesUrl}><code>Символ[]</code></a>                                                  |
-| ХХ0ГГ | ХХ0ГГ | Список файлов и каталогов            | <a href={typesUrl}><code>FileNode[]</code></a>                                                |
-| ХХ0ГГ | ХХ0ГГ | Чтение файла                         | <a href={typesUrl}><code>FileContent</code></a>                                               |
-| ХХ0ГГ | ХХ0ГГ | Получить статус отслеживаемых файлов | <a href={typesUrl}><code>Файл[]</code></a>                                                    |
+| `GET`  | `/find?pattern=<pat>`    | Search for text in files           | Array of match objects with `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
+| `GET`  | `/find/file?query=<q>`   | Find files and directories by name | `string[]` (paths)                                                                          |
+| `GET`  | `/find/symbol?query=<q>` | Find workspace symbols             | <a href={typesUrl}><code>Symbol[]</code></a>                                                |
+| `GET`  | `/file?path=<path>`      | List files and directories         | <a href={typesUrl}><code>FileNode[]</code></a>                                              |
+| `GET`  | `/file/content?path=<p>` | Read a file                        | <a href={typesUrl}><code>FileContent</code></a>                                             |
+| `GET`  | `/file/status`           | Get status for tracked files       | <a href={typesUrl}><code>File[]</code></a>                                                  |
 
 #### `/find/file` параметры запроса
 
@@ -214,8 +214,8 @@ http://<hostname>:<port>/doc
 
 | Метод | Путь  | Описание                                       | Ответ                                        |
 | ----- | ----- | ---------------------------------------------- | -------------------------------------------- |
-| ХХ0ГГ | ХХ0ГГ | Список всех идентификаторов инструментов       | <a href={typesUrl}><code>ToolIDs</code></a>  |
-| ХХ0ГГ | ХХ0ГГ | Список инструментов со схемами JSON для модели | <a href={typesUrl}><code>ToolList</code></a> |
+| `GET`  | `/experimental/tool/ids`                    | List all tool IDs                        | <a href={typesUrl}><code>ToolIDs</code></a>  |
+| `GET`  | `/experimental/tool?provider=<p>&model=<m>` | List tools with JSON schemas for a model | <a href={typesUrl}><code>ToolList</code></a> |
 
 ---
 
@@ -223,10 +223,10 @@ http://<hostname>:<port>/doc
 
 | Метод | Путь  | Описание                            | Ответ                                                     |
 | ----- | ----- | ----------------------------------- | --------------------------------------------------------- |
-| ХХ0ГГ | ХХ0ГГ | Получить статус LSP-сервера         | <a href={typesUrl}><code>LSPStatus[]</code></a>           |
-| ХХ0ГГ | ХХ0ГГ | Получить статус форматтера          | <a href={typesUrl}><code>FormatterStatus[]</code></a>     |
-| ХХ0ГГ | ХХ0ГГ | Получить статус сервера MCP         | `{ [name: string]: `<a href={typesUrl}>MCPStatus</a>` }`  |
-| ХХ0ГГ | ХХ0ГГ | Динамическое добавление сервера MCP | тело: `{ name, config }`, возвращает объект состояния MCP |
+| `GET`  | `/lsp`       | Get LSP server status      | <a href={typesUrl}><code>LSPStatus[]</code></a>          |
+| `GET`  | `/formatter` | Get formatter status       | <a href={typesUrl}><code>FormatterStatus[]</code></a>    |
+| `GET`  | `/mcp`       | Get MCP server status      | `{ [name: string]: `<a href={typesUrl}>MCPStatus</a>` }` |
+| `POST` | `/mcp`       | Add MCP server dynamically | body: `{ name, config }`, returns MCP status object      |
 
 ---
 
@@ -234,7 +234,7 @@ http://<hostname>:<port>/doc
 
 | Метод | Путь  | Описание                      | Ответ                                       |
 | ----- | ----- | ----------------------------- | ------------------------------------------- |
-| ХХ0ГГ | ХХ0ГГ | Список всех доступных агентов | <a href={typesUrl}><code>Агент[]</code></a> |
+| `GET`  | `/agent` | List all available agents | <a href={typesUrl}><code>Agent[]</code></a> |
 
 ---
 
@@ -242,7 +242,7 @@ http://<hostname>:<port>/doc
 
 | Метод | Путь  | Описание                                                               | Ответ |
 | ----- | ----- | ---------------------------------------------------------------------- | ----- |
-| ХХ0ГГ | ХХ0ГГ | Напишите запись в журнале. Тело: `{ service, level, message, extra? }` | ХХ0ГГ |
+| `POST` | `/log` | Write log entry. Body: `{ service, level, message, extra? }` | `boolean` |
 
 ---
 
@@ -250,17 +250,17 @@ http://<hostname>:<port>/doc
 
 | Метод | Путь  | Описание                                       | Ответ                     |
 | ----- | ----- | ---------------------------------------------- | ------------------------- |
-| ХХ0ГГ | ХХ0ГГ | Добавить текст в приглашение                   | ХХ0ГГ                     |
-| ХХ0ГГ | ХХ0ГГ | Открыть диалоговое окно справки                | ХХ0ГГ                     |
-| ХХ0ГГ | ХХ0ГГ | Откройте селектор сеансов                      | ХХ0ГГ                     |
-| ХХ0ГГ | ХХ0ГГ | Откройте выбор темы                            | ХХ0ГГ                     |
-| ХХ0ГГ | ХХ0ГГ | Откройте выбор модели                          | ХХ0ГГ                     |
-| ХХ0ГГ | ХХ0ГГ | Отправить текущий запрос                       | ХХ0ГГ                     |
-| ХХ0ГГ | ХХ0ГГ | Очистить подсказку                             | ХХ0ГГ                     |
-| ХХ0ГГ | ХХ0ГГ | Выполнить команду (`{ command }`)              | ХХ0ГГ                     |
-| ХХ0ГГ | ХХ0ГГ | Показать тост (`{ title?, message, variant }`) | ХХ0ГГ                     |
-| ХХ0ГГ | ХХ0ГГ | Дождитесь следующего запроса на управление     | Объект запроса управления |
-| ХХ0ГГ | ХХ0ГГ | Ответ на запрос управления (`{ body }`)        | ХХ0ГГ                     |
+| `POST` | `/tui/append-prompt`    | Append text to the prompt                   | `boolean`              |
+| `POST` | `/tui/open-help`        | Open the help dialog                        | `boolean`              |
+| `POST` | `/tui/open-sessions`    | Open the session selector                   | `boolean`              |
+| `POST` | `/tui/open-themes`      | Open the theme selector                     | `boolean`              |
+| `POST` | `/tui/open-models`      | Open the model selector                     | `boolean`              |
+| `POST` | `/tui/submit-prompt`    | Submit the current prompt                   | `boolean`              |
+| `POST` | `/tui/clear-prompt`     | Clear the prompt                            | `boolean`              |
+| `POST` | `/tui/execute-command`  | Execute a command (`{ command }`)           | `boolean`              |
+| `POST` | `/tui/show-toast`       | Show toast (`{ title?, message, variant }`) | `boolean`              |
+| `GET`  | `/tui/control/next`     | Wait for the next control request           | Control request object |
+| `POST` | `/tui/control/response` | Respond to a control request (`{ body }`)   | `boolean`              |
 
 ---
 
@@ -268,7 +268,7 @@ http://<hostname>:<port>/doc
 
 | Метод | Путь  | Описание                                                                                    | Ответ |
 | ----- | ----- | ------------------------------------------------------------------------------------------- | ----- |
-| ХХ0ГГ | ХХ0ГГ | Установите учетные данные для аутентификации. Тело должно соответствовать схеме поставщика. | ХХ0ГГ |
+| `PUT`  | `/auth/:id` | Set authentication credentials. Body must match provider schema | `boolean` |
 
 ---
 
@@ -276,7 +276,7 @@ http://<hostname>:<port>/doc
 
 | Метод | Путь  | Описание                                                                                       | Ответ                                |
 | ----- | ----- | ---------------------------------------------------------------------------------------------- | ------------------------------------ |
-| ХХ0ГГ | ХХ0ГГ | Поток событий, отправленный сервером. Первое событие — `server.connected`, затем события шины. | Поток событий, отправленных сервером |
+| `GET`  | `/event` | Server-sent events stream. First event is `server.connected`, then bus events | Server-sent events stream |
 
 ---
 
@@ -284,4 +284,4 @@ http://<hostname>:<port>/doc
 
 | Метод | Путь  | Описание                 | Ответ                                  |
 | ----- | ----- | ------------------------ | -------------------------------------- |
-| ХХ0ГГ | ХХ0ГГ | Спецификация OpenAPI 3.1 | HTML-страница со спецификацией OpenAPI |
+| `GET`  | `/doc` | OpenAPI 3.1 specification | HTML page with OpenAPI spec |

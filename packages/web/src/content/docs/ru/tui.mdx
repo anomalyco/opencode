@@ -31,7 +31,7 @@ Give me a quick summary of the codebase.
 
 Вы можете ссылаться на файлы в своих сообщениях, используя `@`. Это выполняет нечеткий поиск файлов в текущем рабочем каталоге.
 
-:::кончик
+:::tip
 Вы также можете использовать `@` для ссылки на файлы в своих сообщениях.
 :::
 
@@ -191,7 +191,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 Повторить ранее отмененное сообщение. Доступно только после использования `/undo`.
 
-:::кончик
+:::tip
 Любые изменения файлов также будут восстановлены.
 :::
 
@@ -246,7 +246,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 Переключить видимость блоков мышления/рассуждения в разговоре. Если этот параметр включен, вы можете увидеть процесс рассуждения модели для моделей, поддерживающих расширенное мышление.
 
-:::примечание
+:::note
 Эта команда только контролирует, будут ли **отображаться** блоки мышления, но не включает и не отключает возможности модели по рассуждению. Чтобы переключить фактические возможности рассуждения, используйте `ctrl+t` для циклического переключения вариантов модели.
 :::
 
@@ -260,7 +260,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 Отменить последнее сообщение в разговоре. Удаляет самое последнее сообщение пользователя, все последующие ответы и любые изменения файлов.
 
-:::кончик
+:::tip
 Любые внесенные изменения в файле также будут отменены.
 :::
 
@@ -289,12 +289,12 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 Команды `/editor` и `/export` используют редактор, указанный в переменной среды `EDITOR`.
 
-ХХ0ГГ
-ХХ0ГГ
-
-````bash # Example for nano or vim
-export EDITOR=nano
-export EDITOR=vim
+<Tabs>
+  <TabItem label="Linux/macOS">
+    ```bash
+    # Example for nano or vim
+    export EDITOR=nano
+    export EDITOR=vim
 
     # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
     # include --wait
@@ -304,25 +304,25 @@ export EDITOR=vim
     Чтобы сделать его постоянным, добавьте это в свой профиль оболочки;
     `~/.bashrc`, `~/.zshrc` и т. д.
 
-ХХ0ГГ
+  </TabItem>
 
-ХХ0ГГ
-```bash
-set EDITOR=notepad
+  <TabItem label="Windows (CMD)">
+    ```bash
+    set EDITOR=notepad
 
     # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
     # include --wait
     set EDITOR=code --wait
     ```
 
-    Чтобы сделать его постоянным, используйте **Свойства системы** > **Среда.
+    Чтобы сделать его постоянным, используйте **Свойства системы** > **Среда
     Переменные**.
 
-ХХ0ГГ
+  </TabItem>
 
-ХХ0ГГ
-```powershell
-$env:EDITOR = "notepad"
+  <TabItem label="Windows (PowerShell)">
+    ```powershell
+    $env:EDITOR = "notepad"
 
     # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
     # include --wait
@@ -331,8 +331,8 @@ $env:EDITOR = "notepad"
 
     Чтобы сделать его постоянным, добавьте его в свой профиль PowerShell.
 
-ХХ0ГГ
-ХХ0ГГ
+  </TabItem>
+</Tabs>
 
 Популярные варианты редактора включают в себя:
 
@@ -345,7 +345,7 @@ $env:EDITOR = "notepad"
 - `notepad` — Блокнот Windows
 - `subl` – возвышенный текст
 
-:::примечание
+:::note
 Некоторые редакторы, такие как VS Code, необходимо запускать с флагом `--wait`.
 :::
 

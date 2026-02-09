@@ -50,7 +50,7 @@ Når du kjører `opencode` starter den en TUI og en server. Der TUI er
 klient som snakker med serveren. Serveren viser en OpenAPI 3.1-spesifikasjon
 endepunkt. Dette endepunktet brukes også til å generere en [SDK](/docs/sdk).
 
-:::tupp
+:::tip
 Bruk opencode-serveren til å samhandle med opencode programmatisk.
 :::
 
@@ -128,7 +128,7 @@ OpenCode-serveren viser følgende APIer.
 | ------- | ------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------- |
 | `GET`   | `/config`           | Få konfigurasjonsinformasjon           | <a href={typesUrl}><code>Config</code></a>                                               |
 | `PATCH` | `/config`           | Oppdater konfigurasjon                 | <a href={typesUrl}><code>Config</code></a>                                               |
-| `GET`   | `/config/providers` | Liste leverandører og standardmodeller | `{ providers: `<a href={typesUrl}>Tilbyder[]</a>`, default: { [key: string]: string } }` |
+| `GET`   | `/config/providers` | Liste leverandører og standardmodeller | `{ providers: `<a href={typesUrl}>Provider[]</a>`, default: { [key: string]: string } }` |
 
 ---
 
@@ -136,7 +136,7 @@ OpenCode-serveren viser følgende APIer.
 
 | Metode | Sti                              | Beskrivelse                                     | Svar                                                                                |
 | ------ | -------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `GET`  | `/provider`                      | Liste alle leverandører                         | `{ all: `<a href={typesUrl}>Tilbyder[]</a>`, default: {...}, connected: string[] }` |
+| `GET`  | `/provider`                      | Liste alle leverandører                         | `{ all: `<a href={typesUrl}>Provider[]</a>`, default: {...}, connected: string[] }` |
 | `GET`  | `/provider/auth`                 | Få leverandørautentiseringsmetoder              | `{ [providerID: string]: `<a href={typesUrl}>ProviderAuthMethod[]</a>` }`           |
 | `POST` | `/provider/{id}/oauth/authorize` | Autoriser en leverandør ved å bruke OAuth       | <a href={typesUrl}><code>ProviderAuthAuthorization</code></a>                       |
 | `POST` | `/provider/{id}/oauth/callback`  | Håndtere OAuth-tilbakeringing for en leverandør | `boolean`                                                                           |
@@ -174,7 +174,7 @@ OpenCode-serveren viser følgende APIer.
 | ------ | --------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `GET`  | `/session/:id/message`            | Liste meldinger i en økt               | spørring: `limit?`, returnerer `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}[]`                                                     |
 | `POST` | `/session/:id/message`            | Send en melding og vent på svar        | body: `{ messageID?, model?, agent?, noReply?, system?, tools?, parts }`, returnerer `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}` |
-| `GET`  | `/session/:id/message/:messageID` | Få meldingsdetaljer                    | Returnerer `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Del[]</a>`}`                                                                            |
+| `GET`  | `/session/:id/message/:messageID` | Få meldingsdetaljer                    | Returnerer `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                                                            |
 | `POST` | `/session/:id/prompt_async`       | Send en melding asynkront (ingen vent) | body: samme som `/session/:id/message`, returnerer `204 No Content`                                                                                                      |
 | `POST` | `/session/:id/command`            | Utfør en skråstrek-kommando            | body: `{ messageID?, agent?, model?, command, arguments }`, returnerer `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`               |
 | `POST` | `/session/:id/shell`              | Kjør en shell-kommando                 | body: `{ agent, model?, command }`, returnerer `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                       |

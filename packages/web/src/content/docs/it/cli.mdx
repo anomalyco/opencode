@@ -33,6 +33,7 @@ opencode [project]
 | ------------ | ----- | ----------------------------------- |
 | `--continue` | `-c`  | Continua l'ultima sessione          |
 | `--session`  | `-s`  | ID sessione da continuare           |
+| `--fork`     |       | Duplica la sessione quando continui (usa con `--continue` o `--session`) |
 | `--prompt`   |       | Prompt da usare                     |
 | `--model`    | `-m`  | Modello nel formato provider/model  |
 | `--agent`    |       | Agente da usare                     |
@@ -339,6 +340,7 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | `--command`  |       | Il comando da eseguire; usa message per gli argomenti                 |
 | `--continue` | `-c`  | Continua l'ultima sessione                                            |
 | `--session`  | `-s`  | ID sessione da continuare                                             |
+| `--fork`     |       | Duplica la sessione quando continui (usa con `--continue` o `--session`) |
 | `--share`    |       | Condividi la sessione                                                 |
 | `--model`    | `-m`  | Modello nel formato provider/model                                    |
 | `--agent`    |       | Agente da usare                                                       |

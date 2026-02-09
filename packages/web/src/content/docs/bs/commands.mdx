@@ -183,7 +183,7 @@ Ili da vidite nedavne promjene:
 
 ```md title=".opencode/commands/review-changes.md"
 ---
-opis: Pregledajte nedavne promjene
+description: Review recent changes
 ---
 
 Nedavna git urezivanja:
@@ -224,7 +224,7 @@ Opcija `template` definira prompt koji će biti poslan LLM-u kada se naredba izv
 
 ```json title="opencode.json"
 {
-  "komanda": {
+  "command": {
     "test": {
       "template": "Pokrenite kompletan testni paket sa izvještajem o pokrivenosti i pokažite sve greške.\nFokusirajte se na neuspjele testove i predložite popravke."
     }
@@ -262,8 +262,8 @@ Da onemogućite ovo ponašanje, postavite `subtask` na `false`.
 
 ```json title="opencode.json"
 {
-  "komanda": {
-    "recenzija": {
+  "command": {
+    "review": {
       "agent": "plan"
     }
   }
@@ -300,9 +300,9 @@ Koristite `model` konfiguraciju da nadjačate zadani model za ovu naredbu.
 
 ```json title="opencode.json"
 {
-  "komanda": {
-    "analizirati": {
-      "model": "antropski/claude-3-5-sonnet-20241022"
+  "command": {
+    "analyze": {
+      "model": "anthropic/claude-3-5-sonnet-20241022"
     }
   }
 }
@@ -315,7 +315,7 @@ Ovo je **opciona** opcija konfiguracije.
 ## Embedded
 
 opencode uključuje nekoliko ugrađenih naredbi kao što su `/init`, `/undo`, `/redo`, `/share`, `/help`; [saznaj više](/docs/tui#commands).
-:::napomena
+:::note
 Prilagođene komande mogu nadjačati ugrađene komande.
 :::
 Ako definirate prilagođenu naredbu s istim imenom, ona će nadjačati ugrađenu naredbu.

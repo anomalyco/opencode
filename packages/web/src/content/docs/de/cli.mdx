@@ -33,6 +33,7 @@ opencode [project]
 | ------------ | ---- | ------------------------------------------------- |
 | `--continue` | `-c` | Setzen Sie die letzte Sitzung fort                |
 | `--session`  | `-s` | Sitzung ID zum Fortfahren                         |
+| `--fork`     |      | Sitzung beim Fortsetzen verzweigen (mit `--continue` oder `--session`) |
 | `--prompt`   |      | Zur Verwendung auffordern                         |
 | `--model`    | `-m` | Zu verwendendes Modell in der Form provider/model |
 | `--agent`    |      | Zu verwendender Agent                             |
@@ -335,10 +336,11 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 #### Flaggen
 
 | Flagge       | Kurz | Beschreibung                                                                                        |
-| ------------ | ---- | --------------------------------------------------------------------------------------------------- | --------- |
-| `--command`  |      | Der auszuführende Befehl: Nachricht für args                                                        | verwenden |
+| ------------ | ---- | --------------------------------------------------------------------------------------------------- |
+| `--command`  |      | Der auszuführende Befehl, Nachricht für Argumente verwenden                                         |
 | `--continue` | `-c` | Setzen Sie die letzte Sitzung fort                                                                  |
 | `--session`  | `-s` | Sitzung ID zum Fortfahren                                                                           |
+| `--fork`     |      | Verzweigen Sie die Sitzung beim Fortsetzen (mit `--continue` oder `--session`) verwenden            |
 | `--share`    |      | Teilen Sie die Sitzung                                                                              |
 | `--model`    | `-m` | Zu verwendendes Modell in der Form provider/model                                                   |
 | `--agent`    |      | Zu verwendender Agent                                                                               |
@@ -362,12 +364,12 @@ Dadurch wird ein HTTP-Server gestartet, der API-Zugriff auf Opencode-Funktionali
 
 #### Flaggen
 
-| Flagge       | Beschreibung                            |
-| ------------ | --------------------------------------- | -------- |
-| `--port`     | Port zum Abhören                        |
-| `--hostname` | Hostname zum Abhören                    |
-| `--mdns`     | mDNS-Erkennung aktivieren               |
-| `--cors`     | Zusätzliche Browserursprung(e), um CORS | zulassen |
+| Flagge       | Beschreibung                                       |
+| ------------ | -------------------------------------------------- |
+| `--port`     | Port zum Abhören                                   |
+| `--hostname` | Hostname zum Abhören                               |
+| `--mdns`     | mDNS-Erkennung aktivieren                          |
+| `--cors`     | Zusätzliche Browserursprung(e), um CORS zuzulassen |
 
 ---
 
@@ -408,12 +410,12 @@ opencode stats
 
 #### Flaggen
 
-| Flagge      | Beschreibung                                                                                                     |
-| ----------- | ---------------------------------------------------------------------------------------------------------------- | --- |
-| `--days`    | Statistiken für die letzten N Tage anzeigen (alle Zeiten)                                                        |
-| `--tools`   | Anzahl der angebotenen Werkzeuge (alle)                                                                          |
-| `--models`  | Aufschlüsselung der Modellnutzung anzeigen (standardmäßig ausgeblendet). Übergeben Sie eine Zahl, um das obere N | .   |
-| `--project` | Nach Projekt filtern (alle Projekte, leere Zeichenfolge: aktuelles Projekt)                                      |
+| Flagge      | Beschreibung                                                                                                                   |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `--days`    | Statistiken für die letzten N Tage anzeigen (alle Zeiten)                                                                      |
+| `--tools`   | Anzahl der angebotenen Werkzeuge (alle)                                                                                        |
+| `--models`  | Aufschlüsselung der Modellnutzung anzeigen (standardmäßig ausgeblendet). Übergeben Sie eine Zahl, um die obersten N anzuzeigen |
+| `--project` | Nach Projekt filtern (alle Projekte, leere Zeichenfolge: aktuelles Projekt)                                                    |
 
 ---
 
@@ -458,12 +460,12 @@ Dadurch wird ein HTTP-Server gestartet und ein Webbrowser geöffnet, um über ei
 
 #### Flaggen
 
-| Flagge       | Beschreibung                            |
-| ------------ | --------------------------------------- | -------- |
-| `--port`     | Port zum Abhören                        |
-| `--hostname` | Hostname zum Abhören                    |
-| `--mdns`     | mDNS-Erkennung aktivieren               |
-| `--cors`     | Zusätzliche Browserursprung(e), um CORS | zulassen |
+| Flagge       | Beschreibung                                       |
+| ------------ | -------------------------------------------------- |
+| `--port`     | Port zum Abhören                                   |
+| `--hostname` | Hostname zum Abhören                               |
+| `--mdns`     | mDNS-Erkennung aktivieren                          |
+| `--cors`     | Zusätzliche Browserursprung(e), um CORS zuzulassen |
 
 ---
 
@@ -497,12 +499,12 @@ opencode uninstall
 
 #### Flaggen
 
-| Flagge          | Kurz | Beschreibung                            |
-| --------------- | ---- | --------------------------------------- | ------------ |
-| `--keep-config` | `-c` | Konfigurationsdateien behalten          |
-| `--keep-data`   | `-d` | Sitzungsdaten und Snapshots aufbewahren |
-| `--dry-run`     |      | Zeigt, was entfernt werden würde, ohne  | zu entfernen |
-| `--force`       | `-f` | Bestätigungsaufforderungen überspringen |
+| Flagge          | Kurz | Beschreibung                                        |
+| --------------- | ---- | --------------------------------------------------- |
+| `--keep-config` | `-c` | Konfigurationsdateien behalten                      |
+| `--keep-data`   | `-d` | Sitzungsdaten und Snapshots aufbewahren             |
+| `--dry-run`     |      | Zeigt, was entfernt werden würde, ohne zu entfernen |
+| `--force`       | `-f` | Bestätigungsaufforderungen überspringen             |
 
 ---
 
@@ -528,9 +530,9 @@ opencode upgrade v0.1.48
 
 #### Flaggen
 
-| Flagge     | Kurz | Beschreibung                                                           |
-| ---------- | ---- | ---------------------------------------------------------------------- |
-| `--method` | `-m` | Die verwendete Installationsmethode; Curl, NPM, PNPM, Brötchen, Brauen |
+| Flagge     | Kurz | Beschreibung                                                    |
+| ---------- | ---- | --------------------------------------------------------------- |
+| `--method` | `-m` | Die verwendete Installationsmethode; curl, npm, pnpm, bun, brew |
 
 ---
 
@@ -585,10 +587,10 @@ OpenCode kann mithilfe von Umgebungsvariablen konfiguriert werden.
 Diese Umgebungsvariablen ermöglichen experimentelle Funktionen, die sich ändern oder entfernen können.
 
 | Variable                                        | Geben Sie       | eine Beschreibung                                       |
-| ----------------------------------------------- | --------------- | ------------------------------------------------------- | ------------ |
+| ----------------------------------------------- | --------------- | ------------------------------------------------------- |
 | `OPENCODE_EXPERIMENTAL`                         | boolescher Wert | Alle experimentellen Funktionen aktivieren              |
 | `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolescher Wert | Symbolerkennung aktivieren                              |
-| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolescher Wert | Kopieren bei Auswahl in TUI                             | deaktivieren |
+| `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | boolescher Wert | Kopieren bei Auswahl in TUI deaktivieren                |
 | `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | Zahl            | Standard-Timeout für Bash-Befehle in ms                 |
 | `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | Zahl            | Maximale Ausgabetokens für LLM-Antworten                |
 | `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | boolescher Wert | Dateiüberwachung für das gesamte Verzeichnis aktivieren |

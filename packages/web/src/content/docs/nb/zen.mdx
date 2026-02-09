@@ -25,7 +25,7 @@ Det er et stort antall modeller der ute, men bare noen få av dem
 disse modellene fungerer godt som kodeagenter. I tillegg er de fleste tilbydere
 konfigurert veldig annerledes; slik at du får veldig forskjellig ytelse og kvalitet.
 
-:::tupp
+:::tip
 Vi testet en utvalgt gruppe modeller og leverandører som fungerer godt med OpenCode.
 :::
 
@@ -65,16 +65,16 @@ Du kan også få tilgang til modellene våre gjennom følgende API-endepunkter.
 | Modell              | Modell ID          | Endepunkt                                          | AI SDK Pakke                |
 | ------------------- | ------------------ | -------------------------------------------------- | --------------------------- |
 | GPT 5.2             | gpt-5.2            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.2 Codex       | gpt-5.2-kodeks     | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.2 Codex       | gpt-5.2-codex     | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.1             | gpt-5.1            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5.1 Codex       | gpt-5.1-kodeks     | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5.1 Codex       | gpt-5.1-codex     | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.1 Codex Max   | gpt-5.1-codex-max  | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.1 Codex Mini  | gpt-5.1-codex-mini | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5               | gpt-5              | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| GPT 5 Codex         | gpt-5-kodeks       | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
+| GPT 5 Codex         | gpt-5-codex       | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5 Nano          | gpt-5-nano         | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
-| Claude Sonnet 4.5   | claude-sonnett-4-5 | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
-| Claude Sonnet 4     | claude-sonnett-4   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Sonnet 4.5   | claude-sonnet-4-5 | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| Claude Sonnet 4     | claude-sonnet-4   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
 | Claude Haiku 4.5    | claude-haiku-4-5   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
 | Claude Haiku 3.5    | claude-3-5-haiku   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
 | Claude Opus 4.6     | claude-opus-4-6    | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
@@ -83,16 +83,16 @@ Du kan også få tilgang til modellene våre gjennom følgende API-endepunkter.
 | Gemini 3 Pro        | gemini-3-pro       | `https://opencode.ai/zen/v1/models/gemini-3-pro`   | `@ai-sdk/google`            |
 | Gemini 3 Flash      | gemini-3-flash     | `https://opencode.ai/zen/v1/models/gemini-3-flash` | `@ai-sdk/google`            |
 | MiniMax M2.1        | minimax-m2.1       | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| MiniMax M2.1 Gratis | minimax-m2.1-fri   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
+| MiniMax M2.1 Free | minimax-m2.1-free   | `https://opencode.ai/zen/v1/messages`              | `@ai-sdk/anthropic`         |
 | GLM 4.7             | glm-4.7            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| GLM 4.7 Gratis      | glm-4.7-fri        | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| GLM 4.7 Free      | glm-4.7-free        | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | GLM 4.6             | glm-4.6            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Kimi K2.5           | kimi-k2.5          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Kimi K2.5 Gratis    | kimi-k2.5-fri      | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Kimi K2 Tenker      | kimi-k2-tenking    | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2.5 Free    | kimi-k2.5-free      | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Kimi K2 Thinking      | kimi-k2-thinking    | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Kimi K2             | kimi-k2            | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Qwen3-koder 480B    | qwen3-koder        | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
-| Stor sylteagurk     | stor sylteagurk    | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Qwen3 Coder 480B    | qwen3-coder        | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
+| Big Pickle     | big-pickle    | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 
 [modell-id](/docs/config/#models) i OpenCode-konfigurasjonen
 bruker formatet `opencode/<model-id>`. For eksempel, for GPT 5.2 Codex, ville du
@@ -116,17 +116,17 @@ Vi støtter en pay-as-you-go-modell. Nedenfor er prisene **per 1 million tokens*
 
 | Modell                            | Inngang | Utgang | Bufret Les | Bufret skriv |
 | --------------------------------- | ------- | ------ | ---------- | ------------ |
-| Stor sylteagurk                   | Gratis  | Gratis | Gratis     | -            |
-| MiniMax M2.1 Gratis               | Gratis  | Gratis | Gratis     | -            |
+| Big Pickle                   | Gratis  | Gratis | Gratis     | -            |
+| MiniMax M2.1 Free               | Gratis  | Gratis | Gratis     | -            |
 | MiniMax M2.1                      | $0,30   | $1,20  | $0,10      | -            |
-| GLM 4.7 Gratis                    | Gratis  | Gratis | Gratis     | -            |
+| GLM 4.7 Free                    | Gratis  | Gratis | Gratis     | -            |
 | GLM 4.7                           | $0,60   | $2,20  | $0,10      | -            |
 | GLM 4.6                           | $0,60   | $2,20  | $0,10      | -            |
-| Kimi K2.5 Gratis                  | Gratis  | Gratis | Gratis     | -            |
+| Kimi K2.5 Free                  | Gratis  | Gratis | Gratis     | -            |
 | Kimi K2.5                         | $0,60   | $3,00  | $0,08      | -            |
-| Kimi K2 Tenker                    | $0,40   | $2,50  | -          | -            |
+| Kimi K2 Thinking                    | $0,40   | $2,50  | -          | -            |
 | Kimi K2                           | $0,40   | $2,50  | -          | -            |
-| Qwen3-koder 480B                  | $0,45   | $1,50  | -          | -            |
+| Qwen3 Coder 480B                  | $0,45   | $1,50  | -          | -            |
 | Claude Sonnet 4.5 (≤ 200K tokens) | $3,00   | $15,00 | $0,30      | $3,75        |
 | Claude Sonnet 4.5 (> 200K tokens) | $6,00   | $22,50 | $0,60      | $7,50        |
 | Claude Sonnet 4 (≤ 200K tokens)   | $3,00   | $15,00 | $0,30      | $3,75        |
@@ -159,7 +159,7 @@ Kredittkortgebyrer overføres til kostpris (4,4 % + $0,30 per transaksjon); vi b
 De gratis modellene:
 
 - GLM 4.7 Free er tilgjengelig på OpenCode i en begrenset periode. Teamet bruker denne tiden til å samle tilbakemeldinger og forbedre modellen.
-- Kimi K2.5 Gratis er tilgjengelig på OpenCode i en begrenset periode. Teamet bruker denne tiden til å samle tilbakemeldinger og forbedre modellen.
+- Kimi K2.5 Free er tilgjengelig på OpenCode i en begrenset periode. Teamet bruker denne tiden til å samle tilbakemeldinger og forbedre modellen.
 - MiniMax M2.1 Free er tilgjengelig på OpenCode i en begrenset periode. Teamet bruker denne tiden til å samle tilbakemeldinger og forbedre modellen.
 - Big Pickle er en stealth-modell som er gratis på OpenCode i en begrenset periode. Teamet bruker denne tiden til å samle tilbakemeldinger og forbedre modellen.
 
@@ -191,9 +191,9 @@ belaster deg mer enn $20 hvis saldoen din går under $5.
 Alle våre modeller er vert i US. Leverandørene våre følger en nulloppbevaringspolicy og bruker ikke dataene dine til modellopplæring, med følgende unntak:
 
 - Big Pickle: I løpet av gratisperioden kan innsamlede data brukes til å forbedre modellen.
-- GLM 4.7 Gratis: I løpet av gratisperioden kan innsamlede data brukes til å forbedre modellen.
-- Kimi K2.5 Gratis: I løpet av gratisperioden kan innsamlede data brukes til å forbedre modellen.
-- MiniMax M2.1 Gratis: I løpet av gratisperioden kan innsamlede data brukes til å forbedre modellen.
+- GLM 4.7 Free: I løpet av gratisperioden kan innsamlede data brukes til å forbedre modellen.
+- Kimi K2.5 Free: I løpet av gratisperioden kan innsamlede data brukes til å forbedre modellen.
+- MiniMax M2.1 Free: I løpet av gratisperioden kan innsamlede data brukes til å forbedre modellen.
 - OpenAI APIer: Forespørsler oppbevares i 30 dager i samsvar med [OpenAIs datapolicyer](https://platform.openai.com/docs/guides/your-data).
 - Anthropic APIer: Forespørsler oppbevares i 30 dager i samsvar med [Anthropics datapolicyer](https://docs.anthropic.com/en/docs/claude-code/data-usage).
 

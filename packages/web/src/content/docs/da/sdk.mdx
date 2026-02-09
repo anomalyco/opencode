@@ -210,7 +210,7 @@ const pathInfo = await client.path.get()
 | Metode               | Beskrivelse                            | Svar                                                                                                  |
 | -------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | `config.get()`       | Få konfigurasjonsinformasjon           | <a href={typesUrl}><code>Config</code></a>                                                            |
-| `config.providers()` | Liste leverandører og standardmodeller | `{ providers: `<a href={typesUrl}><code>Tilbyder[]</code></a>`, default: { [key: string]: string } }` |
+| `config.providers()` | Liste leverandører og standardmodeller | `{ providers: `<a href={typesUrl}><code>Provider[]</code></a>`, default: { [key: string]: string } }` |
 
 ---
 
@@ -239,10 +239,10 @@ const { providers, default: defaults } = await client.config.providers()
 | `session.share({ path })`                                  | Del økten                           | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                           |
 | `session.unshare({ path })`                                | Slutt å dele økten                  | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                           |
 | `session.summarize({ path, body })`                        | Oppsummer økten                     | Returnerer `boolean`                                                                                                                             |
-| `session.messages({ path })`                               | Liste meldinger i en økt            | Returnerer `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Del[]</code></a>`}[]`                        |
-| `session.message({ path })`                                | Få meldingsdetaljer                 | Returnerer `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Del[]</code></a>`}`                          |
+| `session.messages({ path })`                               | Liste meldinger i en økt            | Returnerer `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                        |
+| `session.message({ path })`                                | Få meldingsdetaljer                 | Returnerer `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                          |
 | `session.prompt({ path, body })`                           | Send melding                        | `body.noReply: true` returnerer UserMessage (kun kontekst). Standard returnerer <a href={typesUrl}><code>AssistantMessage</code></a> med AI svar |
-| `session.command({ path, body })`                          | Send kommando til økt               | Returnerer `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Del[]</code></a>`}`                 |
+| `session.command({ path, body })`                          | Send kommando til økt               | Returnerer `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                 |
 | `session.shell({ path, body })`                            | Kjør en shell-kommando              | Returnerer <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                  |
 | `session.revert({ path, body })`                           | Tilbakestill en melding             | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                           |
 | `session.unrevert({ path })`                               | Gjenopprett tilbakestilte meldinger | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                           |

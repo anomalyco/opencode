@@ -408,12 +408,12 @@ opencode stats
 
 #### フラグ
 
-| 旗          | 説明                                                                                |
-| ----------- | ----------------------------------------------------------------------------------- | -------------------------------- |
-| `--days`    | 過去 N 日間の統計を表示 (すべての時間)                                              |
-| `--tools`   | 表示するツールの数 (すべて)                                                         |
-| `--models`  | モデルの使用状況の内訳を表示します (デフォルトでは非表示)。上位 N                   | を表示するには、数値を渡します。 |
-| `--project` | プロジェクトによるフィルター (すべてのプロジェクト、空の文字列: 現在のプロジェクト) |
+| Flag        | Description                                                                 |
+| ----------- | --------------------------------------------------------------------------- |
+| `--days`    | Show stats for the last N days (all time)                                   |
+| `--tools`   | Number of tools to show (all)                                               |
+| `--models`  | Show model usage breakdown (hidden by default). Pass a number to show top N |
+| `--project` | Filter by project (all projects, empty string: current project)             |
 
 ---
 
@@ -497,12 +497,12 @@ opencode uninstall
 
 #### フラグ
 
-| 旗              | ショート | 説明                                          |
-| --------------- | -------- | --------------------------------------------- | ---------------------------------------- |
-| `--keep-config` | `-c`     | 設定ファイルを保持する                        |
-| `--keep-data`   | `-d`     | セッション データとスナップショットを保持する |
-| `--dry-run`     |          |                                               | を削除せずに削除されるものを表示します。 |
-| `--force`       | `-f`     | 確認プロンプトをスキップする                  |
+| Flag            | Short | Description                                 |
+| --------------- | ----- | ------------------------------------------- |
+| `--keep-config` | `-c`  | Keep configuration files                    |
+| `--keep-data`   | `-d`  | Keep session data and snapshots             |
+| `--dry-run`     |       | Show what would be removed without removing |
+| `--force`       | `-f`  | Skip confirmation prompts                   |
 
 ---
 

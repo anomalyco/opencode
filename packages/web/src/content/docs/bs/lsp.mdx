@@ -8,7 +8,8 @@ description: OpenCode se integriše sa vašim LSP serverima.
 ## Ugrađeno
 
 OpenCode dolazi sa nekoliko ugrađenih LSP servera za popularne jezike:
-| LSP server | Ekstenzije | Zahtjevi || ------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------ |
+| LSP server | Ekstenzije | Zahtjevi
+|------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------ |
 | astro | .astro | Automatske instalacije za Astro projekte |
 | bash | .sh, .bash, .zsh, .ksh | Automatski instalira bash-language-server |
 | clangd | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++ | Automatske instalacije za C/C++ projekte |
@@ -42,7 +43,7 @@ OpenCode dolazi sa nekoliko ugrađenih LSP servera za popularne jezike:
 | yaml-ls | .yaml, .yml | Automatski instalira Red Hat yaml-language-server |
 | zls | .zig, .zon | `zig` komanda dostupna |
 LSP serveri su automatski omogućeni kada se otkrije jedna od gore navedenih ekstenzija datoteke i zahtjevi su ispunjeni.
-:::napomena
+:::note
 Možete onemogućiti automatska preuzimanja LSP servera tako što ćete postaviti varijablu okruženja `OPENCODE_DISABLE_LSP_DOWNLOAD` na `true`.
 :::
 
@@ -69,7 +70,8 @@ Možete prilagoditi LSP servere kroz `lsp` odjeljak u vašoj opencode konfigurac
 ```
 
 Svaki LSP server podržava sljedeće:
-| Nekretnine | Vrsta | Opis || ---------------- | -------- | ------------------------------------------------- |
+| Nekretnine | Vrsta | Opis
+|---------------- | -------- | ------------------------------------------------- |
 | `disabled` | boolean | Postavite ovo na `true` da onemogućite LSP server |
 | `command` | string[] | Naredba za pokretanje LSP servera |
 | `extensions` | string[] | Ekstenzije datoteka koje ovaj LSP server treba da rukuje |
@@ -117,7 +119,7 @@ Koristite svojstvo `initialization` da prosledite opcije inicijalizacije na LSP 
 }
 ```
 
-:::napomena
+:::note
 Opcije inicijalizacije razlikuju se od LSP servera. Provjerite dokumentaciju vašeg LSP servera za dostupne opcije.
 :::
 
