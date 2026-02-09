@@ -1172,12 +1172,12 @@ export namespace Provider {
       }
       for (const item of priority) {
         if (providerID === "amazon-bedrock") {
-          const crossRegionPrefixes = ["global.", "us.", "eu."]
+          const crossRegionPrefixes = ["global.", "us.", "eu.", "jp.", "apac.", "au."]
           const candidates = Object.keys(provider.models).filter((m) => m.includes(item))
 
           // Model selection priority:
           // 1. global. prefix (works everywhere)
-          // 2. User's region prefix (us., eu.)
+          // 2. User's region prefix (us., eu., jp., apac., au.)
           // 3. Unprefixed model
           const globalMatch = candidates.find((m) => m.startsWith("global."))
           if (globalMatch) return getModel(providerID, globalMatch)
@@ -1187,6 +1187,20 @@ export namespace Provider {
             const regionPrefix = region.split("-")[0]
             if (regionPrefix === "us" || regionPrefix === "eu") {
               const regionalMatch = candidates.find((m) => m.startsWith(`${regionPrefix}.`))
+              if (regionalMatch) return getModel(providerID, regionalMatch)
+            } else if (regionPrefix === "ap") {
+              // APAC regions: map to appropriate cross-region prefix
+              const isAustraliaRegion = ["ap-southeast-2", "ap-southeast-4"].includes(region)
+              const isTokyoRegion = region === "ap-northeast-1"
+              let apacPrefix: string
+              if (isAustraliaRegion) {
+                apacPrefix = "au"
+              } else if (isTokyoRegion) {
+                apacPrefix = "jp"
+              } else {
+                apacPrefix = "apac"
+              }
+              const regionalMatch = candidates.find((m) => m.startsWith(`${apacPrefix}.`))
               if (regionalMatch) return getModel(providerID, regionalMatch)
             }
           }
