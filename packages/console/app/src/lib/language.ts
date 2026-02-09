@@ -132,13 +132,15 @@ export function docs(locale: Locale, pathname: string) {
 
   if (value === "root") return `${next.path}${next.suffix}`
 
-  const hit = /^\/docs\/([^/]+)(\/.*)?$/.exec(next.path)
-  if (hit && DOCS_SEGMENT.has(hit[1] ?? "")) {
-    return `${next.path}${next.suffix}`
-  }
-
   if (next.path === "/docs") return `/docs/${value}${next.suffix}`
   if (next.path === "/docs/") return `/docs/${value}/${next.suffix}`
+
+  const head = next.path.slice("/docs/".length).split("/")[0] ?? ""
+  if (!head) return `/docs/${value}/${next.suffix}`
+  if (DOCS_SEGMENT.has(head)) return `${next.path}${next.suffix}`
+  if (head.startsWith("_")) return `${next.path}${next.suffix}`
+  if (head.includes(".")) return `${next.path}${next.suffix}`
+
   return `/docs/${value}${next.path.slice("/docs".length)}${next.suffix}`
 }
 
