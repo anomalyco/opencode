@@ -45,6 +45,7 @@ export const dict = {
   "command.session.new": "新しいセッション",
   "command.file.open": "ファイルを開く",
   "command.tab.closeOthers": "他のタブを閉じる",
+  "command.tab.close": "タブを閉じる",
   "command.context.addSelection": "選択範囲をコンテキストに追加",
   "command.context.addSelection.description": "現在のファイルから選択した行を追加",
   "command.input.focus": "入力欄にフォーカス",

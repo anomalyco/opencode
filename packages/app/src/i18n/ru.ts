@@ -45,6 +45,7 @@ export const dict = {
   "command.session.new": "Новая сессия",
   "command.file.open": "Открыть файл",
   "command.tab.closeOthers": "Закрыть другие вкладки",
+  "command.tab.close": "Закрыть вкладку",
   "command.context.addSelection": "Добавить выделение в контекст",
   "command.context.addSelection.description": "Добавить выбранные строки из текущего файла",
   "command.input.focus": "Фокус на поле ввода",

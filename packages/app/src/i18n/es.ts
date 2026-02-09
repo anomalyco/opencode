@@ -45,6 +45,7 @@ export const dict = {
   "command.session.new": "Nueva sesión",
   "command.file.open": "Abrir archivo",
   "command.tab.closeOthers": "Cerrar otras pestañas",
+  "command.tab.close": "Cerrar pestaña",
   "command.context.addSelection": "Añadir selección al contexto",
   "command.context.addSelection.description": "Añadir las líneas seleccionadas del archivo actual",
   "command.input.focus": "Enfocar entrada",
