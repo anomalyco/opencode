@@ -7,6 +7,7 @@ export const dict = {
   "ui.sessionReview.collapseAll": "ย่อทั้งหมด",
   "ui.sessionReview.change.added": "เพิ่ม",
   "ui.sessionReview.change.removed": "ลบ",
+  "ui.sessionReview.change.modified": "แก้ไข",
 
   "ui.lineComment.label.prefix": "แสดงความคิดเห็นบน ",
   "ui.lineComment.label.suffix": "",

@@ -120,6 +120,11 @@
     gap: calc(var(--spacing) * 0.5);
   }
 
+  &[data-size="small"] {
+    width: 20px;
+    height: 20px;
+  }
+
   &[data-size="large"] {
     height: 32px;
     /* padding: 0 8px 0 6px; */
