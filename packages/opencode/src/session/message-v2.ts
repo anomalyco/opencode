@@ -826,7 +826,7 @@ export namespace MessageV2 {
                     {
                       cause: e,
                     },
-                  )
+                  ).toObject()
                 case "insufficient_quota":
                   return new MessageV2.APIError(
                     {
@@ -837,7 +837,7 @@ export namespace MessageV2 {
                     {
                       cause: e,
                     },
-                  )
+                  ).toObject()
                 case "usage_not_included":
                   return new MessageV2.APIError(
                     {
@@ -849,7 +849,7 @@ export namespace MessageV2 {
                     {
                       cause: e,
                     },
-                  )
+                  ).toObject()
                 case "invalid_prompt":
                   return new MessageV2.APIError(
                     {
@@ -860,12 +860,12 @@ export namespace MessageV2 {
                     {
                       cause: e,
                     },
-                  )
+                  ).toObject()
               }
             }
           }
         } catch {}
-        return new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e })
+        return new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e }).toObject()
     }
   }
 }
