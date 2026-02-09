@@ -167,7 +167,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
   const root = createMemo(() => {
     const nodes = file.tree.children("")
     const paths = nodes
-      .filter((node) => node.type === "file")
+      .filter((node) => node.type === "file" && !node.ignored)
       .map((node) => node.path)
       .sort((a, b) => a.localeCompare(b))
     return paths.slice(0, limit).map(fileItem)

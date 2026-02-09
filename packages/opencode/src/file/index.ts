@@ -496,16 +496,28 @@ export namespace File {
     const project = Instance.project
     let ignored = (_: string) => false
     if (project.vcs === "git") {
-      const ig = ignore()
+      const gitIgnorer = ignore()
       const gitignore = Bun.file(path.join(Instance.worktree, ".gitignore"))
       if (await gitignore.exists()) {
-        ig.add(await gitignore.text())
+        gitIgnorer.add(await gitignore.text())
       }
+
+      const dotIgnorer = ignore()
+      let hasDotIgnore = false
       const ignoreFile = Bun.file(path.join(Instance.worktree, ".ignore"))
       if (await ignoreFile.exists()) {
-        ig.add(await ignoreFile.text())
+        dotIgnorer.add(await ignoreFile.text())
+        hasDotIgnore = true
       }
-      ignored = ig.ignores.bind(ig)
+
+      ignored = (p: string) => {
+        if (hasDotIgnore) {
+          const result = dotIgnorer.test(p)
+          if (result.unignored) return false
+          if (result.ignored) return true
+        }
+        return gitIgnorer.ignores(p)
+      }
     }
     const resolved = dir ? path.join(Instance.directory, dir) : Instance.directory
 
