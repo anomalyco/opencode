@@ -105,12 +105,11 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         // Add the new sidecar url
         if (props.isSidecar && props.defaultUrl) {
           add(props.defaultUrl)
+          setStore("currentSidecarUrl", props.defaultUrl)
         }
 
         setState("active", url)
       })
-
-      console.log(store.list)
     })
 
     const isReady = createMemo(() => ready() && !!state.active)
