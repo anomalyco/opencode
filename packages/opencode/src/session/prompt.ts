@@ -1281,6 +1281,21 @@ export namespace SessionPrompt {
       const plan = Session.plan(input.session)
       const exists = await Bun.file(plan).exists()
       if (!exists) await fs.mkdir(path.dirname(plan), { recursive: true })
+      if (Instance.project.vcs) {
+        const ignore = path.join(Instance.worktree, ".opencode", ".gitignore")
+        const line = "plans/*.md"
+        const current = await Bun.file(ignore)
+          .text()
+          .catch(() => "")
+        if (!current.split(/\r?\n/).includes(line)) {
+          const next = current.trimEnd()
+          if (!next) {
+            await Bun.write(ignore, ["node_modules", "package.json", "bun.lock", ".gitignore", line].join("\n") + "\n")
+          } else {
+            await Bun.write(ignore, next + "\n" + line + "\n")
+          }
+        }
+      }
       const part = await Session.updatePart({
         id: Identifier.ascending("part"),
         messageID: userMessage.info.id,
