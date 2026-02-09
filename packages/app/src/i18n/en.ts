@@ -48,6 +48,7 @@ export const dict = {
   "command.tab.close": "Close tab",
   "command.context.addSelection": "Add selection to context",
   "command.context.addSelection.description": "Add selected lines from the current file",
+  "command.input.focus": "Focus input",
   "command.terminal.toggle": "Toggle terminal",
   "command.fileTree.toggle": "Toggle file tree",
   "command.review.toggle": "Toggle review",
@@ -257,6 +258,7 @@ export const dict = {
   "prompt.popover.emptyResults": "No matching results",
   "prompt.popover.emptyCommands": "No matching commands",
   "prompt.dropzone.label": "Drop images or PDFs here",
+  "prompt.dropzone.file.label": "Drop to @mention file",
   "prompt.slash.badge.custom": "custom",
   "prompt.slash.badge.skill": "skill",
   "prompt.slash.badge.mcp": "mcp",
@@ -278,6 +280,7 @@ export const dict = {
   "prompt.toast.shellSendFailed.title": "Failed to send shell command",
   "prompt.toast.commandSendFailed.title": "Failed to send command",
   "prompt.toast.promptSendFailed.title": "Failed to send prompt",
+  "prompt.toast.promptSendFailed.description": "Unable to retrieve session",
 
   "dialog.mcp.title": "MCPs",
   "dialog.mcp.description": "{{enabled}} of {{total}} enabled",
