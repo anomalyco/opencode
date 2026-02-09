@@ -1,87 +1,112 @@
 #!/usr/bin/env bun
 
+import { $ } from "bun"
+
 interface PR {
   number: number
   title: string
+  author: { login: string }
+  labels: Array<{ name: string }>
 }
 
-interface RunResult {
-  exitCode: number
-  stdout: string
-  stderr: string
+interface FailedPR {
+  number: number
+  title: string
+  reason: string
+}
+
+async function commentOnPR(prNumber: number, reason: string) {
+  const body = `⚠️ **Blocking Beta Release**
+
+This PR cannot be merged into the beta branch due to: **${reason}**
+
+Please resolve this issue to include this PR in the next beta release.`
+
+  try {
+    await $`gh pr comment ${prNumber} --body ${body}`
+    console.log(`  Posted comment on PR #${prNumber}`)
+  } catch (err) {
+    console.log(`  Failed to post comment on PR #${prNumber}: ${err}`)
+  }
 }
 
 async function main() {
-  console.log("Fetching open contributor PRs...")
+  console.log("Fetching open PRs with beta label...")
 
-  const prsResult = await $`gh pr list --label contributor --state open --json number,title --limit 100`.nothrow()
-  if (prsResult.exitCode !== 0) {
-    throw new Error(`Failed to fetch PRs: ${prsResult.stderr}`)
+  const stdout = await $`gh pr list --state open --label beta --json number,title,author,labels --limit 100`.text()
+  const prs: PR[] = JSON.parse(stdout)
+
+  console.log(`Found ${prs.length} open PRs with beta label`)
+
+  if (prs.length === 0) {
+    console.log("No team PRs to merge")
+    return
   }
-
-  const prs: PR[] = JSON.parse(prsResult.stdout)
-  console.log(`Found ${prs.length} open contributor PRs`)
 
   console.log("Fetching latest dev branch...")
-  const fetchDev = await $`git fetch origin dev`.nothrow()
-  if (fetchDev.exitCode !== 0) {
-    throw new Error(`Failed to fetch dev branch: ${fetchDev.stderr}`)
-  }
+  await $`git fetch origin dev`
 
   console.log("Checking out beta branch...")
-  const checkoutBeta = await $`git checkout -B beta origin/dev`.nothrow()
-  if (checkoutBeta.exitCode !== 0) {
-    throw new Error(`Failed to checkout beta branch: ${checkoutBeta.stderr}`)
-  }
+  await $`git checkout -B beta origin/dev`
 
   const applied: number[] = []
-  const skipped: Array<{ number: number; reason: string }> = []
+  const failed: FailedPR[] = []
 
   for (const pr of prs) {
     console.log(`\nProcessing PR #${pr.number}: ${pr.title}`)
 
     console.log("  Fetching PR head...")
-    const fetch = await run(["git", "fetch", "origin", `pull/${pr.number}/head:pr/${pr.number}`])
-    if (fetch.exitCode !== 0) {
-      console.log(`  Failed to fetch PR head: ${fetch.stderr}`)
-      skipped.push({ number: pr.number, reason: `Fetch failed: ${fetch.stderr}` })
+    try {
+      await $`git fetch origin pull/${pr.number}/head:pr/${pr.number}`
+    } catch (err) {
+      console.log(`  Failed to fetch: ${err}`)
+      failed.push({ number: pr.number, title: pr.title, reason: "Fetch failed" })
+      await commentOnPR(pr.number, "Fetch failed")
       continue
     }
 
     console.log("  Merging...")
-    const merge = await run(["git", "merge", "--no-commit", "--no-ff", `pr/${pr.number}`])
-    if (merge.exitCode !== 0) {
+    try {
+      await $`git merge --no-commit --no-ff pr/${pr.number}`
+    } catch {
       console.log("  Failed to merge (conflicts)")
-      await $`git merge --abort`.nothrow()
-      await $`git checkout -- .`.nothrow()
-      await $`git clean -fd`.nothrow()
-      skipped.push({ number: pr.number, reason: "Has conflicts" })
+      try {
+        await $`git merge --abort`
+      } catch {}
+      try {
+        await $`git checkout -- .`
+      } catch {}
+      try {
+        await $`git clean -fd`
+      } catch {}
+      failed.push({ number: pr.number, title: pr.title, reason: "Merge conflicts" })
+      await commentOnPR(pr.number, "Merge conflicts with dev branch")
       continue
     }
 
-    const mergeHead = await $`git rev-parse -q --verify MERGE_HEAD`.nothrow()
-    if (mergeHead.exitCode !== 0) {
+    try {
+      await $`git rev-parse -q --verify MERGE_HEAD`.text()
+    } catch {
       console.log("  No changes, skipping")
-      skipped.push({ number: pr.number, reason: "No changes" })
       continue
     }
 
-    const add = await $`git add -A`.nothrow()
-    if (add.exitCode !== 0) {
-      console.log("  Failed to stage")
-      await $`git checkout -- .`.nothrow()
-      await $`git clean -fd`.nothrow()
-      skipped.push({ number: pr.number, reason: "Failed to stage" })
+    try {
+      await $`git add -A`
+    } catch {
+      console.log("  Failed to stage changes")
+      failed.push({ number: pr.number, title: pr.title, reason: "Staging failed" })
+      await commentOnPR(pr.number, "Failed to stage changes")
       continue
     }
 
     const commitMsg = `Apply PR #${pr.number}: ${pr.title}`
-    const commit = await run(["git", "commit", "-m", commitMsg])
-    if (commit.exitCode !== 0) {
-      console.log(`  Failed to commit: ${commit.stderr}`)
-      await $`git checkout -- .`.nothrow()
-      await $`git clean -fd`.nothrow()
-      skipped.push({ number: pr.number, reason: `Commit failed: ${commit.stderr}` })
+    try {
+      await $`git commit -m ${commitMsg}`
+    } catch (err) {
+      console.log(`  Failed to commit: ${err}`)
+      failed.push({ number: pr.number, title: pr.title, reason: "Commit failed" })
+      await commentOnPR(pr.number, "Failed to commit changes")
       continue
     }
 
@@ -92,14 +117,26 @@ async function main() {
   console.log("\n--- Summary ---")
   console.log(`Applied: ${applied.length} PRs`)
   applied.forEach((num) => console.log(`  - PR #${num}`))
-  console.log(`Skipped: ${skipped.length} PRs`)
-  skipped.forEach((x) => console.log(`  - PR #${x.number}: ${x.reason}`))
 
-  console.log("\nForce pushing beta branch...")
-  const push = await $`git push origin beta --force --no-verify`.nothrow()
-  if (push.exitCode !== 0) {
-    throw new Error(`Failed to push beta branch: ${push.stderr}`)
+  if (failed.length > 0) {
+    console.log(`Failed: ${failed.length} PRs`)
+    failed.forEach((f) => console.log(`  - PR #${f.number}: ${f.reason}`))
+    throw new Error(`${failed.length} PR(s) failed to merge`)
   }
+
+  console.log("\nChecking if beta branch has changes...")
+  await $`git fetch origin beta`
+
+  const localTree = await $`git rev-parse beta^{tree}`.text()
+  const remoteTree = await $`git rev-parse origin/beta^{tree}`.text()
+
+  if (localTree.trim() === remoteTree.trim()) {
+    console.log("Beta branch has identical contents, no push needed")
+    return
+  }
+
+  console.log("Force pushing beta branch...")
+  await $`git push origin beta --force --no-verify`
 
   console.log("Successfully synced beta branch")
 }
@@ -108,31 +145,3 @@ main().catch((err) => {
   console.error("Error:", err)
   process.exit(1)
 })
-
-async function run(args: string[], stdin?: Uint8Array): Promise<RunResult> {
-  const proc = Bun.spawn(args, {
-    stdin: stdin ?? "inherit",
-    stdout: "pipe",
-    stderr: "pipe",
-  })
-  const exitCode = await proc.exited
-  const stdout = await new Response(proc.stdout).text()
-  const stderr = await new Response(proc.stderr).text()
-  return { exitCode, stdout, stderr }
-}
-
-function $(strings: TemplateStringsArray, ...values: unknown[]) {
-  const cmd = strings.reduce((acc, str, i) => acc + str + (values[i] ?? ""), "")
-  return {
-    async nothrow() {
-      const proc = Bun.spawn(cmd.split(" "), {
-        stdout: "pipe",
-        stderr: "pipe",
-      })
-      const exitCode = await proc.exited
-      const stdout = await new Response(proc.stdout).text()
-      const stderr = await new Response(proc.stderr).text()
-      return { exitCode, stdout, stderr }
-    },
-  }
-}

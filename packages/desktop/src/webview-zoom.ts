@@ -4,28 +4,34 @@
 
 import { invoke } from "@tauri-apps/api/core"
 import { type as ostype } from "@tauri-apps/plugin-os"
+import { createSignal } from "solid-js"
 
 const OS_NAME = ostype()
 
-let zoomLevel = 1
+const [webviewZoom, setWebviewZoom] = createSignal(1)
 
 const MAX_ZOOM_LEVEL = 10
 const MIN_ZOOM_LEVEL = 0.2
 
+const clamp = (value: number) => Math.min(Math.max(value, MIN_ZOOM_LEVEL), MAX_ZOOM_LEVEL)
+
+const applyZoom = (next: number) => {
+  setWebviewZoom(next)
+  invoke("plugin:webview|set_webview_zoom", {
+    value: next,
+  })
+}
+
 window.addEventListener("keydown", (event) => {
-  if (OS_NAME === "macos" ? event.metaKey : event.ctrlKey) {
-    if (event.key === "-") {
-      zoomLevel -= 0.2
-    } else if (event.key === "=" || event.key === "+") {
-      zoomLevel += 0.2
-    } else if (event.key === "0") {
-      zoomLevel = 1
-    } else {
-      return
-    }
-    zoomLevel = Math.min(Math.max(zoomLevel, MIN_ZOOM_LEVEL), MAX_ZOOM_LEVEL)
-    invoke("plugin:webview|set_webview_zoom", {
-      value: zoomLevel,
-    })
-  }
+  if (!(OS_NAME === "macos" ? event.metaKey : event.ctrlKey)) return
+
+  let newZoom = webviewZoom()
+
+  if (event.key === "-") newZoom -= 0.2
+  if (event.key === "=" || event.key === "+") newZoom += 0.2
+  if (event.key === "0") newZoom = 1
+
+  applyZoom(clamp(newZoom))
 })
+
+export { webviewZoom }

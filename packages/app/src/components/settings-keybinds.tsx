@@ -44,7 +44,7 @@ function groupFor(id: string): KeybindGroup {
   if (id === PALETTE_ID) return "General"
   if (id.startsWith("terminal.")) return "Terminal"
   if (id.startsWith("model.") || id.startsWith("agent.") || id.startsWith("mcp.")) return "Model and agent"
-  if (id.startsWith("file.")) return "Navigation"
+  if (id.startsWith("file.") || id.startsWith("fileTree.")) return "Navigation"
   if (id.startsWith("prompt.")) return "Prompt"
   if (
     id.startsWith("session.") ||
@@ -396,6 +396,7 @@ export const SettingsKeybinds: Component = () => {
                         <span class="text-14-regular text-text-strong">{title(id)}</span>
                         <button
                           type="button"
+                          data-keybind-id={id}
                           classList={{
                             "h-8 px-3 rounded-md text-12-regular": true,
                             "bg-surface-base text-text-subtle hover:bg-surface-raised-base-hover active:bg-surface-raised-base-active":

@@ -23,6 +23,7 @@ runs:
       with:
         app-id: ${{ inputs.opencode-app-id }}
         private-key: ${{ inputs.opencode-app-secret }}
+        owner: ${{ github.repository_owner }}
 
     - name: Configure git user
       run: |
