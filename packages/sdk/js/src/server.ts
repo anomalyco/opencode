@@ -7,6 +7,7 @@ export type ServerOptions = {
   signal?: AbortSignal
   timeout?: number
   config?: Config
+  executable?: string
 }
 
 export type TuiOptions = {
@@ -16,6 +17,7 @@ export type TuiOptions = {
   agent?: string
   signal?: AbortSignal
   config?: Config
+  executable?: string
 }
 
 export async function createOpencodeServer(options?: ServerOptions) {
@@ -31,7 +33,7 @@ export async function createOpencodeServer(options?: ServerOptions) {
   const args = [`serve`, `--hostname=${options.hostname}`, `--port=${options.port}`]
   if (options.config?.logLevel) args.push(`--log-level=${options.config.logLevel}`)
 
-  const proc = spawn(`opencode`, args, {
+  const proc = spawn(options.executable ?? `opencode`, args, {
     signal: options.signal,
     env: {
       ...process.env,
@@ -106,7 +108,7 @@ export function createOpencodeTui(options?: TuiOptions) {
     args.push(`--agent=${options.agent}`)
   }
 
-  const proc = spawn(`opencode`, args, {
+  const proc = spawn(options?.executable ?? `opencode`, args, {
     signal: options?.signal,
     stdio: "inherit",
     env: {
