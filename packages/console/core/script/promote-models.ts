@@ -9,7 +9,7 @@ const stage = process.argv[2]
 if (!stage) throw new Error("Stage is required")
 
 const root = path.resolve(process.cwd(), "..", "..", "..")
-const PARTS = 10
+const PARTS = 20
 
 // read the secret
 const ret = await $`bun sst secret list`.cwd(root).text()
@@ -29,5 +29,5 @@ ZenData.validate(JSON.parse(values.join("")))
 
 // update the secret
 const envFile = Bun.file(path.join(os.tmpdir(), `models-${Date.now()}.env`))
-await envFile.write(values.map((v, i) => `ZEN_MODELS${i + 1}=${v}`).join("\n"))
+await envFile.write(values.map((v, i) => `ZEN_MODELS${i + 1}="${v.replace(/"/g, '\\"')}"`).join("\n"))
 await $`bun sst secret load ${envFile.name} --stage ${stage}`.cwd(root)

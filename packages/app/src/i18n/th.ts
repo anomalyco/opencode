@@ -28,8 +28,8 @@ export const dict = {
   "command.settings.open": "เปิดการตั้งค่า",
   "command.session.previous": "เซสชันก่อนหน้า",
   "command.session.next": "เซสชันถัดไป",
-  "command.session.previous.unseen": "Previous unread session",
-  "command.session.next.unseen": "Next unread session",
+  "command.session.previous.unseen": "เซสชันที่ยังไม่ได้อ่านก่อนหน้า",
+  "command.session.next.unseen": "เซสชันที่ยังไม่ได้อ่านถัดไป",
   "command.session.archive": "จัดเก็บเซสชัน",
 
   "command.palette": "คำสั่งค้นหา",
@@ -44,8 +44,10 @@ export const dict = {
 
   "command.session.new": "เซสชันใหม่",
   "command.file.open": "เปิดไฟล์",
+  "command.tab.close": "ปิดแท็บ",
   "command.context.addSelection": "เพิ่มส่วนที่เลือกไปยังบริบท",
   "command.context.addSelection.description": "เพิ่มบรรทัดที่เลือกจากไฟล์ปัจจุบัน",
+  "command.input.focus": "โฟกัสช่องป้อนข้อมูล",
   "command.terminal.toggle": "สลับเทอร์มินัล",
   "command.fileTree.toggle": "สลับต้นไม้ไฟล์",
   "command.review.toggle": "สลับการตรวจสอบ",
@@ -216,6 +218,7 @@ export const dict = {
   "prompt.popover.emptyResults": "ไม่พบผลลัพธ์ที่ตรงกัน",
   "prompt.popover.emptyCommands": "ไม่พบคำสั่งที่ตรงกัน",
   "prompt.dropzone.label": "วางรูปภาพหรือ PDF ที่นี่",
+  "prompt.dropzone.file.label": "วางเพื่อ @กล่าวถึงไฟล์",
   "prompt.slash.badge.custom": "กำหนดเอง",
   "prompt.slash.badge.skill": "skill",
   "prompt.slash.badge.mcp": "mcp",
@@ -237,6 +240,7 @@ export const dict = {
   "prompt.toast.shellSendFailed.title": "ไม่สามารถส่งคำสั่งเชลล์",
   "prompt.toast.commandSendFailed.title": "ไม่สามารถส่งคำสั่ง",
   "prompt.toast.promptSendFailed.title": "ไม่สามารถส่งพร้อมท์",
+  "prompt.toast.promptSendFailed.description": "ไม่สามารถดึงเซสชันได้",
 
   "dialog.mcp.title": "MCPs",
   "dialog.mcp.description": "{{enabled}} จาก {{total}} ที่เปิดใช้งาน",

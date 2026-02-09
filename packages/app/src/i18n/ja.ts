@@ -28,8 +28,8 @@ export const dict = {
   "command.settings.open": "設定を開く",
   "command.session.previous": "前のセッション",
   "command.session.next": "次のセッション",
-  "command.session.previous.unseen": "Previous unread session",
-  "command.session.next.unseen": "Next unread session",
+  "command.session.previous.unseen": "前の未読セッション",
+  "command.session.next.unseen": "次の未読セッション",
   "command.session.archive": "セッションをアーカイブ",
 
   "command.palette": "コマンドパレット",
@@ -44,8 +44,10 @@ export const dict = {
 
   "command.session.new": "新しいセッション",
   "command.file.open": "ファイルを開く",
+  "command.tab.close": "タブを閉じる",
   "command.context.addSelection": "選択範囲をコンテキストに追加",
   "command.context.addSelection.description": "現在のファイルから選択した行を追加",
+  "command.input.focus": "入力欄にフォーカス",
   "command.terminal.toggle": "ターミナルの切り替え",
   "command.fileTree.toggle": "ファイルツリーを切り替え",
   "command.review.toggle": "レビューの切り替え",
@@ -210,6 +212,7 @@ export const dict = {
   "prompt.popover.emptyResults": "一致する結果がありません",
   "prompt.popover.emptyCommands": "一致するコマンドがありません",
   "prompt.dropzone.label": "画像またはPDFをここにドロップ",
+  "prompt.dropzone.file.label": "ドロップして@メンションファイルを追加",
   "prompt.slash.badge.custom": "カスタム",
   "prompt.slash.badge.skill": "スキル",
   "prompt.slash.badge.mcp": "mcp",
@@ -231,6 +234,7 @@ export const dict = {
   "prompt.toast.shellSendFailed.title": "シェルコマンドの送信に失敗しました",
   "prompt.toast.commandSendFailed.title": "コマンドの送信に失敗しました",
   "prompt.toast.promptSendFailed.title": "プロンプトの送信に失敗しました",
+  "prompt.toast.promptSendFailed.description": "セッションを取得できませんでした",
 
   "dialog.mcp.title": "MCP",
   "dialog.mcp.description": "{{total}}個中{{enabled}}個が有効",

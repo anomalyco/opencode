@@ -3,12 +3,16 @@ import { ComponentProps, createEffect, createSignal, onCleanup, onMount, splitPr
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { monoFontFamily, useSettings } from "@/context/settings"
+import { parseKeybind, matchKeybind } from "@/context/command"
 import { SerializeAddon } from "@/addons/serialize"
 import { LocalPTY } from "@/context/terminal"
 import { resolveThemeVariant, useTheme, withAlpha, type HexColor } from "@opencode-ai/ui/theme"
 import { useLanguage } from "@/context/language"
 import { showToast } from "@opencode-ai/ui/toast"
+import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
 
+const TOGGLE_TERMINAL_ID = "terminal.toggle"
+const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
   onSubmit?: () => void
@@ -111,17 +115,13 @@ export const Terminal = (props: TerminalProps) => {
     const colors = getTerminalColors()
     setTerminalColors(colors)
     if (!term) return
-    const setOption = (term as unknown as { setOption?: (key: string, value: TerminalColors) => void }).setOption
-    if (!setOption) return
-    setOption("theme", colors)
+    setOptionIfSupported(term, "theme", colors)
   })
 
   createEffect(() => {
     const font = monoFontFamily(settings.appearance.font())
     if (!term) return
-    const setOption = (term as unknown as { setOption?: (key: string, value: string) => void }).setOption
-    if (!setOption) return
-    setOption("fontFamily", font)
+    setOptionIfSupported(term, "fontFamily", font)
   })
 
   const focusTerminal = () => {
@@ -146,12 +146,12 @@ export const Terminal = (props: TerminalProps) => {
     const t = term
     if (!t) return
 
-    const link = (t as unknown as { currentHoveredLink?: { text: string } }).currentHoveredLink
-    if (!link?.text) return
+    const text = getHoveredLinkText(t)
+    if (!text) return
 
     event.preventDefault()
     event.stopImmediatePropagation()
-    platform.openLink(link.text)
+    platform.openLink(text)
   }
 
   onMount(() => {
@@ -240,17 +240,16 @@ export const Terminal = (props: TerminalProps) => {
           return true
         }
 
-        // allow for ctrl-` to toggle terminal in parent
-        if (event.ctrlKey && key === "`") {
-          return true
-        }
+        // allow for toggle terminal keybinds in parent
+        const config = settings.keybinds.get(TOGGLE_TERMINAL_ID) ?? DEFAULT_TOGGLE_TERMINAL_KEYBIND
+        const keybinds = parseKeybind(config)
 
-        return false
+        return matchKeybind(keybinds, event)
       })
 
       const fit = new mod.FitAddon()
       const serializer = new SerializeAddon()
-      cleanups.push(() => (fit as unknown as { dispose?: VoidFunction }).dispose?.())
+      cleanups.push(() => disposeIfDisposable(fit))
       t.loadAddon(serializer)
       t.loadAddon(fit)
       fitAddon = fit
@@ -290,6 +289,27 @@ export const Terminal = (props: TerminalProps) => {
       handleResize = () => fit.fit()
       window.addEventListener("resize", handleResize)
       cleanups.push(() => window.removeEventListener("resize", handleResize))
+      const limit = 16_384
+      const min = 32
+      const windowMs = 750
+      const seed = tail.length > limit ? tail.slice(-limit) : tail
+      let sync = seed.length >= min
+      let syncUntil = 0
+      const stopSync = () => {
+        sync = false
+        syncUntil = 0
+      }
+
+      const overlap = (data: string) => {
+        if (!seed) return 0
+        const max = Math.min(seed.length, data.length)
+        if (max < min) return 0
+        for (let i = max; i >= min; i--) {
+          if (seed.slice(-i) === data.slice(0, i)) return i
+        }
+        return 0
+      }
+
       const onResize = t.onResize(async (size) => {
         if (socket.readyState === WebSocket.OPEN) {
           await sdk.client.pty
@@ -303,38 +323,27 @@ export const Terminal = (props: TerminalProps) => {
             .catch(() => {})
         }
       })
-      cleanups.push(() => (onResize as unknown as { dispose?: VoidFunction }).dispose?.())
+      cleanups.push(() => disposeIfDisposable(onResize))
       const onData = t.onData((data) => {
+        if (data) stopSync()
         if (socket.readyState === WebSocket.OPEN) {
           socket.send(data)
         }
       })
-      cleanups.push(() => (onData as unknown as { dispose?: VoidFunction }).dispose?.())
+      cleanups.push(() => disposeIfDisposable(onData))
       const onKey = t.onKey((key) => {
         if (key.key == "Enter") {
           props.onSubmit?.()
         }
       })
-      cleanups.push(() => (onKey as unknown as { dispose?: VoidFunction }).dispose?.())
+      cleanups.push(() => disposeIfDisposable(onKey))
       // t.onScroll((ydisp) => {
       // console.log("Scroll position:", ydisp)
       // })
 
-      const limit = 16_384
-      const seed = tail
-      let sync = !!seed
-
-      const overlap = (data: string) => {
-        if (!seed) return 0
-        const max = Math.min(seed.length, data.length)
-        for (let i = max; i > 0; i--) {
-          if (seed.slice(-i) === data.slice(0, i)) return i
-        }
-        return 0
-      }
-
       const handleOpen = () => {
         local.onConnect?.()
+        if (sync) syncUntil = Date.now() + windowMs
         sdk.client.pty
           .update({
             ptyID: local.pty.id,
@@ -349,18 +358,23 @@ export const Terminal = (props: TerminalProps) => {
       cleanups.push(() => socket.removeEventListener("open", handleOpen))
 
       const handleMessage = (event: MessageEvent) => {
+        if (disposed) return
         const data = typeof event.data === "string" ? event.data : ""
         if (!data) return
 
         const next = (() => {
           if (!sync) return data
+          if (syncUntil && Date.now() > syncUntil) {
+            stopSync()
+            return data
+          }
           const n = overlap(data)
           if (!n) {
-            sync = false
+            stopSync()
             return data
           }
           const trimmed = data.slice(n)
-          if (trimmed) sync = false
+          if (trimmed) stopSync()
           return trimmed
         })()
 
