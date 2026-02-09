@@ -283,7 +283,7 @@ export function SessionHeader() {
           <Portal mount={mount()}>
             <button
               type="button"
-              class="hidden md:flex w-[320px] max-w-full min-w-0 p-1 pl-1.5 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-raised-base transition-colors cursor-default hover:bg-surface-raised-base-hover focus-visible:bg-surface-raised-base-hover active:bg-surface-raised-base-active"
+              class="hidden md:flex w-[320px] max-w-full min-w-0 h-[24px] px-2 pl-1.5 items-center gap-2 justify-between rounded-md border border-border-base bg-surface-panel transition-colors cursor-default hover:bg-surface-raised-base-hover focus-visible:bg-surface-raised-base-hover active:bg-surface-raised-base-active"
               onClick={() => command.trigger("file.open")}
               aria-label={language.t("session.header.searchFiles")}
             >
@@ -294,7 +294,11 @@ export function SessionHeader() {
                 </span>
               </div>
 
-              <Show when={hotkey()}>{(keybind) => <Keybind class="shrink-0">{keybind()}</Keybind>}</Show>
+              <Show when={hotkey()}>
+                {(keybind) => (
+                  <Keybind class="shrink-0 !border-0 !bg-transparent !shadow-none px-0">{keybind()}</Keybind>
+                )}
+              </Show>
             </button>
           </Portal>
         )}
@@ -303,6 +307,7 @@ export function SessionHeader() {
         {(mount) => (
           <Portal mount={mount()}>
             <div class="flex items-center gap-3">
+              <StatusPopover />
               <Show when={projectDirectory()}>
                 <div class="hidden xl:flex items-center">
                   <Show
@@ -322,25 +327,23 @@ export function SessionHeader() {
                     }
                   >
                     <div class="flex items-center">
-                      <div class="flex items-center rounded-full border border-border-base bg-surface-panel">
+                      <div class="flex items-center rounded-md border border-border-base bg-surface-panel overflow-hidden">
                         <Button
                           variant="ghost"
-                          class="rounded-full h-[28px] py-1.5 pr-4 pl-3 gap-2 border-none shadow-none"
+                          class="rounded-none h-[24px] py-1.5 pr-4 pl-3 gap-2 border-none shadow-none"
                           onClick={() => openDir(current().id)}
                           aria-label={language.t("session.header.open.ariaLabel", { app: current().label })}
                         >
                           <AppIcon id={current().icon} class="size-5" />
-                          <span class="text-12-regular text-text-strong">
-                            {language.t("session.header.open.action", { app: current().label })}
-                          </span>
+                          <span class="text-12-regular text-text-strong">Open</span>
                         </Button>
-                        <div class="h-6 w-px bg-border-base" />
+                        <div class="self-stretch w-px bg-border-base/70" />
                         <DropdownMenu>
                           <DropdownMenu.Trigger
                             as={IconButton}
                             icon="chevron-down"
                             variant="ghost"
-                            class="rounded-full h-[28px] w-auto px-2 border-none shadow-none data-[expanded]:bg-surface-raised-base-active"
+                            class="rounded-none h-[24px] w-auto px-2 border-none shadow-none data-[expanded]:bg-surface-raised-base-active"
                             aria-label={language.t("session.header.open.menu")}
                           />
                           <DropdownMenu.Portal>
@@ -380,7 +383,6 @@ export function SessionHeader() {
                   </Show>
                 </div>
               </Show>
-              <StatusPopover />
               <Show when={showShare()}>
                 <div class="flex items-center">
                   <Popover
@@ -396,8 +398,9 @@ export function SessionHeader() {
                     class="rounded-xl [&_[data-slot=popover-close-button]]:hidden"
                     triggerAs={Button}
                     triggerProps={{
-                      variant: "secondary",
-                      class: "rounded-sm h-[24px] px-3",
+                      variant: "ghost",
+                      class:
+                        "rounded-md h-[24px] px-3 border border-border-base bg-surface-panel shadow-none data-[expanded]:bg-surface-raised-base-active",
                       classList: { "rounded-r-none": shareUrl() !== undefined },
                       style: { scale: 1 },
                     }}
@@ -469,8 +472,8 @@ export function SessionHeader() {
                     >
                       <IconButton
                         icon={state.copied ? "check" : "link"}
-                        variant="secondary"
-                        class="rounded-l-none"
+                        variant="ghost"
+                        class="rounded-l-none h-[24px] border border-border-base bg-surface-panel shadow-none"
                         onClick={copyLink}
                         disabled={state.unshare}
                         aria-label={
