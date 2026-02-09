@@ -48,3 +48,7 @@ if (isDocs) {
   <meta property="og:image" content={ogImage} />
   <meta property="twitter:image" content={ogImage} />
 )}
+
+{ isDocs && (
+  <script is:inline src="/docs/table-sort.js"></script>
+)}
