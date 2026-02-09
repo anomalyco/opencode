@@ -81,14 +81,11 @@ scoop bucket add extras; scoop install extras/opencode-desktop
 安装脚本按照以下优先级决定安装路径：
 
 1. `$OPENCODE_INSTALL_DIR` - 自定义安装目录
-2. `$XDG_BIN_DIR` - 符合 XDG 基础目录规范的路径
-3. `$HOME/bin` - 如果存在或可创建的用户二进制目录
-4. `$HOME/.opencode/bin` - 默认备用路径
+2. `$HOME/.opencode/bin` - 默认备用路径
 
 ```bash
 # 示例
 OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 ```
 
 ### Agents
