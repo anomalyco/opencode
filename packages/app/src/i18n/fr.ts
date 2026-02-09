@@ -44,8 +44,10 @@ export const dict = {
 
   "command.session.new": "Nouvelle session",
   "command.file.open": "Ouvrir un fichier",
+  "command.tab.close": "Fermer l'onglet",
   "command.context.addSelection": "Ajouter la sélection au contexte",
   "command.context.addSelection.description": "Ajouter les lignes sélectionnées du fichier actuel",
+  "command.input.focus": "Focus input",
   "command.terminal.toggle": "Basculer le terminal",
   "command.fileTree.toggle": "Basculer l'arborescence des fichiers",
   "command.review.toggle": "Basculer la revue",
@@ -211,6 +213,7 @@ export const dict = {
   "prompt.popover.emptyResults": "Aucun résultat correspondant",
   "prompt.popover.emptyCommands": "Aucune commande correspondante",
   "prompt.dropzone.label": "Déposez des images ou des PDF ici",
+  "prompt.dropzone.file.label": "Déposez pour @mentionner le fichier",
   "prompt.slash.badge.custom": "personnalisé",
   "prompt.slash.badge.skill": "skill",
   "prompt.slash.badge.mcp": "mcp",
@@ -232,6 +235,7 @@ export const dict = {
   "prompt.toast.shellSendFailed.title": "Échec de l'envoi de la commande shell",
   "prompt.toast.commandSendFailed.title": "Échec de l'envoi de la commande",
   "prompt.toast.promptSendFailed.title": "Échec de l'envoi du message",
+  "prompt.toast.promptSendFailed.description": "Impossible de récupérer la session",
 
   "dialog.mcp.title": "MCPs",
   "dialog.mcp.description": "{{enabled}} sur {{total}} activés",

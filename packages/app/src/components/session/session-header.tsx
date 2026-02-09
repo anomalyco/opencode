@@ -420,7 +420,14 @@ export function SessionHeader() {
                         }
                       >
                         <div class="flex flex-col gap-2">
-                          <TextField value={shareUrl() ?? ""} readOnly copyable tabIndex={-1} class="w-full" />
+                          <TextField
+                            value={shareUrl() ?? ""}
+                            readOnly
+                            copyable
+                            copyKind="link"
+                            tabIndex={-1}
+                            class="w-full"
+                          />
                           <div class="grid grid-cols-2 gap-2">
                             <Button
                               size="large"
@@ -544,11 +551,7 @@ export function SessionHeader() {
                   <Button
                     variant="ghost"
                     class="group/file-tree-toggle size-6 p-0"
-                    onClick={() => {
-                      const opening = !layout.fileTree.opened()
-                      if (opening && !view().reviewPanel.opened()) view().reviewPanel.open()
-                      layout.fileTree.toggle()
-                    }}
+                    onClick={() => layout.fileTree.toggle()}
                     aria-label={language.t("command.fileTree.toggle")}
                     aria-expanded={layout.fileTree.opened()}
                     aria-controls="file-tree-panel"

@@ -44,8 +44,10 @@ export const dict = {
 
   "command.session.new": "Nova sessão",
   "command.file.open": "Abrir arquivo",
+  "command.tab.close": "Fechar aba",
   "command.context.addSelection": "Adicionar seleção ao contexto",
   "command.context.addSelection.description": "Adicionar as linhas selecionadas do arquivo atual",
+  "command.input.focus": "Focar entrada",
   "command.terminal.toggle": "Alternar terminal",
   "command.fileTree.toggle": "Alternar árvore de arquivos",
   "command.review.toggle": "Alternar revisão",
@@ -211,6 +213,7 @@ export const dict = {
   "prompt.popover.emptyResults": "Nenhum resultado correspondente",
   "prompt.popover.emptyCommands": "Nenhum comando correspondente",
   "prompt.dropzone.label": "Solte imagens ou PDFs aqui",
+  "prompt.dropzone.file.label": "Solte para @mencionar arquivo",
   "prompt.slash.badge.custom": "personalizado",
   "prompt.slash.badge.skill": "skill",
   "prompt.slash.badge.mcp": "mcp",
@@ -232,6 +235,7 @@ export const dict = {
   "prompt.toast.shellSendFailed.title": "Falha ao enviar comando shell",
   "prompt.toast.commandSendFailed.title": "Falha ao enviar comando",
   "prompt.toast.promptSendFailed.title": "Falha ao enviar prompt",
+  "prompt.toast.promptSendFailed.description": "Não foi possível recuperar a sessão",
 
   "dialog.mcp.title": "MCPs",
   "dialog.mcp.description": "{{enabled}} de {{total}} habilitados",
