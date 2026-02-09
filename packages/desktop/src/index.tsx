@@ -404,6 +404,7 @@ render(() => {
             window.__OPENCODE__ ??= {}
             window.__OPENCODE__.serverPassword = data().password ?? undefined
 
+
             function Inner() {
               const cmd = useCommand()
 
@@ -413,7 +414,7 @@ render(() => {
             }
 
             return (
-              <AppInterface defaultUrl={data().url}>
+              <AppInterface defaultUrl={data().url} isSidecar>
                 <Inner />
               </AppInterface>
             )
