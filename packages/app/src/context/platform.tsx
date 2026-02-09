@@ -61,7 +61,7 @@ export type Platform = {
   getDisplayBackend?(): Promise<DisplayBackend | null> | DisplayBackend | null
 
   /** Set the preferred display backend (desktop only) */
-  setDisplayBackend?(backend: DisplayBackend): Promise<void> | void
+  setDisplayBackend?(backend: DisplayBackend): Promise<void>
 
   /** Parse markdown to HTML using native parser (desktop only, returns unprocessed code blocks) */
   parseMarkdown?(markdown: string): Promise<string>

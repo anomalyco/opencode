@@ -19,7 +19,6 @@ export interface Settings {
   general: {
     autoSave: boolean
     releaseNotes: boolean
-    wayland: boolean
   }
   updates: {
     startup: boolean
@@ -40,7 +39,6 @@ const defaultSettings: Settings = {
   general: {
     autoSave: true,
     releaseNotes: true,
-    wayland: false,
   },
   updates: {
     startup: true,
@@ -110,10 +108,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         releaseNotes: createMemo(() => store.general?.releaseNotes ?? defaultSettings.general.releaseNotes),
         setReleaseNotes(value: boolean) {
           setStore("general", "releaseNotes", value)
-        },
-        wayland: createMemo(() => store.general?.wayland ?? defaultSettings.general.wayland),
-        setWayland(value: boolean) {
-          setStore("general", "wayland", value)
         },
       },
       updates: {

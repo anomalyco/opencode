@@ -1,4 +1,4 @@
-import { Component, Show, createEffect, createMemo, type JSX } from "solid-js"
+import { Component, Show, createEffect, createMemo, createResource, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -43,36 +43,6 @@ export const SettingsGeneral: Component = () => {
   })
 
   const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
-  const synced = { value: false }
-
-  createEffect(() => {
-    if (!linux()) return
-    if (synced.value) return
-    if (!platform.getDisplayBackend) return
-    synced.value = true
-
-    const result = platform.getDisplayBackend?.()
-    if (result instanceof Promise) {
-      void result
-        .then((backend) => {
-          if (!backend) return
-          settings.general.setWayland(backend === "wayland")
-        })
-        .catch(() => undefined)
-      return
-    }
-    if (!result) return
-    settings.general.setWayland(result === "wayland")
-  })
-
-  const setBackend = (checked: boolean) => {
-    settings.general.setWayland(checked)
-    if (!platform.setDisplayBackend) return
-    const result = platform.setDisplayBackend(checked ? "wayland" : "auto")
-    if (result instanceof Promise) {
-      void result.catch(() => undefined)
-    }
-  }
 
   const check = () => {
     if (!platform.checkUpdate) return
@@ -446,29 +416,39 @@ export const SettingsGeneral: Component = () => {
         </div>
 
         <Show when={linux()}>
-          <div class="flex flex-col gap-1">
-            <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.display")}</h3>
+          {(_) => {
+            const [valueResource, actions] = createResource(() => platform.getDisplayBackend?.())
+            const value = () => (valueResource.state === "pending" ? undefined : valueResource.latest)
 
-            <div class="bg-surface-raised-base px-4 rounded-lg">
-              <SettingsRow
-                title={
-                  <div class="flex items-center gap-2">
-                    <span>{language.t("settings.general.row.wayland.title")}</span>
-                    <Tooltip value={language.t("settings.general.row.wayland.tooltip")} placement="top">
-                      <span class="text-text-weak">
-                        <Icon name="help" size="small" />
-                      </span>
-                    </Tooltip>
-                  </div>
-                }
-                description={language.t("settings.general.row.wayland.description")}
-              >
-                <div data-action="settings-wayland">
-                  <Switch checked={settings.general.wayland()} onChange={setBackend} />
+            const onChange = (checked: boolean) =>
+              platform.setDisplayBackend?.(checked ? "wayland" : "auto").finally(() => actions.refetch())
+
+            return (
+              <div class="flex flex-col gap-1">
+                <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.display")}</h3>
+
+                <div class="bg-surface-raised-base px-4 rounded-lg">
+                  <SettingsRow
+                    title={
+                      <div class="flex items-center gap-2">
+                        <span>{language.t("settings.general.row.wayland.title")}</span>
+                        <Tooltip value={language.t("settings.general.row.wayland.tooltip")} placement="top">
+                          <span class="text-text-weak">
+                            <Icon name="help" size="small" />
+                          </span>
+                        </Tooltip>
+                      </div>
+                    }
+                    description={language.t("settings.general.row.wayland.description")}
+                  >
+                    <div data-action="settings-wayland">
+                      <Switch checked={value() === "wayland"} onChange={onChange} />
+                    </div>
+                  </SettingsRow>
                 </div>
-              </SettingsRow>
-            </div>
-          </div>
+              </div>
+            )
+          }}
         </Show>
       </div>
     </div>
