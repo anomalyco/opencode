@@ -552,15 +552,6 @@ export function Session() {
       },
     },
     {
-      title: showHeader() ? "Hide header" : "Show header",
-      value: "session.toggle.header",
-      category: "Session",
-      onSelect: (dialog) => {
-        setShowHeader((prev) => !prev)
-        dialog.clear()
-      },
-    },
-    {
       title: "Toggle session scrollbar",
       value: "session.toggle.scrollbar",
       keybind: "scrollbar_toggle",

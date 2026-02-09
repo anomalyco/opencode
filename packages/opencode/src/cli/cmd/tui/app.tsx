@@ -580,6 +580,15 @@ function App() {
         dialog.clear()
       },
     },
+    {
+      title: kv.get("header_visible", true) ? "Hide header" : "Show header",
+      value: "session.toggle.header",
+      category: "System",
+      onSelect: (dialog) => {
+        kv.set("header_visible", !kv.get("header_visible", true))
+        dialog.clear()
+      },
+    },
   ])
 
   createEffect(() => {
