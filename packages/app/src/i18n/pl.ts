@@ -44,6 +44,7 @@ export const dict = {
 
   "command.session.new": "Nowa sesja",
   "command.file.open": "Otwórz plik",
+  "command.tab.close": "Zamknij kartę",
   "command.context.addSelection": "Dodaj zaznaczenie do kontekstu",
   "command.context.addSelection.description": "Dodaj zaznaczone linie z bieżącego pliku",
   "command.input.focus": "Fokus na pole wejściowe",
@@ -234,6 +235,7 @@ export const dict = {
   "prompt.toast.shellSendFailed.title": "Nie udało się wysłać polecenia powłoki",
   "prompt.toast.commandSendFailed.title": "Nie udało się wysłać polecenia",
   "prompt.toast.promptSendFailed.title": "Nie udało się wysłać zapytania",
+  "prompt.toast.promptSendFailed.description": "Nie udało się pobrać sesji",
 
   "dialog.mcp.title": "MCP",
   "dialog.mcp.description": "{{enabled}} z {{total}} włączone",

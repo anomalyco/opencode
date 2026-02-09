@@ -40,7 +40,7 @@ import { showToast } from "@opencode-ai/ui/toast"
 import { SessionHeader, SessionContextTab, SortableTab, FileVisual, NewSessionView } from "@/components/session"
 import { navMark, navParams } from "@/utils/perf"
 import { same } from "@/utils/same"
-import { createOpenReviewFile, focusTerminalById } from "@/pages/session/helpers"
+import { createOpenReviewFile, focusTerminalById, getTabReorderIndex } from "@/pages/session/helpers"
 import { createScrollSpy } from "@/pages/session/scroll-spy"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { FileTabContent } from "@/pages/session/file-tabs"
@@ -844,11 +844,9 @@ export default function Page() {
     const { draggable, droppable } = event
     if (draggable && droppable) {
       const currentTabs = tabs().all()
-      const fromIndex = currentTabs?.indexOf(draggable.id.toString())
-      const toIndex = currentTabs?.indexOf(droppable.id.toString())
-      if (fromIndex !== toIndex && toIndex !== undefined) {
-        tabs().move(draggable.id.toString(), toIndex)
-      }
+      const toIndex = getTabReorderIndex(currentTabs, draggable.id.toString(), droppable.id.toString())
+      if (toIndex === undefined) return
+      tabs().move(draggable.id.toString(), toIndex)
     }
   }
 
