@@ -9,7 +9,7 @@ const stage = process.argv[2]
 if (!stage) throw new Error("Stage is required")
 
 const root = path.resolve(process.cwd(), "..", "..", "..")
-const PARTS = 10
+const PARTS = 20
 
 // read the secret
 const ret = await $`bun sst secret list`.cwd(root).text()
