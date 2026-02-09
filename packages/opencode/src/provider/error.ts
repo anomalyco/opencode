@@ -2,8 +2,6 @@ import { APICallError } from "ai"
 import { STATUS_CODES } from "http"
 import { iife } from "@/util/iife"
 
-type JsonObject = Record<string, unknown>
-
 export namespace ProviderError {
   // Adapted from overflow detection patterns in:
   // https://github.com/badlogic/pi-mono/blob/main/packages/ai/src/utils/overflow.ts
@@ -85,24 +83,19 @@ export namespace ProviderError {
     }).trim()
   }
 
-  function json(input: unknown): JsonObject | undefined {
+  function json(input: unknown) {
     if (typeof input === "string") {
       try {
         const result = JSON.parse(input)
-        if (result && typeof result === "object") return result as JsonObject
+        if (result && typeof result === "object") return result
         return undefined
       } catch {
         return undefined
       }
     }
     if (typeof input === "object" && input !== null) {
-      return input as JsonObject
+      return input
     }
-    return undefined
-  }
-
-  function object(input: unknown): JsonObject | undefined {
-    if (typeof input === "object" && input !== null) return input as JsonObject
     return undefined
   }
 
@@ -126,10 +119,7 @@ export namespace ProviderError {
     const responseBody = JSON.stringify(body)
     if (body.type !== "error") return
 
-    const err = object(body.error)
-    const code = typeof err?.code === "string" ? err.code : undefined
-
-    switch (code) {
+    switch (body?.error?.code) {
       case "context_length_exceeded":
         return {
           type: "context_overflow",
@@ -153,7 +143,7 @@ export namespace ProviderError {
       case "invalid_prompt":
         return {
           type: "api_error",
-          message: typeof err?.message === "string" ? err.message : "Invalid prompt.",
+          message: typeof body?.error?.message === "string" ? body?.error?.message : "Invalid prompt.",
           isRetryable: false,
           responseBody,
         }
