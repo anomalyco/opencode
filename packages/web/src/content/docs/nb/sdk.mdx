@@ -169,8 +169,8 @@ const agents = await client.app.agents()
 
 ### Prosjekt
 
-| Metode              | Beskrivelse                | Svar                                           |
-| ------------------- | -------------------------- | ---------------------------------------------- |
+| Metode              | Beskrivelse                | Svar                                          |
+| ------------------- | -------------------------- | --------------------------------------------- |
 | `project.list()`    | Liste over alle prosjekter | <a href={typesUrl}><code>Project[]</code></a> |
 | `project.current()` | Få nåværende prosjekt      | <a href={typesUrl}><code>Project</code></a>   |
 
@@ -239,10 +239,10 @@ const { providers, default: defaults } = await client.config.providers()
 | `session.share({ path })`                                  | Del økten                           | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                           |
 | `session.unshare({ path })`                                | Slutt å dele økten                  | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                           |
 | `session.summarize({ path, body })`                        | Oppsummer økten                     | Returnerer `boolean`                                                                                                                             |
-| `session.messages({ path })`                               | Liste meldinger i en økt            | Returnerer `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                        |
-| `session.message({ path })`                                | Få meldingsdetaljer                 | Returnerer `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                          |
+| `session.messages({ path })`                               | Liste meldinger i en økt            | Returnerer `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                       |
+| `session.message({ path })`                                | Få meldingsdetaljer                 | Returnerer `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                         |
 | `session.prompt({ path, body })`                           | Send melding                        | `body.noReply: true` returnerer UserMessage (kun kontekst). Standard returnerer <a href={typesUrl}><code>AssistantMessage</code></a> med AI svar |
-| `session.command({ path, body })`                          | Send kommando til økt               | Returnerer `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                 |
+| `session.command({ path, body })`                          | Send kommando til økt               | Returnerer `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                |
 | `session.shell({ path, body })`                            | Kjør en shell-kommando              | Returnerer <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                  |
 | `session.revert({ path, body })`                           | Tilbakestill en melding             | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                           |
 | `session.unrevert({ path })`                               | Gjenopprett tilbakestilte meldinger | Returnerer <a href={typesUrl}><code>Session</code></a>                                                                                           |
@@ -289,7 +289,7 @@ await client.session.prompt({
 | `find.files({ query })`   | Finn filer og kataloger etter navn | `string[]` (baner)                                                                         |
 | `find.symbols({ query })` | Finn arbeidsområdesymboler         | <a href={typesUrl}><code>Symbol[]</code></a>                                               |
 | `file.read({ query })`    | Les en fil                         | `{ type: "raw" \| "patch", content: string }`                                              |
-| `file.status({ query? })` | Få status for sporede filer        | <a href={typesUrl}><code>File[]</code></a>                                                  |
+| `file.status({ query? })` | Få status for sporede filer        | <a href={typesUrl}><code>File[]</code></a>                                                 |
 
 `find.files` støtter noen få valgfrie søkefelt:
 

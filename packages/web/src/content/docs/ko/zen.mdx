@@ -62,7 +62,7 @@ OpenCode Zen은 OpenCode의 다른 공급자와 같습니다.
 
 다음 API 엔드포인트를 통해 모델에 액세스할 수 있습니다.
 
-| 모델              | 모델 ID            | 엔드포인트                                           | AI SDK 패키지                |
+| 모델               | 모델 ID            | 엔드포인트                                         | AI SDK 패키지               |
 | ------------------ | ------------------ | -------------------------------------------------- | --------------------------- |
 | GPT 5.2            | gpt-5.2            | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
 | GPT 5.2 Codex      | gpt-5.2-codex      | `https://opencode.ai/zen/v1/responses`             | `@ai-sdk/openai`            |
@@ -114,41 +114,41 @@ https://opencode.ai/zen/v1/models
 
 우리는 pay-as-you-go 모델을 지원합니다. 아래는 1M 토큰 \*\* 당 가격입니다.
 
-| 모델                               | 입력   | 출력   | 캐시 읽기   | 캐시 쓰기   |
-| ---------------------------------- | ------ | ------ | ----------- | ----------- |
-| Big Pickle                         | Free   | Free   | Free        | -           |
-| MiniMax M2.1 Free                  | Free   | Free   | Free        | -           |
-| MiniMax M2.1                       | $0.30  | $1.20  | $0.10       | -           |
-| GLM 4.7 Free                       | Free   | Free   | Free        | -           |
-| GLM 4.7                            | $0.60  | $2.20  | $0.10       | -           |
-| GLM 4.6                            | $0.60  | $2.20  | $0.10       | -           |
-| Kimi K2.5 Free                     | Free   | Free   | Free        | -           |
-| Kimi K2.5                          | $0.60  | $3.00  | $0.08       | -           |
-| Kimi K2 Thinking                   | $0.40  | $2.50  | -           | -           |
-| Kimi K2                            | $0.40  | $2.50  | -           | -           |
-| Qwen3 Coder 480B                   | $0.45  | $1.50  | -           | -           |
-| Claude Sonnet 4.5 (≤ 200K tokens) | $3.00  | $15.00 | $0.30       | $3.75       |
-| Claude Sonnet 4.5 (> 200K tokens) | $6.00  | $22.50 | $0.60       | $7.50       |
-| Claude Sonnet 4 (≤ 200K tokens)   | $3.00  | $15.00 | $0.30       | $3.75       |
-| Claude Sonnet 4 (> 200K tokens)   | $6.00  | $22.50 | $0.60       | $7.50       |
-| Claude Haiku 4.5                   | $1.00  | $5.00  | $0.10       | $1.25       |
-| Claude Haiku 3.5                   | $0.80  | $4.00  | $0.08       | $1.00       |
-| Claude Opus 4.6 (≤ 200K tokens)   | $5.00  | $25.00 | $0.50       | $6.25       |
-| Claude Opus 4.6 (> 200K tokens)   | $10.00 | $37.50 | $1.00       | $12.50      |
-| Claude Opus 4.5                    | $5.00  | $25.00 | $0.50       | $6.25       |
-| Claude Opus 4.1                    | $15.00 | $75.00 | $1.50       | $18.75      |
-| Gemini 3 Pro (≤ 200K tokens)       | $2.00  | $12.00 | $0.20       | -           |
-| Gemini 3 Pro (> 200K tokens)       | $4.00  | $18.00 | $0.40       | -           |
-| Gemini 3 Flash                      | $0.50  | $3.00  | $0.05       | -           |
-| GPT 5.2                             | $1.75  | $14.00 | $0.175      | -           |
-| GPT 5.2 Codex                       | $1.75  | $14.00 | $0.175      | -           |
-| GPT 5.1                             | $1.07  | $8.50  | $0.107      | -           |
-| GPT 5.1 Codex                       | $1.07  | $8.50  | $0.107      | -           |
-| GPT 5.1 Codex Max                   | $1.25  | $10.00 | $0.125      | -           |
-| GPT 5.1 Codex Mini                  | $0.25  | $2.00  | $0.025      | -           |
-| GPT 5                               | $1.07  | $8.50  | $0.107      | -           |
-| GPT 5 Codex                         | $1.07  | $8.50  | $0.107      | -           |
-| GPT 5 Nano                          | Free   | Free   | Free        | -           |
+| 모델                              | 입력   | 출력   | 캐시 읽기 | 캐시 쓰기 |
+| --------------------------------- | ------ | ------ | --------- | --------- |
+| Big Pickle                        | Free   | Free   | Free      | -         |
+| MiniMax M2.1 Free                 | Free   | Free   | Free      | -         |
+| MiniMax M2.1                      | $0.30  | $1.20  | $0.10     | -         |
+| GLM 4.7 Free                      | Free   | Free   | Free      | -         |
+| GLM 4.7                           | $0.60  | $2.20  | $0.10     | -         |
+| GLM 4.6                           | $0.60  | $2.20  | $0.10     | -         |
+| Kimi K2.5 Free                    | Free   | Free   | Free      | -         |
+| Kimi K2.5                         | $0.60  | $3.00  | $0.08     | -         |
+| Kimi K2 Thinking                  | $0.40  | $2.50  | -         | -         |
+| Kimi K2                           | $0.40  | $2.50  | -         | -         |
+| Qwen3 Coder 480B                  | $0.45  | $1.50  | -         | -         |
+| Claude Sonnet 4.5 (≤ 200K tokens) | $3.00  | $15.00 | $0.30     | $3.75     |
+| Claude Sonnet 4.5 (> 200K tokens) | $6.00  | $22.50 | $0.60     | $7.50     |
+| Claude Sonnet 4 (≤ 200K tokens)   | $3.00  | $15.00 | $0.30     | $3.75     |
+| Claude Sonnet 4 (> 200K tokens)   | $6.00  | $22.50 | $0.60     | $7.50     |
+| Claude Haiku 4.5                  | $1.00  | $5.00  | $0.10     | $1.25     |
+| Claude Haiku 3.5                  | $0.80  | $4.00  | $0.08     | $1.00     |
+| Claude Opus 4.6 (≤ 200K tokens)   | $5.00  | $25.00 | $0.50     | $6.25     |
+| Claude Opus 4.6 (> 200K tokens)   | $10.00 | $37.50 | $1.00     | $12.50    |
+| Claude Opus 4.5                   | $5.00  | $25.00 | $0.50     | $6.25     |
+| Claude Opus 4.1                   | $15.00 | $75.00 | $1.50     | $18.75    |
+| Gemini 3 Pro (≤ 200K tokens)      | $2.00  | $12.00 | $0.20     | -         |
+| Gemini 3 Pro (> 200K tokens)      | $4.00  | $18.00 | $0.40     | -         |
+| Gemini 3 Flash                    | $0.50  | $3.00  | $0.05     | -         |
+| GPT 5.2                           | $1.75  | $14.00 | $0.175    | -         |
+| GPT 5.2 Codex                     | $1.75  | $14.00 | $0.175    | -         |
+| GPT 5.1                           | $1.07  | $8.50  | $0.107    | -         |
+| GPT 5.1 Codex                     | $1.07  | $8.50  | $0.107    | -         |
+| GPT 5.1 Codex Max                 | $1.25  | $10.00 | $0.125    | -         |
+| GPT 5.1 Codex Mini                | $0.25  | $2.00  | $0.025    | -         |
+| GPT 5                             | $1.07  | $8.50  | $0.107    | -         |
+| GPT 5 Codex                       | $1.07  | $8.50  | $0.107    | -         |
+| GPT 5 Nano                        | Free   | Free   | Free      | -         |
 
 You might notice Claude Haiku 3.5 사용 역사. 이것은 세션의 제목을 생성하는 데 사용되는 [low cost model](/docs/config/#models)입니다.
 

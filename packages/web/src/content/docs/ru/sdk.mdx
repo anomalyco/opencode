@@ -37,13 +37,13 @@ const { client } = await createOpencode()
 
 #### Параметры
 
-| Вариант | Тип   | Описание                         | По умолчанию |
-| ------- | ----- | -------------------------------- | ------------ |
-| `hostname` | `string`      | Server hostname                | `127.0.0.1` |
-| `port`     | `number`      | Server port                    | `4096`      |
-| `signal`   | `AbortSignal` | Abort signal for cancellation  | `undefined` |
-| `timeout`  | `number`      | Timeout in ms for server start | `5000`      |
-| `config`   | `Config`      | Configuration object           | `{}`        |
+| Вариант    | Тип           | Описание                       | По умолчанию |
+| ---------- | ------------- | ------------------------------ | ------------ |
+| `hostname` | `string`      | Server hostname                | `127.0.0.1`  |
+| `port`     | `number`      | Server port                    | `4096`       |
+| `signal`   | `AbortSignal` | Abort signal for cancellation  | `undefined`  |
+| `timeout`  | `number`      | Timeout in ms for server start | `5000`       |
+| `config`   | `Config`      | Configuration object           | `{}`         |
 
 ---
 
@@ -81,8 +81,8 @@ const client = createOpencodeClient({
 
 #### Параметры
 
-| Вариант | Тип   | Описание                             | По умолчанию |
-| ------- | ----- | ------------------------------------ | ------------ |
+| Вариант         | Тип        | Описание                         | По умолчанию            |
+| --------------- | ---------- | -------------------------------- | ----------------------- |
 | `baseUrl`       | `string`   | URL of the server                | `http://localhost:4096` |
 | `fetch`         | `function` | Custom fetch implementation      | `globalThis.fetch`      |
 | `parseAs`       | `string`   | Response parsing method          | `auto`                  |
@@ -125,8 +125,8 @@ SDK предоставляет все серверные API через типо
 
 ### Глобальный
 
-| Метод | Описание                                     | Ответ |
-| ----- | -------------------------------------------- | ----- |
+| Метод             | Описание                        | Ответ                                |
+| ----------------- | ------------------------------- | ------------------------------------ |
 | `global.health()` | Check server health and version | `{ healthy: true, version: string }` |
 
 ---
@@ -142,8 +142,8 @@ console.log(health.data.version)
 
 ### Приложение
 
-| Метод | Описание                      | Ответ                                       |
-| ----- | ----------------------------- | ------------------------------------------- |
+| Метод          | Описание                  | Ответ                                       |
+| -------------- | ------------------------- | ------------------------------------------- |
 | `app.log()`    | Write a log entry         | `boolean`                                   |
 | `app.agents()` | List all available agents | <a href={typesUrl}><code>Agent[]</code></a> |
 
@@ -169,8 +169,8 @@ const agents = await client.app.agents()
 
 ### Проект
 
-| Метод | Описание                | Ответ                                        |
-| ----- | ----------------------- | -------------------------------------------- |
+| Метод               | Описание            | Ответ                                         |
+| ------------------- | ------------------- | --------------------------------------------- |
 | `project.list()`    | List all projects   | <a href={typesUrl}><code>Project[]</code></a> |
 | `project.current()` | Get current project | <a href={typesUrl}><code>Project</code></a>   |
 
@@ -190,8 +190,8 @@ const currentProject = await client.project.current()
 
 ### Путь
 
-| Метод | Описание              | Ответ                                    |
-| ----- | --------------------- | ---------------------------------------- |
+| Метод        | Описание         | Ответ                                    |
+| ------------ | ---------------- | ---------------------------------------- |
 | `path.get()` | Get current path | <a href={typesUrl}><code>Path</code></a> |
 
 ---
@@ -207,8 +207,8 @@ const pathInfo = await client.path.get()
 
 ### Конфигурация
 
-| Метод | Описание                                  | Ответ                                                                                                 |
-| ----- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Метод                | Описание                          | Ответ                                                                                                 |
+| -------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | `config.get()`       | Get config info                   | <a href={typesUrl}><code>Config</code></a>                                                            |
 | `config.providers()` | List providers and default models | `{ providers: `<a href={typesUrl}><code>Provider[]</code></a>`, default: { [key: string]: string } }` |
 
@@ -226,8 +226,8 @@ const { providers, default: defaults } = await client.config.providers()
 
 ### Сессии
 
-| Метод | Описание                                           | Примечания                                                                                                                                                  |
-| ----- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Метод                                                      | Описание                           | Примечания                                                                                                                                     |
+| ---------------------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `session.list()`                                           | List sessions                      | Returns <a href={typesUrl}><code>Session[]</code></a>                                                                                          |
 | `session.get({ path })`                                    | Get session                        | Returns <a href={typesUrl}><code>Session</code></a>                                                                                            |
 | `session.children({ path })`                               | List child sessions                | Returns <a href={typesUrl}><code>Session[]</code></a>                                                                                          |
@@ -283,8 +283,8 @@ await client.session.prompt({
 
 ### Файлы
 
-| Метод | Описание                             | Ответ                                                                                         |
-| ----- | ------------------------------------ | --------------------------------------------------------------------------------------------- |
+| Метод                     | Описание                           | Ответ                                                                                       |
+| ------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------- |
 | `find.text({ query })`    | Search for text in files           | Array of match objects with `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
 | `find.files({ query })`   | Find files and directories by name | `string[]` (paths)                                                                          |
 | `find.symbols({ query })` | Find workspace symbols             | <a href={typesUrl}><code>Symbol[]</code></a>                                                |
@@ -324,8 +324,8 @@ const content = await client.file.read({
 
 ### ТУИ
 
-| Метод | Описание                         | Ответ |
-| ----- | -------------------------------- | ----- |
+| Метод                          | Описание                  | Ответ     |
+| ------------------------------ | ------------------------- | --------- |
 | `tui.appendPrompt({ body })`   | Append text to the prompt | `boolean` |
 | `tui.openHelp()`               | Open the help dialog      | `boolean` |
 | `tui.openSessions()`           | Open the session selector | `boolean` |
@@ -355,8 +355,8 @@ await client.tui.showToast({
 
 ### Авторизация
 
-| Метод | Описание                                     | Ответ |
-| ----- | -------------------------------------------- | ----- |
+| Метод               | Описание                       | Ответ     |
+| ------------------- | ------------------------------ | --------- |
 | `auth.set({ ... })` | Set authentication credentials | `boolean` |
 
 ---
@@ -374,8 +374,8 @@ await client.auth.set({
 
 ### События
 
-| Метод | Описание                             | Ответ                                |
-| ----- | ------------------------------------ | ------------------------------------ |
+| Метод               | Описание                  | Ответ                     |
+| ------------------- | ------------------------- | ------------------------- |
 | `event.subscribe()` | Server-sent events stream | Server-sent events stream |
 
 ---

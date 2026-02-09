@@ -139,14 +139,14 @@ Dodajte udaljene MCP servere postavljanjem `type` na `"remote"`.
 
 #### Opcije
 
-| Opcija | Vrsta | Obavezno | Opis
-|--------- | ------- | -------- | ----------------------------------------------------------------------------------- |
-| `type` | String | Y | Tip veze sa MCP serverom, mora biti `"remote"`. |
-| `url` | String | Y | URL udaljenog MCP servera. |
-| `enabled` | Boolean | | Omogućite ili onemogućite MCP server pri pokretanju. |
-| `headers` | Objekt | | Zaglavlja za slanje uz zahtjev. |
-| `oauth` | Objekt | | Konfiguracija OAuth provjere autentičnosti. Pogledajte odjeljak [OAuth](#oauth) ispod. |
-| `timeout` | Broj | | Vremensko ograničenje u ms za preuzimanje alata sa MCP servera. Podrazumevano je 5000 (5 sekundi). |
+| Opcija    | Vrsta   | Obavezno | Opis                                                                                               |
+| --------- | ------- | -------- | -------------------------------------------------------------------------------------------------- |
+| `type`    | String  | Y        | Tip veze sa MCP serverom, mora biti `"remote"`.                                                    |
+| `url`     | String  | Y        | URL udaljenog MCP servera.                                                                         |
+| `enabled` | Boolean |          | Omogućite ili onemogućite MCP server pri pokretanju.                                               |
+| `headers` | Objekt  |          | Zaglavlja za slanje uz zahtjev.                                                                    |
+| `oauth`   | Objekt  |          | Konfiguracija OAuth provjere autentičnosti. Pogledajte odjeljak [OAuth](#oauth) ispod.             |
+| `timeout` | Broj    |          | Vremensko ograničenje u ms za preuzimanje alata sa MCP servera. Podrazumevano je 5000 (5 sekundi). |
 
 ---
 
@@ -248,12 +248,12 @@ Ako želite onemogućiti automatski OAuth za server (npr. za servere koji umjest
 
 #### OAuth opcije
 
-| Opcija | Vrsta | Opis
-|-------------- | --------------- | -------------------------------------------------------------------------------- |
-| `oauth` | Objekt \| false | OAuth konfiguracijski objekt, ili `false` da onemogućite automatsko otkrivanje OAuth. |
-| `clientId` | String | ID OAuth klijenta. Ako nije navedeno, pokušat će se izvršiti dinamička registracija klijenta. |
-| `clientSecret` | String | Tajna OAuth klijenta, ako to zahtijeva autorizacijski server. |
-| `scope` | String | OAuth opseg zahtjeva za vrijeme autorizacije. |
+| Opcija         | Vrsta           | Opis                                                                                          |
+| -------------- | --------------- | --------------------------------------------------------------------------------------------- |
+| `oauth`        | Objekt \| false | OAuth konfiguracijski objekt, ili `false` da onemogućite automatsko otkrivanje OAuth.         |
+| `clientId`     | String          | ID OAuth klijenta. Ako nije navedeno, pokušat će se izvršiti dinamička registracija klijenta. |
+| `clientSecret` | String          | Tajna OAuth klijenta, ako to zahtijeva autorizacijski server.                                 |
+| `scope`        | String          | OAuth opseg zahtjeva za vrijeme autorizacije.                                                 |
 
 #### Otklanjanje grešaka
 

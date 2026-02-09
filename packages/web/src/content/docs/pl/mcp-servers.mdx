@@ -116,13 +116,13 @@ use the mcp_everything tool to add the number 3 and 4
 
 Oto wszystkie opcje lokalnego serwera MCP.
 
-| Opcja         | Wpisz            | Wymagane | Opis                                                                                         |
-| ------------- | ---------------- | -------- | -------------------------------------------------------------------------------------------- |
-| `type`        | String           | Y        | Typ połączenia z serwerem MCP musi być `"local"`.                                            |
-| `command`     | Array            | Y        | Polecenie i argumenty uruchamiające serwer MCP.                                              |
-| `environment` | Object           |          | Zmienne ustawienia podczas uruchamiania serwera.                                             |
-| `enabled`     | Boolean          |          | Włącz lub wyłącz serwer MCP podczas uruchamiania.                                            |
-| `timeout`     | Number           |          | Limit czasu w ms na pobieranie narzędzia z serwera MCP. Wartość domyślna do 5000 (5 sekund). |
+| Opcja         | Wpisz   | Wymagane | Opis                                                                                         |
+| ------------- | ------- | -------- | -------------------------------------------------------------------------------------------- |
+| `type`        | String  | Y        | Typ połączenia z serwerem MCP musi być `"local"`.                                            |
+| `command`     | Array   | Y        | Polecenie i argumenty uruchamiające serwer MCP.                                              |
+| `environment` | Object  |          | Zmienne ustawienia podczas uruchamiania serwera.                                             |
+| `enabled`     | Boolean |          | Włącz lub wyłącz serwer MCP podczas uruchamiania.                                            |
+| `timeout`     | Number  |          | Limit czasu w ms na pobieranie narzędzia z serwera MCP. Wartość domyślna do 5000 (5 sekund). |
 
 ---
 
@@ -152,14 +152,14 @@ Dodaj zdalne serwery MCP, ustawiając `type` na `"remote"`.
 
 #### Opcje
 
-| Opcja     | Wpisz            | Wymagane | Opis                                                                                         |
-| --------- | ---------------- | -------- | -------------------------------------------------------------------------------------------- |
-| `type`    | String           | Y        | Typ połączenia z serwerem MCP musi być `"remote"`.                                           |
-| `url`     | String           | Y        | Adres URL zdalnego serwera MCP.                                                              |
-| `enabled` | Boolean          |          | Włącz lub wyłącz serwer MCP podczas uruchamiania.                                            |
-| `headers` | Object           |          | Nagłówki do wysłania z wprowadzenia.                                                         |
-| `oauth`   | Object           |          | Konfiguracja uwierzytelniania OAuth. Zobacz sekcję [OAuth](#oauth) poniżej.                  |
-| `timeout` | Number           |          | Limit czasu w ms na pobieranie narzędzia z serwera MCP. Wartość domyślna do 5000 (5 sekund). |
+| Opcja     | Wpisz   | Wymagane | Opis                                                                                         |
+| --------- | ------- | -------- | -------------------------------------------------------------------------------------------- |
+| `type`    | String  | Y        | Typ połączenia z serwerem MCP musi być `"remote"`.                                           |
+| `url`     | String  | Y        | Adres URL zdalnego serwera MCP.                                                              |
+| `enabled` | Boolean |          | Włącz lub wyłącz serwer MCP podczas uruchamiania.                                            |
+| `headers` | Object  |          | Nagłówki do wysłania z wprowadzenia.                                                         |
+| `oauth`   | Object  |          | Konfiguracja uwierzytelniania OAuth. Zobacz sekcję [OAuth](#oauth) poniżej.                  |
+| `timeout` | Number  |          | Limit czasu w ms na pobieranie narzędzia z serwera MCP. Wartość domyślna do 5000 (5 sekund). |
 
 ---
 
