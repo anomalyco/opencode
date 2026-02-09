@@ -1,4 +1,4 @@
-import type { APICallError, ModelMessage } from "ai"
+import type { ModelMessage } from "ai"
 import { mergeDeep, unique } from "remeda"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import type { JSONSchema } from "zod/v4/core"
@@ -823,14 +823,5 @@ export namespace ProviderTransform {
     }
 
     return schema as JSONSchema7
-  }
-
-  export function error(providerID: string, error: APICallError) {
-    let message = error.message
-    if (providerID.includes("github-copilot") && error.statusCode === 403) {
-      return "Please reauthenticate with the copilot provider to ensure your credentials work properly with OpenCode."
-    }
-
-    return message
   }
 }

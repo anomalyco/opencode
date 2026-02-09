@@ -7,8 +7,7 @@ import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"
 import { fn } from "@/util/fn"
 import { Storage } from "@/storage/storage"
-import { ProviderTransform } from "@/provider/transform"
-import { STATUS_CODES } from "http"
+import { ProviderError } from "@/provider/error"
 import { iife } from "@/util/iife"
 import { type SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
@@ -716,45 +715,6 @@ export namespace MessageV2 {
     return result
   }
 
-  const isOpenAiErrorRetryable = (e: APICallError) => {
-    const status = e.statusCode
-    if (!status) return e.isRetryable
-    // openai sometimes returns 404 for models that are actually available
-    return status === 404 || e.isRetryable
-  }
-
-  // Adapted from overflow detection patterns in:
-  // https://github.com/badlogic/pi-mono/blob/main/packages/ai/src/utils/overflow.ts
-  const overflowPatterns = [
-    /prompt is too long/i, // Anthropic
-    /input is too long for requested model/i, // Amazon Bedrock
-    /exceeds the context window/i, // OpenAI (Completions + Responses API message text)
-    /input token count.*exceeds the maximum/i, // Google (Gemini)
-    /maximum prompt length is \d+/i, // xAI (Grok)
-    /reduce the length of the messages/i, // Groq
-    /maximum context length is \d+ tokens/i, // OpenRouter
-    /exceeds the limit of \d+/i, // GitHub Copilot
-    /exceeds the available context size/i, // llama.cpp server
-    /greater than the context length/i, // LM Studio
-    /context window exceeds limit/i, // MiniMax
-    /exceeded model token limit/i, // Kimi For Coding
-    /context[_ ]length[_ ]exceeded/i, // Generic fallback
-    /too many tokens/i, // Generic fallback
-    /token limit exceeded/i, // Generic fallback
-  ]
-
-  // Providers not reliably handled in this function:
-  // - z.ai: can accept overflow silently (needs token-count/context-window checks)
-
-  function isContextOverflow(message: string) {
-    if (overflowPatterns.some((p) => p.test(message))) return true
-
-    // Providers/status patterns handled outside of regex list:
-    // - Cerebras: often returns "400 (no body)" / "413 (no body)"
-    // - Mistral: often returns "400 (no body)" / "413 (no body)"
-    return /^4(00|13)\s*(status code)?\s*\(no body\)/i.test(message)
-  }
-
   export function fromError(e: unknown, ctx: { providerID: string }) {
     switch (true) {
       case e instanceof DOMException && e.name === "AbortError":
@@ -788,54 +748,28 @@ export namespace MessageV2 {
           { cause: e },
         ).toObject()
       case APICallError.isInstance(e):
-        const message = iife(() => {
-          let msg = e.message
-          if (msg === "") {
-            if (e.responseBody) return e.responseBody
-            if (e.statusCode) {
-              const err = STATUS_CODES[e.statusCode]
-              if (err) return err
-            }
-            return "Unknown error"
-          }
-          const transformed = ProviderTransform.error(ctx.providerID, e)
-          if (transformed !== msg) {
-            return transformed
-          }
-          if (!e.responseBody || (e.statusCode && msg !== STATUS_CODES[e.statusCode])) {
-            return msg
-          }
-
-          try {
-            const body = JSON.parse(e.responseBody)
-            // try to extract common error message fields
-            const errMsg = body.message || body.error || body.error?.message
-            if (errMsg && typeof errMsg === "string") {
-              return `${msg}: ${errMsg}`
-            }
-          } catch {}
-
-          return `${msg}: ${e.responseBody}`
-        }).trim()
-        if (isContextOverflow(message)) {
+        const parsed = ProviderError.parseAPICallError({
+          providerID: ctx.providerID,
+          error: e,
+        })
+        if (parsed.type === "context_overflow") {
           return new MessageV2.ContextOverflowError(
             {
-              message,
-              responseBody: e.responseBody,
+              message: parsed.message,
+              responseBody: parsed.responseBody,
             },
             { cause: e },
           ).toObject()
         }
 
-        const metadata = e.url ? { url: e.url } : undefined
         return new MessageV2.APIError(
           {
-            message,
-            statusCode: e.statusCode,
-            isRetryable: ctx.providerID.startsWith("openai") ? isOpenAiErrorRetryable(e) : e.isRetryable,
-            responseHeaders: e.responseHeaders,
-            responseBody: e.responseBody,
-            metadata,
+            message: parsed.message,
+            statusCode: parsed.statusCode,
+            isRetryable: parsed.isRetryable,
+            responseHeaders: parsed.responseHeaders,
+            responseBody: parsed.responseBody,
+            metadata: parsed.metadata,
           },
           { cause: e },
         ).toObject()
@@ -843,69 +777,27 @@ export namespace MessageV2 {
         return new NamedError.Unknown({ message: e.toString() }, { cause: e }).toObject()
       default:
         try {
-          const json = iife(() => {
-            if (typeof e === "string") {
-              try {
-                return JSON.parse(e)
-              } catch {
-                return undefined
-              }
+          const parsed = ProviderError.parseStreamError(e)
+          if (parsed) {
+            if (parsed.type === "context_overflow") {
+              return new MessageV2.ContextOverflowError(
+                {
+                  message: parsed.message,
+                  responseBody: parsed.responseBody,
+                },
+                { cause: e },
+              ).toObject()
             }
-
-            if (typeof e === "object" && e !== null) {
-              return e
-            }
-            return undefined
-          })
-          if (json) {
-            const responseBody = JSON.stringify(json)
-            // Handle Responses API mid stream style errors
-            if (json?.type === "error") {
-              switch (json?.error?.code) {
-                case "context_length_exceeded":
-                  return new MessageV2.ContextOverflowError(
-                    {
-                      message: "Input exceeds context window of this model",
-                      responseBody,
-                    },
-                    { cause: e },
-                  ).toObject()
-                case "insufficient_quota":
-                  return new MessageV2.APIError(
-                    {
-                      message: "Quota exceeded. Check your plan and billing details.",
-                      isRetryable: false,
-                      responseBody,
-                    },
-                    {
-                      cause: e,
-                    },
-                  ).toObject()
-                case "usage_not_included":
-                  return new MessageV2.APIError(
-                    {
-                      message:
-                        "To use Codex with your ChatGPT plan, upgrade to Plus: https://chatgpt.com/explore/plus.",
-                      isRetryable: false,
-                      responseBody,
-                    },
-                    {
-                      cause: e,
-                    },
-                  ).toObject()
-                case "invalid_prompt":
-                  return new MessageV2.APIError(
-                    {
-                      message: json?.error?.message || "Invalid prompt.",
-                      isRetryable: false,
-                      responseBody,
-                    },
-                    {
-                      cause: e,
-                    },
-                  ).toObject()
-              }
-            }
+            return new MessageV2.APIError(
+              {
+                message: parsed.message,
+                isRetryable: parsed.isRetryable,
+                responseBody: parsed.responseBody,
+              },
+              {
+                cause: e,
+              },
+            ).toObject()
           }
         } catch {}
         return new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e }).toObject()
