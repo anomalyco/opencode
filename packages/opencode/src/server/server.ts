@@ -410,6 +410,38 @@ export namespace Server {
             return c.json(modes)
           },
         )
+        .patch(
+          "/agent/:name",
+          describeRoute({
+            summary: "Update agent",
+            description: "Update an agent's configuration by name.",
+            operationId: "agent.update",
+            responses: {
+              200: {
+                description: "Updated agent",
+                content: {
+                  "application/json": {
+                    schema: resolver(Agent.Info),
+                  },
+                },
+              },
+              ...errors(400),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              name: z.string(),
+            }),
+          ),
+          validator("json", Agent.Patch),
+          async (c) => {
+            const name = c.req.valid("param").name
+            const patch = c.req.valid("json")
+            const agent = await Agent.update(name, patch)
+            return c.json(agent)
+          },
+        )
         .get(
           "/skill",
           describeRoute({

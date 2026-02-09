@@ -48,6 +48,51 @@ export namespace Agent {
     })
   export type Info = z.infer<typeof Info>
 
+  export const Patch = z
+    .object({
+      description: z.string().optional(),
+      mode: z.enum(["subagent", "primary", "all"]).optional(),
+      hidden: z.boolean().optional(),
+      topP: z.number().optional(),
+      temperature: z.number().optional(),
+      color: z.string().optional(),
+      model: z
+        .object({
+          modelID: z.string(),
+          providerID: z.string(),
+        })
+        .optional(),
+      variant: z.string().optional(),
+      prompt: z.string().optional(),
+      steps: z.number().int().positive().optional(),
+      options: z.record(z.string(), z.any()).optional(),
+    })
+    .meta({
+      ref: "AgentPatch",
+    })
+  export type Patch = z.infer<typeof Patch>
+
+  export async function update(name: string, patch: Patch) {
+    const agents = await state()
+    if (!agents[name]) throw new Error(`agent "${name}" not found`)
+
+    const agentConfig: Record<string, unknown> = {}
+    if (patch.description !== undefined) agentConfig.description = patch.description
+    if (patch.mode !== undefined) agentConfig.mode = patch.mode
+    if (patch.hidden !== undefined) agentConfig.hidden = patch.hidden
+    if (patch.temperature !== undefined) agentConfig.temperature = patch.temperature
+    if (patch.topP !== undefined) agentConfig.top_p = patch.topP
+    if (patch.color !== undefined) agentConfig.color = patch.color
+    if (patch.variant !== undefined) agentConfig.variant = patch.variant
+    if (patch.prompt !== undefined) agentConfig.prompt = patch.prompt
+    if (patch.steps !== undefined) agentConfig.steps = patch.steps
+    if (patch.options !== undefined) agentConfig.options = patch.options
+    if (patch.model !== undefined) agentConfig.model = `${patch.model.providerID}/${patch.model.modelID}`
+
+    await Config.update({ agent: { [name]: agentConfig } } as any)
+    return get(name)
+  }
+
   const state = Instance.state(async () => {
     const cfg = await Config.get()
 
