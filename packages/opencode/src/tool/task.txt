@@ -58,3 +58,16 @@ Since the user is greeting, use the greeting-responder agent to respond with a f
 </commentary>
 assistant: "I'm going to use the Task tool to launch the with the greeting-responder agent"
 </example>
+
+Background Mode:
+- Set background=true to run the task asynchronously without blocking.
+- The task returns immediately with a task_id.
+- When the background task completes, you will automatically receive a
+  <task_completed> notification with the task's result.
+- Use the task_id to resume the session later if you need follow-up messages.
+- Do NOT poll or wait for background tasks — continue with other work.
+- Background tasks are ideal for: long-running research, builds, independent
+  subtasks that don't need their result before you can continue.
+- You can launch multiple background tasks concurrently in a single message.
+- If the result in the notification is truncated, use task(task_id="...") to
+  resume the child session and ask for more details.

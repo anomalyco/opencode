@@ -13,6 +13,7 @@ import { SessionProcessor } from "./processor"
 import { fn } from "@/util/fn"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
+import { BackgroundTask } from "./background"
 import { Config } from "@/config/config"
 
 export namespace SessionCompaction {
@@ -137,8 +138,12 @@ export namespace SessionCompaction {
     const compacting = await Plugin.trigger(
       "experimental.session.compacting",
       { sessionID: input.sessionID },
-      { context: [], prompt: undefined },
+      { context: [] as string[], prompt: undefined as string | undefined },
     )
+    // Inject background task context for compaction survival
+    const bgContext = BackgroundTask.compactionContext(input.sessionID)
+    if (bgContext) compacting.context.push(bgContext)
+
     const defaultPrompt =
       "Provide a detailed prompt for continuing our conversation above. Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next considering new session will not have access to our conversation."
     const promptText = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")

@@ -10,6 +10,7 @@ import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { PermissionNext } from "@/permission/next"
+import { BackgroundTask } from "../session/background"
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
@@ -22,6 +23,14 @@ const parameters = z.object({
     )
     .optional(),
   command: z.string().describe("The command that triggered this task").optional(),
+  background: z
+    .boolean()
+    .describe(
+      "If true, the task runs asynchronously in the background and returns immediately. " +
+        "You will receive a <task_completed> notification when the task finishes. " +
+        "Default is false (synchronous, blocking).",
+    )
+    .optional(),
 })
 
 export const TaskTool = Tool.define("task", async (ctx) => {
@@ -115,6 +124,59 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           model,
         },
       })
+
+      // Background mode: fire and forget, return immediately
+      if (params.background) {
+        const bgMessageID = Identifier.ascending("message")
+        const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
+
+        // Fire the prompt without awaiting completion
+        SessionPrompt.prompt({
+          messageID: bgMessageID,
+          sessionID: session.id,
+          model: {
+            modelID: model.modelID,
+            providerID: model.providerID,
+          },
+          agent: agent.name,
+          tools: {
+            todowrite: false,
+            todoread: false,
+            ...(hasTaskPermission ? {} : { task: false }),
+            ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
+          },
+          parts: promptParts,
+        })
+
+        // Register for completion tracking and parent notification
+        BackgroundTask.register({
+          id: session.id,
+          childSessionID: session.id,
+          parentSessionID: ctx.sessionID,
+          parentAgent: ctx.agent ?? "build",
+          description: params.description,
+          agent: params.subagent_type,
+          status: "running",
+          startedAt: Date.now(),
+        })
+
+        return {
+          title: params.description,
+          metadata: {
+            sessionId: session.id,
+            model,
+          },
+          output: [
+            `Background task started.`,
+            `task_id: ${session.id} (for resuming to continue this task if needed)`,
+            `Agent: ${params.subagent_type}`,
+            `Description: ${params.description}`,
+            ``,
+            `You will receive a <task_completed> notification when it finishes.`,
+            `Continue with other work — do not poll or wait.`,
+          ].join("\n"),
+        }
+      }
 
       const messageID = Identifier.ascending("message")
 
