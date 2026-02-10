@@ -1,0 +1,323 @@
+---
+title: คำสั่ง
+description: คำสั่งสร้างคำสั่งอีกครั้งที่ซ้ำกัน
+---
+
+คำสั่งดังกล่าวระบุพรอมต์จำเป็นต้องร้องขอเมื่อคำสั่งนั้นถูกดำเนินการใน TUI
+
+```bash frame="none"
+/my-command
+```
+
+คำสั่งแบบกำหนดเองเป็นส่วนเพิ่มเติมจากคำสั่งในตัว เช่น `/init`, `/undo`, `/redo`, `/share`, `/help` [เรียนรู้เพิ่มเติม](/docs/tui#คำสั่ง)
+
+---
+
+## สร้างไฟล์คำสั่ง
+
+สร้างไฟล์มาร์กดาวน์ในไดเร็กทอรี `commands/` เพื่อกำหนดคำสั่งทำตาม
+
+สร้าง `.opencode/commands/test.md`:
+
+```md title=".opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+frontmatter กำหนดคุณสมบัติคำสั่งเนื้อหาโดยละเอียด
+
+ใช้คำสั่งโดยพิมพ์ `/` คำสั่งคำสั่ง
+
+```bash frame="none"
+"/test"
+```
+
+---
+
+## เม็กซิโก
+
+คำสั่งนี้จะผ่าน OpenCode หรือโดยการดำเนินการไฟล์มาร์กดาวน์ในไดเร็กทอรี `commands/`
+
+---
+
+### JSON
+
+ใช้ส่วน `command` ใน OpenCode ของคุณ [config](/docs/config):
+
+```json title="opencode.jsonc" {4-12}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    // This becomes the name of the command
+    "test": {
+      // This is the prompt that will be sent to the LLM
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
+      // This is shown as the description in the TUI
+      "description": "Run tests with coverage",
+      "agent": "build",
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+รันคำสั่งนี้ใน TUI:
+
+```bash frame="none"
+/test
+```
+
+---
+
+### มาร์กดาวน์
+
+หากต้องการกำหนดคำสั่งของไฟล์มาร์กดาวน์ได้คุณจะต้องดำเนินการใน:
+
+- ทั่วโลก: `~/.config/opencode/commands/`
+- ต่อโครงการ: `.opencode/commands/`
+
+```markdown title="~/.config/opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+ชื่อไฟล์มาร์กดาวน์ในชื่อคำสั่งเช่น `test.md` ให้
+คุณวิ่ง:
+
+```bash frame="none"
+/test
+```
+
+---
+
+## เรามีพร้อมท์
+
+พร้อมรองรับคำสั่งรองรับตามตำแหน่งและพิเศษหลายรายการ
+
+---
+
+### บทความโทรทัศน์
+
+ส่งผ่านข้อเขียนไปยังคำสั่งของวงดนตรี `$ARGUMENTS`
+
+```md title=".opencode/commands/component.md"
+---
+description: Create a new component
+---
+
+Create a new React component named $ARGUMENTS with TypeScript support.
+Include proper typing and basic structure.
+```
+
+รันคำสั่งพร้อมอาร์กิวเมนต์:
+
+```bash frame="none"
+/component Button
+```
+
+และ `$ARGUMENTS` จะเป็นอย่างไร `Button`
+
+เราสามารถเข้าถึงแต่ละจุดได้ตามความต้องการตามหลัก:
+
+- `$1` - ​​​​อาร์กิวเมนต์แรก
+- `$2` - ​​​​อาร์กิวเมนต์ที่สอง
+- `$3` - ​​​​อาร์กิวเมนต์ที่สาม
+- นั่น...
+
+เช่น:
+
+```md title=".opencode/commands/create-file.md"
+---
+description: Create a new file with content
+---
+
+Create a file named $1 in the directory $2
+with the following content: $3
+```
+
+รันคำสั่ง:
+
+```bash frame="none"
+/create-file config.json src "{ \"key\": \"value\" }"
+```
+
+คุณจะรู้สึกได้ถึงความสูง:
+
+- `$1` กับ `config.json`
+- `$2` กับ `src`
+- `$3` กับ `{ "key": "value" }`
+
+---
+
+### ส่วนเชล
+
+ใช้ *!`command`*เพื่อที่จะฉีดประสิทธิภาพสูง [bash command](/docs/tui#bash-commands) ติดตั้งพรอมต์ของคุณ
+
+เพื่อเป็นคำสั่งสร้างความพยายามเพื่อวิเคราะห์การทดสอบของการทดสอบ:
+
+```md title=".opencode/commands/analyze-coverage.md"
+---
+description: Analyze test coverage
+---
+
+Here are the current test results:
+!`npm test`
+
+Based on these results, suggest improvements to increase coverage.
+```
+
+หรือตรวจสอบการเปลี่ยนแปลงล่าสุด:
+
+```md title=".opencode/commands/review-changes.md"
+---
+description: Review recent changes
+---
+
+Recent git commits:
+!`git log --oneline -10`
+
+Review these changes and suggest any improvements.
+```
+
+คำสั่งไดเร็กทอรีรากของโปรเจ็กต์การปฏิบัติตามคำสั่งพร้อมท์
+
+---
+
+### อ้างถึงไฟล์
+
+รวมไฟล์ในคำสั่งของคุณ `@` ในชื่อไฟล์
+
+```md title=".opencode/commands/review-component.md"
+---
+description: Review component
+---
+
+Review the component in @src/components/Button.tsx.
+Check for performance issues and suggest improvements.
+```
+
+เนื้อหาไฟล์จะถูกรวมไว้ด้วยการประกาศอย่างเป็นทางการ
+
+---
+
+## ต
+
+มาดูรายละเอียดเพิ่มเติมกัน
+
+---
+
+### เทม
+
+`template` กำหนดพรอมต์ที่จะเป็นไปได้ LLM จะดำเนินการคำสั่ง
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes."
+    }
+  }
+}
+```
+
+รายการไม่จำเป็น **จำเป็น**
+
+---
+
+### คำอธิบาย
+
+ใช้ตัวเลือก `description` เพื่อให้คำอธิบายโดยย่อเกี่ยวกับสิ่งที่คำสั่งทำ
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "description": "Run tests with coverage"
+    }
+  }
+}
+```
+
+คำอธิบายที่เป็นคำอธิบายใน TUI คุณต้องการเขียนคำสั่ง
+
+---
+
+### ตัวแทน
+
+ใช้ `agent` เพื่อระบุทางเลือกว่า [ตัวแทน](/docs/agents) ใดควรดำเนินการคำสั่งนี้
+นี่คือ [ตัวแทนย่อย](/docs/agents/#subagents) คำสั่งจะไม่จำเป็นต้องทำการย่อยตัวแทนย่อยตาม...
+เหตุผลที่ทำให้สิ่งนี้เป็นไปได้ `subtask` เป็น `false`
+
+```json title="opencode.json"
+{
+  "command": {
+    "review": {
+      "agent": "plan"
+    }
+  }
+}
+```
+
+ขึ้นอยู่กับ ** ตัวเลือก** หากไม่ได้ระบุเหตุผลว่าเป็นเอเจนต์ปัจจุบันของคุณ
+
+---
+
+### งานย่อย
+
+ใช้ `subtask` บูลีนเพื่อไม่จำเป็นต้องทำอะไรเลย [subagent](/docs/agents/#subagents)
+เพราะเหตุใดจะช่วยให้คำสั่งไม่ทำให้ระบบหลักของคุณเสียหาย และจะ **บังคับ** เอเจนต์ให้ความเห็นตัวแทนย่อย
+โปรดดู `mode` เพื่อดูการตั้งค่าเป็น `primary` ในคืนนี้ [agent](/docs/agents) แขก
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "subtask": true
+    }
+  }
+}
+```
+
+ส่วนนี้ **ทางเลือก**
+
+---
+
+### อย่างอย่างนั้น
+
+ใช้ `model` ไปจนถึงโมเดลเริ่มต้นสำหรับคำสั่งนี้
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+ส่วนนี้ **ทางเลือก**
+
+---
+
+## บิวท์อิน
+
+opencode มีคำสั่งในคำสั่งหลายเช่น `/init`, `/undo`, `/redo`, `/share`, `/help`; [เรียนรู้เพิ่มเติม](/docs/tui#คำสั่ง)
+
+:::note
+คำสั่งนี้สามารถดำเนินการได้ในขั้นตอนนี้
+:::
+
+บันทึกคำสั่งด้วยชื่อเดียวกันคำสั่งย้ำคำสั่งใน
