@@ -96,7 +96,7 @@ export namespace BunProc {
       ...(proxied() ? ["--no-cache"] : []),
       "--cwd",
       Global.Path.cache,
-      pkg + "@" + version,
+      version === "latest" ? pkg : pkg + "@" + version,
     ]
 
     // Let Bun handle registry resolution:

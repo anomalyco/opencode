@@ -43,7 +43,7 @@ describe("BunProc registry configuration", () => {
       expect(installFunction).toContain('"--exact"')
       expect(installFunction).toContain('"--cwd"')
       expect(installFunction).toContain("Global.Path.cache")
-      expect(installFunction).toContain('pkg + "@" + version')
+      expect(installFunction).toContain('version === "latest" ? pkg : pkg + "@" + version')
 
       // Verify no registry argument is added
       expect(installFunction).not.toContain('"--registry"')
