@@ -48,8 +48,10 @@ export const dict = {
 
   "command.session.new": "新建会话",
   "command.file.open": "打开文件",
+  "command.tab.close": "关闭标签页",
   "command.context.addSelection": "将所选内容添加到上下文",
   "command.context.addSelection.description": "添加当前文件中选中的行",
+  "command.input.focus": "聚焦输入框",
   "command.terminal.toggle": "切换终端",
   "command.fileTree.toggle": "切换文件树",
   "command.review.toggle": "切换审查",
@@ -252,6 +254,7 @@ export const dict = {
   "prompt.popover.emptyResults": "没有匹配的结果",
   "prompt.popover.emptyCommands": "没有匹配的命令",
   "prompt.dropzone.label": "将图片或 PDF 拖到这里",
+  "prompt.dropzone.file.label": "拖放以 @提及文件",
   "prompt.slash.badge.custom": "自定义",
   "prompt.slash.badge.skill": "技能",
   "prompt.slash.badge.mcp": "mcp",
@@ -273,6 +276,7 @@ export const dict = {
   "prompt.toast.shellSendFailed.title": "发送 shell 命令失败",
   "prompt.toast.commandSendFailed.title": "发送命令失败",
   "prompt.toast.promptSendFailed.title": "发送提示失败",
+  "prompt.toast.promptSendFailed.description": "无法获取会话",
 
   "dialog.mcp.title": "MCPs",
   "dialog.mcp.description": "已启用 {{enabled}} / {{total}}",

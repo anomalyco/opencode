@@ -1,0 +1,67 @@
+---
+title: الانتقال إلى 1.0
+description: ما الجديد في OpenCode 1.0.
+---
+
+OpenCode 1.0 هو إعادة كتابة كاملة لواجهة TUI.
+
+انتقلنا من واجهة TUI المبنية على go+bubbletea، والتي كانت تعاني من مشاكل في الأداء والإمكانات، إلى إطار عمل داخلي (OpenTUI) مكتوب بـ zig+solidjs.
+
+تعمل واجهة TUI الجديدة مثل القديمة لأنها تتصل بخادم opencode نفسه.
+
+---
+
+## الترقية
+
+لا يفترض أن تتم ترقيتك تلقائيا إلى 1.0 إذا كنت تستخدم حاليا إصدارا أقدم.
+لكن بعض الإصدارات القديمة من OpenCode كانت تجلب دائما أحدث إصدار.
+
+للترقية يدويا، شغّل
+
+```bash
+$ opencode upgrade 1.0.0
+```
+
+للرجوع إلى 0.x، شغّل
+
+```bash
+$ opencode upgrade 0.15.31
+```
+
+---
+
+## تغييرات تجربة الاستخدام
+
+أصبح سجل الجلسة أكثر اختصارا، ولا يعرض التفاصيل الكاملة إلا لأداتي edit و bash.
+
+أضفنا شريط أوامر تمر عبره تقريبا كل العمليات. اضغط ctrl+p لإظهاره في أي سياق ولرؤية كل ما يمكنك فعله.
+
+أضفنا شريطا جانبيا للجلسة (يمكن إظهاره/إخفاؤه) يحتوي على معلومات مفيدة.
+
+أزلنا بعض الوظائف التي لم نكن متأكدين أن أحدا يستخدمها فعلا. إذا كانت هناك ميزة مهمة مفقودة، فالرجاء فتح issue وسنعيدها بسرعة.
+
+---
+
+## تغييرات غير متوافقة
+
+### إعادة تسمية اختصارات المفاتيح
+
+- messages_revert -> messages_undo
+- switch_agent -> agent_cycle
+- switch_agent_reverse -> agent_cycle_reverse
+- switch_mode -> agent_cycle
+- switch_mode_reverse -> agent_cycle_reverse
+
+### إزالة اختصارات المفاتيح
+
+- messages_layout_toggle
+- messages_next
+- messages_previous
+- file_diff_toggle
+- file_search
+- file_close
+- file_list
+- app_help
+- project_init
+- tool_details
+- thinking_blocks
