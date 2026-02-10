@@ -13,8 +13,7 @@ import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
 
 const SIDEBAR_WIDTH = 42
-const SIDEBAR_PADDING = 2 + 2 + 1 // left + right + inner scrollbox
-const SIDEBAR_CONTENT_WIDTH = SIDEBAR_WIDTH - SIDEBAR_PADDING
+const SIDEBAR_FILE_WIDTH = SIDEBAR_WIDTH - 2 - 2 - 1 - 1 // left + right padding + inner scrollbox + file row gap
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
@@ -245,7 +244,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                       const stats = [item.additions && `+${item.additions}`, item.deletions && `-${item.deletions}`]
                         .filter(Boolean)
                         .join(" ")
-                      const fileWidth = SIDEBAR_CONTENT_WIDTH - 2 - stats.length
+                      const fileWidth = SIDEBAR_FILE_WIDTH - stats.length
                       return (
                         <box flexDirection="row" gap={1} justifyContent="space-between">
                           <text fg={theme.textMuted} wrapMode="none">
