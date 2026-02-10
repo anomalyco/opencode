@@ -11,32 +11,32 @@ opencode, dosyaları dile özgü formatlayıcılar kullanılarak yazıldıktan v
 
 opencode, popüler diller ve çerçeveler için çeşitli yerleşik biçimlendiricilerle birlikte gelir. Aşağıda ihtiyaç duyduğu biçimlendiricilerin, desteklenen dosya uzantılarının ve komutların veya yapılandırma seçeneklerinin bir listesi bulunmaktadır.
 
-| Formatter          | Extensions                                                                                             | Requirements                                                                                             |
-| ------------------ | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| gofmt              | .go                                                                                                    | `gofmt` komutu mevcut                                                                                    |
-| karışım            | .ex, .exs, .eex, .heex, .leex, .neex, .sface                                                           | `mix` komutu mevcut                                                                                      |
-| daha güzel         | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml ve [more](https://prettier.io/docs/en/index.html) | `prettier` bağımlılığı `package.json`'de                                                                 |
-| biyom              | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml ve [more](https://biomejs.dev/)                   | `biome.json(c)` yapılandırma dosyası                                                                     |
-| zig                | .zig, .zon                                                                                             | `zig` komutu mevcut                                                                                      |
-| clang formatı      | .c, .cpp, .h, .hpp, .ino ve [more](https://clang.llvm.org/docs/ClangFormat.html)                       | `.clang-format` yapılandırma dosyası                                                                     |
-| klint              | .kt, .kts                                                                                              | `ktlint` komutu mevcut                                                                                   |
-| fırfır             | .py, .pyi                                                                                              | `ruff` komutu yapılandırmayla kullanılabilir                                                             |
-| pas fmt            | .rs                                                                                                    | `rustfmt` komutu mevcut                                                                                  |
-| kargo fmt          | .rs                                                                                                    | `cargo fmt` komutu mevcut                                                                                |
-| UV                 | .py, .pyi                                                                                              | `uv` komutu mevcut                                                                                       |
-| rubokop            | .rb, .rake, .gemspec, .ru                                                                              | `rubocop` komutu mevcut                                                                                  |
-| standartrb         | .rb, .rake, .gemspec, .ru                                                                              | `standardrb` komutu mevcut                                                                               |
-| htmlgüzelleştirici | .erb, .html.erb                                                                                        | `htmlbeautifier` komutu mevcut                                                                           |
-| hava               | .R                                                                                                     | `air` komutu mevcut                                                                                      |
-| dart               | .dart                                                                                                  | `dart` komutu mevcut                                                                                     |
-| ocamlformat        | .ml, .mli                                                                                              | `ocamlformat` komutu mevcut ve `.ocamlformat` yapılandırma dosyası                                       |
-| yeryüzü            | .tf, .tfvars                                                                                           | `terraform` komutu mevcut                                                                                |
-| parıltı            | .gliam                                                                                                 | `gleam` komutu mevcut                                                                                    |
-| nixfmt             | .nix                                                                                                   | `nixfmt` komutu mevcut                                                                                   |
-| shfmt              | .sh, .bash                                                                                             | `shfmt` komutu mevcut                                                                                    |
-| pint               | .php                                                                                                   | `laravel/pint` dependency in `composer.json`                                                             |
-| oxfmt (Deneysel)   | .js, .jsx, .ts, .tsx                                                                                   | `oxfmt` içindeki `package.json` bağımlılığı ve [experimental env variable flag](/docs/cli/#experimental) |
-| ormolu             | .hs                                                                                                    | `ormolu` komutu mevcut                                                                                   |
+| Formatter            | Extensions                                                                                             | Requirements                                                                                           |
+| -------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| gofmt                | .go                                                                                                    | `gofmt` komutu mevcut                                                                                  |
+| mix                  | .ex, .exs, .eex, .heex, .leex, .neex, .sface                                                           | `mix` komutu mevcut                                                                                    |
+| prettier             | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml ve [more](https://prettier.io/docs/en/index.html) | `package.json` içinde `prettier` bağımlılığı                                                           |
+| biome                | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml ve [more](https://biomejs.dev/)                   | `biome.json(c)` yapılandırma dosyası                                                                   |
+| zig                  | .zig, .zon                                                                                             | `zig` komutu mevcut                                                                                    |
+| clang-format         | .c, .cpp, .h, .hpp, .ino ve [more](https://clang.llvm.org/docs/ClangFormat.html)                       | `.clang-format` yapılandırma dosyası                                                                   |
+| ktlint               | .kt, .kts                                                                                              | `ktlint` komutu mevcut                                                                                 |
+| ruff                 | .py, .pyi                                                                                              | `ruff` komutu yapılandırmayla kullanılabilir                                                           |
+| rustfmt              | .rs                                                                                                    | `rustfmt` komutu mevcut                                                                                |
+| cargofmt             | .rs                                                                                                    | `cargo fmt` komutu mevcut                                                                              |
+| uv                   | .py, .pyi                                                                                              | `uv` komutu mevcut                                                                                     |
+| rubocop              | .rb, .rake, .gemspec, .ru                                                                              | `rubocop` komutu mevcut                                                                                |
+| standardrb           | .rb, .rake, .gemspec, .ru                                                                              | `standardrb` komutu mevcut                                                                             |
+| htmlbeautifier       | .erb, .html.erb                                                                                        | `htmlbeautifier` komutu mevcut                                                                         |
+| air                  | .R                                                                                                     | `air` komutu mevcut                                                                                    |
+| dart                 | .dart                                                                                                  | `dart` komutu mevcut                                                                                   |
+| ocamlformat          | .ml, .mli                                                                                              | `ocamlformat` komutu mevcut ve `.ocamlformat` yapılandırma dosyası                                     |
+| terraform            | .tf, .tfvars                                                                                           | `terraform` komutu mevcut                                                                              |
+| gleam                | .gleam                                                                                                 | `gleam` komutu mevcut                                                                                  |
+| nixfmt               | .nix                                                                                                   | `nixfmt` komutu mevcut                                                                                 |
+| shfmt                | .sh, .bash                                                                                             | `shfmt` komutu mevcut                                                                                  |
+| pint                 | .php                                                                                                   | `composer.json` içinde `laravel/pint` bağımlılığı                                                      |
+| oxfmt (Experimental) | .js, .jsx, .ts, .tsx                                                                                   | `package.json` içinde `oxfmt` bağımlılığı ve [experimental env variable flag](/docs/cli/#experimental) |
+| ormolu               | .hs                                                                                                    | `ormolu` komutu mevcut                                                                                 |
 
 Yani eğer projenizin `prettier` dosyasında `package.json` varsa, opencode bunu otomatik olarak kullanacaktır.
 
@@ -67,14 +67,14 @@ Biçimlendiricileri opencode yapılandırmanızdaki `formatter` bölümü aracı
 
 Her formatlayıcı yapılandırması aşağıdakileri destekler:
 
-| Emlak         | Tür    | Açıklama                                                               |
-| ------------- | ------ | ---------------------------------------------------------------------- |
-| `disabled`    | boole  | Biçimlendiriciyi devre dışı bırakmak için bunu `true` olarak ayarlayın |
-| `command`     | dize[] | Biçimlendirme için çalıştırılacak komut                                |
-| `environment` | nesne  | Biçimlendiriciyi çalıştırırken ayarlanacak ortam değişkenleri          |
-| `extensions`  | dize[] | Bu formatlayıcının işlemesi gereken dosya uzantıları                   |
+| Property      | Type     | Açıklama                                                               |
+| ------------- | -------- | ---------------------------------------------------------------------- |
+| `disabled`    | boolean  | Biçimlendiriciyi devre dışı bırakmak için bunu `true` olarak ayarlayın |
+| `command`     | string[] | Biçimlendirme için çalıştırılacak komut                                |
+| `environment` | object   | Biçimlendiriciyi çalıştırırken ayarlanacak ortam değişkenleri          |
+| `extensions`  | string[] | Bu formatlayıcının işlemesi gereken dosya uzantıları                   |
 
-Let's look at some examples.
+Bazı örneklere bakalım.
 
 ---
 
@@ -104,7 +104,7 @@ Let's look at some examples.
 
 ---
 
-### Custom formatters
+### Özel biçimlendiriciler
 
 Komutu, ortam değişkenlerini ve dosya uzantılarını belirterek yerleşik biçimlendiricileri geçersiz kılabilir veya yenilerini ekleyebilirsiniz:
 

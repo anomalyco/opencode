@@ -21,7 +21,7 @@ opencode run "Explain how closures work in JavaScript"
 
 ### tui
 
-Avvia l'interfaccia testuale di OpenCode (terminal user interface).
+Avvia l'interfaccia testuale di OpenCode (interfaccia utente da terminale).
 
 ```bash
 opencode [project]
@@ -60,7 +60,7 @@ opencode agent [command]
 
 ### attach
 
-Collega un terminal a un backend server di OpenCode gia' in esecuzione avviato tramite i comandi `serve` o `web`.
+Collega un terminale a un backend server di OpenCode gia' in esecuzione avviato tramite i comandi `serve` o `web`.
 
 ```bash
 opencode attach [url]
@@ -72,7 +72,7 @@ Questo consente di usare la TUI con un backend OpenCode remoto. Per esempio:
 # Start the backend server for web/mobile access
 opencode web --port 4096 --hostname 0.0.0.0
 
-# In another terminal, attach the TUI to the running backend
+# In un altro terminale, collega la TUI al backend in esecuzione
 opencode attach http://10.20.30.40:4096
 ```
 
@@ -326,10 +326,10 @@ opencode run Explain the use of context in Go
 Puoi anche collegarti a una istanza `opencode serve` gia' in esecuzione per evitare i cold boot dei server MCP ad ogni esecuzione:
 
 ```bash
-# Start a headless server in one terminal
+# Avvia un server headless in un terminale
 opencode serve
 
-# In another terminal, run commands that attach to it
+# In un altro terminale, esegui comandi che si collegano ad esso
 opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
@@ -562,7 +562,7 @@ OpenCode puo' essere configurato tramite variabili d'ambiente.
 | `OPENCODE_CONFIG_CONTENT`             | string  | Contenuto JSON di config inline                             |
 | `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | Disabilita i controlli automatici di aggiornamento          |
 | `OPENCODE_DISABLE_PRUNE`              | boolean | Disabilita la potatura dei dati vecchi                      |
-| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | Disabilita aggiornamenti automatici del titolo terminal     |
+| `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | Disabilita aggiornamenti automatici del titolo terminale    |
 | `OPENCODE_PERMISSION`                 | string  | Config permessi JSON inline                                 |
 | `OPENCODE_DISABLE_DEFAULT_PLUGINS`    | boolean | Disabilita i plugin di default                              |
 | `OPENCODE_DISABLE_LSP_DOWNLOAD`       | boolean | Disabilita download automatico dei server LSP               |

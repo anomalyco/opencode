@@ -15,36 +15,36 @@ opencode posiada kilka wbudowanych serwerów LSP dla języków:
 | ------------------ | ------------------------------------------------------------------- | -------------------------------------------------------------------------- |
 | astro              | .astro                                                              | Automatyczne instalacje dla Astro                                          |
 | bash               | .sh, .bash, .zsh, .ksh                                              | Automatycznie instaluje serwer języka bash                                 |
-| brzęk              | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++                | Automatyczne instalacje dla C/C++                                          |
+| clangd             | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++                | Automatyczne instalacje dla C/C++                                          |
 | csharp             | .cs                                                                 | `.NET SDK` zainstalowany                                                   |
 | clojure-lsp        | .clj, .cljs, .cljc, .edn                                            | Komenda `clojure-lsp` dostępna                                             |
-| strzałka           | .dart                                                               | Komenda `dart` dostępna                                                    |
-| nie                | .ts, .tsx, .js, .jsx, .mjs                                          | Dostępne rozwiązanie `deno` (automatyczne wykrywanie deno.json/deno.jsonc) |
-| eliksir-ls         | .ex, .exs                                                           | Komenda `elixir` dostępna                                                  |
-| eslin              | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue                  | `eslint` zależność w projekcie                                             |
+| dart               | .dart                                                               | Komenda `dart` dostępna                                                    |
+| deno               | .ts, .tsx, .js, .jsx, .mjs                                          | Dostępne rozwiązanie `deno` (automatyczne wykrywanie deno.json/deno.jsonc) |
+| elixir-ls          | .ex, .exs                                                           | Komenda `elixir` dostępna                                                  |
+| eslint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue                  | `eslint` zależność w projekcie                                             |
 | fsharp             | .fs, .fsi, .fsx, .fsscript                                          | `.NET SDK` zainstalowany                                                   |
-| blask              | .blask                                                              | Komenda `gleam` dostępna                                                   |
-| gopls              | .idź                                                                | Komenda `go` dostępna                                                      |
-| hl                 | .hs, .lhs                                                           | Komenda `haskell-language-server-wrapper` dostępna                         |
-| jdtl               | .java                                                               | `Java SDK (version 21+)` zainstalowany                                     |
+| gleam              | .gleam                                                              | Komenda `gleam` dostępna                                                   |
+| gopls              | .go                                                                 | Komenda `go` dostępna                                                      |
+| hls                | .hs, .lhs                                                           | Komenda `haskell-language-server-wrapper` dostępna                         |
+| jdtls              | .java                                                               | `Java SDK (version 21+)` zainstalowany                                     |
 | kotlin-ls          | .kt, .kts                                                           | Automatyczne instalacje dla Kotlin                                         |
 | lua-ls             | .lua                                                                | Automatyczne instalacje dla Lua                                            |
 | nixd               | .nix                                                                | Komenda `nixd` dostępna                                                    |
 | ocaml-lsp          | .ml, .mli                                                           | Komenda `ocamllsp` dostępna                                                |
 | oxlint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | `oxlint` zależność w projekcie                                             |
-| php inteligentny   | .php                                                                | Automatyczne instalacje dla PHP                                            |
-| pryzma             | .prysma                                                             | Komenda `prisma` dostępna                                                  |
-| pirat              | .py, .pyi                                                           | Zainstalowana zależność `pyright`                                          |
+| php intelephense   | .php                                                                | Automatyczne instalacje dla PHP                                            |
+| prisma             | .prisma                                                             | Komenda `prisma` dostępna                                                  |
+| pyright            | .py, .pyi                                                           | Zainstalowana zależność `pyright`                                          |
 | ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                           | Dostępne polecenie `ruby` i `gem`                                          |
-| rdza               | .rs                                                                 | Komenda `rust-analyzer` dostępna                                           |
+| rust               | .rs                                                                 | Komenda `rust-analyzer` dostępna                                           |
 | sourcekit-lsp      | .swift, .objc, .objcpp                                              | `swift` zainstalowany (`xcode` na macOS)                                   |
-| smukły             | smukły                                                              | Automatyczne instalacje dla aplikacji Svelte                               |
-| terraforma         | .tf, .tfvars                                                        | Automatyczne instalacje z wydań GitHub                                     |
-| malutka            | .typ, .typc                                                         | Automatyczne instalacje z wydań GitHub                                     |
-| maszynopis         | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts                        | `typescript` zależność w projekcie                                         |
+| svelte             | .svelte                                                             | Automatyczne instalacje dla aplikacji Svelte                               |
+| terraform          | .tf, .tfvars                                                        | Automatyczne instalacje z wydań GitHub                                     |
+| tinymist           | .typ, .typc                                                         | Automatyczne instalacje z wydań GitHub                                     |
+| typescript         | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts                        | `typescript` zależność w projekcie                                         |
 | vue                | .vue                                                                | Automatyczne instalacje dla Vue                                            |
 | yaml-ls            | .yaml, .yml                                                         | Automatycznie instaluje serwer języka yaml Red Hat                         |
-| zł                 | .zig, .zon                                                          | Komenda `zig` dostępna                                                     |
+| zls                | .zig, .zon                                                          | Komenda `zig` dostępna                                                     |
 
 Serwery LSP są automatycznie włączane po wykryciu jednego z rozszerzonych plików i wymagań.
 
@@ -78,7 +78,7 @@ Każdy serwer LSP obsługuje szczegółowe elementy:
 
 | Nieruchomość     | Wpisz    | Opis                                                   |
 | ---------------- | -------- | ------------------------------------------------------ |
-| `disabled`       | boolean  | Ustaw tę opcję na `true`, aby włączyć serwer LSP       |
+| `disabled`       | boolean  | Ustaw tę opcję na `true`, aby wyłączyć serwer LSP      |
 | `command`        | string[] | Polecenie uruchomienia serwera LSP                     |
 | `extensions`     | string[] | Rozszerzenia plików, które powinny mieć ten serwer LSP |
 | `env`            | object   | Zmienne ustawienia podczas uruchamiania serwera        |

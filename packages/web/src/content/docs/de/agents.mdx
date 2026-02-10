@@ -359,7 +359,7 @@ Wenn Sie kein Modell angeben, verwenden Sie den primären Agenten [model globall
 }
 ```
 
-Das Modell ID in Ihrer OpenCode-Konfiguration verwendet das Format `provider/model-id`. Wenn Sie beispielsweise [OpenCode Zen](/docs/zen) verwenden, würden Sie `opencode/gpt-5.1-codex` für GPT 5.1 Codex verwenden.
+Die Modell-ID in Ihrer OpenCode-Konfiguration verwendet das Format `provider/model-id`. Wenn Sie beispielsweise [OpenCode Zen](/docs/zen) verwenden, würden Sie `opencode/gpt-5.1-codex` für GPT 5.1 Codex verwenden.
 
 ---
 
@@ -591,7 +591,7 @@ Die Regeln werden der Reihe nach ausgewertet und die **letzte übereinstimmende 
 :::
 
 :::tip
-Benutzer können jeden Subagenten immer direkt über das Autovervollständigungsmenü `@` aufrufen, auch wenn die Aufgabenberechtigungen des Agenten sterben würden.
+Benutzer können jeden Subagenten immer direkt über das Autovervollständigungsmenü `@` aufrufen, auch wenn die Aufgabenberechtigungen des Agenten dies verweigern würden.
 :::
 
 ---
@@ -600,7 +600,7 @@ Benutzer können jeden Subagenten immer direkt über das Autovervollständigungs
 
 Passen Sie das visuelle Erscheinungsbild des Agenten im UI mit der Option `color` an. Dies wirkt sich darauf aus, wie der Agent in der Benutzeroberfläche angezeigt wird.
 
-Verwenden Sie eine gültige Hex-Farbe (e.g., `#FF5733`) oder Designfarbe: `primary`, `secondary`, `accent`, `success`, `warning`, `error`, `info`.
+Verwenden Sie eine gültige Hex-Farbe (e.g., `#FF5733`) oder Themenfarbe: `primary`, `secondary`, `accent`, `success`, `warning`, `error`, `info`.
 
 ```json title="opencode.json"
 {
@@ -631,7 +631,7 @@ Steuern Sie die Antwortvielfalt mit der Option `top_p`. Alternative zur Temperat
 }
 ```
 
-Die Werte reichen von 0.0 bis 1.0. Die meisten Werte sind fokussierter, die höheren Werte vielfältiger.
+Die Werte reichen von 0.0 bis 1.0. Niedrigere Werte sind fokussierter, höhere Werte vielfältiger.
 
 ---
 
