@@ -77,10 +77,10 @@ export namespace Log {
     )
   }
 
-  function createWriter(filepath: string, truncate?: boolean) {
+  async function createWriter(filepath: string, truncate?: boolean) {
     if (writer) writer.end()
     logpath = filepath
-    if (truncate) fs.truncate(filepath).catch(() => {})
+    if (truncate) await fs.truncate(filepath).catch(() => {})
     writer = Bun.file(filepath).writer()
   }
 
@@ -90,11 +90,11 @@ export namespace Log {
     return num
   }
 
-  function rotate(dir: string) {
+  async function rotate(dir: string) {
     const date = today()
     if (date === current && writer) return
     current = date
-    createWriter(path.join(dir, `opencode-${date}.log`))
+    await createWriter(path.join(dir, `opencode-${date}.log`))
   }
 
   const writeStrategies: Record<Rotate["kind"], (options: Options) => Promise<void>> = {
@@ -103,14 +103,14 @@ export namespace Log {
       const retention = options.rotate?.retention ?? 10
       cleanup(dir, "????-??-??T??????.log", retention)
       const name = options.dev ? "dev.log" : new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log"
-      createWriter(path.join(dir, name), true)
+      await createWriter(path.join(dir, name), true)
       write = flushWriter
     },
     async daily(options) {
       const dir = options.path ?? Global.Path.log
       const retention = options.rotate?.retention ?? 7
       await fs.mkdir(dir, { recursive: true })
-      rotate(dir)
+      await rotate(dir)
       cleanup(dir, "opencode-????-??-??.log", retention)
       write = (msg: any) => {
         rotate(dir)
