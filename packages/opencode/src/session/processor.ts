@@ -342,6 +342,9 @@ export namespace SessionProcessor {
               stack: JSON.stringify(e.stack),
             })
             const error = MessageV2.fromError(e, { providerID: input.model.providerID })
+            // DO NOT retry context overflow errors
+            if (MessageV2.ContextOverflowError.isInstance(error)) {
+            }
             const retry = SessionRetry.retryable(error)
             if (retry !== undefined) {
               attempt++

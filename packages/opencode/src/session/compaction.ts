@@ -39,7 +39,7 @@ export namespace SessionCompaction {
 
     const output = ProviderTransform.maxOutputTokens(input.model)
     const usable = input.model.limit.input || context - output
-    return count > usable
+    return count >= usable
   }
 
   export const PRUNE_MINIMUM = 20_000

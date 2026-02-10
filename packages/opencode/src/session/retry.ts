@@ -59,9 +59,6 @@ export namespace SessionRetry {
   }
 
   export function retryable(error: ReturnType<NamedError["toObject"]>) {
-    // DO NOT retry context overflow errors
-    if (MessageV2.ContextOverflowError.isInstance(error)) return undefined
-
     if (MessageV2.APIError.isInstance(error)) {
       if (!error.data.isRetryable) return undefined
       return error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message
