@@ -63,7 +63,7 @@ Når du bruger OpenCode TUI, kan du skrive `/` etterfulgt av et kommandonavn for
 /help
 ```
 
-De fleste kommandoer har også tastebinding som bruger `ctrl+x` som ledernøkkel, der `ctrl+x` er standard ledernøkkel. [Finn ut mer](/docs/keybinds).
+De fleste kommandoer har også tastebinding som bruger `ctrl+x` som Leader-tast, der `ctrl+x` er standard Leader-tast. [Finn ut mer](/docs/keybinds).
 
 Her er alle tilgængelige skråstrekkommandoer:
 
@@ -87,7 +87,7 @@ Komprimer nuværende session. _Alias_: `/summarize`
 /compact
 ```
 
-**Nøkkelbinding:** `ctrl+x c`
+**Tastebinding:** `ctrl+x c`
 
 ---
 
@@ -99,7 +99,7 @@ Veksle verktøyutførelsesdetaljer.
 /details
 ```
 
-**Nøkkelbinding:** `ctrl+x d`
+**Tastebinding:** `ctrl+x d`
 
 ---
 
@@ -111,7 +111,7 @@ Veksle verktøyutførelsesdetaljer.
 /editor
 ```
 
-**Nøkkelbinding:** `ctrl+x e`
+**Tastebinding:** `ctrl+x e`
 
 ---
 
@@ -123,7 +123,7 @@ Avslutt OpenCode. _Aliaser_: `/quit`, `/q`
 /exit
 ```
 
-**Nøkkelbinding:** `ctrl+x q`
+**Tastebinding:** `ctrl+x q`
 
 ---
 
@@ -135,7 +135,7 @@ Eksporter nuværende samtale til Markdown og åpne i standardredigeringsprogramm
 /export
 ```
 
-**Nøkkelbinding:** `ctrl+x x`
+**Tastebinding:** `ctrl+x x`
 
 ---
 
@@ -147,7 +147,7 @@ Vis hjelpedialogen.
 /help
 ```
 
-**Nøkkelbinding:** `ctrl+x h`
+**Tastebinding:** `ctrl+x h`
 
 ---
 
@@ -159,7 +159,7 @@ Opret eller opdater `AGENTS.md`-fil. [Finn ut mer](/docs/rules).
 /init
 ```
 
-**Nøkkelbinding:** `ctrl+x i`
+**Tastebinding:** `ctrl+x i`
 
 ---
 
@@ -171,7 +171,7 @@ Liste over tilgængelige modeller.
 /models
 ```
 
-**Nøkkelbinding:** `ctrl+x m`
+**Tastebinding:** `ctrl+x m`
 
 ---
 
@@ -183,7 +183,7 @@ Start en ny session. _Alias_: `/clear`
 /new
 ```
 
-**Nøkkelbinding:** `ctrl+x n`
+**Tastebinding:** `ctrl+x n`
 
 ---
 
@@ -202,7 +202,7 @@ være et Git-depot**.
 /redo
 ```
 
-**Nøkkelbinding:** `ctrl+x r`
+**Tastebinding:** `ctrl+x r`
 
 ---
 
@@ -214,7 +214,7 @@ List opp og bytt mellom sessioner. _Aliaser_: `/resume`, `/continue`
 /sessions
 ```
 
-**Nøkkelbinding:** `ctrl+x l`
+**Tastebinding:** `ctrl+x l`
 
 ---
 
@@ -226,7 +226,7 @@ Del nuværende session. [Finn ut mer](/docs/share).
 /share
 ```
 
-**Nøkkelbinding:** `ctrl+x s`
+**Tastebinding:** `ctrl+x s`
 
 ---
 
@@ -238,7 +238,7 @@ Liste over tilgængelige temaer.
 /theme
 ```
 
-**Nøkkelbinding:** `ctrl+x t`
+**Tastebinding:** `ctrl+x t`
 
 ---
 
@@ -271,7 +271,7 @@ være et Git-depot**.
 /undo
 ```
 
-**Nøkkelbinding:** `ctrl+x u`
+**Tastebinding:** `ctrl+x u`
 
 ---
 
@@ -285,9 +285,9 @@ Opphev deling av nuværende session. [Finn ut mer](/docs/share#un-sharing).
 
 ---
 
-## Redaktøroppsett
+## Opsætning af editor
 
-Både kommandoene `/editor` og `/export` bruger redigeringsprogrammet som er spesifisert i miljøvariabelen `EDITOR`.
+Både kommandoene `/editor` og `/export` bruger editoren som er spesifisert i miljøvariabelen `EDITOR`.
 
 <Tabs>
   <TabItem label="Linux/macOS">
@@ -346,10 +346,10 @@ Populære redigeringsalternativer inkluderer:
 - `subl` - Sublime Text
 
 :::note
-Nogle redaktører som VS Code må startes med flagget `--wait`.
+Nogle editorer som VS Code må startes med flagget `--wait`.
 :::
 
-Nogle redaktører trenger kommandolinjeargumenter for at kjøre i blokkeringsmodus. `--wait`-flagget gør at redigeringsprosessen blokkeres til den lukkes.
+Nogle editorer trenger kommandolinjeargumenter for at kjøre i blokeringstilstand. `--wait`-flagget gør at redigeringsprosessen blokkeres til den lukkes.
 
 ---
 
@@ -371,7 +371,7 @@ Du kan tilpasse TUI-oppførselen gjennom OpenCode-konfigurasjonsfilen.
 
 ### Options
 
-- `scroll_acceleration` - Aktiver rulleakselerasjon i macOS-stil for jevn, naturlig rulling. Når aktivert, øker rullehastigheten med raske rullebevegelser og forblir presis for langsommere bevegelser. **Denne innstillingen har forrang over `scroll_speed` og overstyrer den når den er aktivert.**
+- `scroll_acceleration` - Aktiver rulleacceleration i macOS-stil for jevn, naturlig rulling. Når aktivert, øker rullehastigheten med raske rullebevegelser og forblir presis for langsommere bevegelser. **Denne innstillingen har forrang over `scroll_speed` og overstyrer den når den er aktivert.**
 - `scroll_speed` - Styrer hvor raskt TUI ruller når du bruger rullekommandoer (minimum: `1`). Standard er `3`. **Merk: Dette ignoreres hvis `scroll_acceleration.enabled` er satt til `true`.**
 
 ---
@@ -386,5 +386,5 @@ Du kan tilpasse ulike aspekter av TUI-visningen ved at bruge kommandopaletten (`
 
 Veksle om brugernavnet ditt vises i chat-meldinger. Få tilgang til dette gjennom:
 
-- Kommandopalett: Søk etter "brugernavn" eller "skjul brugernavn"
+- Kommandopalet: Søk etter "brugernavn" eller "skjul brugernavn"
 - Innstillingen vedvarer automatisk og vil bli husket over TUI sessioner

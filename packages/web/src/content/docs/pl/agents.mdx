@@ -36,7 +36,7 @@ spójrz na te poniżej.
 
 Podagenci do pomocniczych asystenci, których można przywoływać agenci główni w celu wykonania podstawowych zadań. Możesz także wytwarzać je, **@ wspominając** o nich w swoich wiadomościach.
 
-opencode ma dwóch subagentów: **Ogólne** i **Eksploruj**. Przyjrzymy się temu poniżej.
+opencode ma dwóch subagentów: **General** i **Explore**. Przyjrzymy się temu poniżej.
 
 ---
 
@@ -46,7 +46,7 @@ opencode ma dwa główne agenty i dwa główne agenty podrzędne.
 
 ---
 
-### korzystać z pracy
+### Build
 
 _Tryb_: `primary`
 
@@ -54,7 +54,7 @@ Kompilacja jest **domyślnym** agentem zastosowania z ukrytymi narzędziami. Jes
 
 ---
 
-### założenie z planu
+### Plan
 
 _Tryb_: `primary`
 
@@ -68,7 +68,7 @@ Ten agent jest podłączony, gdy chcesz, aby LLM był kompatybilny z kodem, któ
 
 ---
 
-### miejsce
+### General
 
 _Tryb_: `subagent`
 
@@ -76,7 +76,7 @@ Rozwiązanie rozwiązania złożone z zadań wieloetapowych. Pełny dostęp do n
 
 ---
 
-### eksploracji
+### Explore
 
 _Tryb_: `subagent`
 
@@ -84,7 +84,7 @@ Szybki agent tylko do odczytu do eksploracji baz kodu. Nie można modyfikować p
 
 ---
 
-### zagęszczanie danych
+### Compaction
 
 _Tryb_: `primary`
 
@@ -92,7 +92,7 @@ Ukryty agent systemowy, który jest kontekstem kontekstowym w dużym podsumowani
 
 ---
 
-### jako tytuł
+### Title
 
 _Tryb_: `primary`
 
@@ -100,7 +100,7 @@ Ukryty agent systemowy, krótki tytuł sesji. Działa automatycznie i nie można
 
 ---
 
-### Podsumowanie podsumowania
+### Summary
 
 _Tryb_: `primary`
 
@@ -302,7 +302,7 @@ Jeśli ta opcja nie zostanie skonfigurowana, agent będzie obowiązywał iteracj
 Po tym, jak agent limitu otrzymuje specjalny monit systemowy nakazujący podsumowanie swojej pracy i rekomendowanych do wykonywania zadań.
 
 :::caution
-Starsze pole `maxSteps` jest przestarzałe. Zamiast tego nadzoru `steps`.
+Starsze pole `maxSteps` jest przestarzałe. Zamiast tego użyj `steps`.
 :::
 
 ---

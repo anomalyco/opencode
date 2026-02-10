@@ -58,7 +58,7 @@ opencode agent [command]
 
 ---
 
-### attacher
+### attach
 
 Attachez un terminal à un serveur backend OpenCode déjà en cours d'exécution démarré via les commandes `serve` ou `web`.
 
@@ -85,7 +85,7 @@ opencode attach http://10.20.30.40:4096
 
 ---
 
-#### créer
+#### create
 
 Créez un nouvel agent avec une configuration personnalisée.
 
@@ -97,7 +97,7 @@ Cette commande vous guidera dans la création d'un nouvel agent avec une invite 
 
 ---
 
-#### liste
+#### list
 
 Répertoriez tous les agents disponibles.
 
@@ -107,7 +107,7 @@ opencode agent list
 
 ---
 
-### authentification
+### auth
 
 Commande pour gérer les informations d’identification et la connexion des fournisseurs.
 
@@ -117,7 +117,7 @@ opencode auth [command]
 
 ---
 
-#### se connecter
+#### login
 
 OpenCode est alimenté par la liste des fournisseurs sur [Models.dev](https://models.dev), vous pouvez donc utiliser `opencode auth login` pour configurer les clés API pour tout fournisseur que vous souhaitez utiliser. Ceci est stocké dans `~/.local/share/opencode/auth.json`.
 
@@ -129,7 +129,7 @@ Lorsque OpenCode démarre, il charge les fournisseurs à partir du fichier d'inf
 
 ---
 
-#### liste
+#### list
 
 Répertorie tous les fournisseurs authentifiés tels qu'ils sont stockés dans le fichier d'informations d'identification.
 
@@ -145,7 +145,7 @@ opencode auth ls
 
 ---
 
-#### déconnexion
+#### logout
 
 Vous déconnecte d'un fournisseur en l'effaçant du fichier d'informations d'identification.
 
@@ -165,7 +165,7 @@ opencode github [command]
 
 ---
 
-#### installer
+#### install
 
 Installez l'agent GitHub dans votre référentiel.
 
@@ -177,7 +177,7 @@ Cela configure le flux de travail GitHub Actions nécessaire et vous guide tout 
 
 ---
 
-#### courir
+#### run
 
 Exécutez l'agent GitHub. Ceci est généralement utilisé dans les actions GitHub.
 
@@ -204,7 +204,7 @@ opencode mcp [command]
 
 ---
 
-#### ajouter
+#### add
 
 Ajoutez un serveur MCP à votre configuration.
 
@@ -216,7 +216,7 @@ Cette commande vous guidera dans l’ajout d’un serveur MCP local ou distant.
 
 ---
 
-#### liste
+#### list
 
 Répertoriez tous les serveurs MCP configurés et leur état de connexion.
 
@@ -232,7 +232,7 @@ opencode mcp ls
 
 ---
 
-#### authentification
+#### auth
 
 Authentifiez-vous auprès d'un serveur MCP compatible OAuth.
 
@@ -256,7 +256,7 @@ opencode mcp auth ls
 
 ---
 
-#### déconnexion
+#### logout
 
 Supprimez les informations d'identification OAuth pour un serveur MCP.
 
@@ -266,7 +266,7 @@ opencode mcp logout [name]
 
 ---
 
-#### déboguer
+#### debug
 
 Déboguer les problèmes de connexion OAuth pour un serveur MCP.
 
@@ -276,7 +276,7 @@ opencode mcp debug <name>
 
 ---
 
-### modèles
+### models
 
 Répertoriez tous les modèles disponibles auprès des fournisseurs configurés.
 
@@ -309,7 +309,7 @@ opencode models --refresh
 
 ---
 
-### courir
+### run
 
 Exécutez opencode en mode non interactif en transmettant directement une invite.
 
@@ -352,7 +352,7 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 ---
 
-### servir
+### serve
 
 Démarrez un serveur OpenCode sans tête pour un accès API. Consultez le [serveur docs](/docs/server) pour l'interface complète HTTP.
 
@@ -383,7 +383,7 @@ opencode session [command]
 
 ---
 
-#### liste
+#### list
 
 Répertoriez toutes les sessions OpenCode.
 
@@ -400,7 +400,7 @@ opencode session list
 
 ---
 
-### statistiques
+### stats
 
 Affichez les statistiques d'utilisation et de coût des jetons pour vos sessions OpenCode.
 
@@ -419,7 +419,7 @@ opencode stats
 
 ---
 
-### exporter
+### export
 
 Exportez les données de session sous JSON.
 
@@ -431,7 +431,7 @@ Si vous ne fournissez pas d'ID de session, vous serez invité à sélectionner p
 
 ---
 
-### importer
+### import
 
 Importez les données de session à partir d'un fichier JSON ou d'un partage OpenCode URL.
 
@@ -448,7 +448,7 @@ opencode import https://opncd.ai/s/abc123
 
 ---
 
-### la toile
+### web
 
 Démarrez un serveur OpenCode sans tête avec une interface Web.
 
@@ -489,7 +489,7 @@ Cette commande démarre un serveur ACP qui communique via stdin/stdout en utilis
 
 ---
 
-### désinstaller
+### uninstall
 
 Désinstallez OpenCode et supprimez tous les fichiers associés.
 
@@ -508,7 +508,7 @@ opencode uninstall
 
 ---
 
-### mise à niveau
+### upgrade
 
 Met à jour opencode vers la dernière version ou une version spécifique.
 
@@ -530,9 +530,9 @@ opencode upgrade v0.1.48
 
 #### Drapeaux
 
-| Drapeau    | Court | Descriptif                                                              |
-| ---------- | ----- | ----------------------------------------------------------------------- |
-| `--method` | `-m`  | La méthode d'installation utilisée ; curl, npm, pnpm, chignon, infusion |
+| Drapeau    | Court | Descriptif                                                      |
+| ---------- | ----- | --------------------------------------------------------------- |
+| `--method` | `-m`  | La méthode d'installation utilisée ; curl, npm, pnpm, bun, brew |
 
 ---
 

@@ -9,7 +9,7 @@ opencode suporta o [Agent Client Protocol](https://agentclientprotocol.com) ou (
 Para uma lista de editores e ferramentas que suportam ACP, confira o [relatório de progresso do ACP](https://zed.dev/blog/acp-progress-report#available-now).
 :::
 
-ACP é um protocolo aberto que padroniza a comunicação entre editores de código e agentes de codificação de IA.
+ACP é um protocolo aberto que padroniza a comunicação entre editores de código e agentes de codificação de AI.
 
 ---
 
@@ -30,7 +30,7 @@ Adicione à sua configuração do [Zed](https://zed.dev) (`~/.config/zed/setting
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
-    "opencode": {
+    "OpenCode": {
       "command": "opencode",
       "args": ["acp"]
     }
@@ -51,7 +51,7 @@ Você também pode vincular um atalho de teclado editando seu `keymap.json`:
         {
           "agent": {
             "custom": {
-              "name": "opencode",
+              "name": "OpenCode",
               "command": {
                 "command": "opencode",
                 "args": ["acp"]
@@ -74,7 +74,7 @@ Adicione ao seu acp.json do [JetBrains IDE](https://www.jetbrains.com/) de acord
 ```json title="acp.json"
 {
   "agent_servers": {
-    "opencode": {
+    "OpenCode": {
       "command": "/absolute/path/bin/opencode",
       "args": ["acp"]
     }

@@ -79,8 +79,8 @@ OpenCode で `command` オプションを使用します [config](/docs/config):
 
 Markdown ファイルを使用してコマンドを定義することもできます。それらを次の場所に置きます。
 
-- グローバル: `~/.config/opencode/agents/`
-- プロジェクトごと: `.opencode/agents/`
+- グローバル: `~/.config/opencode/commands/`
+- プロジェクトごと: `.opencode/commands/`
 
 ```markdown title="~/.config/opencode/commands/test.md"
 ---
@@ -161,7 +161,7 @@ with the following content: $3
 
 ---
 
-### shell出力
+### Shell 出力
 
 _!`command`_ を使用して、[bash command](/docs/tui#bash-commands) の出力をプロンプトに挿入します。
 
@@ -319,4 +319,4 @@ opencode には、`/init`、`/undo`、`/redo`、`/share`、`/help` などのい�
 :::note
 カスタム コマンドは組み込みコマンドをオーバーライドできます。
 :::
-If コマンドを定義すると、組み込みコマンドがオーバーライドされます。
+同じ名前のカスタム コマンドを定義すると、組み込みコマンドがオーバーライドされます。

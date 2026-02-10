@@ -5,13 +5,13 @@ description: opencode CLI alternativer og kommandoer.
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-opencode CLI starter som standard [TUI](/docs/tui) når den kjøres uten noen argumenter.
+OpenCode CLI starter som standard [TUI](/docs/tui) når den kjøres uten noen argumenter.
 
 ```bash
 opencode
 ```
 
-Men den godtar også kommandoer som dokumentert på denne siden. Dette lar deg samhandle med opencode programmatisk.
+Men den godtar også kommandoer som dokumentert på denne siden. Dette lar deg samhandle med OpenCode programmatisk.
 
 ```bash
 opencode run "Explain how closures work in JavaScript"
@@ -21,7 +21,7 @@ opencode run "Explain how closures work in JavaScript"
 
 ### tui
 
-Start opencode-terminalbrukergrensesnittet.
+Start OpenCode-terminalbrukergrensesnittet.
 
 ```bash
 opencode [project]
@@ -34,8 +34,8 @@ opencode [project]
 | `--continue` | `-c` | Fortsett siste økt                                                       |
 | `--session`  | `-s` | Økt ID for å fortsette                                                   |
 | `--fork`     |      | Forgren økten ved fortsettelse (bruk med `--continue` eller `--session`) |
-| `--prompt`   |      | Spør om å bruke                                                          |
-| `--model`    | `-m` | Modell å bruke i form av tilbyder/modell                                 |
+| `--prompt`   |      | Ledetekst som skal brukes                                                |
+| `--model`    | `-m` | Modell å bruke i form av leverandør/modell                               |
 | `--agent`    |      | Agent å bruke                                                            |
 | `--port`     |      | Port å lytte på                                                          |
 | `--hostname` |      | Vertsnavn å lytte på                                                     |
@@ -44,13 +44,13 @@ opencode [project]
 
 ## Kommandoer
 
-opencode CLI har også følgende kommandoer.
+OpenCode CLI har også følgende kommandoer.
 
 ---
 
 ### agent
 
-Administrer agenter for opencode.
+Administrer agenter for OpenCode.
 
 ```bash
 opencode agent [command]
@@ -60,13 +60,13 @@ opencode agent [command]
 
 ### attach
 
-Koble en terminal til en allerede kjørende opencode-backend-server startet via `serve` eller `web` kommandoer.
+Koble en terminal til en allerede kjørende OpenCode-backend-server startet via `serve` eller `web` kommandoer.
 
 ```bash
 opencode attach [url]
 ```
 
-Dette gjør det mulig å bruke TUI med en ekstern opencode-backend. For eksempel:
+Dette gjør det mulig å bruke TUI med en ekstern OpenCode-backend. For eksempel:
 
 ```bash
 # Start the backend server for web/mobile access
@@ -119,13 +119,13 @@ opencode auth [command]
 
 #### login
 
-opencode drives av leverandørlisten på [Models.dev](https://models.dev), så du kan bruke `opencode auth login` til å konfigurere API-nøkler for enhver leverandør du vil bruke. Dette er lagret i `~/.local/share/opencode/auth.json`.
+OpenCode drives av leverandørlisten på [Models.dev](https://models.dev), så du kan bruke `opencode auth login` til å konfigurere API-nøkler for enhver leverandør du vil bruke. Dette er lagret i `~/.local/share/opencode/auth.json`.
 
 ```bash
 opencode auth login
 ```
 
-Når opencode starter opp, laster den leverandørene fra legitimasjonsfilen. Og hvis det er noen nøkler definert i miljøene dine eller en `.env`-fil i prosjektet ditt.
+Når OpenCode starter opp, laster den leverandørene fra legitimasjonsfilen. Og hvis det er noen nøkler definert i miljøene dine eller en `.env`-fil i prosjektet ditt.
 
 ---
 
@@ -187,10 +187,10 @@ opencode github run
 
 ##### Flagg
 
-| Flagg     | Beskrivelse                               |
-| --------- | ----------------------------------------- |
-| `--event` | GitHub mock event for å kjøre agenten for |
-| `--token` | GitHub personlig tilgangstoken            |
+| Flagg     | Beskrivelse                              |
+| --------- | ---------------------------------------- |
+| `--event` | GitHub mock-hendelse å kjøre agenten for |
+| `--token` | GitHub personlig tilgangstoken           |
 
 ---
 
@@ -301,7 +301,7 @@ opencode models anthropic
 | `--refresh` | Oppdater modellbufferen fra models.dev                              |
 | `--verbose` | Bruk mer detaljert modellutdata (inkluderer metadata som kostnader) |
 
-Bruk `--refresh`-flagget for å oppdatere den bufrede modelllisten. Dette er nyttig når nye modeller er lagt til en leverandør og du vil se dem i opencode.
+Bruk `--refresh`-flagget for å oppdatere den bufrede modelllisten. Dette er nyttig når nye modeller er lagt til en leverandør og du vil se dem i OpenCode.
 
 ```bash
 opencode models --refresh
@@ -311,7 +311,7 @@ opencode models --refresh
 
 ### run
 
-Kjør opencode i ikke-interaktiv modus ved å sende en melding direkte.
+Kjør OpenCode i ikke-interaktiv modus ved å sende en melding direkte.
 
 ```bash
 opencode run [message..]
@@ -342,25 +342,25 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | `--session`  | `-s` | Økt ID for å fortsette                                                   |
 | `--fork`     |      | Forgren økten ved fortsettelse (bruk med `--continue` eller `--session`) |
 | `--share`    |      | Del økten                                                                |
-| `--model`    | `-m` | Modell å bruke i form av tilbyder/modell                                 |
+| `--model`    | `-m` | Modell å bruke i form av leverandør/modell                               |
 | `--agent`    |      | Agent å bruke                                                            |
 | `--file`     | `-f` | Fil(er) som skal legges ved melding                                      |
 | `--format`   |      | Format: standard (formatert) eller json (rå JSON hendelser)              |
 | `--title`    |      | Tittel for økten (bruker avkortet ledetekst hvis ingen verdi er oppgitt) |
-| `--attach`   |      | Koble til en kjørende opencode-server (f.eks. http://localhost:4096)     |
+| `--attach`   |      | Koble til en kjørende OpenCode-server (f.eks. http://localhost:4096)     |
 | `--port`     |      | Port for den lokale serveren (standard til tilfeldig port)               |
 
 ---
 
 ### serve
 
-Start en hodeløs opencode-server for API-tilgang. Sjekk ut [server-dokumentene](/docs/server) for hele HTTP-grensesnittet.
+Start en hodeløs OpenCode-server for API-tilgang. Sjekk ut [server-dokumentene](/docs/server) for hele HTTP-grensesnittet.
 
 ```bash
 opencode serve
 ```
 
-Dette starter en HTTP-server som gir API tilgang til opencode-funksjonalitet uten TUI-grensesnittet. Sett `OPENCODE_SERVER_PASSWORD` for å aktivere HTTP grunnleggende autentisering (brukernavn er standard til `opencode`).
+Dette starter en HTTP-server som gir API tilgang til OpenCode-funksjonalitet uten TUI-grensesnittet. Sett `OPENCODE_SERVER_PASSWORD` for å aktivere HTTP grunnleggende autentisering (brukernavn er standard til `opencode`).
 
 #### Flagg
 
@@ -375,7 +375,7 @@ Dette starter en HTTP-server som gir API tilgang til opencode-funksjonalitet ute
 
 ### session
 
-Administrer opencode-økter.
+Administrer OpenCode-økter.
 
 ```bash
 opencode session [command]
@@ -385,7 +385,7 @@ opencode session [command]
 
 #### list
 
-List opp alle opencode-økter.
+List opp alle OpenCode-økter.
 
 ```bash
 opencode session list
@@ -402,7 +402,7 @@ opencode session list
 
 ### stats
 
-Vis tokenbruk og kostnadsstatistikk for opencode-øktene dine.
+Vis tokenbruk og kostnadsstatistikk for OpenCode-øktene dine.
 
 ```bash
 opencode stats
@@ -433,13 +433,13 @@ Hvis du ikke gir en økt ID, blir du bedt om å velge fra tilgjengelige økter.
 
 ### import
 
-Importer øktdata fra en JSON-fil eller en opencode share-URL.
+Importer øktdata fra en JSON-fil eller en OpenCode share-URL.
 
 ```bash
 opencode import <file>
 ```
 
-Du kan importere fra en lokal fil eller en opencode share-URL.
+Du kan importere fra en lokal fil eller en OpenCode share-URL.
 
 ```bash
 opencode import session.json
@@ -450,13 +450,13 @@ opencode import https://opncd.ai/s/abc123
 
 ### web
 
-Start en hodeløs opencode-server med et webgrensesnitt.
+Start en hodeløs OpenCode-server med et webgrensesnitt.
 
 ```bash
 opencode web
 ```
 
-Dette starter en HTTP-server og åpner en nettleser for å få tilgang til opencode via et nettgrensesnitt. Sett `OPENCODE_SERVER_PASSWORD` for å aktivere HTTP grunnleggende autentisering (brukernavn er standard til `opencode`).
+Dette starter en HTTP-server og åpner en nettleser for å få tilgang til OpenCode via et nettgrensesnitt. Sett `OPENCODE_SERVER_PASSWORD` for å aktivere HTTP grunnleggende autentisering (brukernavn er standard til `opencode`).
 
 #### Flagg
 
@@ -491,7 +491,7 @@ Denne kommandoen starter en ACP-server som kommuniserer via stdin/stdout ved å 
 
 ### uninstall
 
-Avinstaller opencode og fjern alle relaterte filer.
+Avinstaller OpenCode og fjern alle relaterte filer.
 
 ```bash
 opencode uninstall
@@ -510,7 +510,7 @@ opencode uninstall
 
 ### upgrade
 
-Oppdaterer opencode til siste versjon eller en spesifikk versjon.
+Oppdaterer OpenCode til siste versjon eller en spesifikk versjon.
 
 ```bash
 opencode upgrade [target]
@@ -538,12 +538,12 @@ opencode upgrade v0.1.48
 
 ## Globale flagg
 
-opencode CLI bruker følgende globale flagg.
+OpenCode CLI bruker følgende globale flagg.
 
 | Flagg          | Kort | Beskrivelse                         |
 | -------------- | ---- | ----------------------------------- |
 | `--help`       | `-h` | Vis hjelp                           |
-| `--version`    | `-v` | Utskriftsnummer                     |
+| `--version`    | `-v` | Skriv ut versjonsnummer             |
 | `--print-logs` |      | Skriv ut logger til stderr          |
 | `--log-level`  |      | Loggnivå (DEBUG, INFO, WARN, ERROR) |
 
@@ -551,9 +551,9 @@ opencode CLI bruker følgende globale flagg.
 
 ## Miljøvariabler
 
-opencode kan konfigureres ved hjelp av miljøvariabler.
+OpenCode kan konfigureres ved hjelp av miljøvariabler.
 
-| Variabel                              | Skriv  | Beskrivelse                                                           |
+| Variabel                              | Type   | Beskrivelse                                                           |
 | ------------------------------------- | ------ | --------------------------------------------------------------------- |
 | `OPENCODE_AUTO_SHARE`                 | boolsk | Del økter automatisk                                                  |
 | `OPENCODE_GIT_BASH_PATH`              | streng | Bane til Git Bash-kjørbar på Windows                                  |
@@ -586,7 +586,7 @@ opencode kan konfigureres ved hjelp av miljøvariabler.
 
 Disse miljøvariablene muliggjør eksperimentelle funksjoner som kan endres eller fjernes.
 
-| Variabel                                        | Skriv  | Beskrivelse                                   |
+| Variabel                                        | Type   | Beskrivelse                                   |
 | ----------------------------------------------- | ------ | --------------------------------------------- |
 | `OPENCODE_EXPERIMENTAL`                         | boolsk | Aktiver alle eksperimentelle funksjoner       |
 | `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | boolsk | Aktiver ikonoppdagelse                        |

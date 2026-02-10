@@ -9,7 +9,6 @@ OpenCode CLI po defaultu pokreće [TUI](/docs/tui) kada se pokrene bez ikakvih a
 
 ```bash
 opencode
-
 ```
 
 Ali takođe prihvata komande kao što je dokumentovano na ovoj stranici. Ovo vam omogućava programsku interakciju sa OpenCode.
@@ -26,7 +25,6 @@ Pokrenite korisnički interfejs OpenCode terminala.
 
 ```bash
 opencode [project]
-
 ```
 
 #### Zastave
@@ -44,7 +42,7 @@ opencode [project]
 
 ---
 
-## komandante
+## Commands
 
 OpenCode CLI takođe ima sledeće komande.
 
@@ -60,13 +58,12 @@ opencode agent [command]
 
 ---
 
-### prilog
+### attach
 
 Priključite terminal na već pokrenut OpenCode backend server pokrenut putem `serve` ili `web` komandi.
 
 ```bash
 opencode attach [url]
-
 ```
 
 Ovo omogućava korištenje TUI-ja sa udaljenim OpenCode backend-om. na primjer:
@@ -88,20 +85,19 @@ opencode attach http://10.20.30.40:4096
 
 ---
 
-#### kreiraj
+#### create
 
 Kreirajte novog agenta s prilagođenom konfiguracijom.
 
 ```bash
 opencode agent create
-
 ```
 
 Ova komanda će vas voditi kroz kreiranje novog agenta sa prilagođenim sistemskim promptom i konfiguracijom alata.
 
 ---
 
-#### lista
+#### list
 
 Navedite sve dostupne agente.
 
@@ -117,12 +113,11 @@ Naredba za upravljanje vjerodajnicama i prijavom za provajdere.
 
 ```bash
 opencode auth [command]
-
 ```
 
 ---
 
-#### aplikacija
+#### login
 
 OpenCode pokreće lista provajdera na [Models.dev](https://models.dev), tako da možete koristiti `opencode auth login` da konfigurirate API ključeve za bilo kojeg provajdera kojeg želite koristiti. Ovo je pohranjeno u `~/.local/share/opencode/auth.json`.
 
@@ -134,13 +129,12 @@ Kada se OpenCode pokrene, učitava dobavljače iz datoteke vjerodajnica. I ako p
 
 ---
 
-#### lista
+#### list
 
 Navodi sve autentifikovane dobavljače pohranjene u datoteci akreditiva.
 
 ```bash
-opencode auth lista
-
+opencode auth list
 ```
 
 Ili kratka verzija.
@@ -151,13 +145,12 @@ opencode auth ls
 
 ---
 
-#### odjava
+#### logout
 
 Odjavljuje vas s provajdera tako što ga briše iz datoteke vjerodajnica.
 
 ```bash
 opencode auth logout
-
 ```
 
 ---
@@ -172,20 +165,19 @@ opencode github [command]
 
 ---
 
-#### instaliraj
+#### install
 
 Instalirajte GitHub agenta u svoje spremište.
 
 ```bash
-opencode github instalacija
-
+opencode github install
 ```
 
 Ovo postavlja neophodni tok rada GitHub Actions i vodi vas kroz proces konfiguracije. [Saznajte više](/docs/github).
 
 ---
 
-#### trči
+#### run
 
 Pokrenite GitHub agent. Ovo se obično koristi u GitHub akcijama.
 
@@ -208,12 +200,11 @@ Upravljajte serverima protokola konteksta modela.
 
 ```bash
 opencode mcp [command]
-
 ```
 
 ---
 
-#### dodaj
+#### add
 
 Dodajte MCP server svojoj konfiguraciji.
 
@@ -225,13 +216,12 @@ Ova komanda će vas voditi kroz dodavanje lokalnog ili udaljenog MCP servera.
 
 ---
 
-#### lista
+#### list
 
 Navedite sve konfigurirane MCP servere i njihov status veze.
 
 ```bash
-opencode mcp lista
-
+opencode mcp list
 ```
 
 Ili koristite kratku verziju.
@@ -248,7 +238,6 @@ Autentifikujte se sa MCP serverom koji je omogućen za OAuth.
 
 ```bash
 opencode mcp auth [name]
-
 ```
 
 Ako ne navedete ime servera, od vas će biti zatraženo da izaberete neki od dostupnih servera koji podržavaju OAuth.
@@ -262,12 +251,11 @@ Ili koristite kratku verziju.
 
 ```bash
 opencode mcp auth ls
-
 ```
 
 ---
 
-#### odjava
+#### logout
 
 Uklonite OAuth vjerodajnice za MCP server.
 
@@ -277,18 +265,17 @@ opencode mcp logout [name]
 
 ---
 
-#### otklanjanje grešaka
+#### debug
 
 Otklanjanje grešaka OAuth veze sa MCP serverom.
 
 ```bash
 opencode mcp debug <name>
-
 ```
 
 ---
 
-### model
+### models
 
 Navedite sve dostupne modele konfiguriranih provajdera.
 
@@ -302,7 +289,6 @@ Opciono možete proslijediti ID provajdera za filtriranje modela po tom dobavlja
 
 ```bash
 opencode models anthropic
-
 ```
 
 #### Zastave
@@ -320,13 +306,12 @@ opencode models --refresh
 
 ---
 
-### trči
+### run
 
 Pokrenite opencode u neinteraktivnom modu tako što ćete direktno proslijediti prompt.
 
 ```bash
 opencode run [message..]
-
 ```
 
 Ovo je korisno za skriptiranje, automatizaciju ili kada želite brz odgovor bez pokretanja punog TUI-ja. Na primjer.
@@ -340,9 +325,9 @@ Također možete priključiti pokrenutu `opencode serve` instancu kako biste izb
 ```bash
 # Start a headless server in one terminal
 opencode serve
-# U drugom terminalu, pokrenite komande koje se vezuju za njega
-opencode run --attach http://localhost:4096 "Objasni async/await u JavaScriptu"
 
+# In another terminal, run commands that attach to it
+opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
 #### Zastave
@@ -364,7 +349,7 @@ opencode run --attach http://localhost:4096 "Objasni async/await u JavaScriptu"
 
 ---
 
-### poslužiti
+### serve
 
 Pokrenite OpenCode server bez glave za pristup API-ju. Pogledajte [server docs](/docs/server) za kompletan HTTP interfejs.
 
@@ -385,18 +370,17 @@ Ovo pokreće HTTP server koji pruža API pristup funkcionalnosti otvorenog koda 
 
 ---
 
-### sesija
+### session
 
 Upravljajte OpenCode sesijama.
 
 ```bash
-opencode sesija [naredba]
-
+opencode session [command]
 ```
 
 ---
 
-#### lista
+#### list
 
 Navedite sve OpenCode sesije.
 
@@ -413,13 +397,12 @@ opencode session list
 
 ---
 
-### statistika
+### stats
 
 Prikaži statistiku upotrebe tokena i troškova za vaše OpenCode sesije.
 
 ```bash
 opencode stats
-
 ```
 
 #### Zastave
@@ -433,7 +416,7 @@ opencode stats
 
 ---
 
-### izvoz
+### export
 
 Izvezite podatke sesije kao JSON.
 
@@ -445,13 +428,12 @@ Ako ne unesete ID sesije, od vas će biti zatraženo da odaberete neku od dostup
 
 ---
 
-### uvoz
+### import
 
 Uvezite podatke sesije iz JSON datoteke ili OpenCode dijeljenog URL-a.
 
 ```bash
 opencode import <file>
-
 ```
 
 Možete uvesti iz lokalne datoteke ili OpenCode dijeljenog URL-a.
@@ -469,7 +451,6 @@ Pokrenite OpenCode server bez glave sa web interfejsom.
 
 ```bash
 opencode web
-
 ```
 
 Ovo pokreće HTTP server i otvara web pretraživač za pristup OpenCode preko web interfejsa. Postavite `OPENCODE_SERVER_PASSWORD` da omogućite HTTP osnovnu auth (korisničko ime je zadano na `opencode`).
@@ -505,13 +486,12 @@ Ova komanda pokreće ACP server koji komunicira preko stdin/stdout koristeći nd
 
 ---
 
-### deinstaliraj
+### uninstall
 
 Deinstalirajte OpenCode i uklonite sve povezane datoteke.
 
 ```bash
 opencode uninstall
-
 ```
 
 #### Zastave
@@ -537,7 +517,6 @@ Za nadogradnju na najnoviju verziju.
 
 ```bash
 opencode upgrade
-
 ```
 
 Za nadogradnju na određenu verziju.
@@ -592,7 +571,7 @@ OpenCode se može konfigurirati pomoću varijabli okruženja.
 | `OPENCODE_DISABLE_FILETIME_CHECK` | boolean | Onemogući provjeru vremena datoteke radi optimizacije |
 | `OPENCODE_CLIENT` | string | Identifikator klijenta (zadano na `cli`) |
 | `OPENCODE_ENABLE_EXA` | boolean | Omogući Exa alate za web pretraživanje |
-| `OPENCODE_SERVER_PASSWORD` | string | Omogući osnovnu autorizaciju za `OPENCODE_GIT_BASH_PATH`/`OPENCODE_CONFIG` |
+| `OPENCODE_SERVER_PASSWORD` | string | Omogući osnovnu autorizaciju za `serve`/`web` |
 | `OPENCODE_SERVER_USERNAME` | string | Poništi osnovno korisničko ime autentifikacije (zadano `opencode`) |
 | `OPENCODE_MODELS_URL` | string | Prilagođeni URL za dohvaćanje konfiguracije modela |
 

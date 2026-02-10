@@ -5,9 +5,9 @@ description: Was ist neu in OpenCode 1.0.
 
 OpenCode 1.0 ist eine komplette Neufassung des TUI.
 
-Wir sind vom go+bubbletea-basierten TUI, das Leistungs- und Leistungsprobleme aufwies, zu einem internen Framework (OpenTUI) übergegangen, das in zig+solidjs geschrieben wurde.
+We moved from the go+bubbletea based TUI which had performance and capability issues to an in-house framework (OpenTUI) written in zig+solidjs.
 
-Der neue TUI funktioniert wie der alte, da er eine Verbindung zum gleichen OpenCode-Server herstellt.
+The new TUI works like the old one since it connects to the same opencode server.
 
 ---
 
@@ -44,24 +44,24 @@ Wir haben einige Funktionen entfernt, von denen wir nicht sicher waren, ob sie t
 
 ## Bahnbrechende Veränderungen
 
-### Tastenkombinationen umbenannt
+### Keybinds renamed
 
-- Nachrichten_revert -> Nachrichten_Rückgängig machen
+- messages_revert -> messages_undo
 - switch_agent -> agent_cycle
 - switch_agent_reverse -> agent_cycle_reverse
 - switch_mode -> agent_cycle
 - switch_mode_reverse -> agent_cycle_reverse
 
-### Tastenkombinationen entfernt
+### Keybinds removed
 
-- message_layout_toggle
-- message_next
-- Nachrichten_vorherige
+- messages_layout_toggle
+- messages_next
+- messages_previous
 - file_diff_toggle
 - file_search
 - file_close
-- Dateiliste
+- file_list
 - app_help
 - project_init
-- Werkzeugdetails
-- think_blocks
+- tool_details
+- thinking_blocks

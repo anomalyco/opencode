@@ -1,9 +1,9 @@
 ---
 title: ACP 支持
-description: 在任何 ACP 兼容編輯器中使用 opencode。
+description: 在任何 ACP 兼容編輯器中使用 OpenCode。
 ---
 
-opencode 支持 [Agent Client Protocol](https://agentclientprotocol.com) 或 (ACP)，允許您直接在兼容的編輯器和 IDE 中使用它。
+OpenCode 支持 [Agent Client Protocol](https://agentclientprotocol.com) 或 (ACP)，允許您直接在兼容的編輯器和 IDE 中使用它。
 
 :::tip
 有關支持 ACP 的編輯器和工具的列表，請查看[ACP progress report](https://zed.dev/blog/acp-progress-report#available-now)。
@@ -15,9 +15,9 @@ ACP 是一種開放協議，用於標準化程式碼編輯器和 AI 編碼代理
 
 ## 配置
 
-要通過 ACP 使用 opencode，請將編輯器配置為運行 `opencode acp` 命令。
+要通過 ACP 使用 OpenCode，請將編輯器配置為運行 `opencode acp` 命令。
 
-該命令將 opencode 作為 ACP 兼容的子進程啟動，通過 stdio 通過 JSON-RPC 與您的編輯器進行通信。
+該命令將 OpenCode 作為 ACP 兼容的子進程啟動，通過 stdio 通過 JSON-RPC 與您的編輯器進行通信。
 
 以下是支持 ACP 的流行編輯器的示例。
 
@@ -86,9 +86,9 @@ ACP 是一種開放協議，用於標準化程式碼編輯器和 AI 編碼代理
 
 ---
 
-### Avante
+### Avante.nvim
 
-添加到您的[Avante](https://github.com/yetone/avante.nvim)配置：
+添加到您的[Avante.nvim](https://github.com/yetone/avante.nvim)配置：
 
 ```lua
 {
@@ -121,7 +121,7 @@ ACP 是一種開放協議，用於標準化程式碼編輯器和 AI 編碼代理
 
 ### CodeCompanion.nvim
 
-要將 opencode 用作 [CodeCompanion.nvim](https://github.com/olimorris/CodeCompanion.nvim) 中的 ACP 代理，請將以下內容添加到 Neovim 配置中：
+要將 OpenCode 用作 [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim) 中的 ACP 代理，請將以下內容添加到 Neovim 配置中：
 
 ```lua
 require("codecompanion").setup({
@@ -136,13 +136,13 @@ require("codecompanion").setup({
 })
 ```
 
-此配置將 CodeCompanion 設置為使用 opencode 作為聊天的 ACP 代理。
+此配置將 CodeCompanion 設置為使用 OpenCode 作為聊天的 ACP 代理。
 
 如果您需要傳遞環境變量（如 `OPENCODE_API_KEY`），請參閱 CodeCompanion.nvim 文檔中的 [配置適配器：環境變量](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) 了解完整詳細信息。
 
 ## 支持
 
-opencode 通過 ACP 的工作方式與在 terminal 中的工作方式相同。支持所有功能：
+OpenCode 通過 ACP 的工作方式與在 terminal 中的工作方式相同。支持所有功能：
 
 :::note
 目前不支持某些內置斜杠命令，例如 `/undo` 和 `/redo`。
@@ -150,7 +150,7 @@ opencode 通過 ACP 的工作方式與在 terminal 中的工作方式相同。�
 
 - 內置工具（文件操作、terminal 命令等）
 - 自定義工具和斜杠命令
-- 在 opencode 配置中配置的 MCP 服務器
+- 在 OpenCode 配置中配置的 MCP 服務器
 - `AGENTS.md` 的項目特定規則
 - 自定義格式化程序和 linter
 - 代理和權限系統
