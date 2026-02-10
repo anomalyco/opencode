@@ -1,0 +1,142 @@
+---
+title: Web
+description: Bruke opencode i nettleseren din.
+---
+
+opencode kan kjøres som en nettapplikasjon i nettleseren din, og gir den samme kraftige AI-kodingsopplevelsen uten at du trenger en terminal.
+
+![opencode Web - Ny økt](../../../assets/web/web-homepage-new-session.png)
+
+## Komme i gang
+
+Start nettgrensesnittet ved å kjøre:
+
+```bash
+opencode web
+```
+
+Dette starter en lokal server på `127.0.0.1` med en tilfeldig tilgjengelig port og åpner automatisk opencode i standard nettleser.
+
+:::caution
+Hvis `OPENCODE_SERVER_PASSWORD` ikke er satt, vil serveren være usikret. Dette er greit for lokal bruk, men bør settes for nettverkstilgang.
+:::
+
+:::tip[Windows-brukere]
+For den beste opplevelsen, kjør `opencode web` fra [WSL](/docs/windows-wsl) i stedet for PowerShell. Dette sikrer riktig filsystemtilgang og terminalintegrasjon.
+:::
+
+---
+
+## Konfigurasjon
+
+Du kan konfigurere webserveren ved å bruke kommandolinjeflagg eller i [config file](/docs/config).
+
+### Port
+
+Som standard velger opencode en tilgjengelig port. Du kan spesifisere en port:
+
+```bash
+opencode web --port 4096
+```
+
+### Vertsnavn
+
+Som standard binder serveren seg til `127.0.0.1` (kun lokal vert). Slik gjør du opencode tilgjengelig på nettverket ditt:
+
+```bash
+opencode web --hostname 0.0.0.0
+```
+
+Når du bruker `0.0.0.0`, vil opencode vise både lokale adresser og nettverksadresser:
+
+```
+  Local access:       http://localhost:4096
+  Network access:     http://192.168.1.100:4096
+```
+
+### mDNS-oppdagelse
+
+Aktiver mDNS for å gjøre serveren din synlig på det lokale nettverket:
+
+```bash
+opencode web --mdns
+```
+
+Dette setter automatisk vertsnavnet til `0.0.0.0` og annonserer serveren som `opencode.local`.
+
+Du kan tilpasse mDNS-domenenavnet til å kjøre flere forekomster på samme nettverk:
+
+```bash
+opencode web --mdns --mdns-domain myproject.local
+```
+
+### CORS
+
+For å tillate flere domener for CORS (nyttig for egendefinerte grensesnitt):
+
+```bash
+opencode web --cors https://example.com
+```
+
+### Autentisering
+
+For å beskytte tilgang, angi et passord ved hjelp av miljøvariabelen `OPENCODE_SERVER_PASSWORD`:
+
+```bash
+OPENCODE_SERVER_PASSWORD=secret opencode web
+```
+
+Brukernavnet er standard til `opencode`, men kan endres med `OPENCODE_SERVER_USERNAME`.
+
+---
+
+## Bruke webgrensesnittet
+
+Når det er startet, gir nettgrensesnittet tilgang til dine opencode-økter.
+
+### økter
+
+Se og administrer øktene dine fra hjemmesiden. Du kan se aktive økter og starte nye.
+
+![opencode Web - Active Session](../../../assets/web/web-homepage-active-session.png)
+
+### Serverstatus
+
+Klikk "Se servere" for å se tilkoblede servere og deres status.
+
+![opencode Web - Se servere](../../../assets/web/web-homepage-see-servers.png)
+
+---
+
+## Koble til en terminal
+
+Du kan koble en terminal TUI til en kjørende webserver:
+
+```bash
+# Start the web server
+opencode web --port 4096
+
+# In another terminal, attach the TUI
+opencode attach http://localhost:4096
+```
+
+Dette lar deg bruke både nettgrensesnittet og terminalen samtidig, og deler samme økter og tilstand.
+
+---
+
+## Konfigurasjonsfil
+
+Du kan også konfigurere serverinnstillinger i `opencode.json` konfigurasjonsfilen:
+
+```json
+{
+  "server": {
+    "port": 4096,
+    "hostname": "0.0.0.0",
+    "mdns": true,
+    "cors": ["https://example.com"]
+  }
+}
+```
+
+Kommandolinjeflagg har forrang over konfigurasjonsfilinnstillinger.

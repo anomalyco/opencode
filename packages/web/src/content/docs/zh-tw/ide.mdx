@@ -1,0 +1,48 @@
+---
+title: 集成開發環境
+description: VS Code、Cursor 和其他 IDE 的 opencode 擴展
+---
+
+opencode 與 VS Code、Cursor 或任何支持終端的 IDE 集成。只需在終端中運行 `opencode` 即可開始。
+
+---
+
+## 用法
+
+- **快速啟動**：使用 `Cmd+Esc` (Mac) 或 `Ctrl+Esc` (Windows/Linux) 在拆分終端視圖中打開 opencode，或者聚焦現有終端會話（如果已有終端會話正在運行）。
+- **新會話**：使用 `Cmd+Shift+Esc` (Mac) 或 `Ctrl+Shift+Esc` (Windows/Linux) 啟動新的 opencode 終端會話，即使該會話已打開。您還可以單擊 UI 中的 opencode 按鈕。
+- **上下文感知**：自動與 opencode 共享您當前的選擇或選項卡。
+- **文件引用快捷方式**：使用`Cmd+Option+K` (Mac) 或`Alt+Ctrl+K` (Linux/Windows) 插入文件引用。例如，`@File#L37-42`。
+
+---
+
+## 安裝
+
+要在 VS Code 和 Cursor、Windsurf、VSCodium 等流行分支上安裝 opencode：
+
+1. 打開 VS 代碼
+2. 打開集成終端
+3. 運行 `opencode` - 擴展會自動安裝
+
+另一方面，如果您想在從 TUI 運行 `/editor` 或 `/export` 時使用自己的 IDE，則需要設置 `export EDITOR="code --wait"`。 [了解更多](/docs/tui/#editor-setup)。
+
+---
+
+### 手動安裝
+
+在擴展市場中搜索 **opencode**，然後單擊 **安裝**。
+
+---
+
+### 故障排除
+
+如果擴展無法自動安裝：
+
+- 確保您在集成終端中運行`opencode`。
+- 確認您的 IDE 的 CLI 已安裝：
+  - 對於 VS 代碼：`code` 命令
+  - 對於光標：`cursor` 命令
+  - 對於風帆衝浪：`windsurf` 命令
+  - 對於 VSCodium：`codium` 命令
+  - 如果沒有，請運行 `Cmd+Shift+P` (Mac) 或 `Ctrl+Shift+P` (Windows/Linux) 並蒐索“Shell Command: Install 'code' command in PATH”（或適用於您的 IDE 的等效命令）
+- 確保 VS Code 有權安裝擴展

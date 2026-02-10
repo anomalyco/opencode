@@ -2,6 +2,8 @@ mod cli;
 mod constants;
 #[cfg(windows)]
 mod job_object;
+#[cfg(target_os = "linux")]
+pub mod linux_display;
 mod markdown;
 mod server;
 mod window_customizer;
@@ -157,12 +159,12 @@ fn check_app_exists(app_name: &str) -> bool {
     {
         check_windows_app(app_name)
     }
-    
+
     #[cfg(target_os = "macos")]
     {
         check_macos_app(app_name)
     }
-    
+
     #[cfg(target_os = "linux")]
     {
         check_linux_app(app_name)
@@ -186,19 +188,56 @@ fn check_macos_app(app_name: &str) -> bool {
     if let Ok(home) = std::env::var("HOME") {
         app_locations.push(format!("{}/Applications/{}.app", home, app_name));
     }
-    
+
     for location in app_locations {
         if std::path::Path::new(&location).exists() {
             return true;
         }
     }
-    
+
     // Also check if command exists in PATH
     Command::new("which")
         .arg(app_name)
         .output()
         .map(|output| output.status.success())
         .unwrap_or(false)
+}
+
+#[derive(serde::Serialize, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum LinuxDisplayBackend {
+    Wayland,
+    Auto,
+}
+
+#[tauri::command]
+#[specta::specta]
+fn get_display_backend() -> Option<LinuxDisplayBackend> {
+    #[cfg(target_os = "linux")]
+    {
+        let prefer = linux_display::read_wayland().unwrap_or(false);
+        return Some(if prefer {
+            LinuxDisplayBackend::Wayland
+        } else {
+            LinuxDisplayBackend::Auto
+        });
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    None
+}
+
+#[tauri::command]
+#[specta::specta]
+fn set_display_backend(_app: AppHandle, _backend: LinuxDisplayBackend) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        let prefer = matches!(_backend, LinuxDisplayBackend::Wayland);
+        return linux_display::write_wayland(&_app, prefer);
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]
@@ -242,6 +281,8 @@ pub fn run() {
             server::set_default_server_url,
             server::get_backend_config,
             server::set_backend_config,
+            get_display_backend,
+            set_display_backend,
             markdown::parse_markdown_command,
             check_app_exists,
             wsl_path

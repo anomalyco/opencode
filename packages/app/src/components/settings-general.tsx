@@ -1,8 +1,10 @@
-import { Component, createEffect, createMemo, type JSX, Show } from "solid-js"
+import { Component, Show, createEffect, createMemo, createResource, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
+import { Icon } from "@opencode-ai/ui/icon"
 import { Select } from "@opencode-ai/ui/select"
 import { Switch } from "@opencode-ai/ui/switch"
+import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useLanguage } from "@/context/language"
@@ -36,13 +38,11 @@ export const SettingsGeneral: Component = () => {
   const platform = usePlatform()
   const settings = useSettings()
 
-  type BackendMode = "native" | "wsl"
-
   const [store, setStore] = createStore({
     checking: false,
-    backend: "native" as BackendMode,
-    backendReady: false,
   })
+
+  const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
 
   const check = () => {
     if (!platform.checkUpdate) return
@@ -114,34 +114,6 @@ export const SettingsGeneral: Component = () => {
       label: language.label(locale),
     })),
   )
-
-  const backendOptions = createMemo(() => [
-    { value: "native" as const, label: language.t("settings.desktop.backend.option.native") },
-    { value: "wsl" as const, label: language.t("settings.desktop.backend.option.wsl") },
-  ])
-
-  const showBackend = () =>
-    platform.platform === "desktop" &&
-    platform.os === "windows" &&
-    !!platform.getBackendConfig &&
-    !!platform.setBackendConfig
-
-  createEffect(() => {
-    if (!showBackend()) return
-    if (store.backendReady) return
-    const get = platform.getBackendConfig
-    if (!get) {
-      setStore("backendReady", true)
-      return
-    }
-
-    void Promise.resolve(get())
-      .then((config) => {
-        const mode = config?.mode === "wsl" ? "wsl" : "native"
-        setStore({ backend: mode, backendReady: true })
-      })
-      .catch(() => setStore("backendReady", true))
-  })
 
   const fontOptions = [
     { value: "ibm-plex-mono", label: "font.option.ibmPlexMono" },
@@ -395,36 +367,45 @@ export const SettingsGeneral: Component = () => {
           </div>
         </div>
 
-        <Show when={showBackend()}>
-          <div class="flex flex-col gap-1">
-            <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.desktop.section.backend")}</h3>
+        <Show when={platform.platform === "desktop" && platform.os === "windows"}>
+          {(_) => {
+            const backendOptions = createMemo(() => [
+              { value: "native" as const, label: language.t("settings.desktop.backend.option.native") },
+              { value: "wsl" as const, label: language.t("settings.desktop.backend.option.wsl") },
+            ])
 
-            <div class="bg-surface-raised-base px-4 rounded-lg">
-              <SettingsRow
-                title={language.t("settings.desktop.backend.title")}
-                description={language.t("settings.desktop.backend.description")}
-              >
-                <Select
-                  data-action="settings-backend"
-                  options={backendOptions()}
-                  current={backendOptions().find((o) => o.value === store.backend)}
-                  value={(option) => option.value}
-                  label={(option) => option.label}
-                  onSelect={(option) => {
-                    if (!option) return
-                    const setBackend = platform.setBackendConfig
-                    if (!setBackend) return
-                    setStore("backend", option.value)
-                    void Promise.resolve(setBackend({ mode: option.value }))
-                  }}
-                  variant="secondary"
-                  size="small"
-                  triggerVariant="settings"
-                  disabled={!store.backendReady}
-                />
-              </SettingsRow>
-            </div>
-          </div>
+            const [valueResource, actions] = createResource(() => platform.getBackendConfig?.())
+            const value = () => (valueResource.state === "pending" ? undefined : valueResource.latest)
+
+            return (
+              <div class="flex flex-col gap-1">
+                <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.desktop.section.backend")}</h3>
+
+                <div class="bg-surface-raised-base px-4 rounded-lg">
+                  <SettingsRow
+                    title={language.t("settings.desktop.backend.title")}
+                    description={language.t("settings.desktop.backend.description")}
+                  >
+                    <Select
+                      data-action="settings-backend"
+                      options={backendOptions()}
+                      current={backendOptions().find((o) => o.value === value()?.mode)}
+                      value={(option) => option.value}
+                      label={(option) => option.label}
+                      onSelect={(option) => {
+                        if (!option) return
+                        platform.setBackendConfig?.({ mode: option.value })?.finally(() => actions.refetch())
+                      }}
+                      variant="secondary"
+                      size="small"
+                      triggerVariant="settings"
+                      disabled={valueResource.state === "pending"}
+                    />
+                  </SettingsRow>
+                </div>
+              </div>
+            )
+          }}
         </Show>
 
         {/* Updates Section */}
@@ -474,13 +455,49 @@ export const SettingsGeneral: Component = () => {
             </SettingsRow>
           </div>
         </div>
+
+        <Show when={linux()}>
+          {(_) => {
+            const [valueResource, actions] = createResource(() => platform.getDisplayBackend?.())
+            const value = () => (valueResource.state === "pending" ? undefined : valueResource.latest)
+
+            const onChange = (checked: boolean) =>
+              platform.setDisplayBackend?.(checked ? "wayland" : "auto").finally(() => actions.refetch())
+
+            return (
+              <div class="flex flex-col gap-1">
+                <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.display")}</h3>
+
+                <div class="bg-surface-raised-base px-4 rounded-lg">
+                  <SettingsRow
+                    title={
+                      <div class="flex items-center gap-2">
+                        <span>{language.t("settings.general.row.wayland.title")}</span>
+                        <Tooltip value={language.t("settings.general.row.wayland.tooltip")} placement="top">
+                          <span class="text-text-weak">
+                            <Icon name="help" size="small" />
+                          </span>
+                        </Tooltip>
+                      </div>
+                    }
+                    description={language.t("settings.general.row.wayland.description")}
+                  >
+                    <div data-action="settings-wayland">
+                      <Switch checked={value() === "wayland"} onChange={onChange} />
+                    </div>
+                  </SettingsRow>
+                </div>
+              </div>
+            )
+          }}
+        </Show>
       </div>
     </div>
   )
 }
 
 interface SettingsRowProps {
-  title: string
+  title: string | JSX.Element
   description: string | JSX.Element
   children: JSX.Element
 }

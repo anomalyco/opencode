@@ -1,0 +1,359 @@
+---
+title: Wprowadzenie
+description: Rozpocznij pracę z opencode.
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+import config from "../../../../config.mjs"
+export const console = config.console
+
+[**opencode**](/) do agenta kodującego AI typu open source. Dostępny jest jako interfejs terminalowy, aplikacja komputerowa lub rozszerzenie IDE.
+
+![opencode TUI z motywem opencode](../../../assets/lander/screenshot.png)
+
+Zacznijmy.
+
+---
+
+#### Warunki wstępne
+
+Aby uzyskać dostęp do opencode w swoim terminalu, będziesz potrzebować:
+
+1. Nowoczesny emulator terminala, taki jak:
+   - [WezTerm](https://wezterm.org), wieloplatformowy
+   - [Alacritty](https://alacritty.org), wieloplatformowy
+   - [Ghostty](https://ghostty.org), Linux i macOS
+   - [Kitty](https://sw.kovidgoyal.net/kitty/), Linux i macOS
+
+2. Klucze API dla dostawców LLM, z których korzystasz.
+
+---
+
+## Zainstalować
+
+Najłatwiejszym sposobem instalowania opencode jest zastosowanie skryptu instalacyjnego.
+
+```bash
+curl -fsSL https://opencode.ai/install | bash
+```
+
+Można także zalogować się do urządzenia instalacyjnego:
+
+- **Przy użyciu Node.js**
+
+        <Tabs>
+
+      <TabItem label="npm">
+      ```bash
+      npm install -g opencode-ai
+      ```
+
+          </TabItem>
+
+        <TabItem label="Bun">
+        ```bash
+        bun install -g opencode-ai
+        ```
+
+          </TabItem>
+
+        <TabItem label="pnpm">
+        ```bash
+        pnpm install -g opencode-ai
+        ```
+
+          </TabItem>
+
+        <TabItem label="Yarn">
+        ```bash
+        yarn global add opencode-ai
+        ```
+
+      </TabItem>
+
+  </Tabs>
+
+- **Korzystanie z Homebrew na macOS i Linux**
+
+  ```bash
+  brew install anomalyco/tap/opencode
+  ```
+
+  > W celu uzyskania najbardziej aktualnej wersji zalecamy korzystanie z opencode. Oficjalna formuła `brew install opencode` jest utrzymywana przez zespół Homebrew i jest aktualizowana.
+
+- **Korzystanie z Paru na Arch Linux**
+
+  ```bash
+  paru -S opencode-bin
+  ```
+
+#### Okna
+
+:::tip[Zalecane: prowadzenie WSL]
+Aby najlepiej wykorzystać działanie w systemie Windows, zalecamy udostępnienie [Podsystemu Windows dla systemu Linux (WSL)](/docs/windows-wsl). pozwolenie na użytkowanie i pełna kompatybilność z funkcjami opencode.
+:::
+
+- **Używając czekolady**
+
+  ```bash
+  choco install opencode
+  ```
+
+- **Korzystanie z miarki**
+
+  ```bash
+  scoop install opencode
+  ```
+
+- **Przy użyciu NPM**
+
+  ```bash
+  npm install -g opencode-ai
+  ```
+
+- **Używając Mise’a**
+
+  ```bash
+  mise use -g github:anomalyco/opencode
+  ```
+
+- **Korzystanie z Dockera**
+
+  ```bash
+  docker run -it --rm ghcr.io/anomalyco/opencode
+  ```
+
+Obecnie trwają prace nad instalacją opencode w systemie Windows za pomocą Bun.
+
+Możesz także otrzymać plik binarny z [Releases](https://github.com/anomalyco/opencode/releases).
+
+---
+
+## Skonfiguruj
+
+Dzięki opencode możesz korzystać z dowolnego dostawcy LLM, konfigurując jego klucze API.
+
+Jeśli nadal będziesz korzystać z dostawców LLM, zalecamy skorzystanie z [OpenCode Zen](/docs/zen).
+Do wyselekcjonowanej listy modeli, które zostały zatwierdzone i zweryfikowane przez opencode
+zespół.
+
+1. Uruchom opcję `/connect` w TUI, wybierz opencode i przejdź do [opencode.ai/auth](https://opencode.ai/auth).
+
+   ```txt
+   /connect
+   ```
+
+2. Zaloguj się, dodaj szczegóły rozliczeniowe i skopiuj klucz API.
+
+3. Wklej swój klucz API.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+Alternatywnie możesz wybrać jednego z dodatkowych dostawców. [Dowiedz się więcej](/docs/providers#directory).
+
+---
+
+## Zainicjuj
+
+Po skonfigurowaniu dostawcy, który może przejść do projektu, który
+chcesz pracować.
+
+```bash
+cd /path/to/project
+```
+
+Uruchamiam opencode.
+
+```bash
+opencode
+```
+
+Następnie zainicjuj opencode dla projektu, uruchamiając odpowiednią instrukcję.
+
+```bash frame="none"
+/init
+```
+
+Spowoduje to, że opencode przeanalizuje Twój projekt i utworzy plik `AGENTS.md`
+katalog główny projektu.
+
+:::tip
+Powinieneś zatwierdzić plik `AGENTS.md` swojego projektu w Git.
+:::
+
+Pomaga w opencode zrozumieniu struktury projektu i wzorce kodowania
+używany.
+
+---
+
+## Stosowanie
+
+Teraz możesz pracować nad swoim projektem. Możesz o to zapytać
+wszystko!
+
+Jeśli tylko zaczniesz korzystać z agenta kodującego AI, oto kilka, które mogą być używane
+pomoc.
+
+---
+
+### Zadawaj pytania
+
+Możesz uruchomić opencode o wyjaśnienie bazy kodu.
+
+:::tip
+klawisza klawisza `@` do wyszukiwania rozmytego plików w projekcie.
+:::
+
+```txt frame="none" "@packages/functions/src/api/index.ts"
+How is authentication handled in @packages/functions/src/api/index.ts
+```
+
+Jest to pomocne, jeśli istnieje część bazy kodu, nad którą nie pracowałeś.
+
+---
+
+### Dodaj funkcje
+
+Możesz zastosować opencode o nowej funkcji do Twojego projektu. Najpierw zalecamy poproszenie o wypłacenie planu.
+
+1. **Plan Stworza**
+
+   opencode ma _tryb płaski_, który umożliwia wyłączenie zmian i
+   zamiast tego zasugeruj, jak\_ zaimplementuje tę funkcję.
+
+   Przejdź do niego za pomocą klawisza **Tab**. W osobnym dolnym rogu zobacz właściwy wskaźnik.
+
+   ```bash frame="none" title="Switch to Plan mode"
+   <TAB>
+   ```
+
+   Opiszmy teraz, co chcemy, żeby robił.
+
+   ```txt frame="none"
+   When a user deletes a note, we'd like to flag it as deleted in the database.
+   Then create a screen that shows all the recently deleted notes.
+   From this screen, the user can undelete a note or permanently delete it.
+   ```
+
+   Wersja opencode zawiera dużo oprogramowania, aby zrozumieć, czego chcesz. To pomaga
+   rozmawiaj z nim tak, jakbyś rozmawiał z młodszym programistą w swoim zespole.
+
+   :::tip
+   Podaj opencode kontekstu i kontekstu, które można zrozumieć, co Ty
+   chcieć.
+   :::
+
+2. **Postęp zgodnie z planem**
+
+   Gdy będziesz mieć plan, możesz pozostawić go lub podłączyć więcej.
+
+   ```txt frame="none"
+   We'd like to design this new screen using a design I've used before.
+   [Image #1] Take a look at this image and use it as a reference.
+   ```
+
+   :::tip
+   Przeciągnij i upuść obrazy do terminala, aby dodać je do monitu.
+   :::
+
+   opencode może zeskanować obrazy, które mu przekażesz i poprosisz o potwierdzenie. Możesz
+   należy to, przeciągając i upuszczając obraz do terminala.
+
+3. **Stwórz przełącza**
+
+   Kiedy już jest komfortowo z planem, przełącz się z powrotem do _trybu_
+   zamknięcie na klawisza **Tab**.
+
+   ```bash frame="none"
+   <TAB>
+   ```
+
+   Poproszę o wprowadzenie zmian.
+
+   ```bash frame="none"
+   Sounds good! Go ahead and make the changes.
+   ```
+
+---
+
+### Wprowadź zmiany
+
+Aby zastosować następczą zmianę, można zastosować opencode lub bezpośrednio zbudowanie go
+bez konieczności wcześniejszego przeglądania planu.
+
+```txt frame="none" "@packages/functions/src/settings.ts" "@packages/functions/src/notes.ts"
+We need to add authentication to the /settings route. Take a look at how this is
+handled in the /notes route in @packages/functions/src/notes.ts and implement
+the same logic in @packages/functions/src/settings.ts
+```
+
+Musisz mieć dostęp, że pod warunkiem dostępności narzędzia, więc opencode ma właściwie
+zmiany.
+
+---
+
+### Cofnij zmiany
+
+Załóżmy, że prosisz opencode o wprowadzenie zmian.
+
+```txt frame="none" "@packages/functions/src/api/index.ts"
+Can you refactor the function in @packages/functions/src/api/index.ts?
+```
+
+Ale z sobie sobie sprawę, że to nie jest to, czego chciałeś. **Możesz być** zmiany
+za pomoc polecenia `/undo`.
+
+```bash frame="none"
+/undo
+```
+
+opencode cofnie teraz zmiany i wyświetli wiadomość
+Ponownie.
+
+```txt frame="none" "@packages/functions/src/api/index.ts"
+Can you refactor the function in @packages/functions/src/api/index.ts?
+```
+
+Można zastosować monit i zastosować opencode o próbę próby.
+
+:::tip
+Można `/undo` wiele razy, aby uniknąć wielu zmian.
+:::
+
+Możesz też **możesz powtórzyć** zmianę za pomocą polecenia `/redo`.
+
+```bash frame="none"
+/redo
+```
+
+---
+
+## Udział
+
+Rozmowy z opencode można [udostępniać swoim
+zespół](/docs/share).
+
+```bash frame="none"
+/share
+```
+
+Spowoduje to, że łącza do bieżących połączeń idą do schowki.
+
+:::note
+Rozmowy nie są ogólnodostępne.
+:::
+
+Oto [przykładowa rozmowa](https://opencode.ai/s/4XP1fce5) z opencode.
+
+---
+
+## Dostosuj
+
+tyle! Jesteś teraz profesjonalistą w korzystaniu z opencode.
+
+Aby dostosować go do potrzeb, zalecamy [wybranie motywu](/docs/themes), [dostosowanie skrótów klawiaturowych](/docs/keybinds), [konfigurowanie programów formatujących kod](/docs/formatters), [tworzenie niestandardowych kodów](/docs/commands) lub grę z [konfiguracją opencode](/docs/config).
