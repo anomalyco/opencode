@@ -1,6 +1,6 @@
 ---
 title: Enterprise
-description: Sigurno korištenje OpenCodea u vašoj organizaciji.
+description: Sigurno korištenje OpenCode u vašoj organizaciji.
 ---
 
 import config from "../../../../config.mjs"
@@ -84,7 +84,7 @@ Ta centralizovana konfiguracija može se integrisati s vašim SSO provajderom i 
 
 Kroz centralnu konfiguraciju, OpenCode se može integrisati sa SSO provajderom vaše organizacije za autentifikaciju.
 
-To omogućava OpenCodeu da dobije vjerodajnice za interni AI gateway kroz vaš postojeći sistem upravljanja identitetom.
+To omogućava OpenCode da dobije vjerodajnice za interni AI gateway kroz vaš postojeći sistem upravljanja identitetom.
 
 ---
 
@@ -139,7 +139,7 @@ Da. OpenCode ne pohranjuje vaš kod niti kontekstualne podatke. Sva obrada se od
 <details>
 <summary>Can we use our own private NPM registry?</summary>
 
-OpenCode podržava privatne npm registre kroz Bunovu izvornu podršku za `.npmrc` datoteku. Ako vaša organizacija koristi privatni registar, kao što je JFrog Artifactory, Nexus ili slično, osigurajte da su developeri autentifikovani prije pokretanja OpenCodea.
+OpenCode podržava privatne npm registre kroz Bunovu izvornu podršku za `.npmrc` datoteku. Ako vaša organizacija koristi privatni registar, kao što je JFrog Artifactory, Nexus ili slično, osigurajte da su developeri autentifikovani prije pokretanja OpenCode.
 
 Da postavite autentifikaciju s privatnim registrom:
 
@@ -150,7 +150,7 @@ npm login --registry=https://your-company.jfrog.io/api/npm/npm-virtual/
 Ovo kreira `~/.npmrc` s detaljima za autentifikaciju. OpenCode će to automatski prepoznati.
 
 :::caution
-Morate biti prijavljeni na privatni registar prije pokretanja OpenCodea.
+Morate biti prijavljeni na privatni registar prije pokretanja OpenCode.
 :::
 
 Alternativno, možete ručno konfigurisati `.npmrc` datoteku:
@@ -160,6 +160,6 @@ registry=https://your-company.jfrog.io/api/npm/npm-virtual/
 //your-company.jfrog.io/api/npm/npm-virtual/:_authToken=${NPM_AUTH_TOKEN}
 ```
 
-Developeri moraju biti prijavljeni na privatni registar prije pokretanja OpenCodea kako bi se paketi mogli instalirati iz vašeg enterprise registra.
+Developeri moraju biti prijavljeni na privatni registar prije pokretanja OpenCode kako bi se paketi mogli instalirati iz vašeg enterprise registra.
 
 </details>

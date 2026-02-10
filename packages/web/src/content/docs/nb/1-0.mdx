@@ -3,7 +3,7 @@ title: Migrerer til 1.0
 description: Hva er nytt i opencode 1.0.
 ---
 
-opencode 1.0 er en fullstendig omskrivning av TUI.
+OpenCode 1.0 er en fullstendig omskrivning av TUI.
 
 Vi gikk fra den go+bubbletea-baserte TUI som hadde ytelses- og kapasitetsproblemer til et internt rammeverk (OpenTUI) skrevet i zig+solidjs.
 
@@ -14,7 +14,7 @@ Den nye TUI fungerer som den gamle siden den kobles til den samme opencode-serve
 ## Oppgradering
 
 Du bør ikke autooppgraderes til 1.0 hvis du bruker en tidligere
-versjon. Men noen eldre versjoner av opencode henter alltid den nyeste.
+versjon. Men noen eldre versjoner av OpenCode henter alltid den nyeste.
 
 For å oppgradere manuelt, kjør
 
@@ -44,24 +44,24 @@ Vi fjernet noe funksjonalitet som vi ikke var sikre på at noen faktisk brukte. 
 
 ## Brytende endringer
 
-### Keybindings omdøpt
+### Keybinds omdøpt
 
-- meldinger_tilbake -> meldinger_angre
+- messages_revert -> messages_undo
 - switch_agent -> agent_cycle
 - switch_agent_reverse -> agent_cycle_reverse
 - switch_mode -> agent_cycle
 - switch_mode_reverse -> agent_cycle_reverse
 
-### Keybindings fjernet
+### Keybinds fjernet
 
 - messages_layout_toggle
-- meldinger_neste
-- meldinger_forrige
+- messages_next
+- messages_previous
 - file_diff_toggle
-- filsøk
-- fil_lukk
-- fil_liste
-- app_hjelp
-- prosjekt_init
+- file_search
+- file_close
+- file_list
+- app_help
+- project_init
 - tool_details
-- tenkeblokker
+- thinking_blocks

@@ -123,7 +123,7 @@ SDK は、タイプセーフなクライアントを通じてすべてのサー�
 
 ---
 
-### グローバル
+### Global
 
 | 方法              | 説明                                   | 応答                                 |
 | ----------------- | -------------------------------------- | ------------------------------------ |
@@ -140,7 +140,7 @@ console.log(health.data.version)
 
 ---
 
-### アプリ
+### App
 
 | 方法           | 説明                                       | 応答                                        |
 | -------------- | ------------------------------------------ | ------------------------------------------- |
@@ -167,7 +167,7 @@ const agents = await client.app.agents()
 
 ---
 
-### プロジェクト
+### Project
 
 | 方法                | 説明                             | 応答                                          |
 | ------------------- | -------------------------------- | --------------------------------------------- |
@@ -188,7 +188,7 @@ const currentProject = await client.project.current()
 
 ---
 
-### パス
+### Path
 
 | 方法         | 説明             | 応答                                     |
 | ------------ | ---------------- | ---------------------------------------- |
@@ -205,7 +205,7 @@ const pathInfo = await client.path.get()
 
 ---
 
-### 構成
+### Config
 
 | 方法                 | 説明                                         | 応答                                                                                                  |
 | -------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
@@ -224,7 +224,7 @@ const { providers, default: defaults } = await client.config.providers()
 
 ---
 
-### セッション
+### Sessions
 
 | 方法                                                       | 説明                                    | メモ                                                                                                                                                               |
 | ---------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -243,7 +243,7 @@ const { providers, default: defaults } = await client.config.providers()
 | `session.message({ path })`                                | メッセージの詳細を取得する              | 戻り値 `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                               |
 | `session.prompt({ path, body })`                           | プロンプトメッセージを送信する          | `body.noReply: true` は UserMessage (コンテキストのみ) を返します。デフォルトでは、AI 応答を含む <a href={typesUrl}><code>AssistantMessage</code></a> を返します。 |
 | `session.command({ path, body })`                          | コマンドをセッションに送信              | 戻り値 `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                      |
-| `session.shell({ path, body })`                            | シェルコマンドを実行する                | 戻り値 <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                                        |
+| `session.shell({ path, body })`                            | shell コマンドを実行する                | 戻り値 <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                                        |
 | `session.revert({ path, body })`                           | メッセージを元に戻す                    | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
 | `session.unrevert({ path })`                               | 元に戻したメッセージを復元する          | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
 | `postSessionByIdPermissionsByPermissionId({ path, body })` | 許可リクエストに応答する                | 戻り値 `boolean`                                                                                                                                                   |
@@ -281,7 +281,7 @@ await client.session.prompt({
 
 ---
 
-### ファイル
+### Files
 
 | Method                    | Description                        | Response                                                                                    |
 | ------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------- |
@@ -322,7 +322,7 @@ const content = await client.file.read({
 
 ---
 
-### トゥイ
+### TUI
 
 | 方法                           | 説明                             | 応答      |
 | ------------------------------ | -------------------------------- | --------- |
@@ -353,7 +353,7 @@ await client.tui.showToast({
 
 ---
 
-### 認証
+### Auth
 
 | 方法                | 説明                   | 応答      |
 | ------------------- | ---------------------- | --------- |
@@ -372,7 +372,7 @@ await client.auth.set({
 
 ---
 
-### イベント
+### Events
 
 | 方法                | 説明                            | 応答                            |
 | ------------------- | ------------------------------- | ------------------------------- |

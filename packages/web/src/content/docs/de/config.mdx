@@ -268,7 +268,7 @@ Sie können auch [local models](/docs/models#local) konfigurieren. [Learn more](
 
 Einige Anbieter unterstützen zusätzliche Konfigurationsoptionen über die allgemeinen Einstellungen `timeout` und `apiKey` hinaus.
 
-##### Amazonas-Grundgestein
+##### Amazon Bedrock
 
 Amazon Bedrock unterstützt AWS-spezifische Konfigurationen:
 
@@ -463,7 +463,7 @@ Sie können Codeformatierer über die Option `formatter` konfigurieren.
 
 ### Permissions
 
-Opencode erlaubt standardmäßig alle Vorgänge, ohne dass eine ausdrückliche Genehmigung erforderlich ist. Sie können dies mit der Option `permission` ändern.
+OpenCode erlaubt standardmäßig alle Vorgänge, ohne dass eine ausdrückliche Genehmigung erforderlich ist. Sie können dies mit der Option `permission` ändern.
 
 Um beispielsweise sicherzustellen, dass die Tools `edit` und `bash` eine Benutzergenehmigung erfordern:
 
@@ -565,7 +565,7 @@ Dies erfordert eine Reihe von Pfaden und Glob-Mustern zu Anweisungsdateien. [Erf
 
 ---
 
-### Behinderte Anbieter
+### Deaktivierte Anbieter
 
 Sie können Anbieter, die automatisch geladen werden, über die Option `disabled_providers` deaktivieren. Dies ist nützlich, wenn Sie verhindern möchten, dass bestimmte Anbieter geladen werden, selbst wenn deren Anmeldeinformationen verfügbar sind.
 
@@ -626,13 +626,13 @@ Experimentelle Optionen sind nicht stabil. Sie können ohne vorherige Ankündigu
 
 ---
 
-## Variables
+## Variablen
 
 Sie können die Variablenersetzung in Ihren Konfigurationsdateien verwenden, um auf Umgebungsvariablen und Dateiinhalte zu verweisen.
 
 ---
 
-### Umgebungsvars
+### Umgebungsvariablen
 
 Verwenden Sie `{env:VARIABLE_NAME}`, um Umgebungsvariablen zu ersetzen:
 
@@ -655,7 +655,7 @@ Wenn die Umgebungsvariable nicht gesetzt ist, wird sie durch eine leere Zeichenf
 
 ---
 
-### Files
+### Dateien
 
 Verwenden Sie `{file:path/to/file}`, um den Inhalt einer Datei zu ersetzen:
 

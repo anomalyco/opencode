@@ -8,7 +8,7 @@ import { Steps } from "@astrojs/starlight/components"
 雖然 opencode 可以直接在 Windows 上執行，但為了獲得最佳體驗，我們建議使用 [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install)。WSL 提供了可與 opencode 功能順暢配合的 Linux 環境。
 
 :::tip[為什麼要用 WSL？]
-WSL 提供更好的檔案系統效能、完整的終端支援，以及與 opencode 依賴之開發工具的相容性。
+WSL 提供更好的檔案系統效能、完整的terminal支援，以及與 opencode 依賴之開發工具的相容性。
 :::
 
 ---
@@ -23,7 +23,7 @@ WSL 提供更好的檔案系統效能、完整的終端支援，以及與 openco
 
 2. **在 WSL 中安裝 opencode**
 
-   完成 WSL 設定後，打開 WSL 終端機，並使用其中一種[安裝方式](/docs/)安裝 opencode。
+   完成 WSL 設定後，打開 WSL terminal，並使用其中一種[安裝方式](/docs/)安裝 opencode。
 
    ```bash
    curl -fsSL https://opencode.ai/install | bash
@@ -73,7 +73,7 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
 
 在 Windows 上取得最佳 Web 體驗：
 
-1. **請在 WSL 終端機執行 `opencode web`**，而不是在 PowerShell 執行：
+1. **請在 WSL terminal執行 `opencode web`**，而不是在 PowerShell 執行：
 
    ```bash
    opencode web --hostname 0.0.0.0
@@ -81,7 +81,7 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
 
 2. **在 Windows 瀏覽器中開啟** `http://localhost:<port>`（opencode 會輸出該 URL）
 
-從 WSL 執行 `opencode web` 可確保正確的檔案系統存取與終端整合，同時仍可由 Windows 瀏覽器使用。
+從 WSL 執行 `opencode web` 可確保正確的檔案系統存取與terminal整合，同時仍可由 Windows 瀏覽器使用。
 
 ---
 
