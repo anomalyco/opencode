@@ -22,6 +22,7 @@ import { Snapshot } from "@/snapshot"
 import type { Provider } from "@/provider/provider"
 import { PermissionNext } from "@/permission/next"
 import { Global } from "@/global"
+import type { LanguageModelV2Usage } from "@ai-sdk/provider"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -439,10 +440,15 @@ export namespace Session {
   export const getUsage = fn(
     z.object({
       model: z.custom<Provider.Model>(),
-      usage: z.custom<LanguageModelUsage>(),
+      usage: z.custom<LanguageModelV2Usage>(),
       metadata: z.custom<ProviderMetadata>().optional(),
     }),
     (input) => {
+      const inputTokens = input.usage.inputTokens ?? 0
+      const outputTokens = input.usage.outputTokens ?? 0
+      const reasoningTokens = input.usage.reasoningTokens ?? 0
+      // input.usage.
+
       const cacheReadInputTokens = input.usage.cachedInputTokens ?? 0
       const cacheWriteInputTokens = (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
         // @ts-expect-error
@@ -453,17 +459,18 @@ export namespace Session {
 
       const excludesCachedTokens = !!(input.metadata?.["anthropic"] || input.metadata?.["bedrock"])
       const adjustedInputTokens = excludesCachedTokens
-        ? (input.usage.inputTokens ?? 0)
-        : (input.usage.inputTokens ?? 0) - cacheReadInputTokens - cacheWriteInputTokens
+        ? inputTokens
+        : inputTokens - cacheReadInputTokens - cacheWriteInputTokens
       const safe = (value: number) => {
         if (!Number.isFinite(value)) return 0
         return value
       }
 
       const tokens = {
+        total: input.usage.totalTokens,
         input: safe(adjustedInputTokens),
-        output: safe(input.usage.outputTokens ?? 0),
-        reasoning: safe(input.usage?.reasoningTokens ?? 0),
+        output: safe(outputTokens),
+        reasoning: safe(reasoningTokens),
         cache: {
           write: safe(cacheWriteInputTokens),
           read: safe(cacheReadInputTokens),
