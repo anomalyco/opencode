@@ -32,10 +32,13 @@
     "test": "bun test --conditions=browser --preload ./happydom.ts ./src",
     "test:watch": "bun test --watch --conditions=browser --preload ./happydom.ts ./src",
     "test:ui": "vitest run --config vitest.config.ts",
-    "test:ui:watch": "vitest --config vitest.config.ts"
+    "test:ui:watch": "vitest --config vitest.config.ts",
+    "test:stagehand:red": "node ./e2e/stagehand/terminal-reactivation.red.mjs",
+    "test:stagehand:red:visual-broken": "STAGEHAND_SPLIT_CLOSE_FLOW=1 node ./e2e/stagehand/terminal-reactivation.red.mjs"
   },
   "license": "MIT",
   "devDependencies": {
+    "@browserbasehq/stagehand": "^3.0.0",
     "@solidjs/testing-library": "^0.8.10",
     "@testing-library/jest-dom": "^6.8.0",
     "@testing-library/user-event": "^14.6.1",
@@ -48,6 +51,7 @@
     "@typescript/native-preview": "catalog:",
     "jsdom": "^26.1.0",
     "typescript": "catalog:",
+    "playwright-core": "^1.57.0",
     "vite": "catalog:",
     "vitest": "^2.1.8",
     "vite-plugin-solid": "catalog:"
