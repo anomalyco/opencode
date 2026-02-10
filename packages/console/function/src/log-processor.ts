@@ -38,11 +38,11 @@ export default {
           const json = JSON.parse(message.slice(8))
           data = { ...data, ...json }
           if ("llm.error.code" in json) {
-            events.push({ event_type: "llm.error", time, data: { ...data } })
+            events.push({ time, data: { ...data, event_type: "llm.error" } })
           }
         }
       }
-      events.push({ event_type: "completions", time, data })
+      events.push({ time, data: { ...data, event_type: "completions" } })
       console.log(JSON.stringify(data, null, 2))
 
       const ret = await fetch("https://api.honeycomb.io/1/batch/zen", {
