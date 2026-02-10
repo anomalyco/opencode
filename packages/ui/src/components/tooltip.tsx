@@ -1,5 +1,5 @@
 import { Tooltip as KobalteTooltip } from "@kobalte/core/tooltip"
-import { children, createSignal, Match, onMount, splitProps, Switch, type JSX } from "solid-js"
+import { createSignal, Match, splitProps, Switch, type JSX } from "solid-js"
 import type { ComponentProps } from "solid-js"
 
 export interface TooltipProps extends ComponentProps<typeof KobalteTooltip> {
@@ -40,24 +40,8 @@ export function Tooltip(props: TooltipProps) {
     "contentStyle",
     "inactive",
     "forceOpen",
+    "value",
   ])
-
-  const c = children(() => local.children)
-
-  onMount(() => {
-    const childElements = c()
-    if (childElements instanceof HTMLElement) {
-      childElements.addEventListener("focusin", () => setOpen(true))
-      childElements.addEventListener("focusout", () => setOpen(false))
-    } else if (Array.isArray(childElements)) {
-      for (const child of childElements) {
-        if (child instanceof HTMLElement) {
-          child.addEventListener("focusin", () => setOpen(true))
-          child.addEventListener("focusout", () => setOpen(false))
-        }
-      }
-    }
-  })
 
   return (
     <Switch>
@@ -65,7 +49,7 @@ export function Tooltip(props: TooltipProps) {
       <Match when={true}>
         <KobalteTooltip gutter={4} {...others} open={local.forceOpen || open()} onOpenChange={setOpen}>
           <KobalteTooltip.Trigger as={"div"} data-component="tooltip-trigger" class={local.class}>
-            {c()}
+            {local.children}
           </KobalteTooltip.Trigger>
           <KobalteTooltip.Portal>
             <KobalteTooltip.Content
@@ -75,7 +59,7 @@ export function Tooltip(props: TooltipProps) {
               class={local.contentClass}
               style={local.contentStyle}
             >
-              {others.value}
+              {local.value}
               {/* <KobalteTooltip.Arrow data-slot="tooltip-arrow" /> */}
             </KobalteTooltip.Content>
           </KobalteTooltip.Portal>

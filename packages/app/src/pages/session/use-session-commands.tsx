@@ -48,6 +48,7 @@ export const useSessionCommands = (input: {
   setExpanded: (id: string, fn: (open: boolean | undefined) => boolean) => void
   setActiveMessage: (message: UserMessage | undefined) => void
   addSelectionToContext: (path: string, selection: FileSelection) => void
+  focusInput: () => void
 }) => {
   const sessionCommands = createMemo(() => [
     {
@@ -141,6 +142,13 @@ export const useSessionCommands = (input: {
       category: input.language.t("command.category.view"),
       keybind: "mod+\\",
       onSelect: () => input.layout.fileTree.toggle(),
+    },
+    {
+      id: "input.focus",
+      title: input.language.t("command.input.focus"),
+      category: input.language.t("command.category.view"),
+      keybind: "ctrl+l",
+      onSelect: () => input.focusInput(),
     },
     {
       id: "terminal.new",
@@ -357,37 +365,81 @@ export const useSessionCommands = (input: {
     return [
       {
         id: "session.share",
-        title: input.language.t("command.session.share"),
-        description: input.language.t("command.session.share.description"),
+        title: input.info()?.share?.url
+          ? input.language.t("session.share.copy.copyLink")
+          : input.language.t("command.session.share"),
+        description: input.info()?.share?.url
+          ? input.language.t("toast.session.share.success.description")
+          : input.language.t("command.session.share.description"),
         category: input.language.t("command.category.session"),
         slash: "share",
-        disabled: !input.params.id || !!input.info()?.share?.url,
+        disabled: !input.params.id,
         onSelect: async () => {
           if (!input.params.id) return
-          await input.sdk.client.session
-            .share({ sessionID: input.params.id })
-            .then((res) => {
-              navigator.clipboard.writeText(res.data!.share!.url).catch(() =>
-                showToast({
-                  title: input.language.t("toast.session.share.copyFailed.title"),
-                  variant: "error",
-                }),
-              )
-            })
-            .then(() =>
-              showToast({
-                title: input.language.t("toast.session.share.success.title"),
-                description: input.language.t("toast.session.share.success.description"),
-                variant: "success",
-              }),
+
+          const write = (value: string) => {
+            const body = typeof document === "undefined" ? undefined : document.body
+            if (body) {
+              const textarea = document.createElement("textarea")
+              textarea.value = value
+              textarea.setAttribute("readonly", "")
+              textarea.style.position = "fixed"
+              textarea.style.opacity = "0"
+              textarea.style.pointerEvents = "none"
+              body.appendChild(textarea)
+              textarea.select()
+              const copied = document.execCommand("copy")
+              body.removeChild(textarea)
+              if (copied) return Promise.resolve(true)
+            }
+
+            const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard
+            if (!clipboard?.writeText) return Promise.resolve(false)
+            return clipboard.writeText(value).then(
+              () => true,
+              () => false,
             )
-            .catch(() =>
+          }
+
+          const copy = async (url: string, existing: boolean) => {
+            const ok = await write(url)
+            if (!ok) {
               showToast({
-                title: input.language.t("toast.session.share.failed.title"),
-                description: input.language.t("toast.session.share.failed.description"),
+                title: input.language.t("toast.session.share.copyFailed.title"),
                 variant: "error",
-              }),
-            )
+              })
+              return
+            }
+
+            showToast({
+              title: existing
+                ? input.language.t("session.share.copy.copied")
+                : input.language.t("toast.session.share.success.title"),
+              description: input.language.t("toast.session.share.success.description"),
+              variant: "success",
+            })
+          }
+
+          const existing = input.info()?.share?.url
+          if (existing) {
+            await copy(existing, true)
+            return
+          }
+
+          const url = await input.sdk.client.session
+            .share({ sessionID: input.params.id })
+            .then((res) => res.data?.share?.url)
+            .catch(() => undefined)
+          if (!url) {
+            showToast({
+              title: input.language.t("toast.session.share.failed.title"),
+              description: input.language.t("toast.session.share.failed.description"),
+              variant: "error",
+            })
+            return
+          }
+
+          await copy(url, false)
         },
       },
       {
