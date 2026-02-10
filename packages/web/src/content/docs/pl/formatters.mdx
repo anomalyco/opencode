@@ -1,0 +1,130 @@
+---
+title: Formatery
+description: opencode używa formaterów specyficznych dla języka.
+---
+
+opencode automatycznie formatuje pliki po ich zapisaniu lub edycję przy użyciu formaterów przesyłanych dla języka. Dzięki temu wygenerowany kod będzie używany ze stylami kodu Twojego projektu.
+
+---
+
+## Wbudowany
+
+opencode zawiera kilka wbudowanych formaterów dla nauki języków i frameworków. Zawiera listę formaterów, rozszerzonych plików oraz rozszerzenia i konfiguratory, których potrzebujesz.
+
+| Formater                | Rozszerzenia                                                                                            | Wymagania                                                                                         |
+| ----------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| gofmt                   | .idź                                                                                                    | Komenda `gofmt` dostępna                                                                          |
+| ryzyko                  | .ex, .exs, .eex, .heex, .leex, .neex, .sface                                                            | Komenda `mix` dostępna                                                                            |
+| ładniejsza              | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml i [więcej](https://prettier.io/docs/en/index.html) | Zależność `prettier` w `package.json`                                                             |
+| biom                    | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml i [więcej](https://biomejs.dev/)                   | `biome.json(c)` plik konfiguracyjny                                                               |
+| zyg                     | .zig, .zon                                                                                              | Komenda `zig` dostępna                                                                            |
+| formatuj brzęk          | .c, .cpp, .h, .hpp, .ino i [więcej](https://clang.llvm.org/docs/ClangFormat.html)                       | `.clang-format` plik konfiguracyjny                                                               |
+| ktlint                  | .kt, .kts                                                                                               | Komenda `ktlint` dostępna                                                                         |
+| kryza                   | .py, .pyi                                                                                               | Komenda `ruff` dostępna w konstrukcji                                                             |
+| rustfmt                 | .rs                                                                                                     | Komenda `rustfmt` dostępna                                                                        |
+| załadunek               | .rs                                                                                                     | Komenda `cargo fmt` dostępna                                                                      |
+| UV                      | .py, .pyi                                                                                               | Komenda `uv` dostępna                                                                             |
+| rubocop                 | .rb, .rake, .gemspec, .ru                                                                               | Komenda `rubocop` dostępna                                                                        |
+| standardowe             | .rb, .rake, .gemspec, .ru                                                                               | Komenda `standardrb` dostępna                                                                     |
+| htmlupiększacz          | .erb, .html.erb                                                                                         | Komenda `htmlbeautifier` dostępna                                                                 |
+| powietrze               | .R                                                                                                      | Komenda `air` dostępna                                                                            |
+| strzałka                | .dart                                                                                                   | Komenda `dart` dostępna                                                                           |
+| formatuj ocaml          | .ml, .mli                                                                                               | Dostępna opcja `ocamlformat` i plik konfiguracyjny `.ocamlformat`                                 |
+| terraforma              | .tf, .tfvars                                                                                            | Komenda `terraform` dostępna                                                                      |
+| blask                   | .blask                                                                                                  | Komenda `gleam` dostępna                                                                          |
+| nixfmt                  | .nix                                                                                                    | Komenda `nixfmt` dostępna                                                                         |
+| shfmt                   | .sh, .bash                                                                                              | Komenda `shfmt` dostępna                                                                          |
+| kufel                   | .php                                                                                                    | Zależność `laravel/pint` w `composer.json`                                                        |
+| oxfmt (eksperymentalny) | .js, .jsx, .ts, .tsx                                                                                    | wykonanie `oxfmt` w `package.json` i [flaga eksperymentalna zmienna env](/docs/cli/#experimental) |
+| ormolu                  | .hs                                                                                                     | Komenda `ormolu` dostępna                                                                         |
+
+Jeśli więc Twój projekt zawiera `prettier` w `package.json`, opencode automatycznie przejdź do podmiote.
+
+---
+
+## Jak to działa
+
+Kiedy opencode zapisuje lub edytuje plik:
+
+1. Badanie pliku dotyczącego wszystkich danych formaterów.
+2. Uruchamia decyzje wykonawcze formatujące na plik.
+3. Automatycznie stosuje zmiany formatowania.
+
+Dziesięć procesów zachodzi w tle, konieczne jest zachowanie stylów kodu bez konieczności wykonania czynności czynnościowych.
+
+---
+
+## Skonfiguruj
+
+Można dostosować formatery za pomocą sekcji `formatter` w konstrukcji opencode.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {}
+}
+```
+
+obsługiwane formatyzator Zobacz elementy:
+
+| Nieruchomość  | Wpisz    | Opis                                                                       |
+| ------------- | -------- | -------------------------------------------------------------------------- |
+| `disabled`    | boolean  | Ustaw tę opcję na `true`, aby wyłączyć formater                            |
+| `command`     | string[] | Polecenie uruchomienia formatowania                                        |
+| `environment` | object   | Zmienne ustawienia do ustawień podczas uruchamiania programu formatującego |
+| `extensions`  | string[] | Rozszerzenia plików, które powinny opuścić ten formater                    |
+
+Spójrzmy na kilka przykładów.
+
+---
+
+### Wyłączanie formaterów
+
+Aby globalnie wyłączyć **wszystkie** formatery, ustaw `formatter` na `false`:
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": false
+}
+```
+
+Aby wyłączyć **określony** formater, ustaw `disabled` na `true`:
+
+```json title="opencode.json" {5}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "disabled": true
+    }
+  }
+}
+```
+
+---
+
+### Niestandardowe formatery
+
+Może wystąpić, gdyby nastąpiło nowe, uruchomienie, zmienne udostępnienie i udostępnienie plików:
+
+```json title="opencode.json" {4-14}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "prettier": {
+      "command": ["npx", "prettier", "--write", "$FILE"],
+      "environment": {
+        "NODE_ENV": "development"
+      },
+      "extensions": [".js", ".ts", ".jsx", ".tsx"]
+    },
+    "custom-markdown-formatter": {
+      "command": ["deno", "fmt", "$FILE"],
+      "extensions": [".md"]
+    }
+  }
+}
+```
+
+Symbol zastępczy **`$FILE`** w poleceniu pochodziony z formatowanego pliku.
