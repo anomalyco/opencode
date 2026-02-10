@@ -32,6 +32,7 @@
     /* } */
     &:focus-visible {
       outline: none;
+      background-color: var(--surface-raised-base-hover);
     }
     &[data-disabled] {
       cursor: not-allowed;
@@ -70,6 +71,7 @@
       /* } */
       &:focus-visible {
         outline: none;
+        background-color: var(--surface-raised-base-hover);
       }
       &[data-disabled] {
         cursor: not-allowed;

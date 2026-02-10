@@ -34,7 +34,7 @@ async function main() {
   console.log("Fetching open PRs with beta label...")
 
   const stdout = await $`gh pr list --state open --label beta --json number,title,author,labels --limit 100`.text()
-  const prs: PR[] = JSON.parse(stdout)
+  const prs: PR[] = JSON.parse(stdout).sort((a: PR, b: PR) => a.number - b.number)
 
   console.log(`Found ${prs.length} open PRs with beta label`)
 

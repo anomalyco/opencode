@@ -1,0 +1,379 @@
+---
+title: Araclar
+description: LLM'in kullanabilecegi araclari yonetin.
+---
+
+Araclar, LLM'in kod tabaninizda eylem gerceklestirmesini saglar. opencode yerlesik bir arac setiyle gelir, ancak bunu [ozel araclarla](/docs/custom-tools) veya [MCP sunuculariyla](/docs/mcp-servers) genisletebilirsiniz.
+
+Varsayilan olarak tum araclar **etkindir** ve calismak icin izin istemez. Arac davranisini [izinler](/docs/permissions) uzerinden kontrol edebilirsiniz.
+
+---
+
+## Yapilandirin
+
+Arac davranisini kontrol etmek icin `permission` alanini kullanin. Her arac icin izin verebilir, reddedebilir veya onay isteyebilirsiniz.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "deny",
+    "bash": "ask",
+    "webfetch": "allow"
+  }
+}
+```
+
+Birden fazla araci ayni anda kontrol etmek icin wildcard da kullanabilirsiniz. Ornegin, bir MCP sunucusundan gelen tum araclar icin onay istemek:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "mymcp_*": "ask"
+  }
+}
+```
+
+Izin yapilandirmasi icin [daha fazla bilgi alin](/docs/permissions).
+
+---
+
+## Yerlesik
+
+opencode icinde bulunan tum yerlesik araclar asagidadir.
+
+---
+
+### bash
+
+Proje ortaminizda kabuk komutlari calistirir.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": "allow"
+  }
+}
+```
+
+Bu arac LLM'in `npm install`, `git status` gibi terminal komutlarini veya diger kabuk komutlarini calistirmasini saglar.
+
+---
+
+### edit
+
+Birebir metin degistirme ile mevcut dosyalari duzenler.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+Bu arac dosyalarda kesin metin eslesmelerini degistirerek hassas duzenleme yapar. LLM'in kodu degistirmek icin kullandigi temel yontemdir.
+
+---
+
+### write
+
+Yeni dosyalar olusturur veya mevcut dosyalari uzerine yazar.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+LLM'in yeni dosya olusturmasina izin vermek icin bunu kullanin. Dosya zaten varsa uzerine yazar.
+
+:::note
+`write` araci `edit` izniyle kontrol edilir; bu izin tum dosya degisikliklerini kapsar (`edit`, `write`, `patch`, `multiedit`).
+:::
+
+---
+
+### read
+
+Kod tabaninizdan dosya icerigi okur.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "read": "allow"
+  }
+}
+```
+
+Bu arac dosyalari okur ve iceriklerini dondurur. Buyuk dosyalar icin belirli satir araliklarini okuma destegi vardir.
+
+---
+
+### grep
+
+Duzensiz ifadelerle dosya iceriginde arama yapar.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "grep": "allow"
+  }
+}
+```
+
+Kod tabaninda hizli icerik aramasi sunar. Tam regex sozdizimini ve dosya desen filtrelerini destekler.
+
+---
+
+### glob
+
+Desen eslestirme ile dosya bulur.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "glob": "allow"
+  }
+}
+```
+
+`**/*.js` veya `src/**/*.ts` gibi glob desenleriyle dosya arar. Eslesen dosya yollarini degisim zamanina gore siralar.
+
+---
+
+### list
+
+Verilen yoldaki dosya ve dizinleri listeler.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "list": "allow"
+  }
+}
+```
+
+Bu arac dizin icerigini listeler. Sonuclari filtrelemek icin glob desenlerini kabul eder.
+
+---
+
+### lsp (deneysel)
+
+Tanim, referans, hover bilgisi ve cagrilar hiyerarsisi gibi kod zekasi ozellikleri icin yapilandirdiginiz LSP sunuculariyla etkilesir.
+
+:::note
+Bu arac yalnizca `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (veya `OPENCODE_EXPERIMENTAL=true`) oldugunda kullanilabilir.
+:::
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "lsp": "allow"
+  }
+}
+```
+
+Desteklenen islemler: `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls`, `outgoingCalls`.
+
+Projeniz icin kullanilabilir LSP sunucularini ayarlamak icin [LSP Servers](/docs/lsp) sayfasina bakin.
+
+---
+
+### patch
+
+Dosyalara patch uygular.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+Bu arac patch dosyalarini kod tabaniniza uygular. Farkli kaynaklardan gelen diff ve patch'leri uygulamak icin kullanislidir.
+
+:::note
+`patch` araci `edit` izniyle kontrol edilir; bu izin tum dosya degisikliklerini kapsar (`edit`, `write`, `patch`, `multiedit`).
+:::
+
+---
+
+### skill
+
+Bir [skill](/docs/skills) (`SKILL.md` dosyasi) yukler ve icerigini konusmaya dondurur.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "skill": "allow"
+  }
+}
+```
+
+---
+
+### todowrite
+
+Kodlama oturumlarinda yapilacaklar listesini yonetir.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "todowrite": "allow"
+  }
+}
+```
+
+Karmasik islemlerde ilerlemeyi takip etmek icin gorev listeleri olusturur ve gunceller. LLM bunu cok adimli gorevleri duzenlemek icin kullanir.
+
+:::note
+Bu arac alt ajanlar icin varsayilan olarak devre disidir, ama manuel etkinlestirebilirsiniz. [Daha fazla bilgi](/docs/agents/#permissions)
+:::
+
+---
+
+### todoread
+
+Mevcut yapilacaklar listesini okur.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "todoread": "allow"
+  }
+}
+```
+
+Guncel todo listesi durumunu okur. LLM bunu hangi gorevlerin bekledigini veya tamamlandigini takip etmek icin kullanir.
+
+:::note
+Bu arac alt ajanlar icin varsayilan olarak devre disidir, ama manuel etkinlestirebilirsiniz. [Daha fazla bilgi](/docs/agents/#permissions)
+:::
+
+---
+
+### webfetch
+
+Web icerigi getirir.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "webfetch": "allow"
+  }
+}
+```
+
+LLM'in web sayfalarini getirip okumasini saglar. Dokumantasyon aramak veya cevrimici kaynaklari incelemek icin kullanislidir.
+
+---
+
+### websearch
+
+Web'de bilgi arar.
+
+:::note
+Bu arac yalnizca opencode provider kullanilirken veya `OPENCODE_ENABLE_EXA` ortam degiskeni dogru degerlerden birine ayarlandiginda (ornegin `true` ya da `1`) kullanilabilir.
+
+opencode baslatirken etkinlestirmek icin:
+
+```bash
+OPENCODE_ENABLE_EXA=1 opencode
+```
+
+:::
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "websearch": "allow"
+  }
+}
+```
+
+Exa AI ile web aramasi yaparak ilgili bilgileri bulur. Egitim verisi kesim tarihinin otesindeki konulari arastirmak, guncel olaylari bulmak veya genel arastirma yapmak icin kullanislidir.
+
+API anahtari gerekmez - arac Exa AI'nin barindirilan MCP hizmetine dogrudan kimlik dogrulamasi olmadan baglanir.
+
+:::tip
+Bilgi kesfetmeniz gerekiyorsa `websearch`, belirli bir URL'den icerik cekmeniz gerekiyorsa `webfetch` kullanin.
+:::
+
+---
+
+### question
+
+Calisma sirasinda kullaniciya soru sorar.
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "question": "allow"
+  }
+}
+```
+
+Bu arac LLM'in gorev sirasinda kullaniciya soru sormasini saglar. Sunlar icin kullanislidir:
+
+- Kullanici tercihleri veya gereksinimleri toplamak
+- Belirsiz talimatlari netlestirmek
+- Uygulama seceneklerinde karar almak
+- Hangi yone gidilecegine dair secenek sunmak
+
+Her soru bir baslik, soru metni ve secenek listesi icerir. Kullanicilar seceneklerden birini secebilir veya ozel yanit yazabilir. Birden fazla soru varsa tum yanitlari gondermeden once sorular arasinda gezebilirler.
+
+---
+
+## Ozel araclar
+
+Ozel araclar, LLM'in cagirabilecegi kendi fonksiyonlarinizi tanimlamanizi saglar. Bunlar config dosyanizda tanimlanir ve keyfi kod calistirabilir.
+
+Ozel arac olusturma icin [daha fazla bilgi alin](/docs/custom-tools).
+
+---
+
+## MCP sunuculari
+
+MCP (Model Context Protocol) sunuculari, harici araclari ve servisleri entegre etmenizi saglar. Buna veritabani erisimi, API entegrasyonlari ve ucuncu taraf servisler dahildir.
+
+MCP sunucularini yapilandirma icin [daha fazla bilgi alin](/docs/mcp-servers).
+
+---
+
+## Dahili detaylar
+
+Dahilde `grep`, `glob` ve `list` gibi araclar [ripgrep](https://github.com/BurntSushi/ripgrep) kullanir. Varsayilan olarak ripgrep `.gitignore` desenlerine uyar; yani `.gitignore` icindeki dosya ve dizinler arama ve listeleme sonucuna dahil edilmez.
+
+---
+
+### Ignore desenleri
+
+Normalde yok sayilan dosyalari dahil etmek icin proje kokunde bir `.ignore` dosyasi olusturun. Bu dosya belirli yollari acikca izinli yapabilir.
+
+```text title=".ignore"
+!node_modules/
+!dist/
+!build/
+```
+
+Ornegin bu `.ignore` dosyasi, `.gitignore` icinde olsalar bile ripgrep'in `node_modules/`, `dist/` ve `build/` dizinlerinde arama yapmasina izin verir.

@@ -2,6 +2,7 @@ import { useNavigate, useParams } from "@solidjs/router"
 import { createEffect, createMemo, For, Show, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSortable } from "@thisbeyond/solid-dnd"
+import { createMediaQuery } from "@solid-primitives/media"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { getFilename } from "@opencode-ai/util/path"
 import { Button } from "@opencode-ai/ui/button"
@@ -114,7 +115,8 @@ export const SortableWorkspace = (props: {
   const busy = createMemo(() => props.ctx.isBusy(props.directory))
   const wasBusy = createMemo((prev) => prev || busy(), false)
   const loading = createMemo(() => open() && !booted() && sessions().length === 0 && !wasBusy())
-  const showNew = createMemo(() => !loading() && (sessions().length === 0 || (active() && !params.id)))
+  const touch = createMediaQuery("(hover: none)")
+  const showNew = createMemo(() => !loading() && (touch() || sessions().length === 0 || (active() && !params.id)))
   const loadMore = async () => {
     setWorkspaceStore("limit", (limit) => limit + 5)
     await globalSync.project.loadSessions(props.directory)
@@ -270,23 +272,25 @@ export const SortableWorkspace = (props: {
                     </DropdownMenu.Content>
                   </DropdownMenu.Portal>
                 </DropdownMenu>
-                <Tooltip value={language.t("command.session.new")} placement="top">
-                  <IconButton
-                    icon="plus-small"
-                    variant="ghost"
-                    class="size-6 rounded-md opacity-0 pointer-events-none group-hover/workspace:opacity-100 group-hover/workspace:pointer-events-auto group-focus-within/workspace:opacity-100 group-focus-within/workspace:pointer-events-auto"
-                    data-action="workspace-new-session"
-                    data-workspace={base64Encode(props.directory)}
-                    aria-label={language.t("command.session.new")}
-                    onClick={(event) => {
-                      event.preventDefault()
-                      event.stopPropagation()
-                      props.ctx.setHoverSession(undefined)
-                      props.ctx.clearHoverProjectSoon()
-                      navigate(`/${slug()}/session`)
-                    }}
-                  />
-                </Tooltip>
+                <Show when={!touch()}>
+                  <Tooltip value={language.t("command.session.new")} placement="top">
+                    <IconButton
+                      icon="plus-small"
+                      variant="ghost"
+                      class="size-6 rounded-md opacity-0 pointer-events-none group-hover/workspace:opacity-100 group-hover/workspace:pointer-events-auto group-focus-within/workspace:opacity-100 group-focus-within/workspace:pointer-events-auto"
+                      data-action="workspace-new-session"
+                      data-workspace={base64Encode(props.directory)}
+                      aria-label={language.t("command.session.new")}
+                      onClick={(event) => {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        props.ctx.setHoverSession(undefined)
+                        props.ctx.clearHoverProjectSoon()
+                        navigate(`/${slug()}/session`)
+                      }}
+                    />
+                  </Tooltip>
+                </Show>
               </div>
             </div>
           </div>

@@ -1,0 +1,180 @@
+---
+title: 規則
+description: 設置opencode的自定義指令。
+---
+
+您可以通過創建 `AGENTS.md` 文件來提供 opencode 的自定義指令。這和Cursor的規則類似。它包含將包含在 LLM 上下文中的說明，以便為您的特定項目自定義其行為。
+
+---
+
+## 初始化
+
+要創建新的`AGENTS.md`文件，您可以在opencode中運行`/init`命令。
+
+:::tip
+您應該將項目的 `AGENTS.md` 文件提交到 Git。
+:::
+
+這將掃描您的項目及其所有內容，以了解該項目的內容並生成一個 `AGENTS.md` 文件。這有助於 opencode 更好地導航項目。
+
+如果您有現有的 `AGENTS.md` 文件，這將嘗試添加到其中。
+
+---
+
+## 例子
+
+您也可以手動創建此文件。以下是您可以放入 `AGENTS.md` 文件中的一些內容的示例。
+
+```markdown title="AGENTS.md"
+# SST v3 Monorepo Project
+
+This is an SST v3 monorepo with TypeScript. The project uses bun workspaces for package management.
+
+## Project Structure
+
+- `packages/` - Contains all workspace packages (functions, core, web, etc.)
+- `infra/` - Infrastructure definitions split by service (storage.ts, api.ts, web.ts)
+- `sst.config.ts` - Main SST configuration with dynamic imports
+
+## Code Standards
+
+- Use TypeScript with strict mode enabled
+- Shared code goes in `packages/core/` with proper exports configuration
+- Functions go in `packages/functions/`
+- Infrastructure should be split into logical files in `infra/`
+
+## Monorepo Conventions
+
+- Import shared modules using workspace names: `@my-app/core/example`
+```
+
+我們在此處添加特定於項目的說明，這將在您的團隊中共享。
+
+---
+
+## 類型
+
+opencode 還支持從多個位置讀取 `AGENTS.md` 文件。這有不同的目的。
+
+### 專案
+
+將 `AGENTS.md` 放置在項目根目錄中以獲取特定於項目的規則。這些僅適用於您在此目錄或其子目錄中工作時。
+
+### 全球的
+
+您還可以在 `~/.config/opencode/AGENTS.md` 文件中包含全局規則。這適用於所有opencode會話。
+
+由於這未提交給 Git 或與您的團隊共享，因此我們建議使用它來指定 LLM 應遵循的任何個人規則。
+
+### 克勞德代碼兼容性
+
+對於從 Claude Code 遷移的用戶，opencode 支持 Claude Code 的文件約定作為後備：
+
+- **項目規則**：項目目錄中的`CLAUDE.md`（如果`AGENTS.md`不存在則使用）
+- **全局規則**：`~/.claude/CLAUDE.md`（如果不存在`~/.config/opencode/AGENTS.md`則使用）
+- **技能**：`~/.claude/skills/` — 詳情請參閱[代理技巧](/docs/skills/)
+
+要禁用 Claude Code 兼容性，請設置以下環境變量之一：
+
+```bash
+export OPENCODE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
+export OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
+export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
+```
+
+---
+
+## 優先級
+
+當 opencode 啟動時，它會按以下順序查找規則文件：
+
+1. **本地文件**，從當前目錄向上遍歷(`AGENTS.md`,`CLAUDE.md`)
+2. **全局文件** `~/.config/opencode/AGENTS.md`
+3. **克勞德代碼文件**位於`~/.claude/CLAUDE.md`（除非禁用）
+
+第一個匹配的文件在每個類別中獲勝。例如，如果您同時擁有`AGENTS.md` 和`CLAUDE.md`，則僅使用`AGENTS.md`。同樣，`~/.config/opencode/AGENTS.md` 優先於`~/.claude/CLAUDE.md`。
+
+---
+
+## 定制說明
+
+您可以在 `opencode.json` 或全局 `~/.config/opencode/opencode.json` 中指定自定義指令文件。這允許您和您的團隊重用現有規則，而不必將它們複製到 AGENTS.md。
+
+例子：
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
+}
+```
+
+您還可以使用遠程 URL 從 Web 加載說明。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["https://raw.githubusercontent.com/my-org/shared-rules/main/style.md"]
+}
+```
+
+遠程指令的獲取有 5 秒的超時時間。
+
+所有說明文件均與您的`AGENTS.md` 文件合併。
+
+---
+
+## 引用外部文件
+
+雖然 opencode 不會自動解析 `AGENTS.md` 中的文件引用，但您可以通過兩種方式實現類似的功能：
+
+### 使用 opencode.json
+
+推薦的方法是在`opencode.json`中使用`instructions`字段：
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["docs/development-standards.md", "test/testing-guidelines.md", "packages/*/AGENTS.md"]
+}
+```
+
+### AGENTS.md 中的手動說明
+
+您可以通過在 `AGENTS.md` 中提供明確的指令來教 opencode 讀取外部文件。這是一個實際的例子：
+
+```markdown title="AGENTS.md"
+# TypeScript Project Rules
+
+## External File Loading
+
+CRITICAL: When you encounter a file reference (e.g., @rules/general.md), use your Read tool to load it on a need-to-know basis. They're relevant to the SPECIFIC task at hand.
+
+Instructions:
+
+- Do NOT preemptively load all references - use lazy loading based on actual need
+- When loaded, treat content as mandatory instructions that override defaults
+- Follow references recursively when needed
+
+## Development Guidelines
+
+For TypeScript code style and best practices: @docs/typescript-guidelines.md
+For React component architecture and hooks patterns: @docs/react-patterns.md
+For REST API design and error handling: @docs/api-standards.md
+For testing strategies and coverage requirements: @test/testing-guidelines.md
+
+## General Guidelines
+
+Read the following file immediately as it's relevant to all workflows: @rules/general-guidelines.md.
+```
+
+這種方法允許您：
+
+- 創建模塊化、可重用的規則文件
+- 通過符號鏈接或 git 子模塊在項目之間共享規則
+- 保持 AGENTS.md 簡潔，同時參考詳細指南
+- 確保 opencode 僅在特定任務需要時加載文件
+
+:::tip
+對於 monorepos 或具有共享標準的項目，使用 `opencode.json` 和 glob 模式（如 `packages/*/AGENTS.md`）比手動指令更易於維護。
+:::
