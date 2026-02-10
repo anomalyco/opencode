@@ -19,6 +19,7 @@ interface RemovalTargets {
   directories: Array<{ path: string; label: string; keep: boolean }>
   shellConfig: string | null
   binary: string | null
+  localArtifacts: Array<{ path: string; label: string }>
 }
 
 export const UninstallCommand = {
@@ -96,8 +97,9 @@ async function collectRemovalTargets(args: UninstallArgs, method: Installation.M
 
   const shellConfig = method === "curl" ? await getShellConfigFile() : null
   const binary = method === "curl" ? process.execPath : null
+  const localArtifacts = getLocalArtifacts()
 
-  return { directories, shellConfig, binary }
+  return { directories, shellConfig, binary, localArtifacts }
 }
 
 async function showRemovalSummary(targets: RemovalTargets, method: Installation.Method) {
@@ -122,6 +124,15 @@ async function showRemovalSummary(targets: RemovalTargets, method: Installation.
     prompts.log.info(`  ✓ Binary: ${shortenPath(targets.binary)}`)
   }
 
+  for (const artifact of targets.localArtifacts) {
+    const exists = await fs
+      .access(artifact.path)
+      .then(() => true)
+      .catch(() => false)
+    if (!exists) continue
+    prompts.log.info(`  ✓ ${artifact.label}: ${shortenPath(artifact.path)}`)
+  }
+
   if (targets.shellConfig) {
     prompts.log.info(`  ✓ Shell PATH in ${shortenPath(targets.shellConfig)}`)
   }
@@ -138,6 +149,33 @@ async function showRemovalSummary(targets: RemovalTargets, method: Installation.
     }
     prompts.log.info(`  ✓ Package: ${cmds[method] || method}`)
   }
+}
+
+function getLocalArtifacts(): RemovalTargets["localArtifacts"] {
+  const home = os.homedir()
+  return [
+    {
+      path: path.join(home, ".local", "bin", "opencode"),
+      label: "CLI symlink",
+    },
+    {
+      path: path.join(home, ".local", "share", "applications", "opencode.desktop"),
+      label: "Desktop entry",
+    },
+    {
+      path: path.join(home, ".local", "share", "icons", "hicolor", "128x128", "apps", "opencode.png"),
+      label: "Desktop icon",
+    },
+  ]
+}
+
+async function refreshDesktopCaches() {
+  const home = os.homedir()
+  const appsDir = path.join(home, ".local", "share", "applications")
+  const iconRoot = path.join(home, ".local", "share", "icons", "hicolor")
+
+  await $`update-desktop-database ${appsDir}`.nothrow()
+  await $`gtk-update-icon-cache -f -t ${iconRoot}`.nothrow()
 }
 
 async function executeUninstall(method: Installation.Method, targets: RemovalTargets) {
@@ -175,6 +213,31 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
     } else {
       spinner.stop("Cleaned shell config")
     }
+  }
+
+  let removedDesktopIntegration = false
+  for (const artifact of targets.localArtifacts) {
+    const exists = await fs
+      .access(artifact.path)
+      .then(() => true)
+      .catch(() => false)
+    if (!exists) continue
+
+    spinner.start(`Removing ${artifact.label}...`)
+    const err = await fs.rm(artifact.path, { force: true }).catch((e) => e)
+    if (err) {
+      spinner.stop(`Failed to remove ${artifact.label}`, 1)
+      errors.push(`${artifact.label}: ${err.message}`)
+      continue
+    }
+    if (artifact.label !== "CLI symlink") {
+      removedDesktopIntegration = true
+    }
+    spinner.stop(`Removed ${artifact.label}`)
+  }
+
+  if (removedDesktopIntegration) {
+    await refreshDesktopCaches()
   }
 
   if (method !== "curl" && method !== "unknown") {

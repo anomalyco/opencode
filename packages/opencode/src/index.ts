@@ -26,6 +26,9 @@ import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
+import { DesktopCommand } from "./cli/cmd/desktop"
+import { UpdateCommand } from "./cli/cmd/update"
+import { BuildCommand } from "./cli/cmd/build"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -82,6 +85,9 @@ const cli = yargs(hideBin(process.argv))
   .command(TuiThreadCommand)
   .command(AttachCommand)
   .command(RunCommand)
+  .command(BuildCommand)
+  .command(UpdateCommand)
+  .command(DesktopCommand)
   .command(GenerateCommand)
   .command(DebugCommand)
   .command(AuthCommand)

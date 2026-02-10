@@ -43,6 +43,7 @@ function createEventSource(client: RpcClient): EventSource {
 
 export const TuiThreadCommand = cmd({
   command: "$0 [project]",
+  aliases: ["tui"],
   describe: "start opencode tui",
   builder: (yargs) =>
     withNetworkOptions(yargs)
