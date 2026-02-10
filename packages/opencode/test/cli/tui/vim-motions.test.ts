@@ -403,7 +403,7 @@ describe("vim motion handler", () => {
     expect(ctx.state.mode()).toBe("normal")
   })
 
-  test("submit from normal resets mode and pending", () => {
+  test("submit from normal keeps mode and clears pending", () => {
     let calls = 0
     const ctx = createHandler("", {
       mode: "normal",
@@ -416,7 +416,7 @@ describe("vim motion handler", () => {
     ctx.handler.handleKey(createEvent("return").event)
 
     expect(calls).toBe(1)
-    expect(ctx.state.mode()).toBe("insert")
+    expect(ctx.state.mode()).toBe("normal")
     expect(ctx.state.pending()).toBe("")
   })
 
