@@ -740,6 +740,11 @@ export const SessionRoutes = lazy(() =>
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
           const result = await SessionPrompt.prompt({ ...body, sessionID })
+          if ("reason" in result) {
+            if (result.reason === "cancelled") return
+            stream.write(JSON.stringify(result.message))
+            return
+          }
           stream.write(JSON.stringify(result))
         })
       },
