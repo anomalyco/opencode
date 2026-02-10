@@ -119,7 +119,7 @@ export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
 - `directory`：當前工作目錄。
 - `worktree`：git 工作樹路徑。
 - `client`：用於與 AI 交互的opencode SDK 客戶端。
-- `$`：Bun的[外殼API](https://bun.com/docs/runtime/shell)用於執行命令。
+- `$`：Bun的[shell API](https://bun.com/docs/runtime/shell)用於執行命令。
 
 ---
 
@@ -235,7 +235,7 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 我們使用 `osascript` 在 macOS 上運行 AppleScript。這裡我們用它來發送通知。
 
 :::note
-如果您使用 opencode 桌面應用程序，它可以在響應準備就緒或會話出錯時自動發送系統通知。
+如果您使用 opencode 桌面應用程式，它可以在響應準備就緒或會話出錯時自動發送系統通知。
 :::
 
 ---
@@ -260,7 +260,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 ### 注入環境變量
 
-將環境變量注入所有 shell 執行（AI 工具和用戶終端）：
+將環境變量注入所有 shell 執行（AI 工具和用戶 terminal）：
 
 ```javascript title=".opencode/plugins/inject-env.js"
 export const InjectEnvPlugin = async () => {
@@ -327,7 +327,7 @@ export const MyPlugin = async ({ client }) => {
 }
 ```
 
-級別：`debug`、`info`、`warn`、`error`。詳情請參閱[SDK文檔](https://opencode.ai/docs/sdk)。
+級別：`debug`、`info`、`warn`、`error`。詳情請參閱[SDK 文件](https://opencode.ai/docs/sdk)。
 
 ---
 

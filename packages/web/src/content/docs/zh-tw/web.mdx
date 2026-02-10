@@ -3,13 +3,13 @@ title: 網絡
 description: 在瀏覽器中使用 opencode。
 ---
 
-opencode 可以在瀏覽器中作為 Web 應用程序運行，無需終端即可提供同樣強大的 AI 編碼體驗。
+opencode 可以在瀏覽器中作為 Web 應用程式運行，無需terminal即可提供同樣強大的 AI 編碼體驗。
 
 ![opencode Web - 新會話](../../../assets/web/web-homepage-new-session.png)
 
 ## 入門
 
-通過運行以下命令啟動 Web 界面：
+通過運行以下命令啟動 Web 介面：
 
 ```bash
 opencode web
@@ -22,7 +22,7 @@ opencode web
 :::
 
 :::tip[Windows 用戶]
-為了獲得最佳體驗，請從 [世界SL](/docs/windows-wsl) 而不是 PowerShell 運行 `opencode web`。這確保了正確的文件系統訪問和終端集成。
+為了獲得最佳體驗，請從 [WSL](/docs/windows-wsl) 而不是 PowerShell 運行 `opencode web`。這確保了正確的檔案系統訪問和terminal集成。
 :::
 
 ---
@@ -90,9 +90,9 @@ OPENCODE_SERVER_PASSWORD=secret opencode web
 
 ---
 
-## 使用網絡界面
+## 使用網絡介面
 
-啟動後，Web 界面將提供對 opencode 會話的訪問。
+啟動後，Web 介面將提供對 opencode 會話的訪問。
 
 ### 會議
 
@@ -108,9 +108,9 @@ OPENCODE_SERVER_PASSWORD=secret opencode web
 
 ---
 
-## 連接終端
+## 連接terminal
 
-您可以將終端 TUI 連接到正在運行的 Web 服務器：
+您可以將terminal TUI 連接到正在運行的 Web 服務器：
 
 ```bash
 # Start the web server
@@ -120,7 +120,7 @@ opencode web --port 4096
 opencode attach http://localhost:4096
 ```
 
-這允許您同時使用 Web 界面和終端，共享相同的會話和狀態。
+這允許您同時使用 Web 介面和terminal，共享相同的會話和狀態。
 
 ---
 

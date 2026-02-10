@@ -119,7 +119,7 @@ export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
 - `directory`: 現在の作業ディレクトリ。
 - `worktree`: git ワークツリーのパス。
 - `client`: AI と対話するためのopencode SDK クライアント。
-- `$`: Bun の [コマンドを実行するためのシェル API](https://bun.com/docs/runtime/shell)。
+- `$`: Bun の [コマンドを実行するためのshell API](https://bun.com/docs/runtime/shell)。
 
 ---
 
@@ -192,7 +192,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 - `todo.updated`
 
-#### シェルイベント
+#### shellイベント
 
 - `shell.env`
 
@@ -260,7 +260,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 ### 環境変数を挿入する
 
-すべてのシェル実行 (AI ツールとユーザー端末) に環境変数を挿入します。
+すべてのshell 実行 (AI ツールとユーザーterminal) に環境変数を挿入します。
 
 ```javascript title=".opencode/plugins/inject-env.js"
 export const InjectEnvPlugin = async () => {

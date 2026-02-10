@@ -18,10 +18,10 @@ import {
   AuthError,
   CreditsError,
   MonthlyLimitError,
-  SubscriptionError,
   UserLimitError,
   ModelError,
-  RateLimitError,
+  FreeUsageLimitError,
+  SubscriptionUsageLimitError,
 } from "./error"
 import { createBodyConverter, createStreamPartConverter, createResponseConverter, UsageInfo } from "./provider/provider"
 import { anthropicHelper } from "./provider/anthropic"
@@ -304,9 +304,9 @@ export async function handler(
         { status: 401 },
       )
 
-    if (error instanceof RateLimitError || error instanceof SubscriptionError) {
+    if (error instanceof FreeUsageLimitError || error instanceof SubscriptionUsageLimitError) {
       const headers = new Headers()
-      if (error instanceof SubscriptionError && error.retryAfter) {
+      if (error instanceof SubscriptionUsageLimitError && error.retryAfter) {
         headers.set("retry-after", String(error.retryAfter))
       }
       return new Response(
@@ -520,7 +520,7 @@ export async function handler(
             timeUpdated: sub.timeFixedUpdated,
           })
           if (result.status === "rate-limited")
-            throw new SubscriptionError(
+            throw new SubscriptionUsageLimitError(
               `Subscription quota exceeded. Retry in ${formatRetryTime(result.resetInSec)}.`,
               result.resetInSec,
             )
@@ -534,7 +534,7 @@ export async function handler(
             timeUpdated: sub.timeRollingUpdated,
           })
           if (result.status === "rate-limited")
-            throw new SubscriptionError(
+            throw new SubscriptionUsageLimitError(
               `Subscription quota exceeded. Retry in ${formatRetryTime(result.resetInSec)}.`,
               result.resetInSec,
             )

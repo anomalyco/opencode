@@ -112,7 +112,7 @@ describe("buildRequestParts", () => {
       // Special chars should be encoded
       expect(filePart.url).toContain("file%23name.txt")
       // Should have Windows drive letter properly encoded
-      expect(filePart.url).toMatch(/file:\/\/\/[A-Z]%3A/)
+      expect(filePart.url).toMatch(/file:\/\/\/[A-Z]:/)
     }
   })
 
@@ -210,7 +210,7 @@ describe("buildRequestParts", () => {
     if (filePart?.type === "file") {
       // Should handle absolute path that differs from sessionDirectory
       expect(() => new URL(filePart.url)).not.toThrow()
-      expect(filePart.url).toContain("/D%3A/other/project/file.ts")
+      expect(filePart.url).toContain("/D:/other/project/file.ts")
     }
   })
 

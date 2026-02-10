@@ -1,11 +1,11 @@
 ---
 title: TUI
-description: Использование пользовательского интерфейса терминала opencode.
+description: Использование TUI opencode.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-opencode предоставляет интерактивный интерфейс терминала или TUI для работы над вашими проектами с помощью LLM.
+opencode предоставляет интерактивный terminal интерфейс или TUI для работы над вашими проектами с помощью LLM.
 
 Запуск opencode запускает TUI для текущего каталога.
 
@@ -45,7 +45,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## Bash-команды
 
-Начните сообщение с `!`, чтобы запустить команду оболочки.
+Начните сообщение с `!`, чтобы запустить shell-команду.
 
 ```bash frame="none"
 !ls -la
@@ -301,7 +301,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
     export EDITOR="code --wait"
     ```
 
-    Чтобы сделать его постоянным, добавьте это в свой профиль оболочки;
+    Чтобы сделать его постоянным, добавьте это в свой профиль shell;
     `~/.bashrc`, `~/.zshrc` и т. д.
 
   </TabItem>
@@ -336,9 +336,9 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 Популярные варианты редактора включают в себя:
 
-- `code` — код Visual Studio
-- `cursor` — Курсор
-- `windsurf` - Виндсерфинг
+- `code` — VS Code
+- `cursor` — Cursor
+- `windsurf` - Windsurf
 - `nvim` - Редактор Neovim
 - `vim` — редактор Vim
 - `nano` — Нано-редактор
@@ -349,7 +349,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 Некоторые редакторы, такие как VS Code, необходимо запускать с флагом `--wait`.
 :::
 
-Некоторым редакторам для работы в режиме блокировки необходимы аргументы командной строки. Флаг `--wait` блокирует процесс редактора до его закрытия.
+Некоторым редакторам для работы в режиме блокировки необходимы CLI-аргументы. Флаг `--wait` блокирует процесс редактора до его закрытия.
 
 ---
 
