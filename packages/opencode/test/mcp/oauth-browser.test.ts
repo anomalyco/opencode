@@ -96,6 +96,7 @@ beforeEach(() => {
   openShouldFail = false
   openCalledWith = undefined
   transportCalls.length = 0
+  delete process.env.OPENCODE_CALLER
 })
 
 // Import modules after mocking

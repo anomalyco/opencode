@@ -5,6 +5,22 @@ import * as vscode from "vscode"
 
 const TERMINAL_NAME = "opencode"
 
+interface SSEEvent {
+  type: string
+  properties: Record<string, unknown>
+}
+
+interface BrowserOpenEvent {
+  type: "browser.open"
+  properties: {
+    url: string
+    callbackPort?: number
+  }
+}
+
+const sseConnections = new Map<vscode.Terminal, AbortController>()
+const lastOpenedUrls = new Map<string, number>()
+
 export function activate(context: vscode.ExtensionContext) {
   let openNewTerminalDisposable = vscode.commands.registerCommand("opencode.openNewTerminal", async () => {
     await openTerminal()
@@ -12,7 +28,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   let openTerminalDisposable = vscode.commands.registerCommand("opencode.openTerminal", async () => {
     // An opencode terminal already exists => focus it
-    const existingTerminal = vscode.window.terminals.find((t) => t.name === TERMINAL_NAME)
+    const existingTerminal = vscode.window.terminals.find((t: vscode.Terminal) => t.name === TERMINAL_NAME)
     if (existingTerminal) {
       existingTerminal.show()
       return
@@ -33,14 +49,91 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     if (terminal.name === TERMINAL_NAME) {
-      // @ts-ignore
-      const port = terminal.creationOptions.env?.["_EXTENSION_OPENCODE_PORT"]
+      const options = terminal.creationOptions as vscode.TerminalOptions
+      const port = options.env?.["_EXTENSION_OPENCODE_PORT"]
       port ? await appendPrompt(parseInt(port), fileRef) : terminal.sendText(fileRef, false)
       terminal.show()
     }
   })
 
-  context.subscriptions.push(openTerminalDisposable, addFilepathDisposable)
+  context.subscriptions.push(openTerminalDisposable, addFilepathDisposable, openNewTerminalDisposable)
+
+  const terminalCloseListener = vscode.window.onDidCloseTerminal((terminal: vscode.Terminal) => {
+    const controller = sseConnections.get(terminal)
+    if (controller) {
+      controller.abort()
+      sseConnections.delete(terminal)
+    }
+  })
+  context.subscriptions.push(terminalCloseListener)
+
+  async function connectSSE(port: number, terminal: vscode.Terminal, signal: AbortSignal) {
+    let backoff = 1000
+    const maxBackoff = 30000
+
+    async function connect() {
+      if (signal.aborted) return
+
+      const response = await fetch(`http://localhost:${port}/event`, { signal }).catch(() => null)
+      if (!response || !response.body) {
+        if (signal.aborted) return
+        await new Promise((resolve) => setTimeout(resolve, backoff))
+        backoff = Math.min(backoff * 2, maxBackoff)
+        return connect()
+      }
+
+      backoff = 1000
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ""
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split("\n")
+          buffer = lines.pop() || ""
+
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue
+
+            const json = line.slice(6)
+            const event = JSON.parse(json) as SSEEvent
+
+            if (event.type === "browser.open") {
+              const browserEvent = event as BrowserOpenEvent
+              const url = browserEvent.properties.url
+              const callbackPort = browserEvent.properties.callbackPort
+
+              const now = Date.now()
+              const lastOpened = lastOpenedUrls.get(url)
+              if (lastOpened && now - lastOpened < 5000) continue
+
+              lastOpenedUrls.set(url, now)
+
+              if (callbackPort) {
+                await vscode.env.asExternalUri(vscode.Uri.parse(`http://127.0.0.1:${callbackPort}`))
+              }
+
+              await vscode.env.openExternal(vscode.Uri.parse(url))
+            }
+          }
+        }
+      } catch (e) {
+        if (signal.aborted) return
+      }
+
+      if (!signal.aborted) {
+        await new Promise((resolve) => setTimeout(resolve, backoff))
+        backoff = Math.min(backoff * 2, maxBackoff)
+        return connect()
+      }
+    }
+
+    connect().catch(() => {})
+  }
 
   async function openTerminal() {
     // Create a new terminal in split screen
@@ -63,6 +156,10 @@ export function activate(context: vscode.ExtensionContext) {
 
     terminal.show()
     terminal.sendText(`opencode --port ${port}`)
+
+    const controller = new AbortController()
+    sseConnections.set(terminal, controller)
+    connectSSE(port, terminal, controller.signal)
 
     const fileRef = getActiveFile()
     if (!fileRef) {

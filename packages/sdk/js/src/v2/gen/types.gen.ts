@@ -734,6 +734,21 @@ export type EventTuiSessionSelect = {
   }
 }
 
+export type EventIdeInstalled = {
+  type: "ide.installed"
+  properties: {
+    ide: string
+  }
+}
+
+export type EventBrowserOpen = {
+  type: "browser.open"
+  properties: {
+    url: string
+    callbackPort?: number
+  }
+}
+
 export type EventMcpToolsChanged = {
   type: "mcp.tools.changed"
   properties: {
@@ -933,6 +948,8 @@ export type Event =
   | EventTuiCommandExecute
   | EventTuiToastShow
   | EventTuiSessionSelect
+  | EventIdeInstalled
+  | EventBrowserOpen
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
   | EventCommandExecuted

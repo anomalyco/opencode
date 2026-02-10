@@ -1,5 +1,4 @@
 import path from "path"
-import { exec } from "child_process"
 import * as prompts from "@clack/prompts"
 import { map, pipe, sortBy, values } from "remeda"
 import { Octokit } from "@octokit/rest"
@@ -17,6 +16,7 @@ import type {
 } from "@octokit/webhooks-types"
 import { UI } from "../ui"
 import { cmd } from "./cmd"
+import { Browser } from "@/util/browser"
 import { ModelsDev } from "../../provider/models"
 import { Instance } from "@/project/instance"
 import { bootstrap } from "../bootstrap"
@@ -311,17 +311,8 @@ export const GithubInstallCommand = cmd({
 
             // Open browser
             const url = "https://github.com/apps/opencode-agent"
-            const command =
-              process.platform === "darwin"
-                ? `open "${url}"`
-                : process.platform === "win32"
-                  ? `start "" "${url}"`
-                  : `xdg-open "${url}"`
-
-            exec(command, (error) => {
-              if (error) {
-                prompts.log.warn(`Could not open browser. Please visit: ${url}`)
-              }
+            Browser.open(url).catch(() => {
+              prompts.log.warn(`Could not open browser. Please visit: ${url}`)
             })
 
             // Wait for installation

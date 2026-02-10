@@ -22,7 +22,8 @@ import { McpAuth } from "./auth"
 import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
-import open from "open"
+import { Browser } from "@/util/browser"
+import { OAUTH_CALLBACK_PORT } from "./oauth-provider"
 
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
@@ -803,14 +804,10 @@ export namespace MCP {
     // when the IdP has an active SSO session and redirects immediately
     const callbackPromise = McpOAuthCallback.waitForCallback(oauthState)
 
-    try {
-      const subprocess = await open(authorizationUrl)
-      // The open package spawns a detached process and returns immediately.
-      // We need to listen for errors which fire asynchronously:
-      // - "error" event: command not found (ENOENT)
-      // - "exit" with non-zero code: command exists but failed (e.g., no display)
+    const subprocess = await Browser.open(authorizationUrl, { callbackPort: OAUTH_CALLBACK_PORT })
+    if (subprocess) {
+      // Not in VS Code context — wait for subprocess errors
       await new Promise<void>((resolve, reject) => {
-        // Give the process a moment to fail if it's going to
         const timeout = setTimeout(() => resolve(), 500)
         subprocess.on("error", (error) => {
           clearTimeout(timeout)
@@ -822,12 +819,10 @@ export namespace MCP {
             reject(new Error(`Browser open failed with exit code ${code}`))
           }
         })
+      }).catch((error) => {
+        log.warn("failed to open browser, user must open URL manually", { mcpName, error })
+        Bus.publish(BrowserOpenFailed, { mcpName, url: authorizationUrl })
       })
-    } catch (error) {
-      // Browser opening failed (e.g., in remote/headless sessions like SSH, devcontainers)
-      // Emit event so CLI can display the URL for manual opening
-      log.warn("failed to open browser, user must open URL manually", { mcpName, error })
-      Bus.publish(BrowserOpenFailed, { mcpName, url: authorizationUrl })
     }
 
     // Wait for callback using the already-registered promise
