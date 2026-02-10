@@ -181,20 +181,6 @@ export default function Layout(props: ParentProps) {
     aim.reset()
   })
 
-  createEffect(
-    on(
-      () => ({ dir: params.dir, id: params.id }),
-      () => {
-        if (layout.sidebar.opened()) return
-        if (!state.hoverProject) return
-        aim.reset()
-        setState("hoverSession", undefined)
-        setState("hoverProject", undefined)
-      },
-      { defer: true },
-    ),
-  )
-
   const autoselecting = createMemo(() => {
     if (params.dir) return false
     if (!state.autoselect) return false
