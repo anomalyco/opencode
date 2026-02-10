@@ -113,6 +113,28 @@ export function BasicTool(props: BasicToolProps) {
   )
 }
 
-export function GenericTool(props: { tool: string; hideDetails?: boolean }) {
-  return <BasicTool icon="mcp" trigger={{ title: props.tool }} hideDetails={props.hideDetails} />
+export function GenericTool(props: {
+  tool: string
+  output?: string
+  hideDetails?: boolean
+  defaultOpen?: boolean
+  forceOpen?: boolean
+  locked?: boolean
+}) {
+  return (
+    <BasicTool
+      icon="mcp"
+      trigger={{ title: props.tool }}
+      hideDetails={props.hideDetails}
+      defaultOpen={props.defaultOpen}
+      forceOpen={props.forceOpen}
+      locked={props.locked}
+    >
+      <Show when={props.output}>
+        <div data-component="tool-output" data-scrollable>
+          <pre style={{ "white-space": "pre-wrap", "word-break": "break-word", margin: "0" }}>{props.output}</pre>
+        </div>
+      </Show>
+    </BasicTool>
+  )
 }
