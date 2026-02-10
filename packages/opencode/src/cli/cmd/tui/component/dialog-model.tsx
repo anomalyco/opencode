@@ -33,8 +33,6 @@ export function DialogModel(props: { providerID?: string }) {
     const favorites = connected() ? local.model.favorite() : []
     const recents = local.model.recent()
 
-    const limit = sync.data.config.tui?.recent_models_count ?? 10
-
     function toOptions(items: typeof favorites, category: string) {
       if (!showSections) return []
       return items.flatMap((item) => {
@@ -61,6 +59,8 @@ export function DialogModel(props: { providerID?: string }) {
     }
 
     const favoriteOptions = toOptions(favorites, "Favorites")
+
+    const limit = sync.data.config.tui?.recent_models_count ?? 10
     const recentOptions = toOptions(
       recents
         .filter(
