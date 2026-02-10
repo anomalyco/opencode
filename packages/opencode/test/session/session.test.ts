@@ -140,3 +140,55 @@ describe("step-finish token propagation via Bus event", () => {
     { timeout: 30000 },
   )
 })
+
+describe("session.create custom id", () => {
+  test("custom ID accepted", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const customId = Identifier.descending("session")
+        const session = await Session.create({ id: customId })
+
+        expect(session.id).toBe(customId)
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+
+  test("default behavior preserved", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const session = await Session.create({})
+
+        expect(session.id).toMatch(/^ses_[0-9a-f]{12}[0-9A-Za-z]{14}$/)
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+
+  test("duplicate ID returns error", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const customId = Identifier.descending("session")
+        const session = await Session.create({ id: customId })
+
+        await expect(Session.create({ id: customId })).rejects.toThrow("DuplicateIDError")
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+
+  test("invalid prefix rejected", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        expect(() => Session.create({ id: "bad_a1b2c3d4e5f6AbCdEfGhIjKlMn" })).toThrow()
+      },
+    })
+  })
+})
