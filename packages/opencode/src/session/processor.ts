@@ -15,6 +15,7 @@ import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
+import { SessionStatusMessage } from "./status-message"
 
 export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
@@ -56,7 +57,7 @@ export namespace SessionProcessor {
               input.abort.throwIfAborted()
               switch (value.type) {
                 case "start":
-                  SessionStatus.set(input.sessionID, { type: "busy" })
+                  SessionStatus.set(input.sessionID, { type: "busy", message: "Thinking..." })
                   break
 
                 case "reasoning-start":
@@ -166,6 +167,10 @@ export namespace SessionProcessor {
                         ruleset: agent.permission,
                       })
                     }
+                    SessionStatus.set(input.sessionID, {
+                      type: "busy",
+                      message: SessionStatusMessage.generate(value.toolName, value.input),
+                    })
                   }
                   break
                 }
@@ -231,6 +236,7 @@ export namespace SessionProcessor {
                     snapshot,
                     type: "step-start",
                   })
+                  SessionStatus.set(input.sessionID, { type: "busy", message: "Processing..." })
                   break
 
                 case "finish-step":
@@ -253,6 +259,7 @@ export namespace SessionProcessor {
                     cost: usage.cost,
                   })
                   await Session.updateMessage(input.assistantMessage)
+                  SessionStatus.set(input.sessionID, { type: "idle" })
                   if (snapshot) {
                     const patch = await Snapshot.patch(snapshot)
                     if (patch.files.length) {
@@ -277,6 +284,7 @@ export namespace SessionProcessor {
                   break
 
                 case "text-start":
+                  SessionStatus.set(input.sessionID, { type: "busy", message: "Generating response..." })
                   currentText = {
                     id: Identifier.ascending("part"),
                     messageID: input.assistantMessage.id,
@@ -395,6 +403,7 @@ export namespace SessionProcessor {
           }
           input.assistantMessage.time.completed = Date.now()
           await Session.updateMessage(input.assistantMessage)
+          SessionStatus.set(input.sessionID, { type: "idle" })
           if (needsCompaction) return "compact"
           if (blocked) return "stop"
           if (input.assistantMessage.error) return "stop"

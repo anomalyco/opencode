@@ -7408,6 +7408,9 @@
               "type": {
                 "type": "string",
                 "const": "busy"
+              },
+              "message": {
+                "type": "string"
               }
             },
             "required": ["type"]

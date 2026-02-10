@@ -19,7 +19,7 @@ import { useRenderer } from "@opentui/solid"
 import { Editor } from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import { Clipboard } from "../../util/clipboard"
-import type { FilePart } from "@opencode-ai/sdk/v2"
+import type { FilePart, SessionStatus } from "@opencode-ai/sdk/v2"
 import { TuiEvent } from "../../event"
 import { iife } from "@/util/iife"
 import { Locale } from "@/util/locale"
@@ -1034,6 +1034,11 @@ export function Prompt(props: PromptProps) {
                     <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
                   </Show>
                 </box>
+                <Show when={status().type === "busy"}>
+                  <text fg={theme.textMuted}>
+                    {(status() as Extract<SessionStatus, { type: "busy" }>).message || "BUSY..."}
+                  </text>
+                </Show>
                 <box flexDirection="row" gap={1} flexShrink={0}>
                   {(() => {
                     const retry = createMemo(() => {
