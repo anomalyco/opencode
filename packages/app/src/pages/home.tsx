@@ -46,8 +46,7 @@ export default function Home() {
       }
     }
 
-    const wslEnabled = platform.wslEnabled?.() === true
-    if (platform.openDirectoryPickerDialog && server.isLocal() && !wslEnabled) {
+    if (platform.openDirectoryPickerDialog && server.isLocal() && !(await platform.getWslEnabled?.())) {
       const result = await platform.openDirectoryPickerDialog?.({
         title: language.t("command.project.open"),
         multiple: true,

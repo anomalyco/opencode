@@ -204,57 +204,55 @@ pub fn create_command(app: &tauri::AppHandle, args: &str, extra_env: &[(&str, St
             .map(|(key, value)| (key.to_string(), value.clone())),
     );
 
-    #[cfg(target_os = "windows")]
-    if is_wsl_enabled(app) {
-        let version = app.package_info().version.to_string();
-        let mut script = vec![
-            "set -e".to_string(),
-            "BIN=\"$HOME/.opencode/bin/opencode\"".to_string(),
-            "if [ ! -x \"$BIN\" ]; then".to_string(),
-            format!(
-                "  curl -fsSL https://opencode.ai/install | bash -s -- --version {} --no-modify-path",
-                shell_escape(&version)
-            ),
-            "fi".to_string(),
-        ];
+    if cfg!(windows) {
+        if is_wsl_enabled(app) {
+            let version = app.package_info().version.to_string();
+            let mut script = vec![
+                "set -e".to_string(),
+                "BIN=\"$HOME/.opencode/bin/opencode\"".to_string(),
+                "if [ ! -x \"$BIN\" ]; then".to_string(),
+                format!(
+                    "  curl -fsSL https://opencode.ai/install | bash -s -- --version {} --no-modify-path",
+                    shell_escape(&version)
+                ),
+                "fi".to_string(),
+            ];
 
-        let mut env_prefix = vec![
-            "OPENCODE_EXPERIMENTAL_ICON_DISCOVERY=true".to_string(),
-            "OPENCODE_EXPERIMENTAL_FILEWATCHER=true".to_string(),
-            "OPENCODE_CLIENT=desktop".to_string(),
-            "XDG_STATE_HOME=\"$HOME/.local/state\"".to_string(),
-        ];
-        env_prefix.extend(
-            envs.iter()
-                .filter(|(key, _)| key != "OPENCODE_EXPERIMENTAL_ICON_DISCOVERY")
-                .filter(|(key, _)| key != "OPENCODE_EXPERIMENTAL_FILEWATCHER")
-                .filter(|(key, _)| key != "OPENCODE_CLIENT")
-                .filter(|(key, _)| key != "XDG_STATE_HOME")
-                .map(|(key, value)| format!("{}={}", key, shell_escape(value))),
-        );
+            let mut env_prefix = vec![
+                "OPENCODE_EXPERIMENTAL_ICON_DISCOVERY=true".to_string(),
+                "OPENCODE_EXPERIMENTAL_FILEWATCHER=true".to_string(),
+                "OPENCODE_CLIENT=desktop".to_string(),
+                "XDG_STATE_HOME=\"$HOME/.local/state\"".to_string(),
+            ];
+            env_prefix.extend(
+                envs.iter()
+                    .filter(|(key, _)| key != "OPENCODE_EXPERIMENTAL_ICON_DISCOVERY")
+                    .filter(|(key, _)| key != "OPENCODE_EXPERIMENTAL_FILEWATCHER")
+                    .filter(|(key, _)| key != "OPENCODE_CLIENT")
+                    .filter(|(key, _)| key != "XDG_STATE_HOME")
+                    .map(|(key, value)| format!("{}={}", key, shell_escape(value))),
+            );
 
-        script.push(format!("{} exec \"$BIN\" {}", env_prefix.join(" "), args));
+            script.push(format!("{} exec \"$BIN\" {}", env_prefix.join(" "), args));
 
-        return app
-            .shell()
-            .command("wsl")
-            .args(["-e", "bash", "-lc", &script.join("\n")]);
-    }
+            return app
+                .shell()
+                .command("wsl")
+                .args(["-e", "bash", "-lc", &script.join("\n")]);
+        } else {
+            let mut cmd = app
+                .shell()
+                .sidecar("opencode-cli")
+                .unwrap()
+                .args(args.split_whitespace());
 
-    let mut cmd = app
-        .shell()
-        .sidecar("opencode-cli")
-        .unwrap()
-        .args(args.split_whitespace());
+            for (key, value) in envs {
+                cmd = cmd.env(key, value);
+            }
 
-    for (key, value) in envs {
-        cmd = cmd.env(key, value);
-    }
-
-    return cmd;
-
-    #[cfg(not(target_os = "windows"))]
-    return {
+            return cmd;
+        }
+    } else {
         let sidecar = get_sidecar_path(app);
         let shell = get_user_shell();
 
@@ -271,7 +269,7 @@ pub fn create_command(app: &tauri::AppHandle, args: &str, extra_env: &[(&str, St
         }
 
         cmd
-    };
+    }
 }
 
 pub fn serve(app: &AppHandle, hostname: &str, port: u32, password: &str) -> CommandChild {

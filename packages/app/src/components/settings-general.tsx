@@ -367,10 +367,10 @@ export const SettingsGeneral: Component = () => {
           </div>
         </div>
 
-        <Show when={platform.platform === "desktop" && platform.os === "windows" && platform.getWslConfig}>
+        <Show when={platform.platform === "desktop" && platform.os === "windows" && platform.getWslEnabled}>
           {(_) => {
-            const [valueResource, actions] = createResource(() => platform.getWslConfig?.())
-            const value = () => (valueResource.state === "pending" ? undefined : valueResource.latest)
+            const [enabledResource, actions] = createResource(() => platform.getWslEnabled?.())
+            const enabled = () => (enabledResource.state === "pending" ? undefined : enabledResource.latest)
 
             return (
               <div class="flex flex-col gap-1">
@@ -383,11 +383,9 @@ export const SettingsGeneral: Component = () => {
                   >
                     <div data-action="settings-wsl">
                       <Switch
-                        checked={value()?.enabled ?? false}
-                        disabled={valueResource.state === "pending"}
-                        onChange={(checked) =>
-                          platform.setWslConfig?.({ enabled: checked })?.finally(() => actions.refetch())
-                        }
+                        checked={enabled() ?? false}
+                        disabled={enabledResource.state === "pending"}
+                        onChange={(checked) => platform.setWslEnabled?.(checked)?.finally(() => actions.refetch())}
                       />
                     </div>
                   </SettingsRow>

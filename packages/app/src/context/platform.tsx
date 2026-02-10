@@ -61,10 +61,10 @@ export type Platform = {
   setDefaultServerUrl?(url: string | null): Promise<void> | void
 
   /** Get the configured WSL integration (desktop only) */
-  getWslConfig?(): Promise<{ enabled: boolean } | null> | { enabled: boolean } | null
+  getWslEnabled?(): Promise<boolean>
 
   /** Set the configured WSL integration (desktop only) */
-  setWslConfig?(config: { enabled: boolean }): Promise<void> | void
+  setWslEnabled?(config: boolean): Promise<void> | void
 
   /** Get the preferred display backend (desktop only) */
   getDisplayBackend?(): Promise<DisplayBackend | null> | DisplayBackend | null

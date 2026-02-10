@@ -12,8 +12,8 @@ export const commands = {
 	setDefaultServerUrl: (url: string | null) => __TAURI_INVOKE<null>("set_default_server_url", { url }),
 	getWslConfig: () => __TAURI_INVOKE<WslConfig>("get_wsl_config"),
 	setWslConfig: (config: WslConfig) => __TAURI_INVOKE<null>("set_wsl_config", { config }),
-	getDisplayBackend: () => __TAURI_INVOKE<DisplayBackend | null>("get_display_backend"),
-	setDisplayBackend: (backend: DisplayBackend) => __TAURI_INVOKE<null>("set_display_backend", { backend }),
+	getDisplayBackend: () => __TAURI_INVOKE<"wayland" | "auto" | null>("get_display_backend"),
+	setDisplayBackend: (backend: LinuxDisplayBackend) => __TAURI_INVOKE<null>("set_display_backend", { backend }),
 	parseMarkdownCommand: (markdown: string) => __TAURI_INVOKE<string>("parse_markdown_command", { markdown }),
 	checkAppExists: (appName: string) => __TAURI_INVOKE<boolean>("check_app_exists", { appName }),
 	wslPath: (path: string, mode: "windows" | "linux" | null) => __TAURI_INVOKE<string>("wsl_path", { path, mode }),
@@ -25,19 +25,19 @@ export const events = {
 };
 
 /* Types */
-export type WslConfig = {
-		enabled: boolean,
-	};
-
-export type DisplayBackend = "wayland" | "auto";
-
 export type InitStep = { phase: "server_waiting" } | { phase: "sqlite_waiting" } | { phase: "done" };
+
+export type LinuxDisplayBackend = "wayland" | "auto";
 
 export type LoadingWindowComplete = null;
 
 export type ServerReadyData = {
 		url: string,
 		password: string | null,
+	};
+
+export type WslConfig = {
+		enabled: boolean,
 	};
 
 export type WslPathMode = "windows" | "linux";
@@ -58,3 +58,4 @@ function makeEvent<T>(name: string) {
 
     return Object.assign(fn, base);
 }
+

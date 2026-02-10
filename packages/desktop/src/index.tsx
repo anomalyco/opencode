@@ -58,13 +58,10 @@ const listenForDeepLinks = async () => {
   await onOpenUrl((urls) => emitDeepLinks(urls)).catch(() => undefined)
 }
 
-const defaultWsl: WslConfig = { enabled: false }
-
 const createPlatform = (
   password: Accessor<string | null>,
-  wsl: Accessor<WslConfig>,
+  wsl: Accessor<boolean>,
   setWsl: (next: WslConfig) => void,
-  fetchWsl: () => Promise<WslConfig | null>,
 ): Platform => {
   const os = (() => {
     const type = ostype()
@@ -78,7 +75,6 @@ const createPlatform = (
     version: pkg.version,
 
     async openDirectoryPickerDialog(opts) {
-      if (wsl().enabled) return null
       const result = await open({
         directory: true,
         multiple: opts?.multiple ?? false,
@@ -109,7 +105,7 @@ const createPlatform = (
     },
 
     async openPath(path: string, app?: string) {
-      if (wsl().enabled && os === "windows") {
+      if (wsl() && os === "windows") {
         const converted = await commands.wslPath(path, "windows").catch(() => null)
         return openerOpenPath(converted && converted.length > 0 ? converted : path, app)
       }
@@ -331,18 +327,37 @@ const createPlatform = (
         .catch(() => undefined)
     },
 
-    getWslConfig: async () => {
-      const next = await fetchWsl()
-      if (next) return next
+    fetch: (input, init) => {
+      const pw = password()
+
+      const addHeader = (headers: Headers, password: string) => {
+        headers.append("Authorization", `Basic ${btoa(`opencode:${password}`)}`)
+      }
+
+      if (input instanceof Request) {
+        if (pw) addHeader(input.headers, pw)
+        return tauriFetch(input)
+      } else {
+        const headers = new Headers(init?.headers)
+        if (pw) addHeader(headers, pw)
+        return tauriFetch(input, {
+          ...(init as any),
+          headers: headers,
+        })
+      }
+    },
+
+    getWslEnabled: async () => {
+      const next = await commands.getWslConfig().catch(() => null)
+      if (next) return next.enabled
       return wsl()
     },
 
-    setWslConfig: async (config: WslConfig) => {
-      setWsl(config)
-      await commands.setWslConfig(config).catch(() => undefined)
+    setWslEnabled: async (enabled) => {
+      await commands.setWslConfig({ enabled })
     },
 
-    wslEnabled: () => wsl().enabled,
+    wslEnabled: () => wsl(),
 
     getDefaultServerUrl: async () => {
       const result = await commands.getDefaultServerUrl().catch(() => null)
@@ -359,7 +374,7 @@ const createPlatform = (
     },
 
     setDisplayBackend: async (backend) => {
-      await commands.setDisplayBackend(backend).catch(() => undefined)
+      await commands.setDisplayBackend(backend)
     },
 
     parseMarkdown: (markdown: string) => commands.parseMarkdownCommand(markdown),
@@ -403,16 +418,9 @@ void listenForDeepLinks()
 
 render(() => {
   const [serverPassword, setServerPassword] = createSignal<string | null>(null)
-  const [wsl, setWsl] = createSignal<WslConfig>(defaultWsl)
+  const [wsl, setWsl] = createSignal(window.__OPENCODE__?.wsl ?? false)
 
-  const fetchWsl = async () => {
-    const next = await commands.getWslConfig().catch(() => null)
-    if (!next) return null
-    setWsl(next)
-    return next
-  }
-
-  const platform = createPlatform(() => serverPassword(), wsl, setWsl, fetchWsl)
+  const platform = createPlatform(() => serverPassword(), wsl, setWsl)
 
   function handleClick(e: MouseEvent) {
     const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
@@ -424,7 +432,6 @@ render(() => {
 
   onMount(() => {
     document.addEventListener("click", handleClick)
-    void fetchWsl()
     onCleanup(() => {
       document.removeEventListener("click", handleClick)
     })
