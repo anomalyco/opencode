@@ -8675,6 +8675,11 @@
             "default": "<leader>a",
             "type": "string"
           },
+          "mcp_list": {
+            "description": "Toggle MCPs",
+            "default": "<leader>;",
+            "type": "string"
+          },
           "agent_cycle": {
             "description": "Next agent",
             "default": "tab",

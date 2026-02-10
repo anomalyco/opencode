@@ -415,6 +415,7 @@ function App() {
     {
       title: "Toggle MCPs",
       value: "mcp.list",
+      keybind: "mcp_list",
       category: "Agent",
       slash: {
         name: "mcps",
