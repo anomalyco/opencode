@@ -1050,7 +1050,7 @@ export function Session() {
         }
         const isDelegate = info.delegate
         try {
-          await sdk.fetch(`${sdk.url}/team/${info.teamName}/delegate`, {
+          await fetch(`${sdk.url}/team/${info.teamName}/delegate`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ enabled: !isDelegate }),
