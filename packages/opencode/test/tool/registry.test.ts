@@ -114,6 +114,7 @@ describe("tool.registry", () => {
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
+        // registry should not crash; tool registers even with missing deps
         const ids = await ToolRegistry.ids()
         expect(ids).toContain("cowsay")
       },
