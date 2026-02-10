@@ -16,7 +16,13 @@ const key = (dir: string | undefined, to: string) => `${dir ?? ""}:${to}`
 
 const now = () => performance.now()
 
-const uid = () => crypto.randomUUID?.() ?? Math.random().toString(16).slice(2)
+const uid = () => {
+  try {
+    return crypto.randomUUID()
+  } catch {
+    return Math.random().toString(16).slice(2)
+  }
+}
 
 const navs = new Map<string, Nav>()
 const pending = new Map<string, string>()

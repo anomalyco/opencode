@@ -53,7 +53,13 @@ function createCommentSessionState(store: Store<CommentStore>, setStore: SetStor
 
   const add = (input: Omit<LineComment, "id" | "time">) => {
     const next: LineComment = {
-      id: crypto.randomUUID?.() ?? Math.random().toString(16).slice(2),
+      id: (() => {
+        try {
+          return crypto.randomUUID()
+        } catch {
+          return Math.random().toString(16).slice(2)
+        }
+      })(),
       time: Date.now(),
       ...input,
     }
