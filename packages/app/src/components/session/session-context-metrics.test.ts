@@ -79,15 +79,16 @@ describe("getSessionContextMetrics", () => {
     expect(metrics.context?.usage).toBeNull()
   })
 
-  test("memoizes by message and provider array identity", () => {
+  test("recomputes when message array is mutated in place", () => {
     const messages = [assistant("a1", { input: 10, output: 10, reasoning: 10, read: 10, write: 10 }, 0.25)]
     const providers = [{ id: "openai", models: {} }]
 
     const one = getSessionContextMetrics(messages, providers)
+    messages.push(assistant("a2", { input: 100, output: 20, reasoning: 0, read: 0, write: 0 }, 0.75))
     const two = getSessionContextMetrics(messages, providers)
-    const three = getSessionContextMetrics([...messages], providers)
 
-    expect(two).toBe(one)
-    expect(three).not.toBe(one)
+    expect(one.context?.message.id).toBe("a1")
+    expect(two.context?.message.id).toBe("a2")
+    expect(two.totalCost).toBe(1)
   })
 })

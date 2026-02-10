@@ -1,0 +1,67 @@
+---
+title: Migration vers 1.0
+description: Quoi de neuf dans OpenCode 1.0.
+---
+
+OpenCode 1.0 est une réécriture complète de TUI.
+
+Nous sommes passés du TUI basé sur go+bubbletea qui présentait des problèmes de performances et de capacités à un framework interne (OpenTUI) écrit en zig+solidjs.
+
+Le nouveau TUI fonctionne comme l'ancien puisqu'il se connecte au même serveur opencode.
+
+---
+
+## Mise à niveau
+
+Vous ne devriez pas être automatiquement mis à niveau vers la version 1.0 si vous utilisez actuellement une version précédente
+version. Cependant, certaines anciennes versions de OpenCode récupèrent toujours la dernière version.
+
+Pour mettre à niveau manuellement, exécutez
+
+```bash
+$ opencode upgrade 1.0.0
+```
+
+Pour revenir à 0.x, exécutez
+
+```bash
+$ opencode upgrade 0.15.31
+```
+
+---
+
+## Changements UX
+
+L'historique de la session est plus compressé, affichant uniquement tous les détails de l'outil d'édition et de bash.
+
+Nous avons ajouté une barre de commandes par laquelle presque tout passe. Appuyez sur ctrl+p pour l'afficher dans n'importe quel contexte et voir tout ce que vous pouvez faire.
+
+Ajout d'une barre latérale de session (peut être basculée) avec des informations utiles.
+
+Nous avons supprimé certaines fonctionnalités que nous n'étions pas sûrs que quiconque utilisait réellement. S'il manque quelque chose d'important, veuillez ouvrir un problème et nous le rajouterons rapidement.
+
+---
+
+## Modifications radicales
+
+### Raccourcis clavier renommés
+
+- messages_revert -> messages_undo
+- switch_agent -> agent_cycle
+- switch_agent_reverse -> agent_cycle_reverse
+- switch_mode -> agent_cycle
+- switch_mode_reverse -> agent_cycle_reverse
+
+### Raccourcis clavier supprimés
+
+- messages_layout_toggle
+- messages_suivant
+- messages_précédent
+- fichier_diff_toggle
+- recherche_fichier
+- fichier_fermer
+- liste_fichiers
+- app_help
+- projet_init
+- outil_détails
+- blocs_de_pensée
