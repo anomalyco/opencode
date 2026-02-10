@@ -18,18 +18,19 @@ await Log.init({
     if (Installation.isLocal()) return "DEBUG"
     return "INFO"
   })(),
+  path: process.env.OPENCODE_LOG_PATH || undefined,
+  rotate:
+    process.env.OPENCODE_LOG_ROTATE === "daily"
+      ? { kind: "daily", retention: Number(process.env.OPENCODE_LOG_RETENTION) || undefined }
+      : undefined,
 })
 
 process.on("unhandledRejection", (e) => {
-  Log.Default.error("rejection", {
-    e: e instanceof Error ? e.message : e,
-  })
+  Log.Default.error("rejection", { error: e })
 })
 
 process.on("uncaughtException", (e) => {
-  Log.Default.error("exception", {
-    e: e instanceof Error ? e.message : e,
-  })
+  Log.Default.error("exception", { error: e })
 })
 
 // Subscribe to global events and forward them via RPC
