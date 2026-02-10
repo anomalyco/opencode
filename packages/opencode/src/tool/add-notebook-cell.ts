@@ -1,21 +1,18 @@
 import z from "zod"
-import * as path from "path"
 import { Tool } from "./tool"
-import { FileTime } from "../file/time"
-import { Instance } from "../project/instance"
-import { Bus } from "../bus"
-import { File } from "../file"
-import { FileWatcher } from "../file/watcher"
-import { Snapshot } from "@/snapshot"
-import { assertExternalDirectory } from "./external-directory"
 import {
-  parseNotebook,
-  stringifyNotebook,
   addCell,
+  stringifyNotebook,
   getNotebookSummary,
-  type Notebook,
   type CellType
 } from "../notebook"
+import {
+  loadNotebook,
+  getDisplayPath,
+  calculateFileDiff,
+  writeNotebook,
+  truncatePreview
+} from "./notebook-utils"
 
 const DESCRIPTION = `
 Add a new cell to a Jupyter notebook (.ipynb) file.
@@ -34,110 +31,74 @@ Examples:
 - Add markdown at position 0: cellType="markdown", source="# Title", position=0
 `.trim()
 
+// Display constants
+const PREVIEW_LENGTH = 100
+
 export const AddNotebookCellTool = Tool.define("add_notebook_cell", {
   description: DESCRIPTION,
   parameters: z.object({
-    filePath: z.string().describe("The absolute path to the .ipynb file"),
+    filePath: z.string().min(1, "File path cannot be empty")
+      .describe("The absolute path to the .ipynb file"),
     cellType: z.enum(["code", "markdown", "raw"])
       .describe("Type of cell to create"),
-    source: z.string().describe("Content for the new cell"),
+    source: z.string()
+      .describe("Content for the new cell"),
     position: z.number().int().min(0).optional()
       .describe("Zero-based index where to insert (default: at end)"),
   }),
   async execute(params, ctx) {
-    if (!params.filePath) {
-      throw new Error("filePath is required")
-    }
+    const { notebook, content: contentOld, filePath } = await loadNotebook(params, ctx)
 
-    const filePath = path.isAbsolute(params.filePath) 
-      ? params.filePath 
-      : path.join(Instance.directory, params.filePath)
-    
-    await assertExternalDirectory(ctx, filePath)
-    
-    const file = Bun.file(filePath)
-    const stats = await file.stat().catch(() => {})
-    
-    if (!stats) {
-      throw new Error(`File not found: ${filePath}`)
-    }
-    
-    if (stats.isDirectory()) {
-      throw new Error(`Path is a directory, not a file: ${filePath}`)
-    }
-
-    await FileTime.assert(ctx.sessionID, filePath)
-    const contentOld = await file.text()
-    
-    // Parse the notebook
-    const result = parseNotebook(contentOld)
-    
-    if (!result.success) {
-      throw new Error(`Failed to parse notebook: ${result.error}`)
-    }
-    
-    const notebook = result.notebook!
-    
     // Validate position
-    if (params.position !== undefined && params.position > notebook.cells.length) {
-      throw new Error(
+    const maxPosition = notebook.cells.length
+    if (params.position !== undefined && params.position > maxPosition) {
+      throw new RangeError(
         `Position ${params.position} out of bounds. ` +
-        `Notebook has ${notebook.cells.length} cells (valid range: 0-${notebook.cells.length})`
+        `Notebook has ${maxPosition} cells (valid range: 0-${maxPosition})`
       )
     }
-    
+
     // Add the new cell
     const updatedNotebook = addCell(
-      notebook, 
-      params.cellType as CellType, 
-      params.source, 
+      notebook,
+      params.cellType as CellType,
+      params.source,
       params.position
     )
     const contentNew = stringifyNotebook(updatedNotebook)
-    
+
     // Determine the actual position where the cell was inserted
-    const insertPosition = params.position ?? notebook.cells.length
-    
-    // Ask for permission
+    const insertPosition = params.position ?? maxPosition
+
+    // Ask for permission before writing
+    const displayPath = getDisplayPath(filePath)
     await ctx.ask({
       permission: "edit",
-      patterns: [path.relative(Instance.worktree, filePath)],
+      patterns: [displayPath],
       always: ["*"],
       metadata: {
         filepath: filePath,
         cellType: params.cellType,
         position: insertPosition,
-        preview: params.source.slice(0, 100)
+        preview: truncatePreview(params.source, PREVIEW_LENGTH)
       },
     })
-    
+
     // Write the updated notebook
-    await FileTime.withLock(filePath, async () => {
-      await file.write(contentNew)
-      await Bus.publish(File.Event.Edited, { file: filePath })
-      await Bus.publish(FileWatcher.Event.Updated, {
-        file: filePath,
-        event: "change"
-      })
-      FileTime.read(ctx.sessionID, filePath)
-    })
-    
+    await writeNotebook(filePath, contentOld, contentNew, ctx.sessionID)
+
     // Calculate diff
-    const filediff: Snapshot.FileDiff = {
-      file: filePath,
-      before: contentOld,
-      after: contentNew,
-      additions: contentNew.split("\n").length - contentOld.split("\n").length,
-      deletions: 0,
-    }
-    
-    // Format output
-    const preview = params.source.slice(0, 100)
-    let output = `✓ Added ${params.cellType.toUpperCase()} cell at position ${insertPosition}\n`
-    output += `File: ${path.relative(Instance.worktree, filePath)}\n\n`
-    output += `Content:\n  ${preview}${params.source.length > 100 ? "..." : ""}\n`
-    output += `\n${getNotebookSummary(updatedNotebook)}`
-    
+    const filediff = calculateFileDiff(filePath, contentOld, contentNew)
+
+    // Build output
+    const output = buildAddOutput(
+      displayPath,
+      params.cellType,
+      insertPosition,
+      params.source,
+      updatedNotebook
+    )
+
     ctx.metadata({
       metadata: {
         filediff,
@@ -145,13 +106,33 @@ export const AddNotebookCellTool = Tool.define("add_notebook_cell", {
         position: insertPosition
       }
     })
-    
+
     return {
       metadata: {
         filediff
       },
-      title: path.relative(Instance.worktree, filePath),
+      title: displayPath,
       output
     }
   }
 })
+
+function buildAddOutput(
+  displayPath: string,
+  cellType: string,
+  position: number,
+  source: string,
+  notebook: Notebook
+): string {
+  const parts: string[] = []
+
+  parts.push(`✓ Added ${cellType.toUpperCase()} cell at position ${position}`)
+  parts.push(`File: ${displayPath}`)
+  parts.push("")
+  parts.push(`Content:`)
+  parts.push(`  ${truncatePreview(source, PREVIEW_LENGTH)}`)
+  parts.push("")
+  parts.push(getNotebookSummary(notebook))
+
+  return parts.join("\n")
+}

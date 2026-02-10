@@ -1,32 +1,28 @@
 /**
- * Jupyter Notebook (.ipynb) utility functions for OpenCode
- * Handles parsing, validating, and manipulating Jupyter notebook JSON structure
+ * Jupyter Notebook (.ipynb) utility functions
  */
 
+// Types
 export type CellType = "code" | "markdown" | "raw"
+
+export type CellOutput =
+  | { output_type: "stream"; name: "stdout" | "stderr"; text: string | string[] }
+  | { output_type: "execute_result"; execution_count: number; data: Record<string, unknown>; metadata?: Record<string, unknown> }
+  | { output_type: "display_data"; data: Record<string, unknown>; metadata?: Record<string, unknown> }
+  | { output_type: "error"; ename: string; evalue: string; traceback: string[] }
 
 export interface NotebookCell {
   cell_type: CellType
-  metadata: Record<string, any>
+  metadata: Record<string, unknown>
   source: string | string[]
   execution_count?: number | null
-  outputs?: Array<{
-    output_type: string
-    [key: string]: any
-  }>
+  outputs?: CellOutput[]
 }
 
 export interface NotebookMetadata {
-  language_info?: {
-    name: string
-    [key: string]: any
-  }
-  kernelspec?: {
-    name: string
-    display_name: string
-    [key: string]: any
-  }
-  [key: string]: any
+  language_info?: { name: string; [key: string]: unknown }
+  kernelspec?: { name: string; display_name: string; [key: string]: unknown }
+  [key: string]: unknown
 }
 
 export interface Notebook {
@@ -42,90 +38,85 @@ export interface NotebookParseResult {
   error?: string
 }
 
+// Constants
+export const DEFAULT_PREVIEW_LENGTH = 50
+export const DEFAULT_MAX_PREVIEW_LENGTH = 200
+export const DEFAULT_LIST_PREVIEW_LENGTH = 80
+
 /**
- * Validates if a file is a valid Jupyter notebook
+ * Validate notebook structure (type guard)
  */
-export function isValidNotebook(content: string): boolean {
-  try {
-    const data = JSON.parse(content)
-    return (
-      typeof data === "object" &&
-      data !== null &&
-      "cells" in data &&
-      Array.isArray(data.cells) &&
-      "nbformat" in data &&
-      "metadata" in data
-    )
-  } catch {
-    return false
-  }
+function isValidNotebookData(data: unknown): data is Notebook {
+  if (typeof data !== "object" || data === null) return false
+  const obj = data as Record<string, unknown>
+  return (
+    Array.isArray(obj.cells) &&
+    typeof obj.nbformat === "number" &&
+    obj.nbformat === 4 &&
+    typeof obj.metadata === "object" &&
+    obj.metadata !== null
+  )
 }
 
 /**
- * Parse notebook JSON content
+ * Parse notebook JSON
  */
 export function parseNotebook(content: string): NotebookParseResult {
+  let data: unknown
   try {
-    const data = JSON.parse(content)
-    
-    if (!isValidNotebook(content)) {
-      return {
-        success: false,
-        error: "Invalid notebook format: missing required fields (cells, nbformat, metadata)"
-      }
-    }
-
-    return {
-      success: true,
-      notebook: data as Notebook
-    }
+    data = JSON.parse(content)
   } catch (error) {
     return {
       success: false,
-      error: `Failed to parse notebook JSON: ${error instanceof Error ? error.message : String(error)}`
+      error: `Failed to parse JSON: ${error instanceof Error ? error.message : String(error)}`
     }
   }
+
+  if (!isValidNotebookData(data)) {
+    return { success: false, error: "Invalid notebook format (must be nbformat 4.x)" }
+  }
+
+  return { success: true, notebook: data }
 }
 
 /**
- * Convert notebook back to JSON string
+ * Check if content is a valid notebook
+ */
+export function isValidNotebook(content: string): boolean {
+  return parseNotebook(content).success
+}
+
+/**
+ * Stringify notebook to JSON
  */
 export function stringifyNotebook(notebook: Notebook): string {
   return JSON.stringify(notebook, null, 2)
 }
 
 /**
- * Normalize cell source to string (handles both string and string[] formats)
+ * Normalize source to string
  */
 export function normalizeSource(source: string | string[]): string {
-  if (Array.isArray(source)) {
-    return source.join("")
-  }
-  return source
+  return Array.isArray(source) ? source.join("") : source
 }
 
 /**
- * Convert source to array format (preferred format)
+ * Convert source to array format (Jupyter standard)
  */
 export function sourceToArray(source: string | string[]): string[] {
-  if (Array.isArray(source)) {
-    return source
-  }
-  return source.split(/(?<=\n)/)
+  if (Array.isArray(source)) return source
+  return source === "" ? [""] : source.split("\n")
 }
 
 /**
- * Get cell by index
+ * Get cell at index, returns null if out of bounds
  */
 export function getCell(notebook: Notebook, index: number): NotebookCell | null {
-  if (index < 0 || index >= notebook.cells.length) {
-    return null
-  }
-  return notebook.cells[index]
+  return index >= 0 && index < notebook.cells.length ? notebook.cells[index] : null
 }
 
 /**
- * Add a new cell at the specified position
+ * Add a new cell at position (or end if not specified)
  */
 export function addCell(
   notebook: Notebook,
@@ -145,76 +136,68 @@ export function addCell(
   }
 
   const cells = [...notebook.cells]
-  if (position === undefined || position === cells.length) {
-    cells.push(newCell)
-  } else {
-    cells.splice(position, 0, newCell)
+  const index = position ?? cells.length
+
+  if (index < 0 || index > cells.length) {
+    throw new Error(`Position ${index} out of bounds (valid: 0-${cells.length})`)
   }
 
-  return {
-    ...notebook,
-    cells
-  }
+  cells.splice(index, 0, newCell)
+
+  return { ...notebook, cells }
 }
 
 /**
- * Edit cell at specified index
+ * Edit cell at index
  */
-export function editCell(
-  notebook: Notebook,
-  index: number,
-  source: string
-): Notebook {
+export function editCell(notebook: Notebook, index: number, source: string): Notebook {
   if (index < 0 || index >= notebook.cells.length) {
-    throw new Error(`Cell index ${index} out of bounds`)
+    throw new Error(`Cell index ${index} out of bounds (0-${notebook.cells.length - 1})`)
   }
 
   const cells = [...notebook.cells]
-  cells[index] = {
-    ...cells[index],
-    source: sourceToArray(source)
-  }
+  cells[index] = { ...cells[index], source: sourceToArray(source) }
 
-  return {
-    ...notebook,
-    cells
-  }
+  return { ...notebook, cells }
 }
 
 /**
- * Delete cell at specified index
+ * Delete cell at index
  */
 export function deleteCell(notebook: Notebook, index: number): Notebook {
   if (index < 0 || index >= notebook.cells.length) {
-    throw new Error(`Cell index ${index} out of bounds`)
+    throw new Error(`Cell index ${index} out of bounds (0-${notebook.cells.length - 1})`)
   }
-
-  const cells = notebook.cells.filter((_, i) => i !== index)
 
   return {
     ...notebook,
-    cells
+    cells: notebook.cells.filter((_, i) => i !== index)
   }
 }
 
 /**
- * Format cell information for display
+ * Format cell info for display
  */
-export function formatCellInfo(cell: NotebookCell, index: number): string {
+export function formatCellInfo(
+  cell: NotebookCell,
+  index: number,
+  previewLength = DEFAULT_PREVIEW_LENGTH
+): string {
   const source = normalizeSource(cell.source)
-  const preview = source.split("\n")[0].trim().slice(0, 50)
-  const cellType = cell.cell_type.toUpperCase()
-  
-  let info = `[${index}] ${cellType}`
-  
+  const firstLine = source.split("\n")[0]?.trim() ?? ""
+  const preview = firstLine.slice(0, previewLength)
+  const suffix = firstLine.length > previewLength ? "..." : ""
+
+  let info = `[${index}] ${cell.cell_type.toUpperCase()}`
+
   if (cell.cell_type === "code") {
     info += ` [exec: ${cell.execution_count ?? "not run"}]`
   }
-  
+
   if (preview) {
-    info += `: ${preview}${source.length > 50 ? "..." : ""}`
+    info += `: ${preview}${suffix}`
   }
-  
+
   return info
 }
 
@@ -222,16 +205,17 @@ export function formatCellInfo(cell: NotebookCell, index: number): string {
  * Get notebook summary
  */
 export function getNotebookSummary(notebook: Notebook): string {
-  const codeCells = notebook.cells.filter(c => c.cell_type === "code").length
-  const markdownCells = notebook.cells.filter(c => c.cell_type === "markdown").length
-  const rawCells = notebook.cells.filter(c => c.cell_type === "raw").length
-  
-  const language = notebook.metadata.language_info?.name || "unknown"
-  
-  return `Notebook (${notebook.nbformat}.${notebook.nbformat_minor})` +
-         `\nLanguage: ${language}` +
-         `\nTotal cells: ${notebook.cells.length}` +
-         `  • Code: ${codeCells}` +
-         `  • Markdown: ${markdownCells}` +
-         `  • Raw: ${rawCells}`
+  const code = notebook.cells.filter(c => c.cell_type === "code").length
+  const markdown = notebook.cells.filter(c => c.cell_type === "markdown").length
+  const raw = notebook.cells.filter(c => c.cell_type === "raw").length
+  const language = notebook.metadata.language_info?.name ?? "unknown"
+
+  return [
+    `Notebook (${notebook.nbformat}.${notebook.nbformat_minor})`,
+    `Language: ${language}`,
+    `Total cells: ${notebook.cells.length}`,
+    `  • Code: ${code}`,
+    `  • Markdown: ${markdown}`,
+    `  • Raw: ${raw}`
+  ].join("\n")
 }

@@ -1,15 +1,13 @@
 import z from "zod"
-import * as path from "path"
 import { Tool } from "./tool"
 import { FileTime } from "../file/time"
-import { Instance } from "../project/instance"
-import { assertExternalDirectory } from "./external-directory"
 import {
-  parseNotebook,
   formatCellInfo,
   normalizeSource,
+  DEFAULT_LIST_PREVIEW_LENGTH,
   type Notebook
 } from "../notebook"
+import { loadNotebook, getDisplayPath } from "./notebook-utils"
 
 const DESCRIPTION = `
 List all cells in a Jupyter notebook (.ipynb) file.
@@ -29,103 +27,111 @@ Output shows:
 - Execution count (for code cells)
 `.trim()
 
+// Display constants
+const SEPARATOR_LENGTH = 80
+const SEPARATOR_CHAR = "─"
+
 export const ListNotebookCellsTool = Tool.define("list_notebook_cells", {
   description: DESCRIPTION,
   parameters: z.object({
-    filePath: z.string().describe("The absolute path to the .ipynb file"),
+    filePath: z.string().min(1, "File path cannot be empty")
+      .describe("The absolute path to the .ipynb file"),
     cellType: z.enum(["code", "markdown", "raw"]).optional()
       .describe("Filter by cell type (optional)"),
-    maxPreviewLength: z.number().optional().default(80)
+    maxPreviewLength: z.number().int().min(1).optional().default(DEFAULT_LIST_PREVIEW_LENGTH)
       .describe("Maximum length of content preview"),
   }),
   async execute(params, ctx) {
-    if (!params.filePath) {
-      throw new Error("filePath is required")
-    }
+    const { notebook, filePath } = await loadNotebook(params, ctx)
 
-    const filePath = path.isAbsolute(params.filePath) 
-      ? params.filePath 
-      : path.join(Instance.directory, params.filePath)
-    
-    await assertExternalDirectory(ctx, filePath)
-    
-    const file = Bun.file(filePath)
-    const stats = await file.stat().catch(() => {})
-    
-    if (!stats) {
-      throw new Error(`File not found: ${filePath}`)
-    }
-    
-    if (stats.isDirectory()) {
-      throw new Error(`Path is a directory, not a file: ${filePath}`)
-    }
+    const displayPath = getDisplayPath(filePath)
 
-    await FileTime.assert(ctx.sessionID, filePath)
-    const content = await file.text()
-    
-    // Parse the notebook
-    const result = parseNotebook(content)
-    
-    if (!result.success) {
-      throw new Error(`Failed to parse notebook: ${result.error}`)
-    }
-    
-    const notebook = result.notebook!
-    
     // Filter cells if requested
-    let cells = notebook.cells
-    if (params.cellType) {
-      cells = cells.filter(c => c.cell_type === params.cellType)
-    }
-    
+    const cells = filterCells(notebook, params.cellType)
+
     // Build output
-    let output = `📓 ${path.relative(Instance.worktree, filePath)}\n`
-    output += `${"─".repeat(80)}\n\n`
-    
-    if (params.cellType) {
-      output += `Showing ${params.cellType.toUpperCase()} cells only\n`
-    }
-    
-    output += `Total cells: ${cells.length} / ${notebook.cells.length}\n\n`
-    
-    if (cells.length === 0) {
-      output += "No cells found"
-      if (params.cellType) {
-        output += ` (filtering by ${params.cellType})`
-      }
-      output += "\n"
-    } else {
-      cells.forEach((cell, notebookIndex) => {
-        // Find actual index in notebook
-        const actualIndex = notebook.cells.indexOf(cell)
-        output += formatCellInfo(cell, actualIndex) + "\n"
-        
-        // Add content preview
-        const source = normalizeSource(cell.source)
-        if (source.trim()) {
-          const lines = source.split("\n")
-          const preview = lines[0].trim().slice(0, params.maxPreviewLength)
-          output += `  ${preview}${lines[0].length > params.maxPreviewLength ? "..." : ""}\n`
-          
-          // Show line count if multiline
-          if (lines.length > 1) {
-            output += `  (${lines.length} lines total)\n`
-          }
-        }
-        
-        output += "\n"
-      })
-    }
-    
+    const output = buildListOutput(
+      displayPath,
+      notebook,
+      cells,
+      params.cellType,
+      params.maxPreviewLength
+    )
+
     FileTime.read(ctx.sessionID, filePath)
-    
+
     return {
       metadata: {
         cellCount: cells.length,
-        filteredBy: params.cellType
+        filteredBy: params.cellType,
+        totalCells: notebook.cells.length
       },
-      title: path.relative(Instance.worktree, filePath),
+      title: displayPath,
       output
     }
   }
 })
+
+function filterCells(
+  notebook: Notebook,
+  cellType?: "code" | "markdown" | "raw"
+): Notebook["cells"] {
+  if (!cellType) {
+    return notebook.cells
+  }
+  return notebook.cells.filter(c => c.cell_type === cellType)
+}
+
+function buildListOutput(
+  displayPath: string,
+  notebook: Notebook,
+  cells: Notebook["cells"],
+  cellTypeFilter: string | undefined,
+  maxPreviewLength: number
+): string {
+  const parts: string[] = []
+
+  // Header
+  parts.push(`📓 ${displayPath}`)
+  parts.push(`${SEPARATOR_CHAR.repeat(SEPARATOR_LENGTH)}\n`)
+
+  // Filter info
+  if (cellTypeFilter) {
+    parts.push(`Showing ${cellTypeFilter.toUpperCase()} cells only`)
+  }
+
+  parts.push(`Total cells: ${cells.length} / ${notebook.cells.length}\n`)
+
+  if (cells.length === 0) {
+    parts.push("No cells found")
+    if (cellTypeFilter) {
+      parts.push(` (filtering by ${cellTypeFilter})`)
+    }
+    parts.push("")
+  } else {
+    for (const cell of cells) {
+      // Find actual index in notebook
+      const actualIndex = notebook.cells.indexOf(cell)
+      parts.push(formatCellInfo(cell, actualIndex, maxPreviewLength))
+
+      // Add content preview
+      const source = normalizeSource(cell.source)
+      if (source.trim()) {
+        const lines = source.split("\n")
+        const firstLine = lines[0]?.trim() ?? ""
+        const truncated = firstLine.length > maxPreviewLength
+
+        parts.push(`  ${firstLine.slice(0, maxPreviewLength)}${truncated ? "..." : ""}`)
+
+        // Show line count if multiline
+        if (lines.length > 1) {
+          parts.push(`  (${lines.length} lines total)`)
+        }
+      }
+
+      parts.push("")
+    }
+  }
+
+  return parts.join("\n")
+}
