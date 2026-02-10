@@ -50,4 +50,39 @@ describe("pty disk history", () => {
     const exists = await Bun.file(file).exists()
     expect(exists).toBe(false)
   })
+
+  test("server_history_file_compaction_under_concurrent_append", async () => {
+    process.env.OPENCODE_PTY_HISTORY_DIR = root
+    const history = await createDiskHistory({ directory: "/ws", id: "pty-concurrent", limit: 64 })
+
+    await Promise.all(
+      Array.from({ length: 40 }, (_, i) => Promise.resolve(history.append(`${String(i).padStart(2, "0")}|`))),
+    )
+    await history.close()
+
+    const snapshot = history.snapshot()
+    expect(snapshot.length).toBe(64)
+    const file = historyPath("/ws", "pty-concurrent", root)
+    const text = await fs.readFile(file, "utf8")
+    expect(text.length).toBe(64)
+    expect(text).toBe(snapshot)
+    await history.clear()
+  })
+
+  test("server_history_clear_during_pending_flush_is_safe", async () => {
+    process.env.OPENCODE_PTY_HISTORY_DIR = root
+    const id = "pty-clear-pending"
+    const dir = "/ws"
+    const history = await createDiskHistory({ directory: dir, id, limit: 128 })
+
+    history.append("abcdef")
+    history.append("ghijkl")
+    await history.clear()
+    await history.close()
+
+    expect(history.snapshot()).toBe("")
+    const file = historyPath(dir, id, root)
+    const exists = await Bun.file(file).exists()
+    expect(exists).toBe(false)
+  })
 })

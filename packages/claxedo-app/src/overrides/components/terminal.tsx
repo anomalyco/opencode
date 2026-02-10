@@ -10,9 +10,10 @@ import { resolveThemeVariant, useTheme, withAlpha, type HexColor } from "@openco
 import { useLanguage } from "@/context/language"
 import { showToast } from "@opencode-ai/ui/toast"
 import { markInitialCommandRan, shouldRunInitialCommand } from "./terminal-recovery"
-import { capChunk, createStream, pushStream, takeStream } from "./terminal-stream"
 import { preparePersistBuffer, prepareRestoreBuffer } from "./terminal-buffer"
 import { shouldRecoverDesync, shouldSendResize } from "./terminal-geometry"
+import { sigwinchToggleSize, socketCloseIsError } from "./terminal-connection"
+import { createTerminalRuntimeQueue } from "./terminal-runtime-queue"
 import {
   initWait,
   markBytes,
@@ -83,8 +84,6 @@ export const Terminal = (props: TerminalProps) => {
   let backend: TerminalBackend | undefined
   let disposed = false
   let isBufferRestored = !props.pty.buffer
-  let pendingMessages: string[] = []
-  let pendingBytes = 0
   let msgCount = 0
   const hasBuffer = !!(props.pty.buffer && props.pty.buffer.length > 0)
   const profile = waitProfile(!!local.pty.initialCommand)
@@ -318,8 +317,9 @@ export const Terminal = (props: TerminalProps) => {
         const cols = Math.max(2, b.cols)
         const rows = Math.max(2, b.rows)
         // Force SIGWINCH so TUIs reflow after transient layout corruption.
-        publishResize({ cols: Math.max(2, cols - 1), rows })
-        publishResize({ cols, rows })
+        for (const size of sigwinchToggleSize(cols, rows)) {
+          publishResize(size)
+        }
       }
 
       cleanups.push(
@@ -343,13 +343,7 @@ export const Terminal = (props: TerminalProps) => {
         if (backendResizeTimer) clearTimeout(backendResizeTimer)
       })
 
-      // Helper to flush pending messages after buffer restoration
-      const stream = createStream()
-      let frame = 0
-      let writing = false
-      let reported = false
       let overload = false
-      let pendingDropped = 0
       const handleOverload = (kind: "pending" | "live", dropped: number) => {
         if (overload) return
         overload = true
@@ -363,53 +357,25 @@ export const Terminal = (props: TerminalProps) => {
           socket.close(4000, "terminal overload")
         }
       }
-      const schedule = () => {
-        if (disposed) return
-        if (overload) return
-        if (frame) return
-        if (writing) return
-        frame = requestAnimationFrame(drain)
-      }
-      const drain = () => {
-        frame = 0
-        if (disposed) return
-        if (overload) return
-        if (writing) return
-        const chunk = takeStream(stream, MAX_BATCH_BYTES, MAX_BATCH_ITEMS)
-        if (!chunk) return
-        writing = true
-        b.write(chunk, () => {
-          writing = false
-          if (stream.items.length > 0) schedule()
-        })
-      }
-      const enqueue = (data: string) => {
-        if (overload) return
-        pushStream(stream, data, MAX_STREAM_BYTES)
-        if (stream.dropped > 0 && !reported) {
-          reported = true
-          tlog("output throttled", { ptyId: local.pty.id, dropped: stream.dropped })
-        }
-        if (stream.dropped >= MAX_DROPPED_CHUNKS) {
-          handleOverload("live", stream.dropped)
-          return
-        }
-        schedule()
-      }
-      cleanups.push(() => {
-        if (frame) cancelAnimationFrame(frame)
+      const queue = createTerminalRuntimeQueue({
+        maxPendingBytes: MAX_PENDING_BYTES,
+        maxStreamBytes: MAX_STREAM_BYTES,
+        maxBatchBytes: MAX_BATCH_BYTES,
+        maxBatchItems: MAX_BATCH_ITEMS,
+        maxDroppedChunks: MAX_DROPPED_CHUNKS,
+        requestFrame: requestAnimationFrame,
+        cancelFrame: cancelAnimationFrame,
+        write: (chunk, done) => b.write(chunk, done),
+        onOverload: handleOverload,
+        onThrottled: (dropped) => tlog("output throttled", { ptyId: local.pty.id, dropped }),
       })
+      cleanups.push(() => queue.dispose())
 
       const flushPendingMessages = () => {
         isBufferRestored = true
-        if (pendingMessages.length > 0) {
-          for (const msg of pendingMessages) {
-            enqueue(msg)
-          }
-          tvlog("flush pending", { ptyId: local.pty.id, count: pendingMessages.length })
-          pendingMessages = []
-          pendingBytes = 0
-        }
+        const count = queue.pendingCount()
+        queue.flushPending()
+        if (count > 0) tvlog("flush pending", { ptyId: local.pty.id, count })
       }
 
       // Restore saved buffer on both tab switch and reload. The serialized buffer
@@ -512,15 +478,16 @@ export const Terminal = (props: TerminalProps) => {
         // happens to match the PTY's current size, so we send cols-1 first then cols.
         const targetCols = b.cols
         const targetRows = b.rows
+        const [first, second] = sigwinchToggleSize(targetCols, targetRows)
         sdk.client.pty
           .update({
             ptyID: local.pty.id,
-            size: { cols: Math.max(2, targetCols - 1), rows: targetRows },
+            size: first,
           })
           .then(() =>
             sdk.client.pty.update({
               ptyID: local.pty.id,
-              size: { cols: targetCols, rows: targetRows },
+              size: second,
             }),
           )
           .catch(() => {})
@@ -556,22 +523,10 @@ export const Terminal = (props: TerminalProps) => {
         }
         // Queue messages if buffer restoration is still in progress
         if (!isBufferRestored) {
-          const pending = capChunk(event.data, MAX_PENDING_BYTES)
-          pendingMessages.push(pending.value)
-          pendingBytes += pending.value.length
-          if (pending.trimmed) pendingDropped += 1
-          while (pendingBytes > MAX_PENDING_BYTES && pendingMessages.length > 1) {
-            const next = pendingMessages.shift()
-            if (!next) break
-            pendingBytes -= next.length
-            pendingDropped += 1
-          }
-          if (pendingDropped >= MAX_DROPPED_CHUNKS) {
-            handleOverload("pending", pendingDropped)
-          }
+          queue.push(event.data)
           return
         }
-        enqueue(event.data)
+        queue.push(event.data)
       }
       socket.addEventListener("message", handleMessage)
       cleanups.push(() => socket.removeEventListener("message", handleMessage))
@@ -590,7 +545,7 @@ export const Terminal = (props: TerminalProps) => {
       const handleClose = (event: CloseEvent) => {
         if (disposed) return
         tlog("socket close", { ptyId: local.pty.id, code: event.code, reason: event.reason, clean: event.wasClean })
-        if (event.code !== 1000) {
+        if (socketCloseIsError(event.code)) {
           if (once.value) return
           once.value = true
           local.onConnectError?.(new Error(`WebSocket closed abnormally: ${event.code}`))

@@ -31,4 +31,13 @@ describe("pty history ring", () => {
     history.append("0123456789")
     expect(history.snapshot(4)).toBe("6789")
   })
+
+  test("server_history_limit_enforced_exactly", () => {
+    const history = createHistory(5)
+    history.append("12")
+    history.append("34")
+    history.append("56")
+    expect(history.size()).toBe(5)
+    expect(history.snapshot()).toBe("23456")
+  })
 })

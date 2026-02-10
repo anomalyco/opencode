@@ -186,8 +186,10 @@ export function setupKeyboardHandler(
   } = {},
 ): () => void {
   const handler = (event: KeyboardEvent): boolean => {
+    const key = event.key.toLowerCase()
+
     // Shift+Enter: Send ESC+CR for line continuation
-    if (event.key === "Enter" && event.shiftKey && !event.metaKey && !event.ctrlKey) {
+    if (key === "enter" && event.shiftKey && !event.metaKey && !event.ctrlKey) {
       if (event.type === "keydown" && options.onShiftEnter) {
         options.onShiftEnter()
       }
@@ -195,7 +197,7 @@ export function setupKeyboardHandler(
     }
 
     // Cmd+Backspace: Clear line (Ctrl+U + left arrow)
-    if (event.key === "Backspace" && event.metaKey) {
+    if (key === "backspace" && event.metaKey) {
       if (event.type === "keydown" && options.onWrite) {
         options.onWrite("\x15\x1b[D")
       }
@@ -203,7 +205,7 @@ export function setupKeyboardHandler(
     }
 
     // Cmd+Left: Beginning of line (Ctrl+A)
-    if (event.key === "ArrowLeft" && event.metaKey) {
+    if (key === "arrowleft" && event.metaKey) {
       if (event.type === "keydown" && options.onWrite) {
         options.onWrite("\x01")
       }
@@ -211,7 +213,7 @@ export function setupKeyboardHandler(
     }
 
     // Cmd+Right: End of line (Ctrl+E)
-    if (event.key === "ArrowRight" && event.metaKey) {
+    if (key === "arrowright" && event.metaKey) {
       if (event.type === "keydown" && options.onWrite) {
         options.onWrite("\x05")
       }
@@ -219,25 +221,27 @@ export function setupKeyboardHandler(
     }
 
     // Cmd+D: Split vertical (left/right)
-    if (event.key === "d" && event.metaKey && !event.shiftKey && !event.ctrlKey && !event.altKey) {
+    if (key === "d" && event.metaKey && !event.shiftKey && !event.ctrlKey && !event.altKey) {
       if (event.type === "keydown" && options.onSplitVertical) {
         event.preventDefault()
+        event.stopPropagation()
         options.onSplitVertical()
       }
       return false
     }
 
     // Cmd+Shift+D: Split horizontal (top/bottom)
-    if (event.key === "d" && event.metaKey && event.shiftKey && !event.ctrlKey && !event.altKey) {
+    if (key === "d" && event.metaKey && event.shiftKey && !event.ctrlKey && !event.altKey) {
       if (event.type === "keydown" && options.onSplitHorizontal) {
         event.preventDefault()
+        event.stopPropagation()
         options.onSplitHorizontal()
       }
       return false
     }
 
     // Allow Ctrl+` for parent app toggle
-    if (event.ctrlKey && event.key === "`") {
+    if (event.ctrlKey && key === "`") {
       return true
     }
 

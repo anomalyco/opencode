@@ -9,6 +9,8 @@ import {
   setupResizeHandlers,
   scrollToBottom,
 } from "../helpers"
+import { createModeScanner } from "../mode-scan"
+import { createQuerySuppressor } from "../query-suppression"
 import type { TerminalBackend, TerminalBackendOptions, Disposable, CreateBackendFn } from "./types"
 
 export const createBackend: CreateBackendFn = async (
@@ -35,12 +37,9 @@ export const createBackend: CreateBackendFn = async (
     })
     .catch(() => {})
 
-  // Track bracketed paste mode from terminal escape sequences
-  let isBracketedPaste = false
-  const detectModes = (data: string) => {
-    if (data.includes("\x1b[?2004h")) isBracketedPaste = true
-    if (data.includes("\x1b[?2004l")) isBracketedPaste = false
-  }
+  // Track bracketed paste mode across split writes.
+  const mode = createModeScanner()
+  const suppress = createQuerySuppressor()
 
   // Intercept writes to detect bracketed paste mode
   const originalWrite = xterm.write.bind(xterm)
@@ -65,7 +64,7 @@ export const createBackend: CreateBackendFn = async (
 
   const cleanupPaste = setupPasteHandler(xterm, {
     onWrite: handleWrite,
-    isBracketedPasteEnabled: () => isBracketedPaste,
+    isBracketedPasteEnabled: () => mode.bracketed(),
   })
   cleanups.push(cleanupPaste)
 
@@ -144,11 +143,16 @@ export const createBackend: CreateBackendFn = async (
     },
 
     write(data: string, callback?: () => void) {
-      detectModes(data)
+      const filtered = suppress.scan(data)
+      mode.scan(filtered)
+      if (!filtered) {
+        callback?.()
+        return
+      }
       if (callback) {
-        originalWrite(data, callback)
+        originalWrite(filtered, callback)
       } else {
-        originalWrite(data)
+        originalWrite(filtered)
       }
     },
 

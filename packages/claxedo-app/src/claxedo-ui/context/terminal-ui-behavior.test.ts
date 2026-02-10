@@ -1,13 +1,25 @@
-import { describe, expect, test } from "bun:test"
-import {
-  getEnsureTargets,
-  nextPortalHost,
-  paneInStore,
-  paneLeafIds,
-  pickPendingSplitTarget,
-  pickVisibleHost,
-  resolvePortalRender,
-} from "../components/terminal-content-wrapper"
+import { beforeAll, describe, expect, test } from "bun:test"
+import { ensureLayoutMocked } from "./_test-helper"
+
+// Dynamic import — must happen after mocks are registered to prevent
+// terminal-content-wrapper's transitive import of claxedo-layout from
+// caching the real (unmocked) module and poisoning other test files.
+let mod: typeof import("../components/terminal-content-wrapper")
+
+beforeAll(async () => {
+  await ensureLayoutMocked()
+  mod = await import("../components/terminal-content-wrapper")
+})
+
+const getEnsureTargets = (...args: Parameters<typeof mod.getEnsureTargets>) => mod.getEnsureTargets(...args)
+const nextPortalHost = (...args: Parameters<typeof mod.nextPortalHost>) => mod.nextPortalHost(...args)
+const paneInStore = (...args: Parameters<typeof mod.paneInStore>) => mod.paneInStore(...args)
+const paneLeafIds = (...args: Parameters<typeof mod.paneLeafIds>) => mod.paneLeafIds(...args)
+const pickPendingSplitTarget = (...args: Parameters<typeof mod.pickPendingSplitTarget>) =>
+  mod.pickPendingSplitTarget(...args)
+const pickVisibleHost = (...args: Parameters<typeof mod.pickVisibleHost>) => mod.pickVisibleHost(...args)
+const resolvePortalRender = (...args: Parameters<typeof mod.resolvePortalRender>) =>
+  mod.resolvePortalRender(...args)
 
 function host(id: string, style?: Partial<CSSStyleDeclaration>) {
   const elt = document.createElement("div")

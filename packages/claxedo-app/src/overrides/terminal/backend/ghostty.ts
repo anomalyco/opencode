@@ -88,6 +88,7 @@ export const createBackend: CreateBackendFn = async (
     if (event.metaKey && !event.shiftKey && !event.ctrlKey && !event.altKey && key === "d") {
       if (event.type === "keydown" && options.onSplitVertical) {
         event.preventDefault()
+        event.stopPropagation()
         options.onSplitVertical()
       }
       return false
@@ -97,6 +98,7 @@ export const createBackend: CreateBackendFn = async (
     if (event.metaKey && event.shiftKey && !event.ctrlKey && !event.altKey && key === "d") {
       if (event.type === "keydown" && options.onSplitHorizontal) {
         event.preventDefault()
+        event.stopPropagation()
         options.onSplitHorizontal()
       }
       return false

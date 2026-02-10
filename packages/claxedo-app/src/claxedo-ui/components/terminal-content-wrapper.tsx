@@ -30,6 +30,8 @@ import { useSDK } from "@/context/sdk"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { getTabHostId } from "./tab-content-area"
+import type { TerminalActionOrigin } from "../context/claxedo-layout"
+import { sharedAttachScheduler } from "../../overrides/components/attach-scheduler"
 
 export function getEnsureTargets(
   tabs: Array<{ id: string; type: string; terminalId?: string }>,
@@ -94,6 +96,28 @@ export function pickPendingSplitTarget(
   return all.find((pty) => !known.has(pty.id))
 }
 
+export function tabIdFromHost(hostId: string) {
+  if (!hostId.startsWith("claxedo-tab-host-")) return
+  const tabId = hostId.slice("claxedo-tab-host-".length)
+  if (!tabId) return
+  return tabId
+}
+
+export function resolveOriginFromEvent(
+  event: KeyboardEvent,
+  findGroupId: (tabId: string) => string | undefined,
+): TerminalActionOrigin | undefined {
+  const target = event.target instanceof HTMLElement ? event.target : null
+  const active = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  const host = target?.closest('[id^="claxedo-tab-host-"]') ?? active?.closest('[id^="claxedo-tab-host-"]')
+  if (!(host instanceof HTMLElement)) return
+  const tabId = tabIdFromHost(host.id)
+  if (!tabId) return
+  const groupId = host.dataset.claxedoGroupId ?? findGroupId(tabId)
+  if (!groupId) return
+  return { tabId, groupId, hostId: host.id }
+}
+
 /**
  * Inner wrapper that has access to both contexts.
  * Split out to ensure hooks are called unconditionally.
@@ -111,6 +135,8 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
   // Track which terminals have corresponding tabs in current workspace
   // This Set persists across re-renders but is scoped to this component instance
   const terminalsWithTabs = new Map<string, string>()
+  const seenTerminalIds = new Set<string>()
+  const acknowledgedCreateIds = new Set<string>()
   const link = (terminalId: string, tabId: string) => {
     for (const [id, tab] of terminalsWithTabs.entries()) {
       if (tab !== tabId) continue
@@ -217,9 +243,11 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
       at: string
       dir: "h" | "v"
       known: ReadonlySet<string>
+      origin?: TerminalActionOrigin
     }
   | undefined
 >()
+  let splitTimer: ReturnType<typeof setTimeout> | undefined
 
   const [move, setMove] = createSignal<{ tab: string; id: string } | undefined>()
   const [over, setOver] = createSignal<string | undefined>()
@@ -290,10 +318,49 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
       byTerminalSize: byTerminal.size,
       trackedSize: terminalsWithTabs.size,
     })
+    const activeCreateGroup = claxedo.terminal.creatingGroupId()
+    const acknowledgeCreate = (id: string, tabId: string | undefined) => {
+      if (claxedo.terminal.creating() <= 0) return
+      if (acknowledgedCreateIds.has(id)) return
+      const tabGroupId = tabId ? claxedo.findTabGroup(tabId) : undefined
+      const sameGroup = !activeCreateGroup || !tabGroupId || activeCreateGroup === tabGroupId
+      if (!sameGroup) return
+      claxedo.terminal.created()
+      acknowledgedCreateIds.add(id)
+    }
 
     for (const [i, pty] of all.entries()) {
+      const req = pane()
+      const isPendingSplitTarget = !!req && pendingTarget?.id === pty.id
+      const isNewArrival = !seenTerminalIds.has(pty.id)
+      const currentLifecycle = claxedo.terminal.lifecycle?.(pty.id)
+      if (isNewArrival) seenTerminalIds.add(pty.id)
+      if (isNewArrival && !currentLifecycle) {
+        if (isPendingSplitTarget) {
+          claxedo.terminal.transitionLifecycle?.(pty.id, "attaching", "split_pending_target")
+        } else if (claxedo.terminal.creating() > 0) {
+          claxedo.terminal.transitionLifecycle?.(pty.id, "creating", "pty_detected_during_create")
+        } else {
+          claxedo.terminal.transitionLifecycle?.(pty.id, "attached", "pty_detected_existing")
+        }
+      }
+      const lifecycle = claxedo.terminal.lifecycle?.(pty.id)
+      if (claxedo.terminal.isClosing?.(pty.id)) {
+        log("skip closing", { id: pty.id })
+        continue
+      }
+      if (lifecycle === "closing") {
+        log("skip lifecycle closing", { id: pty.id })
+        continue
+      }
+      if (lifecycle === "attaching" && !isPendingSplitTarget) {
+        log("skip lifecycle attaching", { id: pty.id })
+        continue
+      }
       const owned = claxedo.terminal.owner(pty.id)
       if (owned) {
+        if (isNewArrival) acknowledgeCreate(pty.id, byTerminal.get(pty.id) ?? owned)
+        claxedo.terminal.transitionLifecycle?.(pty.id, "attached", "owned_terminal_seen")
         log("skip owned", { id: pty.id, owner: owned })
         continue
       }
@@ -302,6 +369,8 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
       if (tabId) {
         link(pty.id, tabId)
         log("linked existing", { id: pty.id, tabId })
+        if (isNewArrival) acknowledgeCreate(pty.id, tabId)
+        claxedo.terminal.transitionLifecycle?.(pty.id, "attached", "linked_existing_tab")
         continue
       }
 
@@ -312,14 +381,25 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
         continue
       }
 
-      const req = pane()
-      if (req && pendingTarget?.id === pty.id) {
-        log("pane attach", { tab: req.tab, at: req.at, dir: req.dir, id: pty.id })
-        claxedo.terminal.ensure(req.tab, req.root)
-        link(pty.id, req.tab)
-        claxedo.terminal.own(req.tab, pty.id)
-        claxedo.terminal.split({ tab: req.tab, at: req.at, id: pty.id, dir: req.dir })
-        setPane(undefined)
+      if (isPendingSplitTarget && req) {
+        const key = `${req.tab}:${pty.id}`
+        void sharedAttachScheduler
+          .schedule(key, () => {
+            log("pane attach", { tab: req.tab, at: req.at, dir: req.dir, id: pty.id })
+            claxedo.terminal.transitionLifecycle?.(pty.id, "attaching", "pane_attach_start")
+            claxedo.terminal.ensure(req.tab, req.root)
+            link(pty.id, req.tab)
+            claxedo.terminal.own(req.tab, pty.id)
+            claxedo.terminal.splitInTab({ tab: req.tab, at: req.at, id: pty.id, dir: req.dir, origin: req.origin })
+            claxedo.terminal.transitionLifecycle?.(pty.id, "attached", "pane_attach_complete")
+            claxedo.terminal.clearSplitPending?.(req.tab)
+            if (splitTimer) {
+              clearTimeout(splitTimer)
+              splitTimer = undefined
+            }
+            setPane(undefined)
+          })
+          .promise.catch(() => {})
         continue
       }
 
@@ -327,7 +407,6 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
       // instance, let the target group (or route-level fallback) handle it.
       // Route-level instances (groupId=undefined) are allowed through so they
       // can act as fallback when the target group has no detection instance.
-      const activeCreateGroup = claxedo.terminal.creatingGroupId()
       if (
         claxedo.terminal.creating() > 0 &&
         activeCreateGroup &&
@@ -354,6 +433,11 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
         continue
       }
 
+      if (claxedo.terminal.splitPendingTab?.()) {
+        log("skip: split pending", { id: pty.id, tab: claxedo.terminal.splitPendingTab?.() })
+        continue
+      }
+
       // New terminal detected (or tab state got wiped) - add a tab for it.
       // Use creatingGroupId if a group-scoped create is in flight (set by requestCreate),
       // otherwise default to own group's tabs.
@@ -364,7 +448,9 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
       log("addTerminal result", { created })
       if (!created) continue
       link(pty.id, created)
+      claxedo.terminal.transitionLifecycle?.(pty.id, "attached", "tab_added")
       claxedo.terminal.created()
+      acknowledgedCreateIds.add(pty.id)
     }
   })
 
@@ -383,17 +469,20 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
       if (!hasTab && terminalExists) {
         // Tab was closed but terminal still alive - kill it
         // Close terminals synchronously to prevent onCleanup from saving stale buffers
+        claxedo.terminal.beginClosing?.(terminalId)
         const ids = claxedo.terminal.ids(tabId)
         void terminal.close(terminalId)
         for (const id of ids) {
           if (id === terminalId) continue
           if (!currentTerminalIds.has(id)) continue
+          claxedo.terminal.beginClosing?.(id)
           void terminal.close(id)
         }
         claxedo.terminal.clear(tabId)
         terminalsWithTabs.delete(terminalId)
       } else if (!terminalExists) {
         // Terminal was killed externally - clean up tracking
+        claxedo.terminal.clearClosing?.(terminalId)
         terminalsWithTabs.delete(terminalId)
       }
     }
@@ -412,6 +501,7 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
       const id = tab.type === "terminal" ? tab.terminalId : undefined
       if (!id) continue
       if (ids.has(id)) continue
+      claxedo.terminal.clearClosing?.(id)
 
       // Only act on terminals this instance has tracked via link().
       // Other wrapper instances manage their own terminals.
@@ -436,7 +526,11 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
 
   // Cleanup on unmount - just clear local tracking.
   onCleanup(() => {
+    if (splitTimer) clearTimeout(splitTimer)
+    claxedo.terminal.clearSplitPending?.()
     terminalsWithTabs.clear()
+    seenTerminalIds.clear()
+    acknowledgedCreateIds.clear()
   })
 
   const activeTab = createMemo(() => {
@@ -536,23 +630,43 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
     return m
   })
 
-  const split = (dir: "h" | "v", at: string) => {
-    const tab = activeTerminalTabId()
-    const root = activeTerminalId()
-    if (!tab || !root) return
+  const tabTerminalId = (tabId: string) =>
+    claxedo
+      .split
+      .groups()
+      .flatMap((g) => claxedo.groupTabs(g.id).items())
+      .find((t) => t.id === tabId && t.type === "terminal")?.terminalId
+
+  const terminalOrigin = (tabId: string, hostId?: string): TerminalActionOrigin | undefined => {
+    const gid = claxedo.findTabGroup(tabId)
+    if (!gid) return
+    return { tabId, groupId: gid, hostId: hostId ?? getTabHostId(tabId) }
+  }
+
+  const splitFor = (dir: "h" | "v", at: string, tab: string, origin: TerminalActionOrigin) => {
     const ids = claxedo.terminal.ids(tab)
+    const root = claxedo.terminal.focus(tab) ?? tabTerminalId(tab) ?? ids[0]
+    if (!root) return
     const target = ids.includes(at) ? at : (ids[0] ?? at)
-    setPane({ tab, root, at: target, dir, known: new Set(terminal.all().map((pty) => pty.id)) })
+    claxedo.terminal.beginSplit?.(tab)
+    if (splitTimer) clearTimeout(splitTimer)
+    splitTimer = setTimeout(() => {
+      if (pane()?.tab !== tab) return
+      setPane(undefined)
+      claxedo.terminal.clearSplitPending?.(tab)
+      splitTimer = undefined
+    }, 5000)
+    setPane({ tab, root, at: target, dir, known: new Set(terminal.all().map((pty) => pty.id)), origin })
     terminal.new()
   }
 
-  const close = (id: string) => {
-    const tab = activeTerminalTabId()
-    const root = activeTerminalId()
+  const close = (id: string, tab: string, origin: TerminalActionOrigin) => {
+    const root = tab ? (claxedo.terminal.focus(tab) ?? tabTerminalId(tab) ?? claxedo.terminal.ids(tab)[0]) : undefined
     if (!tab || !root) return
 
     // Close terminal FIRST to remove from store before component unmounts
     // This prevents onCleanup from saving stale buffer data
+    claxedo.terminal.beginClosing?.(id)
     void terminal.close(id)
 
     if (id === root) {
@@ -562,18 +676,18 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
         ownTabs.patch(tab, { terminalId: next, title: title ?? "Terminal" })
         link(next, tab)
         claxedo.terminal.disown(next)
-        claxedo.terminal.close({ tab, id })
-        claxedo.terminal.setFocus(tab, next)
+        claxedo.terminal.closeInTab({ tab, id, origin })
+        claxedo.terminal.focusInTab({ tab, id: next, origin })
         return
       }
-      claxedo.terminal.close({ tab, id })
+      claxedo.terminal.closeInTab({ tab, id, origin })
       claxedo.terminal.disown(id)
       claxedo.terminal.clear(tab)
       ownTabs.close(tab)
       return
     }
 
-    claxedo.terminal.close({ tab, id })
+    claxedo.terminal.closeInTab({ tab, id, origin })
     claxedo.terminal.disown(id)
   }
 
@@ -582,58 +696,60 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
   // - Closes the focused pane (or the whole terminal tab when it's the last pane)
   onMount(() => {
     const handle = (event: KeyboardEvent) => {
+      if ((event as KeyboardEvent & { __claxedoTerminalHandled?: boolean }).__claxedoTerminalHandled) return
       if (!isTerminalActive()) return
       if (!event.metaKey || event.ctrlKey || event.altKey) return
-      if (event.key.toLowerCase() !== "w") return
-      const target = event.target
-      if (!(target instanceof HTMLElement)) return
-      if (!target.closest('[data-component="terminal"]')) return
+      const key = event.key.toLowerCase()
+      if (key !== "w" && key !== "d") return
+      const target = event.target instanceof HTMLElement ? event.target : null
+      const active = document.activeElement instanceof HTMLElement ? document.activeElement : null
+      const inTerminal = !!target?.closest('[data-component="terminal"]') || !!active?.closest('[data-component="terminal"]')
+      if (key === "d" && !inTerminal) return
+      const eventOrigin = resolveOriginFromEvent(event, (tabId) => claxedo.findTabGroup(tabId))
+      ;(event as KeyboardEvent & { __claxedoTerminalHandled?: boolean }).__claxedoTerminalHandled = true
       event.preventDefault()
+      event.stopImmediatePropagation()
       event.stopPropagation()
 
-      const tab = activeTerminalTabId()
+      const tab = eventOrigin?.tabId ?? activeTerminalTabId()
       if (!tab) return
-      const id = claxedo.terminal.focus(tab) ?? activeTerminalId()
+      const origin = eventOrigin ?? terminalOrigin(tab)
+      if (!origin) return
+      const id = claxedo.terminal.focus(tab) ?? tabTerminalId(tab) ?? claxedo.terminal.ids(tab)[0]
       if (!id) return
-      close(id)
+      if (key === "d") {
+        splitFor(event.shiftKey ? "h" : "v", id, tab, origin)
+        return
+      }
+      close(id, tab, origin)
     }
 
-    document.addEventListener("keydown", handle, true)
-    onCleanup(() => document.removeEventListener("keydown", handle, true))
+    // Capture at window level so we preempt document-level command handlers.
+    window.addEventListener("keydown", handle, true)
+    onCleanup(() => {
+      window.removeEventListener("keydown", handle, true)
+    })
   })
 
-  const detach = (id: string) => {
-    const tab = activeTerminalTabId()
-    if (!tab) return
+  const detach = (id: string, tab: string, origin: TerminalActionOrigin) => {
     const pty = map().get(id)
     if (!pty) return
-    claxedo.terminal.close({ tab, id })
-    claxedo.terminal.disown(id)
+    claxedo.terminal.detachFromTab({ tab, id, origin })
     const created = ownTabs.addTerminal(dir(), id, pty.title)
     if (created) link(id, created)
   }
 
-  const focus = (id: string) => {
-    const tab = activeTerminalTabId()
-    if (!tab) return
-    claxedo.terminal.setFocus(tab, id)
-    claxedo.terminal.setZoom(tab, undefined)
+  const focus = (id: string, tab: string, origin: TerminalActionOrigin) => {
+    claxedo.terminal.focusInTab({ tab, id, origin })
   }
 
-  const zoom = (id: string) => {
-    const tab = activeTerminalTabId()
-    if (!tab) return
-    const current = claxedo.terminal.zoom(tab)
-    if (current === id) {
-      claxedo.terminal.setZoom(tab, undefined)
-      return
-    }
-    claxedo.terminal.setZoom(tab, id)
+  const zoom = (id: string, tab: string, origin: TerminalActionOrigin) => {
+    claxedo.terminal.zoomInTab({ tab, id, origin })
   }
 
-  const LeafNode = (props: { id: string }) => {
-    const tab = activeTerminalTabId()
-    const root = activeTerminalId()
+  const LeafNode = (props: { id: string; tabId: string }) => {
+    const tab = props.tabId
+    const root = tabTerminalId(tab) ?? claxedo.terminal.focus(tab) ?? claxedo.terminal.ids(tab)[0]
     const zoomed = tab ? claxedo.terminal.zoom(tab) : undefined
     if (zoomed && zoomed !== props.id) return <div class="hidden" />
 
@@ -650,7 +766,7 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
       const req = pane()
       if (!req || !tab) return undefined
       // Only show loading on the specific pane being split, not all panes
-      if (req.at !== props.id) return undefined
+      if (req.tab !== tab || req.at !== props.id) return undefined
       return req.dir
     }
     const pending = () => pendingDir() !== undefined
@@ -664,6 +780,8 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
       setMove({ tab, id: props.id })
     }
 
+    const origin = () => terminalOrigin(tab)
+
     return (
       <div
         data-pane={props.id}
@@ -673,7 +791,11 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
           "opacity-70": move()?.id === props.id,
         }}
         style={{ opacity: String(dim()) }}
-        onPointerDown={() => focus(props.id)}
+        onPointerDown={() => {
+          const value = origin()
+          if (!value) return
+          focus(props.id, tab, value)
+        }}
       >
         <div class="shrink-0 h-8 flex items-center gap-2 px-2 border-b border-border-weak-base bg-background-stronger/60 backdrop-blur select-none">
           <div
@@ -695,7 +817,11 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
               <IconButton
                 icon="layout-right"
                 variant="ghost"
-                onClick={() => split("v", props.id)}
+                onClick={() => {
+                  const value = origin()
+                  if (!value) return
+                  splitFor("v", props.id, props.tabId, value)
+                }}
                 aria-label="Split vertical"
                 disabled={pendingV()}
                 classList={{ "opacity-50": pendingV() }}
@@ -710,7 +836,11 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
               <IconButton
                 icon="layout-bottom"
                 variant="ghost"
-                onClick={() => split("h", props.id)}
+                onClick={() => {
+                  const value = origin()
+                  if (!value) return
+                  splitFor("h", props.id, props.tabId, value)
+                }}
                 aria-label="Split horizontal"
                 disabled={pendingH()}
                 classList={{ "opacity-50": pendingH() }}
@@ -721,16 +851,38 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
                 </div>
               </Show>
             </div>
-            <IconButton icon="expand" variant="ghost" onClick={() => zoom(props.id)} aria-label="Zoom" />
+            <IconButton
+              icon="expand"
+              variant="ghost"
+              onClick={() => {
+                const value = origin()
+                if (!value) return
+                zoom(props.id, tab, value)
+              }}
+              aria-label="Zoom"
+            />
             <Show when={root && props.id !== root}>
               <IconButton
                 icon="arrow-right"
                 variant="ghost"
-                onClick={() => detach(props.id)}
+                onClick={() => {
+                  const value = origin()
+                  if (!value) return
+                  detach(props.id, tab, value)
+                }}
                 aria-label="Move to tab"
               />
             </Show>
-            <IconButton icon="close-small" variant="ghost" onClick={() => close(props.id)} aria-label="Close pane" />
+            <IconButton
+              icon="close-small"
+              variant="ghost"
+              onClick={() => {
+                const value = origin()
+                if (!value) return
+                close(props.id, props.tabId, value)
+              }}
+              aria-label="Close pane"
+            />
           </div>
         </div>
 
@@ -758,9 +910,17 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
                   onCleanup={(pty) => queueMicrotask(() => terminal.update(pty))}
                   onUpdate={terminal.update}
                   // Cmd+D: split left/right (vertical split)
-                  onSplitVertical={() => split("v", props.id)}
+                  onSplitVertical={() => {
+                    const value = origin()
+                    if (!value) return
+                    splitFor("v", props.id, props.tabId, value)
+                  }}
                   // Cmd+Shift+D: split top/bottom (horizontal split)
-                  onSplitHorizontal={() => split("h", props.id)}
+                  onSplitHorizontal={() => {
+                    const value = origin()
+                    if (!value) return
+                    splitFor("h", props.id, props.tabId, value)
+                  }}
                 />
               </div>
             )
@@ -773,6 +933,7 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
   const SplitNode = (props: {
     node: Extract<import("../context/claxedo-layout").Pane, { t: "split" }>
     path: string
+    tabId: string
   }) => {
     const row = () => props.node.dir === "v"
     const size = () => props.node.size
@@ -810,7 +971,7 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
     })
 
     const handle = (event: PointerEvent) => {
-      const tab = activeTerminalTabId()
+      const tab = props.tabId
       if (!tab) return
       const elt = event.currentTarget
       if (!(elt instanceof HTMLElement)) return
@@ -829,7 +990,7 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
         }}
       >
         <div class="min-w-0 min-h-0" style={{ flex: `0 0 ${size() * 100}%` }}>
-          <Node node={props.node.a} path={props.path + "a"} />
+          <Node node={props.node.a} path={props.path + "a"} tabId={props.tabId} />
         </div>
         <div
           class="shrink-0 bg-transparent"
@@ -841,13 +1002,13 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
           onPointerDown={handle}
         />
         <div class="min-w-0 min-h-0 flex-1">
-          <Node node={props.node.b} path={props.path + "b"} />
+          <Node node={props.node.b} path={props.path + "b"} tabId={props.tabId} />
         </div>
       </div>
     )
   }
 
-  const Node = (props: { node: import("../context/claxedo-layout").Pane; path: string }) => (
+  const Node = (props: { node: import("../context/claxedo-layout").Pane; path: string; tabId: string }) => (
     <Show
       when={props.node.t === "leaf" ? props.node.id : undefined}
       keyed
@@ -855,10 +1016,11 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
         <SplitNode
           node={props.node as Extract<import("../context/claxedo-layout").Pane, { t: "split" }>}
           path={props.path}
+          tabId={props.tabId}
         />
       }
     >
-      {(id) => <LeafNode id={id} />}
+      {(id) => <LeafNode id={id} tabId={props.tabId} />}
     </Show>
   )
 
@@ -969,7 +1131,7 @@ function TerminalContentWrapperInner(props: ParentProps & { claxedo: ReturnType<
           return (
             <Portal mount={state.host}>
               <div class="absolute inset-0 overflow-hidden bg-background-base">
-                <Node node={state.paneRoot as import("../context/claxedo-layout").Pane} path="" />
+                <Node node={state.paneRoot as import("../context/claxedo-layout").Pane} path="" tabId={props.tabId} />
               </div>
             </Portal>
           )

@@ -28,4 +28,11 @@ describe("terminal recovery", () => {
     expect(localStorage.getItem(initialCommandKey("pty-1"))).toBeNull()
     expect(shouldRunInitialCommand({ id: "pty-1", initialCommand: "codex" })).toBe(true)
   })
+
+  test("initial_command_runs_once_across_remount", () => {
+    expect(shouldRunInitialCommand({ id: "pty-1", initialCommand: "codex" })).toBe(true)
+    markInitialCommandRan("pty-1")
+    expect(shouldRunInitialCommand({ id: "pty-1", initialCommand: "codex" })).toBe(false)
+    expect(localStorage.getItem(initialCommandKey("pty-1"))).toBe("1")
+  })
 })

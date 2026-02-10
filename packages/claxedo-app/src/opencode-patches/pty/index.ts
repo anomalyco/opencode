@@ -308,8 +308,13 @@ export namespace Pty {
           session.subscribers.delete(ws)
           continue
         }
-        open = true
-        ws.send(data)
+        try {
+          ws.send(data)
+          open = true
+        } catch {
+          session.subscribers.delete(ws)
+          ws.close()
+        }
       }
       if (open) return
       session.buffer += data
