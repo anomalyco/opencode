@@ -70,9 +70,8 @@ export function DialogTeam() {
   // Refresh team data on open
   onMount(() => {
     dialog.setSize("large")
-    sdk
-      .fetch(`${sdk.url}/team/by-session/${route.sessionID}`)
-      .then((r) => r.json())
+    fetch(`${sdk.url}/team/by-session/${route.sessionID}`)
+      .then((r: Response) => r.json())
       .then((data: any) => {
         if (!data) return
         sync.set("team", route.sessionID, {
