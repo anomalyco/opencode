@@ -18,7 +18,6 @@ export default {
         return
 
       let data = {
-        event_type: "completions",
         "cf.continent": event.event.request.cf?.continent,
         "cf.country": event.event.request.cf?.country,
         "cf.city": event.event.request.cf?.city,
@@ -39,11 +38,11 @@ export default {
           const json = JSON.parse(message.slice(8))
           data = { ...data, ...json }
           if ("llm.error.code" in json) {
-            events.push({ time, data: { ...data } })
+            events.push({ event_type: "llm.error", time, data: { ...data } })
           }
         }
       }
-      events.push({ time, data })
+      events.push({ event_type: "completions", time, data })
       console.log(JSON.stringify(data, null, 2))
 
       const ret = await fetch("https://api.honeycomb.io/1/batch/zen", {
