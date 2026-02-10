@@ -436,7 +436,7 @@ export const dict = {
   "workspace.payments.table.receipt": "Kvittering",
   "workspace.payments.type.credit": "kreditt",
   "workspace.payments.type.subscription": "abonnement",
-  "workspace.payments.view": "Utsikt",
+  "workspace.payments.view": "Vis",
   "workspace.black.loading": "Laster inn...",
   "workspace.black.time.day": "dag",
   "workspace.black.time.days": "dager",
