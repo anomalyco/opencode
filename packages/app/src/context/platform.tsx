@@ -57,6 +57,12 @@ export type Platform = {
   /** Set the default server URL to use on app startup (platform-specific) */
   setDefaultServerUrl?(url: string | null): Promise<void> | void
 
+  /** Get the preferred display backend (desktop only) */
+  getDisplayBackend?(): Promise<DisplayBackend | null> | DisplayBackend | null
+
+  /** Set the preferred display backend (desktop only) */
+  setDisplayBackend?(backend: DisplayBackend): Promise<void>
+
   /** Parse markdown to HTML using native parser (desktop only, returns unprocessed code blocks) */
   parseMarkdown?(markdown: string): Promise<string>
 
@@ -69,6 +75,8 @@ export type Platform = {
   /** Read image from clipboard (desktop only) */
   readClipboardImage?(): Promise<File | null>
 }
+
+export type DisplayBackend = "auto" | "wayland"
 
 export const { use: usePlatform, provider: PlatformProvider } = createSimpleContext({
   name: "Platform",
