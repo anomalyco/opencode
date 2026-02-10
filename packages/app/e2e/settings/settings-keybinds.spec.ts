@@ -1,6 +1,6 @@
 import { test, expect } from "../fixtures"
 import { openSettings, closeDialog, withSession } from "../actions"
-import { keybindButtonSelector } from "../selectors"
+import { keybindButtonSelector, terminalSelector } from "../selectors"
 import { modKey } from "../utils"
 
 test("changing sidebar toggle keybind works", async ({ page, gotoSession }) => {
@@ -267,11 +267,14 @@ test("changing terminal toggle keybind works", async ({ page, gotoSession }) => 
 
   await closeDialog(page, dialog)
 
-  await page.keyboard.press(`${modKey}+Y`)
-  await page.waitForTimeout(100)
+  const terminal = page.locator(terminalSelector)
+  await expect(terminal).not.toBeVisible()
 
-  const pageStable = await page.evaluate(() => document.readyState === "complete")
-  expect(pageStable).toBe(true)
+  await page.keyboard.press(`${modKey}+Y`)
+  await expect(terminal).toBeVisible()
+
+  await page.keyboard.press(`${modKey}+Y`)
+  await expect(terminal).not.toBeVisible()
 })
 
 test("changing command palette keybind works", async ({ page, gotoSession }) => {

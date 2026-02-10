@@ -1,0 +1,323 @@
+---
+title: Commands
+description: Create custom commands for repetitive tasks.
+---
+
+사용자 지정 명령은 TUI에서 실행될 때 실행할 때 실행해야 합니다.
+
+```bash frame="none"
+/my-command
+```
+
+사용자 정의 명령은 `/init`, `/undo`, `/redo`, `/share`, `/share`, `/help`와 같은 내장된 명령 이외에 있습니다. [더 알아보기](/docs/tui#commands).
+
+---
+
+## 명령 파일 생성
+
+사용자 지정 명령을 정의하려면 `commands/` 디렉토리의 Markdown 파일을 만듭니다.
+
+`.opencode/commands/test.md` 만들기:
+
+```md title=".opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+frontmatter 명령 속성을 정의합니다. 콘텐츠는 템플릿이 됩니다.
+
+명령명에 따라 `/`를 입력하여 명령을 사용하십시오.
+
+```bash frame="none"
+"/test"
+```
+
+---
+
+## 구성
+
+opencode config를 통해 사용자 지정 명령을 추가하거나 `commands/` 디렉토리에 있는 Markdown 파일을 만들 수 있습니다.
+
+---
+
+### JSON 태그
+
+opencode [config](/docs/config)에서 `command` 옵션을 사용하십시오:
+
+```json title="opencode.jsonc" {4-12}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    // This becomes the name of the command
+    "test": {
+      // This is the prompt that will be sent to the LLM
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
+      // This is shown as the description in the TUI
+      "description": "Run tests with coverage",
+      "agent": "build",
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+이제 TUI에서이 명령을 실행할 수 있습니다.
+
+```bash frame="none"
+/test
+```
+
+---
+
+### 마크다운
+
+Markdown 파일을 사용하여 명령을 정의할 수 있습니다. 그들에 게:
+
+- 글로벌: `~/.config/opencode/commands/`
+- 프로젝트: `.opencode/commands/`
+
+```markdown title="~/.config/opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+markdown 파일 이름은 명령 이름입니다. 예를 들어, `test.md` lets
+당신은 실행:
+
+```bash frame="none"
+/test
+```
+
+---
+
+## Prompt 구성
+
+사용자 정의 명령에 대한 프롬프트는 몇 가지 특별한 placeholders 및 구문을 지원합니다.
+
+---
+
+#### 가격
+
+`$ARGUMENTS` placeholder를 사용하여 명령을 전달합니다.
+
+```md title=".opencode/commands/component.md"
+---
+description: Create a new component
+---
+
+Create a new React component named $ARGUMENTS with TypeScript support.
+Include proper typing and basic structure.
+```
+
+인수로 명령을 실행:
+
+```bash frame="none"
+/component Button
+```
+
+그리고 `$ARGUMENTS`는 `Button`로 대체될 것입니다.
+
+위치 매개 변수를 사용하여 개별 인수에 액세스 할 수 있습니다.
+
+- `$1` - 첫 번째 인수
+- `$2` - 두 번째 인수
+- `$3` - 세 번째 인수
+- 그래서 ...
+
+예를 들면:
+
+```md title=".opencode/commands/create-file.md"
+---
+description: Create a new file with content
+---
+
+Create a file named $1 in the directory $2
+with the following content: $3
+```
+
+명령을 실행:
+
+```bash frame="none"
+/create-file config.json src "{ \"key\": \"value\" }"
+```
+
+이렇게 대체됩니다:
+
+- `$1`는 `config.json`
+- `$2`는 `src`
+- `$3`는 `{ "key": "value" }`
+
+---
+
+### 포탄 산출
+
+사용 !`command` 는 [bash command](/docs/tui#bash-commands)를 프롬프트로 출력합니다.
+
+예를 들어, 테스트 범위를 분석하는 사용자 정의 명령을 만들려면:
+
+```md title=".opencode/commands/analyze-coverage.md"
+---
+description: Analyze test coverage
+---
+
+Here are the current test results:
+!`npm test`
+
+Based on these results, suggest improvements to increase coverage.
+```
+
+또는 최근 변경 사항 :
+
+```md title=".opencode/commands/review-changes.md"
+---
+description: Review recent changes
+---
+
+Recent git commits:
+!`git log --oneline -10`
+
+Review these changes and suggest any improvements.
+```
+
+명령은 프로젝트의 루트 디렉토리에서 실행하고 출력은 프롬프트의 일부가됩니다.
+
+---
+
+## 파일 참조
+
+파일명에 따라 `@`를 사용하여 명령에 파일이 포함되어 있습니다.
+
+```md title=".opencode/commands/review-component.md"
+---
+description: Review component
+---
+
+Review the component in @src/components/Button.tsx.
+Check for performance issues and suggest improvements.
+```
+
+파일 콘텐츠는 자동으로 프롬프트에 포함되어 있습니다.
+
+---
+
+## 옵션
+
+구성 옵션을 자세히 살펴봅시다.
+
+---
+
+### 템플릿
+
+`template` 옵션은 명령이 실행될 때 LLM에 전송될 프롬프트를 정의합니다.
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes."
+    }
+  }
+}
+```
+
+\*\* config 옵션이 필요합니다.
+
+---
+
+### 묘사
+
+`description` 옵션을 사용하여 명령의 간단한 설명을 제공합니다.
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "description": "Run tests with coverage"
+    }
+  }
+}
+```
+
+명령에 입력할 때 TUI의 설명으로 표시됩니다.
+
+---
+
+## 에이전트
+
+`agent` config를 선택적으로 지정합니다. [agent](/docs/agents)는 이 명령을 실행해야 합니다.
+이 경우 [subagent](/docs/agents/#subagents) 명령은 기본으로 시약을 트리거합니다.
+이 행동을 비활성화하려면 `subtask`를 `false`로 설정하십시오.
+
+```json title="opencode.json"
+{
+  "command": {
+    "review": {
+      "agent": "plan"
+    }
+  }
+}
+```
+
+** 옵션** 설정 옵션입니다. 지정된 경우, 현재 에이전트에 기본값.
+
+---
+
+### 서브스크랩
+
+`subtask` boolean을 사용하여 명령을 강제로 [subagent](/docs/agents/#subagents) 호출합니다.
+이것은 당신이 명령을 원하지 않는 경우 유용합니다 당신의 기본 컨텍스트를 pollute하고 \*\* 에이전트는 시약으로 행동하는,
+`mode`가 [시약](/docs/시약) 구성에 `primary`로 설정되는 경우에도.
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "subtask": true
+    }
+  }
+}
+```
+
+** 옵션** 설정 옵션입니다.
+
+---
+
+### 모형
+
+`model` config를 사용하여 이 명령의 기본 모델을 무시합니다.
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+** 옵션** 설정 옵션입니다.
+
+---
+
+## 내장
+
+opencode는 `/init`, `/undo`, `/redo`, `/share`, `/help`, `/help`와 같은 몇몇 붙박이 명령을 포함합니다; [learn more] (./tui#commands).
+
+:::note
+사용자 지정 명령은 내장 명령을 무시할 수 있습니다.
+:::
+
+같은 이름으로 사용자 정의 명령을 정의하면 내장 명령을 무시합니다.

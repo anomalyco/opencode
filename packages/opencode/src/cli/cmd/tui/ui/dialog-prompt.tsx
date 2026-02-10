@@ -39,7 +39,9 @@ export function DialogPrompt(props: DialogPromptProps) {
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
           {props.title}
         </text>
-        <text fg={theme.textMuted}>esc</text>
+        <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+          esc
+        </text>
       </box>
       <box gap={1}>
         {props.description}
