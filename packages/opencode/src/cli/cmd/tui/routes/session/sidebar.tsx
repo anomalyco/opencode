@@ -1,5 +1,5 @@
 import { useSync } from "@tui/context/sync"
-import { createMemo, For, Show, Switch, Match } from "solid-js"
+import { createMemo, createSignal, For, Show, Switch, Match } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../../context/theme"
 import { Locale } from "@/util/locale"
@@ -11,21 +11,61 @@ import { useKeybind } from "../../context/keybind"
 import { useDirectory } from "../../context/directory"
 import { useKV } from "../../context/kv"
 import { TodoItem } from "../../component/todo-item"
+import { buildSessionTree, sessionRunState } from "../../lib/session-tree"
+import { useRoute } from "../../context/route"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const sync = useSync()
   const { theme } = useTheme()
-  const session = createMemo(() => sync.session.get(props.sessionID)!)
-  const diff = createMemo(() => sync.data.session_diff[props.sessionID] ?? [])
-  const todo = createMemo(() => sync.data.todo[props.sessionID] ?? [])
-  const messages = createMemo(() => sync.data.message[props.sessionID] ?? [])
+  const route = useRoute()
 
   const [expanded, setExpanded] = createStore({
     mcp: true,
     diff: true,
     todo: true,
     lsp: true,
+    subagents: true,
   })
+
+  const tree = createMemo(() =>
+    buildSessionTree({
+      currentSessionID: props.sessionID,
+      sessions: sync.data.session,
+      sort: "created",
+    }),
+  )
+
+  // 锚定到根会话：sidebar 始终显示根会话信息，hover 切换 subagent 时 sidebar 不会重绘
+  const rootSessionID = createMemo(() => tree().rootID)
+  const rootSession = createMemo(() => sync.session.get(rootSessionID())!)
+  const isInSubagent = createMemo(() => props.sessionID !== rootSessionID())
+
+  // 所有展示信息都基于根会话，保持 sidebar 稳定
+  const diff = createMemo(() => sync.data.session_diff[rootSessionID()] ?? [])
+  const todo = createMemo(() => sync.data.todo[rootSessionID()] ?? [])
+  const messages = createMemo(() => sync.data.message[rootSessionID()] ?? [])
+
+  const subagentSessions = createMemo(() => {
+    const t = tree()
+    const out: Array<{ session: (typeof sync.data.session)[number]; depth: number }> = []
+
+    for (const item of t.list) {
+      if (item.id === t.rootID) continue
+      const s = t.sessionByID.get(item.id)
+      if (!s) continue
+      out.push({ session: s, depth: item.depth })
+    }
+
+    return out
+  })
+
+  const getSessionStatus = (sessionID: string) => {
+    const status = sync.data.session_status?.[sessionID] as { type?: string } | undefined
+    return sessionRunState(status)
+  }
+
+  // Parent 悬停状态
+  const [parentHovered, setParentHovered] = createSignal(false)
 
   // Sort MCP servers alphabetically for consistent display order
   const mcpEntries = createMemo(() => Object.entries(sync.data.mcp).sort(([a], [b]) => a.localeCompare(b)))
@@ -69,11 +109,10 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const gettingStartedDismissed = createMemo(() => kv.get("dismissed_getting_started", false))
 
   return (
-    <Show when={session()}>
+    <Show when={rootSession()}>
       <box
         backgroundColor={theme.backgroundPanel}
         width={42}
-        height="100%"
         paddingTop={1}
         paddingBottom={1}
         paddingLeft={2}
@@ -84,10 +123,10 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
           <box flexShrink={0} gap={1} paddingRight={1}>
             <box paddingRight={1}>
               <text fg={theme.text}>
-                <b>{session().title}</b>
+                <b>{rootSession().title}</b>
               </text>
-              <Show when={session().share?.url}>
-                <text fg={theme.textMuted}>{session().share!.url}</text>
+              <Show when={rootSession().share?.url}>
+                <text fg={theme.textMuted}>{rootSession().share!.url}</text>
               </Show>
             </box>
             <box>
@@ -202,6 +241,100 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 </For>
               </Show>
             </box>
+            {/* Subagents Section */}
+            <Show when={subagentSessions().length > 0}>
+              <box>
+                <box
+                  flexDirection="row"
+                  gap={1}
+                  onMouseDown={() => setExpanded("subagents", !expanded.subagents)}
+                >
+                  <text fg={theme.text}>{expanded.subagents ? "▼" : "▶"}</text>
+                  <text fg={theme.text}>
+                    <b>Subagents</b>
+                    <Show when={!expanded.subagents}>
+                      <span style={{ fg: theme.textMuted }}> ({subagentSessions().length})</span>
+                    </Show>
+                  </text>
+                </box>
+                <Show when={expanded.subagents}>
+                  {/* Parent 链接：始终显示，避免布局移位导致闪屏 */}
+                  <box
+                    flexDirection="row"
+                    gap={1}
+                    backgroundColor={parentHovered() && isInSubagent() ? theme.backgroundElement : undefined}
+                    onMouseOver={() => {
+                      setParentHovered(true)
+                      if (isInSubagent()) {
+                        route.navigate({ type: "session", sessionID: rootSessionID() })
+                      }
+                    }}
+                    onMouseOut={() => setParentHovered(false)}
+                    onMouseDown={() => {
+                      if (isInSubagent()) {
+                        route.navigate({ type: "session", sessionID: rootSessionID() })
+                      }
+                    }}
+                  >
+                    <text fg={!isInSubagent() ? theme.primary : theme.accent}>↑</text>
+                    <text fg={!isInSubagent() ? theme.primary : parentHovered() ? theme.text : theme.text}>
+                      {!isInSubagent() ? <span style={{ bold: true }}>Parent</span> : <b>Parent</b>}
+                      <span style={{ fg: !isInSubagent() ? theme.primary : parentHovered() ? theme.text : theme.textMuted }}>
+                        {" "}
+                        {(() => {
+                          const title = rootSession()?.title ?? "Primary"
+                          return title.length > 25 ? title.slice(0, 25) + "…" : title
+                        })()}
+                      </span>
+                    </text>
+                  </box>
+                  <For each={subagentSessions()}>
+                    {(item) => {
+                      const sub = item.session
+                      const status = createMemo(() => getSessionStatus(sub.id))
+                      const isCurrent = createMemo(() => sub.id === props.sessionID)
+                      const [hovered, setHovered] = createSignal(false)
+                      const statusColor = createMemo(() => {
+                        if (status() === "working") return theme.warning
+                        if (status() === "waiting") return theme.accent
+                        return theme.success
+                      })
+                      const statusIcon = createMemo(() => {
+                        if (status() === "working") return "◐"
+                        if (status() === "waiting") return "◎"
+                        return "•"
+                      })
+                      const label = createMemo(() => {
+                        const indent = item.depth > 0 ? `${"  ".repeat(item.depth - 1)}↳ ` : ""
+                        const title = sub.title ?? sub.id.slice(0, 16)
+                        return indent + title
+                      })
+                      return (
+                        <box
+                          flexDirection="row"
+                          gap={1}
+                          backgroundColor={hovered() && !isCurrent() ? theme.backgroundElement : undefined}
+                          onMouseOver={() => {
+                            setHovered(true)
+                            if (!isCurrent()) route.navigate({ type: "session", sessionID: sub.id })
+                          }}
+                          onMouseOut={() => setHovered(false)}
+                          onMouseDown={() => !isCurrent() && route.navigate({ type: "session", sessionID: sub.id })}
+                        >
+                          <text flexShrink={0} fg={statusColor()}>
+                            {statusIcon()}
+                          </text>
+                          <text fg={isCurrent() ? theme.primary : hovered() ? theme.text : theme.textMuted} wrapMode="word">
+                            {isCurrent() || hovered() ? <span style={{ bold: true }}>{label()}</span> : label()}
+                            {status() === "waiting" && <span style={{ fg: theme.accent }}> (waiting)</span>}
+                          </text>
+                        </box>
+                      )
+                    }}
+                  </For>
+                </Show>
+              </box>
+            </Show>
             <Show when={todo().length > 0 && todo().some((t) => t.status !== "completed")}>
               <box>
                 <box

@@ -7,7 +7,8 @@ import { SplitBorder } from "@tui/component/border"
 import type { AssistantMessage, Session } from "@opencode-ai/sdk/v2"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { useKeybind } from "../../context/keybind"
-import { useTerminalDimensions } from "@opentui/solid"
+import { Installation } from "@/installation"
+import { buildSessionTree, sessionRunState } from "../../lib/session-tree"
 
 const Title = (props: { session: Accessor<Session> }) => {
   const { theme } = useTheme()
@@ -34,6 +35,25 @@ export function Header() {
   const sync = useSync()
   const session = createMemo(() => sync.session.get(route.sessionID)!)
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+
+  const tree = createMemo(() =>
+    buildSessionTree({
+      currentSessionID: route.sessionID,
+      sessions: sync.data.session,
+      sort: "created",
+    }),
+  )
+
+  const childCount = createMemo(() => Math.max(0, tree().list.length - 1))
+
+  const workingChildCount = createMemo(() => {
+    const t = tree()
+    return t.list.filter((item) => {
+      if (item.id === t.rootID) return false
+      const status = sync.data.session_status?.[item.id] as { type?: string } | undefined
+      return sessionRunState(status) !== "done"
+    }).length
+  })
 
   const cost = createMemo(() => {
     const total = pipe(
@@ -62,9 +82,7 @@ export function Header() {
   const { theme } = useTheme()
   const keybind = useKeybind()
   const command = useCommandDialog()
-  const [hover, setHover] = createSignal<"parent" | "prev" | "next" | null>(null)
-  const dimensions = useTerminalDimensions()
-  const narrow = createMemo(() => dimensions().width < 80)
+  const [hover, setHover] = createSignal<"parent" | "prev" | "next" | "list" | null>(null)
 
   return (
     <box flexShrink={0}>
@@ -81,51 +99,78 @@ export function Header() {
       >
         <Switch>
           <Match when={session()?.parentID}>
-            <box flexDirection="column" gap={1}>
-              <box flexDirection={narrow() ? "column" : "row"} justifyContent="space-between" gap={narrow() ? 1 : 0}>
+            <box flexDirection="row" gap={2}>
+              <text fg={theme.text}>
+                <b>Subagent session</b>
+              </text>
+              <box
+                onMouseOver={() => setHover("parent")}
+                onMouseOut={() => setHover(null)}
+                onMouseUp={() => command.trigger("session.parent")}
+                backgroundColor={hover() === "parent" ? theme.backgroundElement : theme.backgroundPanel}
+              >
                 <text fg={theme.text}>
-                  <b>Subagent session</b>
+                  Parent <span style={{ fg: theme.textMuted }}>{keybind.print("session_parent")}</span>
                 </text>
-                <ContextInfo context={context} cost={cost} />
               </box>
-              <box flexDirection="row" gap={2}>
-                <box
-                  onMouseOver={() => setHover("parent")}
-                  onMouseOut={() => setHover(null)}
-                  onMouseUp={() => command.trigger("session.parent")}
-                  backgroundColor={hover() === "parent" ? theme.backgroundElement : theme.backgroundPanel}
-                >
-                  <text fg={theme.text}>
-                    Parent <span style={{ fg: theme.textMuted }}>{keybind.print("session_parent")}</span>
-                  </text>
-                </box>
-                <box
-                  onMouseOver={() => setHover("prev")}
-                  onMouseOut={() => setHover(null)}
-                  onMouseUp={() => command.trigger("session.child.previous")}
-                  backgroundColor={hover() === "prev" ? theme.backgroundElement : theme.backgroundPanel}
-                >
-                  <text fg={theme.text}>
-                    Prev <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle_reverse")}</span>
-                  </text>
-                </box>
-                <box
-                  onMouseOver={() => setHover("next")}
-                  onMouseOut={() => setHover(null)}
-                  onMouseUp={() => command.trigger("session.child.next")}
-                  backgroundColor={hover() === "next" ? theme.backgroundElement : theme.backgroundPanel}
-                >
-                  <text fg={theme.text}>
-                    Next <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle")}</span>
-                  </text>
-                </box>
+              <box
+                onMouseOver={() => setHover("prev")}
+                onMouseOut={() => setHover(null)}
+                onMouseUp={() => command.trigger("session.child.previous")}
+                backgroundColor={hover() === "prev" ? theme.backgroundElement : theme.backgroundPanel}
+              >
+                <text fg={theme.text}>
+                  Prev <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle_reverse")}</span>
+                </text>
+              </box>
+              <box
+                onMouseOver={() => setHover("next")}
+                onMouseOut={() => setHover(null)}
+                onMouseUp={() => command.trigger("session.child.next")}
+                backgroundColor={hover() === "next" ? theme.backgroundElement : theme.backgroundPanel}
+              >
+                <text fg={theme.text}>
+                  Next <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_cycle")}</span>
+                </text>
+              </box>
+              <box
+                onMouseOver={() => setHover("list")}
+                onMouseOut={() => setHover(null)}
+                onMouseUp={() => command.trigger("session.child.list")}
+                backgroundColor={hover() === "list" ? theme.backgroundElement : theme.backgroundPanel}
+              >
+                <text fg={theme.text}>
+                  List <span style={{ fg: theme.textMuted }}>{keybind.print("session_child_list")}</span>
+                </text>
+              </box>
+              <box flexGrow={1} flexShrink={1} />
+              <box flexDirection="row" gap={1} flexShrink={0}>
+                <ContextInfo context={context} cost={cost} />
+                <text fg={theme.textMuted}>v{Installation.VERSION}</text>
               </box>
             </box>
           </Match>
           <Match when={true}>
-            <box flexDirection={narrow() ? "column" : "row"} justifyContent="space-between" gap={1}>
-              <Title session={session} />
-              <ContextInfo context={context} cost={cost} />
+            <box flexDirection="row" justifyContent="space-between" gap={1}>
+              <box flexDirection="row" gap={2}>
+                <Title session={session} />
+                <Show when={childCount() > 0}>
+                  <text fg={theme.textMuted}>
+                    <span style={{ fg: workingChildCount() > 0 ? theme.warning : theme.success }}>
+                      {workingChildCount() > 0 ? "◐" : "●"}
+                    </span>{" "}
+                    {childCount()} subagent{childCount() > 1 ? "s" : ""}
+                    <Show when={workingChildCount() > 0}>
+                      <span style={{ fg: theme.warning }}> ({workingChildCount()} working)</span>
+                    </Show>{" "}
+                    <span style={{ fg: theme.border }}>{keybind.print("session_child_list")}</span>
+                  </text>
+                </Show>
+              </box>
+              <box flexDirection="row" gap={1} flexShrink={0}>
+                <ContextInfo context={context} cost={cost} />
+                <text fg={theme.textMuted}>v{Installation.VERSION}</text>
+              </box>
             </box>
           </Match>
         </Switch>

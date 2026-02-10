@@ -1319,6 +1319,10 @@ export type KeybindsConfig = {
    */
   session_parent?: string
   /**
+   * List child sessions
+   */
+  session_child_list?: string
+  /**
    * Suspend terminal
    */
   terminal_suspend?: string
