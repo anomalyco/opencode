@@ -420,7 +420,7 @@ export default function FileTree(props: {
                 >
                   <Collapsible.Trigger>
                     <ContextMenu>
-                      <ContextMenu.Trigger as="div">
+                      <ContextMenu.Trigger as="div" class="w-full">
                         <Wrapper>
                           <Node node={node}>
                             <div class="size-4 flex items-center justify-center text-icon-weak">
@@ -472,7 +472,7 @@ export default function FileTree(props: {
               </Match>
               <Match when={node.type === "file"}>
                 <ContextMenu>
-                  <ContextMenu.Trigger as="div">
+                  <ContextMenu.Trigger as="div" class="w-full">
                     <Wrapper>
                       <Node node={node} as="button" type="button" onClick={() => props.onFileClick?.(node)}>
                         <div class="w-4 shrink-0" />
