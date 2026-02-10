@@ -1,5 +1,7 @@
 import { useFile } from "@/context/file"
+import { useLanguage } from "@/context/language"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
+import { ContextMenu } from "@opencode-ai/ui/context-menu"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
@@ -81,9 +83,14 @@ export default function FileTree(props: {
   _kinds?: ReadonlyMap<string, Kind>
 }) {
   const file = useFile()
+  const language = useLanguage()
   const level = props.level ?? 0
   const draggable = () => props.draggable ?? true
   const tooltip = () => props.tooltip ?? true
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text).catch(() => {})
+  }
 
   const filter = createMemo(() => {
     if (props._filter) return props._filter
@@ -349,8 +356,6 @@ export default function FileTree(props: {
           const expanded = () => file.tree.state(node.path)?.expanded ?? false
           const deep = () => deeps().get(node.path) ?? -1
           const Wrapper = (p: ParentProps) => {
-            if (!tooltip()) return p.children
-
             const parts = node.path.split("/")
             const leaf = parts[parts.length - 1] ?? node.path
             const head = parts.slice(0, -1).join("/")
@@ -367,40 +372,61 @@ export default function FileTree(props: {
 
             const ignored = () => node.type === "directory" && node.ignored
 
-            return (
-              <Tooltip
-                openDelay={2000}
-                placement="bottom-start"
-                class="w-full"
-                contentStyle={{ "max-width": "480px", width: "fit-content" }}
-                value={
-                  <div class="flex items-center min-w-0 whitespace-nowrap text-12-regular">
-                    <span
-                      class="min-w-0 truncate text-text-invert-base"
-                      style={{ direction: "rtl", "unicode-bidi": "plaintext" }}
-                    >
-                      {prefix}
-                    </span>
-                    <span class="shrink-0 text-text-invert-strong">{leaf}</span>
-                    <Show when={label()}>
-                      {(t: () => string) => (
+            const TooltipWrapper = (tp: ParentProps) => {
+              if (!tooltip()) return tp.children
+              return (
+                <Tooltip
+                  openDelay={2000}
+                  placement="bottom-start"
+                  class="w-full"
+                  contentStyle={{ "max-width": "480px", width: "fit-content" }}
+                  value={
+                    <div class="flex items-center min-w-0 whitespace-nowrap text-12-regular">
+                      <span
+                        class="min-w-0 truncate text-text-invert-base"
+                        style={{ direction: "rtl", "unicode-bidi": "plaintext" }}
+                      >
+                        {prefix}
+                      </span>
+                      <span class="shrink-0 text-text-invert-strong">{leaf}</span>
+                      <Show when={label()}>
+                        {(t: () => string) => (
+                          <>
+                            <span class="mx-1 font-bold text-text-invert-strong">•</span>
+                            <span class="shrink-0 text-text-invert-strong">{t()}</span>
+                          </>
+                        )}
+                      </Show>
+                      <Show when={ignored()}>
                         <>
                           <span class="mx-1 font-bold text-text-invert-strong">•</span>
-                          <span class="shrink-0 text-text-invert-strong">{t()}</span>
+                          <span class="shrink-0 text-text-invert-strong">Ignored</span>
                         </>
-                      )}
-                    </Show>
-                    <Show when={ignored()}>
-                      <>
-                        <span class="mx-1 font-bold text-text-invert-strong">•</span>
-                        <span class="shrink-0 text-text-invert-strong">Ignored</span>
-                      </>
-                    </Show>
-                  </div>
-                }
-              >
-                {p.children}
-              </Tooltip>
+                      </Show>
+                    </div>
+                  }
+                >
+                  {tp.children}
+                </Tooltip>
+              )
+            }
+
+            return (
+              <ContextMenu>
+                <ContextMenu.Trigger class="w-full">
+                  <TooltipWrapper>{p.children}</TooltipWrapper>
+                </ContextMenu.Trigger>
+                <ContextMenu.Portal>
+                  <ContextMenu.Content>
+                    <ContextMenu.Item onSelect={() => copyToClipboard(node.path)}>
+                      <ContextMenu.ItemLabel>{language.t("filetree.copyRelativePath")}</ContextMenu.ItemLabel>
+                    </ContextMenu.Item>
+                    <ContextMenu.Item onSelect={() => copyToClipboard(node.absolute)}>
+                      <ContextMenu.ItemLabel>{language.t("filetree.copyAbsolutePath")}</ContextMenu.ItemLabel>
+                    </ContextMenu.Item>
+                  </ContextMenu.Content>
+                </ContextMenu.Portal>
+              </ContextMenu>
             )
           }
 

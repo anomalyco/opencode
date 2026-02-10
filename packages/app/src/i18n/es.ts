@@ -50,6 +50,9 @@ export const dict = {
   "command.input.focus": "Enfocar entrada",
   "command.terminal.toggle": "Alternar terminal",
   "command.fileTree.toggle": "Alternar árbol de archivos",
+
+  "filetree.copyRelativePath": "Copiar ruta relativa",
+  "filetree.copyAbsolutePath": "Copiar ruta absoluta",
   "command.review.toggle": "Alternar revisión",
   "command.terminal.new": "Nueva terminal",
   "command.terminal.new.description": "Crear una nueva pestaña de terminal",

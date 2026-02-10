@@ -50,6 +50,9 @@ export const dict = {
   "command.input.focus": "التركيز على حقل الإدخال",
   "command.terminal.toggle": "تبديل المحطة الطرفية",
   "command.fileTree.toggle": "تبديل شجرة الملفات",
+
+  "filetree.copyRelativePath": "نسخ المسار النسبي",
+  "filetree.copyAbsolutePath": "نسخ المسار المطلق",
   "command.review.toggle": "تبديل المراجعة",
   "command.terminal.new": "محطة طرفية جديدة",
   "command.terminal.new.description": "إنشاء علامة تبويب جديدة للمحطة الطرفية",

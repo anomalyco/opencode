@@ -54,6 +54,9 @@ export const dict = {
   "command.input.focus": "Eingabefeld fokussieren",
   "command.terminal.toggle": "Terminal umschalten",
   "command.fileTree.toggle": "Dateibaum umschalten",
+
+  "filetree.copyRelativePath": "Relativen Pfad kopieren",
+  "filetree.copyAbsolutePath": "Absoluten Pfad kopieren",
   "command.review.toggle": "Überprüfung umschalten",
   "command.terminal.new": "Neues Terminal",
   "command.terminal.new.description": "Neuen Terminal-Tab erstellen",

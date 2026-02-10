@@ -54,6 +54,9 @@ export const dict = {
   "command.input.focus": "聚焦输入框",
   "command.terminal.toggle": "切换终端",
   "command.fileTree.toggle": "切换文件树",
+
+  "filetree.copyRelativePath": "复制相对路径",
+  "filetree.copyAbsolutePath": "复制绝对路径",
   "command.review.toggle": "切换审查",
   "command.terminal.new": "新建终端",
   "command.terminal.new.description": "创建新的终端标签页",

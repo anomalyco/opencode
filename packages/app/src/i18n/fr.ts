@@ -50,6 +50,9 @@ export const dict = {
   "command.input.focus": "Focus input",
   "command.terminal.toggle": "Basculer le terminal",
   "command.fileTree.toggle": "Basculer l'arborescence des fichiers",
+
+  "filetree.copyRelativePath": "Copier le chemin relatif",
+  "filetree.copyAbsolutePath": "Copier le chemin absolu",
   "command.review.toggle": "Basculer la revue",
   "command.terminal.new": "Nouveau terminal",
   "command.terminal.new.description": "Créer un nouvel onglet de terminal",

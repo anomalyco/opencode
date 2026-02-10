@@ -54,6 +54,9 @@ export const dict = {
   "command.input.focus": "입력창 포커스",
   "command.terminal.toggle": "터미널 토글",
   "command.fileTree.toggle": "파일 트리 토글",
+
+  "filetree.copyRelativePath": "상대 경로 복사",
+  "filetree.copyAbsolutePath": "절대 경로 복사",
   "command.review.toggle": "검토 토글",
   "command.terminal.new": "새 터미널",
   "command.terminal.new.description": "새 터미널 탭 생성",

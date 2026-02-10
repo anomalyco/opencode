@@ -50,6 +50,9 @@ export const dict = {
   "command.input.focus": "Фокус на поле ввода",
   "command.terminal.toggle": "Переключить терминал",
   "command.fileTree.toggle": "Переключить дерево файлов",
+
+  "filetree.copyRelativePath": "Копировать относительный путь",
+  "filetree.copyAbsolutePath": "Копировать абсолютный путь",
   "command.review.toggle": "Переключить обзор",
   "command.terminal.new": "Новый терминал",
   "command.terminal.new.description": "Создать новую вкладку терминала",

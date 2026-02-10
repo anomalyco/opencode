@@ -54,6 +54,9 @@ export const dict = {
   "command.input.focus": "聚焦輸入框",
   "command.terminal.toggle": "切換終端機",
   "command.fileTree.toggle": "切換檔案樹",
+
+  "filetree.copyRelativePath": "複製相對路徑",
+  "filetree.copyAbsolutePath": "複製絕對路徑",
   "command.review.toggle": "切換審查",
   "command.terminal.new": "新增終端機",
   "command.terminal.new.description": "建立新的終端機標籤頁",

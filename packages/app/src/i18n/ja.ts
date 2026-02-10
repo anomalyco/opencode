@@ -50,6 +50,9 @@ export const dict = {
   "command.input.focus": "入力欄にフォーカス",
   "command.terminal.toggle": "ターミナルの切り替え",
   "command.fileTree.toggle": "ファイルツリーを切り替え",
+
+  "filetree.copyRelativePath": "相対パスをコピー",
+  "filetree.copyAbsolutePath": "絶対パスをコピー",
   "command.review.toggle": "レビューの切り替え",
   "command.terminal.new": "新しいターミナル",
   "command.terminal.new.description": "新しいターミナルタブを作成",
