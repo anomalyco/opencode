@@ -110,7 +110,7 @@ opencode 可以由以下 GitHub 事件触发：
 | `issue_comment`               | 对问题或 PR 发表评论         | 在评论中提及 `/opencode` 或 `/oc`。 opencode 读取上下文并可以创建分支、打开 PR 或回复。 |
 | `pull_request_review_comment` | 对 PR 中的特定代码行进行评论 | 在检查代码时提及`/opencode` 或`/oc`。 opencode 接收文件路径、行号和 diff 上下文。       |
 | `issues`                      | 问题已打开或已编辑           | 创建或修改问题时自动触发opencode。需要`prompt` 输入。                                   |
-| `pull_request`                | PR 已开启或已更新            | 当 PR 打开、同步或重新打开时自动触发 opencode。对于自动评论很有帮助。                     |
+| `pull_request`                | PR 已开启或已更新            | 当 PR 打开、同步或重新打开时自动触发 opencode。对于自动评论很有帮助。                   |
 | `schedule`                    | 基于 Cron 的计划             | 按计划运行 opencode。需要 `prompt` 输入。输出进入日志和 PR（没有可评论的问题）。        |
 | `workflow_dispatch`           | 从 GitHub UI 手动触发        | 通过“操作”选项卡触发 opencode。需要 `prompt` 输入。输出进入日志和 PR。                  |
 

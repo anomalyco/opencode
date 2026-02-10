@@ -18,12 +18,12 @@ opencode serve [--port <number>] [--hostname <string>] [--cors <origin>]
 
 #### Alternativer
 
-| Flagg           | Beskrivelse                                    | Standard         |
-| --------------- | ---------------------------------------------- | ---------------- |
+| Flagg           | Beskrivelse                                     | Standard         |
+| --------------- | ----------------------------------------------- | ---------------- |
 | `--port`        | Port at lytte på                                | `4096`           |
 | `--hostname`    | Vertsnavn at lytte på                           | `127.0.0.1`      |
-| `--mdns`        | Aktiver mDNS-oppdagelse                        | `false`          |
-| `--mdns-domain` | Egendefinert domenenavn for mDNS-tjeneste      | `opencode.local` |
+| `--mdns`        | Aktiver mDNS-oppdagelse                         | `false`          |
+| `--mdns-domain` | Egendefinert domenenavn for mDNS-tjeneste       | `opencode.local` |
 | `--cors`        | Ytterligere nettleseropprinnelse for at tillate | `[]`             |
 
 `--cors` kan passeres flere ganger:
@@ -127,52 +127,52 @@ OpenCode-serveren viser følgende APIer.
 | Metode  | Sti                 | Beskrivelse                            | Svar                                                                                     |
 | ------- | ------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------- |
 | `GET`   | `/config`           | Få konfigurasjonsinformasjon           | <a href={typesUrl}><code>Config</code></a>                                               |
-| `PATCH` | `/config`           | Opdater konfigurasjon                 | <a href={typesUrl}><code>Config</code></a>                                               |
+| `PATCH` | `/config`           | Opdater konfigurasjon                  | <a href={typesUrl}><code>Config</code></a>                                               |
 | `GET`   | `/config/providers` | Liste leverandører og standardmodeller | `{ providers: `<a href={typesUrl}>Provider[]</a>`, default: { [key: string]: string } }` |
 
 ---
 
 ### Leverandør
 
-| Metode | Sti                              | Beskrivelse                                     | Svar                                                                                |
-| ------ | -------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `GET`  | `/provider`                      | Liste alle leverandører                         | `{ all: `<a href={typesUrl}>Provider[]</a>`, default: {...}, connected: string[] }` |
-| `GET`  | `/provider/auth`                 | Få leverandørautentiseringsmetoder              | `{ [providerID: string]: `<a href={typesUrl}>ProviderAuthMethod[]</a>` }`           |
-| `POST` | `/provider/{id}/oauth/authorize` | Autoriser en leverandør ved at bruge OAuth       | <a href={typesUrl}><code>ProviderAuthAuthorization</code></a>                       |
-| `POST` | `/provider/{id}/oauth/callback`  | Håndtere OAuth-callback for en leverandør | `boolean`                                                                           |
+| Metode | Sti                              | Beskrivelse                                | Svar                                                                                |
+| ------ | -------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------- |
+| `GET`  | `/provider`                      | Liste alle leverandører                    | `{ all: `<a href={typesUrl}>Provider[]</a>`, default: {...}, connected: string[] }` |
+| `GET`  | `/provider/auth`                 | Få leverandørautentiseringsmetoder         | `{ [providerID: string]: `<a href={typesUrl}>ProviderAuthMethod[]</a>` }`           |
+| `POST` | `/provider/{id}/oauth/authorize` | Autoriser en leverandør ved at bruge OAuth | <a href={typesUrl}><code>ProviderAuthAuthorization</code></a>                       |
+| `POST` | `/provider/{id}/oauth/callback`  | Håndtere OAuth-callback for en leverandør  | `boolean`                                                                           |
 
 ---
 
 ### sessioner
 
-| Metode   | Sti                                      | Beskrivelse                              | Noter                                                                             |
-| -------- | ---------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------- |
-| `GET`    | `/session`                               | Liste alle sessioner                         | Returnerer <a href={typesUrl}><code>Session[]</code></a>                              |
-| `POST`   | `/session`                               | Opret en ny session                        | body: `{ parentID?, title? }`, returnerer <a href={typesUrl}><code>Session</code></a> |
-| `GET`    | `/session/status`                        | Få sessionstatus for alle sessioner              | Returnerer `{ [sessionID: string]: `<a href={typesUrl}>SessionStatus</a>` }`          |
-| `GET`    | `/session/:id`                           | Få sessiondetaljer                           | Returnerer <a href={typesUrl}><code>Session</code></a>                                |
-| `DELETE` | `/session/:id`                           | Slett en session og alle dens data           | Returnerer `boolean`                                                                  |
+| Metode   | Sti                                      | Beskrivelse                                 | Noter                                                                                 |
+| -------- | ---------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `GET`    | `/session`                               | Liste alle sessioner                        | Returnerer <a href={typesUrl}><code>Session[]</code></a>                              |
+| `POST`   | `/session`                               | Opret en ny session                         | body: `{ parentID?, title? }`, returnerer <a href={typesUrl}><code>Session</code></a> |
+| `GET`    | `/session/status`                        | Få sessionstatus for alle sessioner         | Returnerer `{ [sessionID: string]: `<a href={typesUrl}>SessionStatus</a>` }`          |
+| `GET`    | `/session/:id`                           | Få sessiondetaljer                          | Returnerer <a href={typesUrl}><code>Session</code></a>                                |
+| `DELETE` | `/session/:id`                           | Slett en session og alle dens data          | Returnerer `boolean`                                                                  |
 | `PATCH`  | `/session/:id`                           | Opdater sessionegenskaper                   | body: `{ title? }`, returnerer <a href={typesUrl}><code>Session</code></a>            |
-| `GET`    | `/session/:id/children`                  | Få en sessions barnesessioner                    | Returnerer <a href={typesUrl}><code>Session[]</code></a>                              |
-| `GET`    | `/session/:id/todo`                      | Få to-doslisten for en session            | Returnerer <a href={typesUrl}><code>Todo[]</code></a>                                 |
-| `POST`   | `/session/:id/init`                      | Analyser appen og lag `AGENTS.md`        | body: `{ messageID, providerID, modelID }`, returnerer `boolean`                      |
-| `POST`   | `/session/:id/fork`                      | Fork en eksisterende session ved en melding  | body: `{ messageID? }`, returnerer <a href={typesUrl}><code>Session</code></a>        |
-| `POST`   | `/session/:id/abort`                     | Avbryt en løpesession                        | Returnerer `boolean`                                                                  |
-| `POST`   | `/session/:id/share`                     | Del en session                               | Returnerer <a href={typesUrl}><code>Session</code></a>                                |
-| `DELETE` | `/session/:id/share`                     | Slutt at dele en session                      | Returnerer <a href={typesUrl}><code>Session</code></a>                                |
-| `GET`    | `/session/:id/diff`                      | Få diff for denne sessionen                  | spørring: `messageID?`, returnerer <a href={typesUrl}><code>FileDiff[]</code></a>     |
-| `POST`   | `/session/:id/summarize`                 | Oppsummer sessionen                          | body: `{ providerID, modelID }`, returnerer `boolean`                                 |
-| `POST`   | `/session/:id/revert`                    | Tilbakestill en melding                  | body: `{ messageID, partID? }`, returnerer `boolean`                                  |
-| `POST`   | `/session/:id/unrevert`                  | Gjenopret alle nulstillete meldinger | Returnerer `boolean`                                                                  |
-| `POST`   | `/session/:id/permissions/:permissionID` | Svar på en tillatelsesforespørsel        | body: `{ response, remember? }`, returnerer `boolean`                                 |
+| `GET`    | `/session/:id/children`                  | Få en sessions barnesessioner               | Returnerer <a href={typesUrl}><code>Session[]</code></a>                              |
+| `GET`    | `/session/:id/todo`                      | Få to-doslisten for en session              | Returnerer <a href={typesUrl}><code>Todo[]</code></a>                                 |
+| `POST`   | `/session/:id/init`                      | Analyser appen og lag `AGENTS.md`           | body: `{ messageID, providerID, modelID }`, returnerer `boolean`                      |
+| `POST`   | `/session/:id/fork`                      | Fork en eksisterende session ved en melding | body: `{ messageID? }`, returnerer <a href={typesUrl}><code>Session</code></a>        |
+| `POST`   | `/session/:id/abort`                     | Avbryt en løpesession                       | Returnerer `boolean`                                                                  |
+| `POST`   | `/session/:id/share`                     | Del en session                              | Returnerer <a href={typesUrl}><code>Session</code></a>                                |
+| `DELETE` | `/session/:id/share`                     | Slutt at dele en session                    | Returnerer <a href={typesUrl}><code>Session</code></a>                                |
+| `GET`    | `/session/:id/diff`                      | Få diff for denne sessionen                 | spørring: `messageID?`, returnerer <a href={typesUrl}><code>FileDiff[]</code></a>     |
+| `POST`   | `/session/:id/summarize`                 | Oppsummer sessionen                         | body: `{ providerID, modelID }`, returnerer `boolean`                                 |
+| `POST`   | `/session/:id/revert`                    | Tilbakestill en melding                     | body: `{ messageID, partID? }`, returnerer `boolean`                                  |
+| `POST`   | `/session/:id/unrevert`                  | Gjenopret alle nulstillete meldinger        | Returnerer `boolean`                                                                  |
+| `POST`   | `/session/:id/permissions/:permissionID` | Svar på en tillatelsesforespørsel           | body: `{ response, remember? }`, returnerer `boolean`                                 |
 
 ---
 
 ### Meldinger
 
-| Metode | Sti                               | Beskrivelse                            | Noter                                                                                                                                                                |
+| Metode | Sti                               | Beskrivelse                            | Noter                                                                                                                                                                    |
 | ------ | --------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET`  | `/session/:id/message`            | Liste meldinger i en session               | spørring: `limit?`, returnerer `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}[]`                                                     |
+| `GET`  | `/session/:id/message`            | Liste meldinger i en session           | spørring: `limit?`, returnerer `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}[]`                                                     |
 | `POST` | `/session/:id/message`            | Send en melding og vent på svar        | body: `{ messageID?, model?, agent?, noReply?, system?, tools?, parts }`, returnerer `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}` |
 | `GET`  | `/session/:id/message/:messageID` | Få meldingsdetaljer                    | Returnerer `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                                                           |
 | `POST` | `/session/:id/prompt_async`       | Send en melding asynkront (ingen vent) | body: samme som `/session/:id/message`, returnerer `204 No Content`                                                                                                      |
@@ -232,8 +232,8 @@ OpenCode-serveren viser følgende APIer.
 
 ### Agenter
 
-| Metode | Sti      | Beskrivelse                      | Svar                                        |
-| ------ | -------- | -------------------------------- | ------------------------------------------- |
+| Metode | Sti      | Beskrivelse                     | Svar                                        |
+| ------ | -------- | ------------------------------- | ------------------------------------------- |
 | `GET`  | `/agent` | Liste alle tilgængelige agenter | <a href={typesUrl}><code>Agent[]</code></a> |
 
 ---
@@ -252,7 +252,7 @@ OpenCode-serveren viser følgende APIer.
 | ------ | ----------------------- | ------------------------------------------- | -------------------------- |
 | `POST` | `/tui/append-prompt`    | Legg til tekst i ledeteksten                | `boolean`                  |
 | `POST` | `/tui/open-help`        | Åpne hjelpedialogen                         | `boolean`                  |
-| `POST` | `/tui/open-sessions`    | Åpne sessionvelgeren                            | `boolean`                  |
+| `POST` | `/tui/open-sessions`    | Åpne sessionvelgeren                        | `boolean`                  |
 | `POST` | `/tui/open-themes`      | Åpne temavelgeren                           | `boolean`                  |
 | `POST` | `/tui/open-models`      | Åpne modellvelgeren                         | `boolean`                  |
 | `POST` | `/tui/submit-prompt`    | Send inn nuværende ledetekst                | `boolean`                  |
