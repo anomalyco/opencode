@@ -509,6 +509,29 @@ const [store, setStore]: [
    interface IconButtonProps { size?: Size }
    ```
 
+6. **Don't confuse `??` with `||` for empty strings**
+   ```typescript
+   // Bad - empty string is not null/undefined, so ?? doesn't trigger
+   const worktree = input.newSessionWorktree ?? "main"
+   // If input.newSessionWorktree = "", result is "" (not "main")
+
+   // Good - use || to handle all falsy values including empty strings
+   const worktree = input.newSessionWorktree?.trim() || "main"
+   // If input.newSessionWorktree = "", result is "main"
+   ```
+
+   **Why it matters**: The nullish coalescing operator `??` only checks for `null` or `undefined`, not empty strings. This can cause bugs when empty strings should be treated as "no value".
+
+   **When to use each**:
+   - Use `??` when you want to preserve falsy values like `0`, `false`, or `""`
+   - Use `||` when you want to replace all falsy values (including `""`, `0`, `false`)
+
+   **Real bug example**: In `submit.ts`, when `sync.data.path.directory` was an empty string, using `??` caused `sessionDirectory` to be set to `""`, triggering a validation error. The fix was to use `||` instead.
+
+   **Files affected**:
+   - `packages/app/src/components/prompt-input/submit.ts:169`
+   - `packages/app/src/pages/session.tsx:591-599`
+
 ### ✅ Do
 
 1. **Use strict mode**
