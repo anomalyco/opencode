@@ -143,6 +143,15 @@ export namespace TeamEvent {
     }),
   )
 
+  export const MessageRead = BusEvent.define(
+    "team.message.read",
+    z.object({
+      teamName: z.string(),
+      agentName: z.string(),
+      count: z.number(),
+    }),
+  )
+
   export const Cleaned = BusEvent.define(
     "team.cleaned",
     z.object({

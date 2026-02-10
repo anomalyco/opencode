@@ -549,31 +549,18 @@ export namespace Team {
         return SessionPrompt.loop({ sessionID: session.id })
       })
       .then(async () => {
+        log.info("teammate loop ended", { teamName: input.teamName, name: input.name })
+        await transitionExecutionStatus(input.teamName, input.name, "completing")
+        await transitionExecutionStatus(input.teamName, input.name, "completed")
+        await transitionExecutionStatus(input.teamName, input.name, "idle")
         const team = await get(input.teamName)
         const member = team?.members.find((m) => m.name === input.name)
-        const cancelled = member?.execution_status === "cancel_requested" || member?.execution_status === "cancelling"
-
-        log.info("teammate loop ended", {
-          teamName: input.teamName,
-          name: input.name,
-          status: cancelled ? "cancelled" : "completed",
-        })
-
-        if (!cancelled) {
-          await transitionExecutionStatus(input.teamName, input.name, "completing")
-          await transitionExecutionStatus(input.teamName, input.name, "completed")
-        }
-        if (cancelled) {
-          await transitionExecutionStatus(input.teamName, input.name, "cancelling")
-          await transitionExecutionStatus(input.teamName, input.name, "cancelled")
-        }
-        await transitionExecutionStatus(input.teamName, input.name, "idle")
         if (member?.status === "shutdown_requested") {
           await transitionMemberStatus(input.teamName, input.name, "shutdown")
         } else {
           await transitionMemberStatus(input.teamName, input.name, "ready")
         }
-        await notifyLead(input.teamName, input.name, session.id, cancelled ? "cancelled" : "completed")
+        await notifyLead(input.teamName, input.name, session.id, "completed")
       })
       .catch(async (err) => {
         log.warn("teammate loop error", { teamName: input.teamName, name: input.name, error: err.message })
@@ -699,6 +686,11 @@ export namespace Team {
       )
     }
 
+    const { Inbox } = await import("./inbox")
+    await Inbox.removeAll(
+      teamName,
+      team.members.map((m) => m.name),
+    )
     await Storage.remove(configKey(teamName))
     await Storage.remove(tasksKey(teamName))
 
@@ -805,6 +797,20 @@ export namespace Team {
         await transitionMemberStatus(team.name, member.name, "ready", { force: true })
         names.push(member.name)
         count++
+      }
+
+      // Recover undelivered inbox messages for interrupted members and the lead
+      try {
+        const { TeamMessaging } = await import("./messaging")
+        for (const member of active) {
+          await TeamMessaging.recoverInbox(team.name, member.name, member.sessionID)
+        }
+        await TeamMessaging.recoverInbox(team.name, "lead", team.leadSessionID)
+      } catch (err: unknown) {
+        log.warn("inbox recovery failed", {
+          teamName: team.name,
+          error: err instanceof Error ? err.message : String(err),
+        })
       }
 
       try {
