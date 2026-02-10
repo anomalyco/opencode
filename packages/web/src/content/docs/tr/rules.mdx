@@ -1,6 +1,6 @@
 ---
 title: Kurallar
-description: Açık kod için özel talimatları ayarlayın.
+description: opencode için özel talimatları ayarlayın.
 ---
 
 Bir `AGENTS.md` dosyası oluşturarak kod açmaya özel talimatlar sağlayabilirsiniz. Bu, İmlecin kurallarına benzer. Özel projeniz için davranışını özelleştirmek amacıyla LLM'in içeriğine dahil edilecek talimatları içerir.
@@ -9,13 +9,13 @@ Bir `AGENTS.md` dosyası oluşturarak kod açmaya özel talimatlar sağlayabilir
 
 ## Initialize
 
-Yeni bir `AGENTS.md` dosyası oluşturmak için `/init` komutunu açık kodda çalıştırabilirsiniz.
+Yeni bir `AGENTS.md` dosyası oluşturmak için `/init` komutunu opencode'da çalıştırabilirsiniz.
 
 :::tip
 Projenizin `AGENTS.md` dosyasını Git'e göndermelisiniz.
 :::
 
-Bu, projenin neyle ilgili olduğunu anlamak için projenizi ve tüm içeriğini tarayacak ve onunla bir `AGENTS.md` dosyası oluşturacaktır. Bu, açık kodun projede daha iyi gezinmesine yardımcı olur.
+Bu, projenin neyle ilgili olduğunu anlamak için projenizi ve tüm içeriğini tarayacak ve onunla bir `AGENTS.md` dosyası oluşturacaktır. Bu, opencode'un projede daha iyi gezinmesine yardımcı olur.
 
 Mevcut bir `AGENTS.md` dosyanız varsa, bu dosyaya eklemeye çalışacaktır.
 
@@ -62,13 +62,13 @@ Projeye özel kurallar için proje kökünüze bir `AGENTS.md` yerleştirin. Bun
 
 ### Global
 
-Ayrıca `~/.config/opencode/AGENTS.md` dosyasında genel kurallara sahip olabilirsiniz. Bu, tüm açık kod oturumlarına uygulanır.
+Ayrıca `~/.config/opencode/AGENTS.md` dosyasında genel kurallara sahip olabilirsiniz. Bu, tüm opencode oturumlarına uygulanır.
 
 Bu Git'e kaydedilmediği veya ekibinizle paylaşılmadığı için, LLM'ın uyması gereken kişisel kuralları belirtmek için bunu kullanmanızı öneririz.
 
 ### Claude Code Compatibility
 
-OpenCode, Claude Code'dan geçiş yapan kullanıcılar için yedek olarak Claude Code'un dosya kurallarını destekler:
+opencode, Claude Code'dan geçiş yapan kullanıcılar için yedek olarak Claude Code'un dosya kurallarını destekler:
 
 - **Proje kuralları**: Proje dizininizdeki `CLAUDE.md` (`AGENTS.md` yoksa kullanılır)
 - **Global rules**: `~/.claude/CLAUDE.md` (used if no `~/.config/opencode/AGENTS.md` exists)
@@ -141,7 +141,7 @@ Opencode, `AGENTS.md`'daki dosya referanslarını otomatik olarak ayrıştırmas
 
 ### Manual Instructions in AGENTS.md
 
-`AGENTS.md`'nizde açık talimatlar sağlayarak açık kodu harici dosyaları okumayı öğretebilirsiniz. İşte pratik bir örnek:
+`AGENTS.md`'nizde açık talimatlar sağlayarak opencode'u harici dosyaları okumayı öğretebilirsiniz. İşte pratik bir örnek:
 
 ```markdown title="AGENTS.md"
 # TypeScript Project Rules
@@ -173,7 +173,7 @@ Bu yaklaşım şunları yapmanızı sağlar:
 - Modüler, yeniden kullanılabilir kural dosyaları oluşturun
 - Sembolik bağlantılar veya git alt modülleri aracılığıyla kuralları projeler arasında paylaşın
 - Keep AGENTS.md concise while referencing detailed guidelines
-- Açık kodun dosyaları yalnızca belirli bir görev için gerektiğinde yüklediğinden emin olun
+- opencode'un dosyaları yalnızca belirli bir görev için gerektiğinde yüklediğinden emin olun
 
 :::tip
 Monorepo'lar veya ortak standartlara sahip projeler için, `opencode.json`'yi glob desenleriyle (`packages/*/AGENTS.md` gibi) kullanmak, manuel talimatlara göre daha sürdürülebilirdir.

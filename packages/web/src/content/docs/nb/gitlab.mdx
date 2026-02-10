@@ -1,33 +1,33 @@
 ---
 title: GitLab
-description: Bruk OpenCode i GitLab-problemer og sammenslåingsforespørsler.
+description: Bruk opencode i GitLab-problemer og sammenslåingsforespørsler.
 ---
 
-OpenCode integreres med GitLab arbeidsflyten gjennom GitLab CI/CD pipeline eller med GitLab Duo.
+opencode integreres med GitLab arbeidsflyten gjennom GitLab CI/CD pipeline eller med GitLab Duo.
 
-I begge tilfeller vil OpenCode kjøre på GitLab-løperne dine.
+I begge tilfeller vil opencode kjøre på GitLab-løperne dine.
 
 ---
 
 ## GitLab CI
 
-OpenCode fungerer i en vanlig GitLab-pipeline. Du kan bygge den inn i en pipeline som en [CI komponent](https://docs.gitlab.com/ee/ci/components/)
+opencode fungerer i en vanlig GitLab-pipeline. Du kan bygge den inn i en pipeline som en [CI komponent](https://docs.gitlab.com/ee/ci/components/)
 
-Her bruker vi en fellesskapsskapt CI/CD-komponent for OpenCode — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
+Her bruker vi en fellesskapsskapt CI/CD-komponent for opencode — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
 
 ---
 
 ### Funksjoner
 
-- **Bruk tilpasset konfigurasjon per jobb**: Konfigurer OpenCode med en tilpasset konfigurasjonskatalog, for eksempel `./config/#custom-directory` for å aktivere eller deaktivere funksjonalitet per OpenCode-anrop.
-- **Minimalt oppsett**: CI-komponenten setter opp OpenCode i bakgrunnen, du trenger bare å lage OpenCode-konfigurasjonen og den første ledeteksten.
+- **Bruk tilpasset konfigurasjon per jobb**: Konfigurer opencode med en tilpasset konfigurasjonskatalog, for eksempel `./config/#custom-directory` for å aktivere eller deaktivere funksjonalitet per opencode-anrop.
+- **Minimalt oppsett**: CI-komponenten setter opp opencode i bakgrunnen, du trenger bare å lage opencode-konfigurasjonen og den første ledeteksten.
 - **Fleksibel**: CI-komponenten støtter flere innganger for å tilpasse virkemåten
 
 ---
 
 ### Oppsett
 
-1. Lagre OpenCode-autentiseringen JSON som en filtype CI miljøvariabler under **Innstillinger** > **CI/CD** > **Variabler**. Sørg for å merke dem som "Masket og skjult".
+1. Lagre opencode-autentiseringen JSON som en filtype CI miljøvariabler under **Innstillinger** > **CI/CD** > **Variabler**. Sørg for å merke dem som "Masket og skjult".
 2. Legg til følgende i `.gitlab-ci.yml`-filen.
 
    ```yaml title=".gitlab-ci.yml"
@@ -46,23 +46,23 @@ For flere inndata og brukstilfeller [sjekk ut dokumentene](https://gitlab.com/ex
 
 ## GitLab Duo
 
-OpenCode integreres med din GitLab arbeidsflyt.
-Nevn `@opencode` i en kommentar, og OpenCode vil utføre oppgaver innenfor din GitLab CI pipeline.
+opencode integreres med din GitLab arbeidsflyt.
+Nevn `@opencode` i en kommentar, og opencode vil utføre oppgaver innenfor din GitLab CI pipeline.
 
 ---
 
 ### Funksjoner
 
-- **Triage-problemer**: Be OpenCode se på et problem og forklare det for deg.
-- **Fiks og implementer**: Be OpenCode om å fikse et problem eller implementere en funksjon.
+- **Triage-problemer**: Be opencode se på et problem og forklare det for deg.
+- **Fiks og implementer**: Be opencode om å fikse et problem eller implementere en funksjon.
   Det vil opprette en ny filial og sende en sammenslåingsforespørsel med endringene.
-- **Sikkert**: OpenCode kjører på GitLab-løperne dine.
+- **Sikkert**: opencode kjører på GitLab-løperne dine.
 
 ---
 
 ### Oppsett
 
-OpenCode kjører i GitLab CI/CD pipeline, her er det du trenger for å sette den opp:
+opencode kjører i GitLab CI/CD pipeline, her er det du trenger for å sette den opp:
 
 :::tip
 Sjekk ut [**GitLab-dokumentene**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) for oppdaterte instruksjoner.
@@ -158,7 +158,7 @@ Du kan se [GitLab CLI agents docs](https://docs.gitlab.com/user/duo_agent_platfo
 
 ### Eksempler
 
-Her er noen eksempler på hvordan du kan bruke OpenCode i GitLab.
+Her er noen eksempler på hvordan du kan bruke opencode i GitLab.
 
 :::tip
 Du kan konfigurere til å bruke en annen triggerfrase enn `@opencode`.
@@ -172,7 +172,7 @@ Du kan konfigurere til å bruke en annen triggerfrase enn `@opencode`.
   @opencode explain this issue
   ```
 
-  OpenCode vil lese problemet og svare med en klar forklaring.
+  opencode vil lese problemet og svare med en klar forklaring.
 
 - **Fiks et problem**
 
@@ -182,7 +182,7 @@ Du kan konfigurere til å bruke en annen triggerfrase enn `@opencode`.
   @opencode fix this
   ```
 
-  OpenCode vil opprette en ny gren, implementere endringene og åpne en sammenslåingsforespørsel med endringene.
+  opencode vil opprette en ny gren, implementere endringene og åpne en sammenslåingsforespørsel med endringene.
 
 - **Gjennomgå sammenslåingsforespørsler**
 
@@ -192,4 +192,4 @@ Du kan konfigurere til å bruke en annen triggerfrase enn `@opencode`.
   @opencode review this merge request
   ```
 
-  OpenCode vil gjennomgå sammenslåingsforespørselen og gi tilbakemelding.
+  opencode vil gjennomgå sammenslåingsforespørselen og gi tilbakemelding.

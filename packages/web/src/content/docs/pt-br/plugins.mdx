@@ -1,9 +1,9 @@
 ---
 title: Plugins
-description: Escreva seus próprios plugins para estender o OpenCode.
+description: Escreva seus próprios plugins para estender o opencode.
 ---
 
-Plugins permitem que você estenda o OpenCode conectando-se a vários eventos e personalizando o comportamento. Você pode criar plugins para adicionar novos recursos, integrar-se a serviços externos ou modificar o comportamento padrão do OpenCode.
+Plugins permitem que você estenda o opencode conectando-se a vários eventos e personalizando o comportamento. Você pode criar plugins para adicionar novos recursos, integrar-se a serviços externos ou modificar o comportamento padrão do opencode.
 
 Para exemplos, confira os [plugins](/docs/ecosystem#plugins) criados pela comunidade.
 
@@ -82,7 +82,7 @@ Plugins locais e ferramentas personalizadas podem usar pacotes npm externos. Adi
 }
 ```
 
-O OpenCode executa `bun install` na inicialização para instalar esses pacotes. Seus plugins e ferramentas podem então importá-los.
+O opencode executa `bun install` na inicialização para instalar esses pacotes. Seus plugins e ferramentas podem então importá-los.
 
 ```ts title=".opencode/plugins/my-plugin.ts"
 import { escape } from "shescape"
@@ -224,7 +224,7 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
     event: async ({ event }) => {
       // Enviar notificação ao concluir a sessão
       if (event.type === "session.idle") {
-        await $`osascript -e 'display notification "Sessão concluída!" with title "opencode"'`
+        await $`osascript -e 'display notification "Session completed!" with title "opencode"'`
       }
     },
   }
@@ -234,7 +234,7 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 Estamos usando `osascript` para executar AppleScript no macOS. Aqui estamos usando para enviar notificações.
 
 :::note
-Se você estiver usando o aplicativo desktop OpenCode, ele pode enviar notificações do sistema automaticamente quando uma resposta estiver pronta ou quando ocorrer um erro na sessão.
+Se você estiver usando o aplicativo desktop opencode, ele pode enviar notificações do sistema automaticamente quando uma resposta estiver pronta ou quando ocorrer um erro na sessão.
 :::
 
 ---
@@ -291,7 +291,7 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
         },
         async execute(args, context) {
           const { directory, worktree } = context
-          return `Olá ${args.foo} de ${directory} (worktree: ${worktree})`
+          return `Hello ${args.foo} from ${directory} (worktree: ${worktree})`
         },
       }),
     },

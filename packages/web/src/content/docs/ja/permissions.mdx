@@ -83,8 +83,8 @@ OpenCode は `permission` 構成を使用して、特定のアクションを自
 パターンの先頭で `~` または `$HOME` を使用して、ホーム ディレクトリを参照できます。これは、[`external_directory`](#external-directories) ルールに特に役立ちます。
 
 - `~/projects/*` -> `/Users/username/projects/*`
-- `~/projects/*` -> `/Users/username/projects/*`
-- `~/projects/*` -> `/Users/username/projects/*`
+- `$HOME/projects/*` -> `/Users/username/projects/*`
+- `~` -> `/Users/username`
 
 ### 外部ディレクトリ
 

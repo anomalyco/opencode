@@ -3,7 +3,7 @@ title: Serwery MPK
 description: Dodaj lokalne i zdalne narzędzie MCP.
 ---
 
-Możesz dodać dodatkowe informacje do OpenCode za pomocą _Model Context Protocol_, w skrócie MCP. OpenCode obsługuje zarówno serwery lokalne, jak i zdalne.
+Możesz dodać dodatkowe informacje do opencode za pomocą _Model Context Protocol_, w skrócie MCP. opencode obsługuje zarówno serwery lokalne, jak i zdalne.
 
 Po dodaniu narzędzi MCP są automatycznie dostępne dla LLM wraz z narzędziami narzędziowymi.
 
@@ -23,7 +23,7 @@ Niektóre serwery MCP, takie jak serwer MCP GitHub, mają szerokie możliwości 
 
 ## Włączać
 
-Dostępny serwery MCP w [OpenCode Config](https://opencode.ai/docs/config/) w `mcp`. Dodaj każdy MCP z unikalną nazwą. Możesz zgłosić się do tego MCP po nazwie, pytając LLM.
+Dostępny serwery MCP w [opencode Config](https://opencode.ai/docs/config/) w `mcp`. Dodaj każdy MCP z unikalną nazwą. Możesz zgłosić się do tego MCP po nazwie, pytając LLM.
 
 ```jsonc title="opencode.jsonc" {6}
 {
@@ -165,7 +165,7 @@ Dodaj zdalne serwery MCP, ustawiając `type` na `"remote"`.
 
 ## OAuth
 
-OpenCode automatyczne uwierzytelnianie OAuth dla zdalnych serwerów MCP. Gdy serwer wymaga uwierzytelnienia, OpenCode:
+opencode automatyczne uwierzytelnianie OAuth dla zdalnych serwerów MCP. Gdy serwer wymaga uwierzytelnienia, opencode:
 
 1. Wykryj odpowiedź 401 i zainijuj przepływ OAuth
 2. używa **Dynamicznej rejestracji klienta (RFC 7591)**, jeśli jest obsługiwana przez serwer
@@ -189,7 +189,7 @@ W innym serwerze MCP z włączoną funkcją OAuth nie jest wymagana specjalna fu
 }
 ```
 
-Jeśli serwer wymaga uwierzytelnienia, OpenCode poprosi Cię o uwierzytelnienie przy próbie jego użycia. Jeśli nie, możesz [ręcznie podłączyć przepływ] (#authenticating) za pomocą `opencode mcp auth <server-name>`.
+Jeśli serwer wymaga uwierzytelnienia, opencode poprosi Cię o uwierzytelnienie przy próbie jego użycia. Jeśli nie, możesz [ręcznie podłączyć przepływ] (#authenticating) za pomocą `opencode mcp auth <server-name>`.
 
 ---
 
@@ -238,7 +238,7 @@ Usuń zapisane dane uwierzytelniające:
 opencode mcp logout my-oauth-server
 ```
 
-Komenda `mcp auth` została udostępniona w celu autoryzacji. Po autoryzacji OpenCode bezpieczne przechowa tokeny w `~/.local/share/opencode/mcp-auth.json`.
+Komenda `mcp auth` została udostępniona w celu autoryzacji. Po autoryzacji opencode bezpieczne przechowa tokeny w `~/.local/share/opencode/mcp-auth.json`.
 
 ---
 
@@ -291,7 +291,7 @@ Komenda `mcp debug` wyświetlanie stanu uwierzytelniania, testuje sprawdzanie pr
 
 ## Zarządzać
 
-Twoje MCP są dostępne jako narzędzie w OpenCode, obok narzędzi dodatkowych. Można to zrobić poprzez podłączenie OpenCode, jak również w innym przypadku.
+Twoje MCP są dostępne jako narzędzie w opencode, obok narzędzi dodatkowych. Można to zrobić poprzez podłączenie opencode, jak również w innym przypadku.
 
 ---
 
@@ -423,7 +423,7 @@ Po dodaniu konfiguracji uwierzytelnij się za pomocą Sentry:
 opencode mcp auth sentry
 ```
 
-Spowoduje otwarcie okna konfiguracji, w którym można zakończyć proces OAuth i połączyć OpenCode z kontem Sentry.
+Spowoduje otwarcie okna konfiguracji, w którym można zakończyć proces OAuth i połączyć opencode z kontem Sentry.
 
 Po uwierzytelnieniu oprogramowania Sentry w swoich monitach, aby rozprzestrzeniać zagrożenia, dane i błędy.
 

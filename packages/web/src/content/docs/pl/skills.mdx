@@ -3,7 +3,7 @@ title: "Agent Skills"
 description: "Define reusable behavior via SKILL.md definitions"
 ---
 
-Umiejętności agenta pozwalają OpenCode odkryć instrukcje wielokrotnego użytku z repozytorium lub katalogu domowego.
+Umiejętności agenta pozwalają opencode odkryć instrukcje wielokrotnego użytku z repozytorium lub katalogu domowego.
 Umiejętności są ładowane na żądanie za pośrednictwem natywnego narzędzia `skill` — agenci widzą dostępne umiejętności i w razie potrzeby mogą załadować pełną zawartość.
 
 ---
@@ -11,7 +11,7 @@ Umiejętności są ładowane na żądanie za pośrednictwem natywnego narzędzia
 ## Place files
 
 Utwórz jeden folder na nazwę umiejętności i umieść w nim `SKILL.md`.
-OpenCode searches these locations:
+opencode searches these locations:
 
 - Project config: `.opencode/skills/<name>/SKILL.md`
 - Global config: `~/.config/opencode/skills/<name>/SKILL.md`
@@ -24,7 +24,7 @@ OpenCode searches these locations:
 
 ## Understand discovery
 
-W przypadku ścieżek lokalnych projektu OpenCode przechodzi od bieżącego katalogu roboczego, aż dotrze do drzewa roboczego git.
+W przypadku ścieżek lokalnych projektu opencode przechodzi od bieżącego katalogu roboczego, aż dotrze do drzewa roboczego git.
 Ładuje po drodze dowolne pasujące `skills/*/SKILL.md` w `.opencode/` i dowolne pasujące `.claude/skills/*/SKILL.md` lub `.agents/skills/*/SKILL.md`.
 
 Ładowane są także definicje globalne z `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` i `~/.agents/skills/*/SKILL.md`.
@@ -102,7 +102,7 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ## Recognize tool description
 
-OpenCode wymienia dostępne umiejętności w opisie narzędzia `skill`.
+opencode wymienia dostępne umiejętności w opisie narzędzia `skill`.
 Każdy wpis zawiera nazwę i opis umiejętności:
 
 ```xml

@@ -3,7 +3,7 @@ title: Servidores MCP
 description: Adicione ferramentas MCP locais e remotas.
 ---
 
-Você pode adicionar ferramentas externas ao OpenCode usando o _Modelo de Contexto de Protocolo_, ou MCP. O OpenCode suporta servidores locais e remotos.
+Você pode adicionar ferramentas externas ao opencode usando o _Modelo de Contexto de Protocolo_, ou MCP. O opencode suporta servidores locais e remotos.
 
 Uma vez adicionadas, as ferramentas MCP estão automaticamente disponíveis para o LLM juntamente com as ferramentas integradas.
 
@@ -23,17 +23,17 @@ Certos servidores MCP, como o servidor MCP do GitHub, tendem a adicionar muitos 
 
 ## Habilitar
 
-Você pode definir servidores MCP em sua [Configuração do OpenCode](https://opencode.ai/docs/config/) sob `mcp`. Adicione cada MCP com um nome único. Você pode se referir a esse MCP pelo nome ao solicitar ao LLM.
+Você pode definir servidores MCP em sua [Configuração do opencode](https://opencode.ai/docs/config/) sob `mcp`. Adicione cada MCP com um nome único. Você pode se referir a esse MCP pelo nome ao solicitar ao LLM.
 
 ```jsonc title="opencode.jsonc" {6}
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "nome-do-servidor-mcp": {
+    "mcp-server-name": {
       // ...
       "enabled": true,
     },
-    "nome-do-outro-servidor-mcp": {
+    "another-mcp-server-name": {
       // ...
     },
   },
@@ -75,13 +75,13 @@ Adicione servidores MCP locais usando `type` como `"local"` dentro do objeto MCP
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "meu-servidor-mcp-local": {
+    "my-local-mcp-server": {
       "type": "local",
-      // Ou ["bun", "x", "meu-comando-mcp"]
-      "command": ["npx", "-y", "meu-comando-mcp"],
+      // Ou ["bun", "x", "my-mcp-command"]
+      "command": ["npx", "-y", "my-mcp-command"],
       "enabled": true,
       "environment": {
-        "MINHA_VAR_DE_ENV": "valor_da_var_de_env",
+        "MY_ENV_VAR": "env_var_value",
       },
     },
   },
@@ -96,7 +96,7 @@ Por exemplo, aqui está como você pode adicionar o servidor MCP de teste [`@mod
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "mcp_tudo": {
+    "mcp_everything": {
       "type": "local",
       "command": ["npx", "-y", "@modelcontextprotocol/server-everything"],
     },
@@ -104,10 +104,10 @@ Por exemplo, aqui está como você pode adicionar o servidor MCP de teste [`@mod
 }
 ```
 
-E para usá-lo, posso adicionar `use the mcp_tudo tool` aos meus prompts.
+E para usá-lo, posso adicionar `use the mcp_everything tool` aos meus prompts.
 
-```txt "mcp_tudo"
-use the mcp_tudo tool to add the number 3 and 4
+```txt "mcp_everything"
+use the mcp_everything tool to add the number 3 and 4
 ```
 
 ---
@@ -134,12 +134,12 @@ Adicione servidores MCP remotos definindo `type` como `"remote"`.
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "meu-mcp-remoto": {
+    "my-remote-mcp": {
       "type": "remote",
-      "url": "https://meu-servidor-mcp.com",
+      "url": "https://my-mcp-server.com",
       "enabled": true,
       "headers": {
-        "Authorization": "Bearer MINHA_CHAVE_API"
+        "Authorization": "Bearer MY_API_KEY"
       }
     }
   }
@@ -165,7 +165,7 @@ O `url` é a URL do servidor MCP remoto e com a opção `headers` você pode pas
 
 ## OAuth
 
-O OpenCode lida automaticamente com a autenticação OAuth para servidores MCP remotos. Quando um servidor requer autenticação, o OpenCode irá:
+O opencode lida automaticamente com a autenticação OAuth para servidores MCP remotos. Quando um servidor requer autenticação, o opencode irá:
 
 1. Detectar a resposta 401 e iniciar o fluxo OAuth
 2. Usar **Registro Dinâmico de Cliente (RFC 7591)** se suportado pelo servidor
@@ -181,7 +181,7 @@ Para a maioria dos servidores MCP habilitados para OAuth, nenhuma configuração
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "meu-servidor-oauth": {
+    "my-oauth-server": {
       "type": "remote",
       "url": "https://mcp.exemplo.com/mcp"
     }
@@ -189,7 +189,7 @@ Para a maioria dos servidores MCP habilitados para OAuth, nenhuma configuração
 }
 ```
 
-Se o servidor requer autenticação, o OpenCode solicitará que você se autentique quando tentar usá-lo pela primeira vez. Se não, você pode [iniciar manualmente o fluxo](#authenticating) com `opencode mcp auth <nome-do-servidor>`.
+Se o servidor requer autenticação, o opencode solicitará que você se autentique quando tentar usá-lo pela primeira vez. Se não, você pode [iniciar manualmente o fluxo](#authenticating) com `opencode mcp auth <server-name>`.
 
 ---
 
@@ -201,12 +201,12 @@ Se você tiver credenciais de cliente do provedor do servidor MCP, pode configur
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "meu-servidor-oauth": {
+    "my-oauth-server": {
       "type": "remote",
       "url": "https://mcp.exemplo.com/mcp",
       "oauth": {
-        "clientId": "{env:MINHA_CHAVE_CLIENTE_MCP}",
-        "clientSecret": "{env:MINHA_CHAVE_SECRETA_MCP}",
+        "clientId": "{env:MY_MCP_CLIENT_KEY}",
+        "clientSecret": "{env:MY_MCP_CLIENT_SECRET}",
         "scope": "tools:read tools:execute"
       }
     }
@@ -223,7 +223,7 @@ Você pode iniciar manualmente a autenticação ou gerenciar credenciais.
 Autentique-se com um servidor MCP específico:
 
 ```bash
-opencode mcp auth meu-servidor-oauth
+opencode mcp auth my-oauth-server
 ```
 
 Liste todos os servidores MCP e seu status de autenticação:
@@ -235,10 +235,10 @@ opencode mcp list
 Remova credenciais armazenadas:
 
 ```bash
-opencode mcp logout meu-servidor-oauth
+opencode mcp logout my-oauth-server
 ```
 
-O comando `mcp auth` abrirá seu navegador para autorização. Após você autorizar, o OpenCode armazenará os tokens de forma segura em `~/.local/share/opencode/mcp-auth.json`.
+O comando `mcp auth` abrirá seu navegador para autorização. Após você autorizar, o opencode armazenará os tokens de forma segura em `~/.local/share/opencode/mcp-auth.json`.
 
 ---
 
@@ -250,12 +250,12 @@ Se você quiser desabilitar o OAuth automático para um servidor (por exemplo, p
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "meu-servidor-chave-api": {
+    "my-api-key-server": {
       "type": "remote",
       "url": "https://mcp.exemplo.com/mcp",
       "oauth": false,
       "headers": {
-        "Authorization": "Bearer {env:MINHA_CHAVE_API}"
+        "Authorization": "Bearer {env:MY_API_KEY}"
       }
     }
   }
@@ -282,7 +282,7 @@ Se um servidor MCP remoto estiver falhando na autenticação, você pode diagnos
 opencode mcp auth list
 
 # Depurar conexão e fluxo OAuth para um servidor específico
-opencode mcp debug meu-servidor-oauth
+opencode mcp debug my-oauth-server
 ```
 
 O comando `mcp debug` mostra o status de autenticação atual, testa a conectividade HTTP e tenta o fluxo de descoberta OAuth.
@@ -291,7 +291,7 @@ O comando `mcp debug` mostra o status de autenticação atual, testa a conectivi
 
 ## Gerenciar
 
-Seus MCPs estão disponíveis como ferramentas no OpenCode, juntamente com ferramentas integradas. Portanto, você pode gerenciá-los através da configuração do OpenCode como qualquer outra ferramenta.
+Seus MCPs estão disponíveis como ferramentas no opencode, juntamente com ferramentas integradas. Portanto, você pode gerenciá-los através da configuração do opencode como qualquer outra ferramenta.
 
 ---
 
@@ -303,17 +303,17 @@ Isso significa que você pode habilitá-los ou desabilitá-los globalmente.
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "meu-mcp-foo": {
+    "my-mcp-foo": {
       "type": "local",
-      "command": ["bun", "x", "meu-comando-mcp-foo"]
+      "command": ["bun", "x", "my-mcp-command-foo"]
     },
-    "meu-mcp-bar": {
+    "my-mcp-bar": {
       "type": "local",
-      "command": ["bun", "x", "meu-comando-mcp-bar"]
+      "command": ["bun", "x", "my-mcp-command-bar"]
     }
   },
   "tools": {
-    "meu-mcp-foo": false
+    "my-mcp-foo": false
   }
 }
 ```
@@ -324,22 +324,22 @@ Também podemos usar um padrão glob para desabilitar todos os MCPs corresponden
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "meu-mcp-foo": {
+    "my-mcp-foo": {
       "type": "local",
-      "command": ["bun", "x", "meu-comando-mcp-foo"]
+      "command": ["bun", "x", "my-mcp-command-foo"]
     },
-    "meu-mcp-bar": {
+    "my-mcp-bar": {
       "type": "local",
-      "command": ["bun", "x", "meu-comando-mcp-bar"]
+      "command": ["bun", "x", "my-mcp-command-bar"]
     }
   },
   "tools": {
-    "meu-mcp*": false
+    "my-mcp*": false
   }
 }
 ```
 
-Aqui estamos usando o padrão glob `meu-mcp*` para desabilitar todos os MCPs.
+Aqui estamos usando o padrão glob `my-mcp*` para desabilitar todos os MCPs.
 
 ---
 
@@ -354,19 +354,19 @@ Se você tiver um grande número de servidores MCP, pode querer habilitá-los ap
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "meu-mcp": {
+    "my-mcp": {
       "type": "local",
-      "command": ["bun", "x", "meu-comando-mcp"],
+      "command": ["bun", "x", "my-mcp-command"],
       "enabled": true
     }
   },
   "tools": {
-    "meu-mcp*": false
+    "my-mcp*": false
   },
   "agent": {
-    "meu-agente": {
+    "my-agent": {
       "tools": {
-        "meu-mcp*": true
+        "my-mcp*": true
       }
     }
   }
@@ -379,7 +379,7 @@ Se você tiver um grande número de servidores MCP, pode querer habilitá-los ap
 
 O padrão glob usa padrões simples de regex globbing:
 
-- `*` corresponde a zero ou mais de qualquer caractere (por exemplo, `"meu-mcp*"` corresponde a `meu-mcp_search`, `meu-mcp_list`, etc.)
+- `*` corresponde a zero ou mais de qualquer caractere (por exemplo, `"my-mcp*"` corresponde a `my-mcp_search`, `my-mcp_list`, etc.)
 - `?` corresponde exatamente a um caractere
 - Todos os outros caracteres correspondem literalmente
 
@@ -423,7 +423,7 @@ Após adicionar a configuração, autentique-se com o Sentry:
 opencode mcp auth sentry
 ```
 
-Isso abrirá uma janela do navegador para completar o fluxo OAuth e conectar o OpenCode à sua conta do Sentry.
+Isso abrirá uma janela do navegador para completar o fluxo OAuth e conectar o opencode à sua conta do Sentry.
 
 Uma vez autenticado, você pode usar ferramentas do Sentry em seus prompts para consultar problemas, projetos e dados de erro.
 

@@ -1,13 +1,13 @@
 ---
 title: 途易
-description: 使用 OpenCode 終端用戶界面。
+description: 使用 opencode 終端用戶界面。
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode 提供了一個交互式終端界面或 TUI，供您與法學碩士一起處理項目。
+opencode 提供了一個交互式終端界面或 TUI，供您與LLM一起處理項目。
 
-運行 OpenCode 會啟動當前目錄的 TUI。
+運行 opencode 會啟動當前目錄的 TUI。
 
 ```bash
 opencode
@@ -57,7 +57,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## 命令
 
-使用 OpenCode TUI 時，您可以鍵入 `/` 後跟命令名稱來快速執行操作。例如：
+使用 opencode TUI 時，您可以鍵入 `/` 後跟命令名稱來快速執行操作。例如：
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ Most commands also have keybind using `ctrl+x` as the leader key, where `ctrl+x`
 
 ### connect
 
-將提供程序添加到 OpenCode。允許您從可用的提供商中進行選擇並添加其 API 密鑰。
+將提供程序添加到 opencode。允許您從可用的提供商中進行選擇並添加其 API 密鑰。
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ Most commands also have keybind using `ctrl+x` as the leader key, where `ctrl+x`
 
 ### exit
 
-退出 OpenCode。 _別名_：`/quit`、`/q`
+退出 opencode。 _別名_：`/quit`、`/q`
 
 ```bash frame="none"
 /exit
@@ -339,7 +339,7 @@ Most commands also have keybind using `ctrl+x` as the leader key, where `ctrl+x`
 - `code` - Visual Studio 代碼
 - `cursor` - 光標
 - `windsurf` - 風帆衝浪
-- `nvim` - Neo 的編輯
+- `nvim` - Neovim 編輯器
 - `vim` - 我來編輯了
 - `nano` - 納米編輯器
 - `notepad` - Windows 記事本
@@ -355,7 +355,7 @@ Most commands also have keybind using `ctrl+x` as the leader key, where `ctrl+x`
 
 ## 配置
 
-您可以通過 OpenCode 配置文件自定義 TUI 行為。
+您可以通過 opencode 配置文件自定義 TUI 行為。
 
 ```json title="opencode.json"
 {

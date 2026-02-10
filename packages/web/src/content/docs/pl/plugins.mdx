@@ -1,9 +1,9 @@
 ---
 title: Wtyczki
-description: Napisz własną wtyczkę, aby rozszerzyć OpenCode.
+description: Napisz własną wtyczkę, aby rozszerzyć opencode.
 ---
 
-Wtyczki umożliwiające wyłączenie OpenCode poprzez podjęcie różnych zdarzeń i zachowanie. Można utworzyć wtyczkę, aby sprawdzić nowe funkcje, integrować się z usługami lub sprawdzaniem zachowania OpenCode.
+Wtyczki umożliwiające wyłączenie opencode poprzez podjęcie różnych zdarzeń i zachowanie. Można utworzyć wtyczkę, aby sprawdzić nowe funkcje, integrować się z usługami lub sprawdzaniem zachowania opencode.
 
 Aby znaleźć się z przykładami, przejrzyj [wtyczki](/docs/ecosystem#plugins) utworzone przez społeczność.
 
@@ -83,7 +83,7 @@ Lokalne narzędzie i narzędzie, które można wykorzystać z zewnętrznych paki
 }
 ```
 
-OpenCode uruchomienie `bun install` przy uruchomieniu, aby je uruchomić. Twoje dodatkowe funkcje będą dostępne po zaimportowaniu.
+opencode uruchomienie `bun install` przy uruchomieniu, aby je uruchomić. Twoje dodatkowe funkcje będą dostępne po zaimportowaniu.
 
 ```ts title=".opencode/plugins/my-plugin.ts"
 import { escape } from "shescape"
@@ -235,7 +235,7 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 Używamy `osascript` do uruchamiania AppleScript na macOS. Tutaj możesz przejść do wysyłania pozostałości.
 
 :::note
-Jeśli korzystasz z aplikacji komputerowej OpenCode, może ona automatycznie wysłać wiadomość systemową, gdy odpowiedź jest gotowa lub gdy wystąpią błędy sesji.
+Jeśli korzystasz z aplikacji komputerowej opencode, może ona automatycznie wysłać wiadomość systemową, gdy odpowiedź jest gotowa lub gdy wystąpią błędy sesji.
 :::
 
 ---

@@ -1,17 +1,17 @@
 ---
 title: CLI
-description: OpenCode CLI seçenekleri ve komutları.
+description: opencode CLI seçenekleri ve komutları.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode CLI herhangi bir argüman olmadan çalıştırıldığında varsayılan olarak [TUI](/docs/tui)'yi başlatır.
+opencode CLI herhangi bir argüman olmadan çalıştırıldığında varsayılan olarak [TUI](/docs/tui)'yi başlatır.
 
 ```bash
 opencode
 ```
 
-Ancak bu sayfada belgelendiği gibi komutları da kabul eder. Bu, OpenCode ile programlı olarak etkileşim kurmanıza olanak tanır.
+Ancak bu sayfada belgelendiği gibi komutları da kabul eder. Bu, opencode ile programlı olarak etkileşim kurmanıza olanak tanır.
 
 ```bash
 opencode run "Explain how closures work in JavaScript"
@@ -21,7 +21,7 @@ opencode run "Explain how closures work in JavaScript"
 
 ### tui
 
-OpenCode terminali kullanıcı arayüzünü başlatın.
+opencode terminali kullanıcı arayüzünü başlatın.
 
 ```bash
 opencode [project]
@@ -29,27 +29,28 @@ opencode [project]
 
 #### Flags
 
-| Bayrak       | Kısa | Açıklama                                    |
-| ------------ | ---- | ------------------------------------------- |
-| `--continue` | `-c` | Son oturuma devam et                        |
-| `--session`  | `-s` | Devam edecek oturum kimliği                 |
-| `--prompt`   |      | Kullanma istemi                             |
-| `--model`    | `-m` | provider/model biçiminde kullanılacak model |
-| `--agent`    |      | Kullanılacak temsilci                       |
-| `--port`     |      | Port to listen on                           |
-| `--hostname` |      | Hostname to listen on                       |
+| Bayrak       | Kısa | Açıklama                                                                      |
+| ------------ | ---- | ----------------------------------------------------------------------------- |
+| `--continue` | `-c` | Son oturuma devam et                                                          |
+| `--session`  | `-s` | Devam edecek oturum kimliği                                                   |
+| `--fork`     |      | Continue ederken oturumu fork'la (`--continue` veya `--session` ile kullanın) |
+| `--prompt`   |      | Kullanma istemi                                                               |
+| `--model`    | `-m` | provider/model biçiminde kullanılacak model                                   |
+| `--agent`    |      | Kullanılacak temsilci                                                         |
+| `--port`     |      | Port to listen on                                                             |
+| `--hostname` |      | Hostname to listen on                                                         |
 
 ---
 
 ## Komutlar
 
-OpenCode CLI ayrıca aşağıdaki komutlara da sahiptir.
+opencode CLI ayrıca aşağıdaki komutlara da sahiptir.
 
 ---
 
 ### agent
 
-OpenCode için aracıları yönetin.
+opencode için aracıları yönetin.
 
 ```bash
 opencode agent [command]
@@ -59,13 +60,13 @@ opencode agent [command]
 
 ### attach
 
-`serve` veya `web` komutlarıyla başlatılan, halihazırda çalışan bir OpenCode arka uç sunucusuna bir terminal ekleyin.
+`serve` veya `web` komutlarıyla başlatılan, halihazırda çalışan bir opencode arka uç sunucusuna bir terminal ekleyin.
 
 ```bash
 opencode attach [url]
 ```
 
-Bu, TUI öğesinin uzak bir OpenCode arka ucuyla kullanılmasına olanak tanır. Örneğin:
+Bu, TUI öğesinin uzak bir opencode arka ucuyla kullanılmasına olanak tanır. Örneğin:
 
 ```bash
 # Start the backend server for web/mobile access
@@ -118,13 +119,13 @@ opencode auth [command]
 
 #### login
 
-OpenCode, [Models.dev](https://models.dev) adresindeki sağlayıcı listesi tarafından desteklenmektedir, dolayısıyla kullanmak istediğiniz herhangi bir sağlayıcı için API anahtarlarını ayarlamak üzere `opencode auth login` kullanabilirsiniz. Bu `~/.local/share/opencode/auth.json`'de saklanıyor.
+opencode, [Models.dev](https://models.dev) adresindeki sağlayıcı listesi tarafından desteklenmektedir, dolayısıyla kullanmak istediğiniz herhangi bir sağlayıcı için API anahtarlarını ayarlamak üzere `opencode auth login` kullanabilirsiniz. Bu `~/.local/share/opencode/auth.json`'de saklanıyor.
 
 ```bash
 opencode auth login
 ```
 
-OpenCode başlatıldığında, sağlayıcıları kimlik bilgileri dosyasından yükler. Ortamlarınızda tanımlanmış herhangi bir anahtar veya projenizde bir `.env` dosyası varsa.
+opencode başlatıldığında, sağlayıcıları kimlik bilgileri dosyasından yükler. Ortamlarınızda tanımlanmış herhangi bir anahtar veya projenizde bir `.env` dosyası varsa.
 
 ---
 
@@ -300,7 +301,7 @@ opencode models anthropic
 | `--refresh` | Modeller.dev'den model önbelleğini yenileyin                                |
 | `--verbose` | Daha ayrıntılı model çıktısı kullanın (maliyetler gibi meta veriler içerir) |
 
-Önbelleğe alınan model listesini güncellemek için `--refresh` bayrağını kullanın. Bu, bir sağlayıcıya yeni modeller eklendiğinde ve bunları OpenCode'da görmek istediğinizde kullanışlıdır.
+Önbelleğe alınan model listesini güncellemek için `--refresh` bayrağını kullanın. Bu, bir sağlayıcıya yeni modeller eklendiğinde ve bunları opencode'da görmek istediğinizde kullanışlıdır.
 
 ```bash
 opencode models --refresh
@@ -310,7 +311,7 @@ opencode models --refresh
 
 ### koşmak
 
-Doğrudan bir istem ileterek açık kodu etkileşimli olmayan modda çalıştırın.
+Doğrudan bir istem ileterek opencode'u etkileşimli olmayan modda çalıştırın.
 
 ```bash
 opencode run [message..]
@@ -339,26 +340,27 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | `--command`  |      | Çalıştırılacak komut, args için mesajı kullanın                                   |
 | `--continue` | `-c` | Son oturuma devam et                                                              |
 | `--session`  | `-s` | Devam edecek oturum kimliği                                                       |
+| `--fork`     |      | Continue ederken oturumu fork'la (`--continue` veya `--session` ile kullanın)     |
 | `--share`    |      | Oturumu paylaşın                                                                  |
 | `--model`    | `-m` | provider/model biçiminde kullanılacak model                                       |
 | `--agent`    |      | Kullanılacak temsilci                                                             |
 | `--file`     | `-f` | Mesaja eklenecek dosya(lar)                                                       |
 | `--format`   |      | Biçim: varsayılan (biçimlendirilmiş) veya json (ham JSON olayları)                |
 | `--title`    |      | Oturumun başlığı (değer sağlanmazsa kısaltılmış bilgi istemi kullanılır)          |
-| `--attach`   |      | Çalışan bir açık kod sunucusuna ekleyin (ör. http://localhost:4096)               |
+| `--attach`   |      | Çalışan bir opencode sunucusuna ekleyin (ör. http://localhost:4096)               |
 | `--port`     |      | Yerel sunucunun bağlantı noktası (varsayılan olarak rastgele bağlantı noktasıdır) |
 
 ---
 
 ### serve
 
-API erişimi için başsız bir OpenCode tarayıcısı başlatılır. Tam HTTP arayüzü için [server docs](/docs/server)'e göz atın.
+API erişimi için başsız bir opencode tarayıcısı başlatılır. Tam HTTP arayüzü için [server docs](/docs/server)'e göz atın.
 
 ```bash
 opencode serve
 ```
 
-Bu, TUI arayüzü olmadan açık kod işlevselliğine API erişimi sağlayan bir HTTP sunucusunu başlatır. HTTP temel kimlik doğrulamasını etkinleştirmek için `OPENCODE_SERVER_PASSWORD` öğesini ayarlayın (kullanıcı adı varsayılan olarak `opencode` şeklindedir).
+Bu, TUI arayüzü olmadan opencode işlevselliğine API erişimi sağlayan bir HTTP sunucusunu başlatır. HTTP temel kimlik doğrulamasını etkinleştirmek için `OPENCODE_SERVER_PASSWORD` öğesini ayarlayın (kullanıcı adı varsayılan olarak `opencode` şeklindedir).
 
 #### Bayraklar
 
@@ -373,7 +375,7 @@ Bu, TUI arayüzü olmadan açık kod işlevselliğine API erişimi sağlayan bir
 
 ### oturum
 
-Manage OpenCode sessions.
+Manage opencode sessions.
 
 ```bash
 opencode session [command]
@@ -383,7 +385,7 @@ opencode session [command]
 
 #### liste
 
-Tüm OpenCode oturumlarını listeleyin.
+Tüm opencode oturumlarını listeleyin.
 
 ```bash
 opencode session list
@@ -400,7 +402,7 @@ opencode session list
 
 ### stats
 
-OpenCode oturumlarınız için belirteç kullanımı ve maliyet istatistiklerini gösterin.
+opencode oturumlarınız için belirteç kullanımı ve maliyet istatistiklerini gösterin.
 
 ```bash
 opencode stats
@@ -431,13 +433,13 @@ Bir oturum kimliği sağlamazsanız mevcut oturumlar arasından seçim yapmanız
 
 ### import
 
-Bir JSON dosyasından veya OpenCode paylaşımından URL oturum verilerini içe aktarın.
+Bir JSON dosyasından veya opencode paylaşımından URL oturum verilerini içe aktarın.
 
 ```bash
 opencode import <file>
 ```
 
-Yerel bir dosyadan veya OpenCode paylaşımından (URL) içe aktarabilirsiniz.
+Yerel bir dosyadan veya opencode paylaşımından (URL) içe aktarabilirsiniz.
 
 ```bash
 opencode import session.json
@@ -448,13 +450,13 @@ opencode import https://opncd.ai/s/abc123
 
 ### web
 
-Web arayüzüyle başsız bir OpenCode sunucusu başlatın.
+Web arayüzüyle başsız bir opencode sunucusu başlatın.
 
 ```bash
 opencode web
 ```
 
-Bu, bir HTTP sunucusunu başlatır ve bir web arayüzü aracılığıyla OpenCode'a erişmek için bir web tarayıcısı açar. HTTP temel kimlik doğrulamasını etkinleştirmek için `OPENCODE_SERVER_PASSWORD` öğesini ayarlayın (kullanıcı adı varsayılan olarak `opencode` şeklindedir).
+Bu, bir HTTP sunucusunu başlatır ve bir web arayüzü aracılığıyla opencode'a erişmek için bir web tarayıcısı açar. HTTP temel kimlik doğrulamasını etkinleştirmek için `OPENCODE_SERVER_PASSWORD` öğesini ayarlayın (kullanıcı adı varsayılan olarak `opencode` şeklindedir).
 
 #### Bayraklar
 
@@ -489,7 +491,7 @@ Bu komut, nd-JSON kullanarak stdin/stdout aracılığıyla iletişim kuran bir A
 
 ### uninstall
 
-OpenCode'u kaldırın ve ilgili tüm dosyaları kaldırın.
+opencode'u kaldırın ve ilgili tüm dosyaları kaldırın.
 
 ```bash
 opencode uninstall
@@ -508,7 +510,7 @@ opencode uninstall
 
 ### upgrade
 
-Açık kodu en son sürüme veya belirli bir sürüme günceller.
+opencode'u en son sürüme veya belirli bir sürüme günceller.
 
 ```bash
 opencode upgrade [target]
@@ -536,7 +538,7 @@ opencode upgrade v0.1.48
 
 ## Küresel Bayraklar
 
-CLI açık kodu aşağıdaki genel bayrakları alır.
+CLI opencode'u aşağıdaki genel bayrakları alır.
 
 | Bayrak         | Kısa | Tanım                                    |
 | -------------- | ---- | ---------------------------------------- |
@@ -549,7 +551,7 @@ CLI açık kodu aşağıdaki genel bayrakları alır.
 
 ## Environment variables
 
-OpenCode ortam değişkenleri kullanılarak yapılandırılabilir.
+opencode ortam değişkenleri kullanılarak yapılandırılabilir.
 
 | Değişken                              | Tür     | Açıklama                                                                    |
 | ------------------------------------- | ------- | --------------------------------------------------------------------------- |

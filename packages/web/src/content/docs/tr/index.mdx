@@ -1,15 +1,15 @@
 ---
 title: Giriş
-description: OpenCode'u kullanmaya başlayın.
+description: opencode'u kullanmaya başlayın.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 import config from "../../../../config.mjs"
 export const console = config.console
 
-[**OpenCode**](/) açık kaynaklı bir AI kodlama aracısıdır. Terminal tabanlı bir arayüz, masaüstü uygulaması veya IDE uzantısı olarak mevcuttur.
+[**opencode**](/) açık kaynaklı bir AI kodlama aracısıdır. Terminal tabanlı bir arayüz, masaüstü uygulaması veya IDE uzantısı olarak mevcuttur.
 
-![OpenCode TUI with the opencode theme](../../../assets/lander/screenshot.png)
+![opencode TUI with the opencode theme](../../../assets/lander/screenshot.png)
 
 Hadi başlayalım.
 
@@ -17,7 +17,7 @@ Hadi başlayalım.
 
 #### Prerequisites
 
-OpenCode'u terminalinizde kullanmak için ihtiyacınız olacak:
+opencode'u terminalinizde kullanmak için ihtiyacınız olacak:
 
 1. Şu gibi modern bir terminal emülatörü:
    - [WezTerm](https://wezterm.org), cross-platform
@@ -31,7 +31,7 @@ OpenCode'u terminalinizde kullanmak için ihtiyacınız olacak:
 
 ## Düzenlemek
 
-OpenCode'u kurmanın en kolay yolu kurulum betiğidir.
+opencode'u kurmanın en kolay yolu kurulum betiğidir.
 
 ```bash
 curl -fsSL https://opencode.ai/install | bash
@@ -79,7 +79,7 @@ Ayrıca aşağıdaki komutlarla da yükleyebilirsiniz:
   brew install anomalyco/tap/opencode
   ```
 
-  > En güncel sürümler için OpenCode dokunuşunu kullanmanızı öneririz. Resmi `brew install opencode` formülü Homebrew ekibi tarafından korunur ve daha sık güncellenir.
+  > En güncel sürümler için opencode dokunuşunu kullanmanızı öneririz. Resmi `brew install opencode` formülü Homebrew ekibi tarafından korunur ve daha sık güncellenir.
 
 - **Paru'yu Arch Linux'ta kullanma**
 
@@ -90,7 +90,7 @@ Ayrıca aşağıdaki komutlarla da yükleyebilirsiniz:
 #### Windows
 
 :::tip[Önerilen: WSL kullanın]
-Windows'ta en iyi deneyim için [Windows Subsystem for Linux (WSL)](/docs/windows-wsl) kullanılmasını öneririz. Daha iyi performans ve OpenCode'un özellikleriyle tam uyumluluğu sağlar.
+Windows'ta en iyi deneyim için [Windows Subsystem for Linux (WSL)](/docs/windows-wsl) kullanılmasını öneririz. Daha iyi performans ve opencode'un özellikleriyle tam uyumluluğu sağlar.
 :::
 
 - **Çikolata Kullanımı**
@@ -123,7 +123,7 @@ Windows'ta en iyi deneyim için [Windows Subsystem for Linux (WSL)](/docs/window
   docker run -it --rm ghcr.io/anomalyco/opencode
   ```
 
-OpenCode'un Bun kullanılarak Windows'a yüklenmesine yönelik destek şu anda devam etmektedir.
+opencode'un Bun kullanılarak Windows'a yüklenmesine yönelik destek şu anda devam etmektedir.
 
 İkili dosyayı [Releases](https://github.com/anomalyco/opencode/releases)'dan da alabilirsiniz.
 
@@ -131,13 +131,13 @@ OpenCode'un Bun kullanılarak Windows'a yüklenmesine yönelik destek şu anda d
 
 ## Yapılandır
 
-OpenCode ile herhangi bir LLM sağlayıcısının API anahtarlarını yapılandırarak kullanabilirsiniz.
+opencode ile herhangi bir LLM sağlayıcısının API anahtarlarını yapılandırarak kullanabilirsiniz.
 
 LLM sağlayıcılarını kullanmaya yeni başlıyorsanız, [OpenCode Zen](/docs/zen) kullanmanızı öneririz.
-OpenCode tarafından test edilmiş ve doğrulanmış modellerin seçilmiş bir listesidir
+opencode tarafından test edilmiş ve doğrulanmış modellerin seçilmiş bir listesidir
 team.
 
-1. TUI'de `/connect` komutunu çalıştırın, açık kodu seçin ve [opencode.ai/auth](https://opencode.ai/auth)'ye gidin.
+1. TUI'de `/connect` komutunu çalıştırın, opencode'u seçin ve [opencode.ai/auth](https://opencode.ai/auth)'ye gidin.
 
    ```txt
    /connect
@@ -167,33 +167,33 @@ Artık bir sağlayıcı yapılandırdığınıza göre, bir projeye gidebilirsin
 cd /path/to/project
 ```
 
-Ve OpenCode'u çalıştırın.
+Ve opencode'u çalıştırın.
 
 ```bash
 opencode
 ```
 
-Daha sonra aşağıdaki komutu çalıştırarak proje için OpenCode'u başlatın.
+Daha sonra aşağıdaki komutu çalıştırarak proje için opencode'u başlatın.
 
 ```bash frame="none"
 /init
 ```
 
-Bu, OpenCode'un projenizi analiz etmesini ve bir `AGENTS.md` dosyası oluşturmasını sağlayacaktır.
+Bu, opencode'un projenizi analiz etmesini ve bir `AGENTS.md` dosyası oluşturmasını sağlayacaktır.
 proje kökü.
 
 :::tip
 Projenizin `AGENTS.md` dosyasını Git'e göndermelisiniz.
 :::
 
-Bu, OpenCode'un proje yapısını ve kodlama modellerini anlamasına yardımcı olur
+Bu, opencode'un proje yapısını ve kodlama modellerini anlamasına yardımcı olur
 kullanılmış.
 
 ---
 
 ## Usage
 
-Artık projeniz üzerinde çalışmak için OpenCode'u kullanmaya hazırsınız. Sormaktan çekinmeyin
+Artık projeniz üzerinde çalışmak için opencode'u kullanmaya hazırsınız. Sormaktan çekinmeyin
 anything!
 
 Yapay zeka kodlama aracısını kullanma konusunda yeniyseniz aşağıda bazı örnekleri bulabilirsiniz:
@@ -203,7 +203,7 @@ help.
 
 ### Soru sor
 
-OpenCode'dan kod tabanını size açıklamasını isteyebilirsiniz.
+opencode'dan kod tabanını size açıklamasını isteyebilirsiniz.
 
 :::tip
 Projedeki dosyaları bulanık aramak için `@` tuşunu kullanın.
@@ -219,11 +219,11 @@ Kod tabanının üzerinde çalışmadığınız bir kısmı varsa bu yararlı ol
 
 ### Add features
 
-OpenCode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de öncelikle ondan bir plan oluşturmasını istemenizi öneririz.
+opencode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de öncelikle ondan bir plan oluşturmasını istemenizi öneririz.
 
 1. **Bir plan oluşturun**
 
-   OpenCode, değişiklik yapma yeteneğini devre dışı bırakan bir _Plan moduna_ sahiptir ve
+   opencode, değişiklik yapma yeteneğini devre dışı bırakan bir _Plan moduna_ sahiptir ve
    bunun yerine özelliğin nasıl uygulanacağını önerin.
 
    **Sekme** tuşunu kullanarak buna geçin. Bunun için sağ alt köşede bir gösterge göreceksiniz.
@@ -240,11 +240,11 @@ OpenCode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de ön
    From this screen, the user can undelete a note or permanently delete it.
    ```
 
-   OpenCode'a ne istediğinizi anlamak için yeterli ayrıntıyı vermek istiyorsunuz. Yardımcı olur
+   opencode'a ne istediğinizi anlamak için yeterli ayrıntıyı vermek istiyorsunuz. Yardımcı olur
    onunla ekibinizdeki kıdemsiz bir geliştiriciyle konuşuyormuş gibi konuşmak.
 
    :::tip
-   OpenCode'a, ne anladığınızı anlamasına yardımcı olacak bol miktarda bağlam ve örnek verin.
+   opencode'a, ne anladığınızı anlamasına yardımcı olacak bol miktarda bağlam ve örnek verin.
    want.
    :::
 
@@ -261,7 +261,7 @@ OpenCode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de ön
    İsteme eklemek için görüntüleri terminale sürükleyip bırakın.
    :::
 
-   OpenCode, verdiğiniz tüm görselleri tarayabilir ve istemlere ekleyebilir. Yapabilirsiniz
+   opencode, verdiğiniz tüm görselleri tarayabilir ve istemlere ekleyebilir. Yapabilirsiniz
    bunu bir görüntüyü terminale sürükleyip bırakarak yapın.
 
 3. **Özelliği oluşturun**
@@ -283,7 +283,7 @@ OpenCode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de ön
 
 ### Değişiklik yap
 
-Daha basit değişiklikler için OpenCode'dan bunu doğrudan oluşturmasını isteyebilirsiniz.
+Daha basit değişiklikler için opencode'dan bunu doğrudan oluşturmasını isteyebilirsiniz.
 Önce planı gözden geçirmeye gerek kalmadan.
 
 ```txt frame="none" "@packages/functions/src/settings.ts" "@packages/functions/src/notes.ts"
@@ -292,14 +292,14 @@ handled in the /notes route in @packages/functions/src/notes.ts and implement
 the same logic in @packages/functions/src/settings.ts
 ```
 
-OpenCode'un doğru kararı vermesi için yeterli miktarda ayrıntı sağladığınızdan emin olmak istiyorsunuz.
+opencode'un doğru kararı vermesi için yeterli miktarda ayrıntı sağladığınızdan emin olmak istiyorsunuz.
 değişiklikler.
 
 ---
 
 ### Undo changes
 
-Diyelim ki OpenCode'dan bazı değişiklikler yapmasını istediniz.
+Diyelim ki opencode'dan bazı değişiklikler yapmasını istediniz.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 Can you refactor the function in @packages/functions/src/api/index.ts?
@@ -312,14 +312,14 @@ Ama istediğinin bu olmadığını anlıyorsun. Değişiklikleri **geri alabilir
 /undo
 ```
 
-OpenCode artık yaptığınız değişiklikleri geri alacak ve orijinal mesajınızı gösterecek
+opencode artık yaptığınız değişiklikleri geri alacak ve orijinal mesajınızı gösterecek
 again.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 Can you refactor the function in @packages/functions/src/api/index.ts?
 ```
 
-Buradan komut isteminde ince ayar yapabilir ve OpenCode'dan tekrar denemesini isteyebilirsiniz.
+Buradan komut isteminde ince ayar yapabilir ve opencode'dan tekrar denemesini isteyebilirsiniz.
 
 :::tip
 Birden çok değişikliği geri almak için `/undo` komutunu birden çok kez çalıştırabilirsiniz.
@@ -335,7 +335,7 @@ Veya `/redo` komutunu kullanarak değişiklikleri **yeniden yapabilirsiniz**.
 
 ## Paylaşmak
 
-OpenCode ile yaptığınız görüşmeler [eşinizle paylaşılabilir]
+opencode ile yaptığınız görüşmeler [eşinizle paylaşılabilir]
 takım](/docs/share).
 
 ```bash frame="none"
@@ -348,12 +348,12 @@ Bu, mevcut konuşmaya bir bağlantı oluşturacak ve bunu panonuza kopyalayacakt
 Konuşmalar varsayılan olarak paylaşılmaz.
 :::
 
-İşte OpenCode'lu bir [örnek konuşma](https://opencode.ai/s/4XP1fce5).
+İşte opencode'lu bir [örnek konuşma](https://opencode.ai/s/4XP1fce5).
 
 ---
 
 ## Customize
 
-İşte bu kadar! Artık OpenCode'u kullanma konusunda profesyonelsiniz.
+İşte bu kadar! Artık opencode'u kullanma konusunda profesyonelsiniz.
 
-Kendinize ait hale getirmek için [picking a theme](/docs/themes), [customizing the keybinds](/docs/keybinds), [configuring code formatters](/docs/formatters), [creating custom commands](/docs/commands) veya [OpenCode config](/docs/config) ile oynamanızı öneririz.
+Kendinize ait hale getirmek için [picking a theme](/docs/themes), [customizing the keybinds](/docs/keybinds), [configuring code formatters](/docs/formatters), [creating custom commands](/docs/commands) veya [opencode config](/docs/config) ile oynamanızı öneririz.

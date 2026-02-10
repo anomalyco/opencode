@@ -1,11 +1,11 @@
 ---
 title: Web
-description: Bruke OpenCode i nettleseren din.
+description: Bruke opencode i nettleseren din.
 ---
 
-OpenCode kan kjøres som en nettapplikasjon i nettleseren din, og gir den samme kraftige AI-kodingsopplevelsen uten at du trenger en terminal.
+opencode kan kjøres som en nettapplikasjon i nettleseren din, og gir den samme kraftige AI-kodingsopplevelsen uten at du trenger en terminal.
 
-![OpenCode Web - Ny økt](../../../assets/web/web-homepage-new-session.png)
+![opencode Web - Ny økt](../../../assets/web/web-homepage-new-session.png)
 
 ## Komme i gang
 
@@ -15,7 +15,7 @@ Start nettgrensesnittet ved å kjøre:
 opencode web
 ```
 
-Dette starter en lokal server på `127.0.0.1` med en tilfeldig tilgjengelig port og åpner automatisk OpenCode i standard nettleser.
+Dette starter en lokal server på `127.0.0.1` med en tilfeldig tilgjengelig port og åpner automatisk opencode i standard nettleser.
 
 :::caution
 Hvis `OPENCODE_SERVER_PASSWORD` ikke er satt, vil serveren være usikret. Dette er greit for lokal bruk, men bør settes for nettverkstilgang.
@@ -33,7 +33,7 @@ Du kan konfigurere webserveren ved å bruke kommandolinjeflagg eller i [config f
 
 ### Port
 
-Som standard velger OpenCode en tilgjengelig port. Du kan spesifisere en port:
+Som standard velger opencode en tilgjengelig port. Du kan spesifisere en port:
 
 ```bash
 opencode web --port 4096
@@ -41,13 +41,13 @@ opencode web --port 4096
 
 ### Vertsnavn
 
-Som standard binder serveren seg til `127.0.0.1` (kun lokal vert). Slik gjør du OpenCode tilgjengelig på nettverket ditt:
+Som standard binder serveren seg til `127.0.0.1` (kun lokal vert). Slik gjør du opencode tilgjengelig på nettverket ditt:
 
 ```bash
 opencode web --hostname 0.0.0.0
 ```
 
-Når du bruker `0.0.0.0`, vil OpenCode vise både lokale adresser og nettverksadresser:
+Når du bruker `0.0.0.0`, vil opencode vise både lokale adresser og nettverksadresser:
 
 ```
   Local access:       http://localhost:4096
@@ -92,19 +92,19 @@ Brukernavnet er standard til `opencode`, men kan endres med `OPENCODE_SERVER_USE
 
 ## Bruke webgrensesnittet
 
-Når det er startet, gir nettgrensesnittet tilgang til dine OpenCode-økter.
+Når det er startet, gir nettgrensesnittet tilgang til dine opencode-økter.
 
 ### økter
 
 Se og administrer øktene dine fra hjemmesiden. Du kan se aktive økter og starte nye.
 
-![OpenCode Web - Active Session](../../../assets/web/web-homepage-active-session.png)
+![opencode Web - Active Session](../../../assets/web/web-homepage-active-session.png)
 
 ### Serverstatus
 
 Klikk "Se servere" for å se tilkoblede servere og deres status.
 
-![OpenCode Web - Se servere](../../../assets/web/web-homepage-see-servers.png)
+![opencode Web - Se servere](../../../assets/web/web-homepage-see-servers.png)
 
 ---
 

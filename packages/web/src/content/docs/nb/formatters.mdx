@@ -1,15 +1,15 @@
 ---
 title: Formatere
-description: OpenCode bruker språkspesifikke formatere.
+description: opencode bruker språkspesifikke formatere.
 ---
 
-OpenCode formaterer automatisk filer etter at de er skrevet eller redigert ved hjelp av språkspesifikke formatere. Dette sikrer at koden som genereres følger kodestilene til prosjektet ditt.
+opencode formaterer automatisk filer etter at de er skrevet eller redigert ved hjelp av språkspesifikke formatere. Dette sikrer at koden som genereres følger kodestilene til prosjektet ditt.
 
 ---
 
 ## Innebygd
 
-OpenCode kommer med flere innebygde formatere for populære språk og rammeverk. Nedenfor er en liste over formatere, støttede filutvidelser og kommandoer eller konfigurasjonsalternativer den trenger.
+opencode kommer med flere innebygde formatere for populære språk og rammeverk. Nedenfor er en liste over formatere, støttede filutvidelser og kommandoer eller konfigurasjonsalternativer den trenger.
 
 | Formater               | Utvidelser                                                                                            | Krav                                                                                                    |
 | ---------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
@@ -38,13 +38,13 @@ OpenCode kommer med flere innebygde formatere for populære språk og rammeverk.
 | oxfmt (Eksperimentell) | .js, .jsx, .ts, .tsx                                                                                  | `oxfmt` avhengighet i `package.json` og et [eksperimentelt env variabel flagg](/docs/cli/#experimental) |
 | ormolu                 | .hs                                                                                                   | `ormolu` kommando tilgjengelig                                                                          |
 
-Så hvis prosjektet ditt har `prettier` i `package.json`, vil OpenCode automatisk bruke det.
+Så hvis prosjektet ditt har `prettier` i `package.json`, vil opencode automatisk bruke det.
 
 ---
 
 ## Slik fungerer det
 
-Når OpenCode skriver eller redigerer en fil, gjør den:
+Når opencode skriver eller redigerer en fil, gjør den:
 
 1. Kontrollerer filtypen mot alle aktiverte formatere.
 2. Kjører riktig formateringskommando på filen.
@@ -56,7 +56,7 @@ Denne prosessen skjer i bakgrunnen, og sikrer at kodestilene dine opprettholdes 
 
 ## Konfigurer
 
-Du kan tilpasse formatere gjennom `formatter`-delen i OpenCode-konfigurasjonen.
+Du kan tilpasse formatere gjennom `formatter`-delen i opencode-konfigurasjonen.
 
 ```json title="opencode.json"
 {

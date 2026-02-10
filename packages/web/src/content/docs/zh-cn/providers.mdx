@@ -1,17 +1,17 @@
 ---
 title: 供應商
-description: 使用 OpenCode 中的任何 LLM 提供程式。
+description: 使用 opencode 中的任何 LLM 提供程式。
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 
-OpenCode uses the [AI SDK](https://ai-sdk.dev/) and [Models.dev](https://models.dev) to support **75+ LLM providers** and it supports running local models.
+opencode uses the [AI SDK](https://ai-sdk.dev/) and [Models.dev](https://models.dev) to support **75+ LLM providers** and it supports running local models.
 
 要新增提供商，您需要：
 
 1. 使用 `/connect` 命令新增提供 API 程序金钥匙。
-2. 在您的 OpenCode 配置中配置提供程式。
+2. 在您的 opencode 配置中配置提供程式。
 
 ---
 
@@ -24,7 +24,7 @@ in `~/.local/share/opencode/auth.json`.
 
 ### 配置
 
-您可以利用 OpenCode 中的 `provider` 部分自定义提供程序
+您可以利用 opencode 中的 `provider` 部分自定义提供程序
 配置。
 
 ---
@@ -48,10 +48,10 @@ in `~/.local/share/opencode/auth.json`.
 
 ---
 
-## OpenCode 一代
+## opencode 一代
 
-OpenCode Zen 是OpenCode团队提供的模型列表，这些模型已被
-经测试和验证可与OpenCode良好配合。 [了解更多](/docs/zen)。
+OpenCode Zen 是opencode团队提供的模型列表，这些模型已被
+经测试和验证可与opencode良好配合。 [了解更多](/docs/zen)。
 
 :::tip
 如果您是新手，我们建议您从 OpenCode Zen 开始。
@@ -80,7 +80,7 @@ OpenCode Zen 是OpenCode团队提供的模型列表，这些模型已被
    /models
    ```
 
-它的工作方式与 OpenCode 中的任何其他提供的程序相同，并且完全可以选择使用。
+它的工作方式与 opencode 中的任何其他提供的程序相同，并且完全可以选择使用。
 
 ---
 
@@ -124,7 +124,7 @@ OpenCode Zen 是OpenCode团队提供的模型列表，这些模型已被
 
 ### 亞馬遜基岩
 
-相当于 Amazon Bedrock 与 OpenCode 结合使用：
+相当于 Amazon Bedrock 与 opencode 结合使用：
 
 1. 前往 Amazon Bedrock 控制台中的 **模型目录** 并请求
    訪問您想要的模型。
@@ -279,7 +279,7 @@ OpenCode Zen 是OpenCode团队提供的模型列表，这些模型已被
    ```
 
 :::info
-Using your Claude Pro/Max subscription in OpenCode is not officially supported by [Anthropic](https://anthropic.com).
+Using your Claude Pro/Max subscription in opencode is not officially supported by [Anthropic](https://anthropic.com).
 :::
 
 ##### 使用 API 键
@@ -482,7 +482,7 @@ Cloudflare AI Gateway lets you access models from OpenAI, Anthropic, Workers AI,
    /models
    ```
 
-   您还可以使用开放代码配置新增模型。
+   您还可以使用opencode配置新增模型。
 
    ```json title="opencode.json"
    {
@@ -662,7 +662,7 @@ GitLab Duo 通过 GitLab 的人工代理提供具有本机工具呼叫功能的�
    #### 使用個人訪問令牌
    1. Go to [GitLab User Settings > Access Tokens](https://gitlab.com/-/user_settings/personal_access_tokens)
    2. 單擊**新增新令牌**
-   3. Name: `OpenCode`, Scopes: `api`
+   3. Name: `opencode`, Scopes: `api`
    4. 复制令牌（以 `glpat-` 发起人）
    5. 在終端中輸入
 
@@ -685,8 +685,8 @@ GitLab Duo 通过 GitLab 的人工代理提供具有本机工具呼叫功能的�
 ##### 自托管 GitLab
 
 :::note[合规笔记]
-OpenCode 使用一个小模型来执行一些 AI 任务，例如生成会话标题。
-情况下，其配置为使用 gpt-5-nano，由 Zen 托管。默认 OpenCode
+opencode 使用一个小模型来执行一些 AI 任务，例如生成会话标题。
+情况下，其配置为使用 gpt-5-nano，由 Zen 托管。默认 opencode
 只需使用您自己的 GitLab 托管示例项，即可将以下内容添加到您的
 `opencode.json` file. It is also recommended to disable session sharing.
 
@@ -784,7 +784,7 @@ Customize through `opencode.json`:
 
 ---
 
-### GitHub 副驾驶
+### GitHub Copilot
 
 相当于您的 GitHub Copilot 订阅与 opencode 一起使用：
 
@@ -823,7 +823,7 @@ Some models need to be manually enabled in your [GitHub Copilot settings](https:
 
 ### 谷歌顶点人工智能
 
-Google Vertex AI 与 OpenCode 结合使用：
+Google Vertex AI 与 opencode 结合使用：
 
 1. 前往 Google Cloud Console 中的 **模型花园** 并检查
    您所在地區提供的型號。
@@ -1005,7 +1005,7 @@ Helicone 支持快速获取、用户跟踪和会话管理等功能的自定义�
 
 ##### 會話跟蹤
 
-Helicone's [Sessions](https://docs.helicone.ai/features/sessions) feature lets you group related LLM requests together. Use the [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) plugin to automatically log each OpenCode conversation as a session in Helicone.
+Helicone's [Sessions](https://docs.helicone.ai/features/sessions) feature lets you group related LLM requests together. Use the [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) plugin to automatically log each opencode conversation as a session in Helicone.
 
 ```bash
 npm install -g opencode-helicone-session
@@ -1019,7 +1019,7 @@ npm install -g opencode-helicone-session
 }
 ```
 
-该外挂将 `Helicone-Session-Id` 和 `Helicone-Session-Name` 标头注入您的请求中。在 Helicone 的会话页面中，您将看到每个 OpenCode 对话都是单独的会话。
+该外挂将 `Helicone-Session-Id` 和 `Helicone-Session-Name` 标头注入您的请求中。在 Helicone 的会话页面中，您将看到每个 opencode 对话都是单独的会话。
 
 ##### 常见螺旋接头
 
@@ -1103,7 +1103,7 @@ IO.NET提供了17种针对各种例子进行优化的模型：
 
 ### LM工作室
 
-您可以通过使用本地模型来使用 LM Studio 配置开放代码。
+您可以通过使用本地模型来使用 LM Studio 配置opencode。
 
 ```json title="opencode.json" "lmstudio" {5, 6, 8, 10-14}
 {
@@ -1223,7 +1223,7 @@ IO.NET提供了17种针对各种例子进行优化的模型：
 您可以使用 Ollama 配置 opencode 本地模型。
 
 :::tip
-Ollama can automatically configure itself for OpenCode. See the [Ollama integration docs](https://docs.ollama.com/integrations/opencode) for details.
+Ollama can automatically configure itself for opencode. See the [Ollama integration docs](https://docs.ollama.com/integrations/opencode) for details.
 :::
 
 ```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
@@ -1262,13 +1262,13 @@ Ollama can automatically configure itself for OpenCode. See the [Ollama integrat
 
 ### 奧拉馬雲
 
-相当于 Ollama Cloud 与 OpenCode 一起使用：
+相当于 Ollama Cloud 与 opencode 一起使用：
 
 1. 前往 [https://ollama.com/](https://ollama.com/) 并登入或建立账户。
 
 2. 导航至**设置** > **金钥匙**，然后单击**添加API金钥匙**以生成新的API金钥匙。
 
-3. 复制 API 金钥以在 OpenCode 中使用。
+3. 复制 API 金钥以在 opencode 中使用。
 
 4. 执行 `/connect` 命令并搜索 **Ollama Cloud**。
 
@@ -1285,7 +1285,7 @@ Ollama can automatically configure itself for OpenCode. See the [Ollama integrat
    └ enter
    ```
 
-6. **重要**：在OpenCode中使用云模型之前，必须将模型信息拉取到本地：
+6. **重要**：在opencode中使用云模型之前，必须将模型信息拉取到本地：
 
    ```bash
    ollama pull gpt-oss:20b-cloud
@@ -1309,7 +1309,7 @@ We recommend signing up for [ChatGPT Plus or Pro](https://chatgpt.com/pricing).
    /connect
    ```
 
-2. 您可以选择 **ChatGPT Plus/Pro** 选项，就会在这里开启您的浏览器
+2. 您可以选择 **ChatGPT Plus 或 Pro** 选项，就会在这里开启您的浏览器
    並要求您進行身份驗證。
 
    ```txt
@@ -1332,9 +1332,9 @@ We recommend signing up for [ChatGPT Plus or Pro](https://chatgpt.com/pricing).
 
 ---
 
-### OpenCode 一代
+### opencode 一代
 
-OpenCode Zen 是 OpenCode 团队提供的经过测试和验证的模型列表。 [了解更多](/docs/zen)。
+OpenCode Zen 是 opencode 团队提供的经过测试和验证的模型列表。 [了解更多](/docs/zen)。
 
 1. 登入 **<a href={console}>OpenCode Zen</a>** 並單擊 **建立 API 金鑰**。
 
@@ -1344,7 +1344,7 @@ OpenCode Zen 是 OpenCode 团队提供的经过测试和验证的模型列表。
    /connect
    ```
 
-3. 输入您的 OpenCode API 金钥匙。
+3. 输入您的 opencode API 金钥匙。
 
    ```txt
    ┌ API key
@@ -1386,7 +1386,7 @@ OpenCode Zen 是 OpenCode 团队提供的经过测试和验证的模型列表。
    /models
    ```
 
-   您还可以通过开放代码配置添加其他模型。
+   您还可以通过opencode配置添加其他模型。
 
    ```json title="opencode.json" {6}
    {
@@ -1401,7 +1401,7 @@ OpenCode Zen 是 OpenCode 团队提供的经过测试和验证的模型列表。
    }
    ```
 
-5. 您还可以使用开放代码配置自定义它们。这是指定的示例
+5. 您还可以使用opencode配置自定义它们。这是指定的示例
 
    ```json title="opencode.json"
    {
@@ -1727,7 +1727,7 @@ Vercel AI Gateway 可以让您跨统一端点访问来自 OpenAI、Anthropic、G
    /models
    ```
 
-   您还可以通过开放代码配置添加其他模型。
+   您还可以通过opencode配置添加其他模型。
 
    ```json title="opencode.json" {6}
    {
@@ -1870,7 +1870,7 @@ Vercel AI Gateway 可以让您跨统一端点访问来自 OpenAI、Anthropic、G
 - **limit.context**：模型接受的最大输入标记。
 - **limit.output**：模型可以生成的最大令牌。
 
-`limit` 栏位允许 OpenCode 了解您还剩下多少上下文。标准成功会自动从 models.dev 中提取这些内容。
+`limit` 栏位允许 opencode 了解您还剩下多少上下文。标准成功会自动从 models.dev 中提取这些内容。
 
 ---
 

@@ -1,12 +1,12 @@
 ---
 title: サーバ
-description: HTTP 経由でオープンコード サーバーと通信します。
+description: HTTP 経由でopencode サーバーと通信します。
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-`opencode serve` コマンドは、オープンコード クライアントが使用できる OpenAPI エンドポイントを公開するヘッドレス HTTP サーバーを実行します。
+`opencode serve` コマンドは、opencode クライアントが使用できる OpenAPI エンドポイントを公開するヘッドレス HTTP サーバーを実行します。
 
 ---
 
@@ -88,10 +88,10 @@ opencode サーバーは次の API を公開します。
 
 ### グローバル
 
-| 方法  | パス             | 説明                                       | 応答               |
-| ----- | ---------------- | ------------------------------------------ | ------------------ |
-| `GET` | `/global/health` | サーバーの健全性とバージョンを取得する     | うーん             |
-| `GET` | `/global/event`  | グローバル イベントの取得 (SSE ストリーム) | イベントストリーム |
+| 方法  | パス             | 説明                                       | 応答                                 |
+| ----- | ---------------- | ------------------------------------------ | ------------------------------------ |
+| `GET` | `/global/health` | サーバーの健全性とバージョンを取得する     | `{ healthy: true, version: string }` |
+| `GET` | `/global/event`  | グローバル イベントの取得 (SSE ストリーム) | イベントストリーム                   |
 
 ---
 

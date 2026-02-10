@@ -1,15 +1,15 @@
 ---
 title: Config
-description: Usando a configuração JSON do OpenCode.
+description: Usando a configuração JSON do opencode.
 ---
 
-Você pode configurar o OpenCode usando um arquivo de configuração JSON.
+Você pode configurar o opencode usando um arquivo de configuração JSON.
 
 ---
 
 ## Formato
 
-O OpenCode suporta os formatos **JSON** e **JSONC** (JSON com Comentários).
+O opencode suporta os formatos **JSON** e **JSONC** (JSON com Comentários).
 
 ```jsonc title="opencode.jsonc"
 {
@@ -95,7 +95,7 @@ Você pode habilitar servidores específicos em sua configuração local:
 
 ### Global
 
-Coloque sua configuração global do OpenCode em `~/.config/opencode/opencode.json`. Use a configuração global para preferências de usuário, como temas, provedores ou atalhos de teclado.
+Coloque sua configuração global do opencode em `~/.config/opencode/opencode.json`. Use a configuração global para preferências de usuário, como temas, provedores ou atalhos de teclado.
 
 A configuração global substitui os padrões organizacionais remotos.
 
@@ -109,7 +109,7 @@ Adicione `opencode.json` na raiz do seu projeto. A configuração do projeto tem
 Coloque a configuração específica do projeto na raiz do seu projeto.
 :::
 
-Quando o OpenCode é iniciado, ele procura um arquivo de configuração no diretório atual ou sobe até o diretório Git mais próximo.
+Quando o opencode é iniciado, ele procura um arquivo de configuração no diretório atual ou sobe até o diretório Git mais próximo.
 
 Isso também é seguro para ser verificado no Git e usa o mesmo esquema que o global.
 
@@ -197,7 +197,7 @@ Opções disponíveis:
 
 - `port` - Porta para escutar.
 - `hostname` - Nome do host para escutar. Quando `mdns` está habilitado e nenhum nome de host está definido, o padrão é `0.0.0.0`.
-- `mdns` - Habilitar descoberta de serviço mDNS. Isso permite que outros dispositivos na rede descubram seu servidor OpenCode.
+- `mdns` - Habilitar descoberta de serviço mDNS. Isso permite que outros dispositivos na rede descubram seu servidor opencode.
 - `mdnsDomain` - Nome de domínio personalizado para o serviço mDNS. O padrão é `opencode.local`. Útil para executar várias instâncias na mesma rede.
 - `cors` - Origens adicionais a serem permitidas para CORS ao usar o servidor HTTP de um cliente baseado em navegador. Os valores devem ser origens completas (esquema + host + porta opcional), por exemplo, `https://app.example.com`.
 
@@ -225,7 +225,7 @@ Você pode gerenciar as ferramentas que um LLM pode usar através da opção `to
 
 ### Modelos
 
-Você pode configurar os provedores e modelos que deseja usar em sua configuração do OpenCode através das opções `provider`, `model` e `small_model`.
+Você pode configurar os provedores e modelos que deseja usar em sua configuração do opencode através das opções `provider`, `model` e `small_model`.
 
 ```json title="opencode.json"
 {
@@ -236,7 +236,7 @@ Você pode configurar os provedores e modelos que deseja usar em sua configuraç
 }
 ```
 
-A opção `small_model` configura um modelo separado para tarefas leves, como geração de títulos. Por padrão, o OpenCode tenta usar um modelo mais barato se um estiver disponível do seu provedor, caso contrário, ele recua para seu modelo principal.
+A opção `small_model` configura um modelo separado para tarefas leves, como geração de títulos. Por padrão, o opencode tenta usar um modelo mais barato se um estiver disponível do seu provedor, caso contrário, ele recua para seu modelo principal.
 
 As opções do provedor podem incluir `timeout` e `setCacheKey`:
 
@@ -298,7 +298,7 @@ Tokens Bearer (`AWS_BEARER_TOKEN_BEDROCK` ou `/connect`) têm precedência sobre
 
 ### Temas
 
-Você pode configurar o tema que deseja usar em sua configuração do OpenCode através da opção `theme`.
+Você pode configurar o tema que deseja usar em sua configuração do opencode através da opção `theme`.
 
 ```json title="opencode.json"
 {
@@ -348,7 +348,7 @@ Você pode definir o agente padrão usando a opção `default_agent`. Isso deter
 }
 ```
 
-O agente padrão deve ser um agente primário (não um subagente). Isso pode ser um agente embutido como `"build"` ou `"plan"`, ou um [agente personalizado](/docs/agents) que você definiu. Se o agente especificado não existir ou for um subagente, o OpenCode recuará para `"build"` com um aviso.
+O agente padrão deve ser um agente primário (não um subagente). Isso pode ser um agente embutido como `"build"` ou `"plan"`, ou um [agente personalizado](/docs/agents) que você definiu. Se o agente especificado não existir ou for um subagente, o opencode recuará para `"build"` com um aviso.
 
 Essa configuração se aplica a todas as interfaces: TUI, CLI (`opencode run`), aplicativo desktop e GitHub Action.
 
@@ -418,7 +418,7 @@ Você pode personalizar seus atalhos de teclado através da opção `keybinds`.
 
 ### Atualização automática
 
-O OpenCode fará o download automaticamente de quaisquer novas atualizações quando for iniciado. Você pode desabilitar isso com a opção `autoupdate`.
+O opencode fará o download automaticamente de quaisquer novas atualizações quando for iniciado. Você pode desabilitar isso com a opção `autoupdate`.
 
 ```json title="opencode.json"
 {
@@ -531,7 +531,7 @@ Você pode configurar servidores MCP que deseja usar através da opção `mcp`.
 
 ### Plugins
 
-[Plugins](/docs/plugins) estendem o OpenCode com ferramentas, hooks e integrações personalizadas.
+[Plugins](/docs/plugins) estendem o opencode com ferramentas, hooks e integrações personalizadas.
 
 Coloque arquivos de plugin em `.opencode/plugins/` ou `~/.config/opencode/plugins/`. Você também pode carregar plugins do npm através da opção `plugin`.
 
@@ -595,7 +595,7 @@ Você pode especificar uma lista de permissão de provedores através da opção
 }
 ```
 
-Isso é útil quando você deseja restringir o OpenCode para usar apenas provedores específicos, em vez de desabilitá-los um a um.
+Isso é útil quando você deseja restringir o opencode para usar apenas provedores específicos, em vez de desabilitá-los um a um.
 
 :::note
 A opção `disabled_providers` tem prioridade sobre `enabled_providers`.

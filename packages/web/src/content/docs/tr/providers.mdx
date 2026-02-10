@@ -1,17 +1,17 @@
 ---
 title: Sağlayıcılar
-description: OpenCode'da herhangi bir LLM sağlayıcısını kullanma.
+description: opencode'da herhangi bir LLM sağlayıcısını kullanma.
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 
-OpenCode, **75'ten fazla LLM sağlayıcısını** desteklemek için [AI SDK](https://ai-sdk.dev/) ve [Models.dev](https://models.dev) kullanır ve yerel modellerin çalıştırılmasını destekler.
+opencode, **75'ten fazla LLM sağlayıcısını** desteklemek için [AI SDK](https://ai-sdk.dev/) ve [Models.dev](https://models.dev) kullanır ve yerel modellerin çalıştırılmasını destekler.
 
 Bir sağlayıcı eklemek için şunları yapmanız gerekir:
 
 1. `/connect` komutunu kullanarak sağlayıcı için API anahtarlarını ekleyin.
-2. Sağlayıcıyı OpenCode yapılandırmanızda yapılandırın.
+2. Sağlayıcıyı opencode yapılandırmanızda yapılandırın.
 
 ---
 
@@ -24,7 +24,7 @@ Bir sağlayıcının API anahtarlarını `/connect` komutuyla eklediğinizde, bu
 
 ### Config
 
-Sağlayıcıları OpenCode'unuzdaki `provider` bölümü aracılığıyla özelleştirebilirsiniz.
+Sağlayıcıları opencode'unuzdaki `provider` bölümü aracılığıyla özelleştirebilirsiniz.
 config.
 
 ---
@@ -50,14 +50,14 @@ config.
 
 ## OpenCode Zen
 
-OpenCode Zen, OpenCode ekibi tarafından sağlanan modellerin bir listesidir.
-OpenCode ile iyi çalıştığı test edildi ve doğrulandı. [Learn more](/docs/zen).
+OpenCode Zen, opencode ekibi tarafından sağlanan modellerin bir listesidir.
+opencode ile iyi çalıştığı test edildi ve doğrulandı. [Learn more](/docs/zen).
 
 :::tip
 Yeniyseniz OpenCode Zen ile başlamanızı öneririz.
 :::
 
-1. TUI'de `/connect` komutunu çalıştırın, açık kodu seçin ve [opencode.ai/auth](https://opencode.ai/auth)'ye gidin.
+1. TUI'de `/connect` komutunu çalıştırın, opencode'u seçin ve [opencode.ai/auth](https://opencode.ai/auth)'ye gidin.
 
    ```txt
    /connect
@@ -80,7 +80,7 @@ Yeniyseniz OpenCode Zen ile başlamanızı öneririz.
    /models
    ```
 
-OpenCode'daki diğer sağlayıcılar gibi çalışır ve kullanımı tamamen isteğe bağlıdır.
+opencode'daki diğer sağlayıcılar gibi çalışır ve kullanımı tamamen isteğe bağlıdır.
 
 ---
 
@@ -124,7 +124,7 @@ Burada bir sağlayıcı göremiyor musunuz? Bir PR gönderin.
 
 ### Amazon Bedrock
 
-Amazon Bedrock'u OpenCode ile kullanmak için:
+Amazon Bedrock'u opencode ile kullanmak için:
 
 1. Amazon Bedrock konsolundaki **Model kataloğuna** gidin ve istekte bulunun
    Dilediğiniz modellere ulaşabilirsiniz.
@@ -279,7 +279,7 @@ Amazon Bedrock'u OpenCode ile kullanmak için:
    ```
 
 :::info
-Claude Pro/Max aboneliğinizi OpenCode'da kullanmak [Anthropic](https://anthropic.com) tarafından resmi olarak desteklenmemektedir.
+Claude Pro/Max aboneliğinizi opencode'da kullanmak [Anthropic](https://anthropic.com) tarafından resmi olarak desteklenmemektedir.
 :::
 
 ##### API tuşlarını kullanma
@@ -303,7 +303,7 @@ Veya zaten bir API anahtarınız varsa **API Anahtarını Manuel Olarak Girin** 
 2. [Azure AI Foundry](https://ai.azure.com/)'a gidin ve bir model dağıtın.
 
    :::note
-   Açık kodun düzgün çalışması için dağıtım adının model adıyla eşleşmesi gerekir.
+   opencode'un düzgün çalışması için dağıtım adının model adıyla eşleşmesi gerekir.
    :::
 
 3. `/connect` komutunu çalıştırın ve **Azure**'u arayın.
@@ -350,7 +350,7 @@ Veya zaten bir API anahtarınız varsa **API Anahtarını Manuel Olarak Girin** 
 2. [Azure AI Foundry](https://ai.azure.com/)'a gidin ve bir model dağıtın.
 
    :::note
-   Açık kodun düzgün çalışması için dağıtım adının model adıyla eşleşmesi gerekir.
+   opencode'un düzgün çalışması için dağıtım adının model adıyla eşleşmesi gerekir.
    :::
 
 3. `/connect` komutunu çalıştırın ve **Azure Bilişsel Hizmetler**'i arayın.
@@ -685,8 +685,8 @@ to store token in opencode auth storage.
 ##### Self-Hosted GitLab
 
 :::note[compliance note]
-OpenCode, oturum başlığını oluşturmak gibi bazı AI görevleri için küçük bir model kullanır.
-Varsayılan olarak Zen tarafından barındırılan gpt-5-nano'yu kullanacak şekilde yapılandırılmıştır. OpenCode'u kilitlemek için
+opencode, oturum başlığını oluşturmak gibi bazı AI görevleri için küçük bir model kullanır.
+Varsayılan olarak Zen tarafından barındırılan gpt-5-nano'yu kullanacak şekilde yapılandırılmıştır. opencode'u kilitlemek için
 yalnızca kendi GitLab tarafından barındırılan örneğinizi kullanmak için aşağıdakileri ekleyin:
 `opencode.json` dosyası. Ayrıca oturum paylaşımını devre dışı bırakmanız da önerilir.
 
@@ -786,7 +786,7 @@ Bu eklenti, MR incelemeleri, sorun izleme, işlem hattı izleme ve daha fazlası
 
 ### GitHub Copilot
 
-GitHub Copilot aboneliğinizi açık kodla kullanmak için:
+GitHub Copilot aboneliğinizi opencode'la kullanmak için:
 
 :::note
 Bazı modelleri kullanmak için [Pro+ aboneliği](https://github.com/features/copilot/plans) gerekebilir.
@@ -822,7 +822,7 @@ Bazı modellerin [GitHub Copilot settings](https://docs.github.com/en/copilot/ho
 
 ### Google Vertex AI
 
-Google Vertex AI'yi OpenCode ile kullanmak için:
+Google Vertex AI'yi opencode ile kullanmak için:
 
 1. Google Cloud Console'daki **Model Bahçesi**'ne gidin ve şunları kontrol edin:
    Bölgenizde mevcut modeller.
@@ -951,7 +951,7 @@ Daha fazla sağlayıcı ve önbelleğe alma ve hız sınırlama gibi gelişmiş 
 
 #### Optional Configs
 
-Helicone'un açık kod aracılığıyla otomatik olarak yapılandırılmayan bir özelliği veya modelini görmeniz durumunda bunu her zaman kendiniz yapılandırabilirsiniz.
+Helicone'un opencode aracılığıyla otomatik olarak yapılandırılmayan bir özelliği veya modelini görmeniz durumunda bunu her zaman kendiniz yapılandırabilirsiniz.
 
 İşte [Helicone's Model Directory](https://helicone.ai/models), eklemek istediğiniz modellerin kimliklerini almak için buna ihtiyacınız olacak.
 
@@ -1004,7 +1004,7 @@ Helicone, önbelleğe alma, kullanıcı izleme ve oturum yönetimi gibi özellik
 
 ##### Oturum izleme
 
-Helicone'un [Sessions](https://docs.helicone.ai/features/sessions) özelliği, ilgili LLM isteklerini birlikte gruplandırmanıza olanak tanır. Her OpenCode görüşmesini Helicone'da bir oturum olarak otomatik olarak kaydetmek için [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) eklentisini kullanın.
+Helicone'un [Sessions](https://docs.helicone.ai/features/sessions) özelliği, ilgili LLM isteklerini birlikte gruplandırmanıza olanak tanır. Her opencode görüşmesini Helicone'da bir oturum olarak otomatik olarak kaydetmek için [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) eklentisini kullanın.
 
 ```bash
 npm install -g opencode-helicone-session
@@ -1018,7 +1018,7 @@ Yapılandırmanıza ekleyin.
 }
 ```
 
-Eklenti isteklerinize `Helicone-Session-Id` ve `Helicone-Session-Name` başlıklarını enjekte eder. Helicone'un Oturumlar sayfasında her OpenCode görüşmesinin ayrı bir oturum olarak listelendiğini göreceksiniz.
+Eklenti isteklerinize `Helicone-Session-Id` ve `Helicone-Session-Name` başlıklarını enjekte eder. Helicone'un Oturumlar sayfasında her opencode görüşmesinin ayrı bir oturum olarak listelendiğini göreceksiniz.
 
 ##### Common Helicone headers
 
@@ -1035,7 +1035,7 @@ Mevcut tüm başlıklar için [Helicone Header Directory](https://docs.helicone.
 
 ### llama.cpp
 
-Açık kodu yerel modelleri kullanacak şekilde [llama.cpp's](https://github.com/ggml-org/llama.cpp) llama-server yardımcı programını kullanarak yapılandırabilirsiniz.
+opencode'u yerel modelleri kullanacak şekilde [llama.cpp's](https://github.com/ggml-org/llama.cpp) llama-server yardımcı programını kullanarak yapılandırabilirsiniz.
 
 ```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
 {
@@ -1102,7 +1102,7 @@ IO.NET, çeşitli kullanım durumları için optimize edilmiş 17 model sunar:
 
 ### LM Studio
 
-LM Studio aracılığıyla açık kodu yerel modelleri kullanacak şekilde yapılandırabilirsiniz.
+LM Studio aracılığıyla opencode'u yerel modelleri kullanacak şekilde yapılandırabilirsiniz.
 
 ```json title="opencode.json" "lmstudio" {5, 6, 8, 10-14}
 {
@@ -1219,10 +1219,10 @@ Moonshot AI'dan Kimi K2'yi kullanmak için:
 
 ### Ollama
 
-Ollama aracılığıyla açık kodu yerel modelleri kullanacak şekilde yapılandırabilirsiniz.
+Ollama aracılığıyla opencode'u yerel modelleri kullanacak şekilde yapılandırabilirsiniz.
 
 :::tip
-Ollama kendisini OpenCode için otomatik olarak yapılandırabilir. Ayrıntılar için [Ollama integration docs](https://docs.ollama.com/integrations/opencode)'a bakın.
+Ollama kendisini opencode için otomatik olarak yapılandırabilir. Ayrıntılar için [Ollama integration docs](https://docs.ollama.com/integrations/opencode)'a bakın.
 :::
 
 ```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
@@ -1261,13 +1261,13 @@ Araç çağrıları çalışmıyorsa Ollama'da `num_ctx` değerini artırmayı d
 
 ### Ollama Cloud
 
-Ollama Cloud'u OpenCode ile kullanmak için:
+Ollama Cloud'u opencode ile kullanmak için:
 
 1. [https://ollama.com/](https://ollama.com/) adresine gidin ve oturum açın veya bir hesap oluşturun.
 
 2. **Ayarlar** > **Anahtarlar**'a gidin ve yeni bir API anahtarı oluşturmak için **API Anahtarı Ekle**'yi tıklayın.
 
-3. OpenCode'da kullanmak için API anahtarını kopyalayın.
+3. opencode'da kullanmak için API anahtarını kopyalayın.
 
 4. `/connect` komutunu çalıştırın ve **Ollama Cloud**'u arayın.
 
@@ -1284,7 +1284,7 @@ Ollama Cloud'u OpenCode ile kullanmak için:
    └ enter
    ```
 
-6. **Önemli**: OpenCode'da bulut modellerini kullanmadan önce model bilgilerini yerel olarak almanız gerekir:
+6. **Önemli**: opencode'da bulut modellerini kullanmadan önce model bilgilerini yerel olarak almanız gerekir:
 
    ```bash
    ollama pull gpt-oss:20b-cloud
@@ -1333,7 +1333,7 @@ Zaten bir API anahtarınız varsa, **API Anahtarını Manuel Olarak Girin** seç
 
 ### OpenCode Zen
 
-OpenCode Zen, OpenCode ekibi tarafından sağlanan test edilmiş ve doğrulanmış modellerin bir listesidir. [Learn more](/docs/zen).
+OpenCode Zen, opencode ekibi tarafından sağlanan test edilmiş ve doğrulanmış modellerin bir listesidir. [Learn more](/docs/zen).
 
 1. **<a href={console}>OpenCode Zen</a>**'de oturum açın ve **API Anahtarı Oluştur**'u tıklayın.
 
@@ -1343,7 +1343,7 @@ OpenCode Zen, OpenCode ekibi tarafından sağlanan test edilmiş ve doğrulanmı
    /connect
    ```
 
-3. OpenCode API anahtarınızı girin.
+3. opencode API anahtarınızı girin.
 
    ```txt
    ┌ API key
@@ -1385,7 +1385,7 @@ OpenCode Zen, OpenCode ekibi tarafından sağlanan test edilmiş ve doğrulanmı
    /models
    ```
 
-   Açık kod yapılandırmanız aracılığıyla ek modeller de ekleyebilirsiniz.
+   opencode yapılandırmanız aracılığıyla ek modeller de ekleyebilirsiniz.
 
    ```json title="opencode.json" {6}
    {
@@ -1400,7 +1400,7 @@ OpenCode Zen, OpenCode ekibi tarafından sağlanan test edilmiş ve doğrulanmı
    }
    ```
 
-5. Bunları ayrıca açık kod yapılandırmanız aracılığıyla da özelleştirebilirsiniz. Burada bir sağlayıcı belirtmeye ilişkin bir örnek verilmiştir
+5. Bunları ayrıca opencode yapılandırmanız aracılığıyla da özelleştirebilirsiniz. Burada bir sağlayıcı belirtmeye ilişkin bir örnek verilmiştir
 
    ```json title="opencode.json"
    {
@@ -1616,7 +1616,7 @@ Vercel AI Gateway, OpenAI, Anthropic, Google, xAI ve daha fazlasındaki modeller
    /models
    ```
 
-Modelleri açık kod yapılandırmanız aracılığıyla da özelleştirebilirsiniz. Sağlayıcı yönlendirme sırasını belirtmeye ilişkin bir örneği burada bulabilirsiniz.
+Modelleri opencode yapılandırmanız aracılığıyla da özelleştirebilirsiniz. Sağlayıcı yönlendirme sırasını belirtmeye ilişkin bir örneği burada bulabilirsiniz.
 
 ```json title="opencode.json"
 {
@@ -1726,7 +1726,7 @@ Some useful routing options:
    /models
    ```
 
-   Açık kod yapılandırmanız aracılığıyla ek modeller de ekleyebilirsiniz.
+   opencode yapılandırmanız aracılığıyla ek modeller de ekleyebilirsiniz.
 
    ```json title="opencode.json" {6}
    {
@@ -1869,7 +1869,7 @@ Configuration details:
 - **limit.context**: Modelin kabul ettiği maksimum giriş jetonları.
 - **limit.output**: Modelin üretebileceği maksimum jeton sayısı.
 
-`limit` alanları OpenCode'un ne kadar bağlamınız kaldığını anlamasını sağlar. Standart sağlayıcılar bunları models.dev'den otomatik olarak alır.
+`limit` alanları opencode'un ne kadar bağlamınız kaldığını anlamasını sağlar. Standart sağlayıcılar bunları models.dev'den otomatik olarak alır.
 
 ---
 
@@ -1882,7 +1882,7 @@ Sağlayıcıyı yapılandırma konusunda sorun yaşıyorsanız aşağıdakileri 
 
    Bu, kimlik doğrulaması için ortam değişkenlerine güvenen Amazon Bedrock gibi sağlayıcılar için geçerli değildir.
 
-2. Özel sağlayıcılar için açık kod yapılandırmasını kontrol edin ve:
-   - `/connect` komutunda kullanılan sağlayıcı kimliğinin, açık kod yapılandırmanızdaki kimlikle eşleştiğinden emin olun.
+2. Özel sağlayıcılar için opencode yapılandırmasını kontrol edin ve:
+   - `/connect` komutunda kullanılan sağlayıcı kimliğinin, opencode yapılandırmanızdaki kimlikle eşleştiğinden emin olun.
    - Sağlayıcı için doğru npm paketi kullanılıyor. Örneğin Cerebras için `@ai-sdk/cerebras` kullanın. Diğer tüm OpenAI uyumlu sağlayıcılar için `@ai-sdk/openai-compatible` kullanın.
    - `options.baseURL` alanında doğru API bitiş noktasının kullanıldığını kontrol edin.

@@ -1,9 +1,9 @@
 ---
 title: 插件
-description: 编写您自己的插件来扩展 OpenCode。
+description: 编写您自己的插件来扩展 opencode。
 ---
 
-插件允许您通过挂钩各种事件和自定义行为来扩展 OpenCode。您可以创建插件来添加新功能、与外部服务集成或修改 OpenCode 的默认行为。
+插件允许您通过挂钩各种事件和自定义行为来扩展 opencode。您可以创建插件来添加新功能、与外部服务集成或修改 opencode 的默认行为。
 
 例如，查看社区创建的[插件](/docs/ecosystem#plugins)。
 
@@ -83,7 +83,7 @@ description: 编写您自己的插件来扩展 OpenCode。
 }
 ```
 
-OpenCode 在启动时运行 `bun install` 来安装这些。然后你的插件和工具就可以导入它们了。
+opencode 在启动时运行 `bun install` 来安装这些。然后你的插件和工具就可以导入它们了。
 
 ```ts title=".opencode/plugins/my-plugin.ts"
 import { escape } from "shescape"
@@ -118,7 +118,7 @@ export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
 - `project`：当前项目信息。
 - `directory`：当前工作目录。
 - `worktree`：git 工作树路径。
-- `client`：用于与AI交互的开放代码SDK客户端。
+- `client`：用于与AI交互的opencodeSDK客户端。
 - `$`：Bun的[外壳API](https://bun.com/docs/runtime/shell)用于执行命令。
 
 ---
@@ -201,7 +201,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 - `tool.execute.after`
 - `tool.execute.before`
 
-#### 途易活動
+#### TUI 活動
 
 - `tui.prompt.append`
 - `tui.command.execute`
@@ -235,7 +235,7 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 我们在 macOS 上使用 `osascript` AppleScript。这里我们用它运行来发送通知。
 
 :::note
-如果您使用 OpenCode 桌面应用程序，它可以在响应准备就绪或会话错误时自动发送系统通知。
+如果您使用 opencode 桌面应用程序，它可以在响应准备就绪或会话错误时自动发送系统通知。
 :::
 
 ---
@@ -300,13 +300,13 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 }
 ```
 
-`tool` 帮助器创建一个可以调用的自定义工具的开放代码。它采用 Zod 模式函数并返回一个工具定义：
+`tool` 帮助器创建一个可以调用的自定义工具的opencode。它采用 Zod 模式函数并返回一个工具定义：
 
 - `description`：该工具的作用
 - `args`：Zod 模式的工具参数
 - `execute`：调用工具时运行的函数
 
-您的自定義工具將可與內置工具一起用於開放代碼。
+您的自定義工具將可與內置工具一起用於opencode。
 
 ---
 
