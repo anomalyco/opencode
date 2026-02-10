@@ -725,10 +725,16 @@ export namespace Config {
         "tools",
       ])
 
-      // Extract unknown properties into options
+      // Extract explicitly declared options (from frontmatter `options:` field)
       const options: Record<string, unknown> = { ...agent.options }
+
+      // Store unknown frontmatter fields in metadata (NOT options) to prevent
+      // them from leaking into LLM API request bodies via mergeDeep in llm.ts.
+      // Strict APIs (OpenAI, Vertex AI, etc.) reject extra fields in the request body.
+      // See: https://github.com/anomalyco/opencode/issues/4282
+      const metadata: Record<string, unknown> = {}
       for (const [key, value] of Object.entries(agent)) {
-        if (!knownKeys.has(key)) options[key] = value
+        if (!knownKeys.has(key)) metadata[key] = value
       }
 
       // Convert legacy tools config to permissions
@@ -747,8 +753,9 @@ export namespace Config {
       // Convert legacy maxSteps to steps
       const steps = agent.steps ?? agent.maxSteps
 
-      return { ...agent, options, permission, steps } as typeof agent & {
+      return { ...agent, options, metadata, permission, steps } as typeof agent & {
         options?: Record<string, unknown>
+        metadata?: Record<string, unknown>
         permission?: Permission
         steps?: number
       }
