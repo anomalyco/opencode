@@ -52,7 +52,8 @@ export async function handler(
   type ModelInfo = Awaited<ReturnType<typeof validateModel>>
   type ProviderInfo = Awaited<ReturnType<typeof selectProvider>>
 
-  const MAX_RETRIES = 3
+  const MAX_FAILOVER_RETRIES = 3
+  const MAX_429_RETRIES = 3
   const FREE_WORKSPACES = [
     "wrk_01K46JDFR0E75SG2Q8K172KF3Y", // frank
     "wrk_01K6W1A3VE0KMNVSCQT43BG2SX", // opencode bench
@@ -111,7 +112,7 @@ export async function handler(
       )
       logger.debug("REQUEST URL: " + reqUrl)
       logger.debug("REQUEST: " + reqBody.substring(0, 300) + "...")
-      const res = await fetch(reqUrl, {
+      const res = await fetchWith429Retry(reqUrl, {
         method: "POST",
         headers: (() => {
           const headers = new Headers(input.request.headers)
@@ -369,7 +370,7 @@ export async function handler(
         if (provider) return provider
       }
 
-      if (retry.retryCount === MAX_RETRIES) {
+      if (retry.retryCount === MAX_FAILOVER_RETRIES) {
         return modelInfo.providers.find((provider) => provider.id === modelInfo.fallbackProvider)
       }
 
@@ -595,6 +596,15 @@ export async function handler(
   function updateProviderKey(authInfo: AuthInfo, providerInfo: ProviderInfo) {
     if (!authInfo?.provider?.credentials) return
     providerInfo.apiKey = authInfo.provider.credentials
+  }
+
+  async function fetchWith429Retry(url: string, options: RequestInit, retry = { count: 0 }) {
+    const res = await fetch(url, options)
+    if (res.status === 429 && retry.count < MAX_429_RETRIES) {
+      await new Promise((resolve) => setTimeout(resolve, Math.pow(2, retry.count) * 500))
+      return fetchWith429Retry(url, options, { count: retry.count + 1 })
+    }
+    return res
   }
 
   async function trackUsage(
