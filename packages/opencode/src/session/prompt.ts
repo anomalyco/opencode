@@ -798,7 +798,7 @@ export namespace SessionPrompt {
         const textParts: string[] = []
         const attachments: MessageV2.FilePart[] = []
 
-        for (const contentItem of result.content) {
+        for (const contentItem of result.content ?? []) {
           if (contentItem.type === "text") {
             textParts.push(contentItem.text)
           } else if (contentItem.type === "image") {
@@ -841,7 +841,7 @@ export namespace SessionPrompt {
           metadata,
           output: truncated.content,
           attachments,
-          content: result.content, // directly return content to preserve ordering when outputting to model
+          content: result.content ?? [], // directly return content to preserve ordering when outputting to model
         }
       }
       tools[key] = item
