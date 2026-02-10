@@ -53,6 +53,8 @@ export namespace ZenData {
         weight: z.number().optional(),
         disabled: z.boolean().optional(),
         storeModel: z.string().optional(),
+        headers: z.record(z.string(), z.string()).optional(),
+        bodyModifier: z.record(z.string(), z.string()).optional(),
       }),
     ),
   })
@@ -84,7 +86,17 @@ export namespace ZenData {
         Resource.ZEN_MODELS7.value +
         Resource.ZEN_MODELS8.value +
         Resource.ZEN_MODELS9.value +
-        Resource.ZEN_MODELS10.value,
+        Resource.ZEN_MODELS10.value +
+        Resource.ZEN_MODELS11.value +
+        Resource.ZEN_MODELS12.value +
+        Resource.ZEN_MODELS13.value +
+        Resource.ZEN_MODELS14.value +
+        Resource.ZEN_MODELS15.value +
+        Resource.ZEN_MODELS16.value +
+        Resource.ZEN_MODELS17.value +
+        Resource.ZEN_MODELS18.value +
+        Resource.ZEN_MODELS19.value +
+        Resource.ZEN_MODELS20.value,
     )
     return ModelsSchema.parse(json)
   })

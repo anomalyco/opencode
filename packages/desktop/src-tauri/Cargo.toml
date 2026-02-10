@@ -18,7 +18,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2.9.5", features = ["macos-private-api", "devtools"] }
+tauri = { version = "2.9.5", features = ["macos-private-api"] }
 tauri-plugin-opener = "2"
 tauri-plugin-deep-link = "2.4.6"
 tauri-plugin-shell = "2"
@@ -55,6 +55,7 @@ webkit2gtk = "=2.0.2"
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-web-kit = "0.3"
+
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = [
