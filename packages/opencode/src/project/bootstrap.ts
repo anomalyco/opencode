@@ -13,6 +13,7 @@ import { Log } from "@/util/log"
 import { ShareNext } from "@/share/share-next"
 import { Snapshot } from "../snapshot"
 import { Truncate } from "../tool/truncation"
+import { Flag } from "@/flag/flag"
 
 export async function InstanceBootstrap() {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
@@ -32,4 +33,25 @@ export async function InstanceBootstrap() {
       await Project.setInitialized(Instance.project.id)
     }
   })
+
+  // Team features — order matters:
+  // 1. onCleanedRestorePermissions() registers synchronously so it's ready
+  //    before recover(), which could trigger cleanup if all members are shutdown.
+  // 2. recover() marks stale busy executions as cancelled, transitions members to ready, and notifies leads.
+  // 3. autoCleanup() subscribes AFTER recover finishes (.finally()) to avoid
+  //    spurious MemberStatusChanged events during recovery triggering premature cleanup.
+  // Fire-and-forget: don't block bootstrap completion.
+  if (Flag.OPENCODE_EXPERIMENTAL_AGENT_TEAMS) {
+    // Dynamic import — only load team module when the feature flag is enabled
+    import("../team").then(({ Team }) => {
+      Team.onCleanedRestorePermissions()
+      Team.recover()
+        .catch((err) => {
+          Log.Default.warn("team recovery failed", { error: err instanceof Error ? err.message : err })
+        })
+        .finally(() => {
+          Team.autoCleanup()
+        })
+    })
+  }
 }
