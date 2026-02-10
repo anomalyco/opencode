@@ -28,11 +28,15 @@ import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
 
 process.on("unhandledRejection", (e) => {
-  Log.Default.error("rejection", { error: e })
+  Log.Default.error("rejection", {
+    e: e instanceof Error ? e.message : e,
+  })
 })
 
 process.on("uncaughtException", (e) => {
-  Log.Default.error("exception", { error: e })
+  Log.Default.error("exception", {
+    e: e instanceof Error ? e.message : e,
+  })
 })
 
 const cli = yargs(hideBin(process.argv))
