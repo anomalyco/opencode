@@ -3,9 +3,6 @@
 
 // borrowed from https://github.com/skyline69/balatro-mod-manager
 #[cfg(target_os = "linux")]
-mod display;
-
-#[cfg(target_os = "linux")]
 fn configure_display_backend() -> Option<String> {
     use std::env;
 
@@ -26,7 +23,7 @@ fn configure_display_backend() -> Option<String> {
         return None;
     }
 
-    let prefer_wayland = display::read_wayland().unwrap_or(false);
+    let prefer_wayland = opencode_lib::linux_display::read_wayland().unwrap_or(false);
     let allow_wayland = prefer_wayland
         || matches!(
             env::var("OC_ALLOW_WAYLAND"),

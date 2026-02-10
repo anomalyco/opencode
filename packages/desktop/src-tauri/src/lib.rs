@@ -3,7 +3,7 @@ mod constants;
 #[cfg(windows)]
 mod job_object;
 #[cfg(target_os = "linux")]
-mod linux_display;
+pub mod linux_display;
 mod markdown;
 mod server;
 mod window_customizer;
