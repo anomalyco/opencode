@@ -15,7 +15,7 @@ Hadi başlayalım.
 
 ---
 
-#### Prerequisites
+#### Ön koşullar
 
 opencode'u terminalinizde kullanmak için ihtiyacınız olacak:
 
@@ -29,7 +29,7 @@ opencode'u terminalinizde kullanmak için ihtiyacınız olacak:
 
 ---
 
-## Düzenlemek
+## Kurulum
 
 opencode'u kurmanın en kolay yolu kurulum betiğidir.
 
@@ -186,18 +186,15 @@ proje kökü.
 Projenizin `AGENTS.md` dosyasını Git'e göndermelisiniz.
 :::
 
-Bu, opencode'un proje yapısını ve kodlama modellerini anlamasına yardımcı olur
-kullanılmış.
+Bu, opencode'un proje yapısını ve kullanılan kodlama kalıplarını anlamasına yardımcı olur.
 
 ---
 
-## Usage
+## Kullanım
 
-Artık projeniz üzerinde çalışmak için opencode'u kullanmaya hazırsınız. Sormaktan çekinmeyin
-anything!
+Artık projeniz üzerinde çalışmak için opencode'u kullanmaya hazırsınız. Dilediğiniz soruyu sorabilirsiniz.
 
-Yapay zeka kodlama aracısını kullanma konusunda yeniyseniz aşağıda bazı örnekleri bulabilirsiniz:
-help.
+AI kodlama agent'ı kullanmaya yeniyseniz aşağıdaki örnekler yardımcı olabilir.
 
 ---
 
@@ -210,21 +207,21 @@ Projedeki dosyaları bulanık aramak için `@` tuşunu kullanın.
 :::
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
-How is authentication handled in @packages/functions/src/api/index.ts
+@packages/functions/src/api/index.ts dosyasında authentication nasıl ele alınıyor?
 ```
 
 Kod tabanının üzerinde çalışmadığınız bir kısmı varsa bu yararlı olur.
 
 ---
 
-### Add features
+### Özellik ekle
 
 opencode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de öncelikle ondan bir plan oluşturmasını istemenizi öneririz.
 
 1. **Bir plan oluşturun**
 
-   opencode, değişiklik yapma yeteneğini devre dışı bırakan bir _Plan moduna_ sahiptir ve
-   bunun yerine özelliğin nasıl uygulanacağını önerin.
+   opencode, değişiklik yapma özelliğini kapatan bir _Plan mode_'a sahiptir.
+   Bu modda, özelliğin nasıl uygulanacağını önerir.
 
    **Sekme** tuşunu kullanarak buna geçin. Bunun için sağ alt köşede bir gösterge göreceksiniz.
 
@@ -232,20 +229,19 @@ opencode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de ön
    <TAB>
    ```
 
-   Now let's describe what we want it to do.
+   Şimdi ne yapmasını istediğimizi anlatalım.
 
    ```txt frame="none"
-   When a user deletes a note, we'd like to flag it as deleted in the database.
-   Then create a screen that shows all the recently deleted notes.
-   From this screen, the user can undelete a note or permanently delete it.
+   Bir kullanıcı not sildiğinde, veritabanında bu notu silinmiş olarak işaretleyelim.
+   Ardından yakın zamanda silinen tüm notları gösteren bir ekran oluşturalım.
+   Bu ekrandan kullanıcı notu geri alabilsin veya kalıcı olarak silebilsin.
    ```
 
-   opencode'a ne istediğinizi anlamak için yeterli ayrıntıyı vermek istiyorsunuz. Yardımcı olur
-   onunla ekibinizdeki kıdemsiz bir geliştiriciyle konuşuyormuş gibi konuşmak.
+   opencode'un isteğinizi anlaması için yeterli ayrıntı verin.
+   Ekibinizdeki junior bir geliştiriciyle konuşur gibi yazmak genelde iyi sonuç verir.
 
    :::tip
-   opencode'a, ne anladığınızı anlamasına yardımcı olacak bol miktarda bağlam ve örnek verin.
-   want.
+   opencode'a bol bağlam ve örnek verin.
    :::
 
 2. **Planı yineleyin**
@@ -253,56 +249,53 @@ opencode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de ön
    Size bir plan sunduğunda ona geri bildirimde bulunabilir veya daha fazla ayrıntı ekleyebilirsiniz.
 
    ```txt frame="none"
-   We'd like to design this new screen using a design I've used before.
-   [Image #1] Take a look at this image and use it as a reference.
+   Bu yeni ekranı daha önce kullandığım bir tasarıma göre yapmak istiyoruz.
+   [Image #1] Bu görsele bakıp referans al.
    ```
 
    :::tip
    İsteme eklemek için görüntüleri terminale sürükleyip bırakın.
    :::
 
-   opencode, verdiğiniz tüm görselleri tarayabilir ve istemlere ekleyebilir. Yapabilirsiniz
-   bunu bir görüntüyü terminale sürükleyip bırakarak yapın.
+   opencode verdiğiniz görselleri tarayıp prompt'a ekleyebilir.
+   Bunu bir görseli terminale sürükleyip bırakarak yapabilirsiniz.
 
 3. **Özelliği oluşturun**
 
-   Plan konusunda kendinizi rahat hissettiğinizde, şu şekilde _Oluşturma moduna_ geri dönün:
-   **Sekme** tuşuna tekrar basmak.
+   Planı yeterli bulduğunuzda **Sekme** tuşuna tekrar basarak _Build mode_'a dönün.
 
    ```bash frame="none"
    <TAB>
    ```
 
-   Ve ondan değişiklikleri yapmasını istiyoruz.
+   Ardından değişiklikleri yapmasını isteyin.
 
    ```bash frame="none"
-   Sounds good! Go ahead and make the changes.
+   Harika görünüyor, şimdi değişiklikleri yap.
    ```
 
 ---
 
 ### Değişiklik yap
 
-Daha basit değişiklikler için opencode'dan bunu doğrudan oluşturmasını isteyebilirsiniz.
-Önce planı gözden geçirmeye gerek kalmadan.
+Daha basit değişikliklerde, önce planı incelemeden opencode'dan doğrudan değişiklik yapmasını isteyebilirsiniz.
 
 ```txt frame="none" "@packages/functions/src/settings.ts" "@packages/functions/src/notes.ts"
-We need to add authentication to the /settings route. Take a look at how this is
-handled in the /notes route in @packages/functions/src/notes.ts and implement
-the same logic in @packages/functions/src/settings.ts
+/settings route'una authentication eklememiz gerekiyor.
+@packages/functions/src/notes.ts içindeki /notes route'unda bunun nasıl yapıldığına bak
+ve aynı mantığı @packages/functions/src/settings.ts içinde uygula.
 ```
 
-opencode'un doğru kararı vermesi için yeterli miktarda ayrıntı sağladığınızdan emin olmak istiyorsunuz.
-değişiklikler.
+opencode'un doğru değişiklikleri yapması için yeterli ayrıntı verdiğinizden emin olun.
 
 ---
 
-### Undo changes
+### Değişiklikleri geri al
 
 Diyelim ki opencode'dan bazı değişiklikler yapmasını istediniz.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
-Can you refactor the function in @packages/functions/src/api/index.ts?
+@packages/functions/src/api/index.ts içindeki fonksiyonu refactor edebilir misin?
 ```
 
 Ama istediğinin bu olmadığını anlıyorsun. Değişiklikleri **geri alabilirsiniz**
@@ -312,11 +305,10 @@ Ama istediğinin bu olmadığını anlıyorsun. Değişiklikleri **geri alabilir
 /undo
 ```
 
-opencode artık yaptığınız değişiklikleri geri alacak ve orijinal mesajınızı gösterecek
-again.
+opencode değişiklikleri geri alır ve orijinal mesajınızı tekrar gösterir.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
-Can you refactor the function in @packages/functions/src/api/index.ts?
+@packages/functions/src/api/index.ts içindeki fonksiyonu refactor edebilir misin?
 ```
 
 Buradan komut isteminde ince ayar yapabilir ve opencode'dan tekrar denemesini isteyebilirsiniz.
@@ -333,10 +325,9 @@ Veya `/redo` komutunu kullanarak değişiklikleri **yeniden yapabilirsiniz**.
 
 ---
 
-## Paylaşmak
+## Paylaş
 
-opencode ile yaptığınız görüşmeler [eşinizle paylaşılabilir]
-takım](/docs/share).
+opencode ile yaptığınız görüşmeleri [ekibinizle paylaşabilirsiniz](/docs/share).
 
 ```bash frame="none"
 /share
@@ -352,8 +343,8 @@ Konuşmalar varsayılan olarak paylaşılmaz.
 
 ---
 
-## Customize
+## Özelleştir
 
 İşte bu kadar! Artık opencode'u kullanma konusunda profesyonelsiniz.
 
-Kendinize ait hale getirmek için [picking a theme](/docs/themes), [customizing the keybinds](/docs/keybinds), [configuring code formatters](/docs/formatters), [creating custom commands](/docs/commands) veya [opencode config](/docs/config) ile oynamanızı öneririz.
+Kendinize göre uyarlamak için [tema seçebilir](/docs/themes), [keybind'leri özelleştirebilir](/docs/keybinds), [code formatter ayarlayabilir](/docs/formatters), [özel komutlar oluşturabilir](/docs/commands) veya [opencode config](/docs/config) ile oynayabilirsiniz.

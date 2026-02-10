@@ -118,7 +118,7 @@ Die Plugin-Funktion erhält:
 - `project`: Die aktuellen Projektinformationen.
 - `directory`: Das aktuelle Arbeitsverzeichnis.
 - `worktree`: Der Git-Worktree-Pfad.
-- `client`: Ein Opencode-SDK-Client für die Interaktion mit AI.
+- `client`: Ein OpenCode-SDK-Client für die Interaktion mit AI.
 - `$`: Buns [shell API](https://bun.com/docs/runtime/shell) zum Ausführen von Befehlen.
 
 ---
@@ -211,7 +211,7 @@ Plugins können Ereignisse abonnieren, wie unten im Abschnitt „Beispiele“ ge
 
 ## Examples
 
-Hier sind einige Beispiele für Plugins, mit denen Sie Opencode erweitern können.
+Hier sind einige Beispiele für Plugins, mit denen Sie OpenCode erweitern können.
 
 ---
 
@@ -242,7 +242,7 @@ Wenn Sie die OpenCode-Desktop-App verwenden, kann diese automatisch Systembenach
 
 ### .env protection
 
-Verhindern Sie, dass Opencode `.env`-Dateien liest:
+Verhindern Sie, dass OpenCode `.env`-Dateien liest:
 
 ```javascript title=".opencode/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
@@ -277,7 +277,7 @@ export const InjectEnvPlugin = async () => {
 
 ### Benutzerdefinierte Werkzeuge
 
-Plugins können Opencode auch benutzerdefinierte Tools hinzufügen:
+Plugins können OpenCode auch benutzerdefinierte Tools hinzufügen:
 
 ```ts title=".opencode/plugins/custom-tools.ts"
 import { type Plugin, tool } from "@opencode-ai/plugin"
@@ -300,13 +300,13 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 }
 ```
 
-Der `tool`-Helfer erstellt ein benutzerdefiniertes Tool, das Opencode aufrufen kann. Es verwendet eine Zod-Schemafunktion und gibt eine Tooldefinition zurück mit:
+Der `tool`-Helfer erstellt ein benutzerdefiniertes Tool, das OpenCode aufrufen kann. Es verwendet eine Zod-Schemafunktion und gibt eine Tooldefinition zurück mit:
 
 - `description`: Was das Tool macht
 - `args`: Zod-Schema für die Argumente des Tools
 - `execute`: Funktion, die ausgeführt wird, wenn das Tool aufgerufen wird
 
-Ihre benutzerdefinierten Tools stehen neben den integrierten Tools für Opencode zur Verfügung.
+Ihre benutzerdefinierten Tools stehen neben den integrierten Tools für OpenCode zur Verfügung.
 
 ---
 

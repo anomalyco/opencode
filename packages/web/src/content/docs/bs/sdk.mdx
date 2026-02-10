@@ -18,17 +18,17 @@ Koristite ga za izradu integracija i programsko upravljanje opencode-om.
 Instalirajte SDK sa npm-a:
 
 ```bash
-npm install @opencode-ai/sdk
+npm install @opencodei/sdk
 ```
 
 ---
 
 ## Create client
 
-Kreirajte instancu opencode-a:
+Kreirajte instancu opencode:
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createOpencode } from "@opencodei/sdk"
 
 const { client } = await createOpencode()
 ```
@@ -52,7 +52,7 @@ Ovo pokrece i server i klijent
 Mozete proslijediti konfiguracijski objekat za prilagodavanje ponasanja. Instanca i dalje ucitava `opencode.json`, ali konfiguraciju mozete nadjacati ili dodati inline:
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createOpencode } from "@opencodei/sdk"
 
 const opencode = await createOpencode({
   hostname: "127.0.0.1",
@@ -72,7 +72,7 @@ opencode.server.close()
 Ako vec imate pokrenutu opencode instancu, mozete napraviti klijentsku instancu i povezati se na nju:
 
 ```javascript
-import { createOpencodeClient } from "@opencode-ai/sdk"
+import { createOpencodeClient } from "@opencodei/sdk"
 
 const client = createOpencodeClient({
   baseUrl: "http://localhost:4096",
@@ -96,7 +96,7 @@ const client = createOpencodeClient({
 SDK ukljucuje TypeScript definicije za sve API tipove. Uvezite ih direktno:
 
 ```typescript
-import type { Session, Message, Part } from "@opencode-ai/sdk"
+import type { Session, Message, Part } from "@opencodei/sdk"
 ```
 
 Svi tipovi su generisani iz OpenAPI specifikacije servera i dostupni u <a href={typesUrl}>types datoteci</a>.

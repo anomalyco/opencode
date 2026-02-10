@@ -9,7 +9,7 @@ Model Context Protocol , 또는 MCP를 사용하여 opencode에 외부 도구를
 
 ---
 
-#### 동굴
+#### 주의사항
 
 MCP 서버를 사용할 때 상황에 추가합니다. 도구가 많이 있으면 신속하게 추가 할 수 있습니다. 그래서 우리는 당신이 사용하는 MCP 서버와 주의를 기울여야 합니다.
 
@@ -163,7 +163,7 @@ use the mcp_everything tool to add the number 3 and 4
 
 ---
 
-## 오아우트
+## OAuth
 
 opencode는 원격 MCP 서버에 대한 OAuth 인증을 자동으로 처리합니다. 서버가 인증이 필요할 때, opencode는:
 
@@ -175,7 +175,7 @@ opencode는 원격 MCP 서버에 대한 OAuth 인증을 자동으로 처리합�
 
 ## 자동
 
-대부분의 OAuth-enabled MCP 서버를 위해, 특별한 윤곽은 필요하지 않습니다. 원격 서버를 구성:
+대부분의 OAuth-enabled MCP 서버를 위해, 특별한 구성은 필요하지 않습니다. 원격 서버를 구성:
 
 ```json title="opencode.json"
 {
@@ -242,7 +242,7 @@ opencode mcp logout my-oauth-server
 
 ---
 
-### # OAuth를 해제
+#### OAuth 비활성화
 
 서버의 자동 OAuth를 비활성화하려는 경우 (예를 들어, 대신 API 키를 사용하는 서버), `oauth`를 `false`로 설정:
 
@@ -343,7 +343,7 @@ MCP는 opencode의 도구로 사용할 수 있으며 내장 도구와 함께 사
 
 ---
 
-## 대리인 당
+## 에이전트 당
 
 MCP 서버의 많은 수를 가지고 있다면 에이전트 당만 활성화하고 전 세계적으로 비활성화 할 수 있습니다. 이 작업을 수행:
 

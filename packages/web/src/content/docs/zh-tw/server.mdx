@@ -155,7 +155,7 @@ opencode 服務器公開以下 API。
 | `PATCH`  | `/session/:id`                           | 更新會話屬性                  | 正文：`{ title? }`，返回 <a href={typesUrl}><code>Session</code></a>            |
 | `GET`    | `/session/:id/children`                  | 獲取會話的子會話              | 返回 <a href={typesUrl}><code>Session[]</code></a>                              |
 | `GET`    | `/session/:id/todo`                      | 獲取會話的待辦事項列表        | 返回 <a href={typesUrl}><code>Todo[]</code></a>                                 |
-| `POST`   | `/session/:id/init`                      | 分析應用程序並創建`AGENTS.md` | 主體：`{ messageID, providerID, modelID }`，返回`boolean`                       |
+| `POST`   | `/session/:id/init`                      | 分析應用程式並創建`AGENTS.md` | 主體：`{ messageID, providerID, modelID }`，返回`boolean`                       |
 | `POST`   | `/session/:id/fork`                      | 在消息中分叉現有會話          | 正文：`{ messageID? }`，返回 <a href={typesUrl}><code>Session</code></a>        |
 | `POST`   | `/session/:id/abort`                     | 中止正在運行的會話            | 返回 `boolean`                                                                  |
 | `POST`   | `/session/:id/share`                     | 分享會議                      | 返回 <a href={typesUrl}><code>Session</code></a>                                |
@@ -230,7 +230,7 @@ opencode 服務器公開以下 API。
 
 ---
 
-### 代理商
+### Agents
 
 | 方法  | 路徑     | 描述               | 回應                                       |
 | ----- | -------- | ------------------ | ------------------------------------------ |

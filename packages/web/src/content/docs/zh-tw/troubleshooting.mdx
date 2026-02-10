@@ -22,7 +22,7 @@ description: 常見問題以及如何解決它們。
 
 ## 貯存
 
-opencode 將會話數據和其他應用程序數據存儲在磁盤上：
+opencode 將會話數據和其他應用程式數據存儲在磁盤上：
 
 - **macOS/Linux**：`~/.local/share/opencode/`
 - **Windows**：按`WIN+R`並粘貼`%USERPROFILE%\.local\share\opencode`
@@ -30,28 +30,28 @@ opencode 將會話數據和其他應用程序數據存儲在磁盤上：
 該目錄包含：
 
 - `auth.json` - 身份驗證數據，例如 API 密鑰、OAuth 令牌
-- `log/` - 應用程序日誌
+- `log/` - 應用程式日誌
 - `project/` - 項目特定數據，例如會話和消息數據
   - 如果項目位於 Git 存儲庫中，則它存儲在 `./<project-slug>/storage/` 中
   - 如果不是 Git 存儲庫，則存儲在 `./global/storage/` 中
 
 ---
 
-## 桌面應用程序
+## 桌面應用程式
 
 opencode Desktop 在後台運行本地 opencode 服務器（`opencode-cli` sidecar）。大多數問題是由行為不當的插件、損壞的緩存或錯誤的服務器設置引起的。
 
 ### 快速檢查
 
-- 完全退出並重新啟動應用程序。
-- 如果應用程序顯示錯誤屏幕，請單擊“**重新啟動**”並複制錯誤詳細信息。
+- 完全退出並重新啟動應用程式。
+- 如果應用程式顯示錯誤屏幕，請單擊“**重新啟動**”並複制錯誤詳細信息。
 - 僅限 macOS：`opencode` 菜單 -> **重新加載 Webview**（如果 UI 為空白/凍結，則有幫助）。
 
 ---
 
 ### 禁用插件
 
-如果桌面應用程序在啟動時崩潰、掛起或行為異常，請首先禁用插件。
+如果桌面應用程式在啟動時崩潰、掛起或行為異常，請首先禁用插件。
 
 #### 檢查全局配置
 
@@ -72,7 +72,7 @@ opencode Desktop 在後台運行本地 opencode 服務器（`opencode-cli` sidec
 
 #### 檢查插件目錄
 
-opencode 還可以從磁盤加載本地插件。暫時將它們移開（或重命名文件夾）並重新啟動桌面應用程序：
+opencode 還可以從磁盤加載本地插件。暫時將它們移開（或重命名文件夾）並重新啟動桌面應用程式：
 
 - **全局插件**
   - **macOS/Linux**：`~/.config/opencode/plugins/`
@@ -80,7 +80,7 @@ opencode 還可以從磁盤加載本地插件。暫時將它們移開（或重�
 - **項目插件**（僅當您使用每個項目配置時）
   - `<your-project>/.opencode/plugins/`
 
-如果應用程序再次開始工作，請一次重新啟用一個插件，以找出導致問題的插件。
+如果應用程式再次開始工作，請一次重新啟用一個插件，以找出導致問題的插件。
 
 ---
 
@@ -103,7 +103,7 @@ opencode 還可以從磁盤加載本地插件。暫時將它們移開（或重�
 
 opencode Desktop 可以啟動自己的本地服務器（默認）或連接到您配置的服務器 URL。
 
-如果您看到 **“連接失敗”** 對話框（或者應用程序永遠無法通過啟動屏幕），請檢查自定義服務器 URL。
+如果您看到 **“連接失敗”** 對話框（或者應用程式永遠無法通過啟動屏幕），請檢查自定義服務器 URL。
 
 #### 清除桌面默認服務器 URL
 
@@ -111,11 +111,11 @@ opencode Desktop 可以啟動自己的本地服務器（默認）或連接到您
 
 #### 從您的配置中刪除`server.port` / `server.hostname`
 
-如果您的 `opencode.json(c)` 包含 `server` 部分，請將其暫時刪除並重新啟動桌面應用程序。
+如果您的 `opencode.json(c)` 包含 `server` 部分，請將其暫時刪除並重新啟動桌面應用程式。
 
 #### 檢查環境變量
 
-如果您在環境中設置了 `OPENCODE_PORT`，桌面應用程序將嘗試將該端口用於本地服務器。
+如果您在環境中設置了 `OPENCODE_PORT`，桌面應用程式將嘗試將該端口用於本地服務器。
 
 - 取消設置`OPENCODE_PORT`（或選擇一個空閒端口）並重新啟動。
 
@@ -125,20 +125,20 @@ opencode Desktop 可以啟動自己的本地服務器（默認）或連接到您
 
 在 Linux 上，某些 Wayland 設置可能會導致空白窗口或合成器錯誤。
 
-- 如果您在 Wayland 上且應用程序空白/崩潰，請嘗試使用 `OC_ALLOW_WAYLAND=1` 啟動。
+- 如果您在 Wayland 上且應用程式空白/崩潰，請嘗試使用 `OC_ALLOW_WAYLAND=1` 啟動。
 - 如果這讓事情變得更糟，請將其刪除並嘗試在 X11 會話下啟動。
 
 ---
 
 ### Windows：WebView2 運行時
 
-在 Windows 上，opencode Desktop 需要 Microsoft Edge **WebView2 運行時**。如果應用程序打開為空白窗口或無法啟動，請安裝/更新 WebView2，然後重試。
+在 Windows 上，opencode Desktop 需要 Microsoft Edge **WebView2 運行時**。如果應用程式打開為空白窗口或無法啟動，請安裝/更新 WebView2，然後重試。
 
 ---
 
 ### Windows：一般性能問題
 
-如果您在 Windows 上遇到性能緩慢、文件訪問問題或終端問題，請嘗試使用[WSL（適用於 Linux 的 Windows 子系統）](/docs/windows-wsl)。 WSL 提供了一個可以與 opencode 功能更加無縫協作的 Linux 環境。
+如果您在 Windows 上遇到性能緩慢、文件訪問問題或terminal問題，請嘗試使用[WSL（適用於 Linux 的 Windows 子系統）](/docs/windows-wsl)。 WSL 提供了一個可以與 opencode 功能更加無縫協作的 Linux 環境。
 
 ---
 
@@ -147,16 +147,16 @@ opencode Desktop 可以啟動自己的本地服務器（默認）或連接到您
 opencode Desktop 僅在以下情況下顯示系統通知：
 
 - 在您的操作系統設置中啟用 opencode 通知，並且
-- 應用程序窗口未聚焦。
+- 應用程式窗口未聚焦。
 
 ---
 
-### 重置桌面應用程序存儲（最後的手段）
+### 重置桌面應用程式存儲（最後的手段）
 
-如果應用程序無法啟動並且您無法從 UI 內部清除設置，請重置桌面應用程序的保存狀態。
+如果應用程式無法啟動並且您無法從 UI 內部清除設置，請重置桌面應用程式的保存狀態。
 
 1. 退出 opencode Desktop。
-2. 查找並刪除這些文件（它們位於 opencode Desktop 應用程序數據目錄中）：
+2. 查找並刪除這些文件（它們位於 opencode Desktop 應用程式數據目錄中）：
 
 - `opencode.settings.dat`（桌面默認服務器 URL）
 - `opencode.global.dat` 和 `opencode.workspace.*.dat`（UI 狀態，如最近的服務器/項目）
@@ -198,7 +198,7 @@ opencode Desktop 僅在以下情況下顯示系統通知：
 ### opencode 無法啟動
 
 1. 檢查日誌中是否有錯誤消息
-2. 嘗試使用 `--print-logs` 運行以查看終端中的輸出
+2. 嘗試使用 `--print-logs` 運行以查看terminal 中的輸出
 3. 確保您擁有最新版本`opencode upgrade`
 
 ---
@@ -250,13 +250,13 @@ opencode Desktop 僅在以下情況下顯示系統通知：
 
 ---
 
-### AI_APICallError 和提供程序包問題
+### AI_APICallError 和提供商套件問題
 
-如果您遇到 API 調用錯誤，這可能是由於過時的提供程序包造成的。 opencode 根據需要動態安裝提供程序包（OpenAI、Anthropic、Google 等）並將其緩存在本地。
+如果您遇到 API 調用錯誤，這可能是由於過時的提供商套件造成的。 opencode 根據需要動態安裝提供商套件（OpenAI、Anthropic、Google 等）並將其緩存在本地。
 
-要解決提供程序包問題：
+要解決提供商套件問題：
 
-1. 清除提供程序包緩存：
+1. 清除提供商套件緩存：
 
    ```bash
    rm -rf ~/.cache/opencode
@@ -264,9 +264,9 @@ opencode Desktop 僅在以下情況下顯示系統通知：
 
    在 Windows 上，按 `WIN+R` 並刪除：`%USERPROFILE%\.cache\opencode`
 
-2. 重新啟動 opencode 以重新安裝最新的提供程序包
+2. 重新啟動 opencode 以重新安裝最新的提供商套件
 
-這將強制 opencode 下載最新版本的提供程序包，這通常可以解決模型參數和 API 更改的兼容性問題。
+這將強制 opencode 下載最新版本的提供商套件，這通常可以解決模型參數和 API 更改的兼容性問題。
 
 ---
 

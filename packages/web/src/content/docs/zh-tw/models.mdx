@@ -3,13 +3,13 @@ title: 型號
 description: 配置LLM提供者和模型。
 ---
 
-opencode 使用[人工智能軟件開發工具包](https://ai-sdk.dev/) 和[模型.dev](https://models.dev) 來支持**75+ LLM 提供商**，並且它支持運行本地模型。
+opencode 使用[AI SDK](https://ai-sdk.dev/) 和[models.dev](https://models.dev) 來支持**75+ LLM 提供商**，並且它支持運行本地模型。
 
 ---
 
 ## 供應商
 
-默認情況下會預加載大多數流行的提供程序。如果您已通過 `/connect` 命令添加了提供程序的憑據，那麼它們將在您啟動 opencode 時可用。
+默認情況下會預加載大多數流行的提供商。如果您已通過 `/connect` 命令添加了提供商的憑據，那麼它們將在您啟動 opencode 時可用。
 
 了解有關[提供者](/docs/providers) 的更多信息。
 
@@ -33,7 +33,7 @@ opencode 使用[人工智能軟件開發工具包](https://ai-sdk.dev/) 和[模�
 考慮使用我們推薦的模型之一。
 :::
 
-然而，既擅長生成代碼又擅長工具調用的只有少數。
+然而，既擅長生成程式碼又擅長工具調用的只有少數。
 
 以下是與 opencode 配合良好的幾個模型，排名不分先後。 （這不是詳盡的列表，也不一定是最新的）：
 
@@ -100,8 +100,8 @@ opencode配置。
 }
 ```
 
-在這裡，我們為兩個內置模型配置全局設置：`gpt-5`（通過 `openai` 提供程序訪問時）和 `claude-sonnet-4-20250514`（通過 `anthropic` 提供程序訪問時）。
-內置提供商和型號名稱可以在[模型.dev](https://models.dev) 上找到。
+在這裡，我們為兩個內置模型配置全局設置：`gpt-5`（通過 `openai` 提供商訪問時）和 `claude-sonnet-4-20250514`（通過 `anthropic` 提供商訪問時）。
+內置提供商和型號名稱可以在[models.dev](https://models.dev) 上找到。
 
 您還可以為您正在使用的任何代理配置這些選項。代理配置會覆蓋此處的所有全局選項。 [了解更多](/docs/agents/#additional)。
 
@@ -143,7 +143,7 @@ opencode配置。
 
 opencode 附帶了許多提供商的默認變體：
 
-**人擇**：
+**Anthropic**：
 
 - `high` - 高思維預算（默認）
 - `max` - 最大思維預算
