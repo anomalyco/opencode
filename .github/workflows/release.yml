@@ -68,9 +68,6 @@ jobs:
           name: Mammouth Code v${{ steps.version.outputs.version }}
           draft: false
           prerelease: false
-          files: |
-            packages/opencode/dist/*.tar.gz
-            packages/opencode/dist/*.zip
           body: |
             ## Mammouth Code v${{ steps.version.outputs.version }}
 
@@ -78,18 +75,7 @@ jobs:
 
             **curl (recommended)**
             ```bash
-            curl -fsSL https://raw.githubusercontent.com/mammouth-ai/code/dev/install.sh | bash
+            curl -fsSL https://code.mammouth.ai/install.sh | bash
             ```
-
-            **Manual download**
-            Download the appropriate binary for your platform below.
-
-            | Platform | Architecture | Download |
-            |----------|--------------|----------|
-            | Linux | x64 | `mammouth-linux-x64.tar.gz` |
-            | Linux | arm64 | `mammouth-linux-arm64.tar.gz` |
-            | macOS | x64 | `mammouth-darwin-x64.tar.gz` |
-            | macOS | arm64 (Apple Silicon) | `mammouth-darwin-arm64.tar.gz` |
-            | Windows | x64 | `mammouth-windows-x64.zip` |
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
