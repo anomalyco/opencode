@@ -436,7 +436,6 @@ export namespace Team {
 
     const session = await Session.createNext({
       parentID: input.parentSessionID,
-      teammate: true,
       directory: Inst.directory,
       title: `${input.name} (@${input.agent.name} teammate, ${label})${input.planApproval ? " [plan mode]" : ""}`,
       permission: rules,
@@ -549,16 +548,10 @@ export namespace Team {
         await transitionExecutionStatus(input.teamName, input.name, "running")
         return SessionPrompt.loop({ sessionID: session.id })
       })
-      .then(async (result) => {
-        log.info("teammate loop ended", { teamName: input.teamName, name: input.name, reason: result.reason })
-        if (result.reason === "completed") {
-          await transitionExecutionStatus(input.teamName, input.name, "completing")
-          await transitionExecutionStatus(input.teamName, input.name, "completed")
-        }
-        if (result.reason === "cancelled") {
-          await transitionExecutionStatus(input.teamName, input.name, "cancelling")
-          await transitionExecutionStatus(input.teamName, input.name, "cancelled")
-        }
+      .then(async () => {
+        log.info("teammate loop ended", { teamName: input.teamName, name: input.name })
+        await transitionExecutionStatus(input.teamName, input.name, "completing")
+        await transitionExecutionStatus(input.teamName, input.name, "completed")
         await transitionExecutionStatus(input.teamName, input.name, "idle")
         const team = await get(input.teamName)
         const member = team?.members.find((m) => m.name === input.name)
@@ -567,7 +560,7 @@ export namespace Team {
         } else {
           await transitionMemberStatus(input.teamName, input.name, "ready")
         }
-        await notifyLead(input.teamName, input.name, session.id, result.reason)
+        await notifyLead(input.teamName, input.name, session.id, "completed")
       })
       .catch(async (err) => {
         log.warn("teammate loop error", { teamName: input.teamName, name: input.name, error: err.message })
