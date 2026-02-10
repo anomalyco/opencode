@@ -2,6 +2,7 @@ import { useNavigate, useParams } from "@solidjs/router"
 import { createEffect, createMemo, For, Show, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSortable } from "@thisbeyond/solid-dnd"
+import { createMediaQuery } from "@solid-primitives/media"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { getFilename } from "@opencode-ai/util/path"
 import { Button } from "@opencode-ai/ui/button"
@@ -114,7 +115,8 @@ export const SortableWorkspace = (props: {
   const busy = createMemo(() => props.ctx.isBusy(props.directory))
   const wasBusy = createMemo((prev) => prev || busy(), false)
   const loading = createMemo(() => open() && !booted() && sessions().length === 0 && !wasBusy())
-  const showNew = createMemo(() => !loading() && (sessions().length === 0 || (active() && !params.id)))
+  const touch = createMediaQuery("(hover: none)")
+  const showNew = createMemo(() => !loading() && (touch() || sessions().length === 0 || (active() && !params.id)))
   const loadMore = async () => {
     setWorkspaceStore("limit", (limit) => limit + 5)
     await globalSync.project.loadSessions(props.directory)
@@ -167,11 +169,9 @@ export const SortableWorkspace = (props: {
           openOnDblClick={false}
         />
       </Show>
-      <Icon
-        name={open() ? "chevron-down" : "chevron-right"}
-        size="small"
-        class="shrink-0 text-icon-base opacity-0 transition-opacity group-hover/workspace:opacity-100 group-focus-within/workspace:opacity-100"
-      />
+      <div class="flex items-center justify-center shrink-0 overflow-hidden w-0 opacity-0 transition-all duration-200 group-hover/workspace:w-3.5 group-hover/workspace:opacity-100 group-focus-within/workspace:w-3.5 group-focus-within/workspace:opacity-100">
+        <Icon name={open() ? "chevron-down" : "chevron-right"} size="small" class="text-icon-base" />
+      </div>
     </div>
   )
 
@@ -196,7 +196,9 @@ export const SortableWorkspace = (props: {
                 when={workspaceEditActive()}
                 fallback={
                   <Collapsible.Trigger
-                    class="flex items-center justify-between w-full pl-2 pr-16 py-1.5 rounded-md hover:bg-surface-raised-base-hover"
+                    class={`flex items-center justify-between w-full pl-2 py-1.5 rounded-md hover:bg-surface-raised-base-hover transition-[padding] duration-200 ${
+                      menu.open ? "pr-16" : "pr-2"
+                    } group-hover/workspace:pr-16 group-focus-within/workspace:pr-16`}
                     data-action="workspace-toggle"
                     data-workspace={base64Encode(props.directory)}
                   >
@@ -204,7 +206,13 @@ export const SortableWorkspace = (props: {
                   </Collapsible.Trigger>
                 }
               >
-                <div class="flex items-center justify-between w-full pl-2 pr-16 py-1.5 rounded-md">{header()}</div>
+                <div
+                  class={`flex items-center justify-between w-full pl-2 py-1.5 rounded-md transition-[padding] duration-200 ${
+                    menu.open ? "pr-16" : "pr-2"
+                  } group-hover/workspace:pr-16 group-focus-within/workspace:pr-16`}
+                >
+                  {header()}
+                </div>
               </Show>
               <div
                 class="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 transition-opacity"
@@ -264,23 +272,25 @@ export const SortableWorkspace = (props: {
                     </DropdownMenu.Content>
                   </DropdownMenu.Portal>
                 </DropdownMenu>
-                <Tooltip value={language.t("command.session.new")} placement="top">
-                  <IconButton
-                    icon="plus-small"
-                    variant="ghost"
-                    class="size-6 rounded-md opacity-0 pointer-events-none group-hover/workspace:opacity-100 group-hover/workspace:pointer-events-auto group-focus-within/workspace:opacity-100 group-focus-within/workspace:pointer-events-auto"
-                    data-action="workspace-new-session"
-                    data-workspace={base64Encode(props.directory)}
-                    aria-label={language.t("command.session.new")}
-                    onClick={(event) => {
-                      event.preventDefault()
-                      event.stopPropagation()
-                      props.ctx.setHoverSession(undefined)
-                      props.ctx.clearHoverProjectSoon()
-                      navigate(`/${slug()}/session`)
-                    }}
-                  />
-                </Tooltip>
+                <Show when={!touch()}>
+                  <Tooltip value={language.t("command.session.new")} placement="top">
+                    <IconButton
+                      icon="plus-small"
+                      variant="ghost"
+                      class="size-6 rounded-md opacity-0 pointer-events-none group-hover/workspace:opacity-100 group-hover/workspace:pointer-events-auto group-focus-within/workspace:opacity-100 group-focus-within/workspace:pointer-events-auto"
+                      data-action="workspace-new-session"
+                      data-workspace={base64Encode(props.directory)}
+                      aria-label={language.t("command.session.new")}
+                      onClick={(event) => {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        props.ctx.setHoverSession(undefined)
+                        props.ctx.clearHoverProjectSoon()
+                        navigate(`/${slug()}/session`)
+                      }}
+                    />
+                  </Tooltip>
+                </Show>
               </div>
             </div>
           </div>

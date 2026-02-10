@@ -1,0 +1,359 @@
+---
+title: Intro
+description: Get started with opencode.
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+import config from "../../../../config.mjs"
+export const console = config.console
+
+[**opencode**](/)는 오픈 소스 AI 코딩 에이전트입니다. 터미널 기반 인터페이스, 데스크탑 앱 또는 IDE 확장으로 사용할 수 있습니다.
+
+![opencode TUI with the opencode theme](../../../assets/lander/screenshot.png)
+
+시작합시다.
+
+---
+
+### # 필수품
+
+당신의 맨끝에 있는 opencode를 사용하려면, 당신은 필요로 할 것입니다:
+
+1. 현대 맨끝 에뮬레이터는 좋아합니다:
+
+- [WezTerm](https://wezterm.org), 크로스 플랫폼
+- [Alacritty](https://alacritty.org), 크로스 플랫폼
+- [Ghostty] (https://ghostty.org), 리눅스 및 macOS
+- [Kitty](https://sw.kovidgoyal.net/kitty/), 리눅스 및 macOS
+
+2. 사용하려는 LLM 공급자를 위한 API 열쇠.
+
+---
+
+## 설치
+
+opencode를 설치하는 가장 쉬운 방법은 설치 스크립트를 통해 입니다.
+
+```bash
+curl -fsSL https://opencode.ai/install | bash
+```
+
+다음 명령으로 설치할 수도 있습니다:
+
+- ** Node.js** 사용
+
+        <Tabs>
+
+      <TabItem label="npm">
+      ```bash
+      npm install -g opencode-ai
+      ```
+
+          </TabItem>
+
+        <TabItem label="Bun">
+        ```bash
+        bun install -g opencode-ai
+        ```
+
+          </TabItem>
+
+        <TabItem label="pnpm">
+        ```bash
+        pnpm install -g opencode-ai
+        ```
+
+          </TabItem>
+
+        <TabItem label="Yarn">
+        ```bash
+        yarn global add opencode-ai
+        ```
+
+      </TabItem>
+
+  </Tabs>
+
+- ** macOS 및 Linux에서 홈 Brew 사용 **
+
+  ```bash
+  brew install anomalyco/tap/opencode
+  ```
+
+> 최신 릴리스를 위해 opencode 탭을 사용하는 것이 좋습니다. 공식 `brew install opencode` 공식은 Homebrew 팀에 의해 유지되고 더 자주 업데이트됩니다.
+
+- **Ar Linux에서 Paru를 사용 **
+
+  ```bash
+  paru -S opencode-bin
+  ```
+
+#### 윈도우
+
+:::tip[추천: WSL 사용]
+Windows에서 최고의 경험을 위해 [Windows Subsystem for Linux (WSL)](/docs/windows-wsl)를 사용하는 것이 좋습니다. opencode의 기능으로 더 나은 성능과 전체 호환성을 제공합니다.
+:::
+
+- ** 초콜릿 **
+
+  ```bash
+  choco install opencode
+  ```
+
+- ** Scoop를 사용 **
+
+  ```bash
+  scoop install opencode
+  ```
+
+- ** NPM **
+
+  ```bash
+  npm install -g opencode-ai
+  ```
+
+- **매거진**
+
+  ```bash
+  mise use -g github:anomalyco/opencode
+  ```
+
+- ** Docker 사용**
+
+  ```bash
+  docker run -it --rm ghcr.io/anomalyco/opencode
+  ```
+
+Bun을 사용하여 Windows에서 opencode 설치 지원은 현재 진행 중입니다.
+
+[Releases](https://github.com/anomalyco/opencode/releases)에서 이진을 할 수도 있습니다.
+
+---
+
+## 구성
+
+opencode를 사용하면 API 키를 구성하여 LLM 공급자를 사용할 수 있습니다.
+
+LLM 공급자를 사용하는 새로운 경우, [OpenCode Zen](/docs/zen)를 사용하는 것이 좋습니다.
+opencode에 의해 테스트 및 확인 된 모델의 큐레이터 목록입니다.
+팀.
+
+1. TUI에서 `/connect` 명령을 실행하고, opencode를 선택하고, [opencode.ai/auth](https://opencode.ai/auth)에 머리를 선택합니다.
+
+   ```txt
+   /connect
+   ```
+
+2. 로그인, 청구 세부 정보를 추가하고 API 키를 복사하십시오.
+
+3. API 키를 붙여.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+또는 다른 공급자 중 하나를 선택할 수 있습니다. [더 알아보기](/docs/providers#directory).
+
+---
+
+## 초기화
+
+이제 공급자를 구성했습니다. 프로젝트로 이동할 수 있습니다.
+일하고 싶습니다.
+
+```bash
+cd /path/to/project
+```
+
+opencode를 실행합니다.
+
+```bash
+opencode
+```
+
+다음, 다음 명령을 실행하여 프로젝트의 opencode를 초기화합니다.
+
+```bash frame="none"
+/init
+```
+
+opencode를 사용하여 프로젝트를 분석하고 `AGENTS.md` 파일을 만들 수 있습니다.
+프로젝트 루트.
+
+:::tip
+프로젝트의 `AGENTS.md` 파일을 Git에 투입해야 합니다.
+:::
+
+이 도움말 opencode는 프로젝트 구조와 코딩 패턴을 이해
+사용.
+
+---
+
+## 사용법
+
+opencode를 사용하여 프로젝트에 작업할 준비가 되어 있습니다. 자주 묻는 질문
+모두!
+
+AI 코딩 에이전트를 사용하는 새로운 경우, 여기에 할 수있는 몇 가지 예입니다
+도움.
+
+---
+
+## 질문
+
+Codebase를 설명하기 위해 opencode를 요청할 수 있습니다.
+
+:::tip
+`@` 키를 사용하여 프로젝트에서 파일을 검색합니다.
+:::
+
+```txt frame="none" "@packages/functions/src/api/index.ts"
+How is authentication handled in @packages/functions/src/api/index.ts
+```
+
+이것은 당신이 작동하지 않은 코드베이스의 일부가 있다면 도움이된다.
+
+---
+
+### 추가 기능
+
+프로젝트에 새로운 기능을 추가하려면 opencode를 요청할 수 있습니다. 우리는 먼저 계획을 만들 것을 묻는 것이 좋습니다.
+
+1. **플랜을 선택 **
+
+opencode는 Plan mode 로 변경할 수 있는 능력을 비활성화하고
+대신 제안 how 그것은 기능을 구현할 것입니다.
+
+**Tab** 키를 사용하여 전환합니다. 오른쪽 하단에 있는 이 지표를 볼 수 있습니다.
+
+```bash frame="none" title="Switch to Plan mode"
+<TAB>
+```
+
+이제 우리가해야 할 일을 설명합니다.
+
+```txt frame="none"
+When a user deletes a note, we'd like to flag it as deleted in the database.
+Then create a screen that shows all the recently deleted notes.
+From this screen, the user can undelete a note or permanently delete it.
+```
+
+당신이 원하는 것을 이해하기 위해 opencode를 충분히 세부 정보를 제공하려는. 그것은 도움
+팀의 주니어 개발자에게 이야기하고 싶습니다.
+
+:::tip
+opencode를 많은 컨텍스트와 예제를 제공하여 당신이 무엇을 이해하는 데 도움이
+이름 \*
+:::
+
+2. **플랜에 대해서 **
+
+플랜을 제공하면 피드백을 제공하거나 자세한 내용을 추가 할 수 있습니다.
+
+```txt frame="none"
+We'd like to design this new screen using a design I've used before.
+[Image #1] Take a look at this image and use it as a reference.
+```
+
+:::tip
+단말에 이미지를 드래그하고 드롭하여 프롬프트에 추가합니다.
+:::
+
+opencode는 어떤 이미지를 스캔할 수 있습니다. 당신은 할 수
+이 작업을 수행하고 끝으로 이미지를 삭제합니다.
+
+3. ** 기능 구축 **
+
+플랜으로 편안하게 느끼면 Build mode by
+**Tab** 키를 다시 입력합니다.
+
+```bash frame="none"
+<TAB>
+```
+
+그리고 변경을 요청합니다.
+
+```bash frame="none"
+Sounds good! Go ahead and make the changes.
+```
+
+---
+
+### 변경
+
+더 똑바른 변화를 위해, 당신은 opencode를 직접 그것을 건설할 수 있습니다
+첫 플랜을 검토하지 않고.
+
+```txt frame="none" "@packages/functions/src/settings.ts" "@packages/functions/src/notes.ts"
+We need to add authentication to the /settings route. Take a look at how this is
+handled in the /notes route in @packages/functions/src/notes.ts and implement
+the same logic in @packages/functions/src/settings.ts
+```
+
+좋은 양의 세부 사항을 제공 하려면 opencode가 올바른
+이름 \*
+
+---
+
+### Undo 변경
+
+opencode를 호출하면 변경 사항을 만들 수 있습니다.
+
+```txt frame="none" "@packages/functions/src/api/index.ts"
+Can you refactor the function in @packages/functions/src/api/index.ts?
+```
+
+그러나 당신이 원하는 것은 아닙니다. ** 변경할 수 없습니다 **
+`/undo` 명령을 사용하여.
+
+```bash frame="none"
+/undo
+```
+
+opencode는 이제 당신이 만든 변경을 반전하고 원래 메시지를 표시
+다시.
+
+```txt frame="none" "@packages/functions/src/api/index.ts"
+Can you refactor the function in @packages/functions/src/api/index.ts?
+```
+
+여기에서 당신은 신속하고 다시 시도 opencode를 요청할 수 있습니다.
+
+:::tip
+`/undo`를 여러 번 실행할 수 있습니다.
+:::
+
+또는 \*\* `/redo` 명령을 사용하여 변경할 수 있습니다.
+
+```bash frame="none"
+/redo
+```
+
+---
+
+## 공유
+
+opencode와 나눈 대화는 [팀과 공유](/docs/share)할 수 있습니다.
+
+```bash frame="none"
+/share
+```
+
+현재 대화에 대한 링크를 만들고 클립보드에 복사합니다.
+
+:::note
+대화는 기본적으로 공유되지 않습니다.
+:::
+
+여기 [example 대화](https://opencode.ai/s/4XP1fce5) 는 opencode 입니다.
+
+---
+
+## 사용자 정의
+
+그리고 그게 다야! 이제 opencode를 사용하여 프로입니다.
+
+자신의 것을 만들기 위해, 우리는 [themes](/docs/themes), [keybinds](/docs/keybinds), [configuring code formatters](/docs/formatters), [creating custom commands](/docs/commands), 또는 [opencode config](/docs/config)와 함께 연주하는 것을 추천합니다.

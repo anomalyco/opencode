@@ -1,0 +1,51 @@
+---
+title: Mreža
+description: Konfigurirajte proksije i prilagođene certifikate.
+---
+
+## OpenCode podržava standardne varijable proxy okruženja i prilagođene sertifikate za mrežna okruženja preduzeća.
+
+## Proxy
+
+OpenCode poštuje standardne varijable proxy okruženja.
+
+```bash
+# HTTPS proxy (recommended)
+export HTTPS_PROXY=https://proxy.example.com:8080
+
+# HTTP proxy (if HTTPS not available)
+export HTTP_PROXY=http://proxy.example.com:8080
+
+# Bypass proxy for local server (required)
+export NO_PROXY=localhost,127.0.0.1
+```
+
+:::caution
+TUI komunicira sa lokalnim HTTP serverom. Morate zaobići proxy za ovu vezu kako biste spriječili petlje usmjeravanja.
+:::
+
+## Možete konfigurirati port servera i ime hosta koristeći [CLI flags](/docs/cli#run).
+
+### Autentikacija
+
+Ako vaš proxy zahtijeva osnovnu autentifikaciju, uključite vjerodajnice u URL.
+
+```bash
+export HTTPS_PROXY=http://username:password@proxy.example.com:8080
+```
+
+:::caution
+Izbjegavajte tvrdo kodiranje lozinki. Koristite varijable okruženja ili sigurno skladište vjerodajnica.
+:::
+
+## Za proxy servere koji zahtijevaju naprednu autentifikaciju kao što je NTLM ili Kerberos, razmislite o korištenju LLM Gatewaya koji podržava vašu metodu provjere autentičnosti.
+
+## Prilagođeni certifikati
+
+Ako vaše preduzeće koristi prilagođene CA-ove za HTTPS veze, konfigurirajte OpenCode da im vjeruje.
+
+```bash
+export NODE_EXTRA_CA_CERTS=/path/to/ca-cert.pem
+```
+
+Ovo radi i za proxy veze i za direktan pristup API-ju.

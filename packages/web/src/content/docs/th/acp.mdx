@@ -1,0 +1,156 @@
+---
+title: ACPสามารถช่วย
+description: ใช้ OpenCode ในโปรแกรมแก้ไขที่ต้องการ ACP
+---
+
+OpenCode ที่แสดง [Agent Client Protocol](https://agentclientprotocol.com) หรือ (ACP) ซึ่งสามารถช่วยได้โดยตรงในการแก้ไขและ IDE ที่หน่วยความจำ
+
+:::tip
+สำหรับรายชื่อและเครื่องมือที่รองรับ ACPรายงานที่[ACP รายงาน](https://zed.dev/blog/acp-progress-report#available-now)
+:::
+
+ACP เป็นแบบเปิดมาตรฐานการสื่อสารระหว่างโปรแกรมแก้ไขโค้ดและตัวแทน AI
+
+---
+
+## เม็กซิโก
+
+บางครั้งใช้ OpenCode ผ่าน ACP ไม่อนุญาตให้โปรแกรมแก้ไขของคุณให้รันคำสั่ง `opencode acp`
+
+สั่งเริ่ม OpenCode เนื่องจากต้องย่อยที่จำเป็นต้องมี ACP ซึ่งจะต้องแก้ไขโปรแกรมของคุณผ่าน JSON-RPC ผ่าน stdio
+
+นี่คือตัวอย่างโปรแกรมแก้ไขยอดนิยมที่รองรับ ACP
+
+---
+
+### เซด
+
+อดทนต่อไป [Zed](https://zed.dev) (`~/.config/zed/settings.json`):
+
+```json title="~/.config/zed/settings.json"
+{
+  "agent_servers": {
+    "OpenCode": {
+      "command": "opencode",
+      "args": ["acp"]
+    }
+  }
+}
+```
+
+สิ่งนั้นเปิดใช้สำหรับ `agent: new thread` ใน **Command Palette**
+
+คุณต้องผูกมัดอย่างหนักเพื่อแก้ไข `keymap.json` ของคุณ:
+
+```json title="keymap.json"
+[
+  {
+    "bindings": {
+      "cmd-alt-o": [
+        "agent::NewExternalAgentThread",
+        {
+          "agent": {
+            "custom": {
+              "name": "OpenCode",
+              "command": {
+                "command": "opencode",
+                "args": ["acp"]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+]
+```
+
+---
+
+### เจ็ตเบรนส์ IDE
+
+ไปที่ [JetBrains IDE](https://www.jetbrains.com/) acp.json ของคุณตาม [เอกสาร](https://www.jetbrains.com/help/ai-assistant/acp.html):
+
+```json title="acp.json"
+{
+  "agent_servers": {
+    "OpenCode": {
+      "command": "/absolute/path/bin/opencode",
+      "args": ["acp"]
+    }
+  }
+}
+```
+
+นี่เป็นการเปิดให้ตัวแทน 'OpenCode' ในเนื้อหาของตัวแทน AI Chat
+
+---
+
+### Avante.nvim
+
+ยังคงมี [Avante.nvim](https://github.com/yetone/avante.nvim) ของคุณ:
+
+```lua
+{
+  acp_providers = {
+    ["opencode"] = {
+      command = "opencode",
+      args = { "acp" }
+    }
+  }
+}
+```
+
+จะต้องส่งผ่านวันพรุ่งนี้:
+
+```lua {6-8}
+{
+  acp_providers = {
+    ["opencode"] = {
+      command = "opencode",
+      args = { "acp" },
+      env = {
+        OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY")
+      }
+    }
+  }
+}
+```
+
+---
+
+### CodeCompanion.nvim
+
+ลองใช้ OpenCode ACP ใน [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim) ให้เพิ่มสิ่งต่อไปนี้ใน Neovim ของคุณ:
+
+```lua
+require("codecompanion").setup({
+  interactions = {
+    chat = {
+      adapter = {
+        name = "opencode",
+        model = "claude-sonnet-4",
+      },
+    },
+  },
+})
+```
+
+คุณสามารถใช้ CodeCompanion เพื่อใช้ opencode เป็น ACP agent สำหรับแชท
+
+หากคุณต้องส่ง environment variables (เช่น `OPENCODE_API_KEY`) โปรดดู [Configuring Adapters: Environment Variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) ในเอกสารของ CodeCompanion.nvim สำหรับรายละเอียดทั้งหมด
+
+## การรองรับ
+
+opencode ทำงานผ่าน ACP เหมือนกับในเทอร์มินัล และรองรับฟีเจอร์ทั้งหมด:
+
+:::note
+คำสั่งสแลมในคำสั่งบางคำสั่งเช่น `/undo` และ `/redo` ยังไม่รองรับในขณะนี้
+:::
+
+- เครื่องมือใน (ไฟล์ไฟล์คำสั่งอื่นๆ)
+- คำอธิบายและคำสั่งสแลช
+- MCP แขกที่นี่คือข้อมูลเพิ่มเติมของ OpenCode ของคุณ
+- กฎเฉพาะโครงการจาก `AGENTS.md`
+- คนจัดรูปแบบและ linters เวียนนา
+- ระบบตัวแทนและระบบ
