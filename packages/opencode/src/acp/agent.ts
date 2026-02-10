@@ -31,7 +31,7 @@ import {
 import { Log } from "../util/log"
 import { pathToFileURL } from "bun"
 import { ACPSessionManager } from "./session"
-import type { ACPConfig } from "./types"
+import type { ACPConfig, ACPSessionState } from "./types"
 import { Provider } from "../provider/provider"
 import { Agent as AgentModule } from "../agent/agent"
 import { Installation } from "@/installation"
@@ -42,6 +42,7 @@ import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
 import type { AssistantMessage, Event, OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
 import { applyPatch } from "diff"
+import type { Session } from "@opencode-ai/sdk"
 
 type ModeOption = { id: string; name: string; description?: string }
 type ModelOption = { modelId: string; name: string }
@@ -175,21 +176,66 @@ export namespace ACP {
       }
     }
 
+    /**
+     * Resolve session for an event, checking parent sessions if the session is a child (e.g., from task tool).
+     * Recursively walks up the parent chain to handle nested tasks.
+     * Returns the ACP session state and the actual event sessionID.
+     */
+    private async getParentACPSessionForEvent(eventSessionID: string): Promise<{
+      session: ACPSessionState
+      eventSessionID: string
+    } | undefined> {
+      
+      let currentSessionID: string | undefined = eventSessionID;
+      const visited = new Set<string>();
+
+      // Traverse up the agent call stack until we hit one that is registered as an ACP agent
+      while(currentSessionID && !visited.has(currentSessionID)) {
+        visited.add(currentSessionID);
+
+        const session = this.sessionManager.tryGet(currentSessionID)
+        if(session){
+          return { session, eventSessionID }
+        }
+
+        const sessionInfo: Session | undefined = await this.sdk.session.get(
+            {
+              sessionID: currentSessionID,
+              directory: ".",
+            },
+            { throwOnError: true },
+          )
+          .then((x) => x.data)
+          .catch(() => undefined)
+
+        if(!sessionInfo?.parentID){
+          break
+        }
+
+        currentSessionID = sessionInfo.parentID
+
+      }
+
+      return undefined
+    }
+
     private async handleEvent(event: Event) {
       switch (event.type) {
         case "permission.asked": {
           const permission = event.properties
-          const session = this.sessionManager.tryGet(permission.sessionID)
-          if (!session) return
+          // Get parent session, in case this was passed from a subagent tool call
+          const resolved = await this.getParentACPSessionForEvent(permission.sessionID)
+          if (!resolved) return
+          const { session, eventSessionID } = resolved
 
-          const prev = this.permissionQueues.get(permission.sessionID) ?? Promise.resolve()
+          const prev = this.permissionQueues.get(eventSessionID) ?? Promise.resolve()
           const next = prev
             .then(async () => {
               const directory = session.cwd
 
               const res = await this.connection
                 .requestPermission({
-                  sessionId: permission.sessionID,
+                  sessionId: session.id,
                   toolCall: {
                     toolCallId: permission.tool?.callID ?? permission.id,
                     status: "pending",
@@ -204,7 +250,7 @@ export namespace ACP {
                   log.error("failed to request permission from ACP", {
                     error,
                     permissionID: permission.id,
-                    sessionID: permission.sessionID,
+                    sessionID: eventSessionID,
                   })
                   await this.sdk.permission.reply({
                     requestID: permission.id,
@@ -251,11 +297,11 @@ export namespace ACP {
               log.error("failed to handle permission", { error, permissionID: permission.id })
             })
             .finally(() => {
-              if (this.permissionQueues.get(permission.sessionID) === next) {
-                this.permissionQueues.delete(permission.sessionID)
+              if (this.permissionQueues.get(eventSessionID) === next) {
+                this.permissionQueues.delete(eventSessionID)
               }
             })
-          this.permissionQueues.set(permission.sessionID, next)
+          this.permissionQueues.set(eventSessionID, next)
           return
         }
 
