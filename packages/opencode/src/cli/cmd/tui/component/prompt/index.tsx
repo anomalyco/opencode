@@ -594,7 +594,7 @@ export function Prompt(props: PromptProps) {
     if (props.selectedTeammate) {
       const teammate = props.selectedTeammate
       try {
-        const res = await fetch(`${sdk.url}/session/${sessionID}/team-message`, {
+        const res = await sdk.fetch(`${sdk.url}/session/${sessionID}/team-message`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

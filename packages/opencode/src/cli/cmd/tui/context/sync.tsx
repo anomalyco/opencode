@@ -623,8 +623,9 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           // Must use sdk.fetch (RPC to worker) since bare fetch can't reach
           // the internal server in direct-RPC mode.
           if (!store.team[sessionID]) {
-            fetch(`${sdk.url}/team/by-session/${sessionID}`)
-              .then((r: Response) => r.json())
+            sdk
+              .fetch(`${sdk.url}/team/by-session/${sessionID}`)
+              .then((r) => r.json())
               .then((data: any) => {
                 if (!data) return
                 setStore("team", sessionID, {

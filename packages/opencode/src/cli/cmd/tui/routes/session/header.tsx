@@ -7,9 +7,9 @@ import { SplitBorder } from "@tui/component/border"
 import type { AssistantMessage, Session } from "@opencode-ai/sdk/v2"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { useKeybind } from "../../context/keybind"
+import { Installation } from "@/installation"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useRoute } from "@tui/context/route"
-import { Installation } from "../../../../../installation"
 
 function memberStatusIcon(status: string): string {
   switch (status) {
