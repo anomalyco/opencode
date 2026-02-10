@@ -68,9 +68,7 @@ Ili ga možete postaviti ručno.
              model: anthropic/claude-sonnet-4-20250514
              # share: true
              # github_token: xxxx
-
-
-```
+   ```
 
 3. **Sačuvaj API ključeve u tajne**
    U **postavkama** organizacije ili projekta proširite **Tajne i varijable** na lijevoj strani i odaberite **Radnje**. I dodajte potrebne API ključeve.
@@ -87,12 +85,12 @@ Ili ga možete postaviti ručno.
   Alternativno, možete koristiti GitHub Action runner [ugrađeni `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) bez instaliranja OpenCode GitHub aplikacije. Samo se pobrinite da date potrebna odobrenja u svom toku rada:
 
 ```yaml
-permissions:
-  id-token: write
-  contents: write
-  pull-requests: write
-  issues: write
-```
+  permissions:
+    id-token: write
+    contents: write
+    pull-requests: write
+    issues: write
+  ```
 
 Također možete koristiti [Personal Access Tokens](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)(PAT) ako želite.
 
@@ -274,9 +272,7 @@ Evo nekoliko primjera kako možete koristiti OpenCode u GitHub.
 
 ```
   /opencode explain this issue
-
-
-```
+  ```
 
 OpenCode će pročitati cijelu temu, uključujući sve komentare, i odgovoriti s jasnim objašnjenjem.
 
@@ -285,9 +281,7 @@ OpenCode će pročitati cijelu temu, uključujući sve komentare, i odgovoriti s
 
 ```
   /opencode fix this
-
-
-```
+  ```
 
 I OpenCode će kreirati novu granu, implementirati promjene i otvoriti PR sa promjenama.
 
@@ -296,9 +290,7 @@ I OpenCode će kreirati novu granu, implementirati promjene i otvoriti PR sa pro
 
 ```
   Delete the attachment from S3 when the note is removed /oc
-
-
-```
+  ```
 
 OpenCode će implementirati traženu promjenu i posvetiti je istom PR-u.
 
@@ -308,9 +300,7 @@ OpenCode će implementirati traženu promjenu i posvetiti je istom PR-u.
 ```
   [Comment on specific lines in Files tab]
   /oc add error handling here
-
-
-```
+  ```
 
 Kada komentarišete određene linije, OpenCode prima:
 

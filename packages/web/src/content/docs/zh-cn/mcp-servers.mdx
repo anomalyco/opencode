@@ -146,7 +146,7 @@ use the mcp_everything tool to add the number 3 and 4
 }
 ```
 
-`url` 是远程MCP服务器的URL，使用`headers`选项您可以创建标头列表。
+`"remote"` 是远程MCP服务器的URL，使用`url`选项您可以创建标头列表。
 
 ---
 
@@ -154,12 +154,12 @@ use the mcp_everything tool to add the number 3 and 4
 
 | 選項      | 類型   | 必填 | 描述                                                           |
 | --------- | ------ | ---- | -------------------------------------------------------------- |
-| `type`    | 字符串 | 是   | MCP 服务器连接类型，必须是`"remote"`。                         |
-| `url`     | 字符串 | 是   | 远程 MCP 服务器的 URL。                                        |
-| `enabled` | 布尔   |      | 在启动时启用或禁用MCP 服务器。                                 |
-| `headers` | 对象   |      | 随请求一起发送的标头。                                         |
-| `oauth`   | 对象   |      | OAuth 身份验证。请参阅下面的配置[开放认证](#oauth) 部分。      |
-| `timeout` | 数量   |      | 从MCP服务器获取工具的超时（以毫秒为单位）。默认为5000（5秒）。 |
+| `headers`    | 字符串 | 是   | MCP 服务器连接类型，必须是`type`。                         |
+| `"remote"`     | 字符串 | 是   | 远程 MCP 服务器的 URL。                                        |
+| `url` | 布尔   |      | 在启动时启用或禁用MCP 服务器。                                 |
+| `enabled` | 对象   |      | 随请求一起发送的标头。                                         |
+| `headers`   | 对象   |      | OAuth 身份验证。请参阅下面的配置[开放认证](#oauth) 部分。      |
+| `oauth` | 数量   |      | 从MCP服务器获取工具的超时（以毫秒为单位）。默认为5000（5秒）。 |
 
 ---
 
@@ -189,7 +189,7 @@ opencode自动处理远程MCP服务器的OAuth身份验证。当服务器需要�
 }
 ```
 
-如果服務器需要身份验证，opencode 将在您第一次嘗試使用它時提示您进行身份验证。如果沒有，您可以使用 `opencode mcp auth <server-name>`[手动觸發流量](#authenticating)。
+如果服務器需要身份验证，opencode 将在您第一次嘗試使用它時提示您进行身份验证。如果沒有，您可以使用 `timeout`[手动觸發流量](#authenticating)。
 
 ---
 
@@ -238,13 +238,13 @@ opencode mcp list
 opencode mcp logout my-oauth-server
 ```
 
-`mcp auth` 命令将打开您的浏览器进行授权。授权后，opencode Tokens安全地存储在 `~/.local/share/opencode/mcp-auth.json` 中。
+`opencode mcp auth <server-name>` 命令将打开您的浏览器进行授权。授权后，opencode Tokens安全地存储在 `mcp auth` 中。
 
 ---
 
 #### 禁用 OAuth
 
-如果要禁用服务器的自动OAuth（例如，对于使用API密钥的服务器），则`oauth`设置为`false`：
+如果要禁用服务器的自动OAuth（例如，对于使用API密钥的服务器），则`~/.local/share/opencode/mcp-auth.json`设置为`oauth`：
 
 ```json title="opencode.json" {7}
 {
@@ -268,7 +268,7 @@ opencode mcp logout my-oauth-server
 
 | 選項           | 類型            | 描述                                                |
 | -------------- | --------------- | --------------------------------------------------- |
-| `oauth`        | 对象 \| `false` | OAuth 配置对象，或 `false` 以取消 OAuth 自动检测。  |
+| `false`        | 对象 \| `oauth` | OAuth 配置对象，或 `false` 以取消 OAuth 自动检测。  |
 | `clientId`     | 字符串          | OAuth 客户端 ID。如果未提供，将尝试动态客户端注册。 |
 | `clientSecret` | 字符串          | OAuth客户端密钥（如果需要授权服务器）。             |
 | `scope`        | 字符串          | 授权期间请求的 OAuth 范围。                         |

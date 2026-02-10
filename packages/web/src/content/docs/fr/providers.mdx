@@ -140,40 +140,40 @@ Pour utiliser Amazon Bedrock avec OpenCode :
 Définissez l'une de ces variables d'environnement lors de l'exécution de opencode :
 
 ```bash
-# Option 1: Using AWS access keys
-AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY opencode
+   # Option 1: Using AWS access keys
+   AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY opencode
 
-# Option 2: Using named AWS profile
-AWS_PROFILE=my-profile opencode
+   # Option 2: Using named AWS profile
+   AWS_PROFILE=my-profile opencode
 
-# Option 3: Using Bedrock bearer token
-AWS_BEARER_TOKEN_BEDROCK=XXX opencode
-```
+   # Option 3: Using Bedrock bearer token
+   AWS_BEARER_TOKEN_BEDROCK=XXX opencode
+   ```
 
 Ou ajoutez-les à votre profil bash :
 
 ```bash title="~/.bash_profile"
-export AWS_PROFILE=my-dev-profile
-export AWS_REGION=us-east-1
-```
+   export AWS_PROFILE=my-dev-profile
+   export AWS_REGION=us-east-1
+   ```
 
 #### Fichier de configuration (recommandé)
 
 Pour une configuration spécifique au projet ou persistante, utilisez `opencode.json` :
 
 ```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "amazon-bedrock": {
-      "options": {
-        "region": "us-east-1",
-        "profile": "my-aws-profile"
-      }
-    }
-  }
-}
-```
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "amazon-bedrock": {
+         "options": {
+           "region": "us-east-1",
+           "profile": "my-aws-profile"
+         }
+       }
+     }
+   }
+   ```
 
 **Options disponibles :**
 
@@ -190,19 +190,19 @@ Les options du fichier de configuration sont prioritaires sur les variables d'en
 Si vous utilisez des points de terminaison d'un VPC pour Bedrock :
 
 ```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "amazon-bedrock": {
-      "options": {
-        "region": "us-east-1",
-        "profile": "production",
-        "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
-      }
-    }
-  }
-}
-```
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "amazon-bedrock": {
+         "options": {
+           "region": "us-east-1",
+           "profile": "production",
+           "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
+         }
+       }
+     }
+   }
+   ```
 
 :::note
 L'option `endpoint` est un alias pour l'option générique `baseURL`, utilisant la terminologie spécifique à AWS. Si `endpoint` et `baseURL` sont spécifiés, `endpoint` est prioritaire.
@@ -333,8 +333,8 @@ Si vous rencontrez des erreurs « Je suis désolé, mais je ne peux pas vous aid
 Ou ajoutez-le à votre profil bash :
 
 ```bash title="~/.bash_profile"
-export AZURE_RESOURCE_NAME=XXX
-```
+   export AZURE_RESOURCE_NAME=XXX
+   ```
 
 6. Exécutez la commande `/models` pour sélectionner votre modèle déployé.
 
@@ -380,8 +380,8 @@ export AZURE_RESOURCE_NAME=XXX
 Ou ajoutez-le à votre profil bash :
 
 ```bash title="~/.bash_profile"
-export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
-```
+   export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
+   ```
 
 6. Exécutez la commande `/models` pour sélectionner votre modèle déployé.
 
@@ -476,8 +476,8 @@ Cloudflare AI Gateway vous permet d'accéder aux modèles de OpenAI, Anthropic, 
 Ou définissez-le comme variable d'environnement.
 
 ```bash title="~/.bash_profile"
-export CLOUDFLARE_API_TOKEN=your-api-token
-```
+   export CLOUDFLARE_API_TOKEN=your-api-token
+   ```
 
 5. Exécutez la commande `/models` pour sélectionner un modèle.
 
@@ -488,18 +488,18 @@ export CLOUDFLARE_API_TOKEN=your-api-token
 Vous pouvez également ajouter des modèles via votre configuration opencode.
 
 ```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "cloudflare-ai-gateway": {
-      "models": {
-        "openai/gpt-4o": {},
-        "anthropic/claude-sonnet-4": {}
-      }
-    }
-  }
-}
-```
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "cloudflare-ai-gateway": {
+         "models": {
+           "openai/gpt-4o": {},
+           "anthropic/claude-sonnet-4": {}
+         }
+       }
+     }
+   }
+   ```
 
 ---
 
@@ -673,8 +673,8 @@ Sélectionnez **OAuth** et votre navigateur s'ouvrira pour autorisation.
 6.  Exécutez la commande `/models` pour voir les modèles disponibles.
 
     ```txt
-    /models
-    ```
+   /models
+   ```
 
 Trois modèles basés sur Claude sont disponibles :
 
@@ -847,16 +847,16 @@ Pour utiliser Google Vertex AI avec OpenCode :
 Définissez-les lors de l'exécution de opencode.
 
 ```bash
-GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
-```
+   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
+   ```
 
 Ou ajoutez-les à votre profil bash.
 
 ```bash title="~/.bash_profile"
-export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
-export GOOGLE_CLOUD_PROJECT=your-project-id
-export VERTEX_LOCATION=global
-```
+   export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+   export GOOGLE_CLOUD_PROJECT=your-project-id
+   export VERTEX_LOCATION=global
+   ```
 
 :::tip
 La région `global` améliore la disponibilité et réduit les erreurs sans frais supplémentaires. Utilisez des points de terminaison régionaux (par exemple, `us-central1`) pour les exigences de résidence des données. [En savoir plus](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
@@ -1394,17 +1394,17 @@ OpenCode Zen est une liste de modèles testés et vérifiés fournie par l'équi
 Vous pouvez également ajouter des modèles supplémentaires via votre configuration opencode.
 
 ```json title="opencode.json" {6}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "openrouter": {
-      "models": {
-        "somecoolnewmodel": {}
-      }
-    }
-  }
-}
-```
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "openrouter": {
+         "models": {
+           "somecoolnewmodel": {}
+         }
+       }
+     }
+   }
+   ```
 
 5. Vous pouvez également les personnaliser via votre configuration opencode. Voici un exemple de spécification d'un fournisseur
 
@@ -1458,14 +1458,14 @@ SAP AI Core donne accès à plus de 40 modèles de OpenAI, Anthropic, Google, Am
 Ou définissez la variable d'environnement `AICORE_SERVICE_KEY` :
 
 ```bash
-AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
-```
+   AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
+   ```
 
 Ou ajoutez-le à votre profil bash :
 
 ```bash title="~/.bash_profile"
-export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}'
-```
+   export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}'
+   ```
 
 4. Définissez éventuellement l'ID de déploiement et le groupe de ressources :
 
@@ -1735,17 +1735,17 @@ Si vous êtes abonné au **Plan de codage GLM**, sélectionnez **Plan de codage 
 Vous pouvez également ajouter des modèles supplémentaires via votre configuration opencode.
 
 ```json title="opencode.json" {6}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "zenmux": {
-      "models": {
-        "somecoolnewmodel": {}
-      }
-    }
-  }
-}
-```
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "zenmux": {
+         "models": {
+           "somecoolnewmodel": {}
+         }
+       }
+     }
+   }
+   ```
 
 ---
 

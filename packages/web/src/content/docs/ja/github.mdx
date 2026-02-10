@@ -40,38 +40,38 @@ opencode github install
 次のワークフロー ファイルをリポジトリの `.github/workflows/opencode.yml` に追加します。適切な `model` と必要な API キーを `env` に設定してください。
 
 ```yml title=".github/workflows/opencode.yml" {24,26}
-name: opencode
+   name: opencode
 
-on:
-  issue_comment:
-    types: [created]
-  pull_request_review_comment:
-    types: [created]
+   on:
+     issue_comment:
+       types: [created]
+     pull_request_review_comment:
+       types: [created]
 
-jobs:
-  opencode:
-    if: |
-      contains(github.event.comment.body, '/oc') ||
-      contains(github.event.comment.body, '/opencode')
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-    steps:
-       - name: Checkout repository
-         uses: actions/checkout@v6
-         with:
-           fetch-depth: 1
-           persist-credentials: false
+   jobs:
+     opencode:
+       if: |
+         contains(github.event.comment.body, '/oc') ||
+         contains(github.event.comment.body, '/opencode')
+       runs-on: ubuntu-latest
+       permissions:
+         id-token: write
+       steps:
+          - name: Checkout repository
+            uses: actions/checkout@v6
+            with:
+              fetch-depth: 1
+              persist-credentials: false
 
-       - name: Run OpenCode
-        uses: anomalyco/opencode/github@latest
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        with:
-          model: anthropic/claude-sonnet-4-20250514
-          # share: true
-          # github_token: xxxx
-```
+          - name: Run OpenCode
+           uses: anomalyco/opencode/github@latest
+           env:
+             ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+           with:
+             model: anthropic/claude-sonnet-4-20250514
+             # share: true
+             # github_token: xxxx
+   ```
 
 3. **API キーをシークレットに保存します**
 
@@ -90,12 +90,12 @@ jobs:
 あるいは、OpenCode GitHub アプリをインストールせずに、GitHub Action ランナーの [組み込み `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) を使用することもできます。ワークフローで必要な権限を必ず付与してください。
 
 ```yaml
-permissions:
-  id-token: write
-  contents: write
-  pull-requests: write
-  issues: write
-```
+  permissions:
+    id-token: write
+    contents: write
+    pull-requests: write
+    issues: write
+  ```
 
 必要に応じて、[パーソナル アクセス トークン](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)(PAT) を使用することもできます。
 
@@ -278,8 +278,8 @@ GitHub で OpenCode を使用する方法の例をいくつか示します。
 このコメントを GitHub の問題に追加します。
 
 ```
-/opencode explain this issue
-```
+  /opencode explain this issue
+  ```
 
 OpenCode は、すべてのコメントを含むスレッド全体を読み取り、明確な説明を返信します。
 
@@ -288,8 +288,8 @@ OpenCode は、すべてのコメントを含むスレッド全体を読み取�
 GitHub の問題で次のように言います。
 
 ```
-/opencode fix this
-```
+  /opencode fix this
+  ```
 
 そして、OpenCode は新しいブランチを作成し、変更を実装し、変更を含む PR を開きます。
 
@@ -298,8 +298,8 @@ GitHub の問題で次のように言います。
 GitHub PR に次のコメントを残してください。
 
 ```
-Delete the attachment from S3 when the note is removed /oc
-```
+  Delete the attachment from S3 when the note is removed /oc
+  ```
 
 OpenCode は要求された変更を実装し、同じ PR にコミットします。
 
@@ -308,9 +308,9 @@ OpenCode は要求された変更を実装し、同じ PR にコミットしま�
 PR の「ファイル」タブのコード行に直接コメントを残します。 OpenCode は、ファイル、行番号、および diff コンテキストを自動的に検出して、正確な応答を提供します。
 
 ```
-[Comment on specific lines in Files tab]
-/oc add error handling here
-```
+  [Comment on specific lines in Files tab]
+  /oc add error handling here
+  ```
 
 特定の行にコメントすると、OpenCode は以下を受け取ります。
 

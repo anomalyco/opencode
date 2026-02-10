@@ -35,7 +35,7 @@ opencode는 일반 GitLab 파이프라인에서 작동합니다. [CI 구성품](
      - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
        inputs:
          config_dir: ${CI_PROJECT_DIR}/opencode-config
-         auth_json: $OPENCODE_AUTH_JSON # The variable name for your opencode authentication JSON
+         auth_json: $OPENCODE_AUTH_JSON # The variable name for your OpenCode authentication JSON
          command: optional-custom-command
          message: "Your prompt here"
    ```
@@ -91,7 +91,7 @@ opencode는 GitLab CI/CD 파이프라인에서 실행되며, 여기서 설정해
       - apt-get install --yes glab
       - echo "Configuring glab"
       - echo $GITLAB_HOST
-      - echo "Creating opencode auth configuration"
+      - echo "Creating OpenCode auth configuration"
       - mkdir --parents ~/.local/share/opencode
       - |
         cat > ~/.local/share/opencode/auth.json << EOF
@@ -104,10 +104,10 @@ opencode는 GitLab CI/CD 파이프라인에서 실행되며, 여기서 설정해
         EOF
       - echo "Configuring git"
       - git config --global user.email "opencode@gitlab.com"
-      - git config --global user.name "opencode"
+      - git config --global user.name "OpenCode"
       - echo "Testing glab"
       - glab issue list
-      - echo "Running opencode"
+      - echo "Running OpenCode"
       - |
         opencode run "
         You are an AI assistant helping with GitLab operations.
@@ -169,8 +169,8 @@ opencode는 GitLab CI/CD 파이프라인에서 실행되며, 여기서 설정해
 GitLab 문제에서이 코멘트를 추가하십시오.
 
 ```
-@opencode explain this issue
-```
+  @opencode explain this issue
+  ```
 
 opencode는 문제와 대답을 명확하게 설명합니다.
 
@@ -179,8 +179,8 @@ opencode는 문제와 대답을 명확하게 설명합니다.
 GitLab 문제에서, 말한다:
 
 ```
-@opencode fix this
-```
+  @opencode fix this
+  ```
 
 opencode는 새로운 지점을 만들 것이며 변경 사항을 구현하고 변경 사항을 병합 요청을 엽니다.
 
@@ -189,7 +189,7 @@ opencode는 새로운 지점을 만들 것이며 변경 사항을 구현하고 �
 GitLab 병합 요청에 대한 다음 의견을 남겨주세요.
 
 ```
-@opencode review this merge request
-```
+  @opencode review this merge request
+  ```
 
 opencode는 병합 요청을 검토하고 피드백을 제공합니다.

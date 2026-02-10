@@ -6,7 +6,7 @@ description: Brug OpenCode i enhver ACP-kompatibel editor.
 OpenCode understøtter [Agent Client Protocol](https://agentclientprotocol.com) eller (ACP), så du kan bruge det direkte i kompatible editorer og IDE'er.
 
 :::tip
-For en liste over redaktører og værktøjer, der understøtter ACP, tjek [ACP progress report](https://zed.dev/blog/acp-progress-report#available-now).
+For en liste over editorer og værktøjer, der understøtter ACP, tjek [ACP progress report](https://zed.dev/blog/acp-progress-report#available-now).
 :::
 
 ACP er en åben protokol, der standardiserer kommunikation mellem kodeeditorer og AI-kodningsagenter.
@@ -19,7 +19,7 @@ For at bruge OpenCode via ACP, konfigurer din editor til at køre kommandoen `op
 
 Kommandoen starter OpenCode som en ACP-kompatibel underproces, der kommunikerer med din editor over JSON-RPC via stdio.
 
-Nedenfor er eksempler på populære redaktører, der understøtter ACP.
+Nedenfor er eksempler på populære editorer, der understøtter ACP.
 
 ---
 
@@ -145,11 +145,11 @@ Hvis du har brug for at sende miljøvariabler (som `OPENCODE_API_KEY`), henvises
 OpenCode fungerer på samme måde via ACP som i terminalen. Alle funktioner understøtter:
 
 :::note
-Nogle indbyggede skråstreg-kommandoer som `/undo` og `/redo` er i øjeblikket ikke understøttet.
+Nogle indbyggede slash-kommandoer som `/undo` og `/redo` er i øjeblikket ikke understøttet.
 :::
 
 - Indbyggede værktøjer (filoperationer, terminalkommandoer osv.)
-- Brugerdefinerede værktøjer og skråstreg-kommandoer
+- Brugerdefinerede værktøjer og slash-kommandoer
 - MCP-servere konfigureret i din OpenCode-konfiguration
 - Projektspecifikke regler fra `AGENTS.md`
 - Brugerdefinerede formatere og linters
