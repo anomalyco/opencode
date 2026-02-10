@@ -118,7 +118,7 @@ export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
 - `project`: 現在のプロジェクト情報。
 - `directory`: 現在の作業ディレクトリ。
 - `worktree`: git ワークツリーのパス。
-- `client`: AI と対話するためのオープンコード SDK クライアント。
+- `client`: AI と対話するためのopencode SDK クライアント。
 - `$`: Bun の [コマンドを実行するためのシェル API](https://bun.com/docs/runtime/shell)。
 
 ---
@@ -149,69 +149,69 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 #### ファイルイベント
 
-- `command.executed`
-- `command.executed`
+- `file.edited`
+- `file.watcher.updated`
 
 #### インストールイベント
 
-- `command.executed`
+- `installation.updated`
 
 #### LSPイベント
 
-- `command.executed`
-- `command.executed`
+- `lsp.client.diagnostics`
+- `lsp.updated`
 
 #### メッセージイベント
 
-- `command.executed`
-- `command.executed`
-- `command.executed`
-- `command.executed`
+- `message.part.removed`
+- `message.part.updated`
+- `message.removed`
+- `message.updated`
 
 #### 許可イベント
 
-- `command.executed`
-- `command.executed`
+- `permission.asked`
+- `permission.replied`
 
 #### サーバーイベント
 
-- `command.executed`
+- `server.connected`
 
 #### セッションイベント
 
-- `command.executed`
-- `command.executed`
-- `command.executed`
-- `command.executed`
-- `command.executed`
-- `command.executed`
-- `command.executed`
-- `command.executed`
+- `session.created`
+- `session.compacted`
+- `session.deleted`
+- `session.diff`
+- `session.error`
+- `session.idle`
+- `session.status`
+- `session.updated`
 
 #### Todoイベント
 
-- `command.executed`
+- `todo.updated`
 
 #### シェルイベント
 
-- `command.executed`
+- `shell.env`
 
 #### ツールイベント
 
-- `command.executed`
-- `command.executed`
+- `tool.execute.after`
+- `tool.execute.before`
 
 #### TUIイベント
 
-- `command.executed`
-- `command.executed`
-- `command.executed`
+- `tui.prompt.append`
+- `tui.command.execute`
+- `tui.toast.show`
 
 ---
 
 ## 例
 
-ここでは、オープンコードを拡張するために使用できるプラグインの例をいくつか示します。
+ここでは、opencodeを拡張するために使用できるプラグインの例をいくつか示します。
 
 ---
 
@@ -277,7 +277,7 @@ export const InjectEnvPlugin = async () => {
 
 ### カスタムツール
 
-プラグインはオープンコードにカスタム ツールを追加することもできます。
+プラグインはopencodeにカスタム ツールを追加することもできます。
 
 ```ts title=".opencode/plugins/custom-tools.ts"
 import { type Plugin, tool } from "@opencode-ai/plugin"
@@ -306,7 +306,7 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 - `args`: ツールの引数の Zod スキーマ
 - `execute`: ツールが呼び出されたときに実行される関数
 
-カスタム ツールは、組み込みツールと並行してオープンコードに使用できます。
+カスタム ツールは、組み込みツールと並行してopencodeに使用できます。
 
 ---
 

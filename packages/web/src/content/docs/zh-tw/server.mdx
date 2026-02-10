@@ -6,7 +6,7 @@ description: 通過 HTTP 與 opencode 服務器交互。
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-`opencode serve` 命令運行一個無頭 HTTP 服務器，該服務器公開開放代碼客戶端可以使用的 OpenAPI 端點。
+`opencode serve` 命令運行一個無頭 HTTP 服務器，該服務器公開opencode客戶端可以使用的 OpenAPI 端點。
 
 ---
 
@@ -65,7 +65,7 @@ opencode TUI 運行，`opencode serve` 將啟動一個新服務器。
 
 當您啟動 TUI 時，它會隨機分配端口和主機名。您可以改為傳入`--hostname` 和`--port` [旗幟](/docs/cli)。然後使用它連接到其服務器。
 
-[`/tui`](#tui) 端點可用於通過服務器驅動 TUI。例如，您可以預填充或運行提示。此設置由 OpenCode [集成開發環境](/docs/ide) 插件使用。
+[`/tui`](#tui) 端點可用於通過服務器驅動 TUI。例如，您可以預填充或運行提示。此設置由 opencode [集成開發環境](/docs/ide) 插件使用。
 
 ---
 

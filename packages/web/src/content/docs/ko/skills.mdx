@@ -3,7 +3,7 @@ title: "Agent Skills"
 description: "Define reusable behavior via SKILL.md definitions"
 ---
 
-Agent Skill let OpenCode discover reusable instruction from your repo 또는 홈 디렉토리.
+Agent Skill let opencode discover reusable instruction from your repo 또는 홈 디렉토리.
 Skills are loaded on-demand via native `skill` tool-agents see available skills and can loaded full content when needed.
 
 ---
@@ -11,7 +11,7 @@ Skills are loaded on-demand via native `skill` tool-agents see available skills 
 ## 파일 장소
 
 기술 이름 당 하나의 폴더를 만들고 내부 `SKILL.md`를 넣어.
-OpenCode 이 위치를 검색:
+opencode 이 위치를 검색:
 
 - 프로젝트 구성: `.opencode/skills/<name>/SKILL.md`
 - 글로벌 구성: `~/.config/opencode/skills/<name>/SKILL.md`
@@ -24,7 +24,7 @@ OpenCode 이 위치를 검색:
 
 ## 발견의 이해
 
-Project-local paths의 경우, OpenCode는 git worktree에 도달 할 때까지 현재 작업 디렉토리에서 걷습니다.
+Project-local paths의 경우, opencode는 git worktree에 도달 할 때까지 현재 작업 디렉토리에서 걷습니다.
 그것은 `.opencode/`에 있는 어떤 어울리는 `skills/*/SKILL.md` 및 어떤 어울리는 `.claude/skills/*/SKILL.md` 또는 `.agents/skills/*/SKILL.md`를 방법 적재합니다.
 
 세계적인 정의는 또한 `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` 및 `~/.agents/skills/*/SKILL.md`에서 적재됩니다.
@@ -102,7 +102,7 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ## 인식 도구 설명
 
-OpenCode는 `skill` 도구 설명에서 사용할 수있는 기술을 나열합니다.
+opencode는 `skill` 도구 설명에서 사용할 수있는 기술을 나열합니다.
 각 항목에는 기술 이름 및 설명이 포함됩니다.
 
 ```xml

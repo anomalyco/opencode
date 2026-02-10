@@ -1,15 +1,15 @@
 ---
 title: Formatters
-description: OpenCode uses language specific formatters.
+description: opencode uses language specific formatters.
 ---
 
-OpenCode는 언어 별 형식을 사용하여 작성 또는 편집 한 후 자동으로 파일을 포맷합니다. 이 생성 된 코드는 프로젝트의 코드 스타일을 따릅니다.
+opencode는 언어 별 형식을 사용하여 작성 또는 편집 한 후 자동으로 파일을 포맷합니다. 이 생성 된 코드는 프로젝트의 코드 스타일을 따릅니다.
 
 ---
 
 ## 내장
 
-OpenCode는 인기있는 언어 및 프레임 워크에 대한 몇 가지 내장 형식자와 함께 제공됩니다. 아래는 formatters, 지원된 파일 확장 및 명령 또는 구성 옵션의 목록입니다.
+opencode는 인기있는 언어 및 프레임 워크에 대한 몇 가지 내장 형식자와 함께 제공됩니다. 아래는 formatters, 지원된 파일 확장 및 명령 또는 구성 옵션의 목록입니다.
 
 | 형식  | 연장                                        | 요구 사항         |
 | ----- | ------------------------------------------- | ----------------- |
@@ -39,13 +39,13 @@ OpenCode는 인기있는 언어 및 프레임 워크에 대한 몇 가지 내장
 | oxfmt (Experimental) | .js, .jsx, .ts, .tsx | `oxfmt` Dependency in `package.json`, [experimental env 변수 플래그](/docs/cli/#experimental) |
 | ormolu | .hs | `ormolu` 명령 가능 |
 
-그래서 프로젝트가 `prettier`를 `package.json`에 가지고 있다면, OpenCode는 자동으로 그것을 사용합니다.
+그래서 프로젝트가 `prettier`를 `package.json`에 가지고 있다면, opencode는 자동으로 그것을 사용합니다.
 
 ---
 
 ## 어떻게 작동합니까?
 
-OpenCode가 파일을 작성하거나 편집할 때:
+opencode가 파일을 작성하거나 편집할 때:
 
 1. 모든 활성화된 formatters에 대한 파일 확장을 확인합니다.
 2. 파일에 적절한 형식의 명령을 실행합니다.
@@ -57,7 +57,7 @@ OpenCode가 파일을 작성하거나 편집할 때:
 
 ## 구성
 
-OpenCode config의 `formatter` 섹션을 통해 형식기를 사용자 정의 할 수 있습니다.
+opencode config의 `formatter` 섹션을 통해 형식기를 사용자 정의 할 수 있습니다.
 
 ```json title="opencode.json"
 {

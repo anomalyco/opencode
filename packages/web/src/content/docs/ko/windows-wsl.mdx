@@ -1,14 +1,14 @@
 ---
 title: Windows (WSL)
-description: WSL로 Windows에서 OpenCode를 더 편하게 사용하세요.
+description: WSL로 Windows에서 opencode를 더 편하게 사용하세요.
 ---
 
 import { Steps } from "@astrojs/starlight/components"
 
-OpenCode는 Windows에서 직접 실행할 수 있지만, 가장 좋은 사용 경험을 위해 [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) 사용을 권장합니다. WSL은 OpenCode 기능과 자연스럽게 동작하는 Linux 환경을 제공합니다.
+opencode는 Windows에서 직접 실행할 수 있지만, 가장 좋은 사용 경험을 위해 [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) 사용을 권장합니다. WSL은 opencode 기능과 자연스럽게 동작하는 Linux 환경을 제공합니다.
 
 :::tip[왜 WSL인가요?]
-WSL은 더 나은 파일 시스템 성능, 완전한 터미널 지원, 그리고 OpenCode가 의존하는 개발 도구와의 호환성을 제공합니다.
+WSL은 더 나은 파일 시스템 성능, 완전한 터미널 지원, 그리고 opencode가 의존하는 개발 도구와의 호환성을 제공합니다.
 :::
 
 ---
@@ -21,17 +21,17 @@ WSL은 더 나은 파일 시스템 성능, 완전한 터미널 지원, 그리고
 
    아직 설치하지 않았다면 Microsoft 공식 가이드를 따라 [WSL을 설치](https://learn.microsoft.com/en-us/windows/wsl/install)하세요.
 
-2. **WSL에 OpenCode 설치하기**
+2. **WSL에 opencode 설치하기**
 
-   WSL 설정이 끝나면 WSL 터미널을 열고 [설치 방법](/docs/) 중 하나로 OpenCode를 설치하세요.
+   WSL 설정이 끝나면 WSL 터미널을 열고 [설치 방법](/docs/) 중 하나로 opencode를 설치하세요.
 
    ```bash
    curl -fsSL https://opencode.ai/install | bash
    ```
 
-3. **WSL에서 OpenCode 실행하기**
+3. **WSL에서 opencode 실행하기**
 
-   프로젝트 디렉터리로 이동한 뒤(OpenCode에서 Windows 파일은 `/mnt/c/`, `/mnt/d/` 등으로 접근) OpenCode를 실행하세요.
+   프로젝트 디렉터리로 이동한 뒤(opencode에서 Windows 파일은 `/mnt/c/`, `/mnt/d/` 등으로 접근) opencode를 실행하세요.
 
    ```bash
    cd /mnt/c/Users/YourName/project
@@ -44,7 +44,7 @@ WSL은 더 나은 파일 시스템 성능, 완전한 터미널 지원, 그리고
 
 ## 데스크톱 앱 + WSL 서버
 
-OpenCode 데스크톱 앱을 쓰면서 서버는 WSL에서 실행하고 싶다면 다음처럼 진행하세요.
+opencode 데스크톱 앱을 쓰면서 서버는 WSL에서 실행하고 싶다면 다음처럼 진행하세요.
 
 1. **WSL에서 서버 시작하기**
 
@@ -85,7 +85,7 @@ Windows에서 웹 사용 경험을 가장 좋게 하려면:
 
 2. **Windows 브라우저에서 접속하기**
 
-   `http://localhost:<port>`로 접속하세요(OpenCode가 URL을 출력합니다).
+   `http://localhost:<port>`로 접속하세요(opencode가 URL을 출력합니다).
 
 WSL에서 `opencode web`를 실행하면 올바른 파일 시스템 접근과 터미널 통합을 유지하면서도 Windows 브라우저에서 바로 사용할 수 있습니다.
 
@@ -107,13 +107,13 @@ opencode
 ```
 
 :::tip
-가장 매끄러운 경험을 원한다면 저장소를 WSL 파일시스템(예: `~/code/`)으로 복제하거나 복사한 뒤 그 위치에서 OpenCode를 실행해 보세요.
+가장 매끄러운 경험을 원한다면 저장소를 WSL 파일시스템(예: `~/code/`)으로 복제하거나 복사한 뒤 그 위치에서 opencode를 실행해 보세요.
 :::
 
 ---
 
 ## 팁
 
-- Windows 드라이브에 있는 프로젝트라도 OpenCode는 WSL에서 실행하면 파일 접근이 더 자연스럽습니다
-- 통합된 개발 워크플로를 위해 OpenCode와 함께 VS Code의 [WSL 확장](https://code.visualstudio.com/docs/remote/wsl)을 사용해 보세요
-- OpenCode 설정과 세션은 WSL 환경의 `~/.local/share/opencode/`에 저장됩니다
+- Windows 드라이브에 있는 프로젝트라도 opencode는 WSL에서 실행하면 파일 접근이 더 자연스럽습니다
+- 통합된 개발 워크플로를 위해 opencode와 함께 VS Code의 [WSL 확장](https://code.visualstudio.com/docs/remote/wsl)을 사용해 보세요
+- opencode 설정과 세션은 WSL 환경의 `~/.local/share/opencode/`에 저장됩니다

@@ -6,7 +6,7 @@ description: Crie comandos personalizados para tarefas repetitivas.
 Comandos personalizados permitem que você especifique um prompt que deseja executar quando esse comando for executado no TUI.
 
 ```bash frame="none"
-/meu-comando
+/my-command
 ```
 
 Comandos personalizados são adicionais aos comandos integrados como `/init`, `/undo`, `/redo`, `/share`, `/help`. [Saiba mais](/docs/tui#commands).
@@ -42,13 +42,13 @@ Use o comando digitando `/` seguido pelo nome do comando.
 
 ## Configurar
 
-Você pode adicionar comandos personalizados através da configuração do OpenCode ou criando arquivos markdown no diretório `commands/`.
+Você pode adicionar comandos personalizados através da configuração do opencode ou criando arquivos markdown no diretório `commands/`.
 
 ---
 
 ### JSON
 
-Use a opção `command` na sua [configuração](/docs/config) do OpenCode:
+Use a opção `command` na sua [configuração](/docs/config) do opencode:
 
 ```json title="opencode.jsonc" {4-12}
 {
@@ -123,10 +123,10 @@ Inclua tipagem adequada e estrutura básica.
 Execute o comando com argumentos:
 
 ```bash frame="none"
-/component Botão
+/component Button
 ```
 
-E `$ARGUMENTS` será substituído por `Botão`.
+E `$ARGUMENTS` será substituído por `Button`.
 
 Você também pode acessar argumentos individuais usando parâmetros posicionais:
 

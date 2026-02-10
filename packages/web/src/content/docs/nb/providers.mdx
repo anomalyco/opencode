@@ -1,17 +1,17 @@
 ---
 title: Leverandører
-description: Bruke en hvilken som helst LLM-leverandør i OpenCode.
+description: Bruke en hvilken som helst LLM-leverandør i opencode.
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 
-OpenCode bruker [AI SDK](https://ai-sdk.dev/) og [Models.dev](https://models.dev) for å støtte **75+ LLM leverandører** og den støtter kjøring av lokale modeller.
+opencode bruker [AI SDK](https://ai-sdk.dev/) og [Models.dev](https://models.dev) for å støtte **75+ LLM leverandører** og den støtter kjøring av lokale modeller.
 
 For å legge til en leverandør må du:
 
 1. Legg til API-nøklene for leverandøren ved å bruke kommandoen `/connect`.
-2. Konfigurer leverandøren i OpenCode-konfigurasjonen.
+2. Konfigurer leverandøren i opencode-konfigurasjonen.
 
 ---
 
@@ -24,7 +24,7 @@ i `~/.local/share/opencode/auth.json`.
 
 ### Konfig
 
-Du kan tilpasse leverandørene gjennom `provider`-delen i OpenCode
+Du kan tilpasse leverandørene gjennom `provider`-delen i opencode
 konfig.
 
 ---
@@ -50,8 +50,8 @@ Du kan tilpasse basen URL for enhver leverandør ved å angi alternativet `baseU
 
 ## OpenCode Zen
 
-OpenCode Zen er en liste over modeller levert av OpenCode-teamet som har vært
-testet og verifisert for å fungere godt med OpenCode. [Finn ut mer](/docs/zen).
+OpenCode Zen er en liste over modeller levert av opencode-teamet som har vært
+testet og verifisert for å fungere godt med opencode. [Finn ut mer](/docs/zen).
 
 :::tip
 Hvis du er ny, anbefaler vi å starte med OpenCode Zen.
@@ -80,7 +80,7 @@ Hvis du er ny, anbefaler vi å starte med OpenCode Zen.
    /models
    ```
 
-Det fungerer som alle andre leverandører i OpenCode og er helt valgfritt å bruke.
+Det fungerer som alle andre leverandører i opencode og er helt valgfritt å bruke.
 
 ---
 
@@ -124,7 +124,7 @@ Ser du ikke en leverandør her? Send inn en PR.
 
 ### Amazonas grunnfjell
 
-Slik bruker du Amazon Bedrock med OpenCode:
+Slik bruker du Amazon Bedrock med opencode:
 
 1. Gå over til **modellkatalogen** i Amazon Bedrock-konsollen og be om
    tilgang til modellene du ønsker.
@@ -279,7 +279,7 @@ For egendefinerte slutningsprofiler, bruk modellen og leverandørnavnet i nøkke
    ```
 
 :::info
-Å bruke Claude Pro/Max-abonnementet ditt i OpenCode støttes ikke offisielt av [Anthropic](https://anthropic.com).
+Å bruke Claude Pro/Max-abonnementet ditt i opencode støttes ikke offisielt av [Anthropic](https://anthropic.com).
 :::
 
 ##### Bruke API-tastene
@@ -685,8 +685,8 @@ for å lagre token i opencode auth-lagring.
 ##### Selvhostet GitLab
 
 :::note[compliance note]
-OpenCode bruker en liten modell for noen AI oppgaver som å generere økttittelen.
-Den er konfigurert til å bruke gpt-5-nano som standard, hostet av Zen. For å låse OpenCode
+opencode bruker en liten modell for noen AI oppgaver som å generere økttittelen.
+Den er konfigurert til å bruke gpt-5-nano som standard, hostet av Zen. For å låse opencode
 for kun å bruke din egen GitLab-hostede forekomst, legg til følgende i din
 `opencode.json` fil. Det anbefales også å deaktivere øktdeling.
 
@@ -786,7 +786,7 @@ Denne plugin-en gir omfattende GitLab-repository-administrasjonsfunksjoner, inkl
 
 ### GitHub Copilot
 
-Slik bruker du GitHub Copilot-abonnementet med OpenCode:
+Slik bruker du GitHub Copilot-abonnementet med opencode:
 
 :::note
 Noen modeller kan trenge en [Pro+
@@ -823,7 +823,7 @@ Noen modeller må aktiveres manuelt i [GitHub Copilot-innstillingene](https://do
 
 ### Google Vertex AI
 
-Slik bruker du Google Vertex AI med OpenCode:
+Slik bruker du Google Vertex AI med opencode:
 
 1. Gå over til **Model Garden** i Google Cloud Console og sjekk
    modeller tilgjengelig i din region.
@@ -1005,7 +1005,7 @@ Helicone støtter tilpassede overskrifter for funksjoner som bufring, brukerspor
 
 ##### Sesjonssporing
 
-Helicones [Sessions](https://docs.helicone.ai/features/sessions) funksjon lar deg gruppere relaterte LLM forespørsler sammen. Bruk [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) plugin for automatisk å logge hver OpenCode-samtale som en økt i Helicone.
+Helicones [Sessions](https://docs.helicone.ai/features/sessions) funksjon lar deg gruppere relaterte LLM forespørsler sammen. Bruk [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) plugin for automatisk å logge hver opencode-samtale som en økt i Helicone.
 
 ```bash
 npm install -g opencode-helicone-session
@@ -1019,7 +1019,7 @@ Legg den til i konfigurasjonen din.
 }
 ```
 
-Programtillegget injiserer `Helicone-Session-Id` og `Helicone-Session-Name` overskrifter i forespørslene dine. På Helicones Sessions-side vil du se hver OpenCode-samtale oppført som en separat økt.
+Programtillegget injiserer `Helicone-Session-Id` og `Helicone-Session-Name` overskrifter i forespørslene dine. På Helicones Sessions-side vil du se hver opencode-samtale oppført som en separat økt.
 
 ##### Vanlige helikonhoder
 
@@ -1223,7 +1223,7 @@ Slik bruker du Kimi K2 fra Moonshot AI:
 Du kan konfigurere opencode for å bruke lokale modeller gjennom Ollama.
 
 :::tip
-Ollama kan automatisk konfigurere seg selv for OpenCode. Se [Ollama-integrasjonsdokumentene](https://docs.ollama.com/integrations/opencode) for detaljer.
+Ollama kan automatisk konfigurere seg selv for opencode. Se [Ollama-integrasjonsdokumentene](https://docs.ollama.com/integrations/opencode) for detaljer.
 :::
 
 ```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
@@ -1262,13 +1262,13 @@ Hvis verktøykall ikke fungerer, prøv å øke `num_ctx` i Ollama. Start rundt 1
 
 ### Ollama Cloud
 
-Slik bruker du Ollama Cloud med OpenCode:
+Slik bruker du Ollama Cloud med opencode:
 
 1. Gå over til [https://ollama.com/](https://ollama.com/) og logg på eller opprett en konto.
 
 2. Naviger til **Innstillinger** > **Nøkler** og klikk på **Legg til API nøkkel** for å generere en ny API nøkkel.
 
-3. Kopier API-nøkkelen for bruk i OpenCode.
+3. Kopier API-nøkkelen for bruk i opencode.
 
 4. Kjør kommandoen `/connect` og søk etter **Ollama Cloud**.
 
@@ -1285,7 +1285,7 @@ Slik bruker du Ollama Cloud med OpenCode:
    └ enter
    ```
 
-6. **Viktig**: Før du bruker skymodeller i OpenCode, må du hente modellinformasjonen lokalt:
+6. **Viktig**: Før du bruker skymodeller i opencode, må du hente modellinformasjonen lokalt:
 
    ```bash
    ollama pull gpt-oss:20b-cloud
@@ -1334,7 +1334,7 @@ Hvis du allerede har en API-nøkkel, kan du velge **Angi API-nøkkel manuelt** o
 
 ### OpenCode Zen
 
-OpenCode Zen er en liste over testede og verifiserte modeller levert av OpenCode-teamet. [Finn ut mer](/docs/zen).
+OpenCode Zen er en liste over testede og verifiserte modeller levert av opencode-teamet. [Finn ut mer](/docs/zen).
 
 1. Logg på **<a href={console}>OpenCode Zen</a>** og klikk på **Create API Key**.
 
@@ -1344,7 +1344,7 @@ OpenCode Zen er en liste over testede og verifiserte modeller levert av OpenCode
    /connect
    ```
 
-3. Skriv inn OpenCode API-nøkkelen.
+3. Skriv inn opencode API-nøkkelen.
 
    ```txt
    ┌ API key
@@ -1509,7 +1509,7 @@ SAP AI Core gir tilgang til 40+ modeller fra OpenAI, Anthropic, Google, Amazon, 
 
 ### Scaleway
 
-Slik bruker du [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/) med OpenCode:
+Slik bruker du [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/) med opencode:
 
 1. Gå over til [Scaleway Console IAM innstillinger](https://console.scaleway.com/iam/api-keys) for å generere en ny API nøkkel.
 
@@ -1870,7 +1870,7 @@ Konfigurasjonsdetaljer:
 - **limit.context**: Maksimalt inndatatoken som modellen godtar.
 - **limit.output**: Maksimalt antall tokens modellen kan generere.
 
-`limit`-feltene lar OpenCode forstå hvor mye kontekst du har igjen. Standardleverandører henter disse automatisk fra models.dev.
+`limit`-feltene lar opencode forstå hvor mye kontekst du har igjen. Standardleverandører henter disse automatisk fra models.dev.
 
 ---
 

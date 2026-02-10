@@ -1,17 +1,17 @@
 ---
 title: 命令行界面
-description: OpenCode CLI 選項和命令。
+description: opencode CLI 選項和命令。
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-默認情況下，OpenCode CLI 在不帶任何參數運行時啟動[途易](/docs/tui)。
+默認情況下，opencode CLI 在不帶任何參數運行時啟動[途易](/docs/tui)。
 
 ```bash
 opencode
 ```
 
-但它也接受本頁記錄的命令。這允許您以編程方式與 OpenCode 交互。
+但它也接受本頁記錄的命令。這允許您以編程方式與 opencode 交互。
 
 ```bash
 opencode run "Explain how closures work in JavaScript"
@@ -21,7 +21,7 @@ opencode run "Explain how closures work in JavaScript"
 
 ### tui
 
-啟動 OpenCode 終端用戶界面。
+啟動 opencode 終端用戶界面。
 
 ```bash
 opencode [project]
@@ -29,27 +29,28 @@ opencode [project]
 
 #### 旗幟
 
-| 旗幟         | 短   | 描述                        |
-| ------------ | ---- | --------------------------- |
-| `--continue` | `-c` | 繼續上一期                  |
-| `--session`  | `-s` | 會話 ID 繼續                |
-| `--prompt`   |      | 提示使用                    |
-| `--model`    | `-m` | 以提供者/模型形式使用的模型 |
-| `--agent`    |      | 代理使用                    |
-| `--port`     |      | 監聽端口                    |
-| `--hostname` |      | 監聽的主機名                |
+| 旗幟         | 短   | 描述                                                      |
+| ------------ | ---- | --------------------------------------------------------- |
+| `--continue` | `-c` | 繼續上一期                                                |
+| `--session`  | `-s` | 會話 ID 繼續                                              |
+| `--fork`     |      | 繼續時分叉會話（與 `--continue` 或 `--session` 一起使用） |
+| `--prompt`   |      | 提示使用                                                  |
+| `--model`    | `-m` | 以提供者/模型形式使用的模型                               |
+| `--agent`    |      | 代理使用                                                  |
+| `--port`     |      | 監聽端口                                                  |
+| `--hostname` |      | 監聽的主機名                                              |
 
 ---
 
 ## 命令
 
-OpenCode CLI 還具有以下命令。
+opencode CLI 還具有以下命令。
 
 ---
 
 ### agent
 
-管理 OpenCode 代理。
+管理 opencode 代理。
 
 ```bash
 opencode agent [command]
@@ -59,13 +60,13 @@ opencode agent [command]
 
 ### attach
 
-將終端連接到通過 `serve` 或 `web` 命令啟動的已運行的 OpenCode 後端服務器。
+將終端連接到通過 `serve` 或 `web` 命令啟動的已運行的 opencode 後端服務器。
 
 ```bash
 opencode attach [url]
 ```
 
-這允許將 TUI 與遠程 OpenCode 後端一起使用。例如：
+這允許將 TUI 與遠程 opencode 後端一起使用。例如：
 
 ```bash
 # Start the backend server for web/mobile access
@@ -118,13 +119,13 @@ opencode auth [command]
 
 #### login
 
-OpenCode 由 [模型.dev](https://models.dev) 上的提供商列表提供支持，因此您可以使用 `opencode auth login` 為您想要使用的任何提供商配置 API 密鑰。它存儲在`~/.local/share/opencode/auth.json` 中。
+opencode 由 [模型.dev](https://models.dev) 上的提供商列表提供支持，因此您可以使用 `opencode auth login` 為您想要使用的任何提供商配置 API 密鑰。它存儲在`~/.local/share/opencode/auth.json` 中。
 
 ```bash
 opencode auth login
 ```
 
-當 OpenCode 啟動時，它會從憑據文件加載提供程序。如果您的環境中定義了任何鍵或項目中的 `.env` 文件。
+當 opencode 啟動時，它會從憑據文件加載提供程序。如果您的環境中定義了任何鍵或項目中的 `.env` 文件。
 
 ---
 
@@ -300,7 +301,7 @@ opencode models anthropic
 | `--refresh` | 從 models.dev 刷新模型緩存               |
 | `--verbose` | 使用更詳細的模型輸出（包括成本等元數據） |
 
-使用`--refresh`標誌來更新緩存的模型列表。當新模型已添加到提供程序並且您希望在 OpenCode 中查看它們時，這非常有用。
+使用`--refresh`標誌來更新緩存的模型列表。當新模型已添加到提供程序並且您希望在 opencode 中查看它們時，這非常有用。
 
 ```bash
 opencode models --refresh
@@ -339,6 +340,7 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | `--command`  |      | 要運行的命令，使用消息作為參數                                  |
 | `--continue` | `-c` | 繼續上一期                                                      |
 | `--session`  | `-s` | 會話 ID 繼續                                                    |
+| `--fork`     |      | 繼續時分叉會話（與 `--continue` 或 `--session` 一起使用）       |
 | `--share`    |      | 分享會議                                                        |
 | `--model`    | `-m` | 以提供者/模型形式使用的模型                                     |
 | `--agent`    |      | 代理使用                                                        |
@@ -352,7 +354,7 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 ### serve
 
-啟動無頭 OpenCode 服務器以進行 API 訪問。查看[服務器文檔](/docs/server) 以獲取完整的 HTTP 接口。
+啟動無頭 opencode 服務器以進行 API 訪問。查看[服務器文檔](/docs/server) 以獲取完整的 HTTP 接口。
 
 ```bash
 opencode serve
@@ -373,7 +375,7 @@ opencode serve
 
 ### session
 
-管理 OpenCode 會話。
+管理 opencode 會話。
 
 ```bash
 opencode session [command]
@@ -383,7 +385,7 @@ opencode session [command]
 
 #### list
 
-列出所有 OpenCode 會話。
+列出所有 opencode 會話。
 
 ```bash
 opencode session list
@@ -400,7 +402,7 @@ opencode session list
 
 ### stats
 
-顯示 OpenCode 會話的令牌使用情況和成本統計信息。
+顯示 opencode 會話的令牌使用情況和成本統計信息。
 
 ```bash
 opencode stats
@@ -431,13 +433,13 @@ opencode export [sessionID]
 
 ### import
 
-從 JSON 文件或 OpenCode 共享 URL 導入會話數據。
+從 JSON 文件或 opencode 共享 URL 導入會話數據。
 
 ```bash
 opencode import <file>
 ```
 
-您可以從本地文件或 OpenCode 共享 URL 導入。
+您可以從本地文件或 opencode 共享 URL 導入。
 
 ```bash
 opencode import session.json
@@ -448,13 +450,13 @@ opencode import https://opncd.ai/s/abc123
 
 ### web
 
-使用 Web 界面啟動無頭 OpenCode 服務器。
+使用 Web 界面啟動無頭 opencode 服務器。
 
 ```bash
 opencode web
 ```
 
-這將啟動 HTTP 服務器並打開 Web 瀏覽器以通過 Web 界面訪問 OpenCode。設置`OPENCODE_SERVER_PASSWORD`以啟用HTTP基本身份驗證（用戶名默認為`opencode`）。
+這將啟動 HTTP 服務器並打開 Web 瀏覽器以通過 Web 界面訪問 opencode。設置`OPENCODE_SERVER_PASSWORD`以啟用HTTP基本身份驗證（用戶名默認為`opencode`）。
 
 #### 旗幟
 
@@ -489,7 +491,7 @@ opencode acp
 
 ### uninstall
 
-卸載 OpenCode 並刪除所有相關文件。
+卸載 opencode 並刪除所有相關文件。
 
 ```bash
 opencode uninstall
@@ -549,7 +551,7 @@ opencode CLI 採用以下全局標誌。
 
 ## 環境變量
 
-可以使用環境變量配置 OpenCode。
+可以使用環境變量配置 opencode。
 
 | 變量                                  | 類型   | 描述                                     |
 | ------------------------------------- | ------ | ---------------------------------------- |

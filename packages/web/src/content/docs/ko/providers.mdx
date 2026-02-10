@@ -1,17 +1,17 @@
 ---
 title: Providers
-description: Using any LLM provider in OpenCode.
+description: Using any LLM provider in opencode.
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 
-OpenCode는 [AI SDK](https://ai-sdk.dev/) 및 [Models.dev](https://models.dev)를 사용하여 **75+ LLM 제공 업체**를 지원하며 로컬 모델을 실행합니다.
+opencode는 [AI SDK](https://ai-sdk.dev/) 및 [Models.dev](https://models.dev)를 사용하여 **75+ LLM 제공 업체**를 지원하며 로컬 모델을 실행합니다.
 
 필요한 공급자를 추가하려면:
 
 1. `/connect` 명령을 사용하여 공급자를 위한 API 열쇠를 추가하십시오.
-2. OpenCode config에 있는 공급자를 구성하십시오.
+2. opencode config에 있는 공급자를 구성하십시오.
 
 ---
 
@@ -24,7 +24,7 @@ OpenCode는 [AI SDK](https://ai-sdk.dev/) 및 [Models.dev](https://models.dev)�
 
 #### 콘피그
 
-OpenCode의 `provider` 섹션을 통해 공급자를 사용자 정의 할 수 있습니다.
+opencode의 `provider` 섹션을 통해 공급자를 사용자 정의 할 수 있습니다.
 설정.
 
 ---
@@ -48,10 +48,10 @@ OpenCode의 `provider` 섹션을 통해 공급자를 사용자 정의 할 수 �
 
 ---
 
-## 오픈코드 젠
+## opencode 젠
 
-OpenCode Zen은 OpenCode 팀이 제공하는 모델 목록입니다.
-OpenCode와 잘 작동하도록 테스트 및 검증. [더 알아보기](/docs/zen).
+OpenCode Zen은 opencode 팀이 제공하는 모델 목록입니다.
+opencode와 잘 작동하도록 테스트 및 검증. [더 알아보기](/docs/zen).
 
 :::tip
 새로운 경우, OpenCode Zen로 시작하는 것이 좋습니다.
@@ -80,7 +80,7 @@ OpenCode와 잘 작동하도록 테스트 및 검증. [더 알아보기](/docs/z
    /models
    ```
 
-OpenCode의 다른 공급자와 같이 작동하고 사용하기에 완전히 선택적입니다.
+opencode의 다른 공급자와 같이 작동하고 사용하기에 완전히 선택적입니다.
 
 ---
 
@@ -124,7 +124,7 @@ OpenCode의 다른 공급자와 같이 작동하고 사용하기에 완전히 �
 
 ### 아마존 베드록
 
-OpenCode로 Amazon Bedrock을 사용하려면:
+opencode로 Amazon Bedrock을 사용하려면:
 
 1. Amazon Bedrock 콘솔 및 요청에서 ** 모델 카탈로그**에 머리
    원하는 모델에 액세스.
@@ -283,7 +283,7 @@ custom inference profiles를 위해, 열쇠에 있는 모형 그리고 공급자
    ```
 
 :::info
-OpenCode의 Claude Pro/Max 구독을 사용하여 [Anthropic](https://anthropic.com)에서 공식적으로 지원되지 않습니다.
+opencode의 Claude Pro/Max 구독을 사용하여 [Anthropic](https://anthropic.com)에서 공식적으로 지원되지 않습니다.
 :::
 
 ##### API 키 사용
@@ -294,7 +294,7 @@ Pro/Max 구독이 없는 경우 **Create an API Key**를 선택할 수 있습니
 
 ---
 
-### Azure 오픈AI
+### Azure OpenAI
 
 :::note
 "나는 미안 해요, 하지만 나는 그 요청을 지원할 수 없습니다" 오류, 에서 콘텐츠 필터를 변경 시도 **DefaultV2**에서 **Default**로 당신의 Azure 자원에.
@@ -488,7 +488,7 @@ export CLOUDFLARE_API_TOKEN=your-api-token
    /models
    ```
 
-Opencode config를 통해 모델을 추가할 수 있습니다.
+opencode config를 통해 모델을 추가할 수 있습니다.
 
 ```json title="opencode.json"
 {
@@ -669,7 +669,7 @@ Select**OAuth**와 브라우저는 권한이 없습니다.
 
 1. [GitLab User Settings > Access Tokens](https://gitlab.com/-/user settings/personal access tokens)로 이동
 2. 새 토큰 추가 \*\*
-3. 이름: `OpenCode`의 범위: `api`
+3. 이름: `opencode`의 범위: `api`
 4. 토큰 복사 (`glpat-`와 함께 시작)
 5. 맨끝에서 그것을 입력하십시오
 
@@ -689,8 +689,8 @@ opencode auth 저장소에 토큰을 저장합니다.
 #### 셀프 호스팅 GitLab
 
 :::note[compliance note]
-OpenCode는 세션 제목을 생성하고 같은 일부 AI 작업을 위해 작은 모델을 사용합니다.
-기본적으로 gpt-5-nano를 사용하도록 구성되며 Zen에서 호스팅됩니다. OpenCode를 잠금
+opencode는 세션 제목을 생성하고 같은 일부 AI 작업을 위해 작은 모델을 사용합니다.
+기본적으로 gpt-5-nano를 사용하도록 구성되며 Zen에서 호스팅됩니다. opencode를 잠금
 자신의 GitLab-hosted 인스턴스를 사용하여 다음을 추가하십시오.
 `opencode.json` 파일. 세션 공유를 비활성화하는 것이 좋습니다.
 
@@ -828,7 +828,7 @@ GitHub Copilot 구독을 사용하여 opencode:
 
 ### 구글 Vertex AI
 
-OpenCode로 Google Vertex AI를 사용하려면:
+opencode로 Google Vertex AI를 사용하려면:
 
 1. Google Cloud Console에서 ** Model Garden**을 통해 헤드를 확인하고 확인하십시오.
    당신의 지역에서 유효한 모형.
@@ -958,7 +958,7 @@ export VERTEX_LOCATION=global
 
 #### 선택 사항
 
-이벤트에서 Opencode를 통해 자동으로 구성되지 않는 Helicone의 기능 또는 모델을 볼 수 있습니다.
+이벤트에서 opencode를 통해 자동으로 구성되지 않는 Helicone의 기능 또는 모델을 볼 수 있습니다.
 
 여기에 [Helicone의 모델 디렉토리](https://helicone.ai/models), 당신은 당신이 추가 할 모델의 ID를 잡아이 필요.
 
@@ -1011,7 +1011,7 @@ Helicone는 캐싱, 사용자 추적 및 세션 관리와 같은 기능을 위�
 
 ##### 세션 추적
 
-Helicone's [Sessions](https://docs.helicone.ai/features/sessions) 기능으로 그룹 관련 LLM 요청이 가능합니다. [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) 플러그인을 사용하여 각 OpenCode 대화를 Helicone 세션으로 자동 로그인하십시오.
+Helicone's [Sessions](https://docs.helicone.ai/features/sessions) 기능으로 그룹 관련 LLM 요청이 가능합니다. [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) 플러그인을 사용하여 각 opencode 대화를 Helicone 세션으로 자동 로그인하십시오.
 
 ```bash
 npm install -g opencode-helicone-session
@@ -1025,7 +1025,7 @@ npm install -g opencode-helicone-session
 }
 ```
 
-플러그인은 `Helicone-Session-Id` 및 `Helicone-Session-Name` 헤더를 귀하의 요청에 주사합니다. Helicone의 세션 페이지에서는 별도의 세션으로 나열된 각 OpenCode 대화를 볼 수 있습니다.
+플러그인은 `Helicone-Session-Id` 및 `Helicone-Session-Name` 헤더를 귀하의 요청에 주사합니다. Helicone의 세션 페이지에서는 별도의 세션으로 나열된 각 opencode 대화를 볼 수 있습니다.
 
 ###### 공통 헬리콥터
 
@@ -1229,7 +1229,7 @@ Moonshot AI에서 Kimi K2 사용 :
 Ollama를 통해 로컬 모델을 사용할 수 있습니다.
 
 :::tip
-Ollama는 OpenCode를 자동으로 구성할 수 있습니다. 자세한 내용은 [Ollama 통합 문서](https://docs.ollama.com/integrations/opencode)를 참조하십시오.
+Ollama는 opencode를 자동으로 구성할 수 있습니다. 자세한 내용은 [Ollama 통합 문서](https://docs.ollama.com/integrations/opencode)를 참조하십시오.
 :::
 
 ```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
@@ -1268,13 +1268,13 @@ Ollama는 OpenCode를 자동으로 구성할 수 있습니다. 자세한 내용�
 
 ##Ollama 클라우드
 
-OpenCode로 Ollama Cloud를 사용하려면:
+opencode로 Ollama Cloud를 사용하려면:
 
 1. [https://ollama.com/](https://ollama.com/) 이상 머리와 로그인하거나 계정을 만들 수 있습니다.
 
 2. Navigate to**Settings** > **Keys** 및 click **API Key**를 추가하여 새로운 API 키 생성.
 
-3. OpenCode에서 사용을 위한 API 열쇠를 복사하십시오.
+3. opencode에서 사용을 위한 API 열쇠를 복사하십시오.
 
 4. `/connect` 명령을 실행하고 ** Ollama Cloud**를 검색하십시오.
 
@@ -1291,7 +1291,7 @@ OpenCode로 Ollama Cloud를 사용하려면:
    └ enter
    ```
 
-6. ** 중요 **: OpenCode의 클라우드 모델을 사용하기 전에, 로컬 모델 정보를 끌어야 합니다:
+6. ** 중요 **: opencode의 클라우드 모델을 사용하기 전에, 로컬 모델 정보를 끌어야 합니다:
 
    ```bash
    ollama pull gpt-oss:20b-cloud
@@ -1338,9 +1338,9 @@ API 키가 이미 있다면 ** 수동으로 API 키**를 입력하고 터미널�
 
 ---
 
-## 오픈코드 젠
+## opencode 젠
 
-OpenCode Zen은 OpenCode 팀에서 제공하는 테스트 및 검증된 모델 목록입니다. [더 알아보기](/docs/zen).
+OpenCode Zen은 opencode 팀에서 제공하는 테스트 및 검증된 모델 목록입니다. [더 알아보기](/docs/zen).
 
 1. 로그인 **<a href={console}>OpenCode Zen</a>** and click**Create API Key**.
 
@@ -1350,7 +1350,7 @@ OpenCode Zen은 OpenCode 팀에서 제공하는 테스트 및 검증된 모델 �
    /connect
    ```
 
-3. OpenCode API 키를 입력하십시오.
+3. opencode API 키를 입력하십시오.
 
    ```txt
    ┌ API key
@@ -1392,7 +1392,7 @@ OpenCode Zen은 OpenCode 팀에서 제공하는 테스트 및 검증된 모델 �
    /models
    ```
 
-Opencode config를 통해 추가 모델을 추가할 수 있습니다.
+opencode config를 통해 추가 모델을 추가할 수 있습니다.
 
 ```json title="opencode.json" {6}
 {
@@ -1515,7 +1515,7 @@ export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","s
 
 ### 스케일웨이
 
-Opencode를 사용하여 [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/)를 사용하려면:
+opencode를 사용하여 [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/)를 사용하려면:
 
 1. [Scaleway 콘솔 IAM 설정](https://console.scaleway.com/iam/api-keys)를 통해 새로운 API 키 생성.
 
@@ -1623,7 +1623,7 @@ Vercel AI를 게이트웨이는 OpenAI, Anthropic, Google, xAI 등에서 모델�
    /models
    ```
 
-Opencode config를 통해 모델을 사용자 정의 할 수 있습니다. 공급자 routing 순서를 지정하는 예입니다.
+opencode config를 통해 모델을 사용자 정의 할 수 있습니다. 공급자 routing 순서를 지정하는 예입니다.
 
 ```json title="opencode.json"
 {
@@ -1733,7 +1733,7 @@ Opencode config를 통해 모델을 사용자 정의 할 수 있습니다. 공�
    /models
    ```
 
-Opencode config를 통해 추가 모델을 추가할 수 있습니다.
+opencode config를 통해 추가 모델을 추가할 수 있습니다.
 
 ```json title="opencode.json" {6}
 {
@@ -1755,7 +1755,7 @@ Opencode config를 통해 추가 모델을 추가할 수 있습니다.
 `/connect` 명령에 나열되지 않은 **OpenAI-compatible** 공급자를 추가하려면:
 
 :::tip
-Opencode를 사용하여 OpenAI 호환 공급자를 사용할 수 있습니다. 가장 현대적인 AI 제공 업체는 OpenAI 호환 API를 제공합니다.
+opencode를 사용하여 OpenAI 호환 공급자를 사용할 수 있습니다. 가장 현대적인 AI 제공 업체는 OpenAI 호환 API를 제공합니다.
 :::
 
 1. `/connect` 명령을 실행하고 ** 다른**로 스크롤하십시오.
@@ -1875,7 +1875,7 @@ Opencode를 사용하여 OpenAI 호환 공급자를 사용할 수 있습니다. 
 - **limit.context**: 최대 입력 토큰 모델은 받아들입니다.
 - **limit.output**: 최대 토큰은 모델을 생성할 수 있습니다.
 
-`limit` 필드를 사용하면 OpenCode가 얼마나 많은 컨텍스트를 이해 할 수 있습니다. 표준 공급자는 model.dev에서 자동적으로 당깁니다.
+`limit` 필드를 사용하면 opencode가 얼마나 많은 컨텍스트를 이해 할 수 있습니다. 표준 공급자는 model.dev에서 자동적으로 당깁니다.
 
 ---
 

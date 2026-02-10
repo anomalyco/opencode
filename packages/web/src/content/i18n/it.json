@@ -51,7 +51,7 @@
   "share.status_error": "Errore",
   "share.status_unknown": "Sconosciuto",
   "share.error_id_not_found": "id non trovato",
-  "share.error_api_url_not_found": "URL API non trovato",
+  "share.error_api_url_not_found": "API URL non trovato",
   "share.error_connection_failed": "Connessione non riuscita",
   "share.opencode_version": "opencode version",
   "share.opencode_name": "opencode",

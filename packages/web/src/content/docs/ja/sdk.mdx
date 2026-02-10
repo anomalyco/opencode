@@ -1,13 +1,13 @@
 ---
 title: SDK
-description: オープンコードサーバー用のタイプセーフな JS クライアント。
+description: opencodeサーバー用のタイプセーフな JS クライアント。
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
 opencode JS/TS SDK は、サーバーと対話するためのタイプセーフなクライアントを提供します。
-これを使用して、統合を構築し、オープンコードをプログラムで制御します。
+これを使用して、統合を構築し、opencodeをプログラムで制御します。
 
 [サーバーの仕組みについて詳しくは、](/docs/server) をご覧ください。たとえば、コミュニティによって構築された [projects](/docs/ecosystem#projects) をチェックしてください。
 
@@ -25,7 +25,7 @@ npm install @opencode-ai/sdk
 
 ## クライアントの作成
 
-オープンコードのインスタンスを作成します。
+opencodeのインスタンスを作成します。
 
 ```javascript
 import { createOpencode } from "@opencode-ai/sdk"
@@ -37,13 +37,13 @@ const { client } = await createOpencode()
 
 #### オプション
 
-| オプション | タイプ        | 説明                                | デフォルト |
-| ---------- | ------------- | ----------------------------------- | ---------- |
-| `hostname` | `string`      | サーバーのホスト名                  | うーん     |
-| `port`     | `number`      | サーバーポート                      | うーん     |
-| `signal`   | `AbortSignal` | キャンセルのためのアボート信号      | うーん     |
-| `timeout`  | `number`      | サーバー起動のタイムアウト (ミリ秒) | うーん     |
-| `config`   | `Config`      | 構成オブジェクト                    | うーん     |
+| オプション | タイプ        | 説明                                | デフォルト  |
+| ---------- | ------------- | ----------------------------------- | ----------- |
+| `hostname` | `string`      | サーバーのホスト名                  | `127.0.0.1` |
+| `port`     | `number`      | サーバーポート                      | `4096`      |
+| `signal`   | `AbortSignal` | キャンセルのためのアボート信号      | `undefined` |
+| `timeout`  | `number`      | サーバー起動のタイムアウト (ミリ秒) | `5000`      |
+| `config`   | `Config`      | 構成オブジェクト                    | `{}`        |
 
 ---
 
@@ -69,7 +69,7 @@ opencode.server.close()
 
 ## クライアントのみ
 
-すでに実行中のオープンコードのインスタンスがある場合は、それに接続するためのクライアント インスタンスを作成できます。
+すでに実行中のopencodeのインスタンスがある場合は、それに接続するためのクライアント インスタンスを作成できます。
 
 ```javascript
 import { createOpencodeClient } from "@opencode-ai/sdk"
@@ -81,13 +81,13 @@ const client = createOpencodeClient({
 
 #### オプション
 
-| オプション      | タイプ     | 説明                                     | デフォルト                                 |
-| --------------- | ---------- | ---------------------------------------- | ------------------------------------------ |
-| `baseUrl`       | `string`   | サーバーの URL                           | うーん                                     |
-| `fetch`         | `function` | カスタムフェッチの実装                   | うーん                                     |
-| `parseAs`       | `string`   | 応答解析方法                             | うーん                                     |
-| `responseStyle` | `string`   | 戻り値のスタイル: `data` または `fields` | 認証済み                                   |
-| `throwOnError`  | `boolean`  |                                          | を返す代わりにエラーをスローします。うーん |
+| オプション      | タイプ     | 説明                                     | デフォルト              |
+| --------------- | ---------- | ---------------------------------------- | ----------------------- |
+| `baseUrl`       | `string`   | サーバーの URL                           | `http://localhost:4096` |
+| `fetch`         | `function` | カスタムフェッチの実装                   | `globalThis.fetch`      |
+| `parseAs`       | `string`   | 応答解析方法                             | `auto`                  |
+| `responseStyle` | `string`   | 戻り値のスタイル: `data` または `fields` | `fields`                |
+| `throwOnError`  | `boolean`  | 返す代わりにエラーをスローする           | `false`                 |
 
 ---
 
@@ -142,10 +142,10 @@ console.log(health.data.version)
 
 ### アプリ
 
-| 方法           | 説明                                       | 応答                                               |
-| -------------- | ------------------------------------------ | -------------------------------------------------- |
-| `app.log()`    | ログエントリを書き込む                     | `boolean`                                          |
-| `app.agents()` | 利用可能なすべてのエージェントをリストする | <a href={typesUrl}><code>エージェント[]</code></a> |
+| 方法           | 説明                                       | 応答                                        |
+| -------------- | ------------------------------------------ | ------------------------------------------- |
+| `app.log()`    | ログエントリを書き込む                     | `boolean`                                   |
+| `app.agents()` | 利用可能なすべてのエージェントをリストする | <a href={typesUrl}><code>Agent[]</code></a> |
 
 ---
 
@@ -169,10 +169,10 @@ const agents = await client.app.agents()
 
 ### プロジェクト
 
-| 方法                | 説明                             | 応答                                               |
-| ------------------- | -------------------------------- | -------------------------------------------------- |
-| `project.list()`    | すべてのプロジェクトをリストする | <a href={typesUrl}><code>プロジェクト[]</code></a> |
-| `project.current()` | 現在のプロジェクトを取得         | <a href={typesUrl}><code>プロジェクト</code></a>   |
+| 方法                | 説明                             | 応答                                          |
+| ------------------- | -------------------------------- | --------------------------------------------- |
+| `project.list()`    | すべてのプロジェクトをリストする | <a href={typesUrl}><code>Project[]</code></a> |
+| `project.current()` | 現在のプロジェクトを取得         | <a href={typesUrl}><code>Project</code></a>   |
 
 ---
 
@@ -192,7 +192,7 @@ const currentProject = await client.project.current()
 
 | 方法         | 説明             | 応答                                     |
 | ------------ | ---------------- | ---------------------------------------- |
-| `path.get()` | 現在のパスを取得 | <a href={typesUrl}><code>パス</code></a> |
+| `path.get()` | 現在のパスを取得 | <a href={typesUrl}><code>Path</code></a> |
 
 ---
 
@@ -207,10 +207,10 @@ const pathInfo = await client.path.get()
 
 ### 構成
 
-| 方法                 | 説明                                         | 応答                                                                                                    |
-| -------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `config.get()`       | 構成情報を取得する                           | <a href={typesUrl}><code>構成</code></a>                                                                |
-| `config.providers()` | プロバイダーとデフォルトのモデルをリストする | `{ providers: `<a href={typesUrl}><code>プロバイダ[]</code></a>`, default: { [key: string]: string } }` |
+| 方法                 | 説明                                         | 応答                                                                                                  |
+| -------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `config.get()`       | 構成情報を取得する                           | <a href={typesUrl}><code>Config</code></a>                                                            |
+| `config.providers()` | プロバイダーとデフォルトのモデルをリストする | `{ providers: `<a href={typesUrl}><code>Provider[]</code></a>`, default: { [key: string]: string } }` |
 
 ---
 
@@ -228,24 +228,24 @@ const { providers, default: defaults } = await client.config.providers()
 
 | 方法                                                       | 説明                                    | メモ                                                                                                                                                               |
 | ---------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `session.list()`                                           | セッションをリストする                  | 戻り値 <a href={typesUrl}><code>セッション[]</code></a>                                                                                                            |
-| `session.get({ path })`                                    | セッションを取得                        | 戻り値 <a href={typesUrl}><code>セッション</code></a>                                                                                                              |
-| `session.children({ path })`                               | 子セッションをリストする                | 戻り値 <a href={typesUrl}><code>セッション[]</code></a>                                                                                                            |
-| `session.create({ body })`                                 | セッションの作成                        | 戻り値 <a href={typesUrl}><code>セッション</code></a>                                                                                                              |
+| `session.list()`                                           | セッションをリストする                  | 戻り値 <a href={typesUrl}><code>Session[]</code></a>                                                                                                               |
+| `session.get({ path })`                                    | セッションを取得                        | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
+| `session.children({ path })`                               | 子セッションをリストする                | 戻り値 <a href={typesUrl}><code>Session[]</code></a>                                                                                                               |
+| `session.create({ body })`                                 | セッションの作成                        | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
 | `session.delete({ path })`                                 | セッションを削除                        | 戻り値 `boolean`                                                                                                                                                   |
-| `session.update({ path, body })`                           | セッションのプロパティを更新する        | 戻り値 <a href={typesUrl}><code>セッション</code></a>                                                                                                              |
+| `session.update({ path, body })`                           | セッションのプロパティを更新する        | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
 | `session.init({ path, body })`                             | アプリを分析して `AGENTS.md` を作成する | 戻り値 `boolean`                                                                                                                                                   |
 | `session.abort({ path })`                                  | 実行中のセッションを中止する            | 戻り値 `boolean`                                                                                                                                                   |
-| `session.share({ path })`                                  | セッションを共有する                    | 戻り値 <a href={typesUrl}><code>セッション</code></a>                                                                                                              |
-| `session.unshare({ path })`                                | セッションの共有を解除                  | 戻り値 <a href={typesUrl}><code>セッション</code></a>                                                                                                              |
+| `session.share({ path })`                                  | セッションを共有する                    | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
+| `session.unshare({ path })`                                | セッションの共有を解除                  | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
 | `session.summarize({ path, body })`                        | セッションを要約する                    | 戻り値 `boolean`                                                                                                                                                   |
-| `session.messages({ path })`                               | セッション内のメッセージをリストする    | 戻り値 `{ info: `<a href={typesUrl}><code>メッセージ</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                                          |
-| `session.message({ path })`                                | メッセージの詳細を取得する              | 戻り値 `{ info: `<a href={typesUrl}><code>メッセージ</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                            |
+| `session.messages({ path })`                               | セッション内のメッセージをリストする    | 戻り値 `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                                             |
+| `session.message({ path })`                                | メッセージの詳細を取得する              | 戻り値 `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                               |
 | `session.prompt({ path, body })`                           | プロンプトメッセージを送信する          | `body.noReply: true` は UserMessage (コンテキストのみ) を返します。デフォルトでは、AI 応答を含む <a href={typesUrl}><code>AssistantMessage</code></a> を返します。 |
 | `session.command({ path, body })`                          | コマンドをセッションに送信              | 戻り値 `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                      |
 | `session.shell({ path, body })`                            | シェルコマンドを実行する                | 戻り値 <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                                        |
-| `session.revert({ path, body })`                           | メッセージを元に戻す                    | 戻り値 <a href={typesUrl}><code>セッション</code></a>                                                                                                              |
-| `session.unrevert({ path })`                               | 元に戻したメッセージを復元する          | 戻り値 <a href={typesUrl}><code>セッション</code></a>                                                                                                              |
+| `session.revert({ path, body })`                           | メッセージを元に戻す                    | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
+| `session.unrevert({ path })`                               | 元に戻したメッセージを復元する          | 戻り値 <a href={typesUrl}><code>Session</code></a>                                                                                                                 |
 | `postSessionByIdPermissionsByPermissionId({ path, body })` | 許可リクエストに応答する                | 戻り値 `boolean`                                                                                                                                                   |
 
 ---

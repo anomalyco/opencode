@@ -1,15 +1,15 @@
 ---
 title: Config
-description: Using the OpenCode JSON config.
+description: Using the opencode JSON config.
 ---
 
-JSON config 파일을 사용하여 OpenCode를 구성할 수 있습니다.
+JSON config 파일을 사용하여 opencode를 구성할 수 있습니다.
 
 ---
 
 ## 형식
 
-OpenCode는 **JSON** 및 **JSONC** (JSON with Comments) 형식을 지원합니다.
+opencode는 **JSON** 및 **JSONC** (JSON with Comments) 형식을 지원합니다.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -94,7 +94,7 @@ Config 소스는 이 순서에서 적재됩니다 (더 많은 소스는 더 이�
 
 ## 글로벌
 
-`~/.config/opencode/opencode.json`에서 글로벌 OpenCode 구성을 배치합니다. 테마, 공급자, keybinds와 같은 사용자 전체 선호도에 대한 글로벌 구성을 사용합니다.
+`~/.config/opencode/opencode.json`에서 글로벌 opencode 구성을 배치합니다. 테마, 공급자, keybinds와 같은 사용자 전체 선호도에 대한 글로벌 구성을 사용합니다.
 
 글로벌 구성 overrides 원격 조직 기본.
 
@@ -108,7 +108,7 @@ Config 소스는 이 순서에서 적재됩니다 (더 많은 소스는 더 이�
 프로젝트의 루트에 특정 설정.
 :::
 
-OpenCode가 시작될 때, 현재 디렉토리의 설정 파일이나 가장 가까운 Git 디렉토리로 이동합니다.
+opencode가 시작될 때, 현재 디렉토리의 설정 파일이나 가장 가까운 Git 디렉토리로 이동합니다.
 
 이것은 Git로 검사되고 글로벌 하나로 동일한 schema를 사용합니다.
 
@@ -199,7 +199,7 @@ opencode run "Hello world"
 
 - `port` - 듣는 항구.
 - `hostname` - 듣는 호스트 이름. `mdns`가 활성화되고 hostname이 설정되지 않으면 `0.0.0.0`로 기본값이 됩니다.
-- `mdns` - 사용 가능한 mDNS 서비스 발견. 이 네트워크에서 다른 장치가 OpenCode 서버를 발견 할 수 있습니다.
+- `mdns` - 사용 가능한 mDNS 서비스 발견. 이 네트워크에서 다른 장치가 opencode 서버를 발견 할 수 있습니다.
 - `mdnsDomain` - mDNS 서비스에 대한 사용자 정의 도메인 이름. 기본 `opencode.local`. 동일한 네트워크에서 여러 인스턴스를 실행하는 데 유용합니다.
 - `cors` - 브라우저 기반 클라이언트에서 HTTP 서버를 사용할 때 CORS를 허용하는 추가 기원. 가치는 가득 차있는 근원이어야 합니다 (scheme + 주인 + 선택적인 항구), 예를들면 `https://app.example.com`.
 
@@ -227,7 +227,7 @@ LLM은 `tools` 옵션을 통해 사용할 수 있습니다.
 
 ## 모델
 
-`provider`, `model` 및 `small_model` 옵션을 통해 OpenCode config에서 사용하려는 공급자와 모델을 구성할 수 있습니다.
+`provider`, `model` 및 `small_model` 옵션을 통해 opencode config에서 사용하려는 공급자와 모델을 구성할 수 있습니다.
 
 ```json title="opencode.json"
 {
@@ -238,7 +238,7 @@ LLM은 `tools` 옵션을 통해 사용할 수 있습니다.
 }
 ```
 
-`small_model` 옵션은 제목 생성과 같은 경량 작업을 위한 별도의 모델을 구성합니다. 기본적으로, OpenCode는 당신의 공급자에게서 1개가 유효하다면 더 싼 모형을 이용하는 것을 시도합니다, 그렇지 않으면 당신의 주요 모형에 돌려보냅니다.
+`small_model` 옵션은 제목 생성과 같은 경량 작업을 위한 별도의 모델을 구성합니다. 기본적으로, opencode는 당신의 공급자에게서 1개가 유효하다면 더 싼 모형을 이용하는 것을 시도합니다, 그렇지 않으면 당신의 주요 모형에 돌려보냅니다.
 
 공급자 선택권은 `timeout`와 `setCacheKey`를 포함할 수 있습니다:
 
@@ -300,7 +300,7 @@ Bearer 토큰 (`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 프로파일 기
 
 ## 테마
 
-`theme` 옵션을 통해 OpenCode config에서 사용하려는 테마를 구성할 수 있습니다.
+`theme` 옵션을 통해 opencode config에서 사용하려는 테마를 구성할 수 있습니다.
 
 ```json title="opencode.json"
 {
@@ -350,7 +350,7 @@ Bearer 토큰 (`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 프로파일 기
 }
 ```
 
-기본 대리인은 1 차적인 대리인이어야 합니다 (미약 아닙니다). 이것은 `"build"` 또는 `"plan"`, 또는 정의된 [custom 대리인] (./agents) 같이 붙박이 대리인일 수 있습니다. 지정된 에이전트가 존재하지 않는 경우, OpenCode는 경고로 `"build"`로 돌아갑니다.
+기본 대리인은 1 차적인 대리인이어야 합니다 (미약 아닙니다). 이것은 `"build"` 또는 `"plan"`, 또는 정의된 [custom 대리인] (./agents) 같이 붙박이 대리인일 수 있습니다. 지정된 에이전트가 존재하지 않는 경우, opencode는 경고로 `"build"`로 돌아갑니다.
 
 이 설정은 모든 인터페이스에서 적용됩니다: TUI, CLI (`opencode run`), 데스크탑 앱 및 GitHub Action.
 
@@ -420,7 +420,7 @@ Bearer 토큰 (`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 프로파일 기
 
 ## 자동 업데이트
 
-OpenCode는 자동으로 시작될 때 새로운 업데이트를 다운로드합니다. `autoupdate` 옵션으로 이것을 비활성화 할 수 있습니다.
+opencode는 자동으로 시작될 때 새로운 업데이트를 다운로드합니다. `autoupdate` 옵션으로 이것을 비활성화 할 수 있습니다.
 
 ```json title="opencode.json"
 {
@@ -533,7 +533,7 @@ Homebrew와 같은 패키지 관리자를 사용하여 설치되지 않은 경�
 
 ### 플러그인
 
-[Plugins](/docs/plugins)는 사용자 정의 도구, 후크 및 통합으로 OpenCode를 확장합니다.
+[Plugins](/docs/plugins)는 사용자 정의 도구, 후크 및 통합으로 opencode를 확장합니다.
 
 `.opencode/plugins/` 또는 `~/.config/opencode/plugins/`에서 플러그인 파일을 배치하십시오. `plugin` 옵션을 통해 npm에서 플러그인을로드 할 수 있습니다.
 
@@ -598,7 +598,7 @@ Homebrew와 같은 패키지 관리자를 사용하여 설치되지 않은 경�
 }
 ```
 
-OpenCode를 제한 할 때 유용합니다. 특정 공급자를 사용하지 않도록하십시오.
+opencode를 제한 할 때 유용합니다. 특정 공급자를 사용하지 않도록하십시오.
 
 :::note
 `disabled_providers`는 `enabled_providers`에 우선권을 가지고 있습니다.

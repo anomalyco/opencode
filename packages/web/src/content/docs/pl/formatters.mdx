@@ -1,15 +1,15 @@
 ---
 title: Formatery
-description: OpenCode używa formaterów specyficznych dla języka.
+description: opencode używa formaterów specyficznych dla języka.
 ---
 
-OpenCode automatycznie formatuje pliki po ich zapisaniu lub edycję przy użyciu formaterów przesyłanych dla języka. Dzięki temu wygenerowany kod będzie używany ze stylami kodu Twojego projektu.
+opencode automatycznie formatuje pliki po ich zapisaniu lub edycję przy użyciu formaterów przesyłanych dla języka. Dzięki temu wygenerowany kod będzie używany ze stylami kodu Twojego projektu.
 
 ---
 
 ## Wbudowany
 
-OpenCode zawiera kilka wbudowanych formaterów dla nauki języków i frameworków. Zawiera listę formaterów, rozszerzonych plików oraz rozszerzenia i konfiguratory, których potrzebujesz.
+opencode zawiera kilka wbudowanych formaterów dla nauki języków i frameworków. Zawiera listę formaterów, rozszerzonych plików oraz rozszerzenia i konfiguratory, których potrzebujesz.
 
 | Formater                | Rozszerzenia                                                                                            | Wymagania                                                                                         |
 | ----------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
@@ -38,13 +38,13 @@ OpenCode zawiera kilka wbudowanych formaterów dla nauki języków i frameworkó
 | oxfmt (eksperymentalny) | .js, .jsx, .ts, .tsx                                                                                    | wykonanie `oxfmt` w `package.json` i [flaga eksperymentalna zmienna env](/docs/cli/#experimental) |
 | ormolu                  | .hs                                                                                                     | Komenda `ormolu` dostępna                                                                         |
 
-Jeśli więc Twój projekt zawiera `prettier` w `package.json`, OpenCode automatycznie przejdź do podmiote.
+Jeśli więc Twój projekt zawiera `prettier` w `package.json`, opencode automatycznie przejdź do podmiote.
 
 ---
 
 ## Jak to działa
 
-Kiedy OpenCode zapisuje lub edytuje plik:
+Kiedy opencode zapisuje lub edytuje plik:
 
 1. Badanie pliku dotyczącego wszystkich danych formaterów.
 2. Uruchamia decyzje wykonawcze formatujące na plik.
@@ -56,7 +56,7 @@ Dziesięć procesów zachodzi w tle, konieczne jest zachowanie stylów kodu bez 
 
 ## Skonfiguruj
 
-Można dostosować formatery za pomocą sekcji `formatter` w konstrukcji OpenCode.
+Można dostosować formatery za pomocą sekcji `formatter` w konstrukcji opencode.
 
 ```json title="opencode.json"
 {

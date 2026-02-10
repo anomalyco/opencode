@@ -3,7 +3,7 @@ title: 權限
 description: 控制哪些操作需要批准才能運行。
 ---
 
-OpenCode 使用`permission` 配置来决定给定的操作是否应自动运行、提示您或被阻止。
+opencode 使用`permission` 配置来决定给定的操作是否应自动运行、提示您或被阻止。
 
 从 `v1.1.1` 开始，旧版配置 `tools` 布尔已被废弃，并已合并到 `permission` 中。仍支持旧版的 `tools` 配置以实现平滑兼容。
 
@@ -88,7 +88,7 @@ OpenCode 使用`permission` 配置来决定给定的操作是否应自动运行�
 
 ### 外部目錄
 
-使用 `external_directory` 允许工具调用启动 OpenCode 的工作目录之外的路径。这适用于任何采用路径作为输入的工具（例如 `read`、`edit`、`list`、`glob`、`grep` 和许多Z`bash` 命令）。
+使用 `external_directory` 允许工具调用启动 opencode 的工作目录之外的路径。这适用于任何采用路径作为输入的工具（例如 `read`、`edit`、`list`、`glob`、`grep` 和许多Z`bash` 命令）。
 
 主扩展（如`~/...`）仅影响模式的编写方式。它不会使外部路径成为当前工作空间的一部分，因此仍然必须通过 `external_directory` 允许工作目录之外的路径。
 
@@ -127,7 +127,7 @@ OpenCode 使用`permission` 配置来决定给定的操作是否应自动运行�
 
 ## 可用權限
 
-OpenCode权限由工具名称和一些安全防护措施决定：
+opencode权限由工具名称和一些安全防护措施决定：
 
 - `read` — 读取文件（与文件路径匹配）
 - `edit` — 所有文件修改（头部`edit`、`write`、`patch`、`multiedit`）
@@ -148,7 +148,7 @@ OpenCode权限由工具名称和一些安全防护措施决定：
 
 ## 預設值
 
-如果您未指定任何内容，OpenCode分散许可的默认值开始：
+如果您未指定任何内容，opencode分散许可的默认值开始：
 
 - 大部分权限默认为`"allow"`。
 - `doom_loop`和`external_directory`默认为`"ask"`。
@@ -171,10 +171,10 @@ OpenCode权限由工具名称和一些安全防护措施决定：
 
 ## “問”的作用是什麼
 
-当 OpenCode 提示批准时，UI 会提供清晰的结果：
+当 opencode 提示批准时，UI 会提供清晰的结果：
 
 - `once` — 仅批准此请求
-- `always` — 批准与建议模式匹配的未来请求（对于当前 OpenCode 会话的其余部分）
+- `always` — 批准与建议模式匹配的未来请求（对于当前 opencode 会话的其余部分）
 - `reject` — 拒绝请求
 
 `always` 将批准的模式集由该工具提供（例如，bash 批准通常将安全端口（如 `git status*`）列入白名单）。
