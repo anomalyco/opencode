@@ -1,6 +1,6 @@
 import { Database, eq, and, sql, inArray } from "@opencode-ai/console-core/drizzle/index.js"
 import { IpRateLimitTable } from "@opencode-ai/console-core/schema/ip.sql.js"
-import { RateLimitError } from "./error"
+import { FreeUsageLimitError } from "./error"
 import { logger } from "./logger"
 import { ZenData } from "@opencode-ai/console-core/model.js"
 
@@ -34,7 +34,7 @@ export function createRateLimiter(limit: ZenData.RateLimit | undefined, rawIp: s
       )
       const total = rows.reduce((sum, r) => sum + r.count, 0)
       logger.debug(`rate limit total: ${total}`)
-      if (total >= limitValue) throw new RateLimitError(`Rate limit exceeded. Please try again later.`)
+      if (total >= limitValue) throw new FreeUsageLimitError(`Rate limit exceeded. Please try again later.`)
     },
   }
 }

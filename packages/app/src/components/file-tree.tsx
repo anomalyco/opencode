@@ -1,4 +1,5 @@
 import { useFile } from "@/context/file"
+import { encodeFilePath } from "@/context/file/path"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -20,11 +21,7 @@ import { Dynamic } from "solid-js/web"
 import type { FileNode } from "@opencode-ai/sdk/v2"
 
 function pathToFileUrl(filepath: string): string {
-  const encodedPath = filepath
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/")
-  return `file://${encodedPath}`
+  return `file://${encodeFilePath(filepath)}`
 }
 
 type Kind = "add" | "del" | "mix"
@@ -223,12 +220,14 @@ export default function FileTree(props: {
       seen.add(item)
     }
 
-    return out.toSorted((a, b) => {
+    out.sort((a, b) => {
       if (a.type !== b.type) {
         return a.type === "directory" ? -1 : 1
       }
       return a.name.localeCompare(b.name)
     })
+
+    return out
   })
 
   const Node = (
