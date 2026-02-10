@@ -96,13 +96,42 @@ export namespace TeamMessaging {
    * If the session is idle (no active prompt loop), starts a new loop
    * so the LLM picks up and processes the injected message.
    */
-  function autoWake(sessionID: string, from: string) {
-    const status = SessionStatus.get(sessionID)
-    if (status.type !== "idle") return
-    log.info("auto-waking idle session", { sessionID, from })
-    SessionPrompt.loop({ sessionID }).catch((err: unknown) => {
-      log.warn("auto-wake failed", { sessionID, error: err instanceof Error ? err.message : String(err) })
-    })
+  async function autoWake(sessionID: string, from: string) {
+    try {
+      const status = SessionStatus.get(sessionID)
+      if (status.type !== "idle") return
+      // Don't wake a teammate that's fully shut down.
+      // We DO wake for shutdown_requested — the teammate needs to process
+      // the shutdown message and wrap up. The .then() handler below
+      // transitions shutdown_requested → shutdown when the loop ends.
+      const info = await Team.findBySession(sessionID)
+      if (info && info.role === "member") {
+        const member = info.team.members.find((m) => m.name === info.memberName)
+        if (member?.status === "shutdown") return
+      }
+      log.info("auto-waking idle session", { sessionID, from })
+      SessionPrompt.loop({ sessionID })
+        .then(async () => {
+          // When an auto-woken loop ends, check if shutdown was requested.
+          // Shutdown is authoritative — the teammate gets one loop to wrap up
+          // (summarize findings, send final messages) then transitions to shutdown.
+          // Both this handler and the spawn .then() check for shutdown_requested;
+          // transitionMemberStatus is idempotent (from === status returns early).
+          const match = await Team.findBySession(sessionID)
+          if (!match || match.role !== "member") return
+          const team = await Team.get(match.team.name)
+          const member = team?.members.find((m) => m.name === match.memberName)
+          if (member?.status === "shutdown_requested") {
+            await Team.transitionMemberStatus(match.team.name, match.memberName!, "shutdown")
+            log.info("auto-wake loop completed shutdown", { teamName: match.team.name, name: match.memberName })
+          }
+        })
+        .catch((err: unknown) => {
+          log.warn("auto-wake loop failed", { sessionID, error: err instanceof Error ? err.message : String(err) })
+        })
+    } catch (err) {
+      log.warn("auto-wake failed", { sessionID, error: err instanceof Error ? (err as Error).message : String(err) })
+    }
   }
 
   /**

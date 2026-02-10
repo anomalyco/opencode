@@ -57,7 +57,7 @@ const CREATE_LOCK_KEY = () => `team:create:${Instance.project.id}`
 const MEMBER_TRANSITIONS: Record<MemberStatus, MemberStatus[]> = {
   ready: ["busy", "shutdown_requested", "shutdown", "error"],
   busy: ["ready", "shutdown_requested", "error"],
-  shutdown_requested: ["shutdown", "ready", "error"],
+  shutdown_requested: ["shutdown", "error"],
   shutdown: [],
   error: ["ready", "shutdown_requested", "shutdown"],
 }
@@ -724,7 +724,10 @@ export namespace Team {
 
     const member = team.members.find((m) => m.name === memberName)
     if (!member) return false
-    if (member.status !== "busy") return false
+    // Allow cancel for busy members and shutdown_requested members
+    // (shutdown sets shutdown_requested before calling cancelMember,
+    // so the member is no longer "busy" by the time we get here)
+    if (member.status !== "busy" && member.status !== "shutdown_requested") return false
     if (TERMINAL_EXECUTION_STATES.has(member.execution_status ?? "idle")) return false
 
     log.info("cancelling member", { teamName, memberName, sessionID: member.sessionID })
@@ -738,7 +741,7 @@ export namespace Team {
       const current = next?.members.find((m) => m.name === memberName)
       if (!current) break
       if (TERMINAL_EXECUTION_STATES.has(current.execution_status ?? "idle")) break
-      if (current.status !== "busy") break
+      if (current.status !== "busy" && current.status !== "shutdown_requested") break
     }
 
     const next = await get(teamName)
