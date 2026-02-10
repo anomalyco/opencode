@@ -172,20 +172,45 @@ export namespace SessionProcessor {
                 case "tool-result": {
                   const match = toolcalls[value.toolCallId]
                   if (match && match.state.status === "running") {
-                    const output = value.output ?? {}
+                    const output = value.output
+                    const text =
+                      typeof output?.output === "string"
+                        ? output.output
+                        : Array.isArray(output?.content)
+                          ? output.content
+                              .map((item: unknown) =>
+                                item &&
+                                typeof item === "object" &&
+                                "type" in item &&
+                                item.type === "text" &&
+                                "text" in item &&
+                                typeof item.text === "string"
+                                  ? item.text
+                                  : "",
+                              )
+                              .filter(Boolean)
+                              .join("\n\n")
+                          : typeof output === "string"
+                            ? output
+                            : output === undefined
+                              ? ""
+                              : JSON.stringify(output)
                     await Session.updatePart({
                       ...match,
                       state: {
                         status: "completed",
                         input: value.input ?? match.state.input,
-                        output: output.output ?? "",
-                        metadata: output.metadata ?? {},
-                        title: output.title ?? "",
+                        output: text,
+                        metadata:
+                          typeof output?.metadata === "object" && output.metadata && !Array.isArray(output.metadata)
+                            ? output.metadata
+                            : {},
+                        title: typeof output?.title === "string" ? output.title : "",
                         time: {
                           start: match.state.time.start,
                           end: Date.now(),
                         },
-                        attachments: output.attachments,
+                        attachments: Array.isArray(output?.attachments) ? output.attachments : undefined,
                       },
                     })
 
