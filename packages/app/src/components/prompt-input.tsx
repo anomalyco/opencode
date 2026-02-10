@@ -635,6 +635,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const hasNonText = rawParts.some((part) => part.type !== "text")
     const shouldReset = trimmed.length === 0 && !hasNonText && images.length === 0
 
+    console.log("[DEBUG handleInput]", {
+      rawText,
+      trimmed,
+      shouldReset,
+      rawPartsLength: rawParts.length,
+      imagesLength: images.length,
+    })
+
     if (shouldReset) {
       setStore("popover", null)
       if (store.historyIndex >= 0 && !store.applyingHistory) {
@@ -674,6 +682,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     mirror.input = true
+    console.log("[DEBUG handleInput] calling prompt.set", {
+      rawParts,
+      images,
+      cursorPosition,
+    })
     prompt.set([...rawParts, ...images], cursorPosition)
     queueScroll()
   }
