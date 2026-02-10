@@ -134,20 +134,26 @@ export async function handler(
         body: reqBody,
       })
 
-      // Try another provider => stop retrying if using fallback provider
-      if (
-        res.status !== 200 &&
-        // ie. openai 404 error: Item with id 'msg_0ead8b004a3b165d0069436a6b6834819896da85b63b196a3f' not found.
-        res.status !== 404 &&
-        // ie. cannot change codex model providers mid-session
-        modelInfo.stickyProvider !== "strict" &&
-        modelInfo.fallbackProvider &&
-        providerInfo.id !== modelInfo.fallbackProvider
-      ) {
-        return retriableRequest({
-          excludeProviders: [...retry.excludeProviders, providerInfo.id],
-          retryCount: retry.retryCount + 1,
+      if (res.status !== 200) {
+        logger.metric({
+          "llm.error.code": res.status,
+          "llm.error.message": res.statusText,
         })
+
+        // Try another provider => stop retrying if using fallback provider
+        if (
+          // ie. openai 404 error: Item with id 'msg_0ead8b004a3b165d0069436a6b6834819896da85b63b196a3f' not found.
+          res.status !== 404 &&
+          // ie. cannot change codex model providers mid-session
+          modelInfo.stickyProvider !== "strict" &&
+          modelInfo.fallbackProvider &&
+          providerInfo.id !== modelInfo.fallbackProvider
+        ) {
+          return retriableRequest({
+            excludeProviders: [...retry.excludeProviders, providerInfo.id],
+            retryCount: retry.retryCount + 1,
+          })
+        }
       }
 
       return { providerInfo, reqBody, res, startTimestamp }
