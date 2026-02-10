@@ -1,9 +1,9 @@
 ---
 title: ACP Support
-description: Use OpenCode in any ACP-compatible editor.
+description: Use opencode in any ACP-compatible editor.
 ---
 
-OpenCode는 [Agent Client Protocol](https://agentclientprotocol.com) 또는 (ACP)을 지원하며, 호환 편집기 및 IDE에서 직접 사용할 수 있습니다.
+opencode는 [Agent Client Protocol](https://agentclientprotocol.com) 또는 (ACP)을 지원하며, 호환 편집기 및 IDE에서 직접 사용할 수 있습니다.
 
 :::tip
 ACP를 지원하는 편집기 및 도구 목록의 경우 [ACP 진행 보고서](https://zed.dev/blog/acp-progress-report#available-now)를 확인하십시오.
@@ -15,9 +15,9 @@ ACP는 코드 편집기와 AI 코딩 에이전트 간의 통신을 표준화하�
 
 ## 구성
 
-ACP를 통해 OpenCode를 사용하려면 `opencode acp` 명령을 실행하려면 편집기를 구성하십시오.
+ACP를 통해 opencode를 사용하려면 `opencode acp` 명령을 실행하려면 편집기를 구성하십시오.
 
-명령은 OpenCode를 실행하여 JSON-RPC를 통해 편집기와 통신하는 ACP 호환 하위 프로세스로 시작합니다.
+명령은 opencode를 실행하여 JSON-RPC를 통해 편집기와 통신하는 ACP 호환 하위 프로세스로 시작합니다.
 
 아래는 ACP를 지원하는 인기있는 편집기의 예입니다.
 
@@ -30,7 +30,7 @@ ACP를 통해 OpenCode를 사용하려면 `opencode acp` 명령을 실행하려�
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
-    "OpenCode": {
+    "opencode": {
       "command": "opencode",
       "args": ["acp"]
     }
@@ -51,7 +51,7 @@ ACP를 통해 OpenCode를 사용하려면 `opencode acp` 명령을 실행하려�
         {
           "agent": {
             "custom": {
-              "name": "OpenCode",
+              "name": "opencode",
               "command": {
                 "command": "opencode",
                 "args": ["acp"]
@@ -74,7 +74,7 @@ ACP를 통해 OpenCode를 사용하려면 `opencode acp` 명령을 실행하려�
 ```json title="acp.json"
 {
   "agent_servers": {
-    "OpenCode": {
+    "opencode": {
       "command": "/absolute/path/bin/opencode",
       "args": ["acp"]
     }
@@ -82,7 +82,7 @@ ACP를 통해 OpenCode를 사용하려면 `opencode acp` 명령을 실행하려�
 }
 ```
 
-그것을 열려면 AI Chat Agent selector의 새로운 'OpenCode' 에이전트를 사용하십시오.
+그것을 열려면 AI Chat Agent selector의 새로운 'opencode' 에이전트를 사용하십시오.
 
 ---
 
@@ -119,9 +119,9 @@ ACP를 통해 OpenCode를 사용하려면 `opencode acp` 명령을 실행하려�
 
 ---
 
-#### CodeCompanion.nvim의
+#### CodeCompanion.nvim
 
-OpenCode를 [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim)에서 ACP 에이전트로 사용하려면 Neovim config에 다음을 추가하십시오.
+opencode를 [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim)에서 ACP 에이전트로 사용하려면 Neovim config에 다음을 추가하십시오.
 
 ```lua
 require("codecompanion").setup({
@@ -136,13 +136,13 @@ require("codecompanion").setup({
 })
 ```
 
-이 구성은 CodeCompanion을 설정하여 채팅을 위한 ACP 에이전트로 OpenCode를 사용합니다.
+이 구성은 CodeCompanion을 설정하여 채팅을 위한 ACP 에이전트로 opencode를 사용합니다.
 
 환경 변수 (`OPENCODE_API_KEY`와 같은)를 전달해야하는 경우, CodeCompanion.nvim 문서에서 [Configuring Adapters: Environment variables](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)를 참조하십시오.
 
 ## 지원
 
-OpenCode는 터미널에서 같은 ACP를 통해 작동합니다. 모든 기능은 지원됩니다:
+opencode는 터미널에서 같은 ACP를 통해 작동합니다. 모든 기능은 지원됩니다:
 
 :::note
 `/undo` 및 `/redo`와 같은 일부 내장 슬래시 명령은 현재 지원되지 않습니다.
@@ -150,7 +150,7 @@ OpenCode는 터미널에서 같은 ACP를 통해 작동합니다. 모든 기능�
 
 - 내장 도구 (파일 작업, 터미널 명령 등)
 - 사용자 정의 도구 및 슬래시 명령
-- OpenCode config에서 설정된 MCP 서버
+- opencode config에서 설정된 MCP 서버
 - `AGENTS.md`의 프로젝트 별 규칙
 - 사용자 정의 포맷 및 라이터
 - 에이전트 및 권한 시스템

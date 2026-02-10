@@ -31,15 +31,16 @@ opencode [project]
 
 #### Zastave
 
-| Zastava      | Kratko | Opis                                           |
-| ------------ | ------ | ---------------------------------------------- |
-| `--continue` | `-c`   | Nastavite posljednju sesiju                    |
-| `--session`  | `-s`   | ID sesije za nastavak                          |
-| `--prompt`   |        | Uputstvo za upotrebu                           |
-| `--model`    | `-m`   | Model za korištenje u obliku dobavljača/modela |
-| `--agent`    |        | Agent za korištenje                            |
-| `--port`     |        | Port za slušanje na                            |
-| `--hostname` |        | Slušajte ime hosta                             |
+| Zastava      | Kratko | Opis                                                                     |
+| ------------ | ------ | ------------------------------------------------------------------------ |
+| `--continue` | `-c`   | Nastavite posljednju sesiju                                              |
+| `--session`  | `-s`   | ID sesije za nastavak                                                    |
+| `--fork`     |        | Forkujte sesiju pri nastavku (koristiti sa `--continue` ili `--session`) |
+| `--prompt`   |        | Uputstvo za upotrebu                                                     |
+| `--model`    | `-m`   | Model za korištenje u obliku dobavljača/modela                           |
+| `--agent`    |        | Agent za korištenje                                                      |
+| `--port`     |        | Port za slušanje na                                                      |
+| `--hostname` |        | Slušajte ime hosta                                                       |
 
 ---
 
@@ -346,19 +347,20 @@ opencode run --attach http://localhost:4096 "Objasni async/await u JavaScriptu"
 
 #### Zastave
 
-| Zastava      | Kratko | Opis                                                                  |
-| ------------ | ------ | --------------------------------------------------------------------- |
-| `--command`  |        | Naredba za pokretanje, koristite poruku za args                       |
-| `--continue` | `-c`   | Nastavite posljednju sesiju                                           |
-| `--session`  | `-s`   | ID sesije za nastavak                                                 |
-| `--share`    |        | Podijelite sesiju                                                     |
-| `--model`    | `-m`   | Model za korištenje u obliku provider/model                           |
-| `--agent`    |        | Agent za korištenje                                                   |
-| `--file`     | `-f`   | Fajlovi koje treba priložiti poruci                                   |
-| `--format`   |        | Format: default (formatiran) ili json (sirovi JSON događaji)          |
-| `--title`    |        | Naslov sesije (koristi skraćeni prompt ako nije navedena vrijednost)  |
-| `--attach`   |        | Priključite na pokrenuti opencode server (npr. http://localhost:4096) |
-| `--port`     |        | Port za lokalni server (zadano na nasumični port)                     |
+| Zastava      | Kratko | Opis                                                                     |
+| ------------ | ------ | ------------------------------------------------------------------------ |
+| `--command`  |        | Naredba za pokretanje, koristite poruku za args                          |
+| `--continue` | `-c`   | Nastavite posljednju sesiju                                              |
+| `--session`  | `-s`   | ID sesije za nastavak                                                    |
+| `--fork`     |        | Forkujte sesiju pri nastavku (koristiti sa `--continue` ili `--session`) |
+| `--share`    |        | Podijelite sesiju                                                        |
+| `--model`    | `-m`   | Model za korištenje u obliku provider/model                              |
+| `--agent`    |        | Agent za korištenje                                                      |
+| `--file`     | `-f`   | Fajlovi koje treba priložiti poruci                                      |
+| `--format`   |        | Format: default (formatiran) ili json (sirovi JSON događaji)             |
+| `--title`    |        | Naslov sesije (koristi skraćeni prompt ako nije navedena vrijednost)     |
+| `--attach`   |        | Priključite na pokrenuti opencode server (npr. http://localhost:4096)    |
+| `--port`     |        | Port za lokalni server (zadano na nasumični port)                        |
 
 ---
 

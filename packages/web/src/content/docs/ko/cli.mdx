@@ -1,17 +1,17 @@
 ---
 title: CLI
-description: OpenCode CLI options and commands.
+description: opencode CLI options and commands.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-기본적으로 OpenCode CLI는 어떤 인수 없이 실행할 때 [TUI](/docs/tui)를 시작합니다.
+기본적으로 opencode CLI는 어떤 인수 없이 실행할 때 [TUI](/docs/tui)를 시작합니다.
 
 ```bash
 opencode
 ```
 
-그러나이 페이지에서 문서로 명령을받습니다. OpenCode programmatically와 상호 작용할 수 있습니다.
+그러나이 페이지에서 문서로 명령을받습니다. opencode programmatically와 상호 작용할 수 있습니다.
 
 ```bash
 opencode run "Explain how closures work in JavaScript"
@@ -21,7 +21,7 @@ opencode run "Explain how closures work in JavaScript"
 
 ### 튜이
 
-OpenCode 터미널 사용자 인터페이스를 시작합니다.
+opencode 터미널 사용자 인터페이스를 시작합니다.
 
 ```bash
 opencode [project]
@@ -44,13 +44,13 @@ opencode [project]
 
 ## 명령
 
-OpenCode CLI에는 다음과 같은 명령이 있습니다.
+opencode CLI에는 다음과 같은 명령이 있습니다.
 
 ---
 
 ## 대리인
 
-OpenCode에 대한 에이전트 관리.
+opencode에 대한 에이전트 관리.
 
 ```bash
 opencode agent [command]
@@ -60,13 +60,13 @@ opencode agent [command]
 
 ### 첨부
 
-`serve` 또는 `web` 명령을 통해 이미 실행되는 OpenCode 백엔드 서버에 터미널을 첨부합니다.
+`serve` 또는 `web` 명령을 통해 이미 실행되는 opencode 백엔드 서버에 터미널을 첨부합니다.
 
 ```bash
 opencode attach [url]
 ```
 
-리모트 OpenCode 백엔드를 사용하여 TUI를 사용할 수 있습니다. 예를 들면:
+리모트 opencode 백엔드를 사용하여 TUI를 사용할 수 있습니다. 예를 들면:
 
 ```bash
 # Start the backend server for web/mobile access
@@ -119,13 +119,13 @@ opencode auth [command]
 
 #### 로그인
 
-OpenCode는 [Models.dev](https://models.dev)의 공급자 목록에 의해 구동되므로 `opencode auth login`를 사용하여 사용하려는 모든 공급자의 API 키를 구성할 수 있습니다. 이것은 `~/.local/share/opencode/auth.json`에서 저장됩니다.
+opencode는 [Models.dev](https://models.dev)의 공급자 목록에 의해 구동되므로 `opencode auth login`를 사용하여 사용하려는 모든 공급자의 API 키를 구성할 수 있습니다. 이것은 `~/.local/share/opencode/auth.json`에서 저장됩니다.
 
 ```bash
 opencode auth login
 ```
 
-OpenCode가 시작하면 credentials 파일에서 공급자를로드합니다. 그리고 프로젝트에 있는 환경 또는 `.env` 파일에서 정의된 키가 있다면.
+opencode가 시작하면 credentials 파일에서 공급자를로드합니다. 그리고 프로젝트에 있는 환경 또는 `.env` 파일에서 정의된 키가 있다면.
 
 ---
 
@@ -301,7 +301,7 @@ opencode models anthropic
 | `--refresh` | 모델 캐시를 모델에서 새로 고침                              |
 | `--verbose` | 더 많은 verbose 모델 출력 사용(비용과 같은 메타데이터 포함) |
 
-`--refresh` 플래그를 사용하여 캐시 모델 목록을 업데이트합니다. 이것은 새로운 모델이 공급자에 추가되었을 때 유용합니다. OpenCode에서 그들을보고 싶습니다.
+`--refresh` 플래그를 사용하여 캐시 모델 목록을 업데이트합니다. 이것은 새로운 모델이 공급자에 추가되었을 때 유용합니다. opencode에서 그들을보고 싶습니다.
 
 ```bash
 opencode models --refresh
@@ -353,7 +353,7 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 ## 서비스
 
-API 액세스를 위한 headless OpenCode 서버를 시작합니다. 완전한 HTTP 인터페이스를 위해 [server docs](/docs/server)를 체크하십시오.
+API 액세스를 위한 headless opencode 서버를 시작합니다. 완전한 HTTP 인터페이스를 위해 [server docs](/docs/server)를 체크하십시오.
 
 ```bash
 opencode serve
@@ -374,7 +374,7 @@ TUI 인터페이스없이 API 액세스를 제공하는 HTTP 서버를 시작합
 
 ### 세션
 
-OpenCode 세션 관리.
+opencode 세션 관리.
 
 ```bash
 opencode session [command]
@@ -384,7 +384,7 @@ opencode session [command]
 
 #### 리스트
 
-모든 OpenCode 세션 목록.
+모든 opencode 세션 목록.
 
 ```bash
 opencode session list
@@ -401,7 +401,7 @@ opencode session list
 
 ### 통계
 
-OpenCode 세션에 대한 토큰 사용 및 비용 통계를 표시합니다.
+opencode 세션에 대한 토큰 사용 및 비용 통계를 표시합니다.
 
 ```bash
 opencode stats
@@ -432,13 +432,13 @@ opencode export [sessionID]
 
 ### 가져오기
 
-JSON 파일 또는 OpenCode 공유 URL에서 세션 데이터를 가져옵니다.
+JSON 파일 또는 opencode 공유 URL에서 세션 데이터를 가져옵니다.
 
 ```bash
 opencode import <file>
 ```
 
-로컬 파일 또는 OpenCode 공유 URL에서 가져올 수 있습니다.
+로컬 파일 또는 opencode 공유 URL에서 가져올 수 있습니다.
 
 ```bash
 opencode import session.json
@@ -449,13 +449,13 @@ opencode import https://opncd.ai/s/abc123
 
 #### 웹
 
-웹 인터페이스로 headless OpenCode 서버를 시작합니다.
+웹 인터페이스로 headless opencode 서버를 시작합니다.
 
 ```bash
 opencode web
 ```
 
-HTTP 서버를 시작하고 웹 인터페이스를 통해 OpenCode에 액세스하는 웹 브라우저를 엽니 다. `OPENCODE_SERVER_PASSWORD`를 설정하여 HTTP 기본 auth (`opencode`에 기본적으로 이름을 지정합니다).
+HTTP 서버를 시작하고 웹 인터페이스를 통해 opencode에 액세스하는 웹 브라우저를 엽니 다. `OPENCODE_SERVER_PASSWORD`를 설정하여 HTTP 기본 auth (`opencode`에 기본적으로 이름을 지정합니다).
 
 #### 플래그
 
@@ -490,7 +490,7 @@ opencode acp
 
 ## 제거
 
-OpenCode 제거하고 관련 파일을 제거합니다.
+opencode 제거하고 관련 파일을 제거합니다.
 
 ```bash
 opencode uninstall
@@ -550,7 +550,7 @@ opencode CLI는 다음의 글로벌 플래그를 사용합니다.
 
 ## 환경 변수
 
-OpenCode는 환경 변수를 사용하여 구성할 수 있습니다.
+opencode는 환경 변수를 사용하여 구성할 수 있습니다.
 
 | 변하기 쉬운                           | 유형    | 묘사                                      |
 | ------------------------------------- | ------- | ----------------------------------------- |

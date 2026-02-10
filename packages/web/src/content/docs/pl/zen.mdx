@@ -1,21 +1,21 @@
 ---
 title: Zen
-description: Wyselekcjonowana lista modeli dostarczonych przez OpenCode.
+description: Wyselekcjonowana lista modeli dostarczonych przez opencode.
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Zen to lista przetestowanych i zweryfikowanych modeli udostępniona przez zespół OpenCode.
+OpenCode Zen to lista przetestowanych i zweryfikowanych modeli udostępniona przez zespół opencode.
 
 :::note
 OpenCode Zen is currently in beta.
 :::
 
-Zen działa jak każdy inny dostawca OpenCode. Logujesz się do OpenCode Zen i dostajesz
+Zen działa jak każdy inny dostawca opencode. Logujesz się do OpenCode Zen i dostajesz
 Twój klucz API. Jest **całkowicie opcjonalny** i nie musisz go używać, aby z niego korzystać
-OpenCode.
+opencode.
 
 ---
 
@@ -26,7 +26,7 @@ these models work well as coding agents. Additionally, most providers are
 skonfigurowany bardzo różnie; więc otrzymujesz zupełnie inną wydajność i jakość.
 
 :::tip
-Przetestowaliśmy wybraną grupę modeli i dostawców, którzy dobrze współpracują z OpenCode.
+Przetestowaliśmy wybraną grupę modeli i dostawców, którzy dobrze współpracują z opencode.
 :::
 
 Jeśli więc używasz modelu za pośrednictwem czegoś takiego jak OpenRouter, nigdy nie będzie to możliwe
@@ -47,7 +47,7 @@ OpenCode Zen to brama AI, która zapewnia dostęp do tych modeli.
 
 ## How it works
 
-OpenCode Zen działa jak każdy inny dostawca OpenCode.
+OpenCode Zen działa jak każdy inny dostawca opencode.
 
 1. Logujesz się do **<a href={console}>OpenCode Zen</a>**, dodajesz swoje rozliczenia
    szczegóły i skopiuj klucz API.
@@ -94,7 +94,7 @@ Dostęp do naszych modeli można również uzyskać za pośrednictwem następuj�
 | Qwen3 Coder 480B   | qwen3-coder          | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 | Big Pickle         | big-pickle           | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 
-[Identyfikator modelu](/docs/config/#models) w konfiguracji OpenCode
+[Identyfikator modelu](/docs/config/#models) w konfiguracji opencode
 używa formatu `opencode/<model-id>`. Na przykład w przypadku Kodeksu GPT 5.2 zrobiłbyś to
 użyj `opencode/gpt-5.2-codex` w swojej konfiguracji.
 
@@ -158,10 +158,10 @@ Opłaty za karty kredytowe są przenoszone na koszt (4,4% + 0,30 USD za transakc
 
 Darmowe modele:
 
-- GLM 4.7 Free jest dostępny na platformie OpenCode przez ograniczony czas. Zespół wykorzystuje ten czas na zbieranie opinii i ulepszanie modelu.
-- Kimi K2.5 Free jest dostępny na OpenCode przez ograniczony czas. Zespół wykorzystuje ten czas na zbieranie opinii i ulepszanie modelu.
-- MiniMax M2.1 Free jest dostępny na platformie OpenCode przez ograniczony czas. Zespół wykorzystuje ten czas na zbieranie opinii i ulepszanie modelu.
-- Big Pickle to ukryty model, który jest bezpłatny w OpenCode przez ograniczony czas. Zespół wykorzystuje ten czas na zbieranie opinii i ulepszanie modelu.
+- GLM 4.7 Free jest dostępny na platformie opencode przez ograniczony czas. Zespół wykorzystuje ten czas na zbieranie opinii i ulepszanie modelu.
+- Kimi K2.5 Free jest dostępny na opencode przez ograniczony czas. Zespół wykorzystuje ten czas na zbieranie opinii i ulepszanie modelu.
+- MiniMax M2.1 Free jest dostępny na platformie opencode przez ograniczony czas. Zespół wykorzystuje ten czas na zbieranie opinii i ulepszanie modelu.
+- Big Pickle to ukryty model, który jest bezpłatny w opencode przez ograniczony czas. Zespół wykorzystuje ten czas na zbieranie opinii i ulepszanie modelu.
 
 <a href={email}>Skontaktuj się z nami</a>, jeśli masz jakieś pytania.
 
@@ -251,4 +251,4 @@ We created OpenCode Zen to:
 1. **Benchmark** najlepsze modele/dostawcy dla agentów kodujących.
 2. Miej dostęp do opcji **najwyższej jakości**, a nie obniżaj wydajności ani nie kieruj się do tańszych dostawców.
 3. Przekaż wszelkie **obniżki cen**, sprzedając po kosztach; więc jedyną marżą jest pokrycie naszych opłat manipulacyjnych.
-4. Nie **nie blokuj**, umożliwiając używanie go z dowolnym innym agentem kodującym. I zawsze pozwalaj na korzystanie z OpenCode dowolnego innego dostawcy.
+4. Nie **nie blokuj**, umożliwiając używanie go z dowolnym innym agentem kodującym. I zawsze pozwalaj na korzystanie z opencode dowolnego innego dostawcy.

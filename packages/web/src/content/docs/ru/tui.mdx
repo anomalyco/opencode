@@ -1,13 +1,13 @@
 ---
-title: ТУИ
-description: Использование пользовательского интерфейса терминала OpenCode.
+title: TUI
+description: Использование пользовательского интерфейса терминала opencode.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode предоставляет интерактивный интерфейс терминала или TUI для работы над вашими проектами с помощью LLM.
+opencode предоставляет интерактивный интерфейс терминала или TUI для работы над вашими проектами с помощью LLM.
 
-Запуск OpenCode запускает TUI для текущего каталога.
+Запуск opencode запускает TUI для текущего каталога.
 
 ```bash
 opencode
@@ -57,7 +57,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## Команды
 
-При использовании OpenCode TUI вы можете ввести `/`, а затем имя команды, чтобы быстро выполнить действия. Например:
+При использовании opencode TUI вы можете ввести `/`, а затем имя команды, чтобы быстро выполнить действия. Например:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### соединять
 
-Добавьте провайдера в OpenCode. Позволяет выбирать из доступных поставщиков и добавлять их ключи API.
+Добавьте провайдера в opencode. Позволяет выбирать из доступных поставщиков и добавлять их ключи API.
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### Выход
 
-Выйдите из OpenCode. _Псевдонимы_: `/quit`, `/q`
+Выйдите из opencode. _Псевдонимы_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -355,7 +355,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## Настроить
 
-Вы можете настроить поведение TUI через файл конфигурации OpenCode.
+Вы можете настроить поведение TUI через файл конфигурации opencode.
 
 ```json title="opencode.json"
 {

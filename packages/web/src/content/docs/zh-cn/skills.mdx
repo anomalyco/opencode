@@ -3,7 +3,7 @@ title: 《代理技巧》
 description: “贯穿 SKILL.md 定义可重用行为”
 ---
 
-代理让 OpenCode 技能从您的存储库或主目录中找到可重用的指令。
+代理让 opencode 技能从您的存储库或主目录中找到可重用的指令。
 技能贯穿本机 `skill` 工具输入导入 - 代理可以检视可用技能并可以在需要时加载完整内容。
 
 ---
@@ -11,7 +11,7 @@ description: “贯穿 SKILL.md 定义可重用行为”
 ## 放置檔案
 
 为每个技能名称建立一个资料夹，并在其中放入`SKILL.md`。
-OpenCode 搜索这些位置：
+opencode 搜索这些位置：
 
 - Project config: `.opencode/skills/<name>/SKILL.md`
 - Global config: `~/.config/opencode/skills/<name>/SKILL.md`
@@ -24,7 +24,7 @@ OpenCode 搜索这些位置：
 
 ## 瞭解發現
 
-对于专案本地路径， OpenCode 从当前工作目录向上走，直到到达 git 工作树。
+对于专案本地路径， opencode 从当前工作目录向上走，直到到达 git 工作树。
 It loads any matching `skills/*/SKILL.md` in `.opencode/` and any matching `.claude/skills/*/SKILL.md` or `.agents/skills/*/SKILL.md` along the way.
 
 Global definitions are also loaded from `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md`, and `~/.agents/skills/*/SKILL.md`.
@@ -102,7 +102,7 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ## 識別工具說明
 
-OpenCode 列出了 `skill` 工具描述中的可用技能。
+opencode 列出了 `skill` 工具描述中的可用技能。
 每個條目都包含技能名稱和描述：
 
 ```xml

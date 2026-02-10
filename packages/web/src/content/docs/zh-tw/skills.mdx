@@ -3,7 +3,7 @@ title: 《代理技巧》
 description: “通過 SKILL.md 定義定義可重用行為”
 ---
 
-代理技能讓 OpenCode 從您的存儲庫或主目錄中發現可重用的指令。
+代理技能讓 opencode 從您的存儲庫或主目錄中發現可重用的指令。
 技能通過本機 `skill` 工具按需加載 - 代理可以查看可用技能並可以在需要時加載完整內容。
 
 ---
@@ -11,7 +11,7 @@ description: “通過 SKILL.md 定義定義可重用行為”
 ## 放置文件
 
 每個技能名稱創建一個文件夾，並在其中放入`SKILL.md`。
-OpenCode 搜索這些位置：
+opencode 搜索這些位置：
 
 - 項目配置：`.opencode/skills/<name>/SKILL.md`
 - 全局配置：`~/.config/opencode/skills/<name>/SKILL.md`
@@ -24,7 +24,7 @@ OpenCode 搜索這些位置：
 
 ## 了解發現
 
-對於項目本地路徑，OpenCode 將從當前工作目錄開始，直到到達 git 工作樹。
+對於項目本地路徑，opencode 將從當前工作目錄開始，直到到達 git 工作樹。
 它加載 `.opencode/` 中任何匹配的 `skills/*/SKILL.md` 以及一路上任何匹配的 `.claude/skills/*/SKILL.md` 或 `.agents/skills/*/SKILL.md`。
 
 全局定義也從`~/.config/opencode/skills/*/SKILL.md`、`~/.claude/skills/*/SKILL.md` 和`~/.agents/skills/*/SKILL.md` 加載。
@@ -102,7 +102,7 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ## 識別工具說明
 
-OpenCode 在`skill` 工具描述中列出了可用的技能。
+opencode 在`skill` 工具描述中列出了可用的技能。
 每個條目都包含技能名稱和描述：
 
 ```xml

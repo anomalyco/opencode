@@ -1,15 +1,15 @@
 ---
 title: 配置
-description: 使用 OpenCode JSON 配置。
+description: 使用 opencode JSON 配置。
 ---
 
-您可以使用 JSON 配置文件配置 OpenCode。
+您可以使用 JSON 配置文件配置 opencode。
 
 ---
 
 ## 格式
 
-OpenCode 支持 **JSON** 和 **JSONC**（带注释的 JSON）格式。
+opencode 支持 **JSON** 和 **JSONC**（带注释的 JSON）格式。
 
 ```jsonc title="opencode.jsonc"
 {
@@ -34,7 +34,7 @@ OpenCode 支持 **JSON** 和 **JSONC**（带注释的 JSON）格式。
 
 配置文件被合併在一起，而不是被替換。以下配置位置的設置被合併。僅當密鑰衝突時，後面的配置才會覆蓋前面的配置。保留所有配置中的非衝突設置。
 
-例如，如果您的全局配置设置`theme: "opencode"`和`autoupdate: true`，并且您的项目配置设置ZZPH最终2ZZ，则配置将包括所有三个设置。
+例如，如果您的全局配置设置`theme: "opencode"`和`autoupdate: true`，并且您的项目配置设置`model: "anthropic/claude-sonnet-4-5"`，则最终配置将包括所有三个设置。
 
 ---
 
@@ -95,7 +95,7 @@ OpenCode 支持 **JSON** 和 **JSONC**（带注释的 JSON）格式。
 
 ### 全球的
 
-将全局 OpenCode 配置放在 `~/.config/opencode/opencode.json` 中。使用全局配置来实现用户范围的首选项，例如主题、提供程序或按键绑定。
+将全局 opencode 配置放在 `~/.config/opencode/opencode.json` 中。使用全局配置来实现用户范围的首选项，例如主题、提供程序或按键绑定。
 
 全局配置覆蓋遠程組織默認值。
 
@@ -109,7 +109,7 @@ OpenCode 支持 **JSON** 和 **JSONC**（带注释的 JSON）格式。
 將項目特定配置放在項目的根目錄中。
 :::
 
-当OpenCode启动时，它会在当前目录中查找配置文件或打开到最近的Git目录。
+当opencode启动时，它会在当前目录中查找配置文件或打开到最近的Git目录。
 
 这也可以安全地签入 Git 并使用与全局模式相同的模式。
 
@@ -200,7 +200,7 @@ opencode run "Hello world"
 
 - Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
 - Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
-- `mdns` - 启用 mDNS 服务发现。这允许网络上的其他设备发现您的 OpenCode 服务器。
+- `mdns` - 启用 mDNS 服务发现。这允许网络上的其他设备发现您的 opencode 服务器。
 - `mdnsDomain` - mDNS 服务的自定义域名。默认为 `opencode.local`。对于在同一个网络上运行多个实例很有用。
 - `cors` - 从基于浏览器的客户端使用 HTTP 服务器时允许 CORS 的其他来源。值必须是完整来源（方案+主机+任选端口），例如 `https://app.example.com`。
 
@@ -210,7 +210,7 @@ opencode run "Hello world"
 
 ### 工具
 
-您可以通过 `tools` 选项管理法学硕士可以使用的工具。
+您可以通过 `tools` 选项管理LLM可以使用的工具。
 
 ```json title="opencode.json"
 {
@@ -228,7 +228,7 @@ opencode run "Hello world"
 
 ### 型號
 
-您可以通过 `provider`、`model` 和 `small_model` 选项来配置要在 OpenCode 配置中使用的提供的程序和模型。
+您可以通过 `provider`、`model` 和 `small_model` 选项来配置要在 opencode 配置中使用的提供的程序和模型。
 
 ```json title="opencode.json"
 {
@@ -239,9 +239,9 @@ opencode run "Hello world"
 }
 ```
 
-`small_model` 选项为标题生成等轻量级任务配置单独的模型。默认情况下，如果您的成功可以提供更便宜的模型，OpenCode 会尝试使用更便宜的模型，否则它会退回到您的主模型。
+`small_model` 选项为标题生成等轻量级任务配置单独的模型。默认情况下，如果您的成功可以提供更便宜的模型，opencode 会尝试使用更便宜的模型，否则它会退回到您的主模型。
 
-Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
+提供商选项可以包括`timeout`和`setCacheKey`：
 
 ```json title="opencode.json"
 {
@@ -287,7 +287,7 @@ Amazon Bedrock 支持 AWS 特定配置：
 }
 ```
 
-- Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
+- `region` - Bedrock 的 AWS 区域（默认为 `AWS_REGION` env var 或 `us-east-1`）
 - `profile` - 来自 `~/.aws/credentials` 的 AWS 命名配置文件（默认为 `AWS_PROFILE` env var）
 - `endpoint` - VPC 终端节点的自定义节点 URL。这是使用 AWS 特定术语的通用 `baseURL` 选项的别名。如果两者都指定，`endpoint` 优先。
 
@@ -301,7 +301,7 @@ Amazon Bedrock 支持 AWS 特定配置：
 
 ### 主題
 
-您可以通过 OpenCode 配置中配置中的 `theme` 选项要使用的主题。
+您可以通过 opencode 配置中配置中的 `theme` 选项要使用的主题。
 
 ```json title="opencode.json"
 {
@@ -421,7 +421,7 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 
 ### 自動更新
 
-OpenCode 将在启动时自动下载任何新的更新。您可以使用 `autoupdate` 选项取消此功能。
+opencode 将在启动时自动下载任何新的更新。您可以使用 `autoupdate` 选项取消此功能。
 
 ```json title="opencode.json"
 {
@@ -534,7 +534,7 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 
 ### 插件
 
-[插件](/docs/plugins) 使用自定义工具、挂钩和集成扩展 OpenCode。
+[插件](/docs/plugins) 使用自定义工具、挂钩和集成扩展 opencode。
 
 将插件文件放置在`.opencode/plugins/` 或`~/.config/opencode/plugins/` 中。您还可以通过 `plugin` 选项从 npm 加载插件。
 
@@ -599,7 +599,7 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 }
 ```
 
-当您想要限制 OpenCode 仅使用特定的提供程序而不是一一禁止它们时，这非常有用。
+当您想要限制 opencode 仅使用特定的提供程序而不是一一禁止它们时，这非常有用。
 
 :::note
 `disabled_providers` 优先于`enabled_providers`。
@@ -657,7 +657,7 @@ Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try 
 
 ### 文件
 
-Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
+使用 `{file:path/to/file}` 替换文件的内容：
 
 ```json title="opencode.json"
 {

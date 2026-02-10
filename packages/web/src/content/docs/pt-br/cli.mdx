@@ -1,17 +1,17 @@
 ---
 title: CLI
-description: Opções e comandos da CLI do OpenCode.
+description: Opções e comandos da CLI do opencode.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-A CLI do OpenCode, por padrão, inicia o [TUI](/docs/tui) quando executada sem argumentos.
+A CLI do opencode, por padrão, inicia o [TUI](/docs/tui) quando executada sem argumentos.
 
 ```bash
 opencode
 ```
 
-Mas também aceita comandos conforme documentado nesta página. Isso permite que você interaja com o OpenCode programaticamente.
+Mas também aceita comandos conforme documentado nesta página. Isso permite que você interaja com o opencode programaticamente.
 
 ```bash
 opencode run "Explique como closures funcionam em JavaScript"
@@ -21,7 +21,7 @@ opencode run "Explique como closures funcionam em JavaScript"
 
 ### tui
 
-Inicie a interface de usuário do terminal do OpenCode.
+Inicie a interface de usuário do terminal do opencode.
 
 ```bash
 opencode [projeto]
@@ -44,13 +44,13 @@ opencode [projeto]
 
 ## Comandos
 
-A CLI do OpenCode também possui os seguintes comandos.
+A CLI do opencode também possui os seguintes comandos.
 
 ---
 
 ### agent
 
-Gerencie agentes para o OpenCode.
+Gerencie agentes para o opencode.
 
 ```bash
 opencode agent [comando]
@@ -60,13 +60,13 @@ opencode agent [comando]
 
 ### attach
 
-Anexe um terminal a um servidor backend do OpenCode já em execução, iniciado via comandos `serve` ou `web`.
+Anexe um terminal a um servidor backend do opencode já em execução, iniciado via comandos `serve` ou `web`.
 
 ```bash
 opencode attach [url]
 ```
 
-Isso permite usar o TUI com um backend OpenCode remoto. Por exemplo:
+Isso permite usar o TUI com um backend opencode remoto. Por exemplo:
 
 ```bash
 # Inicie o servidor backend para acesso web/móvel
@@ -119,13 +119,13 @@ opencode auth [comando]
 
 #### login
 
-O OpenCode é alimentado pela lista de provedores em [Models.dev](https://models.dev), então você pode usar `opencode auth login` para configurar chaves de API para qualquer provedor que você gostaria de usar. Isso é armazenado em `~/.local/share/opencode/auth.json`.
+O opencode é alimentado pela lista de provedores em [Models.dev](https://models.dev), então você pode usar `opencode auth login` para configurar chaves de API para qualquer provedor que você gostaria de usar. Isso é armazenado em `~/.local/share/opencode/auth.json`.
 
 ```bash
 opencode auth login
 ```
 
-Quando o OpenCode é iniciado, ele carrega os provedores do arquivo de credenciais. E se houver chaves definidas em seus ambientes ou em um arquivo `.env` em seu projeto.
+Quando o opencode é iniciado, ele carrega os provedores do arquivo de credenciais. E se houver chaves definidas em seus ambientes ou em um arquivo `.env` em seu projeto.
 
 ---
 
@@ -301,7 +301,7 @@ opencode models anthropic
 | `--refresh` | Atualiza o cache de modelos a partir do models.dev                    |
 | `--verbose` | Use uma saída de modelo mais detalhada (inclui metadados como custos) |
 
-Use a flag `--refresh` para atualizar a lista de modelos em cache. Isso é útil quando novos modelos foram adicionados a um provedor e você deseja vê-los no OpenCode.
+Use a flag `--refresh` para atualizar a lista de modelos em cache. Isso é útil quando novos modelos foram adicionados a um provedor e você deseja vê-los no opencode.
 
 ```bash
 opencode models --refresh
@@ -354,7 +354,7 @@ opencode run --attach http://localhost:4096 "Explique async/await em JavaScript"
 
 ### serve
 
-Inicie um servidor OpenCode sem cabeça para acesso à API. Confira a [documentação do servidor](/docs/server) para a interface HTTP completa.
+Inicie um servidor opencode sem cabeça para acesso à API. Confira a [documentação do servidor](/docs/server) para a interface HTTP completa.
 
 ```bash
 opencode serve
@@ -375,7 +375,7 @@ Isso inicia um servidor HTTP que fornece acesso à funcionalidade do opencode se
 
 ### session
 
-Gerencie sessões do OpenCode.
+Gerencie sessões do opencode.
 
 ```bash
 opencode session [comando]
@@ -385,7 +385,7 @@ opencode session [comando]
 
 #### list
 
-Liste todas as sessões do OpenCode.
+Liste todas as sessões do opencode.
 
 ```bash
 opencode session list
@@ -402,7 +402,7 @@ opencode session list
 
 ### stats
 
-Mostre o uso de tokens e estatísticas de custo para suas sessões do OpenCode.
+Mostre o uso de tokens e estatísticas de custo para suas sessões do opencode.
 
 ```bash
 opencode stats
@@ -433,13 +433,13 @@ Se você não fornecer um ID de sessão, será solicitado que você selecione en
 
 ### import
 
-Importe dados da sessão de um arquivo JSON ou URL de compartilhamento do OpenCode.
+Importe dados da sessão de um arquivo JSON ou URL de compartilhamento do opencode.
 
 ```bash
 opencode import <arquivo>
 ```
 
-Você pode importar de um arquivo local ou de uma URL de compartilhamento do OpenCode.
+Você pode importar de um arquivo local ou de uma URL de compartilhamento do opencode.
 
 ```bash
 opencode import session.json
@@ -450,13 +450,13 @@ opencode import https://opncd.ai/s/abc123
 
 ### web
 
-Inicie um servidor OpenCode sem cabeça com uma interface web.
+Inicie um servidor opencode sem cabeça com uma interface web.
 
 ```bash
 opencode web
 ```
 
-Isso inicia um servidor HTTP e abre um navegador para acessar o OpenCode através de uma interface web. Defina `OPENCODE_SERVER_PASSWORD` para habilitar a autenticação básica HTTP (o nome de usuário padrão é `opencode`).
+Isso inicia um servidor HTTP e abre um navegador para acessar o opencode através de uma interface web. Defina `OPENCODE_SERVER_PASSWORD` para habilitar a autenticação básica HTTP (o nome de usuário padrão é `opencode`).
 
 #### Flags
 
@@ -491,7 +491,7 @@ Este comando inicia um servidor ACP que se comunica via stdin/stdout usando nd-J
 
 ### uninstall
 
-Desinstale o OpenCode e remova todos os arquivos relacionados.
+Desinstale o opencode e remova todos os arquivos relacionados.
 
 ```bash
 opencode uninstall
@@ -551,7 +551,7 @@ A CLI do opencode aceita as seguintes flags globais.
 
 ## Variáveis de ambiente
 
-O OpenCode pode ser configurado usando variáveis de ambiente.
+O opencode pode ser configurado usando variáveis de ambiente.
 
 | Variável                              | Tipo    | Descrição                                                             |
 | ------------------------------------- | ------- | --------------------------------------------------------------------- |

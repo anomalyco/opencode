@@ -3,7 +3,7 @@ title: Troubleshooting
 description: Common issues and how to resolve them.
 ---
 
-OpenCode와 문제를 디버그하려면 로그와 로컬 데이터를 확인하여 디스크에 저장합니다.
+opencode와 문제를 디버그하려면 로그와 로컬 데이터를 확인하여 디스크에 저장합니다.
 
 ---
 
@@ -41,13 +41,13 @@ opencode 저장 세션 데이터 및 디스크에 다른 응용 데이터:
 
 ## 데스크탑 앱
 
-OpenCode 데스크톱은 배경에서 로컬 OpenCode 서버 (`opencode-cli` sidecar)를 실행합니다. 대부분의 문제는 misbehaving 플러그인, 손상된 캐시, 또는 나쁜 서버 설정에 의해 발생합니다.
+opencode 데스크톱은 배경에서 로컬 opencode 서버 (`opencode-cli` sidecar)를 실행합니다. 대부분의 문제는 misbehaving 플러그인, 손상된 캐시, 또는 나쁜 서버 설정에 의해 발생합니다.
 
 ## 빠른 체크
 
 - 완전히 종료하고 앱을 다시 시작.
 - 앱이 오류 화면을 보여 주면 ** Restart**를 클릭하고 오류 세부 정보를 복사합니다.
-- macOS만: `OpenCode` 메뉴 -> **웹뷰 **(UI가 공백/frozen인 경우).
+- macOS만: `opencode` 메뉴 -> **웹뷰 **(UI가 공백/frozen인 경우).
 
 ---
 
@@ -74,7 +74,7 @@ OpenCode 데스크톱은 배경에서 로컬 OpenCode 서버 (`opencode-cli` sid
 
 ### 플러그인 디렉터리 확인
 
-OpenCode는 디스크에서 로컬 플러그인을로드 할 수 있습니다. Temporarily 이동 이러한 방법 (또는 폴더 이름을 변경) 및 데스크톱 응용 프로그램을 다시 시작:
+opencode는 디스크에서 로컬 플러그인을로드 할 수 있습니다. Temporarily 이동 이러한 방법 (또는 폴더 이름을 변경) 및 데스크톱 응용 프로그램을 다시 시작:
 
 - **글로벌 플러그인** -**macOS/리눅스**: `~/.config/opencode/plugins/`
 - **Windows**: 압박 `WIN+R`와 풀 `%USERPROFILE%\.config\opencode\plugins`
@@ -87,9 +87,9 @@ OpenCode는 디스크에서 로컬 플러그인을로드 할 수 있습니다. T
 
 #### 캐시 삭제
 
-플러그인을 비활성화하는 경우 도움이되지 않습니다 (또는 플러그인 설치가 붙어있다), 캐시를 삭제 그래서 OpenCode는 그것을 재구성 할 수 있습니다.
+플러그인을 비활성화하는 경우 도움이되지 않습니다 (또는 플러그인 설치가 붙어있다), 캐시를 삭제 그래서 opencode는 그것을 재구성 할 수 있습니다.
 
-1. Quit OpenCode 데스크톱 완전히.
+1. Quit opencode 데스크톱 완전히.
 2. 캐시 디렉토리 삭제:
 
 -**macOS**: 찾기 -> `Cmd+Shift+G` -> 붙여넣기 `~/.cache/opencode`
@@ -97,13 +97,13 @@ OpenCode는 디스크에서 로컬 플러그인을로드 할 수 있습니다. T
 - **Linux**: `~/.cache/opencode` 삭제 (또는 `rm -rf ~/.cache/opencode` 실행)
 - **Windows**: 압박 `WIN+R`와 풀 `%USERPROFILE%\.cache\opencode`
 
-3. Restart OpenCode 데스크탑.
+3. Restart opencode 데스크탑.
 
 ---
 
 ## 수정 서버 연결 문제
 
-OpenCode 데스크톱은 자체 로컬 서버(과태)를 시작하거나 구성된 서버 URL에 연결할 수 있습니다.
+opencode 데스크톱은 자체 로컬 서버(과태)를 시작하거나 구성된 서버 URL에 연결할 수 있습니다.
 
 **"Connection Failed"** 대화 상자 (또는 앱이 스패시 화면을 지나지 않습니다), 사용자 정의 서버 URL을 확인합니다.
 
@@ -134,21 +134,21 @@ Linux에서 일부 Wayland 설정은 공백 창이나 compositor 오류를 일�
 
 ## Windows: WebView2 실행 시간
 
-Windows에서 OpenCode 데스크톱은 Microsoft Edge ** WebView2 실행 시간 **를 요구합니다. 앱이 공백 창에 열거나 시작하지 않을 경우, install/update WebView2를 설치하고 다시 시도하십시오.
+Windows에서 opencode 데스크톱은 Microsoft Edge ** WebView2 실행 시간 **를 요구합니다. 앱이 공백 창에 열거나 시작하지 않을 경우, install/update WebView2를 설치하고 다시 시도하십시오.
 
 ---
 
 ## Windows: 일반 성능 문제
 
-느린 성능, 파일 액세스 문제 또는 Windows의 터미널 문제를 경험하는 경우 [WSL (Windows Subsystem for Linux)](/docs/windows-wsl)를 사용하여 시도하십시오. WSL은 OpenCode의 기능으로 더 원활하게 작동하는 Linux 환경을 제공합니다.
+느린 성능, 파일 액세스 문제 또는 Windows의 터미널 문제를 경험하는 경우 [WSL (Windows Subsystem for Linux)](/docs/windows-wsl)를 사용하여 시도하십시오. WSL은 opencode의 기능으로 더 원활하게 작동하는 Linux 환경을 제공합니다.
 
 ---
 
 ## 알림 표시되지 않음
 
-OpenCode 데스크톱은 시스템 알림을 보여줍니다 :
+opencode 데스크톱은 시스템 알림을 보여줍니다 :
 
-- OS 설정에서 OpenCode에 대한 알림이 활성화되고,
+- OS 설정에서 opencode에 대한 알림이 활성화되고,
 - 앱 창이 집중되지 않습니다.
 
 ---
@@ -157,8 +157,8 @@ OpenCode 데스크톱은 시스템 알림을 보여줍니다 :
 
 앱이 시작되지 않은 경우 UI 내부에서 설정을 취소할 수 없습니다. 데스크탑 앱의 저장된 상태를 재설정하십시오.
 
-1. Quit OpenCode 데스크탑.
-2. 이 파일을 찾아 삭제 (OpenCode 데스크톱 앱 데이터 디렉토리에서 라이브):
+1. Quit opencode 데스크탑.
+2. 이 파일을 찾아 삭제 (opencode 데스크톱 앱 데이터 디렉토리에서 라이브):
 
 - `opencode.settings.dat` (데스크톱 기본 서버 URL)
 - `opencode.global.dat` 및 `opencode.workspace.*.dat` (최근 서버/프로젝트와 같은 UI 국가)
@@ -174,7 +174,7 @@ OpenCode 데스크톱은 시스템 알림을 보여줍니다 :
 
 ## 도움 받기
 
-OpenCode와 문제가 발생하면:
+opencode와 문제가 발생하면:
 
 1. ** GitHub의 문제 해결 **
 
@@ -198,7 +198,7 @@ OpenCode와 문제가 발생하면:
 
 ---
 
-## OpenCode가 시작되지 않습니다.
+## opencode가 시작되지 않습니다.
 
 1. 오류 메시지에 대한 로그 확인
 2. 맨끝에 있는 산출을 보기 위하여 `--print-logs`로 달리기를 시도하십시오

@@ -3,13 +3,13 @@ title: Modeller
 description: Konfigurere en LLM leverandør og modell.
 ---
 
-OpenCode bruker [AI SDK](https://ai-sdk.dev/) og [Models.dev](https://models.dev) for å støtte **75+ LLM leverandører** og den støtter kjøring av lokale modeller.
+opencode bruker [AI SDK](https://ai-sdk.dev/) og [Models.dev](https://models.dev) for å støtte **75+ LLM leverandører** og den støtter kjøring av lokale modeller.
 
 ---
 
 ## Leverandører
 
-De fleste populære leverandørene er forhåndslastet som standard. Hvis du har lagt til legitimasjonen for en leverandør gjennom kommandoen `/connect`, vil den være tilgjengelig når du starter OpenCode.
+De fleste populære leverandørene er forhåndslastet som standard. Hvis du har lagt til legitimasjonen for en leverandør gjennom kommandoen `/connect`, vil den være tilgjengelig når du starter opencode.
 
 Finn ut mer om [leverandører](/docs/providers).
 
@@ -35,7 +35,7 @@ Vurder å bruke en av modellene vi anbefaler.
 
 Imidlertid er det bare noen få av dem som er gode til både å generere kode og verktøykalling.
 
-Her er flere modeller som fungerer godt med OpenCode, uten spesiell rekkefølge. (Dette er ikke en uttømmende liste og er heller ikke nødvendigvis oppdatert):
+Her er flere modeller som fungerer godt med opencode, uten spesiell rekkefølge. (Dette er ikke en uttømmende liste og er heller ikke nødvendigvis oppdatert):
 
 - GPT 5.2
 - GPT 5.1 Codex
@@ -49,7 +49,7 @@ Her er flere modeller som fungerer godt med OpenCode, uten spesiell rekkefølge.
 ## Angi en standard
 
 For å angi en av disse som standardmodell, kan du angi `model`-tasten i din
-OpenCode-konfigurasjon.
+opencode-konfigurasjon.
 
 ```json title="opencode.json" {3}
 {
@@ -137,11 +137,11 @@ Du kan også definere tilpassede varianter som utvider de innebygde. Varianter l
 
 ## Varianter
 
-Mange modeller støtter flere varianter med forskjellige konfigurasjoner. OpenCode leveres med innebygde standardvarianter for populære leverandører.
+Mange modeller støtter flere varianter med forskjellige konfigurasjoner. opencode leveres med innebygde standardvarianter for populære leverandører.
 
 ### Innebygde varianter
 
-OpenCode leveres med standardvarianter for mange leverandører:
+opencode leveres med standardvarianter for mange leverandører:
 
 **Antropisk**:
 
@@ -203,11 +203,11 @@ Bruk tastebindingen `variant_cycle` for raskt å bytte mellom varianter. [Finn u
 
 ## Laster modeller
 
-Når OpenCode starter opp, ser den etter modeller i følgende prioriterte rekkefølge:
+Når opencode starter opp, ser den etter modeller i følgende prioriterte rekkefølge:
 
 1. Kommandolinjeflagget `--model` eller `-m`. Formatet er det samme som i konfigurasjonsfilen: `provider_id/model_id`.
 
-2. Modelllisten i OpenCode-konfigurasjonen.
+2. Modelllisten i opencode-konfigurasjonen.
 
    ```json title="opencode.json"
    {

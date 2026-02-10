@@ -1,17 +1,17 @@
 ---
 title: GitHub
-description: Use OpenCode em problemas e pull-requests do GitHub.
+description: Use opencode em problemas e pull-requests do GitHub.
 ---
 
-OpenCode integra-se ao seu fluxo de trabalho do GitHub. Mencione `/opencode` ou `/oc` em seu comentário, e o OpenCode executará tarefas dentro do seu runner do GitHub Actions.
+opencode integra-se ao seu fluxo de trabalho do GitHub. Mencione `/opencode` ou `/oc` em seu comentário, e o opencode executará tarefas dentro do seu runner do GitHub Actions.
 
 ---
 
 ## Recursos
 
-- **Triagem de problemas**: Peça ao OpenCode para analisar um problema e explicá-lo para você.
-- **Corrigir e implementar**: Peça ao OpenCode para corrigir um problema ou implementar um recurso. E ele trabalhará em um novo branch e enviará um PR com todas as alterações.
-- **Seguro**: O OpenCode é executado dentro dos runners do seu GitHub.
+- **Triagem de problemas**: Peça ao opencode para analisar um problema e explicá-lo para você.
+- **Corrigir e implementar**: Peça ao opencode para corrigir um problema ou implementar um recurso. E ele trabalhará em um novo branch e enviará um PR com todas as alterações.
+- **Seguro**: O opencode é executado dentro dos runners do seu GitHub.
 
 ---
 
@@ -63,7 +63,7 @@ Ou você pode configurá-lo manualmente.
               fetch-depth: 1
               persist-credentials: false
 
-          - name: Run OpenCode
+          - name: Run opencode
            uses: anomalyco/opencode/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -81,13 +81,13 @@ Ou você pode configurá-lo manualmente.
 
 ## Configuração
 
-- `model`: O modelo a ser usado com o OpenCode. Tem o formato de `provider/model`. Isso é **obrigatório**.
+- `model`: O modelo a ser usado com o opencode. Tem o formato de `provider/model`. Isso é **obrigatório**.
 - `agent`: O agente a ser usado. Deve ser um agente primário. Retorna ao `default_agent` da configuração ou `"build"` se não encontrado.
-- `share`: Se deve compartilhar a sessão do OpenCode. O padrão é **true** para repositórios públicos.
-- `prompt`: Prompt personalizado opcional para substituir o comportamento padrão. Use isso para personalizar como o OpenCode processa solicitações.
-- `token`: Token de acesso do GitHub opcional para realizar operações como criar comentários, confirmar alterações e abrir pull requests. Por padrão, o OpenCode usa o token de acesso da instalação do aplicativo GitHub OpenCode, então commits, comentários e pull requests aparecem como se fossem da aplicação.
+- `share`: Se deve compartilhar a sessão do opencode. O padrão é **true** para repositórios públicos.
+- `prompt`: Prompt personalizado opcional para substituir o comportamento padrão. Use isso para personalizar como o opencode processa solicitações.
+- `token`: Token de acesso do GitHub opcional para realizar operações como criar comentários, confirmar alterações e abrir pull requests. Por padrão, o opencode usa o token de acesso da instalação do aplicativo GitHub opencode, então commits, comentários e pull requests aparecem como se fossem da aplicação.
 
-  Alternativamente, você pode usar o [`GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) embutido do runner do GitHub Action sem instalar o aplicativo GitHub OpenCode. Apenas certifique-se de conceder as permissões necessárias em seu fluxo de trabalho:
+  Alternativamente, você pode usar o [`GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) embutido do runner do GitHub Action sem instalar o aplicativo GitHub opencode. Apenas certifique-se de conceder as permissões necessárias em seu fluxo de trabalho:
 
   ```yaml
   permissions:
@@ -103,23 +103,23 @@ Ou você pode configurá-lo manualmente.
 
 ## Eventos Suportados
 
-O OpenCode pode ser acionado pelos seguintes eventos do GitHub:
+O opencode pode ser acionado pelos seguintes eventos do GitHub:
 
 | Tipo de Evento                | Acionado Por                                        | Detalhes                                                                                                                               |
 | ----------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `issue_comment`               | Comentário em um problema ou PR                     | Mencione `/opencode` ou `/oc` em seu comentário. O OpenCode lê o contexto e pode criar branches, abrir PRs ou responder.               |
-| `pull_request_review_comment` | Comentário em linhas de código específicas em um PR | Mencione `/opencode` ou `/oc` enquanto revisa o código. O OpenCode recebe o caminho do arquivo, números das linhas e contexto do diff. |
-| `issues`                      | Problema aberto ou editado                          | Aciona automaticamente o OpenCode quando problemas são criados ou modificados. Requer entrada de `prompt`.                             |
-| `pull_request`                | PR aberto ou atualizado                             | Aciona automaticamente o OpenCode quando PRs são abertos, sincronizados ou reabertos. Útil para revisões automatizadas.                |
-| `schedule`                    | Cron baseado em agendamento                         | Execute o OpenCode em um cronograma. Requer entrada de `prompt`. A saída vai para logs e PRs (sem problema para comentar).             |
-| `workflow_dispatch`           | Acionamento manual pela interface do GitHub         | Acione o OpenCode sob demanda através da aba Ações. Requer entrada de `prompt`. A saída vai para logs e PRs.                           |
+| `issue_comment`               | Comentário em um problema ou PR                     | Mencione `/opencode` ou `/oc` em seu comentário. O opencode lê o contexto e pode criar branches, abrir PRs ou responder.               |
+| `pull_request_review_comment` | Comentário em linhas de código específicas em um PR | Mencione `/opencode` ou `/oc` enquanto revisa o código. O opencode recebe o caminho do arquivo, números das linhas e contexto do diff. |
+| `issues`                      | Problema aberto ou editado                          | Aciona automaticamente o opencode quando problemas são criados ou modificados. Requer entrada de `prompt`.                             |
+| `pull_request`                | PR aberto ou atualizado                             | Aciona automaticamente o opencode quando PRs são abertos, sincronizados ou reabertos. Útil para revisões automatizadas.                |
+| `schedule`                    | Cron baseado em agendamento                         | Execute o opencode em um cronograma. Requer entrada de `prompt`. A saída vai para logs e PRs (sem problema para comentar).             |
+| `workflow_dispatch`           | Acionamento manual pela interface do GitHub         | Acione o opencode sob demanda através da aba Ações. Requer entrada de `prompt`. A saída vai para logs e PRs.                           |
 
 ### Exemplo de Agendamento
 
-Execute o OpenCode em um cronograma para realizar tarefas automatizadas:
+Execute o opencode em um cronograma para realizar tarefas automatizadas:
 
 ```yaml title=".github/workflows/opencode-scheduled.yml"
-name: Tarefa Agendada OpenCode
+name: Tarefa Agendada opencode
 
 on:
   schedule:
@@ -139,7 +139,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Run OpenCode
+      - name: Run opencode
         uses: anomalyco/opencode/github@latest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -150,7 +150,7 @@ jobs:
             Se você encontrar problemas que valem a pena serem abordados, abra um problema para rastreá-los.
 ```
 
-Para eventos agendados, a entrada `prompt` é **obrigatória** uma vez que não há comentário para extrair instruções. Fluxos de trabalho agendados são executados sem um contexto de usuário para verificação de permissões, então o fluxo de trabalho deve conceder `contents: write` e `pull-requests: write` se você espera que o OpenCode crie branches ou PRs.
+Para eventos agendados, a entrada `prompt` é **obrigatória** uma vez que não há comentário para extrair instruções. Fluxos de trabalho agendados são executados sem um contexto de usuário para verificação de permissões, então o fluxo de trabalho deve conceder `contents: write` e `pull-requests: write` se você espera que o opencode crie branches ou PRs.
 
 ---
 
@@ -191,7 +191,7 @@ jobs:
             - Sugira melhorias
 ```
 
-Para eventos de `pull_request`, se nenhum `prompt` for fornecido, o OpenCode padrão será revisar o pull request.
+Para eventos de `pull_request`, se nenhum `prompt` for fornecido, o opencode padrão será revisar o pull request.
 
 ---
 
@@ -252,7 +252,7 @@ Para eventos de `issues`, a entrada `prompt` é **obrigatória** uma vez que nã
 
 ## Prompts Personalizados
 
-Substitua o prompt padrão para personalizar o comportamento do OpenCode para seu fluxo de trabalho.
+Substitua o prompt padrão para personalizar o comportamento do opencode para seu fluxo de trabalho.
 
 ```yaml title=".github/workflows/opencode.yml"
 - uses: anomalyco/opencode/github@latest
@@ -271,7 +271,7 @@ Isso é útil para impor critérios de revisão específicos, padrões de codifi
 
 ## Exemplos
 
-Aqui estão alguns exemplos de como você pode usar o OpenCode no GitHub.
+Aqui estão alguns exemplos de como você pode usar o opencode no GitHub.
 
 - **Explicar um problema**
 
@@ -281,7 +281,7 @@ Aqui estão alguns exemplos de como você pode usar o OpenCode no GitHub.
   /opencode explain this issue
   ```
 
-  O OpenCode lerá toda a conversa, incluindo todos os comentários, e responderá com uma explicação clara.
+  O opencode lerá toda a conversa, incluindo todos os comentários, e responderá com uma explicação clara.
 
 - **Corrigir um problema**
 
@@ -291,7 +291,7 @@ Aqui estão alguns exemplos de como você pode usar o OpenCode no GitHub.
   /opencode fix this
   ```
 
-  E o OpenCode criará um novo branch, implementará as alterações e abrirá um PR com as mudanças.
+  E o opencode criará um novo branch, implementará as alterações e abrirá um PR com as mudanças.
 
 - **Revisar PRs e fazer alterações**
 
@@ -301,18 +301,18 @@ Aqui estão alguns exemplos de como você pode usar o OpenCode no GitHub.
   Delete the attachment from S3 when the note is removed /oc
   ```
 
-  O OpenCode implementará a alteração solicitada e a confirmará no mesmo PR.
+  O opencode implementará a alteração solicitada e a confirmará no mesmo PR.
 
 - **Revisar linhas de código específicas**
 
-  Deixe um comentário diretamente nas linhas de código na aba "Files" do PR. O OpenCode detecta automaticamente o arquivo, os números das linhas e o contexto do diff para fornecer respostas precisas.
+  Deixe um comentário diretamente nas linhas de código na aba "Files" do PR. O opencode detecta automaticamente o arquivo, os números das linhas e o contexto do diff para fornecer respostas precisas.
 
   ```
   [Comentário sobre linhas específicas na aba Files]
   /oc add error handling here
   ```
 
-  Ao comentar sobre linhas específicas, o OpenCode recebe:
+  Ao comentar sobre linhas específicas, o opencode recebe:
   - O arquivo exato sendo revisado
   - As linhas específicas de código
   - O contexto do diff ao redor

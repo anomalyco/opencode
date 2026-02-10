@@ -3,7 +3,7 @@ title: Permissions
 description: Control which actions require approval to run.
 ---
 
-OpenCode는 주어진 동작이 자동으로 실행되는지 결정하기 위해 `permission` config를 사용하거나 차단합니다.
+opencode는 주어진 동작이 자동으로 실행되는지 결정하기 위해 `permission` config를 사용하거나 차단합니다.
 
 `v1.1.1`의 것과 같이, 유산 `tools` 불린 구성은 deprecated이고 `permission`로 합병되었습니다. 오래된 `tools` config는 여전히 뒤쪽 호환성을 위해 지원됩니다.
 
@@ -88,7 +88,7 @@ Permission 본 사용 간단한 wildcard 일치:
 
 ## 외부 감독
 
-`external_directory`를 사용하여 도구가 OpenCode가 시작된 작업 디렉토리 밖에 터치 경로가 호출되도록합니다. 이것은 입력 (예 : `read`, `edit`, `list`, `glob`, `glob`, `grep` 및 많은 `bash` 명령)로 경로를 수행하는 모든 도구에 적용됩니다.
+`external_directory`를 사용하여 도구가 opencode가 시작된 작업 디렉토리 밖에 터치 경로가 호출되도록합니다. 이것은 입력 (예 : `read`, `edit`, `list`, `glob`, `glob`, `grep` 및 많은 `bash` 명령)로 경로를 수행하는 모든 도구에 적용됩니다.
 
 홈 확장 (`~/...`와 같은) 패턴이 작성된 방법에 영향을 미칩니다. 그것은 현재의 작업 공간의 외부 경로 부분을 만들지 않습니다, 그래서 작업 디렉토리 외부 경로는 여전히 `external_directory`를 통해 허용해야합니다.
 
@@ -127,7 +127,7 @@ Permission 본 사용 간단한 wildcard 일치:
 
 ## 사용 가능한 권한
 
-OpenCode 권한은 도구 이름에 의해 키 입력되며, 두 개의 안전 가드 :
+opencode 권한은 도구 이름에 의해 키 입력되며, 두 개의 안전 가드 :
 
 - `read` - 파일 읽기 (파일 경로의 매칭)
 - `edit` - 모든 파일 수정 (covers `edit`, `write`, `patch`, `multiedit`)
@@ -148,7 +148,7 @@ OpenCode 권한은 도구 이름에 의해 키 입력되며, 두 개의 안전 �
 
 ## 기본
 
-아무것도 지정하지 않는 경우, OpenCode는 permissive 기본값에서 시작합니다.
+아무것도 지정하지 않는 경우, opencode는 permissive 기본값에서 시작합니다.
 
 - `"allow"`에 기본 권한.
 - `doom_loop` 및 `external_directory` 기본적으로 `"ask"`.
@@ -171,10 +171,10 @@ OpenCode 권한은 도구 이름에 의해 키 입력되며, 두 개의 안전 �
 
 ## "Ask"는 무엇입니까?
 
-OpenCode가 승인되면 UI는 세 가지 결과를 제공합니다.
+opencode가 승인되면 UI는 세 가지 결과를 제공합니다.
 
 - `once` - 이 요청을 승인
-- `always` - 제안 된 패턴과 일치하는 미래 요청 (현재 OpenCode 세션의 나머지)
+- `always` - 제안 된 패턴과 일치하는 미래 요청 (현재 opencode 세션의 나머지)
 - `reject` - 요청을 거부
 
 `always`는 도구 (예를 들면, bash 승인 일반적으로 `git status*`와 같은 안전한 명령 접두사)에 의해 approve가 제공 될 패턴의 집합.

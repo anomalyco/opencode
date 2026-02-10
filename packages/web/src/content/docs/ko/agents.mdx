@@ -15,7 +15,7 @@ description: Configure and use specialized agents.
 
 ## 유형
 
-OpenCode의 두 가지 유형이 있습니다; 기본 에이전트와 시약.
+opencode의 두 가지 유형이 있습니다; 기본 에이전트와 시약.
 
 ---
 
@@ -27,7 +27,7 @@ OpenCode의 두 가지 유형이 있습니다; 기본 에이전트와 시약.
 세션 중에 기본 에이전트를 전환하는 **Tab** 키를 사용할 수 있습니다.
 :::
 
-OpenCode는 두 개의 내장 기본 에이전트, **Build** 및 **Plan**와 함께 제공됩니다. 우리는
+opencode는 두 개의 내장 기본 에이전트, **Build** 및 **Plan**와 함께 제공됩니다. 우리는
 아래에서 보기.
 
 ---
@@ -36,13 +36,13 @@ OpenCode는 두 개의 내장 기본 에이전트, **Build** 및 **Plan**와 함
 
 Subagents는 기본 에이전트가 특정 작업을 위해 호출 할 수있는 전문 보조입니다. 또한 수동으로 그들을 호출 할 수 있습니다 ** @ 언급 ** 메시지에서 그들.
 
-OpenCode는 두 개의 내장 하위 시약, ** 일반 ** 및 ** 익스플로러 **. 아래에서 볼 수 있습니다.
+opencode는 두 개의 내장 하위 시약, ** 일반 ** 및 ** 익스플로러 **. 아래에서 볼 수 있습니다.
 
 ---
 
 ## 내장
 
-OpenCode는 기본 에이전트와 두 개의 내장 하위 시약으로 제공됩니다.
+opencode는 기본 에이전트와 두 개의 내장 하위 시약으로 제공됩니다.
 
 ---
 
@@ -277,7 +277,7 @@ markdown 파일 이름은 대리인 이름입니다. 예를 들어, `review.md`�
 }
 ```
 
-온도가 지정되지 않은 경우, OpenCode는 모델 별 기본을 사용합니다. 일반적으로 대부분의 모델의 경우 0, Qwen 모델의 경우 0.55.
+온도가 지정되지 않은 경우, opencode는 모델 별 기본을 사용합니다. 일반적으로 대부분의 모델의 경우 0, Qwen 모델의 경우 0.55.
 
 ---
 
@@ -337,7 +337,7 @@ markdown 파일 이름은 대리인 이름입니다. 예를 들어, `review.md`�
 }
 ```
 
-이 경로는 config 파일이 있는 곳에 관계됩니다. 그래서 이것은 글로벌 OpenCode 구성과 프로젝트 특정 구성 모두를 위해 작동합니다.
+이 경로는 config 파일이 있는 곳에 관계됩니다. 그래서 이것은 글로벌 opencode 구성과 프로젝트 특정 구성 모두를 위해 작동합니다.
 
 ---
 
@@ -359,7 +359,7 @@ markdown 파일 이름은 대리인 이름입니다. 예를 들어, `review.md`�
 }
 ```
 
-OpenCode config의 모델 ID는 `provider/model-id` 형식을 사용합니다. 예를 들어, [OpenCode Zen](/docs/zen)을 사용한다면, GPT 5.1 Codex에 `opencode/gpt-5.1-codex`를 사용할 수 있습니다.
+opencode config의 모델 ID는 `provider/model-id` 형식을 사용합니다. 예를 들어, [OpenCode Zen](/docs/zen)을 사용한다면, GPT 5.1 Codex에 `opencode/gpt-5.1-codex`를 사용할 수 있습니다.
 
 ---
 
@@ -542,7 +542,7 @@ Only analyze code and suggest changes.
 
 ## #숨겨진
 
-`@` 자동 완성 메뉴에서 시약을 숨깁니다. 작업 도구를 통해 다른 에이전트에 의해 invoked programmatically 있어야하는 내부 시약에 유용합니다.
+`hidden: true`를 사용해 `@` 자동 완성 메뉴에서 시약을 숨깁니다. 작업 도구를 통해 다른 에이전트에 의해 invoked programmatically 있어야하는 내부 시약에 유용합니다.
 
 ```json title="opencode.json"
 {

@@ -1,17 +1,17 @@
 ---
 title: GitHub
-description: 在 GitHub 问题和拉取请求中使用 OpenCode。
+description: 在 GitHub 问题和拉取请求中使用 opencode。
 ---
 
-OpenCode 与您的 GitHub 工作流程集成。在评论中提及 `/opencode` 或 `/oc`，OpenCode 将在您的 GitHub Actions 运行器中执行任务。
+opencode 与您的 GitHub 工作流程集成。在评论中提及 `/opencode` 或 `/oc`，opencode 将在您的 GitHub Actions 运行器中执行任务。
 
 ---
 
 ## 特徵
 
-- **分类问题**：要求 OpenCode 调查问题并向您解释。
-- **修复和实施**：要求 OpenCode 修复问题或实施功能。将在一个新的分支中工作并提交包含所有更改的 PR。
-- **安全**：OpenCode 在 GitHub 的运行器中运行。
+- **分类问题**：要求 opencode 调查问题并向您解释。
+- **修复和实施**：要求 opencode 修复问题或实施功能。将在一个新的分支中工作并提交包含所有更改的 PR。
+- **安全**：opencode 在 GitHub 的运行器中运行。
 
 ---
 
@@ -81,13 +81,13 @@ opencode github install
 
 ## 配置
 
-- `model`：与 OpenCode 一起使用的模型。采用 `provider/model` 格式。这是**必需的**。
+- `model`：与 opencode 一起使用的模型。采用 `provider/model` 格式。这是**必需的**。
 - `agent`：要使用的代理。必须是一级代理。如果未找到，则从配置回退到 `default_agent` 或 `"build"`。
-- `share`：是否共享OpenCode会话。对于公共存储库，默认为**true**。
-- `prompt`：可选的自定义提示以覆盖默认行为。使用它来自定义 OpenCode 处理请求的方式。
-- `token`：可选的 GitHub 访问令牌，用于执行创建评论、提交更改和打开拉取请求等操作。默认情况下，OpenCode 使用来自 OpenCode GitHub 应用程序的安装访问令牌，因此提交、评论和拉取请求显示为来自应用。
+- `share`：是否共享opencode会话。对于公共存储库，默认为**true**。
+- `prompt`：可选的自定义提示以覆盖默认行为。使用它来自定义 opencode 处理请求的方式。
+- `token`：可选的 GitHub 访问令牌，用于执行创建评论、提交更改和打开拉取请求等操作。默认情况下，opencode 使用来自 opencode GitHub 应用程序的安装访问令牌，因此提交、评论和拉取请求显示为来自应用。
 
-  或者，您可以使用 GitHub Action 运行程序的[内置`GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token)，而无需安装 OpenCode GitHub 应用程序。只需确保在您的工作流程中所需的权限：
+  或者，您可以使用 GitHub Action 运行程序的[内置`GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token)，而无需安装 opencode GitHub 应用程序。只需确保在您的工作流程中所需的权限：
 
   ```yaml
   permissions:
@@ -103,20 +103,20 @@ opencode github install
 
 ## 支持的活動
 
-OpenCode 可以由以下 GitHub 事件触发：
+opencode 可以由以下 GitHub 事件触发：
 
 | 事件類型                      | 觸發者                       | 詳情                                                                                    |
 | ----------------------------- | ---------------------------- | --------------------------------------------------------------------------------------- |
-| `issue_comment`               | 对问题或 PR 发表评论         | 在评论中提及 `/opencode` 或 `/oc`。 OpenCode 读取上下文并可以创建分支、打开 PR 或回复。 |
-| `pull_request_review_comment` | 对 PR 中的特定代码行进行评论 | 在检查代码时提及`/opencode` 或`/oc`。 OpenCode 接收文件路径、行号和 diff 上下文。       |
-| `issues`                      | 问题已打开或已编辑           | 创建或修改问题时自动触发OpenCode。需要`prompt` 输入。                                   |
-| `pull_request`                | PR 已开启或已更新            | 当 PR 打开、同步或重新打开时自动触发 OpenCode。对于自动评论很有用。                     |
-| `schedule`                    | 基于 Cron 的计划             | 按计划运行 OpenCode。需要 `prompt` 输入。输出进入日志和 PR（没有可评论的问题）。        |
-| `workflow_dispatch`           | 从 GitHub UI 手动触发        | 通过“操作”选项卡触发 OpenCode。需要 `prompt` 输入。输出进入日志和 PR。                  |
+| `issue_comment`               | 对问题或 PR 发表评论         | 在评论中提及 `/opencode` 或 `/oc`。 opencode 读取上下文并可以创建分支、打开 PR 或回复。 |
+| `pull_request_review_comment` | 对 PR 中的特定代码行进行评论 | 在检查代码时提及`/opencode` 或`/oc`。 opencode 接收文件路径、行号和 diff 上下文。       |
+| `issues`                      | 问题已打开或已编辑           | 创建或修改问题时自动触发opencode。需要`prompt` 输入。                                   |
+| `pull_request`                | PR 已开启或已更新            | 当 PR 打开、同步或重新打开时自动触发 opencode。对于自动评论很有用。                     |
+| `schedule`                    | 基于 Cron 的计划             | 按计划运行 opencode。需要 `prompt` 输入。输出进入日志和 PR（没有可评论的问题）。        |
+| `workflow_dispatch`           | 从 GitHub UI 手动触发        | 通过“操作”选项卡触发 opencode。需要 `prompt` 输入。输出进入日志和 PR。                  |
 
 ### 時間表示例
 
-按计划运行OpenCode以执行自动化任务：
+按计划运行opencode以执行自动化任务：
 
 ```yaml title=".github/workflows/opencode-scheduled.yml"
 name: Scheduled OpenCode Task
@@ -150,7 +150,7 @@ jobs:
             If you find issues worth addressing, open an issue to track them.
 ```
 
-对于计划事件，`prompt` 输入是**必需的**，因为没有注释可以从中提取指令。希望计划工作流在没有用户上下文的情况下运行并进行权限检查，因此如果您 OpenCode 创建分支或 PR，工作流必须支持 `contents: write` 和 `pull-requests: write`。
+对于计划事件，`prompt` 输入是**必需的**，因为没有注释可以从中提取指令。希望计划工作流在没有用户上下文的情况下运行并进行权限检查，因此如果您 opencode 创建分支或 PR，工作流必须支持 `contents: write` 和 `pull-requests: write`。
 
 ---
 
@@ -191,7 +191,7 @@ jobs:
             - Suggest improvements
 ```
 
-对于`pull_request`事件，如果未提供`prompt`，OpenCode将默认审核拉取请求。
+对于`pull_request`事件，如果未提供`prompt`，opencode将默认审核拉取请求。
 
 ---
 
@@ -252,7 +252,7 @@ jobs:
 
 ## 自定義提示
 
-覆盖默认提示，为您的工作流程自定义 OpenCode 的行为。
+覆盖默认提示，为您的工作流程自定义 opencode 的行为。
 
 ```yaml title=".github/workflows/opencode.yml"
 - uses: anomalyco/opencode/github@latest
@@ -271,7 +271,7 @@ jobs:
 
 ## 示例
 
-以下是如何在 GitHub 中使用 OpenCode 的一些示例。
+以下是如何在 GitHub 中使用 opencode 的一些示例。
 
 - **解釋一個問題**
 
@@ -281,7 +281,7 @@ jobs:
   /opencode explain this issue
   ```
 
-  OpenCode 将阅读整个线程，包括所有评论，并回复并提供语音解释。
+  opencode 将阅读整个线程，包括所有评论，并回复并提供语音解释。
 
 - **解決問題**
 
@@ -291,7 +291,7 @@ jobs:
   /opencode fix this
   ```
 
-  OpenCode 将创建一个新分支，实施更改，并使用更改打开 PR。
+  opencode 将创建一个新分支，实施更改，并使用更改打开 PR。
 
 - **审查 PR 并进行更改**
 
@@ -305,7 +305,7 @@ jobs:
 
 - **查看特定代碼行**
 
-  直接在PR的“文件”选项卡中的代码行上留下评论。OpenCode自动检测文件、行号和差异上下文以提供准确的响应。
+  直接在PR的“文件”选项卡中的代码行上留下评论。opencode自动检测文件、行号和差异上下文以提供准确的响应。
 
   ```
   [Comment on specific lines in Files tab]

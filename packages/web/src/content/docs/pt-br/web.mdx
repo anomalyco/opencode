@@ -1,11 +1,11 @@
 ---
 title: Web
-description: Usando OpenCode no seu navegador.
+description: Usando opencode no seu navegador.
 ---
 
-OpenCode pode ser executado como uma aplicação web no seu navegador, proporcionando a mesma poderosa experiência de codificação com IA sem precisar de um terminal.
+opencode pode ser executado como uma aplicação web no seu navegador, proporcionando a mesma poderosa experiência de codificação com IA sem precisar de um terminal.
 
-![OpenCode Web - Nova Sessão](../../../assets/web/web-homepage-new-session.png)
+![opencode Web - Nova Sessão](../../../assets/web/web-homepage-new-session.png)
 
 ## Começando
 
@@ -15,7 +15,7 @@ Inicie a interface web executando:
 opencode web
 ```
 
-Isso inicia um servidor local em `127.0.0.1` com uma porta aleatória disponível e abre automaticamente o OpenCode no seu navegador padrão.
+Isso inicia um servidor local em `127.0.0.1` com uma porta aleatória disponível e abre automaticamente o opencode no seu navegador padrão.
 
 :::caution
 Se `OPENCODE_SERVER_PASSWORD` não estiver definido, o servidor ficará sem segurança. Isso é aceitável para uso local, mas deve ser configurado para acesso à rede.
@@ -33,7 +33,7 @@ Você pode configurar o servidor web usando flags de linha de comando ou no seu 
 
 ### Porta
 
-Por padrão, o OpenCode escolhe uma porta disponível. Você pode especificar uma porta:
+Por padrão, o opencode escolhe uma porta disponível. Você pode especificar uma porta:
 
 ```bash
 opencode web --port 4096
@@ -41,13 +41,13 @@ opencode web --port 4096
 
 ### Nome do Host
 
-Por padrão, o servidor se vincula a `127.0.0.1` (apenas localhost). Para tornar o OpenCode acessível na sua rede:
+Por padrão, o servidor se vincula a `127.0.0.1` (apenas localhost). Para tornar o opencode acessível na sua rede:
 
 ```bash
 opencode web --hostname 0.0.0.0
 ```
 
-Ao usar `0.0.0.0`, o OpenCode exibirá endereços locais e de rede:
+Ao usar `0.0.0.0`, o opencode exibirá endereços locais e de rede:
 
 ```
   Acesso local:       http://localhost:4096
@@ -92,19 +92,19 @@ O nome de usuário padrão é `opencode`, mas pode ser alterado com `OPENCODE_SE
 
 ## Usando a Interface Web
 
-Uma vez iniciada, a interface web fornece acesso às suas sessões do OpenCode.
+Uma vez iniciada, a interface web fornece acesso às suas sessões do opencode.
 
 ### Sessões
 
 Visualize e gerencie suas sessões a partir da página inicial. Você pode ver sessões ativas e iniciar novas.
 
-![OpenCode Web - Sessão Ativa](../../../assets/web/web-homepage-active-session.png)
+![opencode Web - Sessão Ativa](../../../assets/web/web-homepage-active-session.png)
 
 ### Status do Servidor
 
 Clique em "Ver Servidores" para visualizar os servidores conectados e seu status.
 
-![OpenCode Web - Ver Servidores](../../../assets/web/web-homepage-see-servers.png)
+![opencode Web - Ver Servidores](../../../assets/web/web-homepage-see-servers.png)
 
 ---
 

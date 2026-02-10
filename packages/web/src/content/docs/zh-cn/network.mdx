@@ -3,13 +3,13 @@ title: 網絡
 description: 配置代理和自定義證書。
 ---
 
-OpenCode支持企业网络环境的标准代理环境变量和自定义证书。
+opencode支持企业网络环境的标准代理环境变量和自定义证书。
 
 ---
 
 ## 代理人
 
-OpenCode 尊重标准代理环境变量。
+opencode 尊重标准代理环境变量。
 
 ```bash
 # HTTPS proxy (recommended)
@@ -48,7 +48,7 @@ export HTTPS_PROXY=http://username:password@proxy.example.com:8080
 
 ## 定制證書
 
-如果您的企业使用自定义 CA 进行 HTTPS 连接，请配置 OpenCode 以信任它们。
+如果您的企业使用自定义 CA 进行 HTTPS 连接，请配置 opencode 以信任它们。
 
 ```bash
 export NODE_EXTRA_CA_CERTS=/path/to/ca-cert.pem

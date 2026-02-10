@@ -1,6 +1,6 @@
 ---
 title: 規則
-description: 設置開放代碼的自定義指令。
+description: 設置opencode的自定義指令。
 ---
 
 您可以通過創建 `AGENTS.md` 文件來提供 opencode 的自定義指令。這和Cursor的規則類似。它包含將包含在 LLM 上下文中的說明，以便為您的特定項目自定義其行為。
@@ -62,13 +62,13 @@ opencode 還支持從多個位置讀取 `AGENTS.md` 文件。這有不同的目�
 
 ### 全球的
 
-您還可以在 `~/.config/opencode/AGENTS.md` 文件中包含全局規則。這適用於所有開放代碼會話。
+您還可以在 `~/.config/opencode/AGENTS.md` 文件中包含全局規則。這適用於所有opencode會話。
 
 由於這未提交給 Git 或與您的團隊共享，因此我們建議使用它來指定 LLM 應遵循的任何個人規則。
 
 ### 克勞德代碼兼容性
 
-對於從 Claude Code 遷移的用戶，OpenCode 支持 Claude Code 的文件約定作為後備：
+對於從 Claude Code 遷移的用戶，opencode 支持 Claude Code 的文件約定作為後備：
 
 - **項目規則**：項目目錄中的`CLAUDE.md`（如果`AGENTS.md`不存在則使用）
 - **全局規則**：`~/.claude/CLAUDE.md`（如果不存在`~/.config/opencode/AGENTS.md`則使用）

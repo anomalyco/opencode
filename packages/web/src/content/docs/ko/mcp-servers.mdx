@@ -3,7 +3,7 @@ title: MCP servers
 description: Add local and remote MCP tools.
 ---
 
-Model Context Protocol , 또는 MCP를 사용하여 OpenCode에 외부 도구를 추가할 수 있습니다. OpenCode는 로컬 및 원격 서버를 모두 지원합니다.
+Model Context Protocol , 또는 MCP를 사용하여 opencode에 외부 도구를 추가할 수 있습니다. opencode는 로컬 및 원격 서버를 모두 지원합니다.
 
 추가되면 MCP 도구는 내장 도구와 함께 LLM에 자동으로 사용할 수 있습니다.
 
@@ -165,7 +165,7 @@ use the mcp_everything tool to add the number 3 and 4
 
 ## 오아우트
 
-OpenCode는 원격 MCP 서버에 대한 OAuth 인증을 자동으로 처리합니다. 서버가 인증이 필요할 때, OpenCode는:
+opencode는 원격 MCP 서버에 대한 OAuth 인증을 자동으로 처리합니다. 서버가 인증이 필요할 때, opencode는:
 
 1. 401 응답을 검출하고 OAuth 흐름을 시작
 2. **Dynamic Client 등록 (RFC 7591) ** 서버에서 지원되는 경우
@@ -189,7 +189,7 @@ OpenCode는 원격 MCP 서버에 대한 OAuth 인증을 자동으로 처리합�
 }
 ```
 
-서버가 인증이 필요한 경우, OpenCode는 먼저 사용하려고 할 때 인증됩니다. 그렇지 않다면, `opencode mcp auth <server-name>`를 사용하여 [manually 방아쇠](#authenticating)을 유발할 수 있습니다.
+서버가 인증이 필요한 경우, opencode는 먼저 사용하려고 할 때 인증됩니다. 그렇지 않다면, `opencode mcp auth <server-name>`를 사용하여 [manually 방아쇠](#authenticating)을 유발할 수 있습니다.
 
 ---
 
@@ -291,7 +291,7 @@ opencode mcp debug my-oauth-server
 
 ## 관리
 
-MCP는 OpenCode의 도구로 사용할 수 있으며 내장 도구와 함께 사용할 수 있습니다. 다른 도구와 같이 OpenCode config를 통해 관리할 수 있습니다.
+MCP는 opencode의 도구로 사용할 수 있으며 내장 도구와 함께 사용할 수 있습니다. 다른 도구와 같이 opencode config를 통해 관리할 수 있습니다.
 
 ---
 
@@ -423,7 +423,7 @@ MCP 서버 도구는 서버 이름으로 prefix로 등록되므로 서버의 모
 opencode mcp auth sentry
 ```
 
-브라우저 창을 열어 OAuth 흐름을 완료하고 OpenCode를 Sentry 계정에 연결하십시오.
+브라우저 창을 열어 OAuth 흐름을 완료하고 opencode를 Sentry 계정에 연결하십시오.
 
 일단 인증되면, 당신은 쿼리 문제, 프로젝트, 오류 데이터에 대한 프린트 도구를 사용할 수 있습니다.
 

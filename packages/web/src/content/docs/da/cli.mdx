@@ -29,15 +29,16 @@ opencode [project]
 
 #### Flag
 
-| Flag         | Kort | Beskrivelse                             |
-| ------------ | ---- | --------------------------------------- |
-| `--continue` | `-c` | Fortsæt sidste session                  |
-| `--session`  | `-s` | Sessions-id for at fortsætte            |
-| `--prompt`   |      | Spørg om at bruge                       |
-| `--model`    | `-m` | Model til brug i form af provider/model |
-| `--agent`    |      | Agent hos bruge                         |
-| `--port`     |      | Port at lytte på                        |
-| `--hostname` |      | Værtsnavn at lytte på                   |
+| Flag         | Kort | Beskrivelse                                                                  |
+| ------------ | ---- | ---------------------------------------------------------------------------- |
+| `--continue` | `-c` | Fortsæt sidste session                                                       |
+| `--session`  | `-s` | Sessions-id for at fortsætte                                                 |
+| `--fork`     |      | Forgren sessionen ved fortsættelse (brug med `--continue` eller `--session`) |
+| `--prompt`   |      | Spørg om at bruge                                                            |
+| `--model`    | `-m` | Model til brug i form af provider/model                                      |
+| `--agent`    |      | Agent hos bruge                                                              |
+| `--port`     |      | Port at lytte på                                                             |
+| `--hostname` |      | Værtsnavn at lytte på                                                        |
 
 ---
 
@@ -339,6 +340,7 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | `--command`  |      | Kommandoen til at køre, brug besked til args                                        |
 | `--continue` | `-c` | Fortsæt sidste session                                                              |
 | `--session`  | `-s` | Sessions-id for at fortsætte                                                        |
+| `--fork`     |      | Forgren sessionen ved fortsættelse (brug med `--continue` eller `--session`)        |
 | `--share`    |      | Del sessionen                                                                       |
 | `--model`    | `-m` | Model til brug i form af provider/model                                             |
 | `--agent`    |      | Agent til brug                                                                      |

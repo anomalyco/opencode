@@ -1,9 +1,9 @@
 ---
 title: ACP 支持
-description: 在任何 ACP 兼容编辑器中使用 OpenCode。
+description: 在任何 ACP 兼容编辑器中使用 opencode。
 ---
 
-OpenCode 支持[代理客户端协议](https://agentclientprotocol.com) 或 (ACP)，允许您直接在兼容的编辑器和 IDE 中使用它。
+opencode 支持[代理客户端协议](https://agentclientprotocol.com) 或 (ACP)，允许您直接在兼容的编辑器和 IDE 中使用它。
 
 :::tip
 有关支持 ACP 的编辑器和工具的列表，请查看[非加太进度进度报告](https://zed.dev/blog/acp-progress-report#available-now)。
@@ -15,9 +15,9 @@ ACP 是一种开放协议，用于标准化代码编辑器和 AI 编码代理之
 
 ## 配置
 
-要通过 ACP 使用 OpenCode，须编辑器配置为运行 `opencode acp` 命令。
+要通过 ACP 使用 opencode，须编辑器配置为运行 `opencode acp` 命令。
 
-该命令将 OpenCode 作为 ACP 兼容的子进程启动，通过 stdio 通过 JSON-RPC 与您的编辑器进行通信。
+该命令将 opencode 作为 ACP 兼容的子进程启动，通过 stdio 通过 JSON-RPC 与您的编辑器进行通信。
 
 以下是支持 ACP 的流行编辑器的示例。
 
@@ -82,7 +82,7 @@ ACP 是一种开放协议，用于标准化代码编辑器和 AI 编码代理之
 }
 ```
 
-要打开它，请在 AI Chat 代理选择器中使用新的“OpenCode”代理。
+要打开它，请在 AI Chat 代理选择器中使用新的“opencode”代理。
 
 ---
 
@@ -121,7 +121,7 @@ ACP 是一种开放协议，用于标准化代码编辑器和 AI 编码代理之
 
 ### 代码合作者.nvim
 
-相当于 OpenCode 网关 [代码伙伴.nvim](https://github.com/olimorris/codecompanion.nvim) 中的 ACP 代理，接下来将以下内容添加到 Neovim 配置中：
+相当于 opencode 网关 [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim) 中的 ACP 代理，接下来将以下内容添加到 Neovim 配置中：
 
 ```lua
 require("codecompanion").setup({
@@ -136,13 +136,13 @@ require("codecompanion").setup({
 })
 ```
 
-此配置将 CodeCompanion 设置为使用 OpenCode 作为聊天的 ACP 代理。
+此配置将 CodeCompanion 设置为使用 opencode 作为聊天的 ACP 代理。
 
 如果您需要交付环境变量（如 `OPENCODE_API_KEY`），请参阅 CodeCompanion.nvim 文档中的 [配置充电器：环境变量Z](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) 了解完整信息。
 
 ## 支持
 
-OpenCode 通过 ACP 的工作方式与在终端中的工作方式相同。支持所有功能：
+opencode 通过 ACP 的工作方式与在终端中的工作方式相同。支持所有功能：
 
 :::note
 目前不支持某些内置斜杠命令，例如 `/undo` 和 `/redo`。
@@ -150,7 +150,7 @@ OpenCode 通过 ACP 的工作方式与在终端中的工作方式相同。支持
 
 - 內置工具（文件操作、終端命令等）
 - 自定義工具和斜杠命令
-- 在 OpenCode 配置中配置的 MCP 服务器
+- 在 opencode 配置中配置的 MCP 服务器
 - `AGENTS.md` 的项目特定规则
 - 自定义程序和 linter
 - 代理和權限系統

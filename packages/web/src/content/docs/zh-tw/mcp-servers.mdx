@@ -3,9 +3,9 @@ title: MCP服務器
 description: 添加本地和遠程 MCP 工具。
 ---
 
-您可以使用“模型上下文協議”或 MCP 將外部工具添加到 OpenCode。 OpenCode 支持本地和遠程服務器。
+您可以使用“模型上下文協議”或 MCP 將外部工具添加到 opencode。 opencode 支持本地和遠程服務器。
 
-添加後，MCP 工具將自動與內置工具一起供法學碩士使用。
+添加後，MCP 工具將自動與內置工具一起供LLM使用。
 
 ---
 
@@ -23,7 +23,7 @@ MCP 服務器會添加到您的上下文中，因此您需要小心啟用哪些�
 
 ## 使能夠
 
-您可以在`mcp` 下的[開放代碼配置](https://opencode.ai/docs/config/) 中定義MCP 服務器。為每個 MCP 添加唯一的名稱。當提示 LLM 時，您可以通過名稱引用該 MCP。
+您可以在`mcp` 下的[opencode配置](https://opencode.ai/docs/config/) 中定義MCP 服務器。為每個 MCP 添加唯一的名稱。當提示 LLM 時，您可以通過名稱引用該 MCP。
 
 ```jsonc title="opencode.jsonc" {6}
 {
@@ -165,7 +165,7 @@ use the mcp_everything tool to add the number 3 and 4
 
 ## 開放認證
 
-OpenCode 自動處理遠程 MCP 服務器的 OAuth 身份驗證。當服務器需要身份驗證時，OpenCode 將：
+opencode 自動處理遠程 MCP 服務器的 OAuth 身份驗證。當服務器需要身份驗證時，opencode 將：
 
 1. 檢測 401 響應並啟動 OAuth 流程
 2. 如果服務器支持，請使用**動態客戶端註冊 (RFC 7591)**
@@ -189,7 +189,7 @@ OpenCode 自動處理遠程 MCP 服務器的 OAuth 身份驗證。當服務器�
 }
 ```
 
-如果服務器需要身份驗證，OpenCode 將在您第一次嘗試使用它時提示您進行身份驗證。如果沒有，您可以使用 `opencode mcp auth <server-name>`[手動觸發流量](#authenticating)。
+如果服務器需要身份驗證，opencode 將在您第一次嘗試使用它時提示您進行身份驗證。如果沒有，您可以使用 `opencode mcp auth <server-name>`[手動觸發流量](#authenticating)。
 
 ---
 
@@ -238,7 +238,7 @@ opencode mcp list
 opencode mcp logout my-oauth-server
 ```
 
-`mcp auth` 命令將打開您的瀏覽器進行授權。授權後，OpenCode 會將令牌安全地存儲在`~/.local/share/opencode/mcp-auth.json` 中。
+`mcp auth` 命令將打開您的瀏覽器進行授權。授權後，opencode 會將令牌安全地存儲在`~/.local/share/opencode/mcp-auth.json` 中。
 
 ---
 
@@ -291,7 +291,7 @@ opencode mcp debug my-oauth-server
 
 ## 管理
 
-您的 MCP 可作為 OpenCode 中的工具以及內置工具使用。因此，您可以像任何其他工具一樣通過 OpenCode 配置來管理它們。
+您的 MCP 可作為 opencode 中的工具以及內置工具使用。因此，您可以像任何其他工具一樣通過 opencode 配置來管理它們。
 
 ---
 
@@ -423,7 +423,7 @@ MCP 服務器工具以服務器名稱作為前綴進行註冊，因此要禁用�
 opencode mcp auth sentry
 ```
 
-這將打開一個瀏覽器窗口以完成 OAuth 流程並將 OpenCode 連接到您的 Sentry 帳戶。
+這將打開一個瀏覽器窗口以完成 OAuth 流程並將 opencode 連接到您的 Sentry 帳戶。
 
 通過身份驗證後，您可以在提示中使用 Sentry 工具來查詢問題、項目和錯誤數據。
 

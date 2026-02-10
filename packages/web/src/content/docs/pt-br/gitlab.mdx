@@ -1,33 +1,33 @@
 ---
 title: GitLab
-description: Use OpenCode em problemas e solicitações de mesclagem do GitLab.
+description: Use opencode em problemas e solicitações de mesclagem do GitLab.
 ---
 
-OpenCode se integra ao seu fluxo de trabalho do GitLab através do seu pipeline CI/CD do GitLab ou com o GitLab Duo.
+opencode se integra ao seu fluxo de trabalho do GitLab através do seu pipeline CI/CD do GitLab ou com o GitLab Duo.
 
-Em ambos os casos, o OpenCode será executado em seus runners do GitLab.
+Em ambos os casos, o opencode será executado em seus runners do GitLab.
 
 ---
 
 ## GitLab CI
 
-OpenCode funciona em um pipeline regular do GitLab. Você pode integrá-lo a um pipeline como um [componente CI](https://docs.gitlab.com/ee/ci/components/)
+opencode funciona em um pipeline regular do GitLab. Você pode integrá-lo a um pipeline como um [componente CI](https://docs.gitlab.com/ee/ci/components/)
 
-Aqui estamos usando um componente CI/CD criado pela comunidade para OpenCode — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
+Aqui estamos usando um componente CI/CD criado pela comunidade para opencode — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
 
 ---
 
 ### Recursos
 
-- **Use configuração personalizada por trabalho**: Configure o OpenCode com um diretório de configuração personalizado, por exemplo `./config/#custom-directory` para habilitar ou desabilitar funcionalidades por invocação do OpenCode.
-- **Configuração mínima**: O componente CI configura o OpenCode em segundo plano, você só precisa criar a configuração do OpenCode e o prompt inicial.
+- **Use configuração personalizada por trabalho**: Configure o opencode com um diretório de configuração personalizado, por exemplo `./config/#custom-directory` para habilitar ou desabilitar funcionalidades por invocação do opencode.
+- **Configuração mínima**: O componente CI configura o opencode em segundo plano, você só precisa criar a configuração do opencode e o prompt inicial.
 - **Flexível**: O componente CI suporta várias entradas para personalizar seu comportamento.
 
 ---
 
 ### Configuração
 
-1. Armazene seu JSON de autenticação do OpenCode como variáveis de ambiente do tipo File em **Configurações** > **CI/CD** > **Variáveis**. Certifique-se de marcá-las como "Mascaradas e ocultas".
+1. Armazene seu JSON de autenticação do opencode como variáveis de ambiente do tipo File em **Configurações** > **CI/CD** > **Variáveis**. Certifique-se de marcá-las como "Mascaradas e ocultas".
 2. Adicione o seguinte ao seu arquivo `.gitlab-ci.yml`.
 
    ```yaml title=".gitlab-ci.yml"
@@ -35,7 +35,7 @@ Aqui estamos usando um componente CI/CD criado pela comunidade para OpenCode —
      - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
        inputs:
          config_dir: ${CI_PROJECT_DIR}/opencode-config
-         auth_json: $OPENCODE_AUTH_JSON # O nome da variável para seu JSON de autenticação do OpenCode
+         auth_json: $OPENCODE_AUTH_JSON # O nome da variável para seu JSON de autenticação do opencode
          command: optional-custom-command
          message: "Seu prompt aqui"
    ```
@@ -46,23 +46,23 @@ Para mais entradas e casos de uso [consulte a documentação](https://gitlab.com
 
 ## GitLab Duo
 
-OpenCode se integra ao seu fluxo de trabalho do GitLab.
-Mencione `@opencode` em um comentário, e o OpenCode executará tarefas dentro do seu pipeline CI do GitLab.
+opencode se integra ao seu fluxo de trabalho do GitLab.
+Mencione `@opencode` em um comentário, e o opencode executará tarefas dentro do seu pipeline CI do GitLab.
 
 ---
 
 ### Recursos
 
-- **Triagem de problemas**: Peça ao OpenCode para analisar um problema e explicá-lo para você.
-- **Corrigir e implementar**: Peça ao OpenCode para corrigir um problema ou implementar uma funcionalidade.
+- **Triagem de problemas**: Peça ao opencode para analisar um problema e explicá-lo para você.
+- **Corrigir e implementar**: Peça ao opencode para corrigir um problema ou implementar uma funcionalidade.
   Ele criará um novo branch e abrirá uma solicitação de mesclagem com as alterações.
-- **Seguro**: O OpenCode é executado em seus runners do GitLab.
+- **Seguro**: O opencode é executado em seus runners do GitLab.
 
 ---
 
 ### Configuração
 
-O OpenCode é executado em seu pipeline CI/CD do GitLab, aqui está o que você precisará para configurá-lo:
+O opencode é executado em seu pipeline CI/CD do GitLab, aqui está o que você precisará para configurá-lo:
 
 :::tip
 Consulte a [**documentação do GitLab**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) para instruções atualizadas.
@@ -91,7 +91,7 @@ Consulte a [**documentação do GitLab**](https://docs.gitlab.com/user/duo_agent
       - apt-get install --yes glab
       - echo "Configurando glab"
       - echo $GITLAB_HOST
-      - echo "Criando configuração de autenticação do OpenCode"
+      - echo "Criando configuração de autenticação do opencode"
       - mkdir --parents ~/.local/share/opencode
       - |
         cat > ~/.local/share/opencode/auth.json << EOF
@@ -104,10 +104,10 @@ Consulte a [**documentação do GitLab**](https://docs.gitlab.com/user/duo_agent
         EOF
       - echo "Configurando git"
       - git config --global user.email "opencode@gitlab.com"
-      - git config --global user.name "OpenCode"
+      - git config --global user.name "opencode"
       - echo "Testando glab"
       - glab issue list
-      - echo "Executando OpenCode"
+      - echo "Executando opencode"
       - |
         opencode run "
         Você é um assistente de IA ajudando com operações do GitLab.
@@ -158,7 +158,7 @@ Você pode consultar a [documentação dos agentes da CLI do GitLab](https://doc
 
 ### Exemplos
 
-Aqui estão alguns exemplos de como você pode usar o OpenCode no GitLab.
+Aqui estão alguns exemplos de como você pode usar o opencode no GitLab.
 
 :::tip
 Você pode configurar para usar uma frase de gatilho diferente de `@opencode`.
@@ -172,7 +172,7 @@ Você pode configurar para usar uma frase de gatilho diferente de `@opencode`.
   @opencode explain this issue
   ```
 
-  O OpenCode lerá o problema e responderá com uma explicação clara.
+  O opencode lerá o problema e responderá com uma explicação clara.
 
 - **Corrigir um problema**
 
@@ -182,7 +182,7 @@ Você pode configurar para usar uma frase de gatilho diferente de `@opencode`.
   @opencode fix this
   ```
 
-  O OpenCode criará um novo branch, implementará as alterações e abrirá uma solicitação de mesclagem com as alterações.
+  O opencode criará um novo branch, implementará as alterações e abrirá uma solicitação de mesclagem com as alterações.
 
 - **Revisar solicitações de mesclagem**
 
@@ -192,4 +192,4 @@ Você pode configurar para usar uma frase de gatilho diferente de `@opencode`.
   @opencode review this merge request
   ```
 
-  O OpenCode revisará a solicitação de mesclagem e fornecerá feedback.
+  O opencode revisará a solicitação de mesclagem e fornecerá feedback.

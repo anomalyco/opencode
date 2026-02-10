@@ -24,8 +24,8 @@ OpenCode の問題をデバッグするには、まず、ディスク上に保�
 
 opencode は、セッション データとその他のアプリケーション データをディスク上の次の場所に保存します。
 
-- **macOS/Linux**: `~/.local/share/opencode/log/`
-- **Windows**: `WIN+R` を押して `%USERPROFILE%\.local\share\opencode\log` を貼り付けます
+- **macOS/Linux**: `~/.local/share/opencode/`
+- **Windows**: `WIN+R` を押して `%USERPROFILE%\.local\share\opencode` を貼り付けます
 
 このディレクトリには次のものが含まれます。
 
@@ -59,7 +59,7 @@ OpenCode Desktop は、ローカル OpenCode サーバー (`opencode-cli` サイ
 
 - **macOS/Linux**: `~/.config/opencode/opencode.jsonc` (または `~/.config/opencode/opencode.json`)
 - **macOS/Linux** (古いインストール): `~/.local/share/opencode/opencode.jsonc`
-- **Windows**: `WIN+R` を押して `%USERPROFILE%\.local\share\opencode\log` を貼り付けます
+- **Windows**: `WIN+R` を押して `%USERPROFILE%\.config\opencode\opencode.jsonc` を貼り付けます
 
 プラグインを構成している場合は、キーを削除するか空の配列に設定して、プラグインを一時的に無効にします。
 
@@ -75,10 +75,10 @@ OpenCode Desktop は、ローカル OpenCode サーバー (`opencode-cli` サイ
 OpenCode はディスクからローカル プラグインをロードすることもできます。これらを一時的に邪魔にならない場所に移動し (またはフォルダーの名前を変更し)、デスクトップ アプリを再起動します。
 
 - **グローバル プラグイン**
-  - **macOS/Linux**: `~/.local/share/opencode/log/`
-  - **Windows**: `WIN+R` を押して `%USERPROFILE%\.local\share\opencode\log` を貼り付けます
+  - **macOS/Linux**: `~/.config/opencode/plugins/`
+  - **Windows**: `WIN+R` を押して `%USERPROFILE%\.config\opencode\plugins` を貼り付けます
 - **プロジェクト プラグイン** (プロジェクトごとの構成を使用する場合のみ)
-  - `command.executed`
+  - `<your-project>/.opencode/plugins/`
 
 アプリが再び動作し始めた場合は、プラグインを 1 つずつ再度有効にして、問題の原因となっているプラ​​グインを特定します。
 
@@ -93,7 +93,7 @@ OpenCode はディスクからローカル プラグインをロードするこ�
 
 - **macOS**: Finder -> `Cmd+Shift+G` -> `~/.cache/opencode` を貼り付け
 - **Linux**: `~/.cache/opencode` を削除します (または `rm -rf ~/.cache/opencode` を実行します)。
-- **Windows**: `WIN+R` を押して `%USERPROFILE%\.local\share\opencode\log` を貼り付けます
+- **Windows**: `WIN+R` を押して `%USERPROFILE%\.cache\opencode` を貼り付けます
 
 3. OpenCode デスクトップを再起動します。
 
@@ -223,9 +223,9 @@ OpenCode で問題が発生している場合:
 
 例:
 
-- `command.executed`
-- `command.executed`
-- `command.executed`
+- `openai/gpt-4.1`
+- `openrouter/google/gemini-2.5-flash`
+- `opencode/kimi-k2`
 
 どのモデルにアクセスできるかを確認するには、`opencode models` を実行します。
 
@@ -262,11 +262,11 @@ API 呼び出しエラーが発生した場合は、プロバイダー パッケ
    rm -rf ~/.cache/opencode
    ```
 
-Windows では、`WIN+R` を押して、`%USERPROFILE%\.local\share\opencode` を削除します。
+Windows では、`WIN+R` を押して、`%USERPROFILE%\.cache\opencode` を削除します。
 
-2. オープンコードを再起動して最新のプロバイダー パッケージを再インストールします
+2. opencodeを再起動して最新のプロバイダー パッケージを再インストールします
 
-これにより、オープンコードはプロバイダー パッケージの最新バージョンを強制的にダウンロードすることになり、多くの場合、モデル パラメーターや API の変更に関する互換性の問題が解決されます。
+これにより、opencodeはプロバイダー パッケージの最新バージョンを強制的にダウンロードすることになり、多くの場合、モデル パラメーターや API の変更に関する互換性の問題が解決されます。
 
 ---
 
