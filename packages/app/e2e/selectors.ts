@@ -48,6 +48,9 @@ export const workspaceItemSelector = (slug: string) =>
 export const workspaceMenuTriggerSelector = (slug: string) =>
   `${sidebarNavSelector} [data-action="workspace-menu"][data-workspace="${slug}"]`
 
+export const workspaceNewSessionSelector = (slug: string) =>
+  `${sidebarNavSelector} [data-action="workspace-new-session"][data-workspace="${slug}"]`
+
 export const listItemSelector = '[data-slot="list-item"]'
 
 export const listItemKeyStartsWithSelector = (prefix: string) => `${listItemSelector}[data-key^="${prefix}"]`

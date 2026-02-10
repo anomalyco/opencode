@@ -28,13 +28,14 @@ function projectsKey(url: string) {
 
 export const { use: useServer, provider: ServerProvider } = createSimpleContext({
   name: "Server",
-  init: (props: { defaultUrl: string }) => {
+  init: (props: { defaultUrl: string; isSidecar?: boolean }) => {
     const platform = usePlatform()
 
     const [store, setStore, _, ready] = persisted(
       Persist.global("server", ["server.v3"]),
       createStore({
         list: [] as string[],
+        currentSidecarUrl: "",
         projects: {} as Record<string, StoredProject[]>,
         lastProject: {} as Record<string, string>,
       }),
@@ -59,7 +60,13 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
       const fallback = normalizeServerUrl(props.defaultUrl)
       if (fallback && url === fallback) {
-        setState("active", url)
+        batch(() => {
+          if (!store.list.includes(url)) {
+            // Add the fallback url to the list if it's not already in the list
+            setStore("list", store.list.length, url)
+          }
+          setState("active", url)
+        })
         return
       }
 
@@ -89,7 +96,20 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       if (state.active) return
       const url = normalizeServerUrl(props.defaultUrl)
       if (!url) return
-      setState("active", url)
+      batch(() => {
+        // Remove the previous startup sidecar url
+        if (store.currentSidecarUrl) {
+          remove(store.currentSidecarUrl)
+        }
+
+        // Add the new sidecar url
+        if (props.isSidecar && props.defaultUrl) {
+          add(props.defaultUrl)
+          setStore("currentSidecarUrl", props.defaultUrl)
+        }
+
+        setState("active", url)
+      })
     })
 
     const isReady = createMemo(() => ready() && !!state.active)
