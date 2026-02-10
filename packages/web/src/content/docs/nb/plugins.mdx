@@ -119,7 +119,7 @@ Plugin-funksjonen mottar:
 - `directory`: Gjeldende arbeidskatalog.
 - `worktree`: Git-arbeidstrebanen.
 - `client`: En opencode SDK klient for samhandling med AI.
-- `$`: Buns [skall API](https://bun.com/docs/runtime/shell) for å utføre kommandoer.
+- `$`: Buns [shell API](https://bun.com/docs/runtime/shell) for å utføre kommandoer.
 
 ---
 
@@ -260,7 +260,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 ### Injiser miljøvariabler
 
-Injiser miljøvariabler i all skallutførelse (AI verktøy og brukerterminaler):
+Injiser miljøvariabler i all shell-utførelse (AI-verktøy og brukerterminaler):
 
 ```javascript title=".opencode/plugins/inject-env.js"
 export const InjectEnvPlugin = async () => {

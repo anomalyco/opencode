@@ -57,7 +57,7 @@ Dette betyder, at projektkonfigurationer kan tilsidesætte globale standardindst
 
 ---
 
-### Fjernbetjening
+### Ekstern konfiguration
 
 Organisationer kan levere standardkonfiguration via `.well-known/opencode`-slutpunktet. Dette hentes automatisk, når du godkender med en udbyder, der understøtter det.
 
@@ -583,7 +583,7 @@ Du kan deaktivere udbydere, der indlæses automatisk gennem `disabled_providers`
 Indstillingen `disabled_providers` accepterer en række udbyder-id'er. Når en udbyder er deaktiveret:
 
 - Det vil ikke blive indlæst, omgivelserne miljøvariabler er indstillet.
-- Den vil ikke blive indlæst, gennem API nøgler er konfigureret kommandoen `/connect`.
+- Den vil ikke blive indlæst, gennem API-nøgler er konfigureret kommandoen `/connect`.
 - Udbyderens modeller vises ikke på modelvalgslisten.
 
 ---
@@ -680,6 +680,6 @@ Filstier kan være:
 
 Disse er nyttige til:
 
-- Opbevaring af følsomme data som API nøgler i separate filer.
+- Opbevaring af følsomme data som API-nøgler i separate filer.
 - Inklusiv store instruktionsfiler uden at rode i din konfiguration.
 - Deling af fælles konfigurationsuddrag på tværs af flere konfigurationsfiler.

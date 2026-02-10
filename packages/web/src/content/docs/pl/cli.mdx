@@ -1,17 +1,17 @@
 ---
-title: interfejs wiersza polecany
-description: Opcje i interfejs interfejsu CLI opencode.
+title: CLI
+description: Opcje i polecenia CLI opencode.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-Interfejs CLI opencode uruchamia się [TUI](/docs/tui), gdy jest uruchamiany bez żadnych argumentów.
+CLI opencode domyślnie uruchamia [TUI](/docs/tui), gdy wywołasz je bez argumentów.
 
 ```bash
 opencode
 ```
 
-Ale także instalacja przez tę stronę. pełni przed programową interakcją z opencode.
+CLI obsługuje też polecenia opisane na tej stronie, więc możesz używać opencode programowo.
 
 ```bash
 opencode run "Explain how closures work in JavaScript"
@@ -19,7 +19,7 @@ opencode run "Explain how closures work in JavaScript"
 
 ---
 
-### TUI
+### tui
 
 Uruchomienie interfejsu użytkownika terminala opencode.
 
@@ -58,7 +58,7 @@ opencode agent [command]
 
 ---
 
-### przytwierdzić
+### attach
 
 Dołącz terminal do już działającego serwera zaplecza opencode uruchomionego za pomocą oprogramowania `serve` lub `web`.
 
@@ -85,7 +85,7 @@ opencode attach http://10.20.30.40:4096
 
 ---
 
-#### co
+#### create
 
 Utwórz nowego agenta z niestandardową konfiguracją.
 
@@ -97,7 +97,7 @@ To działanie poprowadził Cię przez proces tworzenia nowego agenta z niestanda
 
 ---
 
-#### lista
+#### list
 
 Lista wszystkich agentów.
 
@@ -107,7 +107,7 @@ opencode agent list
 
 ---
 
-### autoryzacja
+### auth
 
 Polecenie do zarządzania danymi uwierzytelniającymi i logowaniem dla dostawców.
 
@@ -129,7 +129,7 @@ Po uruchomieniu opencode ładuje dostawców z pliku poświadczeń. A jeśli twoj
 
 ---
 
-#### lista
+#### list
 
 Wyświetlanie list wszystkich uwierzytelnionych dostawców przechowywanych w pliku poświadczeń.
 
@@ -145,7 +145,7 @@ opencode auth ls
 
 ---
 
-#### wyloguj się
+#### logout
 
 Wylogowuje Cię z dostawcy poprzez usunięcie go z pliku poświadczeń.
 
@@ -155,7 +155,7 @@ opencode auth logout
 
 ---
 
-### githubie
+### github
 
 Zarządzaj agentem GitHub w celu automatyzacji repozytorium.
 
@@ -165,7 +165,7 @@ opencode github [command]
 
 ---
 
-#### Dowiedz się
+#### install
 
 Zainstaluj agenta GitHub w swoim repozytorium.
 
@@ -177,7 +177,7 @@ Spowoduje to konieczność uruchomienia akcji GitHub i przeprowadzi cię przez p
 
 ---
 
-#### chcesz
+#### run
 
 Uruchom agenta na GitHubie. Jest to zwykły użytkownik w akcjach GitHub.
 
@@ -204,7 +204,7 @@ opencode mcp [command]
 
 ---
 
-#### zaproponować
+#### add
 
 Dodaj serwer MCP do swojej konfiguracji.
 
@@ -216,7 +216,7 @@ To polecenie poprowadzić Cię przez proces dodawania lokalnego lub zdalnego ser
 
 ---
 
-#### lista
+#### list
 
 Wyświetlanie list wszystkich skonfigurowanych serwerów MCP i ich awarii.
 
@@ -232,7 +232,7 @@ opencode mcp ls
 
 ---
 
-#### autoryzacja
+#### auth
 
 Uwierzytelnij się za pomocą serwera MCP z włączoną funkcją OAuth.
 
@@ -256,7 +256,7 @@ opencode mcp auth ls
 
 ---
 
-#### wyloguj się
+#### logout
 
 Usuń doświadczenie OAuth dla serwera MCP.
 
@@ -266,7 +266,7 @@ opencode mcp logout [name]
 
 ---
 
-#### odpluskwić
+#### debug
 
 Debuguj problemy z połączeniem OAuth dla serwera MCP.
 
@@ -276,7 +276,7 @@ opencode mcp debug <name>
 
 ---
 
-### modele
+### models
 
 Wyświetlanie list modeli wszystkich skonfigurowanych dostawców.
 
@@ -352,7 +352,7 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 ---
 
-### podawać
+### serve
 
 Uruchom bezgłowy serwer opencode w celu uzyskania dostępu do API. Pełny interfejs HTTP w [dokumentacji serwera](/docs/server).
 
@@ -373,7 +373,7 @@ Spowoduje dostęp do serwera HTTP, który zapewnia dostęp do API opencode bez i
 
 ---
 
-### Sesja
+### session
 
 Zarządzaj sesją opencode.
 
@@ -383,7 +383,7 @@ opencode session [command]
 
 ---
 
-#### lista
+#### list
 
 Lista wszystkich sesji opencode.
 
@@ -400,7 +400,7 @@ opencode session list
 
 ---
 
-### statystyki
+### stats
 
 Pokaż statystyki wykorzystania tokenów i sesji szkoleniowych opencode.
 
@@ -419,7 +419,7 @@ opencode stats
 
 ---
 
-### eksport
+### export
 
 Eksportuj dane sesji jako JSON.
 
@@ -448,7 +448,7 @@ opencode import https://opncd.ai/s/abc123
 
 ---
 
-### sieć
+### web
 
 Uruchomiony bezgłowy serwer opencode z interfejsem internetowym.
 
@@ -469,7 +469,7 @@ Spowoduje dostęp do serwera HTTP i otwarcie dostępu do opencode przez interfej
 
 ---
 
-### akp
+### acp
 
 Uruchomiony serwer ACP (Agent Client Protocol).
 
@@ -489,7 +489,7 @@ Aby udostępnić serwer ACP, który komunikuje się poprzez stdin/stdout przy u�
 
 ---
 
-### odinstaluj
+### uninstall
 
 Odinstaluj opencode i usuń wszystkie pliki powiązane.
 
@@ -508,7 +508,7 @@ opencode uninstall
 
 ---
 
-### aktualizacja
+### upgrade
 
 Aktualizuje opencode do oryginalnej wersji lub oryginalnej wersji.
 
@@ -549,7 +549,7 @@ Interfejs CLI kod opencode przyjmuje flagi globalne.
 
 ---
 
-## Zmienne warunki
+## Zmienne środowiskowe
 
 opencode można wykryć za pomocą czyszczenia alternatywnych.
 
@@ -582,7 +582,7 @@ opencode można wykryć za pomocą czyszczenia alternatywnych.
 
 ---
 
-### Eksperymentalny
+### Eksperymentalne
 
 Te zmienne możliwości użycia funkcji eksperymentalnych, które mogą zostać lub usunięte.
 

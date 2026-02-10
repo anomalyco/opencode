@@ -15,7 +15,7 @@ description: 反復的なタスク用のカスタム コマンドを作成しま
 
 ## コマンドファイルの作成
 
-カスタム コマンドを定義するには、`commands/` ディレクトリにマークダウン ファイルを作成します。
+カスタム コマンドを定義するには、`commands/` ディレクトリにMarkdown ファイルを作成します。
 
 `.opencode/commands/test.md` を作成します。
 
@@ -42,7 +42,7 @@ Focus on the failing tests and suggest fixes.
 
 ## 設定する
 
-カスタム コマンドは、OpenCode 構成を通じて、または `commands/` ディレクトリにマークダウン ファイルを作成することによって追加できます。
+カスタム コマンドは、OpenCode 構成を通じて、または `commands/` ディレクトリにMarkdown ファイルを作成することによって追加できます。
 
 ---
 
@@ -75,9 +75,9 @@ OpenCode で `command` オプションを使用します [config](/docs/config):
 
 ---
 
-### マークダウン
+### Markdown
 
-マークダウン ファイルを使用してコマンドを定義することもできます。それらを次の場所に置きます。
+Markdown ファイルを使用してコマンドを定義することもできます。それらを次の場所に置きます。
 
 - グローバル: `~/.config/opencode/agents/`
 - プロジェクトごと: `.opencode/agents/`
@@ -93,7 +93,7 @@ Run the full test suite with coverage report and show any failures.
 Focus on the failing tests and suggest fixes.
 ```
 
-マークダウンファイル名がコマンド名になります。たとえば、`test.md` を使用すると、
+Markdown ファイル名がコマンド名になります。たとえば、`test.md` を使用すると、
 あなたは実行します:
 
 ```bash frame="none"
@@ -161,7 +161,7 @@ with the following content: $3
 
 ---
 
-### シェル出力
+### shell出力
 
 _!`command`_ を使用して、[bash command](/docs/tui#bash-commands) の出力をプロンプトに挿入します。
 

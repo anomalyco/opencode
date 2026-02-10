@@ -95,7 +95,7 @@ opencode의 다른 공급자와 같이 작동하고 사용하기에 완전히 �
 
 ---
 
-### 302. 사이트맵
+### 302.AI
 
 1. [302.AI 콘솔](https://302.ai/)에 머리, 계정을 만들고 API 키를 생성합니다.
 
@@ -288,9 +288,9 @@ opencode의 Claude Pro/Max 구독을 사용하여 [Anthropic](https://anthropic.
 
 ##### API 키 사용
 
-Pro/Max 구독이 없는 경우 **Create an API Key**를 선택할 수 있습니다. 브라우저를 열고 Anthropic에 로그인하고 터미널에서 붙여넣을 수있는 코드를 제공합니다.
+Pro/Max 구독이 없는 경우 **Create an API Key**를 선택할 수 있습니다. 브라우저를 열고 Anthropic에 로그인하고 terminal에서 붙여넣을 수있는 코드를 제공합니다.
 
-또는 이미 API 키가 있다면, ** 수동으로 API Key**를 입력하고 터미널에서 붙여넣을 수 있습니다.
+또는 이미 API 키가 있다면, ** 수동으로 API Key**를 입력하고 terminal에서 붙여넣을 수 있습니다.
 
 ---
 
@@ -396,7 +396,7 @@ export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
 
 #### 기본
 
-1. [Baseten] (https://app.baseten.co/)에 머리는, 계정을 만들고, API 열쇠를 생성합니다.
+1. [Baseten](https://app.baseten.co/)에 머리는, 계정을 만들고, API 열쇠를 생성합니다.
 
 2. `/connect` 명령을 실행하고 **Baseten**를 검색하십시오.
 
@@ -423,7 +423,7 @@ export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
 
 #### Cerebras의
 
-1. [Cerebras 콘솔] (https://inference.cerebras.ai/)에 머리, 계정을 만들고 API 키를 생성합니다.
+1. [Cerebras 콘솔](https://inference.cerebras.ai/)에 머리, 계정을 만들고 API 키를 생성합니다.
 
 2. `/connect` 명령을 실행하고 **Cerebras**를 검색하십시오.
 
@@ -508,7 +508,7 @@ opencode config를 통해 모델을 추가할 수 있습니다.
 
 #### 코텍
 
-1. [Cortecs 콘솔] (https://cortecs.ai/)에 머리, 계정을 만들고 API 키를 생성합니다.
+1. [Cortecs 콘솔](https://cortecs.ai/)에 머리, 계정을 만들고 API 키를 생성합니다.
 
 2. `/connect` 명령을 실행하고 **Cortecs**를 검색하십시오.
 
@@ -535,7 +535,7 @@ opencode config를 통해 모델을 추가할 수 있습니다.
 
 ## 딥스카이
 
-1. [DeepSeek 콘솔] (https://platform.deepseek.com/)에 머리, 계정을 만들고, ** 새로운 API 키**를 클릭합니다.
+1. [DeepSeek 콘솔](https://platform.deepseek.com/)에 머리, 계정을 만들고, ** 새로운 API 키**를 클릭합니다.
 
 2. `/connect` 명령을 실행하고 **DeepSeek**를 검색하십시오.
 
@@ -589,7 +589,7 @@ opencode config를 통해 모델을 추가할 수 있습니다.
 
 ## 펌웨어
 
-1. [Firmware 대시보드] (https://app.firmware.ai/signup)에 머리, 계정을 만들고 API 키를 생성합니다.
+1. [Firmware 대시보드](https://app.firmware.ai/signup)에 머리, 계정을 만들고 API 키를 생성합니다.
 
 2. `/connect` 명령을 실행하고 **Firmware**를 검색하십시오.
 
@@ -671,7 +671,7 @@ Select**OAuth**와 브라우저는 권한이 없습니다.
 2. 새 토큰 추가 \*\*
 3. 이름: `opencode`의 범위: `api`
 4. 토큰 복사 (`glpat-`와 함께 시작)
-5. 맨끝에서 그것을 입력하십시오
+5. terminal에서 그것을 입력하십시오
 
 6. 유효한 모형을 보기 위하여 `/models` 명령을 실행하십시오.
 
@@ -753,7 +753,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 [opencode-gitlab-auth](https://www.npmjs.com/package/@gitlab/opencode-gitlab-auth) 홈페이지에 대한 추가 문서.
 
-##### 윤곽
+##### 구성
 
 `opencode.json`를 통해 주문을 받아서 만드십시오:
 
@@ -795,7 +795,7 @@ GitHub Copilot 구독을 사용하여 opencode:
 
 :::note
 몇몇 모형은 [Pro+를 필요로 할지도 모릅니다
-구독] (https://github.com/features/copilot/plans) 사용.
+구독](https://github.com/features/copilot/plans) 사용.
 
 일부 모델은 수동으로 활성화해야합니다 [GitHub Copilot 설정](https://docs.github.com/en/copilot/how-tos/use-ai-models/configure-access-to-ai-models#setup-for-individual-use).
 :::
@@ -840,7 +840,7 @@ opencode로 Google Vertex AI를 사용하려면:
 2. 필요한 환경 변수를 설정:
 
 - `GOOGLE_CLOUD_PROJECT`: 당신의 구글 클라우드 프로젝트 ID
-- `VERTEX_LOCATION` (선택): Vertex AI를 위한 지구 (`global`에 과태)
+- `VERTEX_LOCATION` (선택): Vertex AI를 위한 지구 (`global`에 기본)
 - 인증(초당):
 - `GOOGLE_APPLICATION_CREDENTIALS`: 서비스 계정 JSON 키 파일 경로
 - gcloud CLI를 사용하여 인증 : `gcloud auth application-default login`
@@ -954,7 +954,7 @@ export VERTEX_LOCATION=global
    /models
    ```
 
-캐싱 및 속도 제한과 같은 더 많은 공급자와 고급 기능을 위해 [Helicone 문서] (https://docs.helicone.ai)를 확인하십시오.
+캐싱 및 속도 제한과 같은 더 많은 공급자와 고급 기능을 위해 [Helicone 문서](https://docs.helicone.ai)를 확인하십시오.
 
 #### 선택 사항
 
@@ -1034,7 +1034,7 @@ npm install -g opencode-helicone-session
 | `Helicone-Cache-Enabled`   | 대응 캐싱 (`true`/`false`)                                 |
 | `Helicone-User-Id`         | 사용자별 추적 가능                                         |
 | `Helicone-Property-[Name]` | 사용자 정의 속성 추가(예: `Helicone-Property-Environment`) |
-| `Helicone-Prompt-Id`       | 신속한 대응                                                |
+| `Helicone-Prompt-Id`       | prompt 대응                                                |
 
 모든 사용 가능한 헤더에 대한 [Helicone Header Directory](https://docs.helicone.ai/helicone-headers/header-directory)를 참조하십시오.
 
@@ -1145,7 +1145,7 @@ LM Studio를 통해 로컬 모델을 사용할 수 있습니다.
 
 Moonshot AI에서 Kimi K2 사용 :
 
-1. [Moonshot AI 콘솔] (https://platform.moonshot.ai/console)에 머리, 계정을 만들고, ** API 키**를 클릭합니다.
+1. [Moonshot AI 콘솔](https://platform.moonshot.ai/console)에 머리, 계정을 만들고, ** API 키**를 클릭합니다.
 
 2. `/connect` 명령을 실행하고 **Moonshot AI**를 검색하십시오.
 
@@ -1199,7 +1199,7 @@ Moonshot AI에서 Kimi K2 사용 :
 
 ## Nebius 토큰 공장
 
-1. [Nebius Token Factory 콘솔] (https://tokenfactory.nebius.com/)에 머리, 계정을 만들고, ** 키 추가 **.
+1. [Nebius Token Factory 콘솔](https://tokenfactory.nebius.com/)에 머리, 계정을 만들고, ** 키 추가 **.
 
 2. `/connect` 명령을 실행하고 **Nebius Token Factory**를 검색하십시오.
 
@@ -1307,7 +1307,7 @@ opencode로 Ollama Cloud를 사용하려면:
 
 ### 오픈아이
 
-[ChatGPT Plus 또는 Pro] (https://chatgpt.com/pricing)에 가입하는 것이 좋습니다.
+[ChatGPT Plus 또는 Pro](https://chatgpt.com/pricing)에 가입하는 것이 좋습니다.
 
 1. 가입하면 `/connect` 명령을 실행하고 OpenAI를 선택하십시오.
 
@@ -1334,7 +1334,7 @@ opencode로 Ollama Cloud를 사용하려면:
 
 ##### API 키 사용
 
-API 키가 이미 있다면 ** 수동으로 API 키**를 입력하고 터미널에서 붙여넣을 수 있습니다.
+API 키가 이미 있다면 ** 수동으로 API 키**를 입력하고 terminal에서 붙여넣을 수 있습니다.
 
 ---
 
@@ -1369,7 +1369,7 @@ OpenCode Zen은 opencode 팀에서 제공하는 테스트 및 검증된 모델 �
 
 ## 오픈로자
 
-1. [OpenRouter 대시보드] (https://openrouter.ai/settings/keys)에 머리, click ** API Key**를 클릭하고 키를 복사합니다.
+1. [OpenRouter 대시보드](https://openrouter.ai/settings/keys)에 머리, click ** API Key**를 클릭하고 키를 복사합니다.
 
 2. `/connect` 명령을 실행하고 OpenRouter를 검색하십시오.
 
@@ -1488,7 +1488,7 @@ export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","s
 
 ### OVHcloud AI 엔드포인트
 
-1. [OVHcloud 패널] (https://ovh.com/manager)에 머리. `Public Cloud` 섹션으로 이동, `AI & Machine Learning` > `AI Endpoints` 및 `API Keys` 탭에서, ** 새로운 API 키 활성화 **.
+1. [OVHcloud 패널](https://ovh.com/manager)에 머리. `Public Cloud` 섹션으로 이동, `AI & Machine Learning` > `AI Endpoints` 및 `API Keys` 탭에서, ** 새로운 API 키 활성화 **.
 
 2. `/connect` 명령을 실행하고 ** OVHcloud AI Endpoints**를 검색하십시오.
 
@@ -1571,7 +1571,7 @@ opencode를 사용하여 [Scaleway Generative APIs](https://www.scaleway.com/en/
 
 ## 베니스 AI
 
-1. [Venice AI 콘솔] (https://venice.ai)에 머리, 계정을 만들고 API 키를 생성합니다.
+1. [Venice AI 콘솔](https://venice.ai)에 머리, 계정을 만들고 API 키를 생성합니다.
 
 2. `/connect` 명령을 실행하고 **Venice AI **를 검색하십시오.
 

@@ -13,7 +13,7 @@ Vous pouvez basculer entre les agents au cours d'une session ou les appeler avec
 
 ---
 
-## Espèces
+## Types
 
 Il existe deux types d'agents dans OpenCode ; agents primaires et sous-agents.
 
@@ -177,7 +177,7 @@ Configurez les agents dans votre fichier de configuration `opencode.json` :
 
 ---
 
-### Réduction
+### Markdown
 
 Vous pouvez également définir des agents à l'aide de fichiers markdown. Placez-les dans :
 
@@ -206,11 +206,11 @@ You are in code review mode. Focus on:
 Provide constructive feedback without making direct changes.
 ```
 
-Le nom du fichier de démarque devient le nom de l'agent. Par exemple, `review.md` crée un agent `review`.
+Le nom du fichier Markdown devient le nom de l'agent. Par exemple, `review.md` crée un agent `review`.
 
 ---
 
-## Possibilités
+## Options
 
 Examinons ces options de configuration en détail.
 
@@ -323,7 +323,7 @@ Définissez sur `true` pour désactiver l'agent.
 
 ---
 
-### Rapide
+### Prompt
 
 Spécifiez un fichier d'invite système personnalisé pour cet agent avec la configuration `prompt`. Le fichier d'invite doit contenir des instructions spécifiques à l'objectif de l'agent.
 
@@ -617,7 +617,7 @@ Utilisez une couleur hexadécimale valide (par exemple, `#FF5733`) ou une couleu
 
 ---
 
-### Haut P
+### Top P
 
 Contrôlez la diversité des réponses avec l’option `top_p`. Alternative à la température pour contrôler le caractère aléatoire.
 
