@@ -70,7 +70,7 @@ GitHub 앱을 설치하고 워크플로를 만들고 비밀을 설정할 수 있
              model: anthropic/claude-sonnet-4-20250514
              # share: true
              # github_token: xxxx
-   ```
+```
 
 3. ** 비밀의 API 키 저장 **
 
@@ -89,12 +89,12 @@ GitHub 앱을 설치하고 워크플로를 만들고 비밀을 설정할 수 있
 대안으로, GitHub Action runner의 [붙박이 `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github token)을 사용하여 opencode GitHub 앱을 설치하지 않고 사용할 수 있습니다. 워크플로우에서 필요한 권한을 부여하는 것을 확인하십시오.
 
 ```yaml
-  permissions:
-    id-token: write
-    contents: write
-    pull-requests: write
-    issues: write
-  ```
+permissions:
+  id-token: write
+  contents: write
+  pull-requests: write
+  issues: write
+```
 
 또한 [개인 액세스 토큰](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)(PAT)를 사용할 수 있습니다.
 
@@ -278,7 +278,7 @@ GitHub 문제에서 이 의견 추가.
 
 ```
   /opencode explain this issue
-  ```
+```
 
 opencode는 모든 코멘트를 포함하여 전체 스레드를 읽고, 명확한 설명과 대답.
 
@@ -288,7 +288,7 @@ GitHub 문제에서:
 
 ```
   /opencode fix this
-  ```
+```
 
 opencode는 새로운 지점을 만들 것이며 변경 사항을 실행하고 PR을 변경합니다.
 
@@ -298,7 +298,7 @@ GitHub PR에 다음 댓글을 남겨주세요.
 
 ```
   Delete the attachment from S3 when the note is removed /oc
-  ```
+```
 
 opencode는 요청한 변경을 구현하고 동일한 PR에 커밋합니다.
 
@@ -309,7 +309,7 @@ PR의 "Files" 탭의 코드 라인에 직접 댓글을 남겨주세요. opencode
 ```
   [Comment on specific lines in Files tab]
   /oc add error handling here
-  ```
+```
 
 특정 라인에 대한 의견이 있을 때, opencode는 다음과 같습니다.
 

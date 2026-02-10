@@ -29,14 +29,14 @@ Ovdje koristimo CI/CD komponentu kreiranu u zajednici za OpenCode — [nagyv/git
 2. Dodajte sljedeće u svoju `.gitlab-ci.yml` datoteku.
 
 ```yaml title=".gitlab-ci.yml"
-   include:
-     - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
-       inputs:
-         config_dir: ${CI_PROJECT_DIR}/opencode-config
-         auth_json: $OPENCODE_AUTH_JSON # The variable name for your OpenCode authentication JSON
-         command: optional-custom-command
-         message: "Your prompt here"
-   ```
+include:
+  - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
+    inputs:
+      config_dir: ${CI_PROJECT_DIR}/opencode-config
+      auth_json: $OPENCODE_AUTH_JSON # The variable name for your OpenCode authentication JSON
+      command: optional-custom-command
+      message: "Your prompt here"
+```
 
 Za više unosa i slučajeva upotrebe [pogledajte dokumente docs](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode) za ovu komponentu.
 
@@ -165,7 +165,7 @@ Možete konfigurirati da koristite drugu frazu okidača od `@opencode`.
 
 ```
   @opencode explain this issue
-  ```
+```
 
 OpenCode će pročitati problem i odgovoriti jasnim objašnjenjem.
 
@@ -174,7 +174,7 @@ OpenCode će pročitati problem i odgovoriti jasnim objašnjenjem.
 
 ```
   @opencode fix this
-  ```
+```
 
 OpenCode će kreirati novu granu, implementirati promjene i otvoriti zahtjev za spajanje s promjenama.
 
@@ -183,6 +183,6 @@ OpenCode će kreirati novu granu, implementirati promjene i otvoriti zahtjev za 
 
 ```
   @opencode review this merge request
-  ```
+```
 
 OpenCode će pregledati zahtjev za spajanje i dati povratne informacije.
