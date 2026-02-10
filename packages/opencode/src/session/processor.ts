@@ -331,9 +331,8 @@ export namespace SessionProcessor {
                     messageID: input.assistantMessage.id,
                     sessionID: input.assistantMessage.sessionID,
                     type: "file",
-                    mime: value.mediaType,
-                    url: value.url,
-                    filename: value.filename,
+                    mime: value.file.mediaType,
+                    url: `data:${value.file.mediaType};base64,${value.file.base64}`,
                   })
                   break
 
