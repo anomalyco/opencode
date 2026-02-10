@@ -8,7 +8,7 @@ import { Steps } from "@astrojs/starlight/components"
 OpenCode は Windows で直接実行できますが、より快適に使うには [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) の利用をおすすめします。WSL は OpenCode の機能とスムーズに連携する Linux 環境を提供します。
 
 :::tip[WSL を使う理由]
-WSL を使うと、ファイルシステム性能、端末サポート、OpenCode が依存する開発ツールとの互換性が向上します。
+WSL を使うと、ファイルシステム性能、terminalサポート、OpenCode が依存する開発ツールとの互換性が向上します。
 :::
 
 ---
@@ -23,7 +23,7 @@ WSL を使うと、ファイルシステム性能、端末サポート、OpenCod
 
 2. **WSL で OpenCode をインストールする**
 
-   WSL の準備ができたら WSL のターミナルを開き、[インストール方法](/docs/) のいずれかで OpenCode をインストールします。
+   WSL の準備ができたら WSL のterminal を開き、[インストール方法](/docs/) のいずれかで OpenCode をインストールします。
 
    ```bash
    curl -fsSL https://opencode.ai/install | bash
@@ -69,23 +69,21 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
 
 :::
 
-````bash
-
 ## Web クライアント + WSL
 
 Windows で Web 利用を快適にするには:
 
-1. **PowerShell ではなく WSL ターミナルで `opencode web` を実行する**
+1. **PowerShell ではなく WSL terminal で `opencode web` を実行する**
 
    ```bash
    opencode web --hostname 0.0.0.0
-````
+   ```
 
 2. **Windows のブラウザーからアクセスする**
 
    `http://localhost:<port>` にアクセスします（URL は OpenCode が表示します）。
 
-WSL から `opencode web` を実行すると、適切なファイルシステムアクセスとターミナル統合を維持したまま、Windows ブラウザーから利用できます。
+WSL から `opencode web` を実行すると、適切なファイルシステムアクセスとterminal 統合を維持したまま、Windows ブラウザーから利用できます。
 
 ---
 

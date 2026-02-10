@@ -14,32 +14,32 @@ OpenCode Zen er for øyeblikket i beta.
 :::
 
 Zen fungerer som alle andre leverandører i OpenCode. Du logger på OpenCode Zen og får
-din API nøkkel. Den er **helt valgfri** og du trenger ikke bruke den for å bruke den
+din API-nøgle. Den er **helt valgfri** og du trenger ikke bruge den for at bruge den
 OpenCode.
 
 ---
 
 ## Bakgrunn
 
-Det er et stort antall modeller der ute, men bare noen få av dem
-disse modellene fungerer godt som kodeagenter. I tillegg er de fleste tilbydere
+Det er et stort antall modeller der ute, men bare nogle få av dem
+disse modellene fungerer godt som kodeagenter. I tiltilføj er de fleste tilbydere
 konfigurert veldig annerledes; slik at du får veldig forskjellig ytelse og kvalitet.
 
 :::tip
 Vi testet en utvalgt gruppe modeller og leverandører som fungerer godt med OpenCode.
 :::
 
-Så hvis du bruker en modell gjennom noe som OpenRouter, kan du aldri bli det
+Så hvis du bruger en modell gjennom noe som OpenRouter, kan du aldri bli det
 sikker på om du får den beste versjonen av modellen du ønsker.
 
-For å fikse dette gjorde vi et par ting:
+For at fikse dette gjorde vi et par ting:
 
 1. Vi testet en utvalgt gruppe modeller og snakket med teamene deres om hvordan
    best kjøre dem.
-2. Vi samarbeidet deretter med noen få leverandører for å sikre at disse ble servert
+2. Vi samarbeidet deretter med nogle få leverandører for at sikre at disse ble servert
    riktig.
 3. Til slutt benchmarket vi kombinasjonen av modell/leverandør og kom frem
-   med en liste som vi har lyst til å anbefale.
+   med en liste som vi har lyst til at anbefale.
 
 OpenCode Zen er en AI gateway som gir deg tilgang til disse modellene.
 
@@ -49,12 +49,12 @@ OpenCode Zen er en AI gateway som gir deg tilgang til disse modellene.
 
 OpenCode Zen fungerer som alle andre leverandører i OpenCode.
 
-1. Du logger på **<a href={console}>OpenCode Zen</a>**, legg til fakturering
-   detaljer, og kopier API-nøkkelen.
-2. Du kjører kommandoen `/connect` i TUI, velger OpenCode Zen og limer inn API-nøkkelen.
-3. Kjør `/models` i TUI for å se listen over modeller vi anbefaler.
+1. Du logger på **<a href={console}>OpenCode Zen</a>**, tilføj til fakturering
+   detaljer, og kopier API-nøgleen.
+2. Du kjører kommandoen `/connect` i TUI, velger OpenCode Zen og limer inn API-nøgleen.
+3. Kjør `/models` i TUI for at se listen over modeller vi anbefaler.
 
-Du belastes per forespørsel, og du kan legge til kreditt på kontoen din.
+Du belastes per forespørsel, og du kan tilføje til kreditt på kontoen din.
 
 ---
 
@@ -95,14 +95,14 @@ Du kan også få tilgang til modellene våre gjennom følgende API-endepunkter.
 | Stor sylteagurk     | stor sylteagurk    | `https://opencode.ai/zen/v1/chat/completions`      | `@ai-sdk/openai-compatible` |
 
 [modell-id](/docs/config/#models) i OpenCode-konfigurasjonen
-bruker formatet `opencode/<model-id>`. For eksempel, for GPT 5.2 Codex, ville du
-bruk `opencode/gpt-5.2-codex` i konfigurasjonen din.
+bruger formatet `opencode/<model-id>`. For eksempel, for GPT 5.2 Codex, ville du
+brug `opencode/gpt-5.2-codex` i konfigurasjonen din.
 
 ---
 
 ### Modeller
 
-Du kan hente hele listen over tilgjengelige modeller og deres metadata fra:
+Du kan hente hele listen over tilgængelige modeller og deres metadata fra:
 
 ```
 https://opencode.ai/zen/v1/models
@@ -150,7 +150,7 @@ Vi støtter en pay-as-you-go-modell. Nedenfor er prisene **per 1 million tokens*
 | GPT 5 Codex                       | $1,07   | $8,50  | $0,107     | -            |
 | GPT 5 Nano                        | Gratis  | Gratis | Gratis     | -            |
 
-Du legger kanskje merke til _Claude Haiku 3.5_ i brukshistorikken din. Dette er en [lavprismodell](/docs/config/#models) som brukes til å generere titlene på øktene dine.
+Du tilføjer kanskje merke til _Claude Haiku 3.5_ i brugshistorikken din. Dette er en [lavprismodell](/docs/config/#models) som bruges til at generere titlene på sessionene dine.
 
 :::note
 Kredittkortgebyrer overføres til kostpris (4,4 % + $0,30 per transaksjon); vi belaster ikke noe utover det.
@@ -158,10 +158,10 @@ Kredittkortgebyrer overføres til kostpris (4,4 % + $0,30 per transaksjon); vi b
 
 De gratis modellene:
 
-- GLM 4.7 Free er tilgjengelig på OpenCode i en begrenset periode. Teamet bruker denne tiden til å samle tilbakemeldinger og forbedre modellen.
-- Kimi K2.5 Gratis er tilgjengelig på OpenCode i en begrenset periode. Teamet bruker denne tiden til å samle tilbakemeldinger og forbedre modellen.
-- MiniMax M2.1 Free er tilgjengelig på OpenCode i en begrenset periode. Teamet bruker denne tiden til å samle tilbakemeldinger og forbedre modellen.
-- Big Pickle er en stealth-modell som er gratis på OpenCode i en begrenset periode. Teamet bruker denne tiden til å samle tilbakemeldinger og forbedre modellen.
+- GLM 4.7 Free er tilgængelig på OpenCode i en begrænset periode. Teamet bruger denne tiden til at samle tilbagemeldinger og forbedre modellen.
+- Kimi K2.5 Gratis er tilgængelig på OpenCode i en begrænset periode. Teamet bruger denne tiden til at samle tilbagemeldinger og forbedre modellen.
+- MiniMax M2.1 Free er tilgængelig på OpenCode i en begrænset periode. Teamet bruger denne tiden til at samle tilbagemeldinger og forbedre modellen.
+- Big Pickle er en stealth-modell som er gratis på OpenCode i en begrænset periode. Teamet bruger denne tiden til at samle tilbagemeldinger og forbedre modellen.
 
 <a href={email}>Contact us</a> if you have any questions.
 
@@ -177,10 +177,10 @@ Du kan endre beløpet for automatisk påfylling. Du kan også deaktivere automat
 
 ### Månedlige grenser
 
-Du kan også angi en månedlig bruksgrense for hele arbeidsområdet og for hver
+Du kan også angi en månedlig brugsgrense for hele arbeidsområdet og for hver
 medlem av teamet ditt.
 
-La oss for eksempel si at du setter en månedlig bruksgrense til $20, Zen vil ikke bruke
+La oss for eksempel si at du setter en månedlig brugsgrense til $20, Zen vil ikke bruge
 mer enn $20 på en måned. Men hvis du har automatisk reload aktivert, kan Zen ende opp
 belaster deg mer enn $20 hvis saldoen din går under $5.
 
@@ -188,12 +188,12 @@ belaster deg mer enn $20 hvis saldoen din går under $5.
 
 ## Personvern
 
-Alle våre modeller er vert i US. Leverandørene våre følger en nulloppbevaringspolicy og bruker ikke dataene dine til modellopplæring, med følgende unntak:
+Alle våre modeller er vert i US. Leverandørene våre følger en nulloppbevaringspolicy og bruger ikke dataene dine til modellopplæring, med følgende unntak:
 
-- Big Pickle: I løpet av gratisperioden kan innsamlede data brukes til å forbedre modellen.
-- GLM 4.7 Gratis: I løpet av gratisperioden kan innsamlede data brukes til å forbedre modellen.
-- Kimi K2.5 Gratis: I løpet av gratisperioden kan innsamlede data brukes til å forbedre modellen.
-- MiniMax M2.1 Gratis: I løpet av gratisperioden kan innsamlede data brukes til å forbedre modellen.
+- Big Pickle: I løpet av gratisperioden kan innsamlede data bruges til at forbedre modellen.
+- GLM 4.7 Gratis: I løpet av gratisperioden kan innsamlede data bruges til at forbedre modellen.
+- Kimi K2.5 Gratis: I løpet av gratisperioden kan innsamlede data bruges til at forbedre modellen.
+- MiniMax M2.1 Gratis: I løpet av gratisperioden kan innsamlede data bruges til at forbedre modellen.
 - OpenAI APIer: Forespørsler oppbevares i 30 dager i samsvar med [OpenAIs datapolicyer](https://platform.openai.com/docs/guides/your-data).
 - Anthropic APIer: Forespørsler oppbevares i 30 dager i samsvar med [Anthropics datapolicyer](https://docs.anthropic.com/en/docs/claude-code/data-usage).
 
@@ -202,7 +202,7 @@ Alle våre modeller er vert i US. Leverandørene våre følger en nulloppbevarin
 ## For lag
 
 Zen fungerer også utmerket for team. Du kan invitere lagkamerater, tildele roller, kuratere
-modellene laget ditt bruker, og mer.
+modellene laget ditt bruger, og mer.
 
 :::note
 Arbeidsområder er for øyeblikket gratis for team som en del av betaversjonen.
@@ -220,7 +220,7 @@ Du kan invitere lagkamerater til arbeidsområdet ditt og tildele roller:
 - **Admin**: Administrer modeller, medlemmer, API-nøkler og fakturering
 - **Medlem**: Administrer kun sine egne API-nøkler
 
-Administratorer kan også sette månedlige forbruksgrenser for hvert medlem for å holde kostnadene under kontroll.
+Administratorer kan også sette månedlige forbrugsgrenser for hvert medlem for at holde kostnadene under kontroll.
 
 ---
 
@@ -228,27 +228,27 @@ Administratorer kan også sette månedlige forbruksgrenser for hvert medlem for 
 
 Administratorer kan aktivere eller deaktivere spesifikke modeller for arbeidsområdet. Forespørsler til en deaktivert modell vil returnere en feil.
 
-Dette er nyttig for tilfeller der du ønsker å deaktivere bruken av en modell som
+Dette er nyttig for tilfeller der du ønsker at deaktivere brugen av en modell som
 samler inn data.
 
 ---
 
 ### Ta med egen nøkkel
 
-Du kan bruke dine egne OpenAI- eller Anthropic API-nøkler mens du fortsatt har tilgang til andre modeller i Zen.
+Du kan bruge dine egne OpenAI- eller Anthropic API-nøkler mens du fortsatt har tilgang til andre modeller i Zen.
 
-Når du bruker dine egne nøkler, faktureres tokens direkte av leverandøren, ikke av Zen.
+Når du bruger dine egne nøkler, faktureres tokens direkte av leverandøren, ikke av Zen.
 
 For eksempel kan organisasjonen din allerede ha en nøkkel for OpenAI eller Anthropic
-og du vil bruke det i stedet for det Zen gir.
+og du vil bruge det i stedet for det Zen gir.
 
 ---
 
 ## Mål
 
-Vi opprettet OpenCode Zen for å:
+Vi opretet OpenCode Zen for at:
 
 1. **Benchmark** de beste modellene/leverandørene for kodingsagenter.
 2. Ha tilgang til alternativene for **høyeste kvalitet** og ikke nedgrader ytelsen eller rute til billigere leverandører.
-3. Gi videre eventuelle **prisfall** ved å selge til kostpris; så den eneste markeringen er å dekke behandlingsgebyrene våre.
-4. Ha **ingen låsing** ved å la deg bruke den med en hvilken som helst annen kodeagent. Og la deg alltid bruke en hvilken som helst annen leverandør med OpenCode også.
+3. Gi videre eventuelle **prisfall** ved at selge til kostpris; så den eneste markeringen er at dekke behandlingsgebyrene våre.
+4. Ha **ingen låsing** ved at la deg bruge den med en hvilken som helst annen kodeagent. Og la deg alltid bruge en hvilken som helst annen leverandør med OpenCode også.

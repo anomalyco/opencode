@@ -6,12 +6,12 @@ description: 使用 opencode 中的任何 LLM 提供商。
 import config from "../../../../config.mjs"
 export const console = config.console
 
-opencode 使用[人工智能軟件開發工具包](https://ai-sdk.dev/) 和[模型.dev](https://models.dev) 來支持**75+ LLM 提供商**，並且它支持運行本地模型。
+opencode 使用[AI SDK](https://ai-sdk.dev/) 和[models.dev](https://models.dev) 來支持**75+ LLM 提供商**，並且它支持運行本地模型。
 
 要添加提供商，您需要：
 
-1. 使用 `/connect` 命令添加提供程序的 API 密鑰。
-2. 在 opencode 配置中配置提供程序。
+1. 使用 `/connect` 命令添加提供商的 API 密鑰。
+2. 在 opencode 配置中配置提供商。
 
 ---
 
@@ -24,14 +24,14 @@ opencode 使用[人工智能軟件開發工具包](https://ai-sdk.dev/) 和[模�
 
 ### 配置
 
-您可以通過 opencode 中的 `provider` 部分自定義提供程序
+您可以通過 opencode 中的 `provider` 部分自定義提供商
 配置。
 
 ---
 
 #### 基本網址
 
-您可以通過設置 `baseURL` 選項來自定義任何提供程序的基本 URL。這在使用代理服務或自定義端點時非常有用。
+您可以通過設置 `baseURL` 選項來自定義任何提供商的基本 URL。這在使用代理服務或自定義端點時非常有用。
 
 ```json title="opencode.json" {6}
 {
@@ -63,7 +63,7 @@ OpenCode Zen 是 opencode 團隊提供的模型列表，這些模型已被
    /connect
    ```
 
-2. 登錄，添加您的賬單詳細信息，然後復制您的 API 密鑰。
+2. 登錄，添加您的帳單詳細信息，然後復制您的 API 密鑰。
 
 3. 粘貼您的 API 密鑰。
 
@@ -80,7 +80,7 @@ OpenCode Zen 是 opencode 團隊提供的模型列表，這些模型已被
    /models
    ```
 
-它的工作方式與 opencode 中的任何其他提供程序一樣，並且完全可以選擇使用。
+它的工作方式與 opencode 中的任何其他提供商一樣，並且完全可以選擇使用。
 
 ---
 
@@ -178,7 +178,7 @@ OpenCode Zen 是 opencode 團隊提供的模型列表，這些模型已被
    **可用選項：**
    - `region` - AWS 區域（例如`us-east-1`、`eu-west-1`）
    - `profile` - 來自 `~/.aws/credentials` 的 AWS 命名配置文件
-   - `endpoint` - VPC 終端節點的自定義終端節點 URL（通用 `baseURL` 選項的別名）
+   - `endpoint` - VPC terminal節點的自定義terminal節點 URL（通用 `baseURL` 選項的別名）
 
    :::tip
    配置文件選項優先於環境變量。
@@ -186,7 +186,7 @@ OpenCode Zen 是 opencode 團隊提供的模型列表，這些模型已被
 
    #### 高級：VPC 端點
 
-   如果您使用 Bedrock 的 VPC 終端節點：
+   如果您使用 Bedrock 的 VPC terminal節點：
 
    ```json title="opencode.json"
    {
@@ -230,7 +230,7 @@ OpenCode Zen 是 opencode 團隊提供的模型列表，這些模型已被
    ```
 
 :::note
-對於自定義推理配置文件，請在密鑰中使用模型和提供程序名稱，並將 `id` 屬性設置為 arn。這確保了正確的緩存：
+對於自定義推理配置文件，請在密鑰中使用模型和提供商名稱，並將 `id` 屬性設置為 arn。這確保了正確的緩存：
 
 ```json title="opencode.json"
 {
@@ -252,7 +252,7 @@ OpenCode Zen 是 opencode 團隊提供的模型列表，這些模型已被
 
 ---
 
-### 人擇
+### Anthropic
 
 1. 註冊後，運行 `/connect` 命令並選擇 Anthropic。
 
@@ -279,18 +279,18 @@ OpenCode Zen 是 opencode 團隊提供的模型列表，這些模型已被
    ```
 
 :::info
-[人擇](https://anthropic.com) 不正式支持在 opencode 中使用您的 Claude Pro/Max 訂閱。
+[Anthropic](https://anthropic.com) 不正式支持在 opencode 中使用您的 Claude Pro/Max 訂閱。
 :::
 
 ##### 使用 API 密鑰
 
-如果您沒有 Pro/Max 訂閱，您還可以選擇 **創建 API 密鑰**。它還會打開您的瀏覽器並要求您登錄 Anthropic 並為您提供一個可以粘貼到終端中的代碼。
+如果您沒有 Pro/Max 訂閱，您還可以選擇 **創建 API 密鑰**。它還會打開您的瀏覽器並要求您登錄 Anthropic 並為您提供一個可以粘貼到terminal 中的程式碼。
 
-或者，如果您已有 API 密鑰，則可以選擇 **手動輸入 API 密鑰** 並將其粘貼到您的終端中。
+或者，如果您已有 API 密鑰，則可以選擇 **手動輸入 API 密鑰** 並將其粘貼到您的terminal中。
 
 ---
 
-### Azure 開放人工智能
+### Azure 開放AI
 
 :::note
 如果遇到“抱歉，但我無法協助該請求”錯誤，請嘗試將 Azure 資源中的內容篩選器從 **DefaultV2** 更改為 **Default**。
@@ -300,7 +300,7 @@ OpenCode Zen 是 opencode 團隊提供的模型列表，這些模型已被
    - **資源名稱**：這將成為您的 API 端點 (`https://RESOURCE_NAME.openai.azure.com/`) 的一部分
    - **API 密鑰**：來自您的資源的 `KEY 1` 或 `KEY 2`
 
-2. 轉到[Azure 人工智能鑄造廠](https://ai.azure.com/) 並部署模型。
+2. 轉到[Azure AI Foundry](https://ai.azure.com/) 並部署模型。
 
    :::note
    部署名稱必須與模型名稱匹配，opencode 才能正常工作。
@@ -347,7 +347,7 @@ OpenCode Zen 是 opencode 團隊提供的模型列表，這些模型已被
    - **資源名稱**：這將成為您的 API 端點 (`https://AZURE_COGNITIVE_SERVICES_RESOURCE_NAME.cognitiveservices.azure.com/`) 的一部分
    - **API 密鑰**：來自您的資源的 `KEY 1` 或 `KEY 2`
 
-2. 轉到[Azure 人工智能鑄造廠](https://ai.azure.com/) 並部署模型。
+2. 轉到[Azure AI Foundry](https://ai.azure.com/) 並部署模型。
 
    :::note
    部署名稱必須與模型名稱匹配，opencode 才能正常工作。
@@ -388,9 +388,9 @@ OpenCode Zen 是 opencode 團隊提供的模型列表，這些模型已被
 
 ---
 
-### 巴吉度獵犬
+### Baseten
 
-1. 前往[巴吉度獵犬](https://app.baseten.co/)，創建一個帳戶並生成一個 API 密鑰。
+1. 前往[Baseten](https://app.baseten.co/)，創建一個帳戶並生成一個 API 密鑰。
 
 2. 運行`/connect`命令並蒐索**Baseten**。
 
@@ -417,7 +417,7 @@ OpenCode Zen 是 opencode 團隊提供的模型列表，這些模型已被
 
 ### 大腦
 
-1. 前往[大腦控制台](https://inference.cerebras.ai/)，創建一個帳戶並生成一個 API 密鑰。
+1. 前往[Cerebras Console](https://inference.cerebras.ai/)，創建一個帳戶並生成一個 API 密鑰。
 
 2. 運行 `/connect` 命令並蒐索 **Cerebras**。
 
@@ -556,7 +556,7 @@ Cloudflare AI Gateway 讓您可以通過統一端點訪問來自 OpenAI、Anthro
 
 ### 深層基礎設施
 
-1. 前往[深度基礎設施儀表板](https://deepinfra.com/dash)，創建一個帳戶並生成一個 API 密鑰。
+1. 前往[DeepInfra dashboard](https://deepinfra.com/dash)，創建一個帳戶並生成一個 API 密鑰。
 
 2. 運行 `/connect` 命令並蒐索 **Deep Infra**。
 
@@ -583,7 +583,7 @@ Cloudflare AI Gateway 讓您可以通過統一端點訪問來自 OpenAI、Anthro
 
 ### 韌體
 
-1. 前往[固件儀表板](https://app.firmware.ai/signup)，創建一個帳戶並生成一個 API 密鑰。
+1. 前往[Firmware dashboard](https://app.firmware.ai/signup)，創建一個帳戶並生成一個 API 密鑰。
 
 2. 運行`/connect`命令並蒐索**固件**。
 
@@ -608,7 +608,7 @@ Cloudflare AI Gateway 讓您可以通過統一端點訪問來自 OpenAI、Anthro
 
 ---
 
-### 煙花人工智能
+### 煙花AI
 
 1. 前往[Fireworks AI 控制台](https://app.fireworks.ai/)，創建一個帳戶，然後單擊“**創建 API 密鑰**”。
 
@@ -664,7 +664,7 @@ GitLab Duo 通過 GitLab 的 Anthropic 代理提供具有本機工具調用功�
    2. 單擊**添加新令牌**
    3. 名稱：`OpenCode`，範圍：`api`
    4. 複製令牌（以`glpat-`開頭）
-   5. 在終端中輸入
+   5. 在 terminal中輸入
 
 3. 運行 `/models` 命令以查看可用模型。
 
@@ -733,14 +733,14 @@ export GITLAB_TOKEN=glpat-...
 ##### 適用於自託管實例的 OAuth
 
 為了使 Oauth 適用於您的自託管實例，您需要創建
-一個新的應用程序（設置→應用程序）
+一個新的應用程式（設置→應用程式）
 回調 URL `http://127.0.0.1:8080/callback` 和以下範圍：
 
 - api（代表您訪問API）
 - read_user（讀取您的個人信息）
 - read_repository（允許對存儲庫進行只讀訪問）
 
-然後將應用程序 ID 公開為環境變量：
+然後將應用程式 ID 公開為環境變量：
 
 ```bash
 export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
@@ -801,7 +801,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
    /connect
    ```
 
-2. 導航至[github.com/login/device](https://github.com/login/device) 並輸入代碼。
+2. 導航至[github.com/login/device](https://github.com/login/device) 並輸入程式碼。
 
    ```txt
    ┌ Login with GitHub Copilot
@@ -821,7 +821,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 ---
 
-### 谷歌頂點人工智能
+### 谷歌頂點AI
 
 要將 Google Vertex AI 與 opencode 結合使用：
 
@@ -867,7 +867,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 ### 格羅克
 
-1. 前往[格羅克控制台](https://console.groq.com/)，單擊“**創建 API 密鑰**”，然後復制密鑰。
+1. 前往[Groq Console](https://console.groq.com/)，單擊“**創建 API 密鑰**”，然後復制密鑰。
 
 2. 運行`/connect`命令並蒐索Groq。
 
@@ -896,7 +896,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 [Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.](https://huggingface.co/docs/inference-providers) 提供對超過 17 個提供商支持的開放模型的訪問。
 
-1. 前往[擁抱臉部設置](https://huggingface.co/settings/tokens/new?ownUserPermissions=inference.serverless.write&tokenType=fineGrained) 創建一個具有調用推理提供程序權限的令牌。
+1. 前往[Hugging Face settings](https://huggingface.co/settings/tokens/new?ownUserPermissions=inference.serverless.write&tokenType=fineGrained) 創建一個具有調用推理提供商權限的令牌。
 
 2. 運行 `/connect` 命令並蒐索 **Hugging Face**。
 
@@ -921,11 +921,11 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 ---
 
-### 螺旋錐
+### Helicone
 
-[螺旋錐](https://helicone.ai) 是一個 LLM 可觀察性平台，可為您的 AI 應用程序提供日誌記錄、監控和分析。 Helicone AI Gateway 根據模型自動將您的請求路由到適當的提供商。
+[Helicone](https://helicone.ai) 是一個 LLM 可觀察性平台，可為您的 AI 應用程式提供日誌記錄、監控和分析。 Helicone AI Gateway 根據模型自動將您的請求路由到適當的提供商。
 
-1. 前往[螺旋錐](https://helicone.ai)，創建一個帳戶，並從您的儀表板生成 API 密鑰。
+1. 前往[Helicone](https://helicone.ai)，創建一個帳戶，並從您的儀表板生成 API 密鑰。
 
 2. 運行 `/connect` 命令並蒐索 **Helicone**。
 
@@ -948,7 +948,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
    /models
    ```
 
-有關更多提供程序和高級功能（例如緩存和速率限制），請查看[螺旋錐文檔](https://docs.helicone.ai)。
+有關更多提供商和高級功能（例如緩存和速率限制），請查看[Helicone docs](https://docs.helicone.ai)。
 
 #### 可選配置
 
@@ -982,7 +982,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 #### 自定義標頭
 
-Helicone 支持緩存、用戶跟踪和會話管理等功能的自定義標頭。使用 `options.headers` 將它們添加到您的提供程序配置中：
+Helicone 支持緩存、用戶跟踪和會話管理等功能的自定義標頭。使用 `options.headers` 將它們添加到您的提供商配置中：
 
 ```jsonc title="~/.config/opencode/opencode.jsonc"
 {
@@ -1005,7 +1005,7 @@ Helicone 支持緩存、用戶跟踪和會話管理等功能的自定義標頭�
 
 ##### 會話跟踪
 
-Helicone 的 [會議](https://docs.helicone.ai/features/sessions) 功能可讓您將相關的 LLM 請求分組在一起。使用 [opencode-helicone-會話](https://github.com/H2Shami/opencode-helicone-session) 插件自動將每個 opencode 對話記錄為 Helicone 中的會話。
+Helicone 的 [會議](https://docs.helicone.ai/features/sessions) 功能可讓您將相關的 LLM 請求分組在一起。使用 [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) 插件自動將每個 opencode 對話記錄為 Helicone 中的會話。
 
 ```bash
 npm install -g opencode-helicone-session
@@ -1036,7 +1036,7 @@ npm install -g opencode-helicone-session
 
 ### 調用.cpp
 
-您可以通過[駱駝.cpp 的](https://github.com/ggml-org/llama.cpp) llama-server實用程序配置opencode以使用本地模型
+您可以通過[llama.cpp 的](https://github.com/ggml-org/llama.cpp) llama-server實用程序配置opencode以使用本地模型
 
 ```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
 {
@@ -1065,8 +1065,8 @@ npm install -g opencode-helicone-session
 在這個例子中：
 
 - `llama.cpp` 是自定義提供商 ID。這可以是您想要的任何字符串。
-- `npm` 指定用於此提供程序的包。這裡，`@ai-sdk/openai-compatible` 用於任何 OpenAI 兼容的 API。
-- `name` 是 UI 中提供程序的顯示名稱。
+- `npm` 指定用於此提供商的包。這裡，`@ai-sdk/openai-compatible` 用於任何 OpenAI 兼容的 API。
+- `name` 是 UI 中提供商的顯示名稱。
 - `options.baseURL` 是本地服務器的端點。
 - `models` 是模型 ID 與其配置的映射。型號名稱將顯示在型號選擇列表中。
 
@@ -1076,7 +1076,7 @@ npm install -g opencode-helicone-session
 
 IO.NET 提供了 17 種針對各種用例進行優化的模型：
 
-1. 前往[IO.NET控制台](https://ai.io.net/)，創建一個帳戶並生成一個 API 密鑰。
+1. 前往[IO.NET console](https://ai.io.net/)，創建一個帳戶並生成一個 API 密鑰。
 
 2. 運行`/connect`命令並蒐索**IO.NET**。
 
@@ -1128,18 +1128,18 @@ IO.NET 提供了 17 種針對各種用例進行優化的模型：
 在這個例子中：
 
 - `lmstudio` 是自定義提供商 ID。這可以是您想要的任何字符串。
-- `npm` 指定用於此提供程序的包。這裡，`@ai-sdk/openai-compatible` 用於任何 OpenAI 兼容的 API。
-- `name` 是 UI 中提供程序的顯示名稱。
+- `npm` 指定用於此提供商的包。這裡，`@ai-sdk/openai-compatible` 用於任何 OpenAI 兼容的 API。
+- `name` 是 UI 中提供商的顯示名稱。
 - `options.baseURL` 是本地服務器的端點。
 - `models` 是模型 ID 與其配置的映射。型號名稱將顯示在型號選擇列表中。
 
 ---
 
-### 登月人工智能
+### 登月AI
 
 要使用 Moonshot AI 中的 Kimi K2：
 
-1. 前往[Moonshot 人工智能控制台](https://platform.moonshot.ai/console)，創建一個帳戶，然後單擊“**創建 API 密鑰**”。
+1. 前往[Moonshot AI console](https://platform.moonshot.ai/console)，創建一個帳戶，然後單擊“**創建 API 密鑰**”。
 
 2. 運行 `/connect` 命令並蒐索 **Moonshot AI**。
 
@@ -1249,8 +1249,8 @@ Ollama 可以自動為 opencode 配置自身。詳情請參閱[Ollama 集成文�
 在這個例子中：
 
 - `ollama` 是自定義提供商 ID。這可以是您想要的任何字符串。
-- `npm` 指定用於此提供程序的包。這裡，`@ai-sdk/openai-compatible` 用於任何 OpenAI 兼容的 API。
-- `name` 是 UI 中提供程序的顯示名稱。
+- `npm` 指定用於此提供商的包。這裡，`@ai-sdk/openai-compatible` 用於任何 OpenAI 兼容的 API。
+- `name` 是 UI 中提供商的顯示名稱。
 - `options.baseURL` 是本地服務器的端點。
 - `models` 是模型 ID 與其配置的映射。型號名稱將顯示在型號選擇列表中。
 
@@ -1299,7 +1299,7 @@ Ollama 可以自動為 opencode 配置自身。詳情請參閱[Ollama 集成文�
 
 ---
 
-### 開放人工智能
+### 開放AI
 
 我們建議註冊[ChatGPT Plus 或 Pro](https://chatgpt.com/pricing)。
 
@@ -1328,7 +1328,7 @@ Ollama 可以自動為 opencode 配置自身。詳情請參閱[Ollama 集成文�
 
 ##### 使用 API 密鑰
 
-如果您已有 API 密鑰，可以選擇 **手動輸入 API 密鑰** 並將其粘貼到您的終端中。
+如果您已有 API 密鑰，可以選擇 **手動輸入 API 密鑰** 並將其粘貼到您的terminal中。
 
 ---
 
@@ -1363,7 +1363,7 @@ OpenCode Zen 是 opencode 團隊提供的經過測試和驗證的模型列表。
 
 ### 開放路由器
 
-1. 前往[OpenRouter儀表板](https://openrouter.ai/settings/keys)，單擊“**創建 API 密鑰**”，然後復制密鑰。
+1. 前往[OpenRouter dashboard](https://openrouter.ai/settings/keys)，單擊“**創建 API 密鑰**”，然後復制密鑰。
 
 2. 運行`/connect`命令並蒐索OpenRouter。
 
@@ -1425,7 +1425,7 @@ OpenCode Zen 是 opencode 團隊提供的經過測試和驗證的模型列表。
 
 ---
 
-### SAP人工智能核心
+### SAPAI核心
 
 SAP AI Core 通過統一平台提供對 OpenAI、Anthropic、Google、Amazon、Meta、Mistral 和 AI21 的 40 多個模型的訪問。
 
@@ -1536,9 +1536,9 @@ SAP AI Core 通過統一平台提供對 OpenAI、Anthropic、Google、Amazon、M
 
 ---
 
-### 一起人工智能
+### 一起AI
 
-1. 前往[一起AI控制台](https://api.together.ai)，創建一個帳戶，然後單擊“**添加密鑰**”。
+1. 前往[Together AI console](https://api.together.ai)，創建一個帳戶，然後單擊“**添加密鑰**”。
 
 2. 運行 `/connect` 命令並蒐索 **Together AI**。
 
@@ -1563,9 +1563,9 @@ SAP AI Core 通過統一平台提供對 OpenAI、Anthropic、Google、Amazon、M
 
 ---
 
-### 威尼斯人工智能
+### 威尼斯AI
 
-1. 前往[威尼斯人工智能控制台](https://venice.ai)，創建一個帳戶並生成一個 API 密鑰。
+1. 前往[Venice AI console](https://venice.ai)，創建一個帳戶並生成一個 API 密鑰。
 
 2. 運行`/connect`命令並蒐索**Venice AI**。
 
@@ -1590,11 +1590,11 @@ SAP AI Core 通過統一平台提供對 OpenAI、Anthropic、Google、Amazon、M
 
 ---
 
-### Vercel人工智能網關
+### VercelAI網關
 
 Vercel AI Gateway 可讓您通過統一端點訪問來自 OpenAI、Anthropic、Google、xAI 等的模型。型號按標價提供，不加價。
 
-1. 前往[維塞爾儀表板](https://vercel.com/)，導航至 **AI Gateway** 選項卡，然後單擊 **API 密鑰** 以創建新的 API 密鑰。
+1. 前往[Vercel dashboard](https://vercel.com/)，導航至 **AI Gateway** 選項卡，然後單擊 **API 密鑰** 以創建新的 API 密鑰。
 
 2. 運行 `/connect` 命令並蒐索 **Vercel AI Gateway**。
 
@@ -1746,10 +1746,10 @@ Vercel AI Gateway 可讓您通過統一端點訪問來自 OpenAI、Anthropic、G
 
 ## 定制提供商
 
-要添加 `/connect` 命令中未列出的任何 **OpenAI 兼容** 提供程序：
+要添加 `/connect` 命令中未列出的任何 **OpenAI 兼容** 提供商：
 
 :::tip
-您可以將任何與 OpenAI 兼容的提供程序與 opencode 結合使用。大多數現代人工智能提供商都提供與 OpenAI 兼容的 API。
+您可以將任何與 OpenAI 兼容的提供商與 opencode 結合使用。大多數現代AI提供商都提供與 OpenAI 兼容的 API。
 :::
 
 1. 運行 `/connect` 命令並向下滾動到 **其他**。
@@ -1827,7 +1827,7 @@ Vercel AI Gateway 可讓您通過統一端點訪問來自 OpenAI、Anthropic、G
 
    有關高級選項的更多信息，請參見下面的示例。
 
-5. 運行 `/models` 命令，您的自定義提供程序和模型將出現在選擇列表中。
+5. 運行 `/models` 命令，您的自定義提供商和模型將出現在選擇列表中。
 
 ---
 
@@ -1883,7 +1883,7 @@ Vercel AI Gateway 可讓您通過統一端點訪問來自 OpenAI、Anthropic、G
 
    這不適用於 Amazon Bedrock 等依賴環境變量進行身份驗證的提供商。
 
-2. 對於自定義提供程序，請檢查 opencode 配置並：
-   - 確保 `/connect` 命令中使用的提供程序 ID 與 opencode 配置中的 ID 匹配。
-   - 正確的 npm 包用於提供程序。例如，對 Cerebras 使用 `@ai-sdk/cerebras`。對於所有其他 OpenAI 兼容提供商，請使用 `@ai-sdk/openai-compatible`。
+2. 對於自定義提供商，請檢查 opencode 配置並：
+   - 確保 `/connect` 命令中使用的提供商 ID 與 opencode 配置中的 ID 匹配。
+   - 正確的 npm 包用於提供商。例如，對 Cerebras 使用 `@ai-sdk/cerebras`。對於所有其他 OpenAI 兼容提供商，請使用 `@ai-sdk/openai-compatible`。
    - 檢查 `options.baseURL` 字段中使用了正確的 API 端點。
