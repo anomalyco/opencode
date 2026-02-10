@@ -31,7 +31,7 @@ export default {
         status: event.event.response?.status ?? 0,
         ip: event.event.request.headers["x-real-ip"],
       }
-      const time = event.eventTimestamp ?? Date.now()
+      const time = new Date(event.eventTimestamp ?? Date.now()).toISOString()
       const events = []
       for (const log of event.logs) {
         for (const message of log.message) {
@@ -49,7 +49,6 @@ export default {
       const ret = await fetch("https://api.honeycomb.io/1/batch/zen", {
         method: "POST",
         headers: {
-          "Content-Encoding": "plaintext",
           "Content-Type": "application/json",
           "X-Honeycomb-Team": Resource.HONEYCOMB_API_KEY.value,
         },
