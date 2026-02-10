@@ -1,0 +1,117 @@
+name: Build Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号 (留空自动获取上游最新版本)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  get-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Install jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+
+      - name: Get upstream latest version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          else
+            LATEST=$(curl -s https://api.github.com/repos/anomalyco/opencode/releases/latest | jq -r .tag_name | sed 's/^v//')
+            echo "获取到上游最新版本: $LATEST"
+            echo "version=$LATEST" >> $GITHUB_OUTPUT
+          fi
+
+  build:
+    needs: get-version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x64
+          - os: ubuntu-latest
+            target: linux-arm64
+          - os: macos-latest
+            target: darwin-arm64
+          - os: macos-latest
+            target: darwin-x64
+          - os: windows-latest
+            target: windows-x64
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build
+        run: bun run build --single --skip-install
+        working-directory: packages/opencode
+        env:
+          OPENCODE_VERSION: ${{ needs.get-version.outputs.version }}
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          cd packages/opencode/dist/opencode-*/bin
+          tar -czf ../../opencode-${{ matrix.target }}.tar.gz *
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cd packages/opencode/dist/opencode-*/bin
+          zip -r ../../opencode-${{ matrix.target }}.zip *
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $binDir = Get-ChildItem -Path "packages/opencode/dist/opencode-*" -Directory | Select-Object -First 1
+          Compress-Archive -Path "$($binDir.FullName)/bin/*" -DestinationPath "packages/opencode/dist/opencode-${{ matrix.target }}.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-${{ matrix.target }}
+          path: packages/opencode/dist/opencode-${{ matrix.target }}.*
+
+  release:
+    needs: [get-version, build]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.get-version.outputs.version }}
+          name: Release v${{ needs.get-version.outputs.version }}
+          draft: false
+          prerelease: false
+          files: artifacts/*
