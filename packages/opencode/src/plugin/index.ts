@@ -30,6 +30,7 @@ export namespace Plugin {
     })
     const config = await Config.get()
     const hooks: Hooks[] = []
+    const pluginLog = Log.create({ service: "plugin.user" })
     const input: PluginInput = {
       client,
       project: Instance.project,
@@ -37,6 +38,7 @@ export namespace Plugin {
       directory: Instance.directory,
       serverUrl: Server.url(),
       $: Bun.$,
+      log: pluginLog,
     }
 
     for (const plugin of INTERNAL_PLUGINS) {
@@ -129,9 +131,16 @@ export namespace Plugin {
     Bus.subscribeAll(async (input) => {
       const hooks = await state().then((x) => x.hooks)
       for (const hook of hooks) {
-        hook["event"]?.({
-          event: input,
-        })
+        try {
+          await hook["event"]?.({
+            event: input,
+          })
+        } catch (error) {
+          log.error("plugin event handler threw an error", {
+            eventType: input.type,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
       }
     })
   }

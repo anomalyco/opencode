@@ -23,6 +23,13 @@ export type ProviderContext = {
   options: Record<string, any>
 }
 
+export type PluginLogger = {
+  debug(message?: any, extra?: Record<string, any>): void
+  info(message?: any, extra?: Record<string, any>): void
+  warn(message?: any, extra?: Record<string, any>): void
+  error(message?: any, extra?: Record<string, any>): void
+}
+
 export type PluginInput = {
   client: ReturnType<typeof createOpencodeClient>
   project: Project
@@ -30,6 +37,11 @@ export type PluginInput = {
   worktree: string
   serverUrl: URL
   $: BunShell
+  /**
+   * Logger that writes to OpenCode's log file instead of stderr.
+   * Use this instead of `console.error()` to avoid corrupting the TUI display.
+   */
+  log: PluginLogger
 }
 
 export type Plugin = (input: PluginInput) => Promise<Hooks>
