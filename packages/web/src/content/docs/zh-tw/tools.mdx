@@ -1,0 +1,379 @@
+---
+title: 工具
+description: 管理LLM可以使用的工具。
+---
+
+工具允許 LLM 在您的代碼庫中執行操作。 opencode 附帶了一組內置工具，但您可以使用[定制工具](/docs/custom-tools) 或[MCP服務器](/docs/mcp-servers) 對其進行擴展。
+
+默認情況下，所有工具都是**啟用**並且不需要運行權限。您可以通過[權限](/docs/permissions)控制工具行為。
+
+---
+
+## 配置
+
+使用 `permission` 字段控制工具行為。您可以允許、拒絕或要求批准每個工具。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "deny",
+    "bash": "ask",
+    "webfetch": "allow"
+  }
+}
+```
+
+您還可以使用通配符同時控制多個工具。例如，要求 MCP 服務器批准所有工具：
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "mymcp_*": "ask"
+  }
+}
+```
+
+[了解更多](/docs/permissions) 關於配置權限。
+
+---
+
+## 內建
+
+以下是 opencode 中可用的所有內置工具。
+
+---
+
+### bash
+
+在項目環境中執行 shell 命令。
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": "allow"
+  }
+}
+```
+
+該工具允許LLM運行 `npm install`、`git status` 等終端命令或任何其他 shell 命令。
+
+---
+
+### edit
+
+使用精確的字符串替換修改現有文件。
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+該工具通過替換精確的文本匹配來對文件執行精確編輯。這是LLM修改代碼的主要方式。
+
+---
+
+### write
+
+創建新文件或覆蓋現有文件。
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+使用它允許LLM創建新文件。如果現有文件已經存在，它將覆蓋它們。
+
+:::note
+`write`工具由`edit`權限控制，該權限涵蓋所有文件修改（`edit`、`write`、`patch`、`multiedit`）。
+:::
+
+---
+
+### read
+
+從代碼庫中讀取文件內容。
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "read": "allow"
+  }
+}
+```
+
+該工具讀取文件並返回其內容。它支持讀取大文件的特定行範圍。
+
+---
+
+### grep
+
+使用正則表達式搜索文件內容。
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "grep": "allow"
+  }
+}
+```
+
+在您的代碼庫中快速進行內容搜索。支持完整的正則表達式語法和文件模式過濾。
+
+---
+
+### glob
+
+通過模式匹配查找文件。
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "glob": "allow"
+  }
+}
+```
+
+使用`**/*.js` 或`src/**/*.ts` 等全局模式搜索文件。返回按修改時間排序的匹配文件路徑。
+
+---
+
+### list
+
+列出給定路徑中的文件和目錄。
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "list": "allow"
+  }
+}
+```
+
+該工具列出目錄內容。它接受全局模式來過濾結果。
+
+---
+
+### lsp（實驗性）
+
+與您配置的 LSP 服務器交互，以獲得代碼智能功能，例如定義、引用、懸停信息和調用層次結構。
+
+:::note
+該工具僅在`OPENCODE_EXPERIMENTAL_LSP_TOOL=true`（或`OPENCODE_EXPERIMENTAL=true`）時可用。
+:::
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "lsp": "allow"
+  }
+}
+```
+
+支持的操作包括`goToDefinition`、`findReferences`、`hover`、`documentSymbol`、`workspaceSymbol`、`goToImplementation`、`prepareCallHierarchy`、`incomingCalls` 和`outgoingCalls`。
+
+要配置哪些 LSP 服務器可用於您的項目，請參閱[LSP服務器](/docs/lsp)。
+
+---
+
+### patch
+
+對文件應用補丁。
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "edit": "allow"
+  }
+}
+```
+
+該工具將補丁文件應用到您的代碼庫。對於應用來自各種來源的差異和補丁很有用。
+
+:::note
+`patch`工具由`edit`權限控制，該權限涵蓋所有文件修改（`edit`、`write`、`patch`、`multiedit`）。
+:::
+
+---
+
+### skill
+
+加載[技能](/docs/skills)（`SKILL.md` 文件）並在對話中返回其內容。
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "skill": "allow"
+  }
+}
+```
+
+---
+
+### todowrite
+
+在編碼會話期間管理待辦事項列表。
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "todowrite": "allow"
+  }
+}
+```
+
+創建和更新任務列表以跟踪複雜操作期間的進度。LLM使用它來組織多步驟任務。
+
+:::note
+默認情況下，子代理禁用此工具，但您可以手動啟用它。 [了解更多](/docs/agents/#permissions)
+:::
+
+---
+
+### todoread
+
+閱讀現有的待辦事項列表。
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "todoread": "allow"
+  }
+}
+```
+
+讀取當前待辦事項列表狀態。LLM用來跟踪哪些任務待處理或已完成。
+
+:::note
+默認情況下，子代理禁用此工具，但您可以手動啟用它。 [了解更多](/docs/agents/#permissions)
+:::
+
+---
+
+### webfetch
+
+獲取網頁內容。
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "webfetch": "allow"
+  }
+}
+```
+
+允許LLM獲取和閱讀網頁。對於查找文檔或研究在線資源很有用。
+
+---
+
+### websearch
+
+在網絡上搜索信息。
+
+:::note
+僅當使用 opencode 提供程序或 `OPENCODE_ENABLE_EXA` 環境變量設置為任何真值（例如 `true` 或 `1`）時，此工具才可用。
+
+要在啟動 opencode 時啟用：
+
+```bash
+OPENCODE_ENABLE_EXA=1 opencode
+```
+
+:::
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "websearch": "allow"
+  }
+}
+```
+
+使用 Exa AI 執行網絡搜索以在線查找相關信息。對於研究主題、查找時事或收集超出訓練數據截止範圍的信息很有用。
+
+不需要 API 密鑰 - 該工具無需身份驗證即可直接連接到 Exa AI 的託管 MCP 服務。
+
+:::tip
+當您需要查找信息（發現）時，請使用 `websearch`；當您需要從特定 URL 檢索內容（檢索）時，請使用 `webfetch`。
+:::
+
+---
+
+### question
+
+在執行過程中詢問用戶問題。
+
+```json title="opencode.json" {4}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "question": "allow"
+  }
+}
+```
+
+該工具允許LLM在任務期間詢問用戶問題。它適用於：
+
+- 收集用戶偏好或要求
+- 澄清不明確的指令
+- 就實施選擇做出決策
+- 提供選擇方向
+
+每個問題都包含標題、問題文本和選項列表。用戶可以從提供的選項中進行選擇或輸入自定義答案。當存在多個問題時，用戶可以在提交所有答案之前在這些問題之間導航。
+
+---
+
+## 定制工具
+
+自定義工具可讓您定義LLM可以調用的自己的函數。這些是在您的配置文件中定義的並且可以執行任意代碼。
+
+[了解更多](/docs/custom-tools) 關於創建自定義工具。
+
+---
+
+## MCP服務器
+
+MCP（模型上下文協議）服務器允許您集成外部工具和服務。這包括數據庫訪問、API 集成和第三方服務。
+
+[了解更多](/docs/mcp-servers) 關於配置 MCP 服務器。
+
+---
+
+## 內部結構
+
+在內部，`grep`、`glob` 和`list` 等工具在底層使用[ripgrep](https://github.com/BurntSushi/ripgrep)。默認情況下，ripgrep 遵循 `.gitignore` 模式，這意味著 `.gitignore` 中列出的文件和目錄將從搜索和列表中排除。
+
+---
+
+### 忽略模式
+
+要包含通常會被忽略的文件，請在項目根目錄中創建一個 `.ignore` 文件。該文件可以明確允許某些路徑。
+
+```text title=".ignore"
+!node_modules/
+!dist/
+!build/
+```
+
+例如，此 `.ignore` 文件允許 ripgrep 在 `node_modules/`、`dist/` 和 `build/` 目錄中搜索，即使它們列在 `.gitignore` 中。

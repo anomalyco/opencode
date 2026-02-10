@@ -1,0 +1,323 @@
+---
+title: Polecenia
+description: Tworz polecany dla powtarzalnych zadań.
+---
+
+Polecenia ustawienia monitu, które może zostać uruchomione po uruchomieniu tego polecenia w TUI.
+
+```bash frame="none"
+/my-command
+```
+
+Polecenia stanowią dodatek do dostarczonych, takich jak `/init`, `/undo`, `/redo`, `/share`, `/help`. [Dowiedz się więcej](/docs/tui#commands).
+
+---
+
+## Utwórz źródło plikówwe
+
+Utwórz pliki przecen w katalogu `commands/`, aby móc korzystać z usług polecanych.
+
+Utwórz `.opencode/commands/test.md`:
+
+```md title=".opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+Frontmatter posiada właściwości. Treść staje się szablonem.
+
+polecany, w rejestrze `/`, a następnie polecany.
+
+```bash frame="none"
+"/test"
+```
+
+---
+
+## Skonfiguruj
+
+Dostęp do sieci przez połączenie opencode lub udostępnia pliki w katalogu `commands/`.
+
+---
+
+### JSON
+
+opcja opcja `command` w swoim opencode [config](/docs/config):
+
+```json title="opencode.jsonc" {4-12}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "command": {
+    // This becomes the name of the command
+    "test": {
+      // This is the prompt that will be sent to the LLM
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
+      // This is shown as the description in the TUI
+      "description": "Run tests with coverage",
+      "agent": "build",
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+Teraz możesz wybrać opcję w TUI:
+
+```bash frame="none"
+/test
+```
+
+---
+
+### Obniżka cen
+
+Można także definiować polecenia za pomocą plików Markdown. Trzymaj je w:
+
+- Globalnie: `~/.config/opencode/commands/`
+- Na projekt: `.opencode/commands/`
+
+```markdown title="~/.config/opencode/commands/test.md"
+---
+description: Run tests with coverage
+agent: build
+model: anthropic/claude-3-5-sonnet-20241022
+---
+
+Run the full test suite with coverage report and show any failures.
+Focus on the failing tests and suggest fixes.
+```
+
+Nazwa pliku przecen staje się nazwą referencyjną. Na przykład `test.md` pozwala
+biegniesz:
+
+```bash frame="none"
+/test
+```
+
+---
+
+## Szybko kliknij
+
+Monity dotyczące niestandardowych urządzeń obsługujących kilka specjalnych symboli zastępczych i składni.
+
+---
+
+### Argumentacja
+
+Przekazuj argumentację do ręki, używając symbolu zastępczego `$ARGUMENTS`.
+
+```md title=".opencode/commands/component.md"
+---
+description: Create a new component
+---
+
+Create a new React component named $ARGUMENTS with TypeScript support.
+Include proper typing and basic structure.
+```
+
+Uruchomienie reakcji z argumentami:
+
+```bash frame="none"
+/component Button
+```
+
+A `$ARGUMENTS` pozostanie pozostawione przez `Button`.
+
+Dostępność do poszczególnych argumentów można również uzyskać za pomocą parametrów funkcjonalnych:
+
+- `$1` - Pierwszy argument
+- `$2` - Drugi argument
+- `$3` - Trzeci argument
+- Biorę dalej...
+
+Na przykład:
+
+```md title=".opencode/commands/create-file.md"
+---
+description: Create a new file with content
+---
+
+Create a file named $1 in the directory $2
+with the following content: $3
+```
+
+Uruchomienie decyzji:
+
+```bash frame="none"
+/create-file config.json src "{ \"key\": \"value\" }"
+```
+
+Aby przechowywać:
+
+- `$1` z `config.json`
+- `$2` z `src`
+- `$3` z `{ "key": "value" }`
+
+---
+
+### Wyjście z pamięci
+
+urządzenie \__!`command`_, aby wstawić dane wyjściowe [polecenie bash](/docs/tui#bash-commands) wykonaj obciążenie.
+
+Na przykład, aby sprawdzić narzędzie analityczne:
+
+```md title=".opencode/commands/analyze-coverage.md"
+---
+description: Analyze test coverage
+---
+
+Here are the current test results:
+!`npm test`
+
+Based on these results, suggest improvements to increase coverage.
+```
+
+Lub aby ostatnia zmiana:
+
+```md title=".opencode/commands/review-changes.md"
+---
+description: Review recent changes
+---
+
+Recent git commits:
+!`git log --oneline -10`
+
+Review these changes and suggest any improvements.
+```
+
+Polecenia są uruchamiane w systemie wyjściowym, a ich dane wyjściowe są uruchamiane.
+
+---
+
+### Referencje plików
+
+Dołącz pliki do swojego polecenia, używając `@`, zawierającego plik.
+
+```md title=".opencode/commands/review-component.md"
+---
+description: Review component
+---
+
+Review the component in @src/components/Button.tsx.
+Check for performance issues and suggest improvements.
+```
+
+Zawartość pliku jest automatycznie umieszczana w pliku.
+
+---
+
+## Opcje
+
+Przyjrzyjmy się szczegółowo opcjom konfiguracji.
+
+---
+
+### Szablon
+
+Opcja `template` została rozstrzygnięta, która została wysłana do LLM po wykonaniu polecenia.
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes."
+    }
+  }
+}
+```
+
+Jest to **wymagana** opcja konfiguracji.
+
+---
+
+### Opis
+
+Możliwość użycia `description`, aby skrócony opis działania polecenia.
+
+```json title="opencode.json"
+{
+  "command": {
+    "test": {
+      "description": "Run tests with coverage"
+    }
+  }
+}
+```
+
+Jest podany jako opis w TUI po wpisaniu polecenia.
+
+---
+
+### Agent
+
+Zastosowanie zastosowania `agent`, aby określić, który [agent] (./agents) powinien zostać naprawiony do wyboru.
+Jeśli jest to [podagent](/docs/agents/#subagents), rozwiązanie to ujawnione, podagenta.
+Aby móc, ustawa `subtask` na `false`.
+
+```json title="opencode.json"
+{
+  "command": {
+    "review": {
+      "agent": "plan"
+    }
+  }
+}
+```
+
+Jest to **opcjonalna** opcja konfiguracji. Jeśli nie jest dostępny, dostępny jest agentem.
+
+---
+
+### Podzadanie
+
+Użyj wartości logicznej `subtask`, aby wymusić wywołanie [podagenta](/docs/agents/#subagents) polecenia.
+Jest to narzędzie, jeśli chcesz, aby decyzja nie zanieczyszczała kontekstu i **zmusiło** agenta do działania jako subagent,
+nawet jeśli `mode` jest podłączony na `primary` w konfiguracji [agent](/docs/agents).
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "subtask": true
+    }
+  }
+}
+```
+
+Jest to **opcjonalna** opcja konfiguracji.
+
+---
+
+### Model
+
+Używając konstrukcji `model`, aby znaleźć ukryty model dla tego polecenia.
+
+```json title="opencode.json"
+{
+  "command": {
+    "analyze": {
+      "model": "anthropic/claude-3-5-sonnet-20241022"
+    }
+  }
+}
+```
+
+Jest to **opcjonalna** opcja konfiguracji.
+
+---
+
+## Wbudowany
+
+opencode zawiera kilka istniejących urządzeń, takich jak `/init`, `/undo`, `/redo`, `/share`, `/help`; [dowiedz się więcej](/docs/tui#commands).
+
+:::note
+Polecenia mogą zostać usunięte.
+:::
+
+Jeśli zdefiniujesz tę samą nazwę, nastąpi decyzja.

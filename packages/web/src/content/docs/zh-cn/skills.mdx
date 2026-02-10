@@ -1,0 +1,222 @@
+---
+title: 《代理技巧》
+description: “贯穿 SKILL.md 定义可重用行为”
+---
+
+代理让 opencode 技能从您的存储库或主目录中找到可重用的指令。
+技能贯穿本机 `skill` 工具输入导入 - 代理可以检视可用技能并可以在需要时加载完整内容。
+
+---
+
+## 放置檔案
+
+为每个技能名称建立一个资料夹，并在其中放入`SKILL.md`。
+opencode 搜索这些位置：
+
+- Project config: `.opencode/skills/<name>/SKILL.md`
+- Global config: `~/.config/opencode/skills/<name>/SKILL.md`
+- 專案Claude相容：`.claude/skills/<name>/SKILL.md`
+- 全域性 Claude 相容： `~/.claude/skills/<name>/SKILL.md`
+- 專案代理相容：`.agents/skills/<name>/SKILL.md`
+- 全球代理相容：`~/.agents/skills/<name>/SKILL.md`
+
+---
+
+## 瞭解發現
+
+对于专案本地路径， opencode 从当前工作目录向上走，直到到达 git 工作树。
+It loads any matching `skills/*/SKILL.md` in `.opencode/` and any matching `.claude/skills/*/SKILL.md` or `.agents/skills/*/SKILL.md` along the way.
+
+Global definitions are also loaded from `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md`, and `~/.agents/skills/*/SKILL.md`.
+
+---
+
+## 寫前言
+
+每个 `SKILL.md` 必须以 YAML frontmatter 。
+僅識別這些欄位：
+
+- `name`（必填）
+- `description`（必填）
+- `license`（任选）
+- `compatibility`（任选）
+- `metadata`（任选，字串到字串对映）
+
+未知的 frontmatter 栏位将被忽略。
+
+---
+
+## 驗證姓名
+
+`name` 必须：
+
+- 長度為 1–64 個字元
+- 為小寫字母數字並帶有單個連字元分隔符
+- 不以 `-` 開始或結束
+- 不包含連續的 `--`
+- 匹配包含 `SKILL.md` 的目录名
+
+等效的正規表示式：
+
+```text
+^[a-z0-9]+(-[a-z0-9]+)*$
+```
+
+---
+
+## 遵循長度規則
+
+`description` 必须是 1-1024 个字元。
+保持足夠具體，以便代理能夠正確選擇。
+
+---
+
+## 使用一個例子
+
+Create `.opencode/skills/git-release/SKILL.md` like this:
+
+```markdown
+---
+name: git-release
+description: Create consistent releases and changelogs
+license: MIT
+compatibility: opencode
+metadata:
+  audience: maintainers
+  workflow: github
+---
+
+## What I do
+
+- Draft release notes from merged PRs
+- Propose a version bump
+- Provide a copy-pasteable `gh release create` command
+
+## When to use me
+
+Use this when you are preparing a tagged release.
+Ask clarifying questions if the target versioning scheme is unclear.
+```
+
+---
+
+## 識別工具說明
+
+opencode 列出了 `skill` 工具描述中的可用技能。
+每個條目都包含技能名稱和描述：
+
+```xml
+<available_skills>
+  <skill>
+    <name>git-release</name>
+    <description>Create consistent releases and changelogs</description>
+  </skill>
+</available_skills>
+```
+
+代理透過呼叫工具來載入技能：
+
+```
+skill({ name: "git-release" })
+```
+
+---
+
+## 配置許可權
+
+Control which skills agents can access using pattern-based permissions in `opencode.json`:
+
+```json
+{
+  "permission": {
+    "skill": {
+      "*": "allow",
+      "pr-review": "allow",
+      "internal-*": "deny",
+      "experimental-*": "ask"
+    }
+  }
+}
+```
+
+| 許可    | 行為                       |
+| ------- | -------------------------- |
+| `allow` | 技能立即加载               |
+| `deny`  | 对特工隐藏技能，访问被拒绝 |
+| `ask`   | 加载前提示用户批准         |
+
+模式支持万用字元：`internal-*` 匹配 `internal-docs`、`internal-tools` 等。
+
+---
+
+## 覆蓋每個代理
+
+為特定代理授予與全域性預設許可權不同的許可權。
+
+**對於自定義代理**（在代理前言中）：
+
+```yaml
+---
+permission:
+  skill:
+    "documents-*": "allow"
+---
+```
+
+**For built-in agents** (in `opencode.json`):
+
+```json
+{
+  "agent": {
+    "plan": {
+      "permission": {
+        "skill": {
+          "internal-*": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+## 禁用技能工具
+
+完全禁用不應該使用技能的特工：
+
+**對於定製代理**：
+
+```yaml
+---
+tools:
+  skill: false
+---
+```
+
+**對於內建代理**：
+
+```json
+{
+  "agent": {
+    "plan": {
+      "tools": {
+        "skill": false
+      }
+    }
+  }
+}
+```
+
+禁用後，`<available_skills>` 部分將被完全省略。
+
+---
+
+## 解決載入問題
+
+如果某項技能沒有顯示：
+
+1. 验证 `SKILL.md` 拼写为全部大写
+2. 检查 frontmatter 是否包括 `name` 和 `description`
+3. 確保技能名稱在所有位置都是唯一的
+4. 查询权限——具有`deny`的代理隐藏技能

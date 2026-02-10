@@ -1,0 +1,128 @@
+---
+title: 分享
+description: 分享您的 opencode 对话。
+---
+
+opencode 的共享功能允许您建立指向 opencode 对话的公共链接，以便您可以与蓝牙进行战斗或从其他人那里获得帮助。
+
+:::note
+任何知道連結的人都可以公開訪問共享對話。
+:::
+
+---
+
+## 它是如何運作的
+
+当您分享对话时，opencode：
+
+1. 为您的会话建立唯一的公共 URL
+2. 將您的對話歷史記錄同步到我們的伺服器
+3. 透過可共享連結訪問對話 — `opncd.ai/s/<share-id>`
+
+---
+
+## 分享
+
+opencode 支持清晰控制对话共享方式的共享模式：
+
+---
+
+### 手動（預設）
+
+在默认情况下，opencode 使用手动共享模式。会话不会自动共享，但您可以使用 `/share` 命令手动共享它们：
+
+```
+/share
+```
+
+这将生成一个唯一的 URL，将其复制到您的剪贴簿中。
+
+要在[配置文件](/docs/config) 中显式设置手动模式：
+
+```json title="opencode.json"
+{
+  "$schema": "https://opncd.ai/config.json",
+  "share": "manual"
+}
+```
+
+---
+
+### 自動分享
+
+您可以通过将 [config file](/docs/config) 中的 `share` 选项设置为 `"auto"` 来为所有新对话启用自动共享：
+
+```json title="opencode.json"
+{
+  "$schema": "https://opncd.ai/config.json",
+  "share": "auto"
+}
+```
+
+啟用自動共享後，每個新對話都會自動共享並生成連結。
+
+---
+
+### 殘疾人
+
+您可以通过将 [config file](/docs/config) 中的 `share` 选项设置为 `"disabled"` 来完全禁用共享：
+
+```json title="opencode.json"
+{
+  "$schema": "https://opncd.ai/config.json",
+  "share": "disabled"
+}
+```
+
+To enforce this across your team for a given project, add it to the `opencode.json` in your project and check into Git.
+
+---
+
+## 取消共享
+
+要停止共享對話並將其從公共訪問中刪除：
+
+```
+/unshare
+```
+
+這將刪除共享連結並刪除與對話相關的資料。
+
+---
+
+## 隱私
+
+分享對話時需要記住一些事項。
+
+---
+
+### 資料保留
+
+共享對話仍然可以訪問，直到您明確取消共享。這
+包括：
+
+- 完整的對話歷史記錄
+- 所有訊息和回覆
+- 會話後設資料
+
+---
+
+### 建議
+
+- 僅共享不包含敏感資訊的對話。
+- 分享之前檢視對話內容。
+- 協作完成後取消共享對話。
+- 避免與專有程式碼或機密資料共享對話。
+- 對於敏感專案，完全禁用共享。
+
+---
+
+## 對於企業
+
+對於企業部署，共享功能可以是：
+
+- **出於安全合規性完全禁用**
+- **仅限** 仅透过 SSO 进行身份验证的用户
+- **在您自己的基礎設施上自行託管**
+
+[了解更多关于在您的组织中使用opencode的](/docs/enterprise)。
