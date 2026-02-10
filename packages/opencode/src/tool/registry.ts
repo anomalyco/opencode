@@ -27,6 +27,19 @@ import { LspTool } from "./lsp"
 import { Truncate } from "./truncation"
 import { PlanExitTool, PlanEnterTool } from "./plan"
 import { ApplyPatchTool } from "./apply_patch"
+import { ProcessQueryTool } from "./process-query"
+import { MemorySaveTool } from "./memory-save"
+import {
+  TeamCreateTool,
+  TeamSpawnTool,
+  TeamMessageTool,
+  TeamBroadcastTool,
+  TeamTasksTool,
+  TeamClaimTool,
+  TeamApprovePlanTool,
+  TeamShutdownTool,
+  TeamCleanupTool,
+} from "./team"
 
 export namespace ToolRegistry {
   const log = Log.create({ service: "tool.registry" })
@@ -64,17 +77,29 @@ export namespace ToolRegistry {
         parameters: z.object(def.args),
         description: def.description,
         execute: async (args, ctx) => {
+          let pluginMetadata: Record<string, any> = {}
+          let pluginTitle = ""
+          const original = ctx.metadata
           const pluginCtx = {
             ...ctx,
             directory: Instance.directory,
             worktree: Instance.worktree,
+            metadata(input: { title?: string; metadata?: Record<string, any> }) {
+              if (input.title !== undefined) pluginTitle = input.title
+              if (input.metadata) pluginMetadata = { ...pluginMetadata, ...input.metadata }
+              original(input)
+            },
           } as unknown as PluginToolContext
           const result = await def.execute(args as any, pluginCtx)
           const out = await Truncate.output(result, {}, initCtx?.agent)
           return {
-            title: "",
+            title: pluginTitle,
             output: out.truncated ? out.content : result,
-            metadata: { truncated: out.truncated, outputPath: out.truncated ? out.outputPath : undefined },
+            metadata: {
+              ...pluginMetadata,
+              truncated: out.truncated,
+              outputPath: out.truncated ? out.outputPath : undefined,
+            },
           }
         },
       }),
@@ -112,9 +137,24 @@ export namespace ToolRegistry {
       CodeSearchTool,
       SkillTool,
       ApplyPatchTool,
+      ProcessQueryTool,
+      MemorySaveTool,
       ...(Flag.OPENCODE_EXPERIMENTAL_LSP_TOOL ? [LspTool] : []),
       ...(config.experimental?.batch_tool === true ? [BatchTool] : []),
       ...(Flag.OPENCODE_EXPERIMENTAL_PLAN_MODE && Flag.OPENCODE_CLIENT === "cli" ? [PlanExitTool, PlanEnterTool] : []),
+      ...(Flag.OPENCODE_EXPERIMENTAL_AGENT_TEAMS
+        ? [
+            TeamCreateTool,
+            TeamSpawnTool,
+            TeamMessageTool,
+            TeamBroadcastTool,
+            TeamTasksTool,
+            TeamClaimTool,
+            TeamApprovePlanTool,
+            TeamShutdownTool,
+            TeamCleanupTool,
+          ]
+        : []),
       ...custom,
     ]
   }
