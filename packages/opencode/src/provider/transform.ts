@@ -769,9 +769,82 @@ export namespace ProviderTransform {
 
     // Convert integer enums to string enums for Google/Gemini
     if (model.providerID === "google" || model.api.id.includes("gemini")) {
+      const defs = (schema as any).$defs || (schema as any).definitions || {}
+
+      // Helper to resolve $ref
+      const resolveRefs = (obj: any, stack: string[] = []): any => {
+        if (obj === null || typeof obj !== "object") return obj
+
+        if (obj.$ref) {
+          const ref = obj.$ref
+          if (stack.includes(ref)) return { type: "object" } // Break cycle
+
+          if (typeof ref === "string") {
+            // Handle #/$defs/ and #/definitions/
+            const key = ref.replace(/^#\/(?:\$defs|definitions)\//, "")
+            if (defs[key]) {
+              return resolveRefs(defs[key], [...stack, ref])
+            }
+          }
+          return { type: "object" }
+        }
+
+        if (Array.isArray(obj)) {
+          return obj.map((item) => resolveRefs(item, stack))
+        }
+
+        const result: any = {}
+        for (const [k, v] of Object.entries(obj)) {
+          if (k === "$defs" || k === "definitions") continue
+          result[k] = resolveRefs(v, stack)
+        }
+        return result
+      }
+
+      const resolvedSchema = resolveRefs(schema)
+
       const sanitizeGemini = (obj: any): any => {
         if (obj === null || typeof obj !== "object") {
           return obj
+        }
+
+        // Handle anyOf/oneOf flattening
+        if (obj.anyOf || obj.oneOf) {
+          const options = (obj.anyOf || obj.oneOf).map(sanitizeGemini)
+
+          if (options.length === 0) return { type: "object" }
+          if (options.length === 1) return options[0]
+
+          // Pattern 2: const values -> enum
+          const isConst = options.every((o: any) => o.const !== undefined)
+          if (isConst) {
+            const types = new Set(options.map((o: any) => o.type).filter(Boolean))
+            let type = types.size === 1 ? [...types][0] : "string"
+            if (types.size === 0) {
+              const val = options[0].const
+              type = typeof val === "number" ? "number" : typeof val === "boolean" ? "boolean" : "string"
+            }
+
+            return {
+              type,
+              enum: options.map((o: any) => o.const),
+            }
+          }
+
+          // Pattern 4: Multiple objects -> merge
+          const isAllObjects = options.every((o: any) => o.type === "object" || (!o.type && o.properties))
+          if (isAllObjects) {
+            const merged: any = { type: "object", properties: {} }
+            for (const opt of options) {
+              if (opt.properties) {
+                Object.assign(merged.properties, opt.properties)
+              }
+            }
+            return merged
+          }
+
+          // Pattern 3: Different types -> pick first
+          return options[0]
         }
 
         if (Array.isArray(obj)) {
@@ -819,7 +892,7 @@ export namespace ProviderTransform {
         return result
       }
 
-      schema = sanitizeGemini(schema)
+      schema = sanitizeGemini(resolvedSchema)
     }
 
     return schema as JSONSchema7
