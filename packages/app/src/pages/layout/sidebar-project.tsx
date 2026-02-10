@@ -79,6 +79,7 @@ const ProjectTile = (props: {
 }): JSX.Element => {
   const notification = useNotification()
   const layout = useLayout()
+  const server = useServer()
   const unseenCount = createMemo(() =>
     props.dirs().reduce((total, directory) => total + notification.project.unseenCount(directory), 0),
   )
@@ -142,6 +143,21 @@ const ProjectTile = (props: {
         <ContextMenu.Content>
           <ContextMenu.Item onSelect={() => props.showEditProjectDialog(props.project)}>
             <ContextMenu.ItemLabel>{props.language.t("common.edit")}</ContextMenu.ItemLabel>
+          </ContextMenu.Item>
+          <ContextMenu.Item
+            data-action="project-pin-toggle"
+            data-project={base64Encode(props.project.worktree)}
+            onSelect={() => {
+              server.projects.isPinned(props.project.worktree)
+                ? server.projects.unpin(props.project.worktree)
+                : server.projects.pin(props.project.worktree)
+            }}
+          >
+            <ContextMenu.ItemLabel>
+              {server.projects.isPinned(props.project.worktree)
+                ? props.language.t("sidebar.project.unpin")
+                : props.language.t("sidebar.project.pin")}
+            </ContextMenu.ItemLabel>
           </ContextMenu.Item>
           <ContextMenu.Item
             data-action="project-workspaces-toggle"
