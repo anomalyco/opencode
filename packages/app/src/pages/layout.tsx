@@ -1272,8 +1272,6 @@ export default function Layout(props: ParentProps) {
         ),
     )
 
-    await globalSDK.client.instance.dispose({ directory }).catch(() => undefined)
-
     setBusy(directory, false)
     dismiss()
 
