@@ -160,6 +160,8 @@ for (const item of targets) {
       OPENCODE_WORKER_PATH: workerPath,
       OPENCODE_CHANNEL: `'${Script.channel}'`,
       OPENCODE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
+      OPENCODE_NPM_PACKAGE: `'${process.env.KORTIX_BUILD ? "@kortix/opencode-ai" : "opencode-ai"}'`,
+      OPENCODE_GITHUB_REPO: `'${process.env.KORTIX_BUILD ? "kortix-ai/opencode" : "anomalyco/opencode"}'`,
     },
   })
 
