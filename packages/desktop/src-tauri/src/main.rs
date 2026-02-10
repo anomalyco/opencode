@@ -23,12 +23,16 @@ fn configure_display_backend() -> Option<String> {
         return None;
     }
 
-    // Allow users to explicitly keep Wayland if they know their setup is stable.
-    let allow_wayland = matches!(
-        env::var("OC_ALLOW_WAYLAND"),
-        Ok(v) if matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes")
-    );
+    let prefer_wayland = opencode_lib::linux_display::read_wayland().unwrap_or(false);
+    let allow_wayland = prefer_wayland
+        || matches!(
+            env::var("OC_ALLOW_WAYLAND"),
+            Ok(v) if matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes")
+        );
     if allow_wayland {
+        if prefer_wayland {
+            return Some("Wayland session detected; using native Wayland from settings".into());
+        }
         return Some("Wayland session detected; respecting OC_ALLOW_WAYLAND=1".into());
     }
 

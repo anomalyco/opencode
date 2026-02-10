@@ -48,6 +48,7 @@ export const dict = {
 
   "command.session.new": "新建会话",
   "command.file.open": "打开文件",
+  "command.tab.close": "关闭标签页",
   "command.context.addSelection": "将所选内容添加到上下文",
   "command.context.addSelection.description": "添加当前文件中选中的行",
   "command.input.focus": "聚焦输入框",

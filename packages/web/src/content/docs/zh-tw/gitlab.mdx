@@ -1,0 +1,195 @@
+---
+title: GitLab
+description: 在 GitLab 問題和合併請求中使用 opencode。
+---
+
+opencode 通過 GitLab CI/CD 管道或與 GitLab Duo 與您的 GitLab 工作流程集成。
+
+在這兩種情況下，opencode 都將在您的 GitLab 運行器上運行。
+
+---
+
+## GitLab。
+
+opencode 在常規 GitLab 管道中工作。您可以將其構建為管道作為 [CI組件](https://docs.gitlab.com/ee/ci/components/)
+
+在這裡，我們使用社區創建的 opencode CI/CD 組件 — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode)。
+
+---
+
+### 特徵
+
+- **每個作業使用自定義配置**：使用自定義配置目錄配置 opencode，例如 `./config/#custom-directory` 以啟用或禁用每個 opencode 調用的功能。
+- Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
+- **靈活**：CI 組件支持多種輸入來自定義其行為
+
+---
+
+### 設定
+
+1. 將 opencode 身份驗證 JSON 作為文件類型 CI 環境變量存儲在 **設置** > **CI/CD** > **變量** 下。確保將它們標記為“屏蔽和隱藏”。
+2. 將以下內容添加到您的 `.gitlab-ci.yml` 文件中。
+
+   ```yaml title=".gitlab-ci.yml"
+   include:
+     - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
+       inputs:
+         config_dir: ${CI_PROJECT_DIR}/opencode-config
+         auth_json: $OPENCODE_AUTH_JSON # The variable name for your OpenCode authentication JSON
+         command: optional-custom-command
+         message: "Your prompt here"
+   ```
+
+有關此組件的更多輸入和用例[查看文檔](https://gitlab.com/explore/catalog/nagyv/gitlab-opencode)。
+
+---
+
+## 亞搏體育app二人組
+
+opencode 與您的 GitLab 工作流程集成。
+在評論中提及`@opencode`，opencode 將在您的 GitLab CI 管道中執行任務。
+
+---
+
+### 特徵
+
+- **分類問題**：要求 opencode 調查問題並向您解釋。
+- **修復和實施**：要求 opencode 修復問題或實施功能。
+  它將創建一個新分支並提出包含更改的合併請求。
+- **安全**：opencode 在您的 GitLab 運行器上運行。
+
+---
+
+### 設定
+
+opencode 在您的 GitLab CI/CD 管道中運行，您需要進行以下設置：
+
+:::tip
+查看[**GitLab 文檔**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) 以獲取最新說明。
+:::
+
+1.  配置您的 GitLab 環境
+2.  設置 CI/CD
+3.  獲取 AI 模型提供商 API 密鑰
+4.  創建服務帳戶
+5.  配置 CI/CD 變量
+6.  創建一個流配置文件，這是一個示例：
+
+        <details>
+
+    <summary>Flow configuration</summary>
+
+    ```yaml
+    image: node:22-slim
+    commands:
+      - echo "Installing opencode"
+      - npm install --global opencode-ai
+      - echo "Installing glab"
+      - export GITLAB_TOKEN=$GITLAB_TOKEN_OPENCODE
+      - apt-get update --quiet && apt-get install --yes curl wget gpg git && rm --recursive --force /var/lib/apt/lists/*
+      - curl --silent --show-error --location "https://raw.githubusercontent.com/upciti/wakemeops/main/assets/install_repository" | bash
+      - apt-get install --yes glab
+      - echo "Configuring glab"
+      - echo $GITLAB_HOST
+      - echo "Creating OpenCode auth configuration"
+      - mkdir --parents ~/.local/share/opencode
+      - |
+        cat > ~/.local/share/opencode/auth.json << EOF
+        {
+          "anthropic": {
+            "type": "api",
+            "key": "$ANTHROPIC_API_KEY"
+          }
+        }
+        EOF
+      - echo "Configuring git"
+      - git config --global user.email "opencode@gitlab.com"
+      - git config --global user.name "OpenCode"
+      - echo "Testing glab"
+      - glab issue list
+      - echo "Running OpenCode"
+      - |
+        opencode run "
+        You are an AI assistant helping with GitLab operations.
+
+        Context: $AI_FLOW_CONTEXT
+        Task: $AI_FLOW_INPUT
+        Event: $AI_FLOW_EVENT
+
+        Please execute the requested task using the available GitLab tools.
+        Be thorough in your analysis and provide clear explanations.
+
+        <important>
+        Please use the glab CLI to access data from GitLab. The glab CLI has already been authenticated. You can run the corresponding commands.
+
+        If you are asked to summarize an MR or issue or asked to provide more information then please post back a note to the MR/Issue so that the user can see it.
+        You don't need to commit or push up changes, those will be done automatically based on the file changes you make.
+        </important>
+        "
+      - git checkout --branch $CI_WORKLOAD_REF origin/$CI_WORKLOAD_REF
+      - echo "Checking for git changes and pushing if any exist"
+      - |
+        if ! git diff --quiet || ! git diff --cached --quiet || [ --not --zero "$(git ls-files --others --exclude-standard)" ]; then
+          echo "Git changes detected, adding and pushing..."
+          git add .
+          if git diff --cached --quiet; then
+            echo "No staged changes to commit"
+          else
+            echo "Committing changes to branch: $CI_WORKLOAD_REF"
+            git commit --message "Codex changes"
+            echo "Pushing changes up to $CI_WORKLOAD_REF"
+            git push https://gitlab-ci-token:$GITLAB_TOKEN@$GITLAB_HOST/gl-demo-ultimate-dev-ai-epic-17570/test-java-project.git $CI_WORKLOAD_REF
+            echo "Changes successfully pushed"
+          fi
+        else
+          echo "No git changes detected, skipping push"
+        fi
+    variables:
+      - ANTHROPIC_API_KEY
+      - GITLAB_TOKEN_OPENCODE
+      - GITLAB_HOST
+    ```
+
+        </details>
+
+詳細說明可以參考[GitLab CLI 代理文檔](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/)。
+
+---
+
+### 示例
+
+以下是如何在 GitLab 中使用 opencode 的一些示例。
+
+:::tip
+您可以配置使用與 `@opencode` 不同的觸發短語。
+:::
+
+- **解釋一個問題**
+
+  在 GitLab 問題中添加此評論。
+
+  ```
+  @opencode explain this issue
+  ```
+
+  opencode 將閱讀該問題並回复並提供清晰的解釋。
+
+- **解決問題**
+
+  在 GitLab 問題中，說：
+
+  ```
+  @opencode fix this
+  ```
+
+  opencode 將創建一個新分支，實施更改，並打開包含更改的合併請求。
+
+- **審查合併請求**
+
+  對 GitLab 合併請求留下以下評論。
+
+  ```
+  @opencode review this merge request
+  ```
+
+  opencode 將審核合併請求並提供反饋。
