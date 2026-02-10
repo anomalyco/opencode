@@ -204,6 +204,10 @@ export namespace Storage {
       if (errnoException.code === "ENOENT") {
         throw new NotFoundError({ message: `Resource not found: ${errnoException.path}` })
       }
+      if (e instanceof SyntaxError) {
+        log.warn("corrupted JSON detected", { error: e.message })
+        throw new NotFoundError({ message: `Corrupted JSON: ${e.message}` })
+      }
       throw e
     })
   }

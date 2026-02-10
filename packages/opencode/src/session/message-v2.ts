@@ -668,17 +668,26 @@ export namespace MessageV2 {
   export const stream = fn(Identifier.schema("session"), async function* (sessionID) {
     const list = await Array.fromAsync(await Storage.list(["message", sessionID]))
     for (let i = list.length - 1; i >= 0; i--) {
-      yield await get({
+      const msg = await get({
         sessionID,
         messageID: list[i][2],
+      }).catch((e) => {
+        if (Storage.NotFoundError.isInstance(e)) return undefined
+        throw e
       })
+      if (!msg) continue
+      yield msg
     }
   })
 
   export const parts = fn(Identifier.schema("message"), async (messageID) => {
     const result = [] as MessageV2.Part[]
     for (const item of await Storage.list(["part", messageID])) {
-      const read = await Storage.read<MessageV2.Part>(item)
+      const read = await Storage.read<MessageV2.Part>(item).catch((e) => {
+        if (Storage.NotFoundError.isInstance(e)) return undefined
+        throw e
+      })
+      if (!read) continue
       result.push(read)
     }
     result.sort((a, b) => (a.id > b.id ? 1 : -1))
