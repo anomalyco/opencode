@@ -419,6 +419,7 @@ export type StepFinishPart = {
   snapshot?: string
   cost: number
   tokens: {
+    total?: number
     input: number
     output: number
     reasoning: number
@@ -1823,6 +1824,14 @@ export type Config = {
      * Enable pruning of old tool outputs (default: true)
      */
     prune?: boolean
+    /**
+     * Token budget to preserve as recent context during compaction
+     */
+    preserved?: number
+    /**
+     * Token headroom reserved to reduce overflow risk before compaction
+     */
+    reserved?: number
   }
   experimental?: {
     disable_paste_summary?: boolean

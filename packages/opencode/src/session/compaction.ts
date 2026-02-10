@@ -32,6 +32,7 @@ export namespace SessionCompaction {
     if (config.compaction?.auto === false) return false
     const context = input.model.limit.context
     if (context === 0) return false
+    const reserved = config.compaction?.reserved ?? 16_000
 
     const count =
       input.tokens.total ||
@@ -39,7 +40,7 @@ export namespace SessionCompaction {
 
     const output = ProviderTransform.maxOutputTokens(input.model)
     const usable = input.model.limit.input || context - output
-    return count >= usable
+    return count >= usable - reserved
   }
 
   export const PRUNE_MINIMUM = 20_000
