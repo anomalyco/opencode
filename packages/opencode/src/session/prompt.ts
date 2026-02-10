@@ -71,9 +71,6 @@ export namespace SessionPrompt {
     async (current) => {
       for (const item of Object.values(current)) {
         item.abort.abort()
-        for (const callback of item.callbacks) {
-          callback.reject(new DOMException("Aborted", "AbortError"))
-        }
       }
     },
   )
@@ -251,9 +248,6 @@ export namespace SessionPrompt {
       return
     }
     match.abort.abort()
-    for (const item of match.callbacks) {
-      item.reject(new DOMException("Aborted", "AbortError"))
-    }
     delete s[sessionID]
     SessionStatus.set(sessionID, { type: "idle" })
     return

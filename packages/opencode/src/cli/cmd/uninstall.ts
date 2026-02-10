@@ -274,7 +274,7 @@ async function getShellConfigFile(): Promise<string | null> {
     const content = await Bun.file(file)
       .text()
       .catch(() => "")
-    if (content.includes("# mammouth") || content.includes(".mammouth/bin")) {
+    if (content.toLowerCase().includes("# mammouth") || content.includes(".mammouth/bin")) {
       return file
     }
   }
