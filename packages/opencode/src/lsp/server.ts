@@ -40,6 +40,9 @@ export namespace LSPServer {
       if (/['"]org\.projectlombok:lombok[:'"]/.test(content)) {
         return true
       }
+      if (/io\.freefair\.lombok/.test(content)) {
+        return true
+      }
     }
 
     // Check build.gradle.kts (Kotlin DSL)
@@ -47,6 +50,9 @@ export namespace LSPServer {
     if (await pathExists(gradleKtsPath)) {
       const content = await Bun.file(gradleKtsPath).text()
       if (/["']org\.projectlombok:lombok[:"']/.test(content)) {
+        return true
+      }
+      if (/io\.freefair\.lombok/.test(content)) {
         return true
       }
     }
