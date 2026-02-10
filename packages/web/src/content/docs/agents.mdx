@@ -208,6 +208,45 @@ Provide constructive feedback without making direct changes.
 
 The markdown file name becomes the agent name. For example, `review.md` creates a `review` agent.
 
+#### Environment variables
+
+You can use environment variables in markdown agent frontmatter using the `{env:VAR_NAME}` syntax. This is useful for dynamic configuration, such as selecting models based on environment.
+
+```markdown title="~/.config/opencode/agents/flexible.md"
+---
+description: "Agent using environment-configured model"
+mode: primary
+model: "{env:OPENCODE_MODEL}"
+---
+
+Your prompt content here.
+```
+
+If the environment variable is not set, it will be replaced with an empty string.
+
+:::note
+Environment variable interpolation only applies to frontmatter fields, not to the markdown body content. This prevents accidental substitution of `{env:VAR}` patterns that may appear as examples or documentation in your prompt.
+:::
+
+This enables workflows like tiered model selection:
+
+```bash frame="none"
+# Set different models for different purposes
+export OPENCODE_HIGH_MODEL=anthropic/claude-opus-4-5
+export OPENCODE_MID_MODEL=anthropic/claude-sonnet-4-20250514
+export OPENCODE_LOW_MODEL=anthropic/claude-haiku-4-20250514
+```
+
+Then reference them in your agents:
+
+```markdown title="~/.config/opencode/agents/planner.md"
+---
+description: "High-capability planning agent"
+mode: primary
+model: "{env:OPENCODE_HIGH_MODEL}"
+---
+```
+
 ---
 
 ## Options
