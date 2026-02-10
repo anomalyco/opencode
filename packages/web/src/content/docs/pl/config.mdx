@@ -1,6 +1,6 @@
 ---
-title: Konfig
-description: Korzystanie z konstrukcji opencode JSON.
+title: Konfiguracja
+description: Ustawienia opencode w pliku JSON.
 ---
 
 Możesz zagrać z opencode za pomocą pliku konfiguracyjnego JSON.
@@ -101,7 +101,7 @@ Konfiguracja globalna zaawansowana, zdalne ustawienie konfiguracji.
 
 ---
 
-### muszę zrobić projekt
+### Projekt
 
 Dodaj `opencode.json` w katalogu głównym projektu. Konfiguracja projektu ma priorytet wśród plików konfiguracyjnych — zaawansowane konfiguracje globalne i zdalne.
 
@@ -264,11 +264,11 @@ Możesz także mieć [model lokalny](/docs/models#local). [Dowiedz się więcej]
 
 ---
 
-#### Opcje dostawcy dla dostawcy
+#### Opcje specyficzne dla dostawców
 
 inne udostępnienie dodatkowych możliwości wyposażenia poza urządzeniami `timeout` i `apiKey`.
 
-##### Podłoże Amazonki
+##### Amazon Bedrock
 
 Amazon Bedrock umożliwia podłączenie wyłącznika dla AWS:
 
@@ -314,7 +314,7 @@ Urządzenie zachęcające do korzystania z urządzeń opencode, za pomocą sieci
 
 ---
 
-### Agencja
+### Agenci
 
 Możliwość dostępności agentów do gniazd za pomocą opcji `agent`.
 
@@ -357,7 +357,7 @@ Dotyczy urządzeń wszystkich interfejsów: TUI, CLI (`opencode run`), aplikacji
 
 ---
 
-### Partycypujący
+### Udostępnianie
 
 Możesz udostępnić [udostępnij](/docs/share) za pomocą opcji `share`.
 
@@ -404,7 +404,7 @@ Można także definiować polecenia przy użyciu plików Markdown w `~/.config/o
 
 ---
 
-### Krótki kluczowy
+### Keybinds
 
 Możliwość zmiany skrótu klawiszowego za pomocą opcji `keybinds`.
 
@@ -435,7 +435,7 @@ Działa tylko wtedy, gdy nie jest uruchamiana przy użyciu menedżera pakietów,
 
 ---
 
-### Formacja
+### Formattery
 
 Można podać kod formacyjny za pomocą opcji `formatter`.
 
@@ -517,7 +517,7 @@ Wzorce są zgodne ze składnią glob. Dostęp tej opcji, aby móc zaszumione kat
 
 ---
 
-### Serwer MPK
+### Serwery MCP
 
 Dostęp do serwerów MCP, których chcesz używać, za pośrednictwem sieci `mcp`.
 
@@ -532,7 +532,7 @@ Dostęp do serwerów MCP, których chcesz używać, za pośrednictwem sieci `mcp
 
 ---
 
-### Wtyki
+### Wtyczki
 
 [Wtyczki](/docs/plugins) rozszerzają opencode o podstawowe narzędzia, hooki i integracje.
 
@@ -549,7 +549,7 @@ Pliki plików wtyczek w `.opencode/plugins/` lub `~/.config/opencode/plugins/`. 
 
 ---
 
-### Instrukcja
+### Instructions
 
 Instrukcja dla modelu, w której można zastosować opcję `instructions`.
 
@@ -565,7 +565,7 @@ o zasadach tutaj](/docs/rules).
 
 ---
 
-### Niepełnosprawny sprzedawca
+### Wyłączeni dostawcy
 
 Zasilacz ładowany automatycznie za pomocą zasilacza `disabled_providers`. Jest to możliwe, gdy istnieje możliwość podłączenia ładowania niektórych dostawców, nawet jeśli dane uwierzytelniające są dostępne.
 
@@ -632,7 +632,7 @@ Możliwość wykorzystania danych zmiennych w plikach konfiguracyjnych, aby odwo
 
 ---
 
-### Kop. zm
+### Env vars
 
 zastosowanie `{env:VARIABLE_NAME}`, aby zakończyć zmiennego przebiegu:
 
@@ -655,7 +655,7 @@ Jeżeli zmienna kontrolna nie jest skonfigurowana, należy zastosować do niej p
 
 ---
 
-### Akta
+### Pliki
 
 źródło `{file:path/to/file}`, aby znaleźć zawartość pliku:
 

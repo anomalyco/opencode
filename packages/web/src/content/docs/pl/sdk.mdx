@@ -6,7 +6,7 @@ description: Klient JS bezpieczny dla typu dla serwera opencode.
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-Pakiet SDK JS/TS z otwartym kodem zapewnia klienta bezpiecznego typu do interakcji z serwerem.
+Pakiet SDK JS/TS z opencode zapewnia klienta bezpiecznego typu do interakcji z serwerem.
 Użyj go do budowania integracji i programowej kontroli otwartego kodu.
 
 [Dowiedz się więcej](/docs/server) o działaniu serwera. Przykłady znajdziesz w [projektach](/docs/ecosystem#projects) stworzonych przez społeczność.
@@ -243,7 +243,7 @@ const { providers, default: defaults } = await client.config.providers()
 | `session.message({ path })`                                | Uzyskaj szczegóły wiadomości                | Zwraca `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                             |
 | `session.prompt({ path, body })`                           | Wyślij wiadomość                            | `body.noReply: true` zwraca UserMessage (tylko kontekst). Domyślnie zwraca <a href={typesUrl}><code>AssistantMessage</code></a> z odpowiedzią AI |
 | `session.command({ path, body })`                          | Wyślij polecenie do sesji                   | Zwraca `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                    |
-| `session.shell({ path, body })`                            | Uruchom polecenie powłoki                   | Zwraca <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                      |
+| `session.shell({ path, body })`                            | Uruchom polecenie shell                   | Zwraca <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                      |
 | `session.revert({ path, body })`                           | Przywróć wiadomość                          | Zwraca <a href={typesUrl}><code>Session</code></a>                                                                                               |
 | `session.unrevert({ path })`                               | Przywróć przywrócone wiadomości             | Zwraca <a href={typesUrl}><code>Session</code></a>                                                                                               |
 | `postSessionByIdPermissionsByPermissionId({ path, body })` | Respond to a permission request             | Returns `boolean`                                                                                                                                |

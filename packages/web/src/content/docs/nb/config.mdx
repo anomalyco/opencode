@@ -268,7 +268,7 @@ Du kan også konfigurere [lokale modeller](/docs/models#local). [Finn ut mer](/d
 
 Noen leverandører støtter flere konfigurasjonsalternativer utover de generiske innstillingene `timeout` og `apiKey`.
 
-##### Amazonas grunnfjell
+##### Amazon Bedrock
 
 Amazon Bedrock støtter AWS-spesifikk konfigurasjon:
 
@@ -287,7 +287,7 @@ Amazon Bedrock støtter AWS-spesifikk konfigurasjon:
 }
 ```
 
-- `region` - AWS region for grunnfjell (standard til `AWS_REGION` env var eller `us-east-1`)
+- `region` - AWS-region for Bedrock (standard er `AWS_REGION` env var eller `us-east-1`)
 - `profile` - AWS navngitt profil fra `~/.aws/credentials` (standard til `AWS_PROFILE` env var)
 - `endpoint` - Egendefinert endepunkt URL for VPC endepunkter. Dette er et alias for det generiske `baseURL`-alternativet som bruker AWS-spesifikk terminologi. Hvis begge er spesifisert, har `endpoint` forrang.
 
@@ -295,7 +295,7 @@ Amazon Bedrock støtter AWS-spesifikk konfigurasjon:
 Bærer-tokens (`AWS_BEARER_TOKEN_BEDROCK` eller `/connect`) har forrang over profilbasert autentisering. Se [godkjenningsprioritet](/docs/providers#authentication-precedence) for detaljer.
 :::
 
-[Les mer om konfigurasjon av Amazons grunnfjell](/docs/providers#amazon-bedrock).
+[Les mer om konfigurasjon av Amazon Bedrock](/docs/providers#amazon-bedrock).
 
 ---
 

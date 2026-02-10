@@ -14,7 +14,7 @@ opencode는 주어진 동작이 자동으로 실행되는지 결정하기 위해
 각 권한 규칙은 다음과 같습니다:
 
 - `"allow"` - 승인없이 실행
-- `"ask"` - 승인을위한 신속한
+- `"ask"` - 승인을위한 prompt
 - `"deny"` - 동작 차단
 
 ---
@@ -80,7 +80,7 @@ Permission 본 사용 간단한 wildcard 일치:
 
 ## 홈 디렉토리 확장
 
-`~` 또는 `$HOME`를 사용할 수 있습니다 패턴의 시작에 홈 디렉토리를 참조. 이것은 특히 유용합니다 [`external_directory`] (#external-directories) 규칙.
+`~` 또는 `$HOME`를 사용할 수 있습니다 패턴의 시작에 홈 디렉토리를 참조. 이것은 특히 유용합니다 [`external_directory`](#external-directories) 규칙.
 
 - `~/projects/*` -> `/Users/username/projects/*`
 - `$HOME/projects/*` -> `/Users/username/projects/*`

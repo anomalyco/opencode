@@ -35,7 +35,7 @@ opencode [project]
 | `--session`  | `-s` | 会话 ID 继续                                              |
 | `--fork`     |      | 继续时分叉会话（与 `--continue` 或 `--session` 一起使用） |
 | `--prompt`   |      | 提示使用                                                  |
-| `--model`    | `-m` | 以提供者/模型形式使用的模型                               |
+| `--model`    | `-m` | 以提供商/模型形式使用的模型                               |
 | `--agent`    |      | 代理使用                                                  |
 | `--port`     |      | 监听端口                                                  |
 | `--hostname` |      | 监听的主机名                                              |
@@ -85,15 +85,15 @@ opencode attach http://10.20.30.40:4096
 
 ---
 
-#### 創造
+#### 创建
 
-使用自定義配置創建新代理。
+使用自定義配置创建新代理。
 
 ```bash
 opencode agent create
 ```
 
-此命令將指導您使用自定義系統提示和工具配置創建新代理。
+此命令将指導您使用自定義系統提示和工具配置创建新代理。
 
 ---
 
@@ -109,7 +109,7 @@ opencode agent list
 
 ### 授權
 
-用於管理提供商的憑據和登錄的命令。
+用于管理提供商的憑據和登錄的命令。
 
 ```bash
 opencode auth [command]
@@ -117,21 +117,21 @@ opencode auth [command]
 
 ---
 
-#### 登入
+#### 登录
 
-opencode 由 [模型.dev](https://models.dev) 上的型号列表提供支持，因此您可以使用 `opencode auth login` 来为您想要使用的任何型号配置 API 按键。它存储在 `~/.local/share/opencode/auth.json` 中。
+opencode 由 [Models.dev](https://models.dev) 上的模型列表提供支持，因此您可以使用 `opencode auth login` 来为您想要使用的任何模型配置 API 按键。它存储在 `~/.local/share/opencode/auth.json` 中。
 
 ```bash
 opencode auth login
 ```
 
-当opencode启动时，它会从会计文件加载提供程序。如果您的环境中定义了任何按键或项目中的`.env`文件。
+当opencode启动时，它会从auth 文件加载提供商。如果您的环境中定义了任何按键或项目中的`.env`文件。
 
 ---
 
 #### 列表
 
-列出憑證文件中存儲的所有經過身份驗證的提供程序。
+列出憑證文件中存儲的所有經过身份验证的提供商。
 
 ```bash
 opencode auth list
@@ -147,7 +147,7 @@ opencode auth ls
 
 #### 註銷
 
-通過從憑據文件中清除提供程序，將您從提供程序中註銷。
+通过從憑據文件中清除提供商，将您從提供商中註銷。
 
 ```bash
 opencode auth logout
@@ -165,7 +165,7 @@ opencode github [command]
 
 ---
 
-#### 安裝
+#### 安装
 
 在您的存储库中安装 GitHub 代理。
 
@@ -190,7 +190,7 @@ opencode github run
 | 旗幟      | 描述                           |
 | --------- | ------------------------------ |
 | `--event` | 用于运行代理的 GitHub 模拟事件 |
-| `--token` | GitHub 个人访问令牌            |
+| `--token` | GitHub 个人访问Tokens            |
 
 ---
 
@@ -276,7 +276,7 @@ opencode mcp debug <name>
 
 ---
 
-### 型號
+### 模型
 
 列出已配置提供商的所有可用模型。
 
@@ -284,9 +284,9 @@ opencode mcp debug <name>
 opencode models [provider]
 ```
 
-此命令以 `provider/model` 格式显示您配置的提供程序中可用的所有模型。
+此命令以 `provider/model` 格式显示您配置的提供商中可用的所有模型。
 
-这对于确定[你的配置](/docs/config/)中使用的意图模型名称很有用。
+这对于确定[你的配置](/docs/config/)中使用的意图模型名称很有帮助。
 
 您可以选择提供项目ID并按该提供项目筛选模型。
 
@@ -301,7 +301,7 @@ opencode models anthropic
 | `--refresh` | 从 models.dev 刷新模型缓存               |
 | `--verbose` | 使用更详细的模型输出（包括成本等元数据） |
 
-使用`--refresh`标志来更新服务器的模型列表。当新模型已添加到提供程序并且您希望在opencode中查看它们时，这非常有用。
+使用`--refresh`标志来更新服务器的模型列表。当新模型已添加到提供商并且您希望在opencode中查看它们时，这非常有用。
 
 ```bash
 opencode models --refresh
@@ -342,7 +342,7 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | `--session`  | `-s` | 会话 ID 继续                                                    |
 | `--fork`     |      | 继续时分叉会话（与 `--continue` 或 `--session` 一起使用）       |
 | `--share`    |      | 分享会议                                                        |
-| `--model`    | `-m` | 以提供者/模型形式使用的模型                                     |
+| `--model`    | `-m` | 以提供商/模型形式使用的模型                                     |
 | `--agent`    |      | 代理使用                                                        |
 | `--file`     | `-f` | 要附加到消息的文件                                              |
 | `--format`   |      | 格式：默认（格式化）或json（原始JSON事件）                      |
@@ -373,7 +373,7 @@ opencode serve
 
 ---
 
-### 會議
+### 会话
 
 管理 opencode 会话。
 
@@ -402,7 +402,7 @@ opencode session list
 
 ### 統計數據
 
-显示opencode会话的令牌使用情况和成本统计信息。
+显示opencode会话的Tokens使用情况和成本统计信息。
 
 ```bash
 opencode stats
@@ -489,7 +489,7 @@ opencode acp
 
 ---
 
-### 解除安裝
+### 解除安装
 
 卸载opencode并删除所有相关文件。
 
@@ -584,15 +584,15 @@ opencode CLI采用以下全局标志。
 
 ### 實驗性的
 
-這些環境變量啟用可能會更改或刪除的實驗性功能。
+这些環境變量启用可能会更改或删除的實驗性功能。
 
 | 變量                                            | 類型 | 描述                                |
 | ----------------------------------------------- | ---- | ----------------------------------- |
 | `OPENCODE_EXPERIMENTAL`                         | 布尔 | 实现所有实验性功能                  |
-| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | 布尔 | 新增图标发现                        |
+| `OPENCODE_EXPERIMENTAL_ICON_DISCOVERY`          | 布尔 | 添加图标发现                        |
 | `OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`  | 布尔 | 在 TUI 中禁用选择时复制             |
 | `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS` | 数量 | bash 命令的默认超时（以毫秒为单位） |
-| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | 数量 | LLM 响应的最大输出令牌              |
+| `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`        | 数量 | LLM 响应的最大输出Tokens              |
 | `OPENCODE_EXPERIMENTAL_FILEWATCHER`             | 布尔 | 为整个目录启用文件观察器            |
 | `OPENCODE_EXPERIMENTAL_OXFMT`                   | 布尔 | 启用 oxfmt 清理程序                 |
 | `OPENCODE_EXPERIMENTAL_LSP_TOOL`                | 布尔 | 实现实验性 LSP 工具                 |

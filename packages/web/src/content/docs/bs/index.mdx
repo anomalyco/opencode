@@ -1,6 +1,6 @@
 ---
 title: Intro
-description: Započnite s OpenCodeom.
+description: Započnite s OpenCode.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
@@ -28,7 +28,7 @@ Da biste koristili OpenCode u svom terminalu, trebat će vam:
 
 ## Instaliraj
 
-Najlakši način za instaliranje OpenCode-a je putem instalacione skripte.
+Najlakši način za instaliranje OpenCode je putem instalacione skripte.
 
 ```bash
 curl -fsSL https://opencode.ai/install | bash
@@ -42,28 +42,28 @@ Također ga možete instalirati pomoću sljedećih naredbi:
 
       <TabItem label="npm">
       ```bash
-      npm install -g opencode-ai
+      npm install -g opencodei
       ```
 
           </TabItem>
 
         <TabItem label="Bun">
         ```bash
-        bun install -g opencode-ai
+        bun install -g opencodei
         ```
 
           </TabItem>
 
         <TabItem label="pnpm">
         ```bash
-        pnpm install -g opencode-ai
+        pnpm install -g opencodei
         ```
 
           </TabItem>
 
         <TabItem label="Yarn">
         ```bash
-        yarn global add opencode-ai
+        yarn global add opencodei
         ```
 
       </TabItem>
@@ -113,7 +113,7 @@ Za najbolje iskustvo na Windows-u preporučujemo korištenje [Windows Subsystem 
 - **Upotreba NPM-a**
 
 ```bash
-  npm install -g opencode-ai
+  npm install -g opencodei
 
 
 ```
@@ -134,7 +134,7 @@ Za najbolje iskustvo na Windows-u preporučujemo korištenje [Windows Subsystem 
 
 ```
 
-Podrška za instaliranje OpenCode-a na Windows koristeći Bun je trenutno u toku.
+Podrška za instaliranje OpenCode na Windows koristeći Bun je trenutno u toku.
 Također možete preuzeti binarnu datoteku iz [Releases](https://github.com/anomalyco/opencode/releases).
 
 ---
@@ -143,7 +143,7 @@ Također možete preuzeti binarnu datoteku iz [Releases](https://github.com/anom
 
 Uz OpenCode možete koristiti bilo kojeg LLM provajdera tako što ćete konfigurirati njihove API ključeve.
 Ako ste tek počeli koristiti LLM provajdere, preporučujemo korištenje [OpenCode Zen](/docs/zen).
-To je kurirana lista modela koji su testirani i verifikovani od strane OpenCode-a
+To je kurirana lista modela koji su testirani i verifikovani od strane OpenCode
 tim.
 
 1. Pokrenite naredbu `/connect` u TUI-u, odaberite opencode i idite na [opencode.ai/auth](https://opencode.ai/auth).
@@ -196,7 +196,7 @@ korijen projekta.
 :::tip
 Trebali biste urezati datoteku `AGENTS.md` vašeg projekta u Git.
 :::
-Ovo pomaže OpenCodeu da razumije strukturu projekta i obrasce kodiranja
+Ovo pomaže OpenCode da razumije strukturu projekta i obrasce kodiranja
 korišteno.
 
 ---
@@ -250,10 +250,10 @@ Hajde sada da opišemo šta želimo da uradi.
 
 ```
 
-Želite da date OpenCode-u dovoljno detalja da razumete šta želite. Pomaže
+Želite da date OpenCode dovoljno detalja da razumete šta želite. Pomaže
 da razgovarate s njim kao da razgovarate sa mlađim programerom u svom timu.
 :::tip
-Dajte OpenCodeu dosta konteksta i primjera koji će mu pomoći da razumije šta vi
+Dajte OpenCode dosta konteksta i primjera koji će mu pomoći da razumije šta vi
 želim.
 :::
 
@@ -311,7 +311,7 @@ promjene.
 
 ### Poništi promjene
 
-Recimo da tražite od OpenCodea da izvrši neke promjene.
+Recimo da tražite od OpenCode da izvrši neke promjene.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 Can you refactor the function in @packages/functions/src/api/index.ts?
@@ -345,7 +345,7 @@ Ili **možete ponoviti** promjene koristeći naredbu `/redo`.
 
 ## Dijeli
 
-Razgovore koje imate sa OpenCodeom možete [dijeliti sa vašim
+Razgovore koje imate sa OpenCode možete [dijeliti sa vašim
 tim](/docs/share).
 
 ```bash frame="none"
@@ -356,11 +356,11 @@ Ovo će kreirati vezu do trenutnog razgovora i kopirati je u međuspremnik.
 :::note
 Razgovori se ne dijele prema zadanim postavkama.
 :::
-Evo [primjer razgovora](https://opencode.ai/s/4XP1fce5) sa OpenCodeom.
+Evo [primjer razgovora](https://opencode.ai/s/4XP1fce5) sa OpenCode.
 
 ---
 
 ## Prilagodi
 
-I to je to! Sada ste profesionalac u korištenju OpenCodea.
+I to je to! Sada ste profesionalac u korištenju OpenCode.
 Da biste to učinili svojim, preporučujemo [odabir teme](/docs/themes), [prilagođavanje povezivanja tipki](/docs/keybinds), [konfiguriranje formatera koda](/docs/formatters), [kreiranje prilagođenih komandi](/docs/commands), ili igranje sa [OpenCode config](/docs/config).

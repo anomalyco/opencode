@@ -216,11 +216,11 @@ Para usar Amazon Bedrock con OpenCode:
    #### Prioridad de autenticación
 
    Amazon Bedrock utiliza la siguiente prioridad de autenticación:
-   1. **Token de portador** - `AWS_BEARER_TOKEN_BEDROCK` variable de entorno o token del comando `/connect`
+   1. **Bearer token** - variable de entorno `AWS_BEARER_TOKEN_BEDROCK` o token del comando `/connect`
    2. **AWS Cadena de credenciales**: perfil, claves de acceso, credenciales compartidas, roles de IAM, tokens de identidad web (EKS IRSA), metadatos de instancia
 
    :::nota
-   Cuando se establece un token de portador (a través de `/connect` o `AWS_BEARER_TOKEN_BEDROCK`), tiene prioridad sobre todos los métodos de credenciales AWS, incluidos los perfiles configurados.
+   Cuando se define un bearer token (a traves de `/connect` o `AWS_BEARER_TOKEN_BEDROCK`), tiene prioridad sobre todos los metodos de credenciales de AWS, incluidos los perfiles configurados.
    :::
 
 3. Ejecute el comando `/models` para seleccionar el modelo que desee.
@@ -442,7 +442,7 @@ Si encuentra errores del tipo "Lo siento, pero no puedo ayudar con esa solicitud
 
 ---
 
-### Puerta de enlace de IA de Cloudflare
+### Cloudflare AI Gateway
 
 Cloudflare AI Gateway le permite acceder a modelos de OpenAI, Anthropic, Workers AI y más a través de un punto final unificado. Con [Facturación unificada](https://developers.cloudflare.com/ai-gateway/features/unified-billing/) no necesita claves API independientes para cada proveedor.
 
@@ -892,11 +892,11 @@ La región `global` mejora la disponibilidad y reduce los errores sin costo adic
 
 ---
 
-### Abrazando la cara
+### Hugging Face
 
 [Hugging Face Inference Providers](https://huggingface.co/docs/inference-providers) proporciona acceso a modelos abiertos compatibles con más de 17 proveedores.
 
-1. Dirígete a [Configuración de cara de abrazo](https://huggingface.co/settings/tokens/new?ownUserPermissions=inference.serverless.write&tokenType=fineGrained) para crear un token con permiso para realizar llamadas a proveedores de inferencia.
+1. Ve a [Hugging Face settings](https://huggingface.co/settings/tokens/new?ownUserPermissions=inference.serverless.write&tokenType=fineGrained) para crear un token con permisos para llamar a inference providers.
 
 2. Ejecute el comando `/connect` y busque **Hugging Face**.
 
@@ -1260,7 +1260,7 @@ Si las llamadas a herramientas no funcionan, intente aumentar `num_ctx` en Ollam
 
 ---
 
-### Nube de Ollama
+### Ollama Cloud
 
 Para usar Ollama Cloud con OpenCode:
 
@@ -1590,7 +1590,7 @@ Para utilizar [API generativas de Scaleway](https://www.scaleway.com/en/docs/gen
 
 ---
 
-### Puerta de enlace AI de Vercel
+### Vercel AI Gateway
 
 Vercel AI Gateway le permite acceder a modelos de OpenAI, Anthropic, Google, xAI y más a través de un punto final unificado. Los modelos se ofrecen a precio de lista sin margen de beneficio.
 

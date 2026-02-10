@@ -11,25 +11,25 @@ export const console = config.console
 
 ![具有opencode主题的opencode TUI](../../../assets/lander/screenshot.png)
 
-讓我們開始吧。
+讓我们開始吧。
 
 ---
 
-#### 先決條件
+#### 先決条件
 
 要在终端中使用opencode，您需要：
 
-1. 現代終端模擬器，例如：
-   - [韦兹术语](https://wezterm.org)，跨平台
-   - [阿拉克里蒂](https://alacritty.org)，跨平台
-   - [幽灵般的](https://ghostty.org)，Linux 和 macOS
-   - [ 猫咪](https://sw.kovidgoyal.net/kitty/)，Linux 和 macOS
+1. 现代终端模拟器，例如：
+   - [WezTerm](https://wezterm.org)，跨平台
+   - [Alacritty](https://alacritty.org)，跨平台
+   - [Ghostty](https://ghostty.org)，Linux 和 macOS
+   - [Kitty](https://sw.kovidgoyal.net/kitty/)，Linux 和 macOS
 
-2. 您想要使用的 LLM 强大的 API 钥匙。
+2. 你要使用的 LLM 提供商 API 密钥。
 
 ---
 
-## 安裝
+## 安装
 
 安装 opencode 最简单的方法是通过安装脚本。
 
@@ -37,7 +37,7 @@ export const console = config.console
 curl -fsSL https://opencode.ai/install | bash
 ```
 
-您還可以使用以下命令安裝它：
+您还可以使用以下命令安装它：
 
 - **使用 Node.js**
 
@@ -131,9 +131,9 @@ curl -fsSL https://opencode.ai/install | bash
 
 ## 配置
 
-借助 opencode，您可以通过配置 API 来使用任何 LLM 成功。
+借助 opencode，你可以通过配置 API 使用任意 LLM 提供商。
 
-如果您不熟悉使用 LLM 成功，我们建议使用[OpenCode Zen](/docs/zen)。
+如果你刚开始使用 LLM 提供商，我们建议使用 [OpenCode Zen](/docs/zen)。
 这是经过 opencode 测试和验证的精选模型列表
 團隊。
 
@@ -154,13 +154,13 @@ curl -fsSL https://opencode.ai/install | bash
    └ enter
    ```
 
-或者，您可以选择其他巨头之一。 [了解更多](/docs/providers#directory)。
+或者，你也可以选择其他提供商之一。[了解更多](/docs/providers#directory)。
 
 ---
 
 ## 初始化
 
-現在您已經配置了提供程序，您可以導航到一個項目
+現在您已經配置了提供商，您可以导航到一个項目
 你想繼續工作。
 
 ```bash
@@ -187,7 +187,7 @@ opencode
 :::
 
 这有助于 opencode 理解项目结构和编码模式
-用過的。
+用过的。
 
 ---
 
@@ -213,7 +213,7 @@ opencode
 How is authentication handled in @packages/functions/src/api/index.ts
 ```
 
-如果您沒有處理代碼庫的一部分，這會很有幫助。
+如果您沒有處理代碼庫的一部分，这会很有幫助。
 
 ---
 
@@ -224,7 +224,7 @@ How is authentication handled in @packages/functions/src/api/index.ts
 1. **制定計劃**
 
    opencode 有一个*计划模式*，该模式禁止其进行更改和
-   相反，建議*如何*實現該功能。
+   相反，建議*如何*實現该功能。
 
    使用 **Tab** 键切换到它。您会在右下角有一个指示符。
 
@@ -232,7 +232,7 @@ How is authentication handled in @packages/functions/src/api/index.ts
    <TAB>
    ```
 
-   現在讓我們描述一下我們想要它做什麼。
+   現在讓我们描述一下我们想要它做什麼。
 
    ```txt frame="none"
    When a user deletes a note, we'd like to flag it as deleted in the database.
@@ -241,7 +241,7 @@ How is authentication handled in @packages/functions/src/api/index.ts
    ```
 
    您需要为 opencode 提供足够的详细信息才能了解您想要的内容。它有帮助
-   就像與團隊中的初級開發人員交談一樣與它交談。
+   就像与團隊中的初級開發人員交談一樣与它交談。
 
    :::提示
    为 opencode 提供大量上下文和示例，以帮助其理解您的内容
@@ -250,7 +250,7 @@ How is authentication handled in @packages/functions/src/api/index.ts
 
 2. **迭代計劃**
 
-   一旦它為您提供了計劃，您就可以提供反饋或添加更多詳細信息。
+   一旦它为您提供了計劃，您就可以提供反饋或添加更多詳細信息。
 
    ```txt frame="none"
    We'd like to design this new screen using a design I've used before.
@@ -258,22 +258,22 @@ How is authentication handled in @packages/functions/src/api/index.ts
    ```
 
    :::提示
-   將圖像拖放到終端中以將其添加到提示中。
+   将圖像拖放到终端中以将其添加到提示中。
    :::
 
    opencode 可以扫描您提供的任何图像并将其添加到提示中。您可以
-   通過將圖像拖放到終端中來完成此操作。
+   通过将圖像拖放到终端中來完成此操作。
 
 3. **構建功能**
 
-   一旦您對計劃感到滿意，請切換回*構建模式*
+   一旦您对計劃感到滿意，请切換回*構建模式*
    再次按 **Tab** 键。
 
    ```bash frame="none"
    <TAB>
    ```
 
-   並要求它做出改變。
+   并要求它做出改變。
 
    ```bash frame="none"
    Sounds good! Go ahead and make the changes.
@@ -284,7 +284,7 @@ How is authentication handled in @packages/functions/src/api/index.ts
 ### 做出改變
 
 对于更直接的更改，您可以要求 opencode 直接构建它
-無需先審查計劃。
+無需先审查計劃。
 
 ```txt frame="none" "@packages/functions/src/settings.ts" "@packages/functions/src/notes.ts"
 We need to add authentication to the /settings route. Take a look at how this is
@@ -305,7 +305,7 @@ the same logic in @packages/functions/src/settings.ts
 Can you refactor the function in @packages/functions/src/api/index.ts?
 ```
 
-但你意識到這不是你想要的。您**可以撤消**更改
+但你意識到这不是你想要的。您**可以撤消**更改
 使用 `/undo` 命令。
 
 ```bash frame="none"
@@ -322,7 +322,7 @@ Can you refactor the function in @packages/functions/src/api/index.ts?
 您可以从这里调整提示并要求 opencode 重试。
 
 :::tip
-您可以多次运行 `/undo` 以取消消减更改。
+您可以多次运行 `/undo` 以撤销多次更改。
 :::
 
 或者您**可以使用 `/redo` 命令重做**更改。
@@ -342,10 +342,10 @@ Can you refactor the function in @packages/functions/src/api/index.ts?
 /share
 ```
 
-這將創建當前對話的鏈接並將其複製到剪貼板。
+这会创建当前对话的链接并复制到剪贴板。
 
 :::note
-默認情況下不共享對話。
+默認情况下不共享对话。
 :::
 
 这是带有 opencode 的[示例对话](https://opencode.ai/s/4XP1fce5)。
@@ -354,6 +354,6 @@ Can you refactor the function in @packages/functions/src/api/index.ts?
 
 ## 定制
 
-就是这样！您现在已经是使用 opencode 的专家了。
+就是这样！你现在已经是 opencode 高手了。
 
 要让您成为自己的，我们建议[选择一个主题](/docs/themes)、[自定义交互绑定](/docs/keybinds)、[配置代码整理程序](/docs/formatters)、[创建自定义命令](/docs/commands)或使用[opencode配置](/docs/config)。
