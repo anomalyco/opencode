@@ -86,6 +86,7 @@ pub fn get_backend_config(app: AppHandle) -> Result<BackendConfig, String> {
 
     let mode = store
         .get(BACKEND_MODE_KEY)
+        .as_ref()
         .and_then(|v| v.as_str())
         .map(|v| match v {
             "wsl" => BackendMode::Wsl,

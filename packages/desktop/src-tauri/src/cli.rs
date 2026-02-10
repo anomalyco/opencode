@@ -5,7 +5,10 @@ use tauri_plugin_shell::{
 };
 use tauri_plugin_store::StoreExt;
 
-use crate::{LogState, constants::{BACKEND_MODE_KEY, MAX_LOG_ENTRIES, SETTINGS_STORE}};
+use crate::{
+    LogState,
+    constants::{BACKEND_MODE_KEY, MAX_LOG_ENTRIES, SETTINGS_STORE},
+};
 
 const CLI_INSTALL_DIR: &str = ".opencode/bin";
 const CLI_BINARY_NAME: &str = "opencode";
@@ -158,6 +161,7 @@ fn is_wsl_backend(app: &tauri::AppHandle) -> bool {
 
     store
         .get(BACKEND_MODE_KEY)
+        .as_ref()
         .and_then(|value| value.as_str())
         .is_some_and(|value| value == "wsl")
 }
@@ -180,12 +184,25 @@ pub fn create_command(app: &tauri::AppHandle, args: &str, extra_env: &[(&str, St
         .expect("Failed to resolve app local data dir");
 
     let mut envs = vec![
-        ("OPENCODE_EXPERIMENTAL_ICON_DISCOVERY".to_string(), "true".to_string()),
-        ("OPENCODE_EXPERIMENTAL_FILEWATCHER".to_string(), "true".to_string()),
+        (
+            "OPENCODE_EXPERIMENTAL_ICON_DISCOVERY".to_string(),
+            "true".to_string(),
+        ),
+        (
+            "OPENCODE_EXPERIMENTAL_FILEWATCHER".to_string(),
+            "true".to_string(),
+        ),
         ("OPENCODE_CLIENT".to_string(), "desktop".to_string()),
-        ("XDG_STATE_HOME".to_string(), state_dir.to_string_lossy().to_string()),
+        (
+            "XDG_STATE_HOME".to_string(),
+            state_dir.to_string_lossy().to_string(),
+        ),
     ];
-    envs.extend(extra_env.iter().map(|(key, value)| (key.to_string(), value.clone())));
+    envs.extend(
+        extra_env
+            .iter()
+            .map(|(key, value)| (key.to_string(), value.clone())),
+    );
 
     #[cfg(target_os = "windows")]
     if is_wsl_backend(app) {
@@ -208,8 +225,7 @@ pub fn create_command(app: &tauri::AppHandle, args: &str, extra_env: &[(&str, St
             "XDG_STATE_HOME=\"$HOME/.local/state\"".to_string(),
         ];
         env_prefix.extend(
-            envs
-                .iter()
+            envs.iter()
                 .filter(|(key, _)| key != "OPENCODE_EXPERIMENTAL_ICON_DISCOVERY")
                 .filter(|(key, _)| key != "OPENCODE_EXPERIMENTAL_FILEWATCHER")
                 .filter(|(key, _)| key != "OPENCODE_CLIENT")
@@ -217,11 +233,7 @@ pub fn create_command(app: &tauri::AppHandle, args: &str, extra_env: &[(&str, St
                 .map(|(key, value)| format!("{}={}", key, shell_escape(value))),
         );
 
-        script.push(format!(
-            "{} exec \"$BIN\" {}",
-            env_prefix.join(" "),
-            args
-        ));
+        script.push(format!("{} exec \"$BIN\" {}", env_prefix.join(" "), args));
 
         return app
             .shell()
@@ -252,9 +264,7 @@ pub fn create_command(app: &tauri::AppHandle, args: &str, extra_env: &[(&str, St
             format!("\"{}\" {}", sidecar.display(), args)
         };
 
-        let mut cmd = app.shell()
-            .command(&shell)
-            .args(["-il", "-c", &cmd]);
+        let mut cmd = app.shell().command(&shell).args(["-il", "-c", &cmd]);
 
         for (key, value) in envs {
             cmd = cmd.env(key, value);

@@ -22,8 +22,8 @@ import { UPDATER_ENABLED } from "./updater"
 import { initI18n, t } from "./i18n"
 import pkg from "../package.json"
 import "./styles.css"
-import { commands, InitStep } from "./bindings"
-import { Channel, invoke } from "@tauri-apps/api/core"
+import { commands, InitStep, type BackendConfig } from "./bindings"
+import { Channel } from "@tauri-apps/api/core"
 import { createMenu } from "./menu"
 
 const root = document.getElementById("root")
@@ -49,10 +49,6 @@ const listenForDeepLinks = async () => {
   const startUrls = await getCurrent().catch(() => null)
   if (startUrls?.length) emitDeepLinks(startUrls)
   await onOpenUrl((urls) => emitDeepLinks(urls)).catch(() => undefined)
-}
-
-type BackendConfig = {
-  mode: "native" | "wsl"
 }
 
 const defaultBackend: BackendConfig = { mode: "native" }
@@ -107,7 +103,7 @@ const createPlatform = (
 
     async openPath(path: string, app?: string) {
       if (backend().mode === "wsl" && os === "windows") {
-        const converted = await invoke<string>("wsl_path", { path, mode: "windows" }).catch(() => null)
+        const converted = await commands.wslPath(path, "windows").catch(() => null)
         return openerOpenPath(converted && converted.length > 0 ? converted : path, app)
       }
       return openerOpenPath(path, app)
@@ -365,7 +361,7 @@ const createPlatform = (
 
     setBackendConfig: async (config: BackendConfig) => {
       setBackend(config)
-      await invoke("set_backend_config", { config }).catch(() => undefined)
+      await commands.setBackendConfig(config).catch(() => undefined)
     },
 
     supportsNativePickers: () => backend().mode !== "wsl",
@@ -414,7 +410,7 @@ render(() => {
   const [backend, setBackend] = createSignal<BackendConfig>(defaultBackend)
 
   const fetchBackend = async () => {
-    const next = await invoke<BackendConfig>("get_backend_config").catch(() => null)
+    const next = await commands.getBackendConfig().catch(() => null)
     if (!next) return null
     setBackend(next)
     return next

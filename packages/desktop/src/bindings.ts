@@ -10,8 +10,11 @@ export const commands = {
 	awaitInitialization: (events: Channel) => __TAURI_INVOKE<ServerReadyData>("await_initialization", { events }),
 	getDefaultServerUrl: () => __TAURI_INVOKE<string | null>("get_default_server_url"),
 	setDefaultServerUrl: (url: string | null) => __TAURI_INVOKE<null>("set_default_server_url", { url }),
+	getBackendConfig: () => __TAURI_INVOKE<BackendConfig>("get_backend_config"),
+	setBackendConfig: (config: BackendConfig) => __TAURI_INVOKE<null>("set_backend_config", { config }),
 	parseMarkdownCommand: (markdown: string) => __TAURI_INVOKE<string>("parse_markdown_command", { markdown }),
 	checkAppExists: (appName: string) => __TAURI_INVOKE<boolean>("check_app_exists", { appName }),
+	wslPath: (path: string, mode: "windows" | "linux" | null) => __TAURI_INVOKE<string>("wsl_path", { path, mode }),
 };
 
 /** Events */
@@ -20,6 +23,12 @@ export const events = {
 };
 
 /* Types */
+export type BackendConfig = {
+		mode: BackendMode,
+	};
+
+export type BackendMode = "native" | "wsl";
+
 export type InitStep = { phase: "server_waiting" } | { phase: "sqlite_waiting" } | { phase: "done" };
 
 export type LoadingWindowComplete = null;
@@ -28,6 +37,8 @@ export type ServerReadyData = {
 		url: string,
 		password: string | null,
 	};
+
+export type WslPathMode = "windows" | "linux";
 
 /* Tauri Specta runtime */
 function makeEvent<T>(name: string) {
