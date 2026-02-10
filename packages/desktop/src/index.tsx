@@ -16,7 +16,6 @@ import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { type as ostype } from "@tauri-apps/plugin-os"
 import { check, Update } from "@tauri-apps/plugin-updater"
 import { getCurrentWindow } from "@tauri-apps/api/window"
-import { invoke } from "@tauri-apps/api/core"
 import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification"
 import { relaunch } from "@tauri-apps/plugin-process"
 import { AsyncStorage } from "@solid-primitives/storage"
@@ -30,7 +29,7 @@ import { UPDATER_ENABLED } from "./updater"
 import { initI18n, t } from "./i18n"
 import pkg from "../package.json"
 import "./styles.css"
-import { commands, InitStep, type BackendConfig } from "./bindings"
+import { commands, InitStep, type WslConfig } from "./bindings"
 import { Channel } from "@tauri-apps/api/core"
 import { createMenu } from "./menu"
 
@@ -59,13 +58,13 @@ const listenForDeepLinks = async () => {
   await onOpenUrl((urls) => emitDeepLinks(urls)).catch(() => undefined)
 }
 
-const defaultBackend: BackendConfig = { mode: "native" }
+const defaultWsl: WslConfig = { enabled: false }
 
 const createPlatform = (
   password: Accessor<string | null>,
-  backend: Accessor<BackendConfig>,
-  setBackend: (next: BackendConfig) => void,
-  fetchBackend: () => Promise<BackendConfig | null>,
+  wsl: Accessor<WslConfig>,
+  setWsl: (next: WslConfig) => void,
+  fetchWsl: () => Promise<WslConfig | null>,
 ): Platform => {
   const os = (() => {
     const type = ostype()
@@ -79,7 +78,7 @@ const createPlatform = (
     version: pkg.version,
 
     async openDirectoryPickerDialog(opts) {
-      if (backend().mode === "wsl") return null
+      if (wsl().enabled) return null
       const result = await open({
         directory: true,
         multiple: opts?.multiple ?? false,
@@ -110,7 +109,7 @@ const createPlatform = (
     },
 
     async openPath(path: string, app?: string) {
-      if (backend().mode === "wsl" && os === "windows") {
+      if (wsl().enabled && os === "windows") {
         const converted = await commands.wslPath(path, "windows").catch(() => null)
         return openerOpenPath(converted && converted.length > 0 ? converted : path, app)
       }
@@ -332,18 +331,18 @@ const createPlatform = (
         .catch(() => undefined)
     },
 
-    getBackendConfig: async () => {
-      const next = await fetchBackend()
+    getWslConfig: async () => {
+      const next = await fetchWsl()
       if (next) return next
-      return backend()
+      return wsl()
     },
 
-    setBackendConfig: async (config: BackendConfig) => {
-      setBackend(config)
-      await commands.setBackendConfig(config).catch(() => undefined)
+    setWslConfig: async (config: WslConfig) => {
+      setWsl(config)
+      await commands.setWslConfig(config).catch(() => undefined)
     },
 
-    supportsNativePickers: () => backend().mode !== "wsl",
+    wslEnabled: () => wsl().enabled,
 
     getDefaultServerUrl: async () => {
       const result = await commands.getDefaultServerUrl().catch(() => null)
@@ -355,12 +354,12 @@ const createPlatform = (
     },
 
     getDisplayBackend: async () => {
-      const result = await invoke<DisplayBackend | null>("get_display_backend").catch(() => null)
+      const result = await commands.getDisplayBackend().catch(() => null)
       return result
     },
 
     setDisplayBackend: async (backend) => {
-      await invoke("set_display_backend", { backend }).catch(() => undefined)
+      await commands.setDisplayBackend(backend).catch(() => undefined)
     },
 
     parseMarkdown: (markdown: string) => commands.parseMarkdownCommand(markdown),
@@ -404,16 +403,16 @@ void listenForDeepLinks()
 
 render(() => {
   const [serverPassword, setServerPassword] = createSignal<string | null>(null)
-  const [backend, setBackend] = createSignal<BackendConfig>(defaultBackend)
+  const [wsl, setWsl] = createSignal<WslConfig>(defaultWsl)
 
-  const fetchBackend = async () => {
-    const next = await commands.getBackendConfig().catch(() => null)
+  const fetchWsl = async () => {
+    const next = await commands.getWslConfig().catch(() => null)
     if (!next) return null
-    setBackend(next)
+    setWsl(next)
     return next
   }
 
-  const platform = createPlatform(() => serverPassword(), backend, setBackend, fetchBackend)
+  const platform = createPlatform(() => serverPassword(), wsl, setWsl, fetchWsl)
 
   function handleClick(e: MouseEvent) {
     const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
@@ -425,7 +424,7 @@ render(() => {
 
   onMount(() => {
     document.addEventListener("click", handleClick)
-    void fetchBackend()
+    void fetchWsl()
     onCleanup(() => {
       document.removeEventListener("click", handleClick)
     })

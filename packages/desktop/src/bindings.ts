@@ -10,8 +10,10 @@ export const commands = {
 	awaitInitialization: (events: Channel) => __TAURI_INVOKE<ServerReadyData>("await_initialization", { events }),
 	getDefaultServerUrl: () => __TAURI_INVOKE<string | null>("get_default_server_url"),
 	setDefaultServerUrl: (url: string | null) => __TAURI_INVOKE<null>("set_default_server_url", { url }),
-	getBackendConfig: () => __TAURI_INVOKE<BackendConfig>("get_backend_config"),
-	setBackendConfig: (config: BackendConfig) => __TAURI_INVOKE<null>("set_backend_config", { config }),
+	getWslConfig: () => __TAURI_INVOKE<WslConfig>("get_wsl_config"),
+	setWslConfig: (config: WslConfig) => __TAURI_INVOKE<null>("set_wsl_config", { config }),
+	getDisplayBackend: () => __TAURI_INVOKE<DisplayBackend | null>("get_display_backend"),
+	setDisplayBackend: (backend: DisplayBackend) => __TAURI_INVOKE<null>("set_display_backend", { backend }),
 	parseMarkdownCommand: (markdown: string) => __TAURI_INVOKE<string>("parse_markdown_command", { markdown }),
 	checkAppExists: (appName: string) => __TAURI_INVOKE<boolean>("check_app_exists", { appName }),
 	wslPath: (path: string, mode: "windows" | "linux" | null) => __TAURI_INVOKE<string>("wsl_path", { path, mode }),
@@ -23,11 +25,11 @@ export const events = {
 };
 
 /* Types */
-export type BackendConfig = {
-		mode: BackendMode,
+export type WslConfig = {
+		enabled: boolean,
 	};
 
-export type BackendMode = "native" | "wsl";
+export type DisplayBackend = "wayland" | "auto";
 
 export type InitStep = { phase: "server_waiting" } | { phase: "sqlite_waiting" } | { phase: "done" };
 
@@ -56,4 +58,3 @@ function makeEvent<T>(name: string) {
 
     return Object.assign(fn, base);
 }
-

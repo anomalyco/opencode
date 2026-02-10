@@ -7,7 +7,7 @@ use tauri_plugin_store::StoreExt;
 
 use crate::{
     LogState,
-    constants::{BACKEND_MODE_KEY, MAX_LOG_ENTRIES, SETTINGS_STORE},
+    constants::{MAX_LOG_ENTRIES, SETTINGS_STORE, WSL_ENABLED_KEY},
 };
 
 const CLI_INSTALL_DIR: &str = ".opencode/bin";
@@ -154,16 +154,16 @@ fn get_user_shell() -> String {
     std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string())
 }
 
-fn is_wsl_backend(app: &tauri::AppHandle) -> bool {
+fn is_wsl_enabled(app: &tauri::AppHandle) -> bool {
     let Ok(store) = app.store(SETTINGS_STORE) else {
         return false;
     };
 
     store
-        .get(BACKEND_MODE_KEY)
+        .get(WSL_ENABLED_KEY)
         .as_ref()
-        .and_then(|value| value.as_str())
-        .is_some_and(|value| value == "wsl")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
 }
 
 fn shell_escape(input: &str) -> String {
@@ -205,7 +205,7 @@ pub fn create_command(app: &tauri::AppHandle, args: &str, extra_env: &[(&str, St
     );
 
     #[cfg(target_os = "windows")]
-    if is_wsl_backend(app) {
+    if is_wsl_enabled(app) {
         let version = app.package_info().version.to_string();
         let mut script = vec![
             "set -e".to_string(),

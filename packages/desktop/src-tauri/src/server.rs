@@ -8,35 +8,17 @@ use tokio::task::JoinHandle;
 
 use crate::{
     cli,
-    constants::{BACKEND_MODE_KEY, DEFAULT_SERVER_URL_KEY, SETTINGS_STORE},
+    constants::{DEFAULT_SERVER_URL_KEY, SETTINGS_STORE, WSL_ENABLED_KEY},
 };
 
-#[derive(Clone, Copy, serde::Serialize, serde::Deserialize, specta::Type, Debug)]
-#[serde(rename_all = "snake_case")]
-pub enum BackendMode {
-    Native,
-    Wsl,
-}
-
-impl BackendMode {
-    fn as_str(&self) -> &'static str {
-        match self {
-            BackendMode::Native => "native",
-            BackendMode::Wsl => "wsl",
-        }
-    }
-}
-
 #[derive(Clone, serde::Serialize, serde::Deserialize, specta::Type, Debug)]
-pub struct BackendConfig {
-    pub mode: BackendMode,
+pub struct WslConfig {
+    pub enabled: bool,
 }
 
-impl Default for BackendConfig {
+impl Default for WslConfig {
     fn default() -> Self {
-        Self {
-            mode: BackendMode::Native,
-        }
+        Self { enabled: false }
     }
 }
 
@@ -79,35 +61,28 @@ pub async fn set_default_server_url(app: AppHandle, url: Option<String>) -> Resu
 
 #[tauri::command]
 #[specta::specta]
-pub fn get_backend_config(app: AppHandle) -> Result<BackendConfig, String> {
+pub fn get_wsl_config(app: AppHandle) -> Result<WslConfig, String> {
     let store = app
         .store(SETTINGS_STORE)
         .map_err(|e| format!("Failed to open settings store: {}", e))?;
 
-    let mode = store
-        .get(BACKEND_MODE_KEY)
+    let enabled = store
+        .get(WSL_ENABLED_KEY)
         .as_ref()
-        .and_then(|v| v.as_str())
-        .map(|v| match v {
-            "wsl" => BackendMode::Wsl,
-            _ => BackendMode::Native,
-        })
-        .unwrap_or(BackendMode::Native);
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
-    Ok(BackendConfig { mode })
+    Ok(WslConfig { enabled })
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn set_backend_config(app: AppHandle, config: BackendConfig) -> Result<(), String> {
+pub fn set_wsl_config(app: AppHandle, config: WslConfig) -> Result<(), String> {
     let store = app
         .store(SETTINGS_STORE)
         .map_err(|e| format!("Failed to open settings store: {}", e))?;
 
-    store.set(
-        BACKEND_MODE_KEY,
-        serde_json::Value::String(config.mode.as_str().to_string()),
-    );
+    store.set(WSL_ENABLED_KEY, serde_json::Value::Bool(config.enabled));
 
     store
         .save()

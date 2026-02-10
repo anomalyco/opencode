@@ -367,40 +367,29 @@ export const SettingsGeneral: Component = () => {
           </div>
         </div>
 
-        <Show when={platform.platform === "desktop" && platform.os === "windows"}>
+        <Show when={platform.platform === "desktop" && platform.os === "windows" && platform.getWslConfig}>
           {(_) => {
-            const backendOptions = createMemo(() => [
-              { value: "native" as const, label: language.t("settings.desktop.backend.option.native") },
-              { value: "wsl" as const, label: language.t("settings.desktop.backend.option.wsl") },
-            ])
-
-            const [valueResource, actions] = createResource(() => platform.getBackendConfig?.())
+            const [valueResource, actions] = createResource(() => platform.getWslConfig?.())
             const value = () => (valueResource.state === "pending" ? undefined : valueResource.latest)
 
             return (
               <div class="flex flex-col gap-1">
-                <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.desktop.section.backend")}</h3>
+                <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.desktop.section.wsl")}</h3>
 
                 <div class="bg-surface-raised-base px-4 rounded-lg">
                   <SettingsRow
-                    title={language.t("settings.desktop.backend.title")}
-                    description={language.t("settings.desktop.backend.description")}
+                    title={language.t("settings.desktop.wsl.title")}
+                    description={language.t("settings.desktop.wsl.description")}
                   >
-                    <Select
-                      data-action="settings-backend"
-                      options={backendOptions()}
-                      current={backendOptions().find((o) => o.value === value()?.mode)}
-                      value={(option) => option.value}
-                      label={(option) => option.label}
-                      onSelect={(option) => {
-                        if (!option) return
-                        platform.setBackendConfig?.({ mode: option.value })?.finally(() => actions.refetch())
-                      }}
-                      variant="secondary"
-                      size="small"
-                      triggerVariant="settings"
-                      disabled={valueResource.state === "pending"}
-                    />
+                    <div data-action="settings-wsl">
+                      <Switch
+                        checked={value()?.enabled ?? false}
+                        disabled={valueResource.state === "pending"}
+                        onChange={(checked) =>
+                          platform.setWslConfig?.({ enabled: checked })?.finally(() => actions.refetch())
+                        }
+                      />
+                    </div>
                   </SettingsRow>
                 </div>
               </div>
