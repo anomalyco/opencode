@@ -3,6 +3,7 @@ import { ComponentProps, createEffect, createSignal, onCleanup, onMount, splitPr
 import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { monoFontFamily, useSettings } from "@/context/settings"
+import { parseKeybind, matchKeybind } from "@/context/command"
 import { SerializeAddon } from "@/addons/serialize"
 import { LocalPTY } from "@/context/terminal"
 import { resolveThemeVariant, useTheme, withAlpha, type HexColor } from "@opencode-ai/ui/theme"
@@ -10,6 +11,8 @@ import { useLanguage } from "@/context/language"
 import { showToast } from "@opencode-ai/ui/toast"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
 
+const TOGGLE_TERMINAL_ID = "terminal.toggle"
+const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
   onSubmit?: () => void
@@ -71,7 +74,9 @@ export const Terminal = (props: TerminalProps) => {
   let handleTextareaBlur: () => void
   let disposed = false
   const cleanups: VoidFunction[] = []
-  let tail = local.pty.tail ?? ""
+  const start =
+    typeof local.pty.cursor === "number" && Number.isSafeInteger(local.pty.cursor) ? local.pty.cursor : undefined
+  let cursor = start ?? 0
 
   const cleanup = () => {
     if (!cleanups.length) return
@@ -161,13 +166,16 @@ export const Terminal = (props: TerminalProps) => {
 
       const once = { value: false }
 
-      const url = new URL(sdk.url + `/pty/${local.pty.id}/connect?directory=${encodeURIComponent(sdk.directory)}`)
+      const url = new URL(sdk.url + `/pty/${local.pty.id}/connect`)
+      url.searchParams.set("directory", sdk.directory)
+      url.searchParams.set("cursor", String(start !== undefined ? start : local.pty.buffer ? -1 : 0))
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
       if (window.__OPENCODE__?.serverPassword) {
         url.username = "opencode"
         url.password = window.__OPENCODE__?.serverPassword
       }
       const socket = new WebSocket(url)
+      socket.binaryType = "arraybuffer"
       cleanups.push(() => {
         if (socket.readyState !== WebSocket.CLOSED && socket.readyState !== WebSocket.CLOSING) socket.close()
       })
@@ -237,12 +245,11 @@ export const Terminal = (props: TerminalProps) => {
           return true
         }
 
-        // allow for ctrl-` to toggle terminal in parent
-        if (event.ctrlKey && key === "`") {
-          return true
-        }
+        // allow for toggle terminal keybinds in parent
+        const config = settings.keybinds.get(TOGGLE_TERMINAL_ID) ?? DEFAULT_TOGGLE_TERMINAL_KEYBIND
+        const keybinds = parseKeybind(config)
 
-        return false
+        return matchKeybind(keybinds, event)
       })
 
       const fit = new mod.FitAddon()
@@ -287,26 +294,6 @@ export const Terminal = (props: TerminalProps) => {
       handleResize = () => fit.fit()
       window.addEventListener("resize", handleResize)
       cleanups.push(() => window.removeEventListener("resize", handleResize))
-      const limit = 16_384
-      const min = 32
-      const windowMs = 750
-      const seed = tail.length > limit ? tail.slice(-limit) : tail
-      let sync = seed.length >= min
-      let syncUntil = 0
-      const stopSync = () => {
-        sync = false
-        syncUntil = 0
-      }
-
-      const overlap = (data: string) => {
-        if (!seed) return 0
-        const max = Math.min(seed.length, data.length)
-        if (max < min) return 0
-        for (let i = max; i >= min; i--) {
-          if (seed.slice(-i) === data.slice(0, i)) return i
-        }
-        return 0
-      }
 
       const onResize = t.onResize(async (size) => {
         if (socket.readyState === WebSocket.OPEN) {
@@ -323,7 +310,6 @@ export const Terminal = (props: TerminalProps) => {
       })
       cleanups.push(() => disposeIfDisposable(onResize))
       const onData = t.onData((data) => {
-        if (data) stopSync()
         if (socket.readyState === WebSocket.OPEN) {
           socket.send(data)
         }
@@ -341,7 +327,6 @@ export const Terminal = (props: TerminalProps) => {
 
       const handleOpen = () => {
         local.onConnect?.()
-        if (sync) syncUntil = Date.now() + windowMs
         sdk.client.pty
           .update({
             ptyID: local.pty.id,
@@ -355,31 +340,31 @@ export const Terminal = (props: TerminalProps) => {
       socket.addEventListener("open", handleOpen)
       cleanups.push(() => socket.removeEventListener("open", handleOpen))
 
+      const decoder = new TextDecoder()
+
       const handleMessage = (event: MessageEvent) => {
         if (disposed) return
+        if (event.data instanceof ArrayBuffer) {
+          // WebSocket control frame: 0x00 + UTF-8 JSON (currently { cursor }).
+          const bytes = new Uint8Array(event.data)
+          if (bytes[0] !== 0) return
+          const json = decoder.decode(bytes.subarray(1))
+          try {
+            const meta = JSON.parse(json) as { cursor?: unknown }
+            const next = meta?.cursor
+            if (typeof next === "number" && Number.isSafeInteger(next) && next >= 0) {
+              cursor = next
+            }
+          } catch {
+            // ignore
+          }
+          return
+        }
+
         const data = typeof event.data === "string" ? event.data : ""
         if (!data) return
-
-        const next = (() => {
-          if (!sync) return data
-          if (syncUntil && Date.now() > syncUntil) {
-            stopSync()
-            return data
-          }
-          const n = overlap(data)
-          if (!n) {
-            stopSync()
-            return data
-          }
-          const trimmed = data.slice(n)
-          if (trimmed) stopSync()
-          return trimmed
-        })()
-
-        if (!next) return
-
-        t.write(next)
-        tail = next.length >= limit ? next.slice(-limit) : (tail + next).slice(-limit)
+        t.write(data)
+        cursor += data.length
       }
       socket.addEventListener("message", handleMessage)
       cleanups.push(() => socket.removeEventListener("message", handleMessage))
@@ -433,7 +418,7 @@ export const Terminal = (props: TerminalProps) => {
       props.onCleanup({
         ...local.pty,
         buffer,
-        tail,
+        cursor,
         rows: t.rows,
         cols: t.cols,
         scrollY: t.getViewportY(),
