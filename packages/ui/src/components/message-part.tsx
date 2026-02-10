@@ -1,5 +1,6 @@
 import {
   Component,
+  ErrorBoundary,
   createEffect,
   createMemo,
   createSignal,
@@ -1001,35 +1002,48 @@ ToolRegistry.register({
               }}
               onSubtitleClick={handleSubtitleClick}
             >
-              <div
-                ref={autoScroll.scrollRef}
-                onScroll={autoScroll.handleScroll}
-                data-component="tool-output"
-                data-scrollable
+              <Show
+                when={childToolParts().length > 0}
+                fallback={
+                  <Show when={props.output}>
+                    <div data-component="tool-output" data-scrollable>
+                      <pre style={{ "white-space": "pre-wrap", "word-break": "break-word", margin: "0" }}>
+                        {props.output}
+                      </pre>
+                    </div>
+                  </Show>
+                }
               >
-                <div ref={autoScroll.contentRef} data-component="task-tools">
-                  <For each={childToolParts()}>
-                    {(item) => {
-                      const info = createMemo(() => getToolInfo(item.tool, item.state.input))
-                      const subtitle = createMemo(() => {
-                        if (info().subtitle) return info().subtitle
-                        if (item.state.status === "completed" || item.state.status === "running") {
-                          return item.state.title
-                        }
-                      })
-                      return (
-                        <div data-slot="task-tool-item">
-                          <Icon name={info().icon} size="small" />
-                          <span data-slot="task-tool-title">{info().title}</span>
-                          <Show when={subtitle()}>
-                            <span data-slot="task-tool-subtitle">{subtitle()}</span>
-                          </Show>
-                        </div>
-                      )
-                    }}
-                  </For>
+                <div
+                  ref={autoScroll.scrollRef}
+                  onScroll={autoScroll.handleScroll}
+                  data-component="tool-output"
+                  data-scrollable
+                >
+                  <div ref={autoScroll.contentRef} data-component="task-tools">
+                    <For each={childToolParts()}>
+                      {(item) => {
+                        const info = createMemo(() => getToolInfo(item.tool, item.state.input))
+                        const subtitle = createMemo(() => {
+                          if (info().subtitle) return info().subtitle
+                          if (item.state.status === "completed" || item.state.status === "running") {
+                            return item.state.title
+                          }
+                        })
+                        return (
+                          <div data-slot="task-tool-item">
+                            <Icon name={info().icon} size="small" />
+                            <span data-slot="task-tool-title">{info().title}</span>
+                            <Show when={subtitle()}>
+                              <span data-slot="task-tool-subtitle">{subtitle()}</span>
+                            </Show>
+                          </div>
+                        )
+                      }}
+                    </For>
+                  </div>
                 </div>
-              </div>
+              </Show>
             </BasicTool>
           </Match>
         </Switch>
@@ -1093,19 +1107,31 @@ ToolRegistry.register({
           </div>
         }
       >
-        <Show when={props.metadata.filediff?.path || props.input.filePath}>
+        <Show when={props.metadata.filediff?.file || props.input.filePath}>
           <div data-component="edit-content">
-            <Dynamic
-              component={diffComponent}
-              before={{
-                name: props.metadata?.filediff?.file || props.input.filePath,
-                contents: props.metadata?.filediff?.before || props.input.oldString,
-              }}
-              after={{
-                name: props.metadata?.filediff?.file || props.input.filePath,
-                contents: props.metadata?.filediff?.after || props.input.newString,
-              }}
-            />
+            <ErrorBoundary
+              fallback={
+                <div data-component="tool-output" data-scrollable>
+                  <pre style={{ "white-space": "pre-wrap", "word-break": "break-word", margin: "0" }}>
+                    {props.metadata?.filediff?.before !== props.metadata?.filediff?.after
+                      ? `--- ${props.metadata?.filediff?.file || props.input.filePath}\n+++ ${props.metadata?.filediff?.file || props.input.filePath}\n\n${props.input.oldString ? `- ${props.input.oldString}` : ""}${props.input.newString ? `\n+ ${props.input.newString}` : ""}`
+                      : props.output ?? ""}
+                  </pre>
+                </div>
+              }
+            >
+              <Dynamic
+                component={diffComponent}
+                before={{
+                  name: props.metadata?.filediff?.file || props.input.filePath,
+                  contents: props.metadata?.filediff?.before || props.input.oldString,
+                }}
+                after={{
+                  name: props.metadata?.filediff?.file || props.input.filePath,
+                  contents: props.metadata?.filediff?.after || props.input.newString,
+                }}
+              />
+            </ErrorBoundary>
           </div>
         </Show>
         <DiagnosticsDisplay diagnostics={diagnostics()} />

@@ -76,17 +76,23 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
       return
     }
 
-    const plainText = clipboardData.getData("text/plain") ?? ""
-
-    // Desktop: Browser clipboard has no images and no text, try platform's native clipboard for images
-    if (input.readClipboardImage && !plainText) {
-      const file = await input.readClipboardImage()
-      if (file) {
-        await addImageAttachment(file)
-        return
+    // Desktop: try native clipboard for images before falling back to text.
+    // WebKitGTK does not expose clipboard images via DataTransfer (WebKit Bug #218519),
+    // so the browser path above will miss them. Always attempt the native read here
+    // regardless of whether text is also present in the clipboard.
+    if (input.readClipboardImage) {
+      try {
+        const file = await input.readClipboardImage()
+        if (file) {
+          await addImageAttachment(file)
+          return
+        }
+      } catch {
+        // Native clipboard read failed, fall through to text
       }
     }
 
+    const plainText = clipboardData.getData("text/plain") ?? ""
     if (!plainText) return
     input.addPart({ type: "text", content: plainText, start: 0, end: 0 })
   }

@@ -364,26 +364,40 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
   },
 
   async readClipboardImage() {
-    const image = await readImage().catch(() => null)
-    if (!image) return null
-    const bytes = await image.rgba().catch(() => null)
-    if (!bytes || bytes.length === 0) return null
-    const size = await image.size().catch(() => null)
-    if (!size) return null
-    const canvas = document.createElement("canvas")
-    canvas.width = size.width
-    canvas.height = size.height
-    const ctx = canvas.getContext("2d")
-    if (!ctx) return null
-    const imageData = ctx.createImageData(size.width, size.height)
-    imageData.data.set(bytes)
-    ctx.putImageData(imageData, 0, 0)
-    return new Promise<File | null>((resolve) => {
-      canvas.toBlob((blob) => {
-        if (!blob) return resolve(null)
-        resolve(new File([blob], `pasted-image-${Date.now()}.png`, { type: "image/png" }))
-      }, "image/png")
+    const image = await readImage().catch((e) => {
+      console.warn("[clipboard] readImage failed:", e)
+      return null
     })
+    if (!image) return null
+    const bytes = await image.rgba().catch((e) => {
+      console.warn("[clipboard] image.rgba() failed:", e)
+      return null
+    })
+    if (!bytes || bytes.length === 0) return null
+    const size = await image.size().catch((e) => {
+      console.warn("[clipboard] image.size() failed:", e)
+      return null
+    })
+    if (!size) return null
+    try {
+      const canvas = document.createElement("canvas")
+      canvas.width = size.width
+      canvas.height = size.height
+      const ctx = canvas.getContext("2d")
+      if (!ctx) return null
+      const imageData = ctx.createImageData(size.width, size.height)
+      imageData.data.set(bytes)
+      ctx.putImageData(imageData, 0, 0)
+      return new Promise<File | null>((resolve) => {
+        canvas.toBlob((blob) => {
+          if (!blob) return resolve(null)
+          resolve(new File([blob], `pasted-image-${Date.now()}.png`, { type: "image/png" }))
+        }, "image/png")
+      })
+    } catch (e) {
+      console.warn("[clipboard] canvas conversion failed:", e)
+      return null
+    }
   },
 })
 

@@ -523,20 +523,36 @@ export function Diff<T>(props: DiffProps<T>) {
     setCurrent(instance)
 
     container.innerHTML = ""
-    instance.render({
-      oldFile: {
-        ...local.before,
-        contents: beforeContents,
-        cacheKey: checksum(beforeContents),
-      },
-      newFile: {
-        ...local.after,
-        contents: afterContents,
-        cacheKey: checksum(afterContents),
-      },
-      lineAnnotations: annotations,
-      containerWrapper: container,
-    })
+    try {
+      instance.render({
+        oldFile: {
+          ...local.before,
+          contents: beforeContents,
+          cacheKey: checksum(beforeContents),
+        },
+        newFile: {
+          ...local.after,
+          contents: afterContents,
+          cacheKey: checksum(afterContents),
+        },
+        lineAnnotations: annotations,
+        containerWrapper: container,
+      })
+    } catch (e) {
+      console.warn("[diff] FileDiff.render() failed:", e)
+      // Render a basic text fallback when the diff library fails
+      const pre = document.createElement("pre")
+      pre.style.whiteSpace = "pre-wrap"
+      pre.style.wordBreak = "break-word"
+      pre.style.margin = "0"
+      pre.style.padding = "8px 12px"
+      pre.style.fontSize = "var(--font-size-small)"
+      pre.style.fontFamily = "var(--font-family-mono)"
+      pre.textContent = beforeContents !== afterContents
+        ? `--- ${local.before?.name ?? "before"}\n+++ ${local.after?.name ?? "after"}\n\nDiff rendering failed. Before: ${beforeContents.length} chars, After: ${afterContents.length} chars`
+        : "No changes"
+      container.appendChild(pre)
+    }
 
     applyScheme()
 
