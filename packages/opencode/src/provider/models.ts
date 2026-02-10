@@ -85,9 +85,9 @@ export namespace ModelsDev {
   }
 
   export const Data = lazy(async () => {
-    const file = Bun.file(filepath)
+    const file = Bun.file(Flag.OPENCODE_MODELS_PATH ?? filepath)
     const result = await file.json().catch(() => {})
-    if (result && typeof result === "object" && Object.keys(result).length > 0) return result
+    if (result) return result
     // @ts-ignore
     const snapshot = await import("./models-snapshot")
       .then((m) => m.snapshot as Record<string, unknown>)

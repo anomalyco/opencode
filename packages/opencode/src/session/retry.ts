@@ -59,8 +59,13 @@ export namespace SessionRetry {
   }
 
   export function retryable(error: ReturnType<NamedError["toObject"]>) {
+    // DO NOT retry context overflow errors
+    if (MessageV2.ContextOverflowError.isInstance(error)) return undefined
+
     if (MessageV2.APIError.isInstance(error)) {
       if (!error.data.isRetryable) return undefined
+      if (error.data.responseBody?.includes("FreeUsageLimitError"))
+        return `Free usage exceeded, add credits https://opencode.ai/zen`
       return error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message
     }
 
@@ -89,13 +94,7 @@ export namespace SessionRetry {
       if (json.type === "error" && json.error?.code?.includes("rate_limit")) {
         return "Rate Limited"
       }
-      if (
-        json.error?.message?.includes("no_kv_space") ||
-        (json.type === "error" && json.error?.type === "server_error") ||
-        !!json.error
-      ) {
-        return "Provider Server Error"
-      }
+      return JSON.stringify(json)
     } catch {
       return undefined
     }

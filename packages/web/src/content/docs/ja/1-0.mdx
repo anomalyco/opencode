@@ -1,0 +1,67 @@
+---
+title: 1.0 への移行
+description: OpenCode 1.0 の新機能。
+---
+
+OpenCode 1.0 は TUI を完全に書き直したものです。
+
+私たちは、パフォーマンスと機能に問題があった go+bubbletea ベースの TUI から、zig+solidjs で書かれた社内フレームワーク (OpenTUI) に移行しました。
+
+新しい TUI は、同じopencode サーバーに接続するため、古い TUI と同様に機能します。
+
+---
+
+## アップグレード中
+
+現在以前のバージョンを使用している場合は、1.0 に自動アップグレードしないでください。
+バージョン。ただし、OpenCode の一部の古いバージョンは常に最新のものを取得します。
+
+手動でアップグレードするには、次を実行します
+
+```bash
+$ opencode upgrade 1.0.0
+```
+
+0.x にダウングレードするには、次を実行します。
+
+```bash
+$ opencode upgrade 0.15.31
+```
+
+---
+
+## UXの変更
+
+セッション履歴はより圧縮されており、編集および bash ツールの完全な詳細のみが表示されます。
+
+ほぼすべての操作が実行できるコマンド バーを追加しました。 Ctrl+P を押すと、任意のコンテキストでそれが表示され、実行できるすべてのことが表示されます。
+
+役立つ情報を含むセッション サイドバー (切り替え可能) を追加しました。
+
+実際に誰も使用しているかどうかわからないいくつかの機能を削除しました。重要な点が欠けている場合は、問題を開いてください。すぐに追加します。
+
+---
+
+## 重大な変更
+
+### キーバインドの名前が変更されました
+
+- messages_revert -> messages_undo
+- switch_agent -> agent_cycle
+- switch_agent_reverse -> agent_cycle_reverse
+- switch_mode -> agent_cycle
+- switch_mode_reverse -> agent_cycle_reverse
+
+### キーバインドが削除されました
+
+- messages_layout_toggle
+- messages_next
+- messages_previous
+- file_diff_toggle
+- file_search
+- file_close
+- file_list
+- app_help
+- project_init
+- tool_details
+- thinking_blocks

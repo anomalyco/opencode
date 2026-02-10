@@ -1,11 +1,13 @@
 export const dict = {
   "ui.sessionReview.title": "การเปลี่ยนแปลงเซสชัน",
+  "ui.sessionReview.title.lastTurn": "การเปลี่ยนแปลงของเทิร์นล่าสุด",
   "ui.sessionReview.diffStyle.unified": "แบบรวม",
   "ui.sessionReview.diffStyle.split": "แบบแยก",
   "ui.sessionReview.expandAll": "ขยายทั้งหมด",
   "ui.sessionReview.collapseAll": "ย่อทั้งหมด",
   "ui.sessionReview.change.added": "เพิ่ม",
   "ui.sessionReview.change.removed": "ลบ",
+  "ui.sessionReview.change.modified": "แก้ไข",
 
   "ui.lineComment.label.prefix": "แสดงความคิดเห็นบน ",
   "ui.lineComment.label.suffix": "",

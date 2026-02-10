@@ -1,5 +1,6 @@
 import { test, expect } from "../fixtures"
 import { promptSelector } from "../selectors"
+import { clickListItem } from "../actions"
 
 test("smoke model selection updates prompt footer", async ({ page, gotoSession }) => {
   await gotoSession()
@@ -32,9 +33,7 @@ test("smoke model selection updates prompt footer", async ({ page, gotoSession }
 
   await input.fill(model)
 
-  const item = dialog.locator(`[data-slot="list-item"][data-key="${key}"]`)
-  await expect(item).toBeVisible()
-  await item.click()
+  await clickListItem(dialog, { key })
 
   await expect(dialog).toHaveCount(0)
 

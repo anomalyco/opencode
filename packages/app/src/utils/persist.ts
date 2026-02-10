@@ -17,7 +17,7 @@ type PersistTarget = {
 const LEGACY_STORAGE = "default.dat"
 const GLOBAL_STORAGE = "opencode.global.dat"
 const LOCAL_PREFIX = "opencode."
-const fallback = { disabled: false }
+const fallback = new Map<string, boolean>()
 
 const CACHE_MAX_ENTRIES = 500
 const CACHE_MAX_BYTES = 8 * 1024 * 1024
@@ -63,6 +63,14 @@ function cacheGet(key: string) {
   cache.delete(key)
   cache.set(key, entry)
   return entry.value
+}
+
+function fallbackDisabled(scope: string) {
+  return fallback.get(scope) === true
+}
+
+function fallbackSet(scope: string) {
+  fallback.set(scope, true)
 }
 
 function quota(error: unknown) {
@@ -142,7 +150,6 @@ function write(storage: Storage, key: string, value: string) {
   }
 
   const ok = evict(storage, key, value)
-  if (!ok) cacheSet(key, value)
   return ok
 }
 
@@ -188,6 +195,14 @@ function parse(value: string) {
   }
 }
 
+function normalize(defaults: unknown, raw: string, migrate?: (value: unknown) => unknown) {
+  const parsed = parse(raw)
+  if (parsed === undefined) return
+  const migrated = migrate ? migrate(parsed) : parsed
+  const merged = merge(defaults, migrated)
+  return JSON.stringify(merged)
+}
+
 function workspaceStorage(dir: string) {
   const head = dir.slice(0, 12) || "workspace"
   const sum = checksum(dir) ?? "0"
@@ -196,18 +211,19 @@ function workspaceStorage(dir: string) {
 
 function localStorageWithPrefix(prefix: string): SyncStorage {
   const base = `${prefix}:`
+  const scope = `prefix:${prefix}`
   const item = (key: string) => base + key
   return {
     getItem: (key) => {
       const name = item(key)
       const cached = cacheGet(name)
-      if (fallback.disabled && cached !== undefined) return cached
+      if (fallbackDisabled(scope)) return cached ?? null
 
       const stored = (() => {
         try {
           return localStorage.getItem(name)
         } catch {
-          fallback.disabled = true
+          fallbackSet(scope)
           return null
         }
       })()
@@ -217,40 +233,40 @@ function localStorageWithPrefix(prefix: string): SyncStorage {
     },
     setItem: (key, value) => {
       const name = item(key)
-      cacheSet(name, value)
-      if (fallback.disabled) return
+      if (fallbackDisabled(scope)) return
       try {
         if (write(localStorage, name, value)) return
       } catch {
-        fallback.disabled = true
+        fallbackSet(scope)
         return
       }
-      fallback.disabled = true
+      fallbackSet(scope)
     },
     removeItem: (key) => {
       const name = item(key)
       cacheDelete(name)
-      if (fallback.disabled) return
+      if (fallbackDisabled(scope)) return
       try {
         localStorage.removeItem(name)
       } catch {
-        fallback.disabled = true
+        fallbackSet(scope)
       }
     },
   }
 }
 
 function localStorageDirect(): SyncStorage {
+  const scope = "direct"
   return {
     getItem: (key) => {
       const cached = cacheGet(key)
-      if (fallback.disabled && cached !== undefined) return cached
+      if (fallbackDisabled(scope)) return cached ?? null
 
       const stored = (() => {
         try {
           return localStorage.getItem(key)
         } catch {
-          fallback.disabled = true
+          fallbackSet(scope)
           return null
         }
       })()
@@ -259,26 +275,31 @@ function localStorageDirect(): SyncStorage {
       return stored
     },
     setItem: (key, value) => {
-      cacheSet(key, value)
-      if (fallback.disabled) return
+      if (fallbackDisabled(scope)) return
       try {
         if (write(localStorage, key, value)) return
       } catch {
-        fallback.disabled = true
+        fallbackSet(scope)
         return
       }
-      fallback.disabled = true
+      fallbackSet(scope)
     },
     removeItem: (key) => {
       cacheDelete(key)
-      if (fallback.disabled) return
+      if (fallbackDisabled(scope)) return
       try {
         localStorage.removeItem(key)
       } catch {
-        fallback.disabled = true
+        fallbackSet(scope)
       }
     },
   }
+}
+
+export const PersistTesting = {
+  localStorageDirect,
+  localStorageWithPrefix,
+  normalize,
 }
 
 export const Persist = {
@@ -346,12 +367,11 @@ export function persisted<T>(
         getItem: (key) => {
           const raw = current.getItem(key)
           if (raw !== null) {
-            const parsed = parse(raw)
-            if (parsed === undefined) return raw
-
-            const migrated = config.migrate ? config.migrate(parsed) : parsed
-            const merged = merge(defaults, migrated)
-            const next = JSON.stringify(merged)
+            const next = normalize(defaults, raw, config.migrate)
+            if (next === undefined) {
+              current.removeItem(key)
+              return null
+            }
             if (raw !== next) current.setItem(key, next)
             return next
           }
@@ -360,16 +380,13 @@ export function persisted<T>(
             const legacyRaw = legacyStore.getItem(legacyKey)
             if (legacyRaw === null) continue
 
-            current.setItem(key, legacyRaw)
+            const next = normalize(defaults, legacyRaw, config.migrate)
+            if (next === undefined) {
+              legacyStore.removeItem(legacyKey)
+              continue
+            }
+            current.setItem(key, next)
             legacyStore.removeItem(legacyKey)
-
-            const parsed = parse(legacyRaw)
-            if (parsed === undefined) return legacyRaw
-
-            const migrated = config.migrate ? config.migrate(parsed) : parsed
-            const merged = merge(defaults, migrated)
-            const next = JSON.stringify(merged)
-            if (legacyRaw !== next) current.setItem(key, next)
             return next
           }
 
@@ -393,12 +410,11 @@ export function persisted<T>(
       getItem: async (key) => {
         const raw = await current.getItem(key)
         if (raw !== null) {
-          const parsed = parse(raw)
-          if (parsed === undefined) return raw
-
-          const migrated = config.migrate ? config.migrate(parsed) : parsed
-          const merged = merge(defaults, migrated)
-          const next = JSON.stringify(merged)
+          const next = normalize(defaults, raw, config.migrate)
+          if (next === undefined) {
+            await current.removeItem(key).catch(() => undefined)
+            return null
+          }
           if (raw !== next) await current.setItem(key, next)
           return next
         }
@@ -409,16 +425,13 @@ export function persisted<T>(
           const legacyRaw = await legacyStore.getItem(legacyKey)
           if (legacyRaw === null) continue
 
-          await current.setItem(key, legacyRaw)
+          const next = normalize(defaults, legacyRaw, config.migrate)
+          if (next === undefined) {
+            await legacyStore.removeItem(legacyKey).catch(() => undefined)
+            continue
+          }
+          await current.setItem(key, next)
           await legacyStore.removeItem(legacyKey)
-
-          const parsed = parse(legacyRaw)
-          if (parsed === undefined) return legacyRaw
-
-          const migrated = config.migrate ? config.migrate(parsed) : parsed
-          const merged = merge(defaults, migrated)
-          const next = JSON.stringify(merged)
-          if (legacyRaw !== next) await current.setItem(key, next)
           return next
         }
 

@@ -1,5 +1,6 @@
 export const dict = {
   "ui.sessionReview.title": "تغييرات الجلسة",
+  "ui.sessionReview.title.lastTurn": "تغييرات آخر دور",
   "ui.sessionReview.diffStyle.unified": "موجد",
   "ui.sessionReview.diffStyle.split": "منقسم",
   "ui.sessionReview.expandAll": "توسيع الكل",
@@ -7,6 +8,7 @@ export const dict = {
 
   "ui.sessionReview.change.added": "مضاف",
   "ui.sessionReview.change.removed": "محذوف",
+  "ui.sessionReview.change.modified": "معدل",
   "ui.lineComment.label.prefix": "تعليق على ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "جارٍ التعليق على ",
