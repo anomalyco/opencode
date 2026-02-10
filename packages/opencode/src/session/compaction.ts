@@ -212,7 +212,7 @@ When constructing the summary, try to stick to this template:
         sessionID: input.sessionID,
         type: "text",
         synthetic: true,
-        text: "Continue if you have next steps",
+        text: "Proceed only when there are clear, concrete next steps based on the user's instructions. If next steps are unclear, ask clarifying questions before continuing. Do not make edits unless the user has explicitly asked for implementation or it is clearly implied by their request.",
         time: {
           start: Date.now(),
           end: Date.now(),
