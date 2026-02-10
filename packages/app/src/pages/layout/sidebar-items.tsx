@@ -21,8 +21,11 @@ const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
 export const ProjectIcon = (props: { project: LocalProject; class?: string; notify?: boolean }): JSX.Element => {
   const notification = useNotification()
-  const unseenCount = createMemo(() => notification.project.unseenCount(props.project.worktree))
-  const hasError = createMemo(() => notification.project.unseenHasError(props.project.worktree))
+  const dirs = createMemo(() => [props.project.worktree, ...(props.project.sandboxes ?? [])])
+  const unseenCount = createMemo(() =>
+    dirs().reduce((total, directory) => total + notification.project.unseenCount(directory), 0),
+  )
+  const hasError = createMemo(() => dirs().some((directory) => notification.project.unseenHasError(directory)))
   const name = createMemo(() => props.project.name || getFilename(props.project.worktree))
   return (
     <div class={`relative size-8 shrink-0 rounded ${props.class ?? ""}`}>
@@ -141,7 +144,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
 
   const item = (
     <A
-      href={`${props.slug}/session/${props.session.id}`}
+      href={`/${props.slug}/session/${props.session.id}`}
       class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] ${props.mobile ? "pr-7" : ""} group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
       onPointerEnter={scheduleHoverPrefetch}
       onPointerLeave={cancelHoverPrefetch}
@@ -282,7 +285,7 @@ export const NewSessionItem = (props: {
   const tooltip = () => props.mobile || !props.sidebarExpanded()
   const item = (
     <A
-      href={`${props.slug}/session`}
+      href={`/${props.slug}/session`}
       end
       class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none ${props.dense ? "py-0.5" : "py-1"}`}
       onClick={() => {

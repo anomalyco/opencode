@@ -219,6 +219,44 @@ export namespace Worktree {
     return [outputText(result.stderr), outputText(result.stdout)].filter(Boolean).join("\n")
   }
 
+  function failed(result: { stdout?: Uint8Array; stderr?: Uint8Array }) {
+    return [outputText(result.stderr), outputText(result.stdout)].filter(Boolean).flatMap((chunk) =>
+      chunk
+        .split("\n")
+        .map((line) => line.trim())
+        .flatMap((line) => {
+          const match = line.match(/^warning:\s+failed to remove\s+(.+):\s+/i)
+          if (!match) return []
+          const value = match[1]?.trim().replace(/^['"]|['"]$/g, "")
+          if (!value) return []
+          return [value]
+        }),
+    )
+  }
+
+  async function prune(root: string, entries: string[]) {
+    const base = await canonical(root)
+    await Promise.all(
+      entries.map(async (entry) => {
+        const target = await canonical(path.resolve(root, entry))
+        if (target === base) return
+        if (!target.startsWith(`${base}${path.sep}`)) return
+        await fs.rm(target, { recursive: true, force: true }).catch(() => undefined)
+      }),
+    )
+  }
+
+  async function sweep(root: string) {
+    const first = await $`git clean -ffdx`.quiet().nothrow().cwd(root)
+    if (first.exitCode === 0) return first
+
+    const entries = failed(first)
+    if (!entries.length) return first
+
+    await prune(root, entries)
+    return $`git clean -ffdx`.quiet().nothrow().cwd(root)
+  }
+
   async function canonical(input: string) {
     const abs = path.resolve(input)
     const real = await fs.realpath(abs).catch(() => abs)
@@ -536,7 +574,7 @@ export namespace Worktree {
       throw new ResetFailedError({ message: errorText(resetToTarget) || "Failed to reset worktree to target" })
     }
 
-    const clean = await $`git clean -fdx`.quiet().nothrow().cwd(worktreePath)
+    const clean = await sweep(worktreePath)
     if (clean.exitCode !== 0) {
       throw new ResetFailedError({ message: errorText(clean) || "Failed to clean worktree" })
     }
