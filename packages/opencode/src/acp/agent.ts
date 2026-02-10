@@ -208,7 +208,7 @@ export namespace ACP {
           .then((x) => x.data)
           .catch(() => undefined)
 
-        if(!sessionInfo?.parentID){
+        if(!sessionInfo){
           break
         }
 
