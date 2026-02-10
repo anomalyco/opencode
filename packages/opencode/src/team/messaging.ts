@@ -99,7 +99,7 @@ export namespace TeamMessaging {
         timestamp: Date.now(),
       }).then(
         () => true,
-        (err) => {
+        (err: unknown) => {
           const msg = err instanceof Error ? err.message : String(err)
           log.warn("broadcast inbox write failed", { target: target.name, error: msg })
           errors.push({ target: target.name, phase: "inbox", error: msg })

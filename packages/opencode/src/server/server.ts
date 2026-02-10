@@ -18,7 +18,6 @@ import { Vcs } from "../project/vcs"
 import { Agent } from "../agent/agent"
 import { Skill } from "../skill/skill"
 import { Auth } from "../auth"
-import { Session } from "../session"
 import { Flag } from "../flag/flag"
 import { Command } from "../command"
 import { Global } from "../global"
@@ -80,6 +79,9 @@ export namespace Server {
           })
         })
         .use((c, next) => {
+          // Allow CORS preflight requests to succeed without auth.
+          // Browser clients sending Authorization headers will preflight with OPTIONS.
+          if (c.req.method === "OPTIONS") return next()
           const password = Flag.OPENCODE_SERVER_PASSWORD
           if (!password) return next()
           const username = Flag.OPENCODE_SERVER_USERNAME ?? "opencode"
@@ -109,7 +111,12 @@ export namespace Server {
 
               if (input.startsWith("http://localhost:")) return input
               if (input.startsWith("http://127.0.0.1:")) return input
-              if (input === "tauri://localhost" || input === "http://tauri.localhost") return input
+              if (
+                input === "tauri://localhost" ||
+                input === "http://tauri.localhost" ||
+                input === "https://tauri.localhost"
+              )
+                return input
 
               // *.opencode.ai (https only, adjust if needed)
               if (/^https:\/\/([a-z0-9-]+\.)*opencode\.ai$/.test(input)) {
@@ -188,21 +195,14 @@ export namespace Server {
         )
         .use(async (c, next) => {
           if (c.req.path === "/log") return next()
-          const raw = c.req.query("directory") || c.req.header("x-opencode-directory")
-          let directory: string | undefined
-          if (raw) {
+          const raw = c.req.query("directory") || c.req.header("x-opencode-directory") || process.cwd()
+          const directory = (() => {
             try {
-              directory = decodeURIComponent(raw)
+              return decodeURIComponent(raw)
             } catch {
-              directory = raw
+              return raw
             }
-          }
-          if (!directory) {
-            // For session-scoped routes, resolve directory from the stored session
-            const match = c.req.path.match(/^\/session\/(ses_[^/]+)/)
-            if (match) directory = await Session.findDirectory(match[1])
-          }
-          if (!directory) directory = process.cwd()
+          })()
           return Instance.provide({
             directory,
             init: InstanceBootstrap,
@@ -576,7 +576,6 @@ export namespace Server {
   export function listen(opts: {
     port: number
     hostname: string
-    unix?: string
     mdns?: boolean
     mdnsDomain?: string
     cors?: string[]
@@ -584,36 +583,14 @@ export namespace Server {
     _corsWhitelist = opts.cors ?? []
 
     const args = {
+      hostname: opts.hostname,
       idleTimeout: 0,
       fetch: App().fetch,
       websocket: websocket,
     } as const
-
-    // Unix socket mode
-    if (opts.unix) {
-      // Remove stale socket file if it exists
-      try {
-        const { unlinkSync } = require("fs")
-        unlinkSync(opts.unix)
-      } catch {}
-      const server = Bun.serve({ fetch: args.fetch, websocket: args.websocket, unix: opts.unix })
-      _url = new URL(`unix://${opts.unix}`)
-      const originalStop = server.stop.bind(server)
-      server.stop = async (closeActiveConnections?: boolean) => {
-        try {
-          const { unlinkSync } = require("fs")
-          unlinkSync(opts.unix!)
-        } catch {}
-        return originalStop(closeActiveConnections)
-      }
-      return server
-    }
-
-    // TCP mode
-    const tcpArgs = { ...args, hostname: opts.hostname }
     const tryServe = (port: number) => {
       try {
-        return Bun.serve({ ...tcpArgs, port })
+        return Bun.serve({ ...args, port })
       } catch {
         return undefined
       }

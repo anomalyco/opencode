@@ -719,7 +719,12 @@ export const SessionRoutes = lazy(() =>
             description: "Created message",
             content: {
               "application/json": {
-                schema: resolver(MessageV2.WithParts),
+                schema: resolver(
+                  z.object({
+                    info: MessageV2.Assistant,
+                    parts: MessageV2.Part.array(),
+                  }),
+                ),
               },
             },
           },
@@ -739,13 +744,8 @@ export const SessionRoutes = lazy(() =>
         return stream(c, async (stream) => {
           const sessionID = c.req.valid("param").sessionID
           const body = c.req.valid("json")
-          const result = await SessionPrompt.prompt({ ...body, sessionID })
-          if ("reason" in result) {
-            if (result.reason === "cancelled") return
-            stream.write(JSON.stringify(result.message))
-            return
-          }
-          stream.write(JSON.stringify(result))
+          const msg = await SessionPrompt.prompt({ ...body, sessionID })
+          stream.write(JSON.stringify(msg))
         })
       },
     )
