@@ -4,7 +4,6 @@ import { useTheme } from "../context/theme"
 import { useDialog } from "@tui/ui/dialog"
 import { useSync } from "@tui/context/sync"
 import { For, Match, Switch, Show, createMemo } from "solid-js"
-import { Installation } from "@/installation"
 
 export type DialogStatusProps = {}
 
@@ -50,7 +49,6 @@ export function DialogStatus() {
           esc
         </text>
       </box>
-      <text fg={theme.textMuted}>OpenCode v{Installation.VERSION}</text>
       <Show when={Object.keys(sync.data.mcp).length > 0} fallback={<text fg={theme.text}>No MCP Servers</text>}>
         <box>
           <text fg={theme.text}>{Object.keys(sync.data.mcp).length} MCP Servers</text>
