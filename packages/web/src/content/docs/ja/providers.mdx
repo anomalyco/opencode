@@ -148,32 +148,32 @@ opencode の実行中に次の環境変数のいずれかを設定します。
 
    # Option 3: Using Bedrock bearer token
    AWS_BEARER_TOKEN_BEDROCK=XXX opencode
-   ```
+```
 
 または、それらを bash プロファイルに追加します。
 
 ```bash title="~/.bash_profile"
    export AWS_PROFILE=my-dev-profile
    export AWS_REGION=us-east-1
-   ```
+```
 
 #### 設定ファイル (推奨)
 
 プロジェクト固有の構成または永続的な構成の場合は、`opencode.json` を使用します。
 
 ```json title="opencode.json"
-   {
-     "$schema": "https://opencode.ai/config.json",
-     "provider": {
-       "amazon-bedrock": {
-         "options": {
-           "region": "us-east-1",
-           "profile": "my-aws-profile"
-         }
-       }
-     }
-   }
-   ```
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "amazon-bedrock": {
+      "options": {
+        "region": "us-east-1",
+        "profile": "my-aws-profile"
+      }
+    }
+  }
+}
+```
 
 **利用可能なオプション:**
 
@@ -190,19 +190,19 @@ opencode の実行中に次の環境変数のいずれかを設定します。
 Bedrock の VPC エンドポイントを使用している場合:
 
 ```json title="opencode.json"
-   {
-     "$schema": "https://opencode.ai/config.json",
-     "provider": {
-       "amazon-bedrock": {
-         "options": {
-           "region": "us-east-1",
-           "profile": "production",
-           "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
-         }
-       }
-     }
-   }
-   ```
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "amazon-bedrock": {
+      "options": {
+        "region": "us-east-1",
+        "profile": "production",
+        "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
+      }
+    }
+  }
+}
+```
 
 :::note
 `endpoint` オプションは、AWS 固有の用語を使用した汎用の `baseURL` オプションのエイリアスです。 `endpoint` と `baseURL` の両方が指定された場合は、`endpoint` が優先されます。
@@ -334,7 +334,7 @@ opencodeが正しく動作するには、デプロイメント名がモデル名
 
 ```bash title="~/.bash_profile"
    export AZURE_RESOURCE_NAME=XXX
-   ```
+```
 
 6. `/models` コマンドを実行して、デプロイされたモデルを選択します。
 
@@ -381,7 +381,7 @@ opencodeが正しく動作するには、デプロイメント名がモデル名
 
 ```bash title="~/.bash_profile"
    export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
-   ```
+```
 
 6. `/models` コマンドを実行して、デプロイされたモデルを選択します。
 
@@ -477,7 +477,7 @@ Cloudflare AI Gatewayを使用すると、統合エンドポイントを通じ�
 
 ```bash title="~/.bash_profile"
    export CLOUDFLARE_API_TOKEN=your-api-token
-   ```
+```
 
 5. `/models` コマンドを実行してモデルを選択します。
 
@@ -488,18 +488,18 @@ Cloudflare AI Gatewayを使用すると、統合エンドポイントを通じ�
 opencode構成を通じてモデルを追加することもできます。
 
 ```json title="opencode.json"
-   {
-     "$schema": "https://opencode.ai/config.json",
-     "provider": {
-       "cloudflare-ai-gateway": {
-         "models": {
-           "openai/gpt-4o": {},
-           "anthropic/claude-sonnet-4": {}
-         }
-       }
-     }
-   }
-   ```
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "cloudflare-ai-gateway": {
+      "models": {
+        "openai/gpt-4o": {},
+        "anthropic/claude-sonnet-4": {}
+      }
+    }
+  }
+}
+```
 
 ---
 
@@ -673,8 +673,10 @@ GitLab Duo は、GitLab の Anthropic プロキシを介したネイティブ �
 6.  `/models` コマンドを実行して、利用可能なモデルを確認します。
 
     ```txt
-   /models
-   ```
+    /models
+    ```
+
+````
 
 3 つのクロードベースのモデルが利用可能です。
 
@@ -697,11 +699,11 @@ OpenCode は、セッション タイトルの生成などの一部の AI タス
 
 ```json
 {
-  "$schema": "https://opencode.ai/config.json",
-  "small_model": "gitlab/duo-chat-haiku-4-5",
-  "share": "disabled"
+"$schema": "https://opencode.ai/config.json",
+"small_model": "gitlab/duo-chat-haiku-4-5",
+"share": "disabled"
 }
-```
+````
 
 :::
 
@@ -848,7 +850,7 @@ opencode の実行中に設定します。
 
 ```bash
    GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
-   ```
+```
 
 または、それらを bash プロファイルに追加します。
 
@@ -856,7 +858,7 @@ opencode の実行中に設定します。
    export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
    export GOOGLE_CLOUD_PROJECT=your-project-id
    export VERTEX_LOCATION=global
-   ```
+```
 
 :::tip
 `global` 領域は、追加コストなしで可用性を向上させ、エラーを削減します。データ常駐要件には、リージョン エンドポイント (`us-central1` など) を使用します。 [詳細はこちら](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
@@ -1394,17 +1396,17 @@ OpenCode Zen は、OpenCode チームによって提供される、テストお�
 opencode構成を通じて追加のモデルを追加することもできます。
 
 ```json title="opencode.json" {6}
-   {
-     "$schema": "https://opencode.ai/config.json",
-     "provider": {
-       "openrouter": {
-         "models": {
-           "somecoolnewmodel": {}
-         }
-       }
-     }
-   }
-   ```
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openrouter": {
+      "models": {
+        "somecoolnewmodel": {}
+      }
+    }
+  }
+}
+```
 
 5. opencode設定を通じてカスタマイズすることもできます。プロバイダーを指定する例を次に示します。
 
@@ -1459,13 +1461,13 @@ SAP AI コアは、統合プラットフォームを通じて、OpenAI、Anthrop
 
 ```bash
    AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
-   ```
+```
 
 または、bash プロファイルに追加します。
 
 ```bash title="~/.bash_profile"
    export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}'
-   ```
+```
 
 4. 必要に応じて、デプロイメント ID とリソース グループを設定します。
 
@@ -1735,17 +1737,17 @@ opencode構成を通じてモデルをカスタマイズすることもできま
 opencode構成を通じて追加のモデルを追加することもできます。
 
 ```json title="opencode.json" {6}
-   {
-     "$schema": "https://opencode.ai/config.json",
-     "provider": {
-       "zenmux": {
-         "models": {
-           "somecoolnewmodel": {}
-         }
-       }
-     }
-   }
-   ```
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "zenmux": {
+      "models": {
+        "somecoolnewmodel": {}
+      }
+    }
+  }
+}
+```
 
 ---
 

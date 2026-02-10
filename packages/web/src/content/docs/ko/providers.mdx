@@ -148,32 +148,32 @@ opencode를 실행하는 동안 이러한 환경 변수 중 하나를 설정:
 
    # Option 3: Using Bedrock bearer token
    AWS_BEARER_TOKEN_BEDROCK=XXX opencode
-   ```
+```
 
 또는 bash 프로필에 추가:
 
 ```bash title="~/.bash_profile"
    export AWS_PROFILE=my-dev-profile
    export AWS_REGION=us-east-1
-   ```
+```
 
 #### 설정 파일 (추천)
 
 프로젝트 별 또는 지속적 구성의 경우 `opencode.json`를 사용하십시오.
 
 ```json title="opencode.json"
-   {
-     "$schema": "https://opencode.ai/config.json",
-     "provider": {
-       "amazon-bedrock": {
-         "options": {
-           "region": "us-east-1",
-           "profile": "my-aws-profile"
-         }
-       }
-     }
-   }
-   ```
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "amazon-bedrock": {
+      "options": {
+        "region": "us-east-1",
+        "profile": "my-aws-profile"
+      }
+    }
+  }
+}
+```
 
 ** 유효한 옵션:**
 
@@ -190,19 +190,19 @@ opencode를 실행하는 동안 이러한 환경 변수 중 하나를 설정:
 Bedrock의 VPC 엔드포인트를 사용하는 경우:
 
 ```json title="opencode.json"
-   {
-     "$schema": "https://opencode.ai/config.json",
-     "provider": {
-       "amazon-bedrock": {
-         "options": {
-           "region": "us-east-1",
-           "profile": "production",
-           "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
-         }
-       }
-     }
-   }
-   ```
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "amazon-bedrock": {
+      "options": {
+        "region": "us-east-1",
+        "profile": "production",
+        "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
+      }
+    }
+  }
+}
+```
 
 :::note
 `endpoint` 옵션은 일반적인 `baseURL` 옵션의 별칭입니다. `endpoint`와 `baseURL` 둘 다 지정되는 경우에, `endpoint`는 전진합니다.
@@ -336,7 +336,7 @@ Pro/Max 구독이 없는 경우 **Create an API Key**를 선택할 수 있습니
 
 ```bash title="~/.bash_profile"
    export AZURE_RESOURCE_NAME=XXX
-   ```
+```
 
 6. `/models` 명령을 실행하여 배포 된 모델을 선택하십시오.
 
@@ -384,7 +384,7 @@ Pro/Max 구독이 없는 경우 **Create an API Key**를 선택할 수 있습니
 
 ```bash title="~/.bash_profile"
    export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
-   ```
+```
 
 6. `/models` 명령을 실행하여 배포 된 모델을 선택하십시오.
 
@@ -480,7 +480,7 @@ Cloudflare AI 게이트웨이는 OpenAI, Anthropic, Workers AI 등의 모델에 
 
 ```bash title="~/.bash_profile"
    export CLOUDFLARE_API_TOKEN=your-api-token
-   ```
+```
 
 5. 모델을 선택하려면 `/models` 명령을 실행하십시오.
 
@@ -491,18 +491,18 @@ Cloudflare AI 게이트웨이는 OpenAI, Anthropic, Workers AI 등의 모델에 
 opencode config를 통해 모델을 추가할 수 있습니다.
 
 ```json title="opencode.json"
-   {
-     "$schema": "https://opencode.ai/config.json",
-     "provider": {
-       "cloudflare-ai-gateway": {
-         "models": {
-           "openai/gpt-4o": {},
-           "anthropic/claude-sonnet-4": {}
-         }
-       }
-     }
-   }
-   ```
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "cloudflare-ai-gateway": {
+      "models": {
+        "openai/gpt-4o": {},
+        "anthropic/claude-sonnet-4": {}
+      }
+    }
+  }
+}
+```
 
 ---
 
@@ -849,7 +849,7 @@ opencode를 실행하면서 설정한다.
 
 ```bash
    GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
-   ```
+```
 
 또는 bash 프로파일에 추가하십시오.
 
@@ -857,7 +857,7 @@ opencode를 실행하면서 설정한다.
    export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
    export GOOGLE_CLOUD_PROJECT=your-project-id
    export VERTEX_LOCATION=global
-   ```
+```
 
 :::tip
 `global` 지구는 가용성을 개량하고 추가 비용 없이 과실을 감소시킵니다. 데이터 거주 요건에 대한 지역 엔드포인트(e.g., `us-central1`)를 사용하십시오. [더 알아보기](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional and global endpoints)
@@ -1395,17 +1395,17 @@ OpenCode Zen은 opencode 팀에서 제공하는 테스트 및 검증된 모델 �
 opencode config를 통해 추가 모델을 추가할 수 있습니다.
 
 ```json title="opencode.json" {6}
-   {
-     "$schema": "https://opencode.ai/config.json",
-     "provider": {
-       "openrouter": {
-         "models": {
-           "somecoolnewmodel": {}
-         }
-       }
-     }
-   }
-   ```
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "openrouter": {
+      "models": {
+        "somecoolnewmodel": {}
+      }
+    }
+  }
+}
+```
 
 5. 당신은 또한 당신의 opencode config를 통해 그들을 주문을 받아서 만들 수 있습니다. 공급자 지정의 예입니다.
 
@@ -1460,13 +1460,13 @@ SAP AI Core는 OpenAI, Anthropic, Google, Amazon, Meta, Mistral 및 AI21의 40+ 
 
 ```bash
    AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
-   ```
+```
 
 또는 bash 프로파일에 추가:
 
 ```bash title="~/.bash_profile"
    export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}'
-   ```
+```
 
 4. 선택적으로 배치 ID 및 자원 그룹:
 
@@ -1736,17 +1736,17 @@ opencode config를 통해 모델을 사용자 정의 할 수 있습니다. 공�
 opencode config를 통해 추가 모델을 추가할 수 있습니다.
 
 ```json title="opencode.json" {6}
-   {
-     "$schema": "https://opencode.ai/config.json",
-     "provider": {
-       "zenmux": {
-         "models": {
-           "somecoolnewmodel": {}
-         }
-       }
-     }
-   }
-   ```
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "zenmux": {
+      "models": {
+        "somecoolnewmodel": {}
+      }
+    }
+  }
+}
+```
 
 ---
 

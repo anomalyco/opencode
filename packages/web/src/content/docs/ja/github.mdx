@@ -71,7 +71,7 @@ opencode github install
              model: anthropic/claude-sonnet-4-20250514
              # share: true
              # github_token: xxxx
-   ```
+```
 
 3. **API キーをシークレットに保存します**
 
@@ -90,12 +90,12 @@ opencode github install
 あるいは、OpenCode GitHub アプリをインストールせずに、GitHub Action ランナーの [組み込み `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) を使用することもできます。ワークフローで必要な権限を必ず付与してください。
 
 ```yaml
-  permissions:
-    id-token: write
-    contents: write
-    pull-requests: write
-    issues: write
-  ```
+permissions:
+  id-token: write
+  contents: write
+  pull-requests: write
+  issues: write
+```
 
 必要に応じて、[パーソナル アクセス トークン](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)(PAT) を使用することもできます。
 
@@ -279,7 +279,7 @@ GitHub で OpenCode を使用する方法の例をいくつか示します。
 
 ```
   /opencode explain this issue
-  ```
+```
 
 OpenCode は、すべてのコメントを含むスレッド全体を読み取り、明確な説明を返信します。
 
@@ -289,7 +289,7 @@ GitHub の問題で次のように言います。
 
 ```
   /opencode fix this
-  ```
+```
 
 そして、OpenCode は新しいブランチを作成し、変更を実装し、変更を含む PR を開きます。
 
@@ -299,7 +299,7 @@ GitHub PR に次のコメントを残してください。
 
 ```
   Delete the attachment from S3 when the note is removed /oc
-  ```
+```
 
 OpenCode は要求された変更を実装し、同じ PR にコミットします。
 
@@ -310,7 +310,7 @@ PR の「ファイル」タブのコード行に直接コメントを残しま�
 ```
   [Comment on specific lines in Files tab]
   /oc add error handling here
-  ```
+```
 
 特定の行にコメントすると、OpenCode は以下を受け取ります。
 
