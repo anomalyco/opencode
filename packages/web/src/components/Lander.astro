@@ -1,7 +1,7 @@
 ---
 import { Image } from 'astro:assets';
+import { getRelativeLocaleUrl } from 'astro:i18n';
 import config from "virtual:starlight/user-config";
-import type { Props } from '@astrojs/starlight/props';
 
 import CopyIcon from "../assets/lander/copy.svg";
 import CheckIcon from "../assets/lander/check.svg";
@@ -19,8 +19,14 @@ const imageAttrs = {
     alt: image?.alt || '',
 };
 
-const github = config.social.filter(s => s.icon === 'github')[0];
-const discord = config.social.filter(s => s.icon === 'discord')[0];
+const github = (config.social || []).filter(s => s.icon === 'github')[0];
+const discord = (config.social || []).filter(s => s.icon === 'discord')[0];
+const locale = Astro.currentLocale || 'root';
+const t = Astro.locals.t as (key: string) => string;
+const docsHref = getRelativeLocaleUrl(locale, "")
+const docsCliHref = getRelativeLocaleUrl(locale, "cli")
+const docsIdeHref = getRelativeLocaleUrl(locale, "ide")
+const docsGithubHref = getRelativeLocaleUrl(locale, "github")
 
 const command = "curl -fsSL"
 const protocol = "https://"
@@ -44,19 +50,21 @@ if (image) {
 <div class="hero">
     <section class="top">
       <div class="logo">
-        <Image
-          src={darkImage}
-          {...imageAttrs}
-          class:list={{ 'light:sl-hidden': Boolean(lightImage) }}
-        />
-        <Image src={lightImage} {...imageAttrs} class="dark:sl-hidden" />
+        {darkImage && (
+          <Image
+            src={darkImage}
+            {...imageAttrs}
+            class:list={{ 'light:sl-hidden': Boolean(lightImage) }}
+          />
+        )}
+        {lightImage && <Image src={lightImage} {...imageAttrs} class="dark:sl-hidden" />}
       </div>
-      <h1>The AI coding agent built for the terminal.</h1>
+      <h1>{t('app.lander.hero.title')}</h1>
     </section>
 
     <section class="cta">
       <div class="col1">
-        <a href="/docs">Get Started</a>
+        <a href={docsHref}>{t('app.lander.cta.getStarted')}</a>
       </div>
       <div class="col2">
       <button class="command" data-command={`${command} ${protocol}${url} ${bash}`}>
@@ -73,13 +81,13 @@ if (image) {
 
     <section class="content">
       <ul>
-        <li><b>Native TUI</b>: A responsive, native, themeable terminal UI.</li>
-        <li><b>LSP enabled</b>: Automatically loads the right LSPs for the LLM.</li>
-        <li><b>Multi-session</b>: Start multiple agents in parallel on the same project.</li>
-        <li><b>Shareable links</b>: Share a link to any sessions for reference or to debug.</li>
-        <li><b>GitHub Copilot</b>: Log in with GitHub to use your Copilot account.</li>
-        <li><b>ChatGPT Plus/Pro</b>: Log in with OpenAI to use your ChatGPT Plus or Pro account.</li>
-        <li><b>Use any model</b>: Supports 75+ LLM providers through <a href="https://models.dev">Models.dev</a>, including local models.</li>
+        <li><b>{t('app.lander.features.native_tui.title')}</b>: {t('app.lander.features.native_tui.description')}</li>
+        <li><b>{t('app.lander.features.lsp_enabled.title')}</b>: {t('app.lander.features.lsp_enabled.description')}</li>
+        <li><b>{t('app.lander.features.multi_session.title')}</b>: {t('app.lander.features.multi_session.description')}</li>
+        <li><b>{t('app.lander.features.shareable_links.title')}</b>: {t('app.lander.features.shareable_links.description')}</li>
+        <li><b>GitHub Copilot</b>: {t('app.lander.features.github_copilot.description')}</li>
+        <li><b>ChatGPT Plus/Pro</b>: {t('app.lander.features.chatgpt_plus_pro.description')}</li>
+        <li><b>{t('app.lander.features.use_any_model.title')}</b>: {t('app.lander.features.use_any_model.prefix')} <a href="https://models.dev">Models.dev</a>, {t('app.lander.features.use_any_model.suffix')}</li>
       </ul>
     </section>
 
@@ -149,26 +157,26 @@ if (image) {
     <section class="images">
       <div class="left">
         <figure>
-          <figcaption>opencode TUI with the tokyonight theme</figcaption>
-          <a href="/docs/cli">
-            <Image src={TuiScreenshot} alt="opencode TUI with the tokyonight theme" />
+          <figcaption>{t('app.lander.images.tui.caption')}</figcaption>
+          <a href={docsCliHref}>
+            <Image src={TuiScreenshot} alt={t('app.lander.images.tui.alt')} />
           </a>
         </figure>
       </div>
       <div class="right">
         <div class="row1">
           <figure>
-            <figcaption>opencode in VS Code</figcaption>
-            <a href="/docs/ide">
-              <Image src={VscodeScreenshot} alt="opencode in VS Code" />
+            <figcaption>{t('app.lander.images.vscode.caption')}</figcaption>
+            <a href={docsIdeHref}>
+              <Image src={VscodeScreenshot} alt={t('app.lander.images.vscode.alt')} />
             </a>
           </figure>
         </div>
         <div class="row2">
           <figure>
-            <figcaption>opencode in GitHub</figcaption>
-            <a href="/docs/github">
-              <Image src={GithubScreenshot} alt="opencode in GitHub" />
+            <figcaption>{t('app.lander.images.github.caption')}</figcaption>
+            <a href={docsGithubHref}>
+              <Image src={GithubScreenshot} alt={t('app.lander.images.github.alt')} />
             </a>
           </figure>
         </div>
