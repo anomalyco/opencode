@@ -151,6 +151,9 @@ try {
   }
   process.exitCode = 1
 } finally {
+  // Clean up all instance state (bus subscriptions, PTY sessions, LSP clients, etc.)
+  const { Instance } = await import("./project/instance")
+  await Instance.disposeAll().catch(() => {})
   // Some subprocesses don't react properly to SIGTERM and similar signals.
   // Most notably, some docker-container-based MCP servers don't handle such signals unless
   // run using `docker run --init`.

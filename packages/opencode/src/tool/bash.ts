@@ -175,7 +175,9 @@ export const BashTool = Tool.define("bash", async () => {
         detached: process.platform !== "win32",
       })
 
-      let output = ""
+      const MAX_OUTPUT_BYTES = 10 * 1024 * 1024 // 10MB
+      const outputChunks: Buffer[] = []
+      let outputSize = 0
 
       // Initialize metadata with empty output
       ctx.metadata({
@@ -186,11 +188,17 @@ export const BashTool = Tool.define("bash", async () => {
       })
 
       const append = (chunk: Buffer) => {
-        output += chunk.toString()
+        outputChunks.push(chunk)
+        outputSize += chunk.length
+        // Ring buffer: drop earliest chunks when exceeding limit
+        while (outputSize > MAX_OUTPUT_BYTES && outputChunks.length > 1) {
+          const dropped = outputChunks.shift()!
+          outputSize -= dropped.length
+        }
+        const preview = Buffer.concat(outputChunks).toString("utf-8")
         ctx.metadata({
           metadata: {
-            // truncate the metadata to avoid GIANT blobs of data (has nothing to do w/ what agent can access)
-            output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
+            output: preview.length > MAX_METADATA_LENGTH ? preview.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : preview,
             description: params.description,
           },
         })
@@ -240,6 +248,10 @@ export const BashTool = Tool.define("bash", async () => {
           reject(error)
         })
       })
+
+      let output = Buffer.concat(outputChunks).toString("utf-8")
+      outputChunks.length = 0
+      outputSize = 0
 
       const resultMetadata: string[] = []
 
