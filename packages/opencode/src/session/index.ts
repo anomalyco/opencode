@@ -457,6 +457,10 @@ export namespace Session {
         input.metadata?.["venice"]?.["usage"]?.["cacheCreationInputTokens"] ??
         0) as number
 
+      // OpenRouter provides inputTokens as the total count of input tokens (including cached).
+      // AFAIK other providers (OpenRouter/OpenAI/Gemini etc.) do it the same way e.g. vercel/ai#8794 (comment)
+      // Anthropic does it differently though - inputTokens doesn't include cached tokens.
+      // It looks like OpenCode's cost calculation assumes all providers return inputTokens the same way Anthropic does (I'm guessing getUsage logic was originally implemented with anthropic), so it's causing incorrect cost calculation for OpenRouter and others.
       const excludesCachedTokens = !!(input.metadata?.["anthropic"] || input.metadata?.["bedrock"])
       const adjustedInputTokens = excludesCachedTokens
         ? inputTokens
@@ -465,6 +469,9 @@ export namespace Session {
         if (!Number.isFinite(value)) return 0
         return value
       }
+      // Anthropic doesn't provide total_tokens, compute from components
+      // output.usage.totalTokens =
+      // 	output.usage.input + output.usage.output + output.usage.cacheRead + output.usage.cacheWrite;
 
       const tokens = {
         total: input.usage.totalTokens,
