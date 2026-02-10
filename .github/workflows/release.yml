@@ -68,14 +68,22 @@ jobs:
           name: Mammouth Code v${{ steps.version.outputs.version }}
           draft: false
           prerelease: false
+          files: |
+            packages/opencode/dist/mammouth-*.tar.gz
+            packages/opencode/dist/mammouth-*.zip
           body: |
             ## Mammouth Code v${{ steps.version.outputs.version }}
 
             ### Installation
 
-            **curl (recommended)**
+            **macOS / Linux (curl)**
             ```bash
             curl -fsSL https://code.mammouth.ai/install.sh | bash
+            ```
+
+            **Windows (PowerShell)**
+            ```powershell
+            irm https://code.mammouth.ai/install.ps1 | iex
             ```
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
