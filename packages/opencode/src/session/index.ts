@@ -8,6 +8,7 @@ import { type ProviderMetadata } from "ai"
 import { Config } from "../config/config"
 import { Flag } from "../flag/flag"
 import { Installation } from "../installation"
+import { NamedError } from "@opencode-ai/util/error"
 
 import { Database, NotFoundError, eq, and, gte, isNull, desc, like, inArray, lt } from "../storage/db"
 import { SyncEvent } from "../sync"
@@ -237,6 +238,7 @@ export namespace Session {
   export const create = fn(
     z
       .object({
+        id: SessionID.zod.optional(),
         parentID: SessionID.zod.optional(),
         title: z.string().optional(),
         permission: Info.shape.permission,
@@ -244,7 +246,15 @@ export namespace Session {
       })
       .optional(),
     async (input) => {
+      if (input?.id) {
+        const existing = await get(input.id).catch((e) => {
+          if (e instanceof NotFoundError) return undefined
+          throw e
+        })
+        if (existing) throw new DuplicateIDError({ id: input.id })
+      }
       return createNext({
+        id: input?.id,
         parentID: input?.parentID,
         directory: Instance.directory,
         title: input?.title,
@@ -771,6 +781,13 @@ export namespace Session {
       super(`Session ${sessionID} is busy`)
     }
   }
+
+  export const DuplicateIDError = NamedError.create(
+    "DuplicateIDError",
+    z.object({
+      id: z.string(),
+    }),
+  )
 
   export const initialize = fn(
     z.object({

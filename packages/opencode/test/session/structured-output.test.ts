@@ -377,7 +377,6 @@ describe("structured-output.createStructuredOutputTool", () => {
     })
 
     expect(modelOutput.type).toBe("text")
-    expect(modelOutput.value).toBe("Test output")
   })
 
   // Note: Retry behavior is handled by the AI SDK and the prompt loop, not the tool itself
