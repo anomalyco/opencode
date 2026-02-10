@@ -19,8 +19,19 @@ export namespace ProviderError {
     /context window exceeds limit/i, // MiniMax
     /exceeded model token limit/i, // Kimi For Coding
     /context[_ ]length[_ ]exceeded/i, // Generic fallback
-    /too many tokens/i, // Generic fallback
+    /too many tokens(?! per (day|minute|hour|second))(?! processed)/i, // Generic fallback (excludes rate limit phrases)
     /token limit exceeded/i, // Generic fallback
+  ]
+
+  // Rate limit patterns that should NOT be treated as context overflow.
+  // These are checked before overflow patterns so that errors like
+  // "Too many tokens per day" (AWS Bedrock) and "too many tokens
+  // processed" (Cerebras) are correctly classified as retryable API errors.
+  const RATE_LIMIT_PATTERNS = [
+    /too many tokens per (day|minute|hour|second)/i, // AWS Bedrock daily/minute quota
+    /tokens per (day|minute|hour|second) limit/i, // Generic rate limit
+    /too many tokens processed/i, // Cerebras
+    /rate limit/i, // Generic rate limit
   ]
 
   function isOpenAiErrorRetryable(e: APICallError) {
@@ -30,9 +41,17 @@ export namespace ProviderError {
     return status === 404 || e.isRetryable
   }
 
+  function isRateLimit(message: string) {
+    return RATE_LIMIT_PATTERNS.some((p) => p.test(message))
+  }
+
   // Providers not reliably handled in this function:
   // - z.ai: can accept overflow silently (needs token-count/context-window checks)
   function isOverflow(message: string) {
+    // Rate limit errors should never be classified as context overflow,
+    // even if they contain phrases like "too many tokens".
+    if (isRateLimit(message)) return false
+
     if (OVERFLOW_PATTERNS.some((p) => p.test(message))) return true
 
     // Providers/status patterns handled outside of regex list:
