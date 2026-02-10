@@ -1026,10 +1026,31 @@ export default function Page() {
         </Show>
       </Match>
       <Match when={true}>
-        <div class={input.emptyClass}>
-          <Mark class="w-14 opacity-10" />
-          <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.empty")}</div>
-        </div>
+        <SessionReviewTab
+          title={changesTitle()}
+          empty={
+            store.changes === "turn" ? (
+              emptyTurn()
+            ) : (
+              <div class={input.emptyClass}>
+                <Mark class="w-14 opacity-10" />
+                <div class="text-14-regular text-text-weak max-w-56">{language.t("session.review.empty")}</div>
+              </div>
+            )
+          }
+          diffs={reviewDiffs}
+          view={view}
+          diffStyle={input.diffStyle}
+          onDiffStyleChange={input.onDiffStyleChange}
+          onScrollRef={(el) => setTree("reviewScroll", el)}
+          focusedFile={tree.activeDiff}
+          onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+          comments={comments.all()}
+          focusedComment={comments.focus()}
+          onFocusedCommentChange={comments.setFocus}
+          onViewFile={openReviewFile}
+          classes={input.classes}
+        />
       </Match>
     </Switch>
   )
@@ -1041,7 +1062,7 @@ export default function Page() {
           diffStyle: layout.review.diffStyle(),
           onDiffStyleChange: layout.review.setDiffStyle,
           loadingClass: "px-6 py-4 text-text-weak",
-          emptyClass: "h-full px-6 pb-30 flex flex-col items-center justify-center text-center gap-6",
+          emptyClass: "h-full pb-30 flex flex-col items-center justify-center text-center gap-6",
         })}
       </div>
     </div>
@@ -1569,7 +1590,7 @@ export default function Page() {
                         container: "px-4",
                       },
                       loadingClass: "px-4 py-4 text-text-weak",
-                      emptyClass: "h-full px-4 pb-30 flex flex-col items-center justify-center text-center gap-6",
+                      emptyClass: "h-full pb-30 flex flex-col items-center justify-center text-center gap-6",
                     })}
                     scroll={ui.scroll}
                     onResumeScroll={resumeScroll}
