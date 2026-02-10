@@ -548,7 +548,8 @@ export const TeamApprovePlanTool = Tool.define("team_approve_plan", {
 export const TeamShutdownTool = Tool.define("team_shutdown", {
   description:
     "Request a teammate to shut down gracefully. The teammate receives the shutdown request " +
-    "and can either approve (wraps up and exits) or reject (continues working with an explanation). " +
+    "and can wrap up current work before exiting. Shutdown is authoritative — once requested, " +
+    "the teammate will be transitioned to shutdown after processing the message. " +
     "Only the team lead should use this.",
   parameters: z.object({
     name: z.string().describe("Name of the teammate to shut down"),
@@ -578,33 +579,45 @@ export const TeamShutdownTool = Tool.define("team_shutdown", {
 
     const reason = params.reason ?? "The lead has requested you shut down."
 
-    // Send a shutdown request message — the teammate can approve or reject
-    await TeamMessaging.send({
-      teamName: teamInfo.team.name,
-      from: "lead",
-      to: params.name,
-      text: [
-        `SHUTDOWN REQUEST: ${reason}`,
-        "",
-        "Please do one of the following:",
-        "1. If you can wrap up, summarize your findings and send them to the lead, then stop working.",
-        "2. If you need more time, reply to the lead explaining why you should continue.",
-      ].join("\n"),
-    })
+    // Transition to shutdown_requested BEFORE sending the message.
+    // This ensures autoWake's .then() handler sees the correct status
+    // when the auto-woken loop completes.
+    await Team.transitionMemberStatus(teamInfo.team.name, params.name, "shutdown_requested")
 
     await Bus.publish(TeamEvent.ShutdownRequest, {
       teamName: teamInfo.team.name,
       memberName: params.name,
     })
 
-    await Team.transitionMemberStatus(teamInfo.team.name, params.name, "shutdown_requested", { force: true })
+    // Send the shutdown message — this triggers autoWake which starts
+    // a new prompt loop. When that loop ends, the .then() handler
+    // sees shutdown_requested and transitions to shutdown.
+    // If the send fails, fall back to direct shutdown since there's
+    // no loop that will trigger the transition.
+    try {
+      await TeamMessaging.send({
+        teamName: teamInfo.team.name,
+        from: "lead",
+        to: params.name,
+        text: [
+          `SHUTDOWN REQUEST: ${reason}`,
+          "",
+          "Please wrap up your current work:",
+          "1. Summarize your findings and send them to the lead.",
+          "2. Stop working after sending your summary.",
+        ].join("\n"),
+      })
+    } catch {
+      await Team.transitionMemberStatus(teamInfo.team.name, params.name, "shutdown")
+    }
+
     if (member.status === "busy") {
       await Team.cancelMember(teamInfo.team.name, params.name)
     }
 
     return {
       title: `Shutdown requested: ${params.name}`,
-      output: `Shutdown request sent to "${params.name}". They will finish their current work and stop. If they reject, they will message you with an explanation.`,
+      output: `Shutdown request sent to "${params.name}". They will wrap up current work and stop.`,
       metadata: {},
     }
   },
