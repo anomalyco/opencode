@@ -3,13 +3,13 @@ title: 型號
 description: 配置LLM提供者和模型。
 ---
 
-OpenCode 使用[人工智能軟件開發工具包](https://ai-sdk.dev/) 和[模型.dev](https://models.dev) 來支持**75+ LLM 提供商**，並且它支持運行本地模型。
+opencode 使用[人工智能軟件開發工具包](https://ai-sdk.dev/) 和[模型.dev](https://models.dev) 來支持**75+ LLM 提供商**，並且它支持運行本地模型。
 
 ---
 
 ## 供應商
 
-默認情況下會預加載大多數流行的提供程序。如果您已通過 `/connect` 命令添加了提供程序的憑據，那麼它們將在您啟動 OpenCode 時可用。
+默認情況下會預加載大多數流行的提供程序。如果您已通過 `/connect` 命令添加了提供程序的憑據，那麼它們將在您啟動 opencode 時可用。
 
 了解有關[提供者](/docs/providers) 的更多信息。
 
@@ -35,7 +35,7 @@ OpenCode 使用[人工智能軟件開發工具包](https://ai-sdk.dev/) 和[模�
 
 然而，既擅長生成代碼又擅長工具調用的只有少數。
 
-以下是與 OpenCode 配合良好的幾個模型，排名不分先後。 （這不是詳盡的列表，也不一定是最新的）：
+以下是與 opencode 配合良好的幾個模型，排名不分先後。 （這不是詳盡的列表，也不一定是最新的）：
 
 - GPT 5.2
 - GPT 5.1 法典
@@ -49,7 +49,7 @@ OpenCode 使用[人工智能軟件開發工具包](https://ai-sdk.dev/) 和[模�
 ## 設置默認值
 
 要將其中之一設置為默認模型，您可以在您的
-打開代碼配置。
+opencode配置。
 
 ```json title="opencode.json" {3}
 {
@@ -58,7 +58,7 @@ OpenCode 使用[人工智能軟件開發工具包](https://ai-sdk.dev/) 和[模�
 }
 ```
 
-這裡完整的 ID 是`provider_id/model_id`。例如，如果您使用 [開放代碼禪](/docs/zen)，則您將使用 `opencode/gpt-5.1-codex` 來表示 GPT 5.1 Codex。
+這裡完整的 ID 是`provider_id/model_id`。例如，如果您使用 [OpenCode Zen](/docs/zen)，則您將使用 `opencode/gpt-5.1-codex` 來表示 GPT 5.1 Codex。
 
 如果您配置了[定制提供商](/docs/providers#custom)，則`provider_id` 是配置中`provider` 部分的密鑰，`model_id` 是`provider.models` 中的密鑰。
 
@@ -137,18 +137,18 @@ OpenCode 使用[人工智能軟件開發工具包](https://ai-sdk.dev/) 和[模�
 
 ## 變體
 
-許多型號支持具有不同配置的多種變體。 OpenCode 附帶了流行提供商的內置默認變體。
+許多型號支持具有不同配置的多種變體。 opencode 附帶了流行提供商的內置默認變體。
 
 ### 內置變體
 
-OpenCode 附帶了許多提供商的默認變體：
+opencode 附帶了許多提供商的默認變體：
 
 **人擇**：
 
 - `high` - 高思維預算（默認）
 - `max` - 最大思維預算
 
-**開放人工智能**：
+**OpenAI**：
 
 因型號而異，但大致如下：
 
@@ -203,11 +203,11 @@ OpenCode 附帶了許多提供商的默認變體：
 
 ## 加載模型
 
-當 OpenCode 啟動時，它會按以下優先順序檢查模型：
+當 opencode 啟動時，它會按以下優先順序檢查模型：
 
 1. `--model` 或 `-m` 命令行標誌。格式與配置文件中的相同：`provider_id/model_id`。
 
-2. OpenCode 配置中的模型列表。
+2. opencode 配置中的模型列表。
 
    ```json title="opencode.json"
    {

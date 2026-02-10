@@ -137,7 +137,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
     const projectDirectory = sdk.directory
     const isNewSession = !params.id
-    const worktreeSelection = input.newSessionWorktree ?? "main"
+    const worktreeSelection = input.newSessionWorktree || "main"
 
     let sessionDirectory = projectDirectory
     let client = sdk.client

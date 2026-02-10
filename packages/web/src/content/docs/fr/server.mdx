@@ -98,10 +98,10 @@ Le serveur opencode expose les API suivantes.
 
 ### Projet
 
-| Méthode | Chemin             | Descriptif                 | Réponse                                      |
-| ------- | ------------------ | -------------------------- | -------------------------------------------- |
-| `GET`   | `/project`         | Lister tous les projets    | <a href={typesUrl}><code>Projet[]</code></a> |
-| `GET`   | `/project/current` | Obtenez le projet en cours | <a href={typesUrl}><code>Projet</code></a>   |
+| Méthode | Chemin             | Descriptif                 | Réponse                                       |
+| ------- | ------------------ | -------------------------- | --------------------------------------------- |
+| `GET`   | `/project`         | Lister tous les projets    | <a href={typesUrl}><code>Project[]</code></a> |
+| `GET`   | `/project/current` | Obtenez le projet en cours | <a href={typesUrl}><code>Project</code></a>   |
 
 ---
 
@@ -109,7 +109,7 @@ Le serveur opencode expose les API suivantes.
 
 | Méthode | Chemin  | Descriptif                                           | Réponse                                     |
 | ------- | ------- | ---------------------------------------------------- | ------------------------------------------- |
-| `GET`   | `/path` | Obtenir le chemin actuel                             | <a href={typesUrl}><code>Chemin</code></a>  |
+| `GET`   | `/path` | Obtenir le chemin actuel                             | <a href={typesUrl}><code>Path</code></a>    |
 | `GET`   | `/vcs`  | Obtenir des informations VCS pour le projet en cours | <a href={typesUrl}><code>VcsInfo</code></a> |
 
 ---
@@ -124,22 +124,22 @@ Le serveur opencode expose les API suivantes.
 
 ### Configuration
 
-| Méthode | Chemin              | Descriptif                                   | Réponse                                                                                     |
-| ------- | ------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `GET`   | `/config`           | Obtenir des informations de configuration    | <a href={typesUrl}><code>Configuration</code></a>                                           |
-| `PATCH` | `/config`           | Mettre à jour la configuration               | <a href={typesUrl}><code>Configuration</code></a>                                           |
-| `GET`   | `/config/providers` | Liste des fournisseurs et modèles par défaut | `{ providers: `<a href={typesUrl}>Fournisseur[]</a>`, default: { [key: string]: string } }` |
+| Méthode | Chemin              | Descriptif                                   | Réponse                                                                                  |
+| ------- | ------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `GET`   | `/config`           | Obtenir des informations de configuration    | <a href={typesUrl}><code>Config</code></a>                                               |
+| `PATCH` | `/config`           | Mettre à jour la configuration               | <a href={typesUrl}><code>Config</code></a>                                               |
+| `GET`   | `/config/providers` | Liste des fournisseurs et modèles par défaut | `{ providers: `<a href={typesUrl}>Provider[]</a>`, default: { [key: string]: string } }` |
 
 ---
 
 ### Fournisseur
 
-| Méthode | Chemin                           | Descriptif                                             | Réponse                                                                                |
-| ------- | -------------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------- |
-| `GET`   | `/provider`                      | Liste de tous les fournisseurs                         | `{ all: `<a href={typesUrl}>Fournisseur[]</a>`, default: {...}, connected: string[] }` |
-| `GET`   | `/provider/auth`                 | Obtenir les méthodes d'authentification du fournisseur | `{ [providerID: string]: `<a href={typesUrl}>ProviderAuthMethod[]</a>` }`              |
-| `POST`  | `/provider/{id}/oauth/authorize` | Autoriser un fournisseur en utilisant OAuth            | <a href={typesUrl}><code>ProviderAuthAuthorization</code></a>                          |
-| `POST`  | `/provider/{id}/oauth/callback`  | Gérer le rappel OAuth pour un fournisseur              | `boolean`                                                                              |
+| Méthode | Chemin                           | Descriptif                                             | Réponse                                                                             |
+| ------- | -------------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| `GET`   | `/provider`                      | Liste de tous les fournisseurs                         | `{ all: `<a href={typesUrl}>Provider[]</a>`, default: {...}, connected: string[] }` |
+| `GET`   | `/provider/auth`                 | Obtenir les méthodes d'authentification du fournisseur | `{ [providerID: string]: `<a href={typesUrl}>ProviderAuthMethod[]</a>` }`           |
+| `POST`  | `/provider/{id}/oauth/authorize` | Autoriser un fournisseur en utilisant OAuth            | <a href={typesUrl}><code>ProviderAuthAuthorization</code></a>                       |
+| `POST`  | `/provider/{id}/oauth/callback`  | Gérer le rappel OAuth pour un fournisseur              | `boolean`                                                                           |
 
 ---
 
@@ -195,10 +195,10 @@ Le serveur opencode expose les API suivantes.
 | ------- | ------------------------ | -------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | `GET`   | `/find?pattern=<pat>`    | Rechercher du texte dans des fichiers              | Tableau d'objets correspondant avec `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
 | `GET`   | `/find/file?query=<q>`   | Rechercher des fichiers et des répertoires par nom | `string[]` (chemins)                                                                                |
-| `GET`   | `/find/symbol?query=<q>` | Rechercher des symboles d'espace de travail        | <a href={typesUrl}><code>Symbole[]</code></a>                                                       |
+| `GET`   | `/find/symbol?query=<q>` | Rechercher des symboles d'espace de travail        | <a href={typesUrl}><code>Symbol[]</code></a>                                                        |
 | `GET`   | `/file?path=<path>`      | Liste des fichiers et répertoires                  | <a href={typesUrl}><code>FileNode[]</code></a>                                                      |
 | `GET`   | `/file/content?path=<p>` | Lire un fichier                                    | <a href={typesUrl}><code>FileContent</code></a>                                                     |
-| `GET`   | `/file/status`           | Obtenir le statut des fichiers suivis              | <a href={typesUrl}><code>Fichier[]</code></a>                                                       |
+| `GET`   | `/file/status`           | Obtenir le statut des fichiers suivis              | <a href={typesUrl}><code>File[]</code></a>                                                          |
 
 #### Paramètres de requête `/find/file`
 
@@ -212,10 +212,10 @@ Le serveur opencode expose les API suivantes.
 
 ### Outils (expérimentaux)
 
-| Méthode | Chemin                                      | Descriptif                                                  | Réponse                                            |
-| ------- | ------------------------------------------- | ----------------------------------------------------------- | -------------------------------------------------- |
-| `GET`   | `/experimental/tool/ids`                    | Répertorier tous les ID d'outils                            | <a href={typesUrl}><code>ToolIDs</code></a>        |
-| `GET`   | `/experimental/tool?provider=<p>&model=<m>` | Répertorier les outils avec des schémas JSON pour un modèle | <a href={typesUrl}><code>Liste d'outils</code></a> |
+| Méthode | Chemin                                      | Descriptif                                                  | Réponse                                      |
+| ------- | ------------------------------------------- | ----------------------------------------------------------- | -------------------------------------------- |
+| `GET`   | `/experimental/tool/ids`                    | Répertorier tous les ID d'outils                            | <a href={typesUrl}><code>ToolIDs</code></a>  |
+| `GET`   | `/experimental/tool?provider=<p>&model=<m>` | Répertorier les outils avec des schémas JSON pour un modèle | <a href={typesUrl}><code>ToolList</code></a> |
 
 ---
 

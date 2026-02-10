@@ -7,7 +7,7 @@ import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
 opencode JS/TS SDK 提供类型其他安全的客户端用于与服务器交互。
-使用它以程序设计方式构建集成和控制开放代码。
+使用它以程序设计方式构建集成和控制opencode。
 
 [了解更多关于服务器如何工作的](/docs/server)。例如，检视社区构建的[projects](/docs/ecosystem#projects)。
 
@@ -283,13 +283,13 @@ await client.session.prompt({
 
 ### 檔案
 
-| 方法                      | 描述                 | 回應                                                               |
-| ------------------------- | -------------------- | ------------------------------------------------------------------ | -------------- |
-| `find.text({ query })`    | 搜索档案中文字       | 含 `path`、`lines`、`line_number`、`absolute_offset`、`submatches` | 与像团队的匹配 |
-| `find.files({ query })`   | 按名称查询档案和目录 | `string[]`（路径）                                                 |
-| `find.symbols({ query })` | 查詢工作區符號       | <a href={typesUrl}><code>符號[]</code></a>                         |
-| `file.read({ query })`    | 读取档案             | `{ type: "raw" \| "patch", content: string }`                      |
-| `file.status({ query? })` | 獲取跟蹤檔案的狀態   | <a href={typesUrl}><code>檔案[]</code></a>                         |
+| 方法                      | 描述                 | 回應                                                                                |
+| ------------------------- | -------------------- | ----------------------------------------------------------------------------------- |
+| `find.text({ query })`    | 搜索档案中文字       | 具有 `path`、`lines`、`line_number`、`absolute_offset`、`submatches` 的匹配对象数组 |
+| `find.files({ query })`   | 按名称查询档案和目录 | `string[]`（路径）                                                                  |
+| `find.symbols({ query })` | 查詢工作區符號       | <a href={typesUrl}><code>符號[]</code></a>                                          |
+| `file.read({ query })`    | 读取档案             | `{ type: "raw" \| "patch", content: string }`                                       |
+| `file.status({ query? })` | 獲取跟蹤檔案的狀態   | <a href={typesUrl}><code>檔案[]</code></a>                                          |
 
 `find.files` 支持一些可选的查询栏位：
 

@@ -50,7 +50,7 @@ When you run `opencode` it starts a TUI and a server. Where the TUI is the
 与服务器器对话的客户端。服务器器公开 OpenAPI 3.1 规范
 该端点还用于生成 [SDK](/docs/sdk)。
 
-:::提示
+:::tip
 使用opencode服务器以程序设计方式与opencode交互。
 :::
 
@@ -65,7 +65,7 @@ opencode TUI running, `opencode serve` will start a new server.
 
 当您启动 TUI 时，它会随机分配端口和主机名。您可以重新设置 `--hostname` 和 `--port` [flags](/docs/cli)。使用它连线到其服务器然后器。
 
-[**_T2_**](#tui) 端点可用于跨境服务器驱动 TUI。例如，您可以预填充或执行提示。此设置由 OpenCode [IDE](/docs/ide) 外挂使用。
+[**_T2_**](#tui) 端点可用于跨境服务器驱动 TUI。例如，您可以预填充或执行提示。此设置由 opencode [IDE](/docs/ide) 外挂使用。
 
 ---
 
@@ -274,9 +274,9 @@ opencode服务器公开以下API。
 
 ### 活動
 
-| 方法  | 路徑                                           | 描述               | 回應     |
-| ----- | ---------------------------------------------- | ------------------ | -------- | -------------------- |
-| `GET` | 第一个事件是`server.connected`，然后是巴士事件 | 服务器传送的事件流 | `/event` | 服务器传送的事件流。 |
+| 方法  | 路徑     | 描述                                                                | 回應               |
+| ----- | -------- | ------------------------------------------------------------------- | ------------------ |
+| `GET` | `/event` | 服务器发送事件流。第一个事件是 `server.connected`，之后是总线事件。 | 服务器发送事件流。 |
 
 ---
 

@@ -1,13 +1,13 @@
 ---
 title: TUI
-description: 使用 OpenCode 终端用户界面。
+description: 使用 opencode 终端用户界面。
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode 提供交互式终端介面或 TUI，以便使用 LLM 处理您的专案。
+opencode 提供交互式终端介面或 TUI，以便使用 LLM 处理您的专案。
 
-执行OpenCode启动当前目录的TUI。
+执行opencode启动当前目录的TUI。
 
 ```bash
 opencode
@@ -31,7 +31,7 @@ Give me a quick summary of the codebase.
 
 您可以使用 `@` 在訊息中引用檔案。這會在當前工作目錄中進行模糊檔案搜尋。
 
-:::提示
+:::tip
 您還可以使用 `@` 來引用訊息中的檔案。
 :::
 
@@ -57,7 +57,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## 命令
 
-使用 OpenCode TUI 时，您可以输入 `/` 后跟命令名称来快速执行操作。例如：
+使用 opencode TUI 时，您可以输入 `/` 后跟命令名称来快速执行操作。例如：
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### 連線
 
-将新增到 OpenCode。允许您从可用的成功中进行选择并新增他们的 API 重要。
+将新增到 opencode。允许您从可用的成功中进行选择并新增他们的 API 重要。
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### 出口
 
-退出OpenCode。 _别名_：`/quit`、`/q`
+退出opencode。 _别名_：`/quit`、`/q`
 
 ```bash frame="none"
 /exit
@@ -191,7 +191,7 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 
 删除之前重做消除的讯息。仅在使用`/undo`后可用。
 
-:::提示
+:::tip
 任何檔案更改也將被恢復。
 :::
 
@@ -246,7 +246,7 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 
 切换对话中 thinking/reasoning 块的可视性。启用后，您可以看到支持增强套件思维的模型的推理过程。
 
-:::笔记
+:::note
 该命令仅控制是否**显示** - 不启用或取消模型的推理功能。要切换实际推理功能，请使用 `ctrl+t` 回圈切换模型变体。
 :::
 
@@ -260,7 +260,7 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 
 撤消對話中的最後一條訊息。刪除最近的使用者訊息、所有後續響應以及任何檔案更改。
 
-:::提示
+:::tip
 所做的任何檔案更改也將被恢復。
 :::
 
@@ -339,13 +339,13 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 - `code` - Visual Studio 程序代码
 - `cursor` - 游标
 - `windsurf` - 风帆冲浪
-- `nvim` - Neo 的编辑器
+- `nvim` - Neovim 编辑器
 - `vim` - Vim 编辑器
 - `nano` - 奈米编辑器
 - `notepad` - Windows 文章书
 - `subl` - 崇高文字
 
-:::笔记
+:::note
 一些编辑器如 VS Code 需要以 `--wait` 标志启动。
 :::
 
@@ -355,7 +355,7 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 
 ## 配置
 
-您可以使用 OpenCode 配置文件自定义 TUI 行为。
+您可以使用 opencode 配置文件自定义 TUI 行为。
 
 ```json title="opencode.json"
 {

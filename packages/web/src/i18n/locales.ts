@@ -69,7 +69,7 @@ const starts = [
   ["en", "root"],
 ] as const
 
-export function matchLocale(input: string) {
+function parse(input: string) {
   let decoded = ""
   try {
     decoded = decodeURIComponent(input)
@@ -78,6 +78,22 @@ export function matchLocale(input: string) {
   }
 
   const value = decoded.trim().toLowerCase()
+  if (!value) return null
+  return value
+}
+
+export function exactLocale(input: string) {
+  const value = parse(input)
+  if (!value) return null
+  if (value in localeAlias) {
+    return localeAlias[value as keyof typeof localeAlias]
+  }
+
+  return null
+}
+
+export function matchLocale(input: string) {
+  const value = parse(input)
   if (!value) return null
 
   if (value.startsWith("zh")) {

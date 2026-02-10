@@ -1,33 +1,33 @@
 ---
 title: GitLab
-description: GitLab sorunlarında ve parçalanma isteğinde OpenCode'u kullanın.
+description: GitLab sorunlarında ve parçalanma isteğinde opencode'u kullanın.
 ---
 
-OpenCode, GitLab CI/CD ardışık düzeniniz veya GitLab Duo aracılığıyla GitLab iş akışınızla bütünleşir.
+opencode, GitLab CI/CD ardışık düzeniniz veya GitLab Duo aracılığıyla GitLab iş akışınızla bütünleşir.
 
-Her iki durumda da OpenCode, GitLab çalıştırıcılarınızda çalışacaktır.
+Her iki durumda da opencode, GitLab çalıştırıcılarınızda çalışacaktır.
 
 ---
 
 ## GitLab CI
 
-OpenCode normal bir GitLab hattında çalışır. Bunu bir [CI component](https://docs.gitlab.com/ee/ci/components/) olarak bir boru hattına oluşturabilirsiniz.
+opencode normal bir GitLab hattında çalışır. Bunu bir [CI component](https://docs.gitlab.com/ee/ci/components/) olarak bir boru hattına oluşturabilirsiniz.
 
-Burada OpenCode için topluluk tarafından oluşturulan bir CI/CD bileşeni kullanıyoruz — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
+Burada opencode için topluluk tarafından oluşturulan bir CI/CD bileşeni kullanıyoruz — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
 
 ---
 
 ### Özellikler
 
-- **İş başına özel işlemleri kullanın**: OpenCode parçalarının kullanıma veya devre dışı bırakmak için OpenCode'u özel bir yapılandırma dizini ile yapılandırın; örneğin `./config/#custom-directory`.
-- **Minimum kurulum**: CI bileşeni OpenCode'u arka planda kurar; yalnızca OpenCode yapılandırmasını ve ilk istemi oluşturmanız gerekir.
+- **İş başına özel işlemleri kullanın**: opencode parçalarının kullanıma veya devre dışı bırakmak için opencode'u özel bir yapılandırma dizini ile yapılandırın; örneğin `./config/#custom-directory`.
+- **Minimum kurulum**: CI bileşeni opencode'u arka planda kurar; yalnızca opencode yapılandırmasını ve ilk istemi oluşturmanız gerekir.
 - **Esnek**: CI bileşeni, davranışını özelleştirmek için çeşitli girişleri destekler
 
 ---
 
 ### Setup
 
-1. OpenCode kimlik doğrulamanızı JSON **Ayarlar** > **CI/CD** > **Değişkenler** altında Dosya türü CI ortam değişkenleri olarak saklayın. Bunları "Maskeli ve gizli" olarak işaretlediğinizden emin olun.
+1. opencode kimlik doğrulamanızı JSON **Ayarlar** > **CI/CD** > **Değişkenler** altında Dosya türü CI ortam değişkenleri olarak saklayın. Bunları "Maskeli ve gizli" olarak işaretlediğinizden emin olun.
 2. Aşağıdakileri `.gitlab-ci.yml` dosyanıza ekleyin.
 
    ```yaml title=".gitlab-ci.yml"
@@ -46,23 +46,23 @@ Daha fazla girdi ve bu bileşene yönelik kullanım durumları için [check out 
 
 ## GitLab Duo
 
-OpenCode, GitLab iş akışınızla bütünleşir.
-Bir yorumda `@opencode`'dan bahsedin; OpenCode, GitLab CI işlem hattınızdaki görevleri yürütecektir.
+opencode, GitLab iş akışınızla bütünleşir.
+Bir yorumda `@opencode`'dan bahsedin; opencode, GitLab CI işlem hattınızdaki görevleri yürütecektir.
 
 ---
 
 ### Features
 
-- **Sorunları önceliklendirin**: OpenCode'dan bir sorunu araştırıp size açıklamasını isteyin.
-- **Düzelt ve uygula**: OpenCode'dan bir sorunu düzeltmesini veya bir özelliği uygulamasını isteyin.
+- **Sorunları önceliklendirin**: opencode'dan bir sorunu araştırıp size açıklamasını isteyin.
+- **Düzelt ve uygula**: opencode'dan bir sorunu düzeltmesini veya bir özelliği uygulamasını isteyin.
   Yeni bir şube oluşturacak ve değişikliklerle birlikte bir birleştirme isteği oluşturacaktır.
-- **Güvenli**: OpenCode, GitLab çalıştırıcılarınızda çalışır.
+- **Güvenli**: opencode, GitLab çalıştırıcılarınızda çalışır.
 
 ---
 
 ### Kurmak
 
-OpenCode, GitLab CI/CD işlem hattınızda çalışır; bunu ayarlamak için ihtiyacınız olacaklar:
+opencode, GitLab CI/CD işlem hattınızda çalışır; bunu ayarlamak için ihtiyacınız olacaklar:
 
 :::tip
 Güncel talimatlar için [**GitLab docs**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/)'a göz atın.
@@ -158,7 +158,7 @@ Ayrıntılı talimatlar için [GitLab CLI agents docs](https://docs.gitlab.com/u
 
 ### Examples
 
-GitLab'da OpenCode'u nasıl kullanabileceğinize dair bazı örnekleri burada bulabilirsiniz.
+GitLab'da opencode'u nasıl kullanabileceğinize dair bazı örnekleri burada bulabilirsiniz.
 
 :::tip
 `@opencode`'dan farklı bir tetikleyici ifade kullanacak şekilde yapılandırabilirsiniz.
@@ -172,7 +172,7 @@ GitLab'da OpenCode'u nasıl kullanabileceğinize dair bazı örnekleri burada bu
   @opencode explain this issue
   ```
 
-  OpenCode konuyu okuyacak ve net bir açıklama ile yanıt verecektir.
+  opencode konuyu okuyacak ve net bir açıklama ile yanıt verecektir.
 
 - **Fix an issue**
 
@@ -182,7 +182,7 @@ GitLab'da OpenCode'u nasıl kullanabileceğinize dair bazı örnekleri burada bu
   @opencode fix this
   ```
 
-  OpenCode yeni bir şube oluşturacak, değişiklikleri uygulayacak ve değişiklikleri içeren bir birleştirme isteği açacaktır.
+  opencode yeni bir şube oluşturacak, değişiklikleri uygulayacak ve değişiklikleri içeren bir birleştirme isteği açacaktır.
 
 - **Review merge requests**
 
@@ -192,4 +192,4 @@ GitLab'da OpenCode'u nasıl kullanabileceğinize dair bazı örnekleri burada bu
   @opencode review this merge request
   ```
 
-  OpenCode, birleştirme isteğini inceleyecek ve geri bildirim sağlayacaktır.
+  opencode, birleştirme isteğini inceleyecek ve geri bildirim sağlayacaktır.

@@ -28,9 +28,9 @@ npm install @opencode-ai/sdk
 opencode의 인스턴스 만들기:
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createopencode } from "@opencode-ai/sdk"
 
-const { client } = await createOpencode()
+const { client } = await createopencode()
 ```
 
 서버와 클라이언트 모두 시작
@@ -52,9 +52,9 @@ const { client } = await createOpencode()
 구성 객체를 전달할 수 있습니다. 인스턴스는 여전히 `opencode.json`를 선택하지만 구성 인라인을 추가 할 수 있습니다.
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createopencode } from "@opencode-ai/sdk"
 
-const opencode = await createOpencode({
+const opencode = await createopencode({
   hostname: "127.0.0.1",
   port: 4096,
   config: {
@@ -72,9 +72,9 @@ opencode.server.close()
 opencode의 실행 인스턴스가 이미 있다면 클라이언트 인스턴스를 만들 수 있습니다.
 
 ```javascript
-import { createOpencodeClient } from "@opencode-ai/sdk"
+import { createopencodeClient } from "@opencode-ai/sdk"
 
-const client = createOpencodeClient({
+const client = createopencodeClient({
   baseUrl: "http://localhost:4096",
 })
 ```
@@ -205,7 +205,7 @@ const pathInfo = await client.path.get()
 
 ---
 
-# # # # 콘피그
+#### 콘피그
 
 | 방법                 | 설명                       | 응답                                                                                                  |
 | -------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------- |
@@ -287,9 +287,9 @@ await client.session.prompt({
 | ------------------------- | ---------------------------- | -------------------------------------------------------------------------------------- |
 | `find.text({ query })`    | 파일에서 텍스트 검색         | `path`, `lines`, `line_number`, `absolute_offset`, `submatches`와 일치하는 개체의 배열 |
 | `find.files({ query })`   | 이름의 파일 및 디렉토리 찾기 | `string[]` (경로)                                                                      |
-| `find.symbols({ query })` | 업무 공간 기호 찾기          | <a href={typesUrl}><code>Symbol</code></a>                                             |
+| `find.symbols({ query })` | 업무 공간 기호 찾기          | <a href={typesUrl}><code>Symbol[]</code></a>                                           |
 | `file.read({ query })`    | 파일 보기                    | `{ type: "raw" \| "patch", content: string }`                                          |
-| `file.status({ query? })` | 트랙 된 파일 상태를 확인     | <a href={typesUrl}><code> 파일[]</code></a>                                            |
+| `file.status({ query? })` | 트랙 된 파일 상태를 확인     | <a href={typesUrl}><code>File[]</code></a>                                             |
 
 `find.files`는 몇몇 선택적인 조회 분야를 지원합니다:
 
@@ -322,7 +322,7 @@ const content = await client.file.read({
 
 ---
 
-# # # # TUI
+#### TUI
 
 | 방법                           | 설명                     | 응답      |
 | ------------------------------ | ------------------------ | --------- |
@@ -353,7 +353,7 @@ await client.tui.showToast({
 
 ---
 
-# # # # # 가을
+##### 가을
 
 | 방법                | 설명           | 응답      |
 | ------------------- | -------------- | --------- |

@@ -1,14 +1,14 @@
 ---
 title: Windows (WSL)
-description: En iyi deneyim icin OpenCode'u WSL'de calistirin.
+description: En iyi deneyim icin opencode'u WSL'de calistirin.
 ---
 
 import { Steps } from "@astrojs/starlight/components"
 
-OpenCode Windows'ta dogrudan calisabilir, ancak en iyi deneyim icin [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) kullanmanizi oneriyoruz. WSL, OpenCode ozellikleriyle sorunsuz calisan bir Linux ortami saglar.
+opencode Windows'ta dogrudan calisabilir, ancak en iyi deneyim icin [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) kullanmanizi oneriyoruz. WSL, opencode ozellikleriyle sorunsuz calisan bir Linux ortami saglar.
 
 :::tip[Why WSL?]
-WSL, daha iyi dosya sistemi performansi, tam terminal destegi ve OpenCode'un dayandigi gelistirme araclariyla uyumluluk sunar.
+WSL, daha iyi dosya sistemi performansi, tam terminal destegi ve opencode'un dayandigi gelistirme araclariyla uyumluluk sunar.
 :::
 
 ---
@@ -21,17 +21,17 @@ WSL, daha iyi dosya sistemi performansi, tam terminal destegi ve OpenCode'un day
 
    Henuz yuklemediyseniz resmi Microsoft rehberini kullanarak [WSL kurulumunu](https://learn.microsoft.com/en-us/windows/wsl/install) yapin.
 
-2. **OpenCode'u WSL icine yukleyin**
+2. **opencode'u WSL icine yukleyin**
 
-   WSL hazir olduktan sonra WSL terminalini acin ve OpenCode'u [kurulum yontemlerinden](/docs/) biriyle yukleyin.
+   WSL hazir olduktan sonra WSL terminalini acin ve opencode'u [kurulum yontemlerinden](/docs/) biriyle yukleyin.
 
    ```bash
    curl -fsSL https://opencode.ai/install | bash
    ```
 
-3. **OpenCode'u WSL icinden kullanin**
+3. **opencode'u WSL icinden kullanin**
 
-   Proje dizininize gidin (`/mnt/c/`, `/mnt/d/` vb. ile Windows dosyalarina erisebilirsiniz) ve OpenCode'u calistirin.
+   Proje dizininize gidin (`/mnt/c/`, `/mnt/d/` vb. ile Windows dosyalarina erisebilirsiniz) ve opencode'u calistirin.
 
    ```bash
    cd /mnt/c/Users/YourName/project
@@ -44,7 +44,7 @@ WSL, daha iyi dosya sistemi performansi, tam terminal destegi ve OpenCode'un day
 
 ## Desktop uygulamasi + WSL sunucusu
 
-OpenCode Desktop kullanmak isteyip sunucuyu WSL'de calistirmak istiyorsaniz:
+opencode Desktop kullanmak isteyip sunucuyu WSL'de calistirmak istiyorsaniz:
 
 1. **Sunucuyu WSL'de baslatin** ve dis baglantilara izin vermek icin `--hostname 0.0.0.0` kullanin:
 
@@ -79,7 +79,7 @@ Windows'ta en iyi web deneyimi icin:
    opencode web --hostname 0.0.0.0
    ```
 
-2. **Windows tarayicinizdan** `http://localhost:<port>` adresini acin (OpenCode URL'yi yazdirir)
+2. **Windows tarayicinizdan** `http://localhost:<port>` adresini acin (opencode URL'yi yazdirir)
 
 `opencode web` komutunu WSL'den calistirmak, dosya sistemi erisimi ve terminal entegrasyonunu daha tutarli hale getirirken tarayicidan erisimi korur.
 
@@ -101,13 +101,13 @@ opencode
 ```
 
 :::tip
-En sorunsuz deneyim icin deponuzu WSL dosya sistemine (ornegin `~/code/` altina) klonlayip OpenCode'u orada calistirmayi dusunun.
+En sorunsuz deneyim icin deponuzu WSL dosya sistemine (ornegin `~/code/` altina) klonlayip opencode'u orada calistirmayi dusunun.
 :::
 
 ---
 
 ## Ipuclari
 
-- Windows suruculerinde duran projelerde OpenCode'u WSL icinde calistirin - dosya erisimi daha sorunsuz olur
-- Butunlesik bir gelistirme akisi icin OpenCode ile birlikte VS Code [WSL eklentisini](https://code.visualstudio.com/docs/remote/wsl) kullanin
-- OpenCode konfigurasyonunuz ve oturumlariniz WSL ortaminda `~/.local/share/opencode/` konumunda saklanir
+- Windows suruculerinde duran projelerde opencode'u WSL icinde calistirin - dosya erisimi daha sorunsuz olur
+- Butunlesik bir gelistirme akisi icin opencode ile birlikte VS Code [WSL eklentisini](https://code.visualstudio.com/docs/remote/wsl) kullanin
+- opencode konfigurasyonunuz ve oturumlariniz WSL ortaminda `~/.local/share/opencode/` konumunda saklanir

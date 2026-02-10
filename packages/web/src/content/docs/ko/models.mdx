@@ -3,13 +3,13 @@ title: Models
 description: Configuring an LLM provider and model.
 ---
 
-OpenCode는 [AI SDK](https://ai-sdk.dev/) 및 [Models.dev](https://models.dev)를 사용하여 **75+ LLM 제공 업체**를 지원하며 로컬 모델을 실행합니다.
+opencode는 [AI SDK](https://ai-sdk.dev/) 및 [Models.dev](https://models.dev)를 사용하여 **75+ LLM 제공 업체**를 지원하며 로컬 모델을 실행합니다.
 
 ---
 
 ## 공급자
 
-가장 인기 있는 공급자는 기본적으로 preloaded. `/connect` 명령을 통해 공급자를위한 자격 증명을 추가하면 OpenCode를 시작할 때 사용할 수 있습니다.
+가장 인기 있는 공급자는 기본적으로 preloaded. `/connect` 명령을 통해 공급자를위한 자격 증명을 추가하면 opencode를 시작할 때 사용할 수 있습니다.
 
 자세히 알아보기 [providers](/docs/providers).
 
@@ -35,7 +35,7 @@ OpenCode는 [AI SDK](https://ai-sdk.dev/) 및 [Models.dev](https://models.dev)�
 
 그러나 코드와 도구 호출 모두에서 좋은 그들 중 몇 가지가있다.
 
-다음은 OpenCode와 잘 작동하는 몇 가지 모델입니다. 특히 주문이 없습니다. (이것은 철저한 목록이 아니며 반드시 날짜까지입니다) :
+다음은 opencode와 잘 작동하는 몇 가지 모델입니다. 특히 주문이 없습니다. (이것은 철저한 목록이 아니며 반드시 날짜까지입니다) :
 
 - GPT의 5.2
 - GPT 5.1 코덱
@@ -49,7 +49,7 @@ OpenCode는 [AI SDK](https://ai-sdk.dev/) 및 [Models.dev](https://models.dev)�
 ## 기본값 설정
 
 기본 모델로 설정하려면 `model` 키를 설정할 수 있습니다.
-OpenCode 설정.
+opencode 설정.
 
 ```json title="opencode.json" {3}
 {
@@ -137,11 +137,11 @@ config를 통해 모델의 옵션을 구성할 수 있습니다.
 
 ## 참배
 
-다른 윤곽을 가진 많은 모형 지원 다수 변종. OpenCode는 인기있는 공급자를위한 기본 변형으로 배송됩니다.
+다른 윤곽을 가진 많은 모형 지원 다수 변종. opencode는 인기있는 공급자를위한 기본 변형으로 배송됩니다.
 
 ## 내장 변형
 
-OpenCode는 많은 공급자를 위한 과태 변종으로 발송합니다:
+opencode는 많은 공급자를 위한 과태 변종으로 발송합니다:
 
 **Anthropic**:
 
@@ -203,11 +203,11 @@ keybind `variant_cycle`를 사용하여 변형 사이 신속하게 전환합니�
 
 ## 로딩 모델
 
-OpenCode가 시작될 때, 다음의 우선순위 순서에 있는 모형을 검사합니다:
+opencode가 시작될 때, 다음의 우선순위 순서에 있는 모형을 검사합니다:
 
 1. `--model` 또는 `-m` 명령 선 깃발. 형식은 구성 파일과 동일합니다. `provider_id/model_id`.
 
-2. OpenCode config의 모델 목록.
+2. opencode config의 모델 목록.
 
    ```json title="opencode.json"
    {

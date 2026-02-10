@@ -1,15 +1,15 @@
 ---
 title: Serwery LSP
-description: OpenCode integruje się z serwerem LSP.
+description: opencode integruje się z serwerem LSP.
 ---
 
-OpenCode integruje się z protokołem serwera językowego (LSP), aby pomóc LLM w korzystaniu z bazowego kodu. Wykorzystuje diagnostykę, aby otrzymać odpowiedź zwrotną do LLM.
+opencode integruje się z protokołem serwera językowego (LSP), aby pomóc LLM w korzystaniu z bazowego kodu. Wykorzystuje diagnostykę, aby otrzymać odpowiedź zwrotną do LLM.
 
 ---
 
 ## Wbudowany
 
-OpenCode posiada kilka wbudowanych serwerów LSP dla języków:
+opencode posiada kilka wbudowanych serwerów LSP dla języków:
 
 | Serwer LSP         | Rozszerzenie                                                        | Wymagania                                                                  |
 | ------------------ | ------------------------------------------------------------------- | -------------------------------------------------------------------------- |
@@ -76,13 +76,13 @@ Możesz dostosować serwery LSP poprzez sekcję `lsp` w konfiguracji opencode.
 
 Każdy serwer LSP obsługuje szczegółowe elementy:
 
-| Nieruchomość     | Wpisz            | Opis                                                   |
-| ---------------- | ---------------- | ------------------------------------------------------ |
-| `disabled`       | wartość logiczna | Ustaw tę opcję na `true`, aby włączyć serwer LSP       |
-| `command`        | ciąg[]           | Polecenie uruchomienia serwera LSP                     |
-| `extensions`     | ciąg[]           | Rozszerzenia plików, które powinny mieć ten serwer LSP |
-| `env`            | obiekt           | Zmienne ustawienia podczas uruchamiania serwera        |
-| `initialization` | obiekt           | Opcje inicjalizacji do wysłania na serwer LSP          |
+| Nieruchomość     | Wpisz    | Opis                                                   |
+| ---------------- | -------- | ------------------------------------------------------ |
+| `disabled`       | boolean  | Ustaw tę opcję na `true`, aby włączyć serwer LSP       |
+| `command`        | string[] | Polecenie uruchomienia serwera LSP                     |
+| `extensions`     | string[] | Rozszerzenia plików, które powinny mieć ten serwer LSP |
+| `env`            | object   | Zmienne ustawienia podczas uruchamiania serwera        |
+| `initialization` | object   | Opcje inicjalizacji do wysłania na serwer LSP          |
 
 Spójrzmy na kilka przykładów.
 

@@ -1,17 +1,17 @@
 ---
 title: Providers
-description: Korzystanie z dowolnego dostawcy LLM w OpenCode.
+description: Korzystanie z dowolnego dostawcy LLM w opencode.
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 
-OpenCode używa [AI SDK](https://ai-sdk.dev/) i [Models.dev](https://models.dev) do obsługi **ponad 75 dostawców LLM** i obsługuje uruchamianie modeli lokalnych.
+opencode używa [AI SDK](https://ai-sdk.dev/) i [Models.dev](https://models.dev) do obsługi **ponad 75 dostawców LLM** i obsługuje uruchamianie modeli lokalnych.
 
 Aby dodać dostawcę należy:
 
 1. Dodaj klucze API dla dostawcy za pomocą komendy `/connect`.
-2. Skonfiguruj dostawcę w konfiguracji OpenCode.
+2. Skonfiguruj dostawcę w konfiguracji opencode.
 
 ---
 
@@ -24,7 +24,7 @@ in `~/.local/share/opencode/auth.json`.
 
 ### Config
 
-Możesz dostosować dostawców za pomocą sekcji `provider` w swoim OpenCode
+Możesz dostosować dostawców za pomocą sekcji `provider` w swoim opencode
 config.
 
 ---
@@ -50,8 +50,8 @@ Możesz dostosować podstawowy adres URL dla dowolnego dostawcy, ustawiając opc
 
 ## OpenCode Zen
 
-OpenCode Zen to lista modeli dostarczonych przez zespół OpenCode, które zostały
-przetestowane i zweryfikowane, aby dobrze współpracować z OpenCode. [Dowiedz się więcej](/docs/zen).
+OpenCode Zen to lista modeli dostarczonych przez zespół opencode, które zostały
+przetestowane i zweryfikowane, aby dobrze współpracować z opencode. [Dowiedz się więcej](/docs/zen).
 
 :::tip
 Jeśli jesteś nowy, zalecamy rozpoczęcie od OpenCode Zen.
@@ -80,7 +80,7 @@ Jeśli jesteś nowy, zalecamy rozpoczęcie od OpenCode Zen.
    /models
    ```
 
-Działa jak każdy inny dostawca w OpenCode i jest całkowicie opcjonalny w użyciu.
+Działa jak każdy inny dostawca w opencode i jest całkowicie opcjonalny w użyciu.
 
 ---
 
@@ -124,7 +124,7 @@ Nie widzisz tutaj dostawcy? Prześlij PR.
 
 ### Amazon Bedrock
 
-Aby używać Amazon Bedrock z OpenCode:
+Aby używać Amazon Bedrock z opencode:
 
 1. Przejdź do **Katalogu modeli** w konsoli Amazon Bedrock i poproś
    dostęp do wybranych modeli.
@@ -279,7 +279,7 @@ W przypadku niestandardowych profili wnioskowania użyj nazwy modelu i dostawcy 
    ```
 
 :::info
-Korzystanie z subskrypcji Claude Pro/Max w OpenCode nie jest oficjalnie obsługiwane przez [Anthropic](https://anthropic.com).
+Korzystanie z subskrypcji Claude Pro/Max w opencode nie jest oficjalnie obsługiwane przez [Anthropic](https://anthropic.com).
 :::
 
 ##### Using API keys
@@ -685,8 +685,8 @@ to store token in opencode auth storage.
 ##### Self-Hosted GitLab
 
 :::note[compliance note]
-OpenCode używa małego modelu do niektórych zadań AI, takich jak generowanie tytułu sesji.
-Domyślnie jest skonfigurowany do używania gpt-5-nano, hostowanego przez Zen. Aby zablokować OpenCode
+opencode używa małego modelu do niektórych zadań AI, takich jak generowanie tytułu sesji.
+Domyślnie jest skonfigurowany do używania gpt-5-nano, hostowanego przez Zen. Aby zablokować opencode
 aby używać tylko własnej instancji hostowanej przez GitLab, dodaj następujące elementy do pliku
 `opencode.json` plik. Zalecane jest również wyłączenie udostępniania sesji.
 
@@ -789,9 +789,9 @@ Ta wtyczka zapewnia kompleksowe możliwości zarządzania repozytorium GitLab, w
 Aby korzystać z subskrypcji GitHub Copilot z kodem opencode:
 
 :::note
-Niektóre modele mogą wymagać [subskrypcji Pro+](https://github.com/features/copilot/plans), aby z nich korzystać.
+Niektóre modele mogą wymagać [subskrypcji Pro+](https://github.com/features/Copilot/plans), aby z nich korzystać.
 
-Niektóre modele należy włączyć ręcznie w [ustawieniach GitHub Copilot](https://docs.github.com/en/copilot/how-tos/use-ai-models/configure-access-to-ai-models#setup-for-individual-use).
+Niektóre modele należy włączyć ręcznie w [ustawieniach GitHub Copilot](https://docs.github.com/en/Copilot/how-tos/use-ai-models/configure-access-to-ai-models#setup-for-individual-use).
 :::
 
 1. Uruchom komendę `/connect` i wyszukaj GitHub Copilot.
@@ -822,7 +822,7 @@ Niektóre modele należy włączyć ręcznie w [ustawieniach GitHub Copilot](htt
 
 ### Google Vertex AI
 
-Aby używać Google Vertex AI z OpenCode:
+Aby używać Google Vertex AI z opencode:
 
 1. Przejdź do **Model Garden** w Google Cloud Console i sprawdź
    modele dostępne w Twoim regionie.
@@ -1004,7 +1004,7 @@ Helicone obsługuje niestandardowe nagłówki dla funkcji takich jak buforowanie
 
 ##### Śledzenie sesji
 
-Funkcja [Sesje](https://docs.helicone.ai/features/sessions) firmy Helicone umożliwia grupowanie powiązanych żądań LLM. Użyj wtyczki [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session), aby automatycznie rejestrować każdą konwersację OpenCode jako sesję w Helicone.
+Funkcja [Sesje](https://docs.helicone.ai/features/sessions) firmy Helicone umożliwia grupowanie powiązanych żądań LLM. Użyj wtyczki [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session), aby automatycznie rejestrować każdą konwersację opencode jako sesję w Helicone.
 
 ```bash
 npm install -g opencode-helicone-session
@@ -1018,7 +1018,7 @@ Dodaj go do swojej konfiguracji.
 }
 ```
 
-Wtyczka wstawia nagłówki `Helicone-Session-Id` i `Helicone-Session-Name` do Twoich żądań. Na stronie Sesje Helicone każda konwersacja OpenCode będzie wymieniona jako osobna sesja.
+Wtyczka wstawia nagłówki `Helicone-Session-Id` i `Helicone-Session-Name` do Twoich żądań. Na stronie Sesje Helicone każda konwersacja opencode będzie wymieniona jako osobna sesja.
 
 ##### Common Helicone headers
 
@@ -1222,7 +1222,7 @@ Aby użyć Kimi K2 z Moonshot AI:
 Możesz skonfigurować kod otwarty tak, aby korzystał z modeli lokalnych poprzez Ollamę.
 
 :::tip
-Ollama może automatycznie skonfigurować się pod kątem OpenCode. Aby uzyskać szczegółowe informacje, zobacz [dokumentację integracji Ollama](https://docs.ollama.com/integrations/opencode).
+Ollama może automatycznie skonfigurować się pod kątem opencode. Aby uzyskać szczegółowe informacje, zobacz [dokumentację integracji Ollama](https://docs.ollama.com/integrations/opencode).
 :::
 
 ```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
@@ -1261,13 +1261,13 @@ Jeśli wywołania narzędzi nie działają, spróbuj zwiększyć `num_ctx` w Oll
 
 ### Ollama Cloud
 
-Aby korzystać z Ollama Cloud z OpenCode:
+Aby korzystać z Ollama Cloud z opencode:
 
 1. Udaj się do [https://ollama.com/](https://ollama.com/) i zaloguj się lub utwórz konto.
 
 2. Przejdź do **Ustawienia** > **Klucze** i kliknij **Dodaj klucz API**, aby wygenerować nowy klucz API.
 
-3. Skopiuj klucz API do użycia w OpenCode.
+3. Skopiuj klucz API do użycia w opencode.
 
 4. Uruchom polecenie `/connect` i wyszukaj **Ollama Cloud**.
 
@@ -1284,7 +1284,7 @@ Aby korzystać z Ollama Cloud z OpenCode:
    └ enter
    ```
 
-6. **Ważne**: Przed użyciem modeli chmurowych w OpenCode musisz pobrać informacje o modelu lokalnie:
+6. **Ważne**: Przed użyciem modeli chmurowych w opencode musisz pobrać informacje o modelu lokalnie:
 
    ```bash
    ollama pull gpt-oss:20b-cloud
@@ -1333,7 +1333,7 @@ Jeśli posiadasz już klucz API, możesz wybrać opcję **Wprowadź klucz API r�
 
 ### OpenCode Zen
 
-OpenCode Zen to lista przetestowanych i zweryfikowanych modeli udostępniona przez zespół OpenCode. [Dowiedz się więcej](/docs/zen).
+OpenCode Zen to lista przetestowanych i zweryfikowanych modeli udostępniona przez zespół opencode. [Dowiedz się więcej](/docs/zen).
 
 1. Zaloguj się do **<a href={console}>OpenCode Zen</a>** i kliknij **Utwórz klucz API**.
 
@@ -1343,7 +1343,7 @@ OpenCode Zen to lista przetestowanych i zweryfikowanych modeli udostępniona prz
    /connect
    ```
 
-3. Wprowadź klucz API OpenCode.
+3. Wprowadź klucz API opencode.
 
    ```txt
    ┌ API key
@@ -1869,7 +1869,7 @@ Configuration details:
 - **limit.context**: Maksymalna liczba żetonów wejściowych akceptowanych przez model.
 - **limit.output**: Maksymalna liczba tokenów, które model może wygenerować.
 
-Pola `limit` pozwalają OpenCode zrozumieć, ile kontekstu pozostało. Standardowi dostawcy pobierają je automatycznie z models.dev.
+Pola `limit` pozwalają opencode zrozumieć, ile kontekstu pozostało. Standardowi dostawcy pobierają je automatycznie z models.dev.
 
 ---
 

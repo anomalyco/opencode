@@ -36,7 +36,7 @@ export default tool({
   },
   async execute(args) {
     // Sua lógica de banco de dados aqui
-    return `Consulta executada: ${args.query}`
+    return `Executed query: ${args.query}`
   },
 })
 ```
@@ -121,7 +121,7 @@ export default tool({
   async execute(args, context) {
     // Acessar informações do contexto
     const { agent, sessionID, messageID, directory, worktree } = context
-    return `Agente: ${agent}, Sessão: ${sessionID}, Mensagem: ${messageID}, Diretório: ${directory}, Worktree: ${worktree}`
+    return `Agent: ${agent}, Session: ${sessionID}, Message: ${messageID}, Directory: ${directory}, Worktree: ${worktree}`
   },
 })
 ```

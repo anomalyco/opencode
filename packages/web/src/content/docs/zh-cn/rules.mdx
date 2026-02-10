@@ -1,6 +1,6 @@
 ---
 title: 規則
-description: 設置開放代碼的自定義指令。
+description: 設置opencode的自定義指令。
 ---
 
 您可以通过 `AGENTS.md` 文件创建 opencode 的自定义指令。这和 Cursor 的规则类似。它包含将包含在 LLM 上下文中的说明，方便您的特定项目自定义其行为。
@@ -11,7 +11,7 @@ description: 設置開放代碼的自定義指令。
 
 要创建新的`AGENTS.md`文件，您可以在opencode中运行`/init`命令。
 
-:::提示
+:::tip
 您应该将项目的 `AGENTS.md` 文件提交到 Git。
 :::
 
@@ -62,7 +62,7 @@ opencode 还支持从多个位置读取 `AGENTS.md` 文件。这有不同的目�
 
 ### 全球的
 
-您还可以在 `~/.config/opencode/AGENTS.md` 文件中包含全局规则。这适用于所有开放代码会话。
+您还可以在 `~/.config/opencode/AGENTS.md` 文件中包含全局规则。这适用于所有opencode会话。
 
 由于此未提交给 Git 或与您的团队共享，因此我们建议使用它来指定 LLM 应遵循的任何个人规则。
 
@@ -175,6 +175,6 @@ Read the following file immediately as it's relevant to all workflows: @rules/ge
 - 保持 AGENTS.md 简洁，同时参考详细指南
 - 确保opencode仅在特定任务需要时加载文件
 
-:::提示
+:::tip
 对于 monorepos 或具有共享标准的项目，使用 `opencode.json` 和 glob 模式（如 `packages/*/AGENTS.md`）比手动指令更易于维护。
 :::

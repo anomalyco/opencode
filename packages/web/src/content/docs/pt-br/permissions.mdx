@@ -3,7 +3,7 @@ title: Permissões
 description: Controle quais ações requerem aprovação para serem executadas.
 ---
 
-OpenCode usa a configuração `permission` para decidir se uma determinada ação deve ser executada automaticamente, solicitar sua aprovação ou ser bloqueada.
+opencode usa a configuração `permission` para decidir se uma determinada ação deve ser executada automaticamente, solicitar sua aprovação ou ser bloqueada.
 
 A partir da versão `v1.1.1`, a configuração booleana legada `tools` foi descontinuada e mesclada na `permission`. A antiga configuração `tools` ainda é suportada para compatibilidade retroativa.
 
@@ -88,7 +88,7 @@ Você pode usar `~` ou `$HOME` no início de um padrão para referenciar seu dir
 
 ### Diretórios Externos
 
-Use `external_directory` para permitir chamadas de ferramentas que tocam em caminhos fora do diretório de trabalho onde o OpenCode foi iniciado. Isso se aplica a qualquer ferramenta que aceite um caminho como entrada (por exemplo, `read`, `edit`, `list`, `glob`, `grep` e muitos comandos `bash`).
+Use `external_directory` para permitir chamadas de ferramentas que tocam em caminhos fora do diretório de trabalho onde o opencode foi iniciado. Isso se aplica a qualquer ferramenta que aceite um caminho como entrada (por exemplo, `read`, `edit`, `list`, `glob`, `grep` e muitos comandos `bash`).
 
 A expansão do home (como `~/...`) afeta apenas como um padrão é escrito. Não torna um caminho externo parte do espaço de trabalho atual, então caminhos fora do diretório de trabalho ainda devem ser permitidos via `external_directory`.
 
@@ -127,7 +127,7 @@ Mantenha a lista focada em caminhos confiáveis e adicione regras adicionais de 
 
 ## Permissões Disponíveis
 
-As permissões do OpenCode são indexadas pelo nome da ferramenta, além de alguns guardas de segurança:
+As permissões do opencode são indexadas pelo nome da ferramenta, além de alguns guardas de segurança:
 
 - `read` — leitura de um arquivo (corresponde ao caminho do arquivo)
 - `edit` — todas as modificações de arquivo (cobre `edit`, `write`, `patch`, `multiedit`)
@@ -148,7 +148,7 @@ As permissões do OpenCode são indexadas pelo nome da ferramenta, além de algu
 
 ## Padrões
 
-Se você não especificar nada, o OpenCode começa com padrões permissivos:
+Se você não especificar nada, o opencode começa com padrões permissivos:
 
 - A maioria das permissões padrão é `"allow"`.
 - `doom_loop` e `external_directory` padrão é `"ask"`.
@@ -171,10 +171,10 @@ Se você não especificar nada, o OpenCode começa com padrões permissivos:
 
 ## O que “Ask” Faz
 
-Quando o OpenCode solicita aprovação, a interface oferece três resultados:
+Quando o opencode solicita aprovação, a interface oferece três resultados:
 
 - `once` — aprovar apenas esta solicitação
-- `always` — aprovar futuras solicitações que correspondam aos padrões sugeridos (para o restante da sessão atual do OpenCode)
+- `always` — aprovar futuras solicitações que correspondam aos padrões sugeridos (para o restante da sessão atual do opencode)
 - `reject` — negar a solicitação
 
 O conjunto de padrões que `always` aprovaria é fornecido pela ferramenta (por exemplo, aprovações de bash normalmente incluem um prefixo de comando seguro como `git status*`).

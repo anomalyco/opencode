@@ -6,7 +6,7 @@ description: 通過 HTTP 與 opencode 服務器交互。
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-`opencode serve` 命令運行一個無頭 HTTP 服務器，該服務器公開開放代碼客戶端可以使用的 OpenAPI 端點。
+`opencode serve` 命令運行一個無頭 HTTP 服務器，該服務器公開opencode客戶端可以使用的 OpenAPI 端點。
 
 ---
 
@@ -65,7 +65,7 @@ opencode TUI 運行，`opencode serve` 將啟動一個新服務器。
 
 當您啟動 TUI 時，它會隨機分配端口和主機名。您可以改為傳入`--hostname` 和`--port` [旗幟](/docs/cli)。然後使用它連接到其服務器。
 
-[`/tui`](#tui) 端點可用於通過服務器驅動 TUI。例如，您可以預填充或運行提示。此設置由 OpenCode [集成開發環境](/docs/ide) 插件使用。
+[`/tui`](#tui) 端點可用於通過服務器驅動 TUI。例如，您可以預填充或運行提示。此設置由 opencode [集成開發環境](/docs/ide) 插件使用。
 
 ---
 
@@ -183,22 +183,22 @@ opencode 服務器公開以下 API。
 
 ### 命令
 
-| 方法  | 路徑       | 描述         | 回應                                       |
-| ----- | ---------- | ------------ | ------------------------------------------ |
-| `GET` | `/command` | 列出所有命令 | <a href={typesUrl}><code>命令[]</code></a> |
+| 方法  | 路徑       | 描述         | 回應                                          |
+| ----- | ---------- | ------------ | --------------------------------------------- |
+| `GET` | `/command` | 列出所有命令 | <a href={typesUrl}><code>Command[]</code></a> |
 
 ---
 
 ### 文件
 
-| 方法  | 路徑                     | 描述                 | 回應                                                                 |
-| ----- | ------------------------ | -------------------- | -------------------------------------------------------------------- | -------------- |
-| `GET` | `/find?pattern=<pat>`    | 搜索文件中的文本     | 具有 `path`、`lines`、`line_number`、`absolute_offset`、`submatches` | 的匹配對像數組 |
-| `GET` | `/find/file?query=<q>`   | 按名稱查找文件和目錄 | `string[]`（路徑）                                                   |
-| `GET` | `/find/symbol?query=<q>` | 查找工作區符號       | <a href={typesUrl}><code>符號[]</code></a>                           |
-| `GET` | `/file?path=<path>`      | 列出文件和目錄       | <a href={typesUrl}><code>FileNode[]</code></a>                       |
-| `GET` | `/file/content?path=<p>` | 讀取文件             | <a href={typesUrl}><code>FileContent</code></a>                      |
-| `GET` | `/file/status`           | 獲取跟踪文件的狀態   | <a href={typesUrl}><code>文件[]</code></a>                           |
+| 方法  | 路徑                     | 描述                 | 回應                                                                                |
+| ----- | ------------------------ | -------------------- | ----------------------------------------------------------------------------------- |
+| `GET` | `/find?pattern=<pat>`    | 搜索文件中的文本     | 具有 `path`, `lines`, `line_number`, `absolute_offset`, `submatches` 的匹配對象陣列 |
+| `GET` | `/find/file?query=<q>`   | 按名稱查找文件和目錄 | `string[]`（路徑）                                                                  |
+| `GET` | `/find/symbol?query=<q>` | 查找工作區符號       | <a href={typesUrl}><code>Symbol[]</code></a>                                        |
+| `GET` | `/file?path=<path>`      | 列出文件和目錄       | <a href={typesUrl}><code>FileNode[]</code></a>                                      |
+| `GET` | `/file/content?path=<p>` | 讀取文件             | <a href={typesUrl}><code>FileContent</code></a>                                     |
+| `GET` | `/file/status`           | 獲取跟蹤文件的狀態   | <a href={typesUrl}><code>File[]</code></a>                                          |
 
 #### `/find/file`查詢參數
 

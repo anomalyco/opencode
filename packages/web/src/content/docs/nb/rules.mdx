@@ -3,7 +3,7 @@ title: Regler
 description: Set custom instructions for opencode.
 ---
 
-Du kan gi tilpassede instruksjoner for å OpenCode ved å opprette en `AGENTS.md`-fil. Dette ligner på Cursors regler. Den inneholder instruksjoner som vil bli inkludert i LLMs kontekst for å tilpasse oppførselen til ditt spesifikke prosjekt.
+Du kan gi tilpassede instruksjoner for å opencode ved å opprette en `AGENTS.md`-fil. Dette ligner på Cursors regler. Den inneholder instruksjoner som vil bli inkludert i LLMs kontekst for å tilpasse oppførselen til ditt spesifikke prosjekt.
 
 ---
 
@@ -11,7 +11,7 @@ Du kan gi tilpassede instruksjoner for å OpenCode ved å opprette en `AGENTS.md
 
 For å lage en ny `AGENTS.md` fil, kan du kjøre kommandoen `/init` i opencode.
 
-:::tupp
+:::tip
 Du bør overgi prosjektets `AGENTS.md`-fil til Git.
 :::
 
@@ -68,7 +68,7 @@ Siden dette ikke er forpliktet til Git eller delt med teamet ditt, anbefaler vi 
 
 ### Claude-kodekompatibilitet
 
-For brukere som migrerer fra Claude Code, støtter OpenCode Claude Codes filkonvensjoner som fallbacks:
+For brukere som migrerer fra Claude Code, støtter opencode Claude Codes filkonvensjoner som fallbacks:
 
 - **Prosjektregler**: `CLAUDE.md` i prosjektkatalogen din (brukes hvis ingen `AGENTS.md` eksisterer)
 - **Globale regler**: `~/.claude/CLAUDE.md` (brukes hvis ingen `~/.config/opencode/AGENTS.md` eksisterer)
@@ -175,6 +175,6 @@ Denne tilnærmingen lar deg:
 - Hold AGENTS.md kortfattet mens du refererer til detaljerte retningslinjer
 - Sørg for at opencode laster filer kun når det er nødvendig for den spesifikke oppgaven
 
-:::tupp
+:::tip
 For monorepos eller prosjekter med delte standarder er bruk av `opencode.json` med glob-mønstre (som `packages/*/AGENTS.md`) mer vedlikeholdbart enn manuelle instruksjoner.
 :::

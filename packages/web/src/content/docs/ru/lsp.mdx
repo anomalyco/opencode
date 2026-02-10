@@ -1,54 +1,54 @@
 ---
 title: ЛСП Серверы
-description: OpenCode интегрируется с вашими серверами LSP.
+description: opencode интегрируется с вашими серверами LSP.
 ---
 
-OpenCode интегрируется с вашим протоколом языкового сервера (LSP), чтобы помочь LLM взаимодействовать с вашей кодовой базой. Он использует диагностику для предоставления обратной связи LLM.
+opencode интегрируется с вашим протоколом языкового сервера (LSP), чтобы помочь LLM взаимодействовать с вашей кодовой базой. Он использует диагностику для предоставления обратной связи LLM.
 
 ---
 
 ## Встроенный
 
-OpenCode поставляется с несколькими встроенными LSP-серверами для популярных языков:
+opencode поставляется с несколькими встроенными LSP-серверами для популярных языков:
 
-| ЛСП Сервер            | Расширения                                                          | Требования                                                              |
-| --------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| астро                 | .astro                                                              | Автоматическая установка для проектов Astro                             |
-| бить                  | .sh, .bash, .zsh, .ksh                                              | Автоматически устанавливает сервер языка bash                           |
-| лязг                  | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++                | Автоматическая установка для проектов C/C++.                            |
-| csharp                | .cs                                                                 | `.NET SDK` установлен                                                   |
-| Clojure-LSP           | .clj, .cljs, .cljc, .edn                                            | Доступна команда `clojure-lsp`                                          |
-| дротик                | .dart                                                               | Доступна команда `dart`                                                 |
-| дено                  | .ts, .tsx, .js, .jsx, .mjs                                          | Доступна команда `deno` (автоматически определяет deno.json/deno.jsonc) |
-| эликсир-ls            | .ex, .exs                                                           | Доступна команда `elixir`                                               |
-| эслинт                | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue                  | Зависимость `eslint` в проекте                                          |
-| fsharp                | .fs, .fsi, .fsx, .fsscript                                          | `.NET SDK` установлен                                                   |
-| светиться             | .блеск                                                              | Доступна команда `gleam`                                                |
-| гоплс                 | .идти                                                               | Доступна команда `go`                                                   |
-| хлс                   | .hs, .lhs                                                           | Доступна команда `haskell-language-server-wrapper`                      |
-| jdtls                 | .java                                                               | `Java SDK (version 21+)` установлен                                     |
-| Котлин-LS             | .кт, .ктс                                                           | Автоматическая установка для проектов Kotlin                            |
-| Луа-ЛС                | .lua                                                                | Автоматическая установка для проектов Lua                               |
-| снег                  | .nix                                                                | Доступна команда `nixd`                                                 |
-| ocaml-lsp             | .мл, .мли                                                           | Доступна команда `ocamllsp`                                             |
-| бычья линта           | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | Зависимость `oxlint` в проекте                                          |
-| PHP                   | .php                                                                | Автоматическая установка для проектов PHP                               |
-| призма                | .prisma                                                             | Доступна команда `prisma`                                               |
-| пирит                 | .py, .pyi                                                           | Установлена ​​зависимость `pyright`                                     |
-| рубин-lsp (рубокоп)   | .rb, .rake, .gemspec, .ru                                           | Доступны команды `ruby` и `gem`.                                        |
-| ржавчина              | .rs                                                                 | Доступна команда `rust-analyzer`                                        |
-| исходный комплект-lsp | .swift, .objc, .objcpp                                              | `swift` установлен (`xcode` в macOS)                                    |
-| стройный              | .стройный                                                           | Автоматическая установка для проектов Svelte                            |
-| терраформировать      | .tf, .tfvars                                                        | Автоматическая установка из выпусков GitHub                             |
-| tinymist              | .тип, .типк                                                         | Автоматическая установка из выпусков GitHub                             |
-| машинопись            | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts                        | Зависимость `typescript` в проекте                                      |
-| вид                   | .vue                                                                | Автоматическая установка для проектов Vue                               |
-| Ямл-лс                | .yaml, .yml                                                         | Автоматически устанавливает Red Hat yaml-language-server                |
-| Злс                   | .zig, .zon                                                          | Доступна команда `zig`                                                  |
+| LSP Server         | Extensions                                                          | Requirements                                                 |
+| ------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------ |
+| astro              | .astro                                                              | Auto-installs for Astro projects                             |
+| bash               | .sh, .bash, .zsh, .ksh                                              | Auto-installs bash-language-server                           |
+| clangd             | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++                | Auto-installs for C/C++ projects                             |
+| csharp             | .cs                                                                 | `.NET SDK` installed                                         |
+| clojure-lsp        | .clj, .cljs, .cljc, .edn                                            | `clojure-lsp` command available                              |
+| dart               | .dart                                                               | `dart` command available                                     |
+| deno               | .ts, .tsx, .js, .jsx, .mjs                                          | `deno` command available (auto-detects deno.json/deno.jsonc) |
+| elixir-ls          | .ex, .exs                                                           | `elixir` command available                                   |
+| eslint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue                  | `eslint` dependency in project                               |
+| fsharp             | .fs, .fsi, .fsx, .fsscript                                          | `.NET SDK` installed                                         |
+| gleam              | .gleam                                                              | `gleam` command available                                    |
+| gopls              | .go                                                                 | `go` command available                                       |
+| hls                | .hs, .lhs                                                           | `haskell-language-server-wrapper` command available          |
+| jdtls              | .java                                                               | `Java SDK (version 21+)` installed                           |
+| kotlin-ls          | .kt, .kts                                                           | Auto-installs for Kotlin projects                            |
+| lua-ls             | .lua                                                                | Auto-installs for Lua projects                               |
+| nixd               | .nix                                                                | `nixd` command available                                     |
+| ocaml-lsp          | .ml, .mli                                                           | `ocamllsp` command available                                 |
+| oxlint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | `oxlint` dependency in project                               |
+| php intelephense   | .php                                                                | Auto-installs for PHP projects                               |
+| prisma             | .prisma                                                             | `prisma` command available                                   |
+| pyright            | .py, .pyi                                                           | `pyright` dependency installed                               |
+| ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                           | `ruby` and `gem` commands available                          |
+| rust               | .rs                                                                 | `rust-analyzer` command available                            |
+| sourcekit-lsp      | .swift, .objc, .objcpp                                              | `swift` installed (`xcode` on macOS)                         |
+| svelte             | .svelte                                                             | Auto-installs for Svelte projects                            |
+| terraform          | .tf, .tfvars                                                        | Auto-installs from GitHub releases                           |
+| tinymist           | .typ, .typc                                                         | Auto-installs from GitHub releases                           |
+| typescript         | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts                        | `typescript` dependency in project                           |
+| vue                | .vue                                                                | Auto-installs for Vue projects                               |
+| yaml-ls            | .yaml, .yml                                                         | Auto-installs Red Hat yaml-language-server                   |
+| zls                | .zig, .zon                                                          | `zig` command available                                      |
 
 Серверы LSP автоматически включаются при обнаружении одного из указанных выше расширений файлов и выполнении требований.
 
-:::примечание
+:::note
 Вы можете отключить автоматическую загрузку LSP-сервера, установив для переменной среды `OPENCODE_DISABLE_LSP_DOWNLOAD` значение `true`.
 :::
 
@@ -65,7 +65,7 @@ OpenCode поставляется с несколькими встроенным
 
 ## Настроить
 
-Вы можете настроить серверы LSP через раздел `lsp` в конфигурации открытого кода.
+Вы можете настроить серверы LSP через раздел `lsp` в конфигурации opencode.
 
 ```json title="opencode.json"
 {
@@ -76,13 +76,13 @@ OpenCode поставляется с несколькими встроенным
 
 Каждый LSP-сервер поддерживает следующее:
 
-| Свойство         | Тип                 | Описание                                                                    |
-| ---------------- | ------------------- | --------------------------------------------------------------------------- |
-| `disabled`       | логическое значение | Установите для этого параметра значение `true`, чтобы отключить сервер LSP. |
-| `command`        | нить[]              | Команда запуска LSP-сервера                                                 |
-| `extensions`     | нить[]              | Расширения файлов, которые должен обрабатывать этот сервер LSP              |
-| `env`            | объект              | Переменные среды, которые нужно установить при запуске сервера              |
-| `initialization` | объект              | Параметры инициализации для отправки на сервер LSP                          |
+| Свойство         | Тип      | Описание                                                                    |
+| ---------------- | -------- | --------------------------------------------------------------------------- |
+| `disabled`       | boolean  | Установите для этого параметра значение `true`, чтобы отключить сервер LSP. |
+| `command`        | string[] | Команда запуска LSP-сервера                                                 |
+| `extensions`     | string[] | Расширения файлов, которые должен обрабатывать этот сервер LSP              |
+| `env`            | object   | Переменные среды, которые нужно установить при запуске сервера              |
+| `initialization` | object   | Параметры инициализации для отправки на сервер LSP                          |
 
 Давайте посмотрим на несколько примеров.
 
@@ -126,7 +126,7 @@ OpenCode поставляется с несколькими встроенным
 }
 ```
 
-:::примечание
+:::note
 Параметры инициализации зависят от сервера LSP. Проверьте документацию вашего LSP-сервера на наличие доступных опций.
 :::
 
