@@ -3,19 +3,19 @@ title: 主題
 description: 選擇內置主題或定義您自己的主題。
 ---
 
-使用 opencode，您可以從多個內置主題之一中進行選擇，使用適合您的終端主題的主題，或者定義您自己的自定義主題。
+使用 opencode，您可以從多個內置主題之一中進行選擇，使用適合您的terminal主題的主題，或者定義您自己的自定義主題。
 
 默認情況下，opencode 使用我們自己的 `opencode` 主題。
 
 ---
 
-## 終端要求
+## terminal要求
 
-為了使主題能夠正確顯示完整的調色板，您的終端必須支持**真彩色**（24 位顏色）。大多數現代終端默認支持此功能，但您可能需要啟用它：
+為了使主題能夠正確顯示完整的調色板，您的terminal必須支持**真彩色**（24 位顏色）。大多數現代terminal默認支持此功能，但您可能需要啟用它：
 
 - **檢查支持**：運行`echo $COLORTERM` - 它應該輸出`truecolor`或`24bit`
 - **啟用真彩色**：在 shell 配置文件中設置環境變量 `COLORTERM=truecolor`
-- **終端兼容性**：確保您的終端模擬器支持 24 位顏色（大多數現代終端，​​如 iTerm2、Alacritty、Kitty、Windows 終端和最新版本的 GNOME 終端都支持）
+- **terminal兼容性**：確保您的terminal模擬器支持 24 位顏色（大多數現代terminal，​​如 iTerm2、Alacritty、Kitty、Windows terminal和最新版本的 GNOME terminal都支持）
 
 如果沒有真彩色支持，主題的顏色精度可能會降低或回落到最接近的 256 色近似值。
 
@@ -27,17 +27,17 @@ opencode 附帶了幾個內置主題。
 
 | 名稱                   | 描述                                                              |
 | ---------------------- | ----------------------------------------------------------------- |
-| `system`               | 適應您終端的背景顏色                                              |
-| `tokyonight`           | 基於[東京之夜](https://github.com/folke/tokyonight.nvim)主題      |
-| `everforest`           | 基於[永福森林](https://github.com/sainnhe/everforest)主題         |
-| `ayu`                  | 基於[香魚](https://github.com/ayu-theme)深色主題                  |
-| `catppuccin`           | 基於[卡普布辛](https://github.com/catppuccin)主題                 |
-| `catppuccin-macchiato` | 基於[卡普布辛](https://github.com/catppuccin)主題                 |
-| `gruvbox`              | 基於[礦箱](https://github.com/morhetz/gruvbox)主題                |
-| `kanagawa`             | 基於[神奈川](https://github.com/rebelot/kanagawa.nvim)主題        |
-| `nord`                 | 基於[諾德](https://github.com/nordtheme/nord)主題                 |
+| `system`               | 適應您terminal的背景顏色                                              |
+| `tokyonight`           | 基於[tokyonight](https://github.com/folke/tokyonight.nvim)主題      |
+| `everforest`           | 基於[everforest](https://github.com/sainnhe/everforest)主題         |
+| `ayu`                  | 基於[ayu](https://github.com/ayu-theme)深色主題                  |
+| `catppuccin`           | 基於[catppuccin](https://github.com/catppuccin)主題                 |
+| `catppuccin-macchiato` | 基於[catppuccin](https://github.com/catppuccin)主題                 |
+| `gruvbox`              | 基於[gruvbox](https://github.com/morhetz/gruvbox)主題                |
+| `kanagawa`             | 基於[kanagawa](https://github.com/rebelot/kanagawa.nvim)主題        |
+| `nord`                 | 基於[Nord](https://github.com/nordtheme/nord)主題                 |
 | `matrix`               | 黑客風格黑底綠主題                                                |
-| `one-dark`             | 基於[原子一號](https://github.com/Th3Whit3Wolf/one-nvim) 深色主題 |
+| `one-dark`             | 基於[One Dark](https://github.com/Th3Whit3Wolf/one-nvim) 深色主題 |
 
 此外，我們還在不斷添加新主題。
 
@@ -45,17 +45,17 @@ opencode 附帶了幾個內置主題。
 
 ## 系統主題
 
-`system` 主題旨在自動適應您終端的配色方案。與使用固定顏色的傳統主題不同，_system_ 主題：
+`system` 主題旨在自動適應您terminal的配色方案。與使用固定顏色的傳統主題不同，_system_ 主題：
 
-- **生成灰度**：根據終端的背景顏色創建自定義灰度，確保最佳對比度。
-- **使用 ANSI 顏色**：利用標準 ANSI 顏色 (0-15) 進行語法突出顯示和 UI 元素，尊重終端的調色板。
-- **保留終端默認設置**：使用 `none` 作為文本和背景顏色，以保持終端的本機外觀。
+- **生成灰度**：根據terminal的背景顏色創建自定義灰度，確保最佳對比度。
+- **使用 ANSI 顏色**：利用標準 ANSI 顏色 (0-15) 進行語法突出顯示和 UI 元素，尊重terminal的調色板。
+- **保留terminal默認設置**：使用 `none` 作為文本和背景顏色，以保持terminal的本機外觀。
 
 系統主題適合以下用戶：
 
-- 希望 opencode 與其終端的外觀相匹配
-- 使用自定義終端配色方案
-- 希望所有終端應用程序具有一致的外觀
+- 希望 opencode 與其terminal的外觀相匹配
+- 使用自定義terminal配色方案
+- 希望所有terminal應用程式具有一致的外觀
 
 ---
 
@@ -119,7 +119,7 @@ vim .opencode/themes/my-theme.json
 - **ANSI 顏色**：`3` (0-255)
 - **顏色參考**：`"primary"` 或自定義定義
 - **深色/淺色版本**：`{"dark": "#000", "light": "#fff"}`
-- **無顏色**：`"none"` - 使用終端的默認顏色或透明
+- **無顏色**：`"none"` - 使用terminal的默認顏色或透明
 
 ---
 
@@ -129,12 +129,12 @@ vim .opencode/themes/my-theme.json
 
 ---
 
-### 終端默認值
+### terminal默認值
 
-特殊值`"none"`可用於任何顏色以繼承終端的默認顏色。這對於創建與終端配色方案無縫融合的主題特別有用：
+特殊值`"none"`可用於任何顏色以繼承terminal的默認顏色。這對於創建與terminal配色方案無縫融合的主題特別有用：
 
-- `"text": "none"` - 使用終端的默認前景色
-- `"background": "none"` - 使用終端的默認背景顏色
+- `"text": "none"` - 使用terminal的默認前景色
+- `"background": "none"` - 使用terminal的默認背景顏色
 
 ---
 

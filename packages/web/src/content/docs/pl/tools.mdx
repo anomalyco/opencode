@@ -47,7 +47,7 @@ Oto wszystkie wbudowane narzędzia dostępne w opencode.
 
 ### bash
 
-Wykonuj polecenia powłoki w środowisku projektu.
+Wykonuj polecenia shell w środowisku projektu.
 
 ```json title="opencode.json" {4}
 {
@@ -58,13 +58,13 @@ Wykonuj polecenia powłoki w środowisku projektu.
 }
 ```
 
-To narzędzie umożliwia LLM uruchamianie poleceń terminalowych, takich jak `npm install`, `git status` lub dowolne inne polecenie powłoki.
+To narzędzie umożliwia LLM uruchamianie poleceń terminalowych, takich jak `npm install`, `git status` lub dowolne inne polecenie shell.
 
 ---
 
 ### edit
 
-Modify existing files using exact string replacements.
+Modyfikuj istniejące pliki przez dokładne podmiany tekstu.
 
 ```json title="opencode.json" {4}
 {
@@ -119,7 +119,7 @@ Narzędzie to odczytuje pliki i zwraca ich zawartość. Obsługuje czytanie okre
 
 ### grep
 
-Search file contents using regular expressions.
+Przeszukuj zawartość plików za pomocą wyrażeń regularnych.
 
 ```json title="opencode.json" {4}
 {
@@ -136,7 +136,7 @@ Szybkie wyszukiwanie treści w całej bazie kodu. Obsługuje pełną składnię 
 
 ### glob
 
-Find files by pattern matching.
+Znajduj pliki na podstawie wzorców.
 
 ```json title="opencode.json" {4}
 {
@@ -193,7 +193,7 @@ Aby skonfigurować, które serwery LSP są dostępne dla Twojego projektu, zobac
 
 ### patch
 
-Apply patches to files.
+Stosuj patche do plików.
 
 ```json title="opencode.json" {4}
 {
@@ -250,7 +250,7 @@ To narzędzie jest domyślnie wyłączone dla podagentów, ale można je włącz
 
 ### todoread
 
-Read existing todo lists.
+Odczytuj istniejące listy todo.
 
 ```json title="opencode.json" {4}
 {
@@ -271,7 +271,7 @@ To narzędzie jest domyślnie wyłączone dla podagentów, ale można je włącz
 
 ### webfetch
 
-Fetch web content.
+Pobieraj treści z web.
 
 ```json title="opencode.json" {4}
 {
@@ -293,7 +293,7 @@ Wyszukaj informacje w Internecie.
 :::note
 To narzędzie jest dostępne tylko w przypadku korzystania z dostawcy opencode lub gdy zmienna środowiskowa `OPENCODE_ENABLE_EXA` jest ustawiona na dowolną wartość prawdziwą (np. `true` lub `1`).
 
-To enable when launching opencode:
+Aby włączyć przy uruchamianiu opencode:
 
 ```bash
 OPENCODE_ENABLE_EXA=1 opencode
@@ -335,16 +335,16 @@ Zadawaj pytania użytkownikowi podczas wykonywania.
 
 To narzędzie umożliwia LLM zadawanie pytań użytkownikowi podczas wykonywania zadania. Jest to przydatne dla:
 
-- Gathering user preferences or requirements
-- Clarifying ambiguous instructions
-- Getting decisions on implementation choices
-- Offering choices about what direction to take
+- Zbieranie preferencji i wymagań użytkownika
+- Doprecyzowanie niejednoznacznych instrukcji
+- Uzyskiwanie decyzji dotyczących implementacji
+- Proponowanie możliwych kierunków działania
 
 Każde pytanie zawiera nagłówek, tekst pytania i listę opcji. Użytkownicy mogą wybierać spośród dostępnych opcji lub wpisać niestandardową odpowiedź. Jeśli pytań jest wiele, użytkownicy mogą nawigować między nimi przed przesłaniem wszystkich odpowiedzi.
 
 ---
 
-## Custom tools
+## Narzędzia niestandardowe
 
 Niestandardowe narzędzia pozwalają zdefiniować własne funkcje, które LLM może wywołać. Są one zdefiniowane w pliku konfiguracyjnym i mogą wykonywać dowolny kod.
 
@@ -352,7 +352,7 @@ Niestandardowe narzędzia pozwalają zdefiniować własne funkcje, które LLM mo
 
 ---
 
-## MCP servers
+## Serwery MCP
 
 Serwery MCP (Model Context Protocol) umożliwiają integrację zewnętrznych narzędzi i usług. Obejmuje to dostęp do baz danych, integracje API i usługi stron trzecich.
 
@@ -360,13 +360,13 @@ Serwery MCP (Model Context Protocol) umożliwiają integrację zewnętrznych nar
 
 ---
 
-## Internals
+## Wnętrze działania
 
 Wewnętrznie narzędzia takie jak `grep`, `glob` i `list` używają pod maską [ripgrep](https://github.com/BurntSushi/ripgrep). Domyślnie ripgrep respektuje wzorce `.gitignore`, co oznacza, że ​​pliki i katalogi wymienione w Twoim `.gitignore` zostaną wykluczone z wyszukiwań i list.
 
 ---
 
-### Ignore patterns
+### Wzorce ignorowania
 
 Aby uwzględnić pliki, które normalnie byłyby ignorowane, utwórz plik `.ignore` w katalogu głównym projektu. Ten plik może jawnie zezwalać na określone ścieżki.
 

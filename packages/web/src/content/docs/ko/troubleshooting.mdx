@@ -103,7 +103,7 @@ opencode는 디스크에서 로컬 플러그인을로드 할 수 있습니다. T
 
 ## 수정 서버 연결 문제
 
-opencode 데스크톱은 자체 로컬 서버(과태)를 시작하거나 구성된 서버 URL에 연결할 수 있습니다.
+opencode 데스크톱은 자체 로컬 서버(기본)를 시작하거나 구성된 서버 URL에 연결할 수 있습니다.
 
 **"Connection Failed"** 대화 상자 (또는 앱이 스패시 화면을 지나지 않습니다), 사용자 정의 서버 URL을 확인합니다.
 
@@ -140,7 +140,7 @@ Windows에서 opencode 데스크톱은 Microsoft Edge ** WebView2 실행 시간 
 
 ## Windows: 일반 성능 문제
 
-느린 성능, 파일 액세스 문제 또는 Windows의 터미널 문제를 경험하는 경우 [WSL (Windows Subsystem for Linux)](/docs/windows-wsl)를 사용하여 시도하십시오. WSL은 opencode의 기능으로 더 원활하게 작동하는 Linux 환경을 제공합니다.
+느린 성능, 파일 액세스 문제 또는 Windows의 terminal 문제를 경험하는 경우 [WSL (Windows Subsystem for Linux)](/docs/windows-wsl)를 사용하여 시도하십시오. WSL은 opencode의 기능으로 더 원활하게 작동하는 Linux 환경을 제공합니다.
 
 ---
 
@@ -201,7 +201,7 @@ opencode와 문제가 발생하면:
 ## opencode가 시작되지 않습니다.
 
 1. 오류 메시지에 대한 로그 확인
-2. 맨끝에 있는 산출을 보기 위하여 `--print-logs`로 달리기를 시도하십시오
+2. terminal에 있는 산출을 보기 위하여 `--print-logs`로 달리기를 시도하십시오
 3. 당신은 `opencode upgrade`를 가진 최신 버전이 있는 것을 지킵니다
 
 ---
@@ -240,7 +240,7 @@ ProviderInitError가 발생하면 잘못된 구성이나 손상된 구성이 있
 
 해결하기:
 
-1. 첫째로, 당신의 공급자는 [providers guide] (./providers)를 따르기 위하여 제대로 설치됩니다
+1. 첫째로, 당신의 공급자는 [providers guide](./providers)를 따르기 위하여 제대로 설치됩니다
 2. 문제가 발생하면 저장된 구성을 삭제하십시오.
 
    ```bash

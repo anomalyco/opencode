@@ -177,7 +177,7 @@ http://<hostname>:<port>/doc
 | `GET`  | `/session/:id/message/:messageID` | รับรายละเอียดข้อความ                 | ส่งคืน `{ info: `<a href={typesUrl}>ข้อความ</a>`, parts: `<a href={typesUrl}>ส่วนหนึ่ง[]</a>`}`                                                                          |
 | `POST` | `/session/:id/prompt_async`       | ส่งข้อความแบบอะซิงโครนัส (ไม่ต้องรอ) | เนื้อความ: เหมือนกับ `/session/:id/message` ส่งคืน `204 No Content`                                                                                                      |
 | `POST` | `/session/:id/command`            | ดำเนินการคำสั่งเครื่องหมายทับ        | เนื้อความ: `{ messageID?, agent?, model?, command, arguments }` ส่งคืน `{ info: `<a href={typesUrl}>ข้อความ</a>`, parts: `<a href={typesUrl}>ส่วน[]</a>`}`               |
-| `POST` | `/session/:id/shell`              | รันคำสั่งเชลล์                       | เนื้อความ: `{ agent, model?, command }` ส่งคืน `{ info: `<a href={typesUrl}>ข้อความ</a>`, parts: `<a href={typesUrl}>ส่วน[]</a>`}`                                       |
+| `POST` | `/session/:id/shell`              | รันคำสั่ง shell                       | เนื้อความ: `{ agent, model?, command }` ส่งคืน `{ info: `<a href={typesUrl}>ข้อความ</a>`, parts: `<a href={typesUrl}>ส่วน[]</a>`}`                                       |
 
 ---
 

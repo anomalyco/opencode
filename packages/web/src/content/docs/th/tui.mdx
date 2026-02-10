@@ -1,11 +1,11 @@
 ---
 title: TUI
-description: การใช้อินเทอร์เฟซผู้ใช้เทอร์มินัล OpenCode
+description: การใช้อินเทอร์เฟซผู้ใช้ terminal OpenCode
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode มีอินเทอร์เฟซเทอร์มินัลแบบโต้ตอบหรือ TUI สำหรับการทำงานในโครงการของคุณด้วย LLM
+OpenCode มีอินเทอร์เฟซ terminal แบบโต้ตอบหรือ TUI สำหรับการทำงานในโครงการของคุณด้วย LLM
 
 การรัน OpenCode จะเริ่มต้น TUI สำหรับไดเร็กทอรีปัจจุบัน
 
@@ -45,7 +45,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## คำสั่งทุบตี
 
-เริ่มข้อความด้วย `!` เพื่อรันคำสั่งเชลล์
+เริ่มข้อความด้วย `!` เพื่อรันคำสั่ง shell
 
 ```bash frame="none"
 !ls -la
@@ -301,7 +301,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
     export EDITOR="code --wait"
     ```
 
-    หากต้องการทำให้เป็นแบบถาวร ให้เพิ่มสิ่งนี้ลงในโปรไฟล์เชลล์ของคุณ
+    หากต้องการทำให้เป็นแบบถาวร ให้เพิ่มสิ่งนี้ลงในโปรไฟล์ shell ของคุณ
     `~/.bashrc`, `~/.zshrc` ฯลฯ
 
   </TabItem>

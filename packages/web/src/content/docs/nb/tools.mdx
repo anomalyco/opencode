@@ -47,7 +47,7 @@ Her er alle de innebygde verktøyene som er tilgjengelige i opencode.
 
 ### bash
 
-Utfør skallkommandoer i prosjektmiljøet ditt.
+Utfør shell-kommandoer i prosjektmiljøet ditt.
 
 ```json title="opencode.json" {4}
 {
@@ -62,7 +62,7 @@ Dette verktøyet lar LLM kjøre terminalkommandoer som `npm install`, `git statu
 
 ---
 
-### rediger
+### edit
 
 Endre eksisterende filer ved å bruke eksakte strengerstatninger.
 
@@ -79,7 +79,7 @@ Dette verktøyet utfører nøyaktige redigeringer av filer ved å erstatte eksak
 
 ---
 
-### skriv
+### write
 
 Opprett nye filer eller overskriv eksisterende.
 
@@ -100,7 +100,7 @@ Bruk denne for å la LLM lage nye filer. Den vil overskrive eksisterende filer h
 
 ---
 
-### lest
+### read
 
 Les filinnholdet fra kodebasen din.
 
@@ -151,7 +151,7 @@ Søk etter filer ved å bruke glob-mønstre som `**/*.js` eller `src/**/*.ts`. R
 
 ---
 
-### liste
+### list
 
 List filer og kataloger i en gitt bane.
 
@@ -168,7 +168,7 @@ Dette verktøyet viser kataloginnhold. Den aksepterer glob-mønstre for å filtr
 
 ---
 
-### lsp (eksperimentell)
+### lsp (experimental)
 
 Samhandle med dine konfigurerte LSP-servere for å få kodeintelligensfunksjoner som definisjoner, referanser, sveveinformasjon og anropshierarki.
 
@@ -212,7 +212,7 @@ Dette verktøyet bruker oppdateringsfiler til kodebasen din. Nyttig for å påf�
 
 ---
 
-### ferdighet
+### skill
 
 Last inn en [ferdighet](/docs/skills) (en `SKILL.md` fil) og returner innholdet i samtalen.
 
@@ -227,7 +227,7 @@ Last inn en [ferdighet](/docs/skills) (en `SKILL.md` fil) og returner innholdet 
 
 ---
 
-### for å skrive
+### todowrite
 
 Administrer gjøremålslister under kodingsøkter.
 
@@ -269,7 +269,7 @@ Dette verktøyet er deaktivert for subagenter som standard, men du kan aktivere 
 
 ---
 
-### webhenting
+### webfetch
 
 Hent nettinnhold.
 
@@ -286,7 +286,7 @@ Lar LLM hente og lese nettsider. Nyttig for å slå opp dokumentasjon eller fors
 
 ---
 
-### nettsøk
+### websearch
 
 Søk på nettet for informasjon.
 
@@ -320,7 +320,7 @@ Bruk `websearch` når du trenger å finne informasjon (oppdagelse), og `webfetch
 
 ---
 
-### spørsmål
+### question
 
 Still brukeren spørsmål under utførelse.
 

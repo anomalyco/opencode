@@ -54,7 +54,7 @@ punkt końcowy. Ten punkt końcowy jest również używany do generowania [SDK](
 Użyj serwera opencode do programowej interakcji z opencode.
 :::
 
-Ta architektura umożliwia obsługę wielu klientów przez kod otwarty i programową interakcję z kodem otwartym.
+Ta architektura umożliwia obsługę wielu klientów przez opencode i programową interakcję z kodem otwartym.
 
 Możesz uruchomić `opencode serve`, aby uruchomić samodzielny serwer. Jeśli masz
 opencode TUI działa, `opencode serve` uruchomi nowy serwer.
@@ -177,7 +177,7 @@ Serwer opencode udostępnia następujące interfejsy API.
 | `GET`  | `/session/:id/message/:messageID` | Uzyskaj szczegóły wiadomości                    | Zwraca `{ info: `<a href={typesUrl}>Wiadomość</a>`, parts: `<a href={typesUrl}>Część[]</a>`}`                                                                            |
 | `POST` | `/session/:id/prompt_async`       | Wyślij wiadomość asynchronicznie (bez czekania) | treść: taka sama jak `/session/:id/message`, zwraca `204 No Content`                                                                                                     |
 | `POST` | `/session/:id/command`            | Wykonaj polecenie ukośnika                      | treść: `{ messageID?, agent?, model?, command, arguments }`, zwraca `{ info: `<a href={typesUrl}>Wiadomość</a>`, parts: `<a href={typesUrl}>Część[]</a>`}`               |
-| `POST` | `/session/:id/shell`              | Uruchom polecenie powłoki                       | treść: `{ agent, model?, command }`, zwraca `{ info: `<a href={typesUrl}>Wiadomość</a>`, parts: `<a href={typesUrl}>Część[]</a>`}`                                       |
+| `POST` | `/session/:id/shell`              | Uruchom polecenie shell                       | treść: `{ agent, model?, command }`, zwraca `{ info: `<a href={typesUrl}>Wiadomość</a>`, parts: `<a href={typesUrl}>Część[]</a>`}`                                       |
 
 ---
 

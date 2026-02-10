@@ -23,7 +23,7 @@ opencode 與您的 GitHub 工作流程集成。在評論中提及`/opencode` 或
 opencode github install
 ```
 
-這將引導您完成安裝 GitHub 應用程序、創建工作流程和設置機密。
+這將引導您完成安裝 GitHub 應用程式、創建工作流程和設置機密。
 
 ---
 
@@ -85,9 +85,9 @@ opencode github install
 - `agent`: The agent to use.必須是一級代理。如果未找到，則從配置回退到 `default_agent` 或 `"build"`。
 - `share`：是否共享opencode會話。對於公共存儲庫，默認為 **true**。
 - `prompt`：可選的自定義提示以覆蓋默認行為。使用它來自定義 opencode 處理請求的方式。
-- `token`：可選的 GitHub 訪問令牌，用於執行創建評論、提交更改和打開拉取請求等操作。默認情況下，opencode 使用來自 opencode GitHub 應用程序的安裝訪問令牌，因此提交、評論和拉取請求顯示為來自應用程序。
+- `token`：可選的 GitHub 訪問令牌，用於執行創建評論、提交更改和打開拉取請求等操作。默認情況下，opencode 使用來自 opencode GitHub 應用程式的安裝訪問令牌，因此提交、評論和拉取請求顯示為來自應用程式。
 
-  或者，您可以使用 GitHub Action 運行程序的[內置`GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token)，而無需安裝 opencode GitHub 應用程序。只需確保在您的工作流程中授予所需的權限：
+  或者，您可以使用 GitHub Action 運行程序的[內置`GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token)，而無需安裝 opencode GitHub 應用程式。只需確保在您的工作流程中授予所需的權限：
 
   ```yaml
   permissions:
@@ -108,7 +108,7 @@ opencode 可以由以下 GitHub 事件觸發：
 | 事件類型                      | 觸發者                       | 詳情                                                                                               |
 | ----------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------- |
 | `issue_comment`               | 對問題或 PR 發表評論         | Mention `/opencode` or `/oc` in your comment. opencode 讀取上下文並可以創建分支、打開 PR 或回复。  |
-| `pull_request_review_comment` | 對 PR 中的特定代碼行進行評論 | 在檢查代碼時提及`/opencode` 或`/oc`。 opencode receives file path, line numbers, and diff context. |
+| `pull_request_review_comment` | 對 PR 中的特定程式碼行進行評論 | 在檢查程式碼時提及`/opencode` 或`/oc`。 opencode receives file path, line numbers, and diff context. |
 | `issues`                      | 問題已打開或已編輯           | 創建或修改問題時自動觸發 opencode。需要 `prompt` 輸入。                                            |
 | `pull_request`                | PR 已開啟或已更新            | Automatically trigger opencode when PRs are opened, synchronized, or reopened.對於自動評論很有用。 |
 | `schedule`                    | 基於 Cron 的計劃             | 按計劃運行 opencode。需要 `prompt` 輸入。輸出進入日誌和 PR（沒有可評論的問題）。                   |
@@ -303,9 +303,9 @@ jobs:
 
   Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
 
-- **查看特定代碼行**
+- **查看特定程式碼行**
 
-  直接在 PR 的“文件”選項卡中的代碼行上留下評論。 opencode 自動檢測文件、行號和差異上下文以提供精確的響應。
+  直接在 PR 的“文件”選項卡中的程式碼行上留下評論。 opencode 自動檢測文件、行號和差異上下文以提供精確的響應。
 
   ```
   [Comment on specific lines in Files tab]
@@ -314,7 +314,7 @@ jobs:
 
   Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
   - 正在審查的確切文件
-  - 具體代碼行
+  - 具體程式碼行
   - 周圍的 diff 上下文
   - 行號信息
 
