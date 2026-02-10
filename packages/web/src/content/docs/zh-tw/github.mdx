@@ -1,0 +1,321 @@
+---
+title: GitHub
+description: 在 GitHub 問題和拉取請求中使用 opencode。
+---
+
+opencode 與您的 GitHub 工作流程集成。在評論中提及`/opencode` 或`/oc`，opencode 將在您的 GitHub Actions 運行器中執行任務。
+
+---
+
+## 特徵
+
+- **分類問題**：要求 opencode 調查問題並向您解釋。
+- **修復和實施**：要求 opencode 修復問題或實施功能。它將在一個新分支中工作並提交包含所有更改的 PR。
+- **安全**：opencode 在 GitHub 的運行器中運行。
+
+---
+
+## 安裝
+
+在 GitHub 存儲庫中的項目中運行以下命令：
+
+```bash
+opencode github install
+```
+
+這將引導您完成安裝 GitHub 應用程序、創建工作流程和設置機密。
+
+---
+
+### 手動設置
+
+或者您可以手動設置。
+
+1. Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
+
+   前往[**github.com/apps/opencode-agent**](https://github.com/apps/opencode-agent)。確保它已安裝在目標存儲庫上。
+
+2. **添加工作流程**
+
+   將以下工作流程文件添加到存儲庫中的 `.github/workflows/opencode.yml` 中。確保在`env`中設置適當的`model`和所需的API密鑰。
+
+   ```yml title=".github/workflows/opencode.yml" {24,26}
+   name: opencode
+
+   on:
+     issue_comment:
+       types: [created]
+     pull_request_review_comment:
+       types: [created]
+
+   jobs:
+     opencode:
+       if: |
+         contains(github.event.comment.body, '/oc') ||
+         contains(github.event.comment.body, '/opencode')
+       runs-on: ubuntu-latest
+       permissions:
+         id-token: write
+       steps:
+          - name: Checkout repository
+            uses: actions/checkout@v6
+            with:
+              fetch-depth: 1
+              persist-credentials: false
+
+          - name: Run OpenCode
+           uses: anomalyco/opencode/github@latest
+           env:
+             ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+           with:
+             model: anthropic/claude-sonnet-4-20250514
+             # share: true
+             # github_token: xxxx
+   ```
+
+3. Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
+
+   在您的組織或項目的**設置**中，展開左側的**秘密和變量**，然後選擇**操作**。並添加所需的 API 密鑰。
+
+---
+
+## 配置
+
+- `model`：與 opencode 一起使用的模型。採用`provider/model` 格式。這是**必需的**。
+- `agent`: The agent to use.必須是一級代理。如果未找到，則從配置回退到 `default_agent` 或 `"build"`。
+- `share`：是否共享opencode會話。對於公共存儲庫，默認為 **true**。
+- `prompt`：可選的自定義提示以覆蓋默認行為。使用它來自定義 opencode 處理請求的方式。
+- `token`：可選的 GitHub 訪問令牌，用於執行創建評論、提交更改和打開拉取請求等操作。默認情況下，opencode 使用來自 opencode GitHub 應用程序的安裝訪問令牌，因此提交、評論和拉取請求顯示為來自應用程序。
+
+  或者，您可以使用 GitHub Action 運行程序的[內置`GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token)，而無需安裝 opencode GitHub 應用程序。只需確保在您的工作流程中授予所需的權限：
+
+  ```yaml
+  permissions:
+    id-token: write
+    contents: write
+    pull-requests: write
+    issues: write
+  ```
+
+  Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
+
+---
+
+## 支持的活動
+
+opencode 可以由以下 GitHub 事件觸發：
+
+| 事件類型                      | 觸發者                       | 詳情                                                                                               |
+| ----------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------- |
+| `issue_comment`               | 對問題或 PR 發表評論         | Mention `/opencode` or `/oc` in your comment. opencode 讀取上下文並可以創建分支、打開 PR 或回复。  |
+| `pull_request_review_comment` | 對 PR 中的特定代碼行進行評論 | 在檢查代碼時提及`/opencode` 或`/oc`。 opencode receives file path, line numbers, and diff context. |
+| `issues`                      | 問題已打開或已編輯           | 創建或修改問題時自動觸發 opencode。需要 `prompt` 輸入。                                            |
+| `pull_request`                | PR 已開啟或已更新            | Automatically trigger opencode when PRs are opened, synchronized, or reopened.對於自動評論很有用。 |
+| `schedule`                    | 基於 Cron 的計劃             | 按計劃運行 opencode。需要 `prompt` 輸入。輸出進入日誌和 PR（沒有可評論的問題）。                   |
+| `workflow_dispatch`           | 從 GitHub UI 手動觸發        | 通過“操作”選項卡按需觸發 opencode。需要 `prompt` 輸入。輸出進入日誌和 PR。                         |
+
+### 時間表示例
+
+按計劃運行 opencode 以執行自動化任務：
+
+```yaml title=".github/workflows/opencode-scheduled.yml"
+name: Scheduled OpenCode Task
+
+on:
+  schedule:
+    - cron: "0 9 * * 1" # Every Monday at 9am UTC
+
+jobs:
+  opencode:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Run OpenCode
+        uses: anomalyco/opencode/github@latest
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        with:
+          model: anthropic/claude-sonnet-4-20250514
+          prompt: |
+            Review the codebase for any TODO comments and create a summary.
+            If you find issues worth addressing, open an issue to track them.
+```
+
+For scheduled events, the `prompt` input is **required** since there's no comment to extract instructions from.計劃工作流在沒有用戶上下文的情況下運行以進行權限檢查，因此如果您希望 opencode 創建分支或 PR，工作流必須授予 `contents: write` 和 `pull-requests: write`。
+
+---
+
+### 拉取請求示例
+
+打開或更新 PR 時自動審核：
+
+```yaml title=".github/workflows/opencode-review.yml"
+name: opencode-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: read
+      issues: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: anomalyco/opencode/github@latest
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          model: anthropic/claude-sonnet-4-20250514
+          use_github_token: true
+          prompt: |
+            Review this pull request:
+            - Check for code quality issues
+            - Look for potential bugs
+            - Suggest improvements
+```
+
+對於 `pull_request` 事件，如果未提供 `prompt`，opencode 將默認審核拉取請求。
+
+---
+
+### 問題分類示例
+
+自動分類新問題。此示例過濾超過 30 天的帳戶以減少垃圾郵件：
+
+```yaml title=".github/workflows/opencode-triage.yml"
+name: Issue Triage
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Check account age
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const user = await github.rest.users.getByUsername({
+              username: context.payload.issue.user.login
+            });
+            const created = new Date(user.data.created_at);
+            const days = (Date.now() - created) / (1000 * 60 * 60 * 24);
+            return days >= 30;
+          result-encoding: string
+
+      - uses: actions/checkout@v6
+        if: steps.check.outputs.result == 'true'
+        with:
+          persist-credentials: false
+
+      - uses: anomalyco/opencode/github@latest
+        if: steps.check.outputs.result == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        with:
+          model: anthropic/claude-sonnet-4-20250514
+          prompt: |
+            Review this issue. If there's a clear fix or relevant docs:
+            - Provide documentation links
+            - Add error handling guidance for code examples
+            Otherwise, do not comment.
+```
+
+對於 `issues` 事件，`prompt` 輸入是**必需的**，因為沒有註釋可從中提取指令。
+
+---
+
+## 自定義提示
+
+覆蓋默認提示，為您的工作流程自定義 opencode 的行為。
+
+```yaml title=".github/workflows/opencode.yml"
+- uses: anomalyco/opencode/github@latest
+  with:
+    model: anthropic/claude-sonnet-4-5
+    prompt: |
+      Review this pull request:
+      - Check for code quality issues
+      - Look for potential bugs
+      - Suggest improvements
+```
+
+這對於執行與您的項目相關的特定審查標準、編碼標准或重點領域非常有用。
+
+---
+
+## 示例
+
+以下是如何在 GitHub 中使用 opencode 的一些示例。
+
+- **解釋一個問題**
+
+  在 GitHub 問題中添加此評論。
+
+  ```
+  /opencode explain this issue
+  ```
+
+  opencode 將閱讀整個線程，包括所有評論，並回复並提供清晰的解釋。
+
+- **解決問題**
+
+  在 GitHub 問題中，說：
+
+  ```
+  /opencode fix this
+  ```
+
+  opencode 將創建一個新分支，實施更改，並使用更改打開 PR。
+
+- **審查 PR 並進行更改**
+
+  在 GitHub PR 上留下以下評論。
+
+  ```
+  Delete the attachment from S3 when the note is removed /oc
+  ```
+
+  Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
+
+- **查看特定代碼行**
+
+  直接在 PR 的“文件”選項卡中的代碼行上留下評論。 opencode 自動檢測文件、行號和差異上下文以提供精確的響應。
+
+  ```
+  [Comment on specific lines in Files tab]
+  /oc add error handling here
+  ```
+
+  Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
+  - 正在審查的確切文件
+  - 具體代碼行
+  - 周圍的 diff 上下文
+  - 行號信息
+
+  這允許更有針對性的請求，而無需手動指定文件路徑或行號。

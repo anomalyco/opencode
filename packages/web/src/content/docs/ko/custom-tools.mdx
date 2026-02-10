@@ -1,0 +1,170 @@
+---
+title: Custom Tools
+description: Create tools the LLM can call in opencode.
+---
+
+사용자 정의 도구는 LLM이 대화 중에 호출 할 수있는 기능을 만듭니다. 그들은 `read`, `write` 및 `bash`와 같은 opencode의 [붙박이 도구] (./tools)와 함께 작동합니다.
+
+---
+
+## 도구 만들기
+
+도구는 **TypeScript** 또는 **JavaScript** 파일로 정의됩니다. 그러나 도구 정의는 ** 어떤 언어로 작성된 스크립트를 호출 할 수 있습니다 ** - TypeScript 또는 JavaScript는 도구 정의 자체에서만 사용됩니다.
+
+---
+
+## 위치
+
+그들은 정의 할 수 있습니다:
+
+- 프로젝트의 `.opencode/tools/` 디렉토리에 배치하여 로컬.
+- 또는 전 세계적으로 `~/.config/opencode/tools/`에 배치하여.
+
+---
+
+## 구조
+
+도구를 만드는 가장 쉬운 방법은 `tool()` helper를 사용하여 유형 안전 및 검증을 제공합니다.
+
+```ts title=".opencode/tools/database.ts" {1}
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Query the project database",
+  args: {
+    query: tool.schema.string().describe("SQL query to execute"),
+  },
+  async execute(args) {
+    // Your database logic here
+    return `Executed query: ${args.query}`
+  },
+})
+```
+
+**파일 이름**는 **tool name**가 됩니다. 위는 `database` 공구를 만듭니다.
+
+---
+
+### 파일 당 다수 공구
+
+단일 파일에서 여러 도구를 수출할 수 있습니다. 각 수출은 ** 별도의 도구 ** 이름 ** `<filename>_<exportname>`**:
+
+```ts title=".opencode/tools/math.ts"
+import { tool } from "@opencode-ai/plugin"
+
+export const add = tool({
+  description: "Add two numbers",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args) {
+    return args.a + args.b
+  },
+})
+
+export const multiply = tool({
+  description: "Multiply two numbers",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args) {
+    return args.a * args.b
+  },
+})
+```
+
+이것은 2개의 공구를 만듭니다: `math_add`와 `math_multiply`.
+
+---
+
+#### 가격
+
+`tool.schema`를 사용할 수 있습니다, 그냥 [Zod](https://zod.dev), 인수 유형을 정의합니다.
+
+```ts "tool.schema"
+args: {
+  query: tool.schema.string().describe("SQL query to execute")
+}
+```
+
+[Zod](https://zod.dev)를 직접 가져오고 일반 객체를 반환할 수 있습니다.
+
+```ts {6}
+import { z } from "zod"
+
+export default {
+  description: "Tool description",
+  args: {
+    param: z.string().describe("Parameter description"),
+  },
+  async execute(args, context) {
+    // Tool implementation
+    return "result"
+  },
+}
+```
+
+---
+
+### 텍스트
+
+도구는 현재 세션에 대한 컨텍스트를받습니다.
+
+```ts title=".opencode/tools/project.ts" {8}
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Get project information",
+  args: {},
+  async execute(args, context) {
+    // Access context information
+    const { agent, sessionID, messageID, directory, worktree } = context
+    return `Agent: ${agent}, Session: ${sessionID}, Message: ${messageID}, Directory: ${directory}, Worktree: ${worktree}`
+  },
+})
+```
+
+세션 작업 디렉토리에 `context.directory`를 사용합니다.
+git worktree 루트에 `context.worktree`를 사용합니다.
+
+---
+
+## 예제
+
+### Python 도구 작성
+
+원하는 모든 언어로 도구를 쓸 수 있습니다. 여기에 Python을 사용하여 두 개의 숫자를 추가하는 예입니다.
+
+먼저 Python 스크립트로 도구를 만듭니다.
+
+```python title=".opencode/tools/add.py"
+import sys
+
+a = int(sys.argv[1])
+b = int(sys.argv[2])
+print(a + b)
+```
+
+그런 다음 도구 정의를 만듭니다.
+
+```ts title=".opencode/tools/python-add.ts" {10}
+import { tool } from "@opencode-ai/plugin"
+import path from "path"
+
+export default tool({
+  description: "Add two numbers using Python",
+  args: {
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
+  },
+  async execute(args, context) {
+    const script = path.join(context.worktree, ".opencode/tools/add.py")
+    const result = await Bun.$`python3 ${script} ${args.a} ${args.b}`.text()
+    return result.trim()
+  },
+})
+```
+
+여기에 우리는 [`Bun.$`](https://bun.com/docs/runtime/shell) 유틸리티를 사용하여 파이썬 스크립트를 실행합니다.

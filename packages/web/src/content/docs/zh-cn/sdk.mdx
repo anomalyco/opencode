@@ -1,0 +1,391 @@
+---
+title: 軟體開發工具包
+description: opencode 服务器的类型不同于安全 JS 客户端。
+---
+
+import config from "../../../../config.mjs"
+export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
+
+opencode JS/TS SDK 提供类型其他安全的客户端用于与服务器交互。
+使用它以程序设计方式构建集成和控制opencode。
+
+[了解更多关于服务器如何工作的](/docs/server)。例如，检视社区构建的[projects](/docs/ecosystem#projects)。
+
+---
+
+## 安裝
+
+从npm安装SDK：
+
+```bash
+npm install @opencode-ai/sdk
+```
+
+---
+
+## 建立客戶端
+
+创建opencode的示例项：
+
+```javascript
+import { createOpencode } from "@opencode-ai/sdk"
+
+const { client } = await createOpencode()
+```
+
+這會同時啟動伺服器和客戶端
+
+#### 選項
+
+| 選項       | 型別          | 描述                           | 預設        |
+| ---------- | ------------- | ------------------------------ | ----------- |
+| `hostname` | `string`      | 服务器主机名                   | `127.0.0.1` |
+| `port`     | `number`      | 伺服器埠                       | `4096`      |
+| `signal`   | `AbortSignal` | 取消的中止讯号                 | `undefined` |
+| `timeout`  | `number`      | 服务器启动超时（以毫秒为单位） | `5000`      |
+| `config`   | `Config`      | 放置的财产                     | `{}`        |
+
+---
+
+## 配置
+
+You can pass a configuration object to customize behavior. The instance still picks up your `opencode.json`, but you can override or add configuration inline:
+
+```javascript
+import { createOpencode } from "@opencode-ai/sdk"
+
+const opencode = await createOpencode({
+  hostname: "127.0.0.1",
+  port: 4096,
+  config: {
+    model: "anthropic/claude-3-5-sonnet-20241022",
+  },
+})
+
+console.log(`Server running at ${opencode.server.url}`)
+
+opencode.server.close()
+```
+
+## 僅限客戶
+
+如果您已经有 opencode 的正在执行示例项，则可以创建一个客户端示例项来连线到它：
+
+```javascript
+import { createOpencodeClient } from "@opencode-ai/sdk"
+
+const client = createOpencodeClient({
+  baseUrl: "http://localhost:4096",
+})
+```
+
+#### 選項
+
+| 選項            | 型別       | 描述                         | 預設                    |
+| --------------- | ---------- | ---------------------------- | ----------------------- |
+| `baseUrl`       | `string`   | 伺服器的 URL                 | `http://localhost:4096` |
+| `fetch`         | `function` | 习俗获取实现                 | `globalThis.fetch`      |
+| `parseAs`       | `string`   | 响应解析方法                 | `auto`                  |
+| `responseStyle` | `string`   | 返回样式：`data` 或 `fields` | `fields`                |
+| `throwOnError`  | `boolean`  | 掷骰错误而不是返回           | `false`                 |
+
+---
+
+## 型別
+
+SDK 包括所有 API 型以外的 TypeScript 定义。直接汇入其中：
+
+```typescript
+import type { Session, Message, Part } from "@opencode-ai/sdk"
+```
+
+所有型別均根據伺服器的 OpenAPI 規範生成，並可在 <a href={typesUrl}> 型別檔案 </a> 中找到。
+
+---
+
+## 錯誤
+
+SDK 可能会丢掷错误，您可以捕获并处理这些错误：
+
+```typescript
+try {
+  await client.session.get({ path: { id: "invalid-id" } })
+} catch (error) {
+  console.error("Failed to get session:", (error as Error).message)
+}
+```
+
+---
+
+## 蜜蜂
+
+SDK跨越型别安全客户端公开所有服务器API。
+
+---
+
+### 全球的
+
+| 方法              | 描述                     | 回應                                 |
+| ----------------- | ------------------------ | ------------------------------------ |
+| `global.health()` | 检查服务器健康状况和版本 | `{ healthy: true, version: string }` |
+
+---
+
+#### 示例
+
+```javascript
+const health = await client.global.health()
+console.log(health.data.version)
+```
+
+---
+
+### 應用程式
+
+| 方法           | 描述               | 回應                                       |
+| -------------- | ------------------ | ------------------------------------------ |
+| `app.log()`    | 登录日志           | `boolean`                                  |
+| `app.agents()` | 列出所有可用的代理 | <a href={typesUrl}><code>代理[]</code></a> |
+
+---
+
+#### 示例
+
+```javascript
+// Write a log entry
+await client.app.log({
+  body: {
+    service: "my-app",
+    level: "info",
+    message: "Operation completed",
+  },
+})
+
+// List available agents
+const agents = await client.app.agents()
+```
+
+---
+
+### 專案
+
+| 方法                | 描述         | 回應                                       |
+| ------------------- | ------------ | ------------------------------------------ |
+| `project.list()`    | 列出所有專案 | <a href={typesUrl}><code>專案[]</code></a> |
+| `project.current()` | 獲取當前專案 | <a href={typesUrl}><code>專案</code></a>   |
+
+---
+
+#### 示例
+
+```javascript
+// List all projects
+const projects = await client.project.list()
+
+// Get current project
+const currentProject = await client.project.current()
+```
+
+---
+
+### 小路
+
+| 方法         | 描述         | 回應                                     |
+| ------------ | ------------ | ---------------------------------------- |
+| `path.get()` | 獲取當前路徑 | <a href={typesUrl}><code>路徑</code></a> |
+
+---
+
+#### 示例
+
+```javascript
+// Get current path information
+const pathInfo = await client.path.get()
+```
+
+---
+
+### 配置
+
+| 方法                 | 描述                 | 回應                                                                                                |
+| -------------------- | -------------------- | --------------------------------------------------------------------------------------------------- |
+| `config.get()`       | 獲取配置資訊         | <a href={typesUrl}><code>配置</code></a>                                                            |
+| `config.providers()` | 列出提供商和預設模型 | `{ providers: `<a href={typesUrl}><code>提供商[]</code></a>`, default: { [key: string]: string } }` |
+
+---
+
+#### 示例
+
+```javascript
+const config = await client.config.get()
+
+const { providers, default: defaults } = await client.config.providers()
+```
+
+---
+
+### 會議
+
+| 方法                                                       | 描述                               | 筆記                                                                                                                            |
+| ---------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `session.list()`                                           | 列出會話                           | 返回 <a href={typesUrl}><code>Session[]</code></a>                                                                              |
+| `session.get({ path })`                                    | 獲取會話                           | 返回 <a href={typesUrl}><code>會話</code></a>                                                                                   |
+| `session.children({ path })`                               | 列出子會話                         | 返回 <a href={typesUrl}><code>Session[]</code></a>                                                                              |
+| `session.create({ body })`                                 | 建立會話                           | 返回 <a href={typesUrl}><code>會話</code></a>                                                                                   |
+| `session.delete({ path })`                                 | 离开会话                           | 返回`boolean`                                                                                                                   |
+| `session.update({ path, body })`                           | 更新會話屬性                       | 返回 <a href={typesUrl}><code>會話</code></a>                                                                                   |
+| `session.init({ path, body })`                             | Analyze app and create `AGENTS.md` | Returns `boolean`                                                                                                               |
+| `session.abort({ path })`                                  | 中止正在执行的会话                 | 返回`boolean`                                                                                                                   |
+| `session.share({ path })`                                  | 分享會                             | 返回 <a href={typesUrl}><code>會話</code></a>                                                                                   |
+| `session.unshare({ path })`                                | 取消共享會話                       | 返回 <a href={typesUrl}><code>會話</code></a>                                                                                   |
+| `session.summarize({ path, body })`                        | 会议总结                           | 返回`boolean`                                                                                                                   |
+| `session.messages({ path })`                               | 列出會話中的訊息                   | 返回 `{ info: `<a href={typesUrl}><code>訊息</code></a>`, parts: `<a href={typesUrl}><code>部分[]</code></a>`}[]`               |
+| `session.message({ path })`                                | 獲取訊息詳情                       | 返回 `{ info: `<a href={typesUrl}><code>訊息</code></a>`, parts: `<a href={typesUrl}><code>部分[]</code></a>`}`                 |
+| `session.prompt({ path, body })`                           | 傳送提示資訊                       | `body.noReply: true` 返回 UserMessage（僅限上下文）。預設返回 <a href={typesUrl}><code>AssistantMessage</code></a> 以及 AI 響應 |
+| `session.command({ path, body })`                          | 向會話傳送命令                     | 返回 `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>部分[]</code></a>`}`     |
+| `session.shell({ path, body })`                            | 執行 shell 命令                    | 返回 <a href={typesUrl}><code>AssistantMessage</code></a>                                                                       |
+| `session.revert({ path, body })`                           | 回覆訊息                           | 返回 <a href={typesUrl}><code>會話</code></a>                                                                                   |
+| `session.unrevert({ path })`                               | 恢復已恢復的訊息                   | 返回 <a href={typesUrl}><code>會話</code></a>                                                                                   |
+| `postSessionByIdPermissionsByPermissionId({ path, body })` | 回复许可权限请求                   | 返回`boolean`                                                                                                                   |
+
+---
+
+#### 示例
+
+```javascript
+// Create and manage sessions
+const session = await client.session.create({
+  body: { title: "My session" },
+})
+
+const sessions = await client.session.list()
+
+// Send a prompt message
+const result = await client.session.prompt({
+  path: { id: session.id },
+  body: {
+    model: { providerID: "anthropic", modelID: "claude-3-5-sonnet-20241022" },
+    parts: [{ type: "text", text: "Hello!" }],
+  },
+})
+
+// Inject context without triggering AI response (useful for plugins)
+await client.session.prompt({
+  path: { id: session.id },
+  body: {
+    noReply: true,
+    parts: [{ type: "text", text: "You are a helpful assistant." }],
+  },
+})
+```
+
+---
+
+### 檔案
+
+| 方法                      | 描述                 | 回應                                                                                |
+| ------------------------- | -------------------- | ----------------------------------------------------------------------------------- |
+| `find.text({ query })`    | 搜索档案中文字       | 具有 `path`、`lines`、`line_number`、`absolute_offset`、`submatches` 的匹配对象数组 |
+| `find.files({ query })`   | 按名称查询档案和目录 | `string[]`（路径）                                                                  |
+| `find.symbols({ query })` | 查詢工作區符號       | <a href={typesUrl}><code>符號[]</code></a>                                          |
+| `file.read({ query })`    | 读取档案             | `{ type: "raw" \| "patch", content: string }`                                       |
+| `file.status({ query? })` | 獲取跟蹤檔案的狀態   | <a href={typesUrl}><code>檔案[]</code></a>                                          |
+
+`find.files` 支持一些可选的查询栏位：
+
+- `type`：`"file"` 或 `"directory"`
+- `directory`：覆盖搜索的专案根目录
+- `limit`：最大结果 (1–200)
+
+---
+
+#### 示例
+
+```javascript
+// Search and read files
+const textResults = await client.find.text({
+  query: { pattern: "function.*opencode" },
+})
+
+const files = await client.find.files({
+  query: { query: "*.ts", type: "file" },
+})
+
+const directories = await client.find.files({
+  query: { query: "packages", type: "directory", limit: 20 },
+})
+
+const content = await client.file.read({
+  query: { path: "src/index.ts" },
+})
+```
+
+---
+
+### TUI
+
+| 方法                           | 描述             | 回應      |
+| ------------------------------ | ---------------- | --------- |
+| `tui.appendPrompt({ body })`   | 将文字附加到提示 | `boolean` |
+| `tui.openHelp()`               | 开启帮助对话方块 | `boolean` |
+| `tui.openSessions()`           | 开启会话选择器   | `boolean` |
+| `tui.openThemes()`             | 开启主题选择器   | `boolean` |
+| `tui.openModels()`             | 开启模型选择器   | `boolean` |
+| `tui.submitPrompt()`           | 提交当前提示     | `boolean` |
+| `tui.clearPrompt()`            | 清除提示         | `boolean` |
+| `tui.executeCommand({ body })` | 执行命令         | `boolean` |
+| `tui.showToast({ body })`      | 显示吐司通知     | `boolean` |
+
+---
+
+#### 示例
+
+```javascript
+// Control TUI interface
+await client.tui.appendPrompt({
+  body: { text: "Add this to prompt" },
+})
+
+await client.tui.showToast({
+  body: { message: "Task completed", variant: "success" },
+})
+```
+
+---
+
+### 授權
+
+| 方法                | 描述             | 回應      |
+| ------------------- | ---------------- | --------- |
+| `auth.set({ ... })` | 设定身份验证凭据 | `boolean` |
+
+---
+
+#### 示例
+
+```javascript
+await client.auth.set({
+  path: { id: "anthropic" },
+  body: { type: "api", key: "your-api-key" },
+})
+```
+
+---
+
+### 活動
+
+| 方法                | 描述               | 回應               |
+| ------------------- | ------------------ | ------------------ |
+| `event.subscribe()` | 服务器传送的事件流 | 服务器传送的事件流 |
+
+---
+
+#### 示例
+
+```javascript
+// Listen to real-time events
+const events = await client.event.subscribe()
+for await (const event of events.stream) {
+  console.log("Event:", event.type, event.properties)
+}
+```

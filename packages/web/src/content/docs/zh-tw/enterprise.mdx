@@ -1,0 +1,170 @@
+---
+title: 企業
+description: 在您的組織中安全地使用 opencode。
+---
+
+import config from "../../../../config.mjs"
+export const email = `mailto:${config.email}`
+
+opencode Enterprise 適用於希望確保其代碼和數據永遠不會離開其基礎設施的組織。它可以通過使用與 SSO 和內部 AI 網關集成的集中式配置來實現此目的。
+
+:::note
+opencode 不存儲您的任何代碼或上下文數據。
+:::
+
+要開始使用 opencode Enterprise：
+
+1. 與您的團隊進行內部試驗。
+2. **<a href={email}>聯繫我們</a>**討論定價和實施選項。
+
+---
+
+## 審判
+
+opencode 是開源的，不存儲您的任何代碼或上下文數據，因此您的開發人員只需 [開始吧](/docs/) 並進行試用。
+
+---
+
+### 數據處理
+
+**opencode 不會存儲您的代碼或上下文數據。 ** 所有處理都在本地進行或通過直接 API 調用您的 AI 提供商。
+
+這意味著只要您使用您信任的提供商或內部提供商
+AI網關，您可以安全使用opencode。
+
+這裡唯一需要注意的是可選的 `/share` 功能。
+
+---
+
+#### 分享對話
+
+如果用戶啟用 `/share` 功能，對話和與之關聯的數據將被發送到我們用於在 opencode.ai 上託管這些共享頁面的服務。
+
+數據當前通過我們的 CDN 邊緣網絡提供服務，並緩存在用戶附近的邊緣。
+
+我們建議您在試用時禁用此功能。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "disabled"
+}
+```
+
+[了解更多關於分享的信息](/docs/share)。
+
+---
+
+### 代碼所有權
+
+**您擁有 opencode 生成的所有代碼。 ** 沒有許可限製或所有權聲明。
+
+---
+
+## 定價
+
+我們對 opencode Enterprise 使用單機模型。如果您有自己的 LLM 網關，我們不會對使用的令牌收取費用。有關定價和實施選項的更多詳細信息，請**<a href={email}>聯繫我們</a>**。
+
+---
+
+## 部署
+
+完成試用並準備好使用 opencode 後，請訪問：
+您的組織，您可以**<a href={email}>聯繫我們</a>**進行討論
+定價和實施選項。
+
+---
+
+### 中央配置
+
+我們可以將 opencode 設置為為您的整個組織使用單一的中央配置。
+
+這種集中式配置可以與您的 SSO 提供商集成，並確保所有用戶僅訪問您的內部 AI 網關。
+
+---
+
+### 單點登錄集成
+
+通過中央配置，opencode 可以與您組織的 SSO 提供商集成以進行身份​​驗證。
+
+這使得 opencode 能夠通過現有的身份管理系統獲取內部 AI 網關的憑據。
+
+---
+
+### 內部AI網關
+
+通過中央配置，opencode 還可以配置為僅使用您的內部 AI 網關。
+
+您還可以禁用所有其他 AI 提供商，確保所有請求都通過組織批准的基礎設施。
+
+---
+
+### 自託管
+
+雖然我們建議禁用共享頁面以確保您的數據永遠不會離開
+您的組織，我們還可以幫助您在您的基礎設施上自行託管它們。
+
+目前這已在我們的路線圖上。如果您有興趣，**<a href={email}>讓我們知道</a>**。
+
+---
+
+## 常問問題
+
+<details>
+<summary>什麼是 opencode Enterprise？ </summary>
+
+opencode Enterprise 適用於希望確保其代碼和數據永遠不會離開其基礎設施的組織。它可以通過使用與 SSO 和內部 AI 網關集成的集中式配置來實現此目的。
+
+</details>
+
+<details>
+<summary>如何開始使用 opencode Enterprise？ </summary>
+
+只需與您的團隊進行內部試用即可。 opencode 默認情況下不存儲您的代碼或上下文數據，因此可以輕鬆上手。
+
+然後**<a href={email}>聯繫我們</a>**討論定價和實施選項。
+
+</details>
+
+<details>
+<summary>企業定價如何運作？ </summary>
+
+我們提供按席位企業定價。如果您有自己的 LLM 網關，我們不會對使用的令牌收取費用。如需了解更多詳情，請**<a href={email}>聯繫我們</a>**，獲取根據您組織的需求定制的報價。
+
+</details>
+
+<details>
+<summary>opencode Enterprise 保證我的數據安全嗎？ </summary>
+
+是的。 opencode 不存儲您的代碼或上下文數據。所有處理都在本地進行或通過直接 API 調用您的 AI 提供商。通過中央配置和 SSO 集成，您的數據在組織的基礎架構中保持安全。
+
+</details>
+
+<details>
+<summary>我們可以使用自己的私有 NPM 註冊表嗎？ </summary>
+
+opencode 通過 Bun 的本機 `.npmrc` 文件支持來支持私有 npm 註冊表。如果您的組織使用私有註冊表，例如 JFrog Artifactory、Nexus 或類似的註冊表，請確保開發人員在運行 opencode 之前經過身份驗證。
+
+要使用您的私有註冊表設置身份驗證：
+
+```bash
+npm login --registry=https://your-company.jfrog.io/api/npm/npm-virtual/
+```
+
+這將創建帶有身份驗證詳細信息的`~/.npmrc`。 opencode 會自動
+拿起這個。
+
+:::caution
+在運行 opencode 之前，您必須登錄私有註冊表。
+:::
+
+或者，您可以手動配置 `.npmrc` 文件：
+
+```bash title="~/.npmrc"
+registry=https://your-company.jfrog.io/api/npm/npm-virtual/
+//your-company.jfrog.io/api/npm/npm-virtual/:_authToken=${NPM_AUTH_TOKEN}
+```
+
+開發人員必須在運行 opencode 之前登錄私有註冊表，以確保可以從企業註冊表安裝軟件包。
+
+</details>
