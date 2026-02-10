@@ -1,16 +1,16 @@
 ---
 title: Plugins
-description: Napišite vlastite dodatke za proširenje OpenCode-a.
+description: Napišite vlastite dodatke za proširenje OpenCode.
 ---
 
-Dodaci vam omogućavaju da proširite OpenCode spajanjem na različite događaje i prilagođavanjem ponašanja. Možete kreirati dodatke za dodavanje novih funkcija, integraciju sa eksternim uslugama ili izmenu zadanog ponašanja OpenCode-a.
+Dodaci vam omogućavaju da proširite OpenCode spajanjem na različite događaje i prilagođavanjem ponašanja. Možete kreirati dodatke za dodavanje novih funkcija, integraciju sa eksternim uslugama ili izmenu zadanog ponašanja OpenCode.
 Za primjere, pogledajte [plugins](/docs/ecosystem#plugins) kreirane od strane zajednice.
 
 ---
 
 ## Koristite dodatak
 
-## Postoje dva načina za učitavanje dodataka.
+Postoje dva načina za učitavanje dodataka.
 
 ### Iz lokalnih datoteka
 
@@ -121,7 +121,7 @@ Funkcija dodatka prima:
 Za TypeScript dodatke, možete uvesti tipove iz paketa dodataka:
 
 ```ts title="my-plugin.ts" {1}
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@opencodei/plugin"
 
 export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
@@ -204,7 +204,7 @@ Dodaci se mogu pretplatiti na događaje kao što je prikazano ispod u odjeljku P
 
 ## Primjeri
 
-## Evo nekoliko primjera dodataka koje možete koristiti za proširenje otvorenog koda.
+Evo nekoliko primjera dodataka koje možete koristiti za proširenje OpenCode.
 
 ### Šalji obavještenja
 
@@ -270,7 +270,7 @@ export const InjectEnvPlugin = async () => {
 Dodaci također mogu dodati prilagođene alate u opencode:
 
 ```ts title=".opencode/plugins/custom-tools.ts"
-import { type Plugin, tool } from "@opencode-ai/plugin"
+import { type Plugin, tool } from "@opencodei/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
   return {
@@ -316,14 +316,14 @@ export const MyPlugin = async ({ client }) => {
 }
 ```
 
-## Nivoi: `debug`, `info`, `warn`, `error`. Pogledajte [SDK dokumentaciju](https://opencode.ai/docs/sdk) za detalje.
+Nivoi su: `debug`, `info`, `warn`, `error`. Pogledajte [SDK dokumentaciju](https://opencode.ai/docs/sdk) za detalje.
 
 ### Kuke za sabijanje
 
 Prilagodite kontekst uključen kada se sesija zbije:
 
 ```ts title=".opencode/plugins/compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@opencodei/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
   return {
@@ -346,7 +346,7 @@ Include any state that should persist across compaction:
 Također možete u potpunosti zamijeniti prompt za sabijanje postavljanjem `output.prompt`:
 
 ```ts title=".opencode/plugins/custom-compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@opencodei/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {
   return {

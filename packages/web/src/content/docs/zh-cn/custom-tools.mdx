@@ -1,13 +1,13 @@
 ---
 title: 定制工具
-description: 創建法學碩士可以在opencode中調用的工具。
+description: 创建法學碩士可以在opencode中调用的工具。
 ---
 
 自定义工具是您创建的函数，LLM 可以在对话期间调用。它们与 opencode 的[内置工具](/docs/tools) 一起工作，例如 `read`、`write` 和 `bash`。
 
 ---
 
-## 創建工具
+## 创建工具
 
 工具定义为 **TypeScript** 或 **JavaScript** 文件。但是，工具定义调用可以使用 **任何语言** 编写的脚本 - TypeScript 或 JavaScript 仅用于工具定义本身。
 
@@ -15,7 +15,7 @@ description: 創建法學碩士可以在opencode中調用的工具。
 
 ### 地點
 
-它們可以定義為：
+它們可以定義为：
 
 - 通过将它们放在项目的 `.opencode/tools/` 目录中来本地进行。
 - 或者在全局范围内，将它们放在 `~/.config/opencode/tools/` 中。
@@ -45,9 +45,9 @@ export default tool({
 
 ---
 
-#### 每個文件多個工具
+#### 每个文件多个工具
 
-您還可以從單個文件導出多個工具。每個導出都會成為**一個單獨的工具**，名稱為**`<filename>_<exportname>`**：
+您还可以從單个文件導出多个工具。每个導出都会成为**一个單獨的工具**，名称为**`<filename>_<exportname>`**：
 
 ```ts title=".opencode/tools/math.ts"
 import { tool } from "@opencode-ai/plugin"
@@ -110,7 +110,7 @@ export default {
 
 ### 情境
 
-工具接收有關當前會話的上下文：
+工具接收有關当前会话的上下文：
 
 ```ts title=".opencode/tools/project.ts" {8}
 import { tool } from "@opencode-ai/plugin"
@@ -147,7 +147,7 @@ b = int(sys.argv[2])
 print(a + b)
 ```
 
-然後創建調用它的工具定義：
+然後创建调用它的工具定義：
 
 ```ts title=".opencode/tools/python-add.ts" {10}
 import { tool } from "@opencode-ai/plugin"

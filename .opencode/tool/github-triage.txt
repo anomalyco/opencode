@@ -1,4 +1,4 @@
-Use this tool to assign and/or label a Github issue.
+Use this tool to assign and/or label a GitHub issue.
 
 You can assign the following users:
 - thdxr

@@ -172,7 +172,7 @@ opencode run "Hello world"
 
 - `scroll_acceleration.enabled` - macOS 스타일 스크롤 가속을 가능하게합니다. ** `scroll_speed`에 대한 준비. **
 - `scroll_speed` - 사용자 정의 스크롤 속도 승수 (기본: `3`, 최소: `1`). `scroll_acceleration.enabled`가 `true`인 경우에 Ignored.
-- `diff_style` - 제어 디프 렌더링. `"auto"`는 맨끝 폭에, `"stacked"` 항상 단 하나 란을 보여줍니다 적응시킵니다.
+- `diff_style` - 제어 디프 렌더링. `"auto"`는 terminal 폭에, `"stacked"` 항상 단 하나 란을 보여줍니다 적응시킵니다.
 
 [TUI를 사용하여 더 자세히 알아보기](/docs/tui).
 
@@ -256,7 +256,7 @@ LLM은 `tools` 옵션을 통해 사용할 수 있습니다.
 }
 ```
 
-- `timeout` - 밀리 초 (과태: 300000)에서 타임 아웃 요청. `false`로 분리할 수 있습니다.
+- `timeout` - 밀리 초 (기본: 300000)에서 타임 아웃 요청. `false`로 분리할 수 있습니다.
 - `setCacheKey` - 캐시 키가 항상 지정된 공급자를 위해 설정됩니다.
 
 [local model](/docs/models#local)을 구성할 수 있습니다. [더 알아보기](/docs/models).
@@ -265,7 +265,7 @@ LLM은 `tools` 옵션을 통해 사용할 수 있습니다.
 
 ### 공급자 특정 선택권
 
-몇몇 공급자는 일반적인 `timeout` 및 `apiKey` 조정을 넘어서 추가 윤곽 선택권을 지원합니다.
+몇몇 공급자는 일반적인 `timeout` 및 `apiKey` 조정을 넘어서 추가 구성 선택권을 지원합니다.
 
 ##### 아마존 베드록
 
@@ -286,8 +286,8 @@ Amazon Bedrock는 AWS 별 구성을 지원합니다:
 }
 ```
 
-- `region` - Bedrock를 위한 AWS 지역 (`AWS_REGION` env var 또는 `us-east-1`에 과태)
-- `profile` - AWS는 `~/.aws/credentials` (`AWS_PROFILE` env var에 과태)에서 단면도 지명했습니다
+- `region` - Bedrock를 위한 AWS 지역 (`AWS_REGION` env var 또는 `us-east-1`에 기본)
+- `profile` - AWS는 `~/.aws/credentials` (`AWS_PROFILE` env var에 기본)에서 단면도 지명했습니다
 - `endpoint` - VPC 엔드 포인트에 대한 사용자 정의 엔드 포인트 URL. 이것은 AWS 별 용어를 사용하여 일반적인 `baseURL` 옵션에 대한 별명입니다. 둘 다 지정되는 경우에, `endpoint`는 전진합니다.
 
 :::note
@@ -339,7 +339,7 @@ Bearer 토큰 (`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 프로파일 기
 
 ---
 
-### 과태 대리인
+### 기본 에이전트
 
 `default_agent` 옵션을 사용하여 기본 에이전트를 설정할 수 있습니다. 아무도 명시적으로 지정되지 않을 때 에이전트가 사용되는 결정.
 
@@ -350,7 +350,7 @@ Bearer 토큰 (`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 프로파일 기
 }
 ```
 
-기본 대리인은 1 차적인 대리인이어야 합니다 (미약 아닙니다). 이것은 `"build"` 또는 `"plan"`, 또는 정의된 [custom 대리인] (./agents) 같이 붙박이 대리인일 수 있습니다. 지정된 에이전트가 존재하지 않는 경우, opencode는 경고로 `"build"`로 돌아갑니다.
+기본 에이전트은 주요 에이전트이어야 합니다 (미약 아닙니다). 이것은 `"build"` 또는 `"plan"`, 또는 정의된 [custom 에이전트](./agents) 같이 붙박이 에이전트일 수 있습니다. 지정된 에이전트가 존재하지 않는 경우, opencode는 경고로 `"build"`로 돌아갑니다.
 
 이 설정은 모든 인터페이스에서 적용됩니다: TUI, CLI (`opencode run`), 데스크탑 앱 및 GitHub Action.
 
@@ -560,7 +560,7 @@ Homebrew와 같은 패키지 관리자를 사용하여 설치되지 않은 경�
 ```
 
 이 경로와 glob 패턴의 배열을 사용하여 명령 파일. [더 알아보기
-여기 규칙에 관하여] (./rules).
+여기 규칙에 관하여](./rules).
 
 ---
 
