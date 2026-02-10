@@ -1,0 +1,170 @@
+---
+title: 企業
+description: 在您的组织中安全地使用 opencode。
+---
+
+import config from "../../../../config.mjs"
+export const email = `mailto:${config.email}`
+
+opencode Enterprise 适用于希望确保其代码和数据永远不会离开其基础设施的组织。它可以通过使用与 SSO 和内部 AI 网关集成的集中方式配置来实现此目的。
+
+:::note
+opencode 不存储您的任何代码或上下文数据。
+:::
+
+要开始使用opencode Enterprise：
+
+1. 與您的團隊進行內部試驗。
+2. **<a href={email}>聯繫我們</a>**討論定價和實施選項。
+
+---
+
+## 審判
+
+opencode 是开源的，不存储您的任何代码或上下文数据，因此您的开发人员只需 [开始吧](/docs/) 并进行试用。
+
+---
+
+### 數據處理
+
+**opencode 不会存储您的代码或上下文数据。 **所有处理都在本地进行或通过直接 API 调用您的 AI 成功。
+
+這意味著只要您使用您信任的提供商或內部提供商
+AI网关，您可以安全使用opencode。
+
+这里唯一需要注意的是可选的 `/share` 功能。
+
+---
+
+#### 分享對話
+
+如果启用用户 `/share` 功能，对话和关联的数据将被发送到我们用于在 opencode.ai 上托管这些共享页面的服务。
+
+数据当前通过我们的CDN边缘网络提供服务，并缓存在用户附近的边缘。
+
+我們建議您在試用時禁用此功能。
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "share": "disabled"
+}
+```
+
+[了解更多关于分享的信息](/docs/share)。
+
+---
+
+### 代碼所有權
+
+**您拥有 opencode 生成的所有代码。 ** 没有许可限制或语音报表。
+
+---
+
+## 定價
+
+我們對 opencode Enterprise 使用單機模型。如果您有自己的 LLM 網關，我們不會對使用的令牌收取費用。有關定價和實施選項的更多詳細信息，請**<a href={email}>聯繫我們</a>**。
+
+---
+
+## 部署
+
+完成试验并准备好使用 opencode 后，请访问：
+您的組織，您可以**<a href={email}>聯繫我們</a>**進行討論
+定價和實施選項。
+
+---
+
+### 中央配置
+
+我们可以将 opencode 设置为您的整个组织使用单一的中央配置。
+
+这种集中式配置可以与您的 SSO 成功集成，并确保所有用户仅访问您的内部 AI 网关。
+
+---
+
+### 單點登錄集成
+
+通过中央配置，opencode 可以与您组织的 SSO 成功集成以进行身份​​​​验证。
+
+这使得 opencode 能够通过现有的身份管理系统获取内部 AI 网关的凭据。
+
+---
+
+### 内部AI网关
+
+通过中央配置，opencode 还可以配置为仅使用您的内部 AI 网关。
+
+您还可以取消所有其他人工智能启动，确保所有请求都通过组织批准的基础设施。
+
+---
+
+### 自託管
+
+雖然我們建議禁用共享頁面以確保您的數據永遠不會離開
+您的組織，我們還可以幫助您在您的基礎設施上自行託管它們。
+
+目前這已在我們的路線圖上。如果您有興趣，**<a href={email}>讓我們知道</a>**。
+
+---
+
+## 常問問題
+
+<details>
+<summary>什麼是 opencode Enterprise？ </summary>
+
+opencode Enterprise 适用于希望确保其代码和数据永远不会离开其基础设施的组织。它可以通过使用与 SSO 和内部 AI 网关集成的集中方式配置来实现此目的。
+
+</details>
+
+<details>
+<summary>如何開始使用 opencode Enterprise？ </summary>
+
+与您的团队进行内部实验即可。opencode 默认情况下不存储您的代码或上下文数据，可以轻松上手。
+
+然後**<a href={email}>聯繫我們</a>**討論定價和實施選項。
+
+</details>
+
+<details>
+<summary>企業定價如何運作？ </summary>
+
+我們提供按席位企業定價。如果您有自己的 LLM 網關，我們不會對使用的令牌收取費用。如需了解更多詳情，請**<a href={email}>聯繫我們</a>**，獲取根據您組織的需求定制的報價。
+
+</details>
+
+<details>
+<summary>opencode Enterprise 保證我的數據安全嗎？ </summary>
+
+opencode 不存储您的代码或上下文数据。所有处理都在本地进行或通过直接 API 调用您的 AI 工作。通过中央配置和 SSO 集成，您的数据在组织的基础架构中保持安全。
+
+</details>
+
+<details>
+<summary>我們可以使用自己的私有 NPM 註冊表嗎？ </summary>
+
+opencode 通过 Bun 的本机 `.npmrc` 文件支持来支持香蕉 npm 肥料。如果您的组织使用了花生，例如 JFrog Artifactory、Nexus 或类似的肥料，请确保开发人员在运行 opencode 之前经过身份验证。
+
+要使用您的私有註冊表設置身份驗證：
+
+```bash
+npm login --registry=https://your-company.jfrog.io/api/npm/npm-virtual/
+```
+
+这将创建带有身份验证详细信息的 `~/.npmrc`。 opencode 会自动
+拿起這個。
+
+:::caution
+在运行 opencode 之前，您必须登录灌木丛。
+:::
+
+或者，您可以手动配置`.npmrc`文件：
+
+```bash title="~/.npmrc"
+registry=https://your-company.jfrog.io/api/npm/npm-virtual/
+//your-company.jfrog.io/api/npm/npm-virtual/:_authToken=${NPM_AUTH_TOKEN}
+```
+
+开发人员必须在运行opencode之前登录棉花，以确保从企业种植樱桃。
+
+</details>

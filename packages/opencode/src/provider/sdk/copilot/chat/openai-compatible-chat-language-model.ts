@@ -219,7 +219,13 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
     // text content:
     const text = choice.message.content
     if (text != null && text.length > 0) {
-      content.push({ type: "text", text })
+      content.push({
+        type: "text",
+        text,
+        providerMetadata: choice.message.reasoning_opaque
+          ? { copilot: { reasoningOpaque: choice.message.reasoning_opaque } }
+          : undefined,
+      })
     }
 
     // reasoning content (Copilot uses reasoning_text):
@@ -243,6 +249,9 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
           toolCallId: toolCall.id ?? generateId(),
           toolName: toolCall.function.name,
           input: toolCall.function.arguments!,
+          providerMetadata: choice.message.reasoning_opaque
+            ? { copilot: { reasoningOpaque: choice.message.reasoning_opaque } }
+            : undefined,
         })
       }
     }
@@ -478,7 +487,11 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
               }
 
               if (!isActiveText) {
-                controller.enqueue({ type: "text-start", id: "txt-0" })
+                controller.enqueue({
+                  type: "text-start",
+                  id: "txt-0",
+                  providerMetadata: reasoningOpaque ? { copilot: { reasoningOpaque } } : undefined,
+                })
                 isActiveText = true
               }
 
@@ -559,6 +572,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
                         toolCallId: toolCall.id ?? generateId(),
                         toolName: toolCall.function.name,
                         input: toolCall.function.arguments,
+                        providerMetadata: reasoningOpaque ? { copilot: { reasoningOpaque } } : undefined,
                       })
                       toolCall.hasFinished = true
                     }
@@ -601,6 +615,7 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
                     toolCallId: toolCall.id ?? generateId(),
                     toolName: toolCall.function.name,
                     input: toolCall.function.arguments,
+                    providerMetadata: reasoningOpaque ? { copilot: { reasoningOpaque } } : undefined,
                   })
                   toolCall.hasFinished = true
                 }

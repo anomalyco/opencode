@@ -17,7 +17,7 @@ type PersistTarget = {
 const LEGACY_STORAGE = "default.dat"
 const GLOBAL_STORAGE = "opencode.global.dat"
 const LOCAL_PREFIX = "opencode."
-const fallback = { disabled: false }
+const fallback = new Map<string, boolean>()
 
 const CACHE_MAX_ENTRIES = 500
 const CACHE_MAX_BYTES = 8 * 1024 * 1024
@@ -63,6 +63,14 @@ function cacheGet(key: string) {
   cache.delete(key)
   cache.set(key, entry)
   return entry.value
+}
+
+function fallbackDisabled(scope: string) {
+  return fallback.get(scope) === true
+}
+
+function fallbackSet(scope: string) {
+  fallback.set(scope, true)
 }
 
 function quota(error: unknown) {
@@ -142,7 +150,6 @@ function write(storage: Storage, key: string, value: string) {
   }
 
   const ok = evict(storage, key, value)
-  if (!ok) cacheSet(key, value)
   return ok
 }
 
@@ -196,18 +203,19 @@ function workspaceStorage(dir: string) {
 
 function localStorageWithPrefix(prefix: string): SyncStorage {
   const base = `${prefix}:`
+  const scope = `prefix:${prefix}`
   const item = (key: string) => base + key
   return {
     getItem: (key) => {
       const name = item(key)
       const cached = cacheGet(name)
-      if (fallback.disabled && cached !== undefined) return cached
+      if (fallbackDisabled(scope)) return cached ?? null
 
       const stored = (() => {
         try {
           return localStorage.getItem(name)
         } catch {
-          fallback.disabled = true
+          fallbackSet(scope)
           return null
         }
       })()
@@ -217,40 +225,40 @@ function localStorageWithPrefix(prefix: string): SyncStorage {
     },
     setItem: (key, value) => {
       const name = item(key)
-      cacheSet(name, value)
-      if (fallback.disabled) return
+      if (fallbackDisabled(scope)) return
       try {
         if (write(localStorage, name, value)) return
       } catch {
-        fallback.disabled = true
+        fallbackSet(scope)
         return
       }
-      fallback.disabled = true
+      fallbackSet(scope)
     },
     removeItem: (key) => {
       const name = item(key)
       cacheDelete(name)
-      if (fallback.disabled) return
+      if (fallbackDisabled(scope)) return
       try {
         localStorage.removeItem(name)
       } catch {
-        fallback.disabled = true
+        fallbackSet(scope)
       }
     },
   }
 }
 
 function localStorageDirect(): SyncStorage {
+  const scope = "direct"
   return {
     getItem: (key) => {
       const cached = cacheGet(key)
-      if (fallback.disabled && cached !== undefined) return cached
+      if (fallbackDisabled(scope)) return cached ?? null
 
       const stored = (() => {
         try {
           return localStorage.getItem(key)
         } catch {
-          fallback.disabled = true
+          fallbackSet(scope)
           return null
         }
       })()
@@ -259,26 +267,30 @@ function localStorageDirect(): SyncStorage {
       return stored
     },
     setItem: (key, value) => {
-      cacheSet(key, value)
-      if (fallback.disabled) return
+      if (fallbackDisabled(scope)) return
       try {
         if (write(localStorage, key, value)) return
       } catch {
-        fallback.disabled = true
+        fallbackSet(scope)
         return
       }
-      fallback.disabled = true
+      fallbackSet(scope)
     },
     removeItem: (key) => {
       cacheDelete(key)
-      if (fallback.disabled) return
+      if (fallbackDisabled(scope)) return
       try {
         localStorage.removeItem(key)
       } catch {
-        fallback.disabled = true
+        fallbackSet(scope)
       }
     },
   }
+}
+
+export const PersistTesting = {
+  localStorageDirect,
+  localStorageWithPrefix,
 }
 
 export const Persist = {
