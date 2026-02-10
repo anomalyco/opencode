@@ -134,12 +134,12 @@ opencode服务器公开以下API。
 
 ### 提供商
 
-| 方法   | 路徑                             | 描述                   | 回应                                                                              |
-| ------ | -------------------------------- | ---------------------- | --------------------------------------------------------------------------------- |
-| `GET`  | `/provider`                      | 列出所有提供商         | `{ all: `<a href={typesUrl}>提供商[]</a>`, default: {...}, connected: string[] }` |
-| `GET`  | `/provider/auth`                 | 获取提供商身份验证方法 | `{ [providerID: string]: `<a href={typesUrl}>ProviderAuthMethod[]</a>` }`         |
-| `POST` | `/provider/{id}/oauth/authorize` | 使用 OAuth 授權提供商  | <a href={typesUrl}><code>ProviderAuthAuthorization</code></a>                     |
-| `POST` | `/provider/{id}/oauth/callback`  | 处理提供商的 OAuth 回调  | `boolean`                                                                         |
+| 方法   | 路徑                             | 描述                    | 回应                                                                              |
+| ------ | -------------------------------- | ----------------------- | --------------------------------------------------------------------------------- |
+| `GET`  | `/provider`                      | 列出所有提供商          | `{ all: `<a href={typesUrl}>提供商[]</a>`, default: {...}, connected: string[] }` |
+| `GET`  | `/provider/auth`                 | 获取提供商身份验证方法  | `{ [providerID: string]: `<a href={typesUrl}>ProviderAuthMethod[]</a>` }`         |
+| `POST` | `/provider/{id}/oauth/authorize` | 使用 OAuth 授權提供商   | <a href={typesUrl}><code>ProviderAuthAuthorization</code></a>                     |
+| `POST` | `/provider/{id}/oauth/callback`  | 处理提供商的 OAuth 回调 | `boolean`                                                                         |
 
 ---
 
