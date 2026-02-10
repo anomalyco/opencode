@@ -1172,7 +1172,7 @@ export namespace Config {
             .int()
             .min(0)
             .optional()
-            .describe("Token headroom reserved to reduce overflow risk before compaction"),
+            .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
         })
         .optional(),
       experimental: z

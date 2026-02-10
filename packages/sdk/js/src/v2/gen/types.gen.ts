@@ -1825,10 +1825,6 @@ export type Config = {
      */
     prune?: boolean
     /**
-     * Token budget to preserve as recent context during compaction
-     */
-    preserved?: number
-    /**
      * Token headroom reserved to reduce overflow risk before compaction
      */
     reserved?: number
