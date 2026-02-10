@@ -1,6 +1,7 @@
 import { createEffect, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
 import { Collapsible } from "./collapsible"
 import { Icon, IconProps } from "./icon"
+import { suppressAutoScrollResize } from "../hooks/create-auto-scroll"
 
 export type TriggerTitle = {
   title: string
@@ -38,6 +39,7 @@ export function BasicTool(props: BasicToolProps) {
 
   const handleOpenChange = (value: boolean) => {
     if (props.locked && !value) return
+    suppressAutoScrollResize()
     setOpen(value)
   }
 
