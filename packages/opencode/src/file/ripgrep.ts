@@ -340,7 +340,7 @@ export namespace Ripgrep {
     limit?: number
     follow?: boolean
   }) {
-    const args = [`${await filepath()}`, "--json", "--hidden", "--glob='!.git/*'"]
+    const args = [`${await filepath()}`, "--no-config", "--json", "--hidden", "--glob='!.git/*'"]
     if (input.follow) args.push("--follow")
 
     if (input.glob) {
