@@ -293,7 +293,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
           setStore("lastProject", key, directory)
         },
         bringToTop(directory: string) {
-          if (!store.dynamicSort) return
+          if (!(store.dynamicSort ?? true)) return
           const key = origin()
           if (!key) return
           const current = store.projects[key] ?? []
