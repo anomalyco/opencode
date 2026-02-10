@@ -20,9 +20,9 @@ use std::{
     env,
     net::TcpListener,
     path::PathBuf,
+    process::Command,
     sync::{Arc, Mutex},
     time::Duration,
-    process::Command,
 };
 use tauri::{AppHandle, Manager, RunEvent, State, ipc::Channel};
 #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
@@ -152,12 +152,12 @@ fn check_app_exists(app_name: &str) -> bool {
     {
         check_windows_app(app_name)
     }
-    
+
     #[cfg(target_os = "macos")]
     {
         check_macos_app(app_name)
     }
-    
+
     #[cfg(target_os = "linux")]
     {
         check_linux_app(app_name)
@@ -165,9 +165,163 @@ fn check_app_exists(app_name: &str) -> bool {
 }
 
 #[cfg(target_os = "windows")]
-fn check_windows_app(app_name: &str) -> bool {
+fn check_windows_app(_app_name: &str) -> bool {
     // Check if command exists in PATH, including .exe
     return true;
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_windows_app_path(app_name: &str) -> Option<String> {
+    use std::path::{Path, PathBuf};
+
+    // Try to find the command using 'where'
+    let output = Command::new("where").arg(app_name).output().ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let paths = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(PathBuf::from)
+        .collect::<Vec<_>>();
+
+    let has_ext = |path: &Path, ext: &str| {
+        path.extension()
+            .and_then(|v| v.to_str())
+            .map(|v| v.eq_ignore_ascii_case(ext))
+            .unwrap_or(false)
+    };
+
+    if let Some(path) = paths.iter().find(|path| has_ext(path, "exe")) {
+        return Some(path.to_string_lossy().to_string());
+    }
+
+    let resolve_cmd = |path: &Path| -> Option<String> {
+        let content = std::fs::read_to_string(path).ok()?;
+
+        for token in content.split('"') {
+            let lower = token.to_ascii_lowercase();
+            if !lower.contains(".exe") {
+                continue;
+            }
+
+            if let Some(index) = lower.find("%~dp0") {
+                let base = path.parent()?;
+                let suffix = &token[index + 5..];
+                let mut resolved = PathBuf::from(base);
+
+                for part in suffix.replace('/', "\\").split('\\') {
+                    if part.is_empty() || part == "." {
+                        continue;
+                    }
+                    if part == ".." {
+                        let _ = resolved.pop();
+                        continue;
+                    }
+                    resolved.push(part);
+                }
+
+                if resolved.exists() {
+                    return Some(resolved.to_string_lossy().to_string());
+                }
+            }
+
+            let resolved = PathBuf::from(token);
+            if resolved.exists() {
+                return Some(resolved.to_string_lossy().to_string());
+            }
+        }
+
+        None
+    };
+
+    for path in &paths {
+        if has_ext(path, "cmd") || has_ext(path, "bat") {
+            if let Some(resolved) = resolve_cmd(path) {
+                return Some(resolved);
+            }
+        }
+
+        if path.extension().is_none() {
+            let cmd = path.with_extension("cmd");
+            if cmd.exists() {
+                if let Some(resolved) = resolve_cmd(&cmd) {
+                    return Some(resolved);
+                }
+            }
+
+            let bat = path.with_extension("bat");
+            if bat.exists() {
+                if let Some(resolved) = resolve_cmd(&bat) {
+                    return Some(resolved);
+                }
+            }
+        }
+    }
+
+    let key = app_name
+        .chars()
+        .filter(|v| v.is_ascii_alphanumeric())
+        .flat_map(|v| v.to_lowercase())
+        .collect::<String>();
+
+    if !key.is_empty() {
+        for path in &paths {
+            let dirs = [
+                path.parent(),
+                path.parent().and_then(|dir| dir.parent()),
+                path.parent()
+                    .and_then(|dir| dir.parent())
+                    .and_then(|dir| dir.parent()),
+            ];
+
+            for dir in dirs.into_iter().flatten() {
+                if let Ok(entries) = std::fs::read_dir(dir) {
+                    for entry in entries.flatten() {
+                        let candidate = entry.path();
+                        if !has_ext(&candidate, "exe") {
+                            continue;
+                        }
+
+                        let Some(stem) = candidate.file_stem().and_then(|v| v.to_str()) else {
+                            continue;
+                        };
+
+                        let name = stem
+                            .chars()
+                            .filter(|v| v.is_ascii_alphanumeric())
+                            .flat_map(|v| v.to_lowercase())
+                            .collect::<String>();
+
+                        if name.contains(&key) || key.contains(&name) {
+                            return Some(candidate.to_string_lossy().to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    paths.first().map(|path| path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+fn resolve_app_path(app_name: &str) -> Option<String> {
+    #[cfg(target_os = "windows")]
+    {
+        resolve_windows_app_path(app_name)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        // On macOS/Linux, just return the app_name as-is since
+        // the opener plugin handles them correctly
+        Some(app_name.to_string())
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -181,13 +335,13 @@ fn check_macos_app(app_name: &str) -> bool {
     if let Ok(home) = std::env::var("HOME") {
         app_locations.push(format!("{}/Applications/{}.app", home, app_name));
     }
-    
+
     for location in app_locations {
         if std::path::Path::new(&location).exists() {
             return true;
         }
     }
-    
+
     // Also check if command exists in PATH
     Command::new("which")
         .arg(app_name)
@@ -251,7 +405,8 @@ pub fn run() {
             get_display_backend,
             set_display_backend,
             markdown::parse_markdown_command,
-            check_app_exists
+            check_app_exists,
+            resolve_app_path
         ])
         .events(tauri_specta::collect_events![LoadingWindowComplete])
         .error_handling(tauri_specta::ErrorHandlingMode::Throw);
