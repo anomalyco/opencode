@@ -342,21 +342,8 @@ export namespace SessionProcessor {
               stack: JSON.stringify(e.stack),
             })
             const error = MessageV2.fromError(e, { providerID: input.model.providerID })
-            // DO NOT retry context overflow errors
             if (MessageV2.ContextOverflowError.isInstance(error)) {
-              // const compaction = await Agent.get("compaction")
-              // const compactionModel = compaction.model
-              //   ? `${compaction.model.providerID}/${compaction.model.modelID}`
-              //   : undefined
-              // if (
-              //   streamInput.agent.name !== "compaction" &&
-              //   compactionModel &&
-              //   compactionModel !== `${streamInput.model.providerID}/${streamInput.model.id}`
-              // ) {
-              //   needsCompaction = true
-              // } else {
-              //   // Need to do explicit / better compaction
-              // }
+              // TODO: Handle context overflow error
             }
             const retry = SessionRetry.retryable(error)
             if (retry !== undefined) {
