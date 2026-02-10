@@ -516,6 +516,11 @@ export const dict = {
   "settings.section.server": "เซิร์ฟเวอร์",
   "settings.tab.general": "ทั่วไป",
   "settings.tab.shortcuts": "ทางลัด",
+  "settings.desktop.section.backend": "Backend",
+  "settings.desktop.backend.title": "Server backend",
+  "settings.desktop.backend.description": "Choose where the OpenCode server runs.",
+  "settings.desktop.backend.option.native": "Native (Windows)",
+  "settings.desktop.backend.option.wsl": "WSL (Linux)",
 
   "settings.general.section.appearance": "รูปลักษณ์",
   "settings.general.section.notifications": "การแจ้งเตือนระบบ",

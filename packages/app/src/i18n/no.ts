@@ -515,6 +515,11 @@ export const dict = {
   "settings.section.server": "Server",
   "settings.tab.general": "Generelt",
   "settings.tab.shortcuts": "Snarveier",
+  "settings.desktop.section.backend": "Backend",
+  "settings.desktop.backend.title": "Server backend",
+  "settings.desktop.backend.description": "Choose where the OpenCode server runs.",
+  "settings.desktop.backend.option.native": "Native (Windows)",
+  "settings.desktop.backend.option.wsl": "WSL (Linux)",
 
   "settings.general.section.appearance": "Utseende",
   "settings.general.section.notifications": "Systemvarsler",

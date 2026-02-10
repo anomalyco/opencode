@@ -23,7 +23,7 @@ import { initI18n, t } from "./i18n"
 import pkg from "../package.json"
 import "./styles.css"
 import { commands, InitStep } from "./bindings"
-import { Channel } from "@tauri-apps/api/core"
+import { Channel, invoke } from "@tauri-apps/api/core"
 import { createMenu } from "./menu"
 
 const root = document.getElementById("root")
@@ -51,7 +51,18 @@ const listenForDeepLinks = async () => {
   await onOpenUrl((urls) => emitDeepLinks(urls)).catch(() => undefined)
 }
 
-const createPlatform = (password: Accessor<string | null>): Platform => ({
+type BackendConfig = {
+  mode: "native" | "wsl"
+}
+
+const defaultBackend: BackendConfig = { mode: "native" }
+
+const createPlatform = (
+  password: Accessor<string | null>,
+  backend: Accessor<BackendConfig>,
+  setBackend: (next: BackendConfig) => void,
+  fetchBackend: () => Promise<BackendConfig | null>,
+): Platform => ({
   platform: "desktop",
   os: (() => {
     const type = ostype()
@@ -61,6 +72,7 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
   version: pkg.version,
 
   async openDirectoryPickerDialog(opts) {
+    if (backend().mode === "wsl") return null
     const result = await open({
       directory: true,
       multiple: opts?.multiple ?? false,
@@ -338,6 +350,19 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
     await commands.setDefaultServerUrl(url)
   },
 
+  getBackendConfig: async () => {
+    const next = await fetchBackend()
+    if (next) return next
+    return backend()
+  },
+
+  setBackendConfig: async (config: BackendConfig) => {
+    setBackend(config)
+    await invoke("set_backend_config", { config }).catch(() => undefined)
+  },
+
+  supportsNativePickers: () => backend().mode !== "wsl",
+
   parseMarkdown: (markdown: string) => commands.parseMarkdownCommand(markdown),
 
   webviewZoom,
@@ -378,7 +403,16 @@ void listenForDeepLinks()
 
 render(() => {
   const [serverPassword, setServerPassword] = createSignal<string | null>(null)
-  const platform = createPlatform(() => serverPassword())
+  const [backend, setBackend] = createSignal<BackendConfig>(defaultBackend)
+
+  const fetchBackend = async () => {
+    const next = await invoke<BackendConfig>("get_backend_config").catch(() => null)
+    if (!next) return null
+    setBackend(next)
+    return next
+  }
+
+  const platform = createPlatform(() => serverPassword(), backend, setBackend, fetchBackend)
 
   function handleClick(e: MouseEvent) {
     const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
@@ -390,6 +424,7 @@ render(() => {
 
   onMount(() => {
     document.addEventListener("click", handleClick)
+    void fetchBackend()
     onCleanup(() => {
       document.removeEventListener("click", handleClick)
     })

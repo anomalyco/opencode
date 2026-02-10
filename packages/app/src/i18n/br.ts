@@ -512,6 +512,11 @@ export const dict = {
   "settings.section.server": "Servidor",
   "settings.tab.general": "Geral",
   "settings.tab.shortcuts": "Atalhos",
+  "settings.desktop.section.backend": "Backend",
+  "settings.desktop.backend.title": "Server backend",
+  "settings.desktop.backend.description": "Choose where the OpenCode server runs.",
+  "settings.desktop.backend.option.native": "Native (Windows)",
+  "settings.desktop.backend.option.wsl": "WSL (Linux)",
 
   "settings.general.section.appearance": "Aparência",
   "settings.general.section.notifications": "Notificações do sistema",

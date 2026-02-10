@@ -209,6 +209,8 @@ pub fn run() {
             await_initialization,
             server::get_default_server_url,
             server::set_default_server_url,
+            server::get_backend_config,
+            server::set_backend_config,
             markdown::parse_markdown_command,
             check_app_exists
         ])

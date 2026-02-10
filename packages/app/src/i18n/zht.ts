@@ -545,6 +545,11 @@ export const dict = {
   "settings.section.server": "伺服器",
   "settings.tab.general": "一般",
   "settings.tab.shortcuts": "快速鍵",
+  "settings.desktop.section.backend": "Backend",
+  "settings.desktop.backend.title": "Server backend",
+  "settings.desktop.backend.description": "Choose where the OpenCode server runs.",
+  "settings.desktop.backend.option.native": "Native (Windows)",
+  "settings.desktop.backend.option.wsl": "WSL (Linux)",
 
   "settings.general.section.appearance": "外觀",
   "settings.general.section.notifications": "系統通知",

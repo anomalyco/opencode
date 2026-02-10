@@ -1182,7 +1182,8 @@ export default function Layout(props: ParentProps) {
       }
     }
 
-    if (platform.openDirectoryPickerDialog && server.isLocal()) {
+    const allowNative = platform.supportsNativePickers?.() !== false
+    if (platform.openDirectoryPickerDialog && server.isLocal() && allowNative) {
       const result = await platform.openDirectoryPickerDialog?.({
         title: language.t("command.project.open"),
         multiple: true,

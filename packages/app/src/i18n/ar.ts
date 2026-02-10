@@ -508,6 +508,11 @@ export const dict = {
   "settings.section.server": "الخادم",
   "settings.tab.general": "عام",
   "settings.tab.shortcuts": "اختصارات",
+  "settings.desktop.section.backend": "Backend",
+  "settings.desktop.backend.title": "Server backend",
+  "settings.desktop.backend.description": "Choose where the OpenCode server runs.",
+  "settings.desktop.backend.option.native": "Native (Windows)",
+  "settings.desktop.backend.option.wsl": "WSL (Linux)",
 
   "settings.general.section.appearance": "المظهر",
   "settings.general.section.notifications": "إشعارات النظام",

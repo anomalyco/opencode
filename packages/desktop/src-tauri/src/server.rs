@@ -8,8 +8,37 @@ use tokio::task::JoinHandle;
 
 use crate::{
     cli,
-    constants::{DEFAULT_SERVER_URL_KEY, SETTINGS_STORE},
+    constants::{BACKEND_MODE_KEY, DEFAULT_SERVER_URL_KEY, SETTINGS_STORE},
 };
+
+#[derive(Clone, Copy, serde::Serialize, serde::Deserialize, specta::Type, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum BackendMode {
+    Native,
+    Wsl,
+}
+
+impl BackendMode {
+    fn as_str(&self) -> &'static str {
+        match self {
+            BackendMode::Native => "native",
+            BackendMode::Wsl => "wsl",
+        }
+    }
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize, specta::Type, Debug)]
+pub struct BackendConfig {
+    pub mode: BackendMode,
+}
+
+impl Default for BackendConfig {
+    fn default() -> Self {
+        Self {
+            mode: BackendMode::Native,
+        }
+    }
+}
 
 #[tauri::command]
 #[specta::specta]
@@ -40,6 +69,44 @@ pub async fn set_default_server_url(app: AppHandle, url: Option<String>) -> Resu
             store.delete(DEFAULT_SERVER_URL_KEY);
         }
     }
+
+    store
+        .save()
+        .map_err(|e| format!("Failed to save settings: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_backend_config(app: AppHandle) -> Result<BackendConfig, String> {
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("Failed to open settings store: {}", e))?;
+
+    let mode = store
+        .get(BACKEND_MODE_KEY)
+        .and_then(|v| v.as_str())
+        .map(|v| match v {
+            "wsl" => BackendMode::Wsl,
+            _ => BackendMode::Native,
+        })
+        .unwrap_or(BackendMode::Native);
+
+    Ok(BackendConfig { mode })
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn set_backend_config(app: AppHandle, config: BackendConfig) -> Result<(), String> {
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("Failed to open settings store: {}", e))?;
+
+    store.set(
+        BACKEND_MODE_KEY,
+        serde_json::Value::String(config.mode.as_str().to_string()),
+    );
 
     store
         .save()

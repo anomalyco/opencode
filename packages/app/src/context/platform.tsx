@@ -33,6 +33,9 @@ export type Platform = {
   /** Open directory picker dialog (native on Tauri, server-backed on web) */
   openDirectoryPickerDialog?(opts?: { title?: string; multiple?: boolean }): Promise<string | string[] | null>
 
+  /** Whether native pickers should be used (desktop only) */
+  supportsNativePickers?(): boolean
+
   /** Open native file picker dialog (Tauri only) */
   openFilePickerDialog?(opts?: { title?: string; multiple?: boolean }): Promise<string | string[] | null>
 
@@ -56,6 +59,12 @@ export type Platform = {
 
   /** Set the default server URL to use on app startup (platform-specific) */
   setDefaultServerUrl?(url: string | null): Promise<void> | void
+
+  /** Get the configured backend mode (desktop only) */
+  getBackendConfig?(): Promise<{ mode: "native" | "wsl" } | null> | { mode: "native" | "wsl" } | null
+
+  /** Set the configured backend mode (desktop only) */
+  setBackendConfig?(config: { mode: "native" | "wsl" }): Promise<void> | void
 
   /** Parse markdown to HTML using native parser (desktop only, returns unprocessed code blocks) */
   parseMarkdown?(markdown: string): Promise<string>
