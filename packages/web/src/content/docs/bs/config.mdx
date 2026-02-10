@@ -14,7 +14,7 @@ OpenCode podržava i **JSON** i **JSONC** (JSON sa komentarima) formate.
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  // Konfiguracija teme
+  // Theme configuration
   "theme": "opencode",
   "model": "anthropic/claude-sonnet-4-5",
   "autoupdate": true,
@@ -127,7 +127,6 @@ prate istu strukturu.
 ```bash
 export OPENCODE_CONFIG_DIR=/path/to/my/config-directory
 opencode run "Hello world"
-
 ```
 
 Prilagođeni direktorij se učitava nakon direktorija globalne konfiguracije i `.opencode`, tako da **može nadjačati** njihove postavke.

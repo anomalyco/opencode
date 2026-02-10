@@ -63,7 +63,7 @@ Ou você pode configurá-lo manualmente.
               fetch-depth: 1
               persist-credentials: false
 
-          - name: Run opencode
+          - name: Run OpenCode
            uses: anomalyco/opencode/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -119,11 +119,11 @@ O opencode pode ser acionado pelos seguintes eventos do GitHub:
 Execute o opencode em um cronograma para realizar tarefas automatizadas:
 
 ```yaml title=".github/workflows/opencode-scheduled.yml"
-name: Tarefa Agendada opencode
+name: Scheduled OpenCode Task
 
 on:
   schedule:
-    - cron: "0 9 * * 1" # Toda segunda-feira às 9h UTC
+    - cron: "0 9 * * 1" # Every Monday at 9am UTC
 
 jobs:
   opencode:
@@ -139,15 +139,15 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Run opencode
+      - name: Run OpenCode
         uses: anomalyco/opencode/github@latest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
           model: anthropic/claude-sonnet-4-20250514
           prompt: |
-            Revise a base de código em busca de comentários TODO e crie um resumo.
-            Se você encontrar problemas que valem a pena serem abordados, abra um problema para rastreá-los.
+            Review the codebase for any TODO comments and create a summary.
+            If you find issues worth addressing, open an issue to track them.
 ```
 
 Para eventos agendados, a entrada `prompt` é **obrigatória** uma vez que não há comentário para extrair instruções. Fluxos de trabalho agendados são executados sem um contexto de usuário para verificação de permissões, então o fluxo de trabalho deve conceder `contents: write` e `pull-requests: write` se você espera que o opencode crie branches ou PRs.
@@ -185,10 +185,10 @@ jobs:
           model: anthropic/claude-sonnet-4-20250514
           use_github_token: true
           prompt: |
-            Revise este pull request:
-            - Verifique se há problemas de qualidade de código
-            - Procure por bugs potenciais
-            - Sugira melhorias
+            Review this pull request:
+            - Check for code quality issues
+            - Look for potential bugs
+            - Suggest improvements
 ```
 
 Para eventos de `pull_request`, se nenhum `prompt` for fornecido, o opencode padrão será revisar o pull request.
@@ -200,7 +200,7 @@ Para eventos de `pull_request`, se nenhum `prompt` for fornecido, o opencode pad
 Triagem automática de novos problemas. Este exemplo filtra contas com mais de 30 dias para reduzir spam:
 
 ```yaml title=".github/workflows/opencode-triage.yml"
-name: Triagem de Problemas
+name: Issue Triage
 
 on:
   issues:
@@ -215,7 +215,7 @@ jobs:
       pull-requests: write
       issues: write
     steps:
-      - name: Verificar idade da conta
+      - name: Check account age
         id: check
         uses: actions/github-script@v7
         with:
@@ -240,10 +240,10 @@ jobs:
         with:
           model: anthropic/claude-sonnet-4-20250514
           prompt: |
-            Revise este problema. Se houver uma correção clara ou documentos relevantes:
-            - Forneça links de documentação
-            - Adicione orientações de tratamento de erros para exemplos de código
-            Caso contrário, não comente.
+            Review this issue. If there's a clear fix or relevant docs:
+            - Provide documentation links
+            - Add error handling guidance for code examples
+            Otherwise, do not comment.
 ```
 
 Para eventos de `issues`, a entrada `prompt` é **obrigatória** uma vez que não há comentário para extrair instruções.
@@ -259,10 +259,10 @@ Substitua o prompt padrão para personalizar o comportamento do opencode para se
   with:
     model: anthropic/claude-sonnet-4-5
     prompt: |
-      Revise este pull request:
-      - Verifique se há problemas de qualidade de código
-      - Procure por bugs potenciais
-      - Sugira melhorias
+      Review this pull request:
+      - Check for code quality issues
+      - Look for potential bugs
+      - Suggest improvements
 ```
 
 Isso é útil para impor critérios de revisão específicos, padrões de codificação ou áreas de foco relevantes para seu projeto.
@@ -308,7 +308,7 @@ Aqui estão alguns exemplos de como você pode usar o opencode no GitHub.
   Deixe um comentário diretamente nas linhas de código na aba "Files" do PR. O opencode detecta automaticamente o arquivo, os números das linhas e o contexto do diff para fornecer respostas precisas.
 
   ```
-  [Comentário sobre linhas específicas na aba Files]
+  [Comment on specific lines in Files tab]
   /oc add error handling here
   ```
 

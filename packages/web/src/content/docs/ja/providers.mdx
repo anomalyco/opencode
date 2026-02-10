@@ -29,7 +29,7 @@ config.
 
 ---
 
-#### ベース URL
+#### Base URL
 
 `baseURL` オプションを設定することで、任意のプロバイダーのベース URL をカスタマイズできます。これは、プロキシ サービスまたはカスタム エンドポイントを使用する場合に便利です。
 
@@ -122,7 +122,7 @@ OpenCode で適切に動作することがテストおよび検証されてい�
 
 ---
 
-### アマゾンの岩盤
+### Amazon Bedrock
 
 OpenCode で Amazon Bedrock を使用するには:
 
@@ -140,40 +140,40 @@ Amazon Bedrock で必要なモデルにアクセスできる必要がありま�
 opencode の実行中に次の環境変数のいずれかを設定します。
 
 ```bash
-# Option 1: Using AWS access keys
-AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY opencode
+   # Option 1: Using AWS access keys
+   AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY opencode
 
-# Option 2: Using named AWS profile
-AWS_PROFILE=my-profile opencode
+   # Option 2: Using named AWS profile
+   AWS_PROFILE=my-profile opencode
 
-# Option 3: Using Bedrock bearer token
-AWS_BEARER_TOKEN_BEDROCK=XXX opencode
-```
+   # Option 3: Using Bedrock bearer token
+   AWS_BEARER_TOKEN_BEDROCK=XXX opencode
+   ```
 
 または、それらを bash プロファイルに追加します。
 
 ```bash title="~/.bash_profile"
-export AWS_PROFILE=my-dev-profile
-export AWS_REGION=us-east-1
-```
+   export AWS_PROFILE=my-dev-profile
+   export AWS_REGION=us-east-1
+   ```
 
 #### 設定ファイル (推奨)
 
 プロジェクト固有の構成または永続的な構成の場合は、`opencode.json` を使用します。
 
 ```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "amazon-bedrock": {
-      "options": {
-        "region": "us-east-1",
-        "profile": "my-aws-profile"
-      }
-    }
-  }
-}
-```
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "amazon-bedrock": {
+         "options": {
+           "region": "us-east-1",
+           "profile": "my-aws-profile"
+         }
+       }
+     }
+   }
+   ```
 
 **利用可能なオプション:**
 
@@ -190,19 +190,19 @@ export AWS_REGION=us-east-1
 Bedrock の VPC エンドポイントを使用している場合:
 
 ```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "amazon-bedrock": {
-      "options": {
-        "region": "us-east-1",
-        "profile": "production",
-        "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
-      }
-    }
-  }
-}
-```
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "amazon-bedrock": {
+         "options": {
+           "region": "us-east-1",
+           "profile": "production",
+           "endpoint": "https://bedrock-runtime.us-east-1.vpce-xxxxx.amazonaws.com"
+         }
+       }
+     }
+   }
+   ```
 
 :::note
 `endpoint` オプションは、AWS 固有の用語を使用した汎用の `baseURL` オプションのエイリアスです。 `endpoint` と `baseURL` の両方が指定された場合は、`endpoint` が優先されます。
@@ -255,7 +255,7 @@ Amazon Bedrock は次の認証優先度を使用します。
 
 ---
 
-### 人間的
+### Anthropic
 
 1. サインアップしたら、`/connect` コマンドを実行し、[Anthropic] を選択します。
 
@@ -333,8 +333,8 @@ opencodeが正しく動作するには、デプロイメント名がモデル名
 または、bash プロファイルに追加します。
 
 ```bash title="~/.bash_profile"
-export AZURE_RESOURCE_NAME=XXX
-```
+   export AZURE_RESOURCE_NAME=XXX
+   ```
 
 6. `/models` コマンドを実行して、デプロイされたモデルを選択します。
 
@@ -344,7 +344,7 @@ export AZURE_RESOURCE_NAME=XXX
 
 ---
 
-### Azure コグニティブ サービス
+### Azure Cognitive Services
 
 1. [Azure portal](https://portal.azure.com/) に移動し、**Azure OpenAI** リソースを作成します。必要なものは次のとおりです。
    - **リソース名**: これは API エンドポイント (`https://AZURE_COGNITIVE_SERVICES_RESOURCE_NAME.cognitiveservices.azure.com/`) の一部になります。
@@ -380,8 +380,8 @@ opencodeが正しく動作するには、デプロイメント名がモデル名
 または、bash プロファイルに追加します。
 
 ```bash title="~/.bash_profile"
-export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
-```
+   export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
+   ```
 
 6. `/models` コマンドを実行して、デプロイされたモデルを選択します。
 
@@ -391,7 +391,7 @@ export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
 
 ---
 
-### ベーステン
+### Baseten
 
 1. [Baseten](https://app.baseten.co/) に移動し、アカウントを作成し、API キーを生成します。
 
@@ -418,7 +418,7 @@ export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
 
 ---
 
-### 大脳
+### Cerebras
 
 1. [Cerebras console](https://inference.cerebras.ai/) に移動し、アカウントを作成し、API キーを生成します。
 
@@ -445,7 +445,7 @@ export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
 
 ---
 
-### Cloudflare AI ゲートウェイ
+### Cloudflare AI Gateway
 
 Cloudflare AI Gatewayを使用すると、統合エンドポイントを通じてOpenAI、Anthropic、Workers AIなどのモデルにアクセスできます。 [Unified Billing](https://developers.cloudflare.com/ai-gateway/features/unified-billing/) を使用すると、プロバイダーごとに個別の API キーは必要ありません。
 
@@ -476,8 +476,8 @@ Cloudflare AI Gatewayを使用すると、統合エンドポイントを通じ�
 または環境変数として設定します。
 
 ```bash title="~/.bash_profile"
-export CLOUDFLARE_API_TOKEN=your-api-token
-```
+   export CLOUDFLARE_API_TOKEN=your-api-token
+   ```
 
 5. `/models` コマンドを実行してモデルを選択します。
 
@@ -488,22 +488,22 @@ export CLOUDFLARE_API_TOKEN=your-api-token
 opencode構成を通じてモデルを追加することもできます。
 
 ```json title="opencode.json"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "cloudflare-ai-gateway": {
-      "models": {
-        "openai/gpt-4o": {},
-        "anthropic/claude-sonnet-4": {}
-      }
-    }
-  }
-}
-```
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "cloudflare-ai-gateway": {
+         "models": {
+           "openai/gpt-4o": {},
+           "anthropic/claude-sonnet-4": {}
+         }
+       }
+     }
+   }
+   ```
 
 ---
 
-### コルテックス
+### Cortecs
 
 1. [Cortecs console](https://cortecs.ai/) に移動し、アカウントを作成し、API キーを生成します。
 
@@ -530,7 +530,7 @@ opencode構成を通じてモデルを追加することもできます。
 
 ---
 
-### ディープシーク
+### DeepSeek
 
 1. [DeepSeek コンソール ](https://platform.deepseek.com/) に移動し、アカウントを作成し、**新しい API キーの作成** をクリックします。
 
@@ -557,7 +557,7 @@ opencode構成を通じてモデルを追加することもできます。
 
 ---
 
-### ディープインフラ
+### Deep Infra
 
 1. [Deep Infra ダッシュボード](https://deepinfra.com/dash) に移動し、アカウントを作成し、API キーを生成します。
 
@@ -584,7 +584,7 @@ opencode構成を通じてモデルを追加することもできます。
 
 ---
 
-### ファームウェア
+### Firmware
 
 1. [ファームウェア ダッシュボード](https://app.firmware.ai/signup) に移動し、アカウントを作成し、API キーを生成します。
 
@@ -611,7 +611,7 @@ opencode構成を通じてモデルを追加することもできます。
 
 ---
 
-### 花火AI
+### Fireworks AI
 
 1. [Fireworks AI コンソール ](https://app.fireworks.ai/) に移動し、アカウントを作成し、**API キーの作成** をクリックします。
 
@@ -638,7 +638,7 @@ opencode構成を通じてモデルを追加することもできます。
 
 ---
 
-### GitLab デュオ
+### GitLab Duo
 
 GitLab Duo は、GitLab の Anthropic プロキシを介したネイティブ ツール呼び出し機能を備えた AI を活用したエージェント チャットを提供します。
 
@@ -673,8 +673,8 @@ GitLab Duo は、GitLab の Anthropic プロキシを介したネイティブ �
 6.  `/models` コマンドを実行して、利用可能なモデルを確認します。
 
     ```txt
-    /models
-    ```
+   /models
+   ```
 
 3 つのクロードベースのモデルが利用可能です。
 
@@ -789,7 +789,7 @@ GitLab ツール (マージ リクエスト、問題、パイプライン、CI/C
 
 ---
 
-### GitHub コパイロット
+### GitHub Copilot
 
 GitHub Copilot サブスクリプションをopencodeで使用するには:
 
@@ -826,7 +826,7 @@ subscription](https://github.com/features/copilot/plans) を使用します。
 
 ---
 
-### Google バーテックス AI
+### Google Vertex AI
 
 OpenCode で Google Vertex AI を使用するには:
 
@@ -847,16 +847,16 @@ Vertex AI API が有効になっている Google Cloud プロジェクトが必�
 opencode の実行中に設定します。
 
 ```bash
-GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
-```
+   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
+   ```
 
 または、それらを bash プロファイルに追加します。
 
 ```bash title="~/.bash_profile"
-export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
-export GOOGLE_CLOUD_PROJECT=your-project-id
-export VERTEX_LOCATION=global
-```
+   export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+   export GOOGLE_CLOUD_PROJECT=your-project-id
+   export VERTEX_LOCATION=global
+   ```
 
 :::tip
 `global` 領域は、追加コストなしで可用性を向上させ、エラーを削減します。データ常駐要件には、リージョン エンドポイント (`us-central1` など) を使用します。 [詳細はこちら](https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-partner-models#regional_and_global_endpoints)
@@ -870,7 +870,7 @@ export VERTEX_LOCATION=global
 
 ---
 
-### グロク
+### Groq
 
 1. [Groq console](https://console.groq.com/) に移動し、[**API キーの作成**] をクリックして、キーをコピーします。
 
@@ -897,7 +897,7 @@ export VERTEX_LOCATION=global
 
 ---
 
-### ハグフェイス
+### Hugging Face
 
 [ハグ顔推論プロバイダー ](https://huggingface.co/docs/inference-providers) は、17 を超えるプロバイダーがサポートするオープン モデルへのアクセスを提供します。
 
@@ -926,7 +926,7 @@ export VERTEX_LOCATION=global
 
 ---
 
-### ヘリコン
+### Helicone
 
 [Helicone](https://helicone.ai) は、AI アプリケーションのロギング、監視、分析を提供する LLM 可観測性プラットフォームです。 Helicone AI ゲートウェイは、モデルに基づいてリクエストを適切なプロバイダーに自動的にルーティングします。
 
@@ -1039,7 +1039,7 @@ npm install -g opencode-helicone-session
 
 ---
 
-### ラマ.cpp
+### llama.cpp
 
 [llama.cpp の s](https://github.com/ggml-org/llama.cpp) llama-server ユーティリティ] を通じて、ローカル モデルを使用するようにopencodeを構成できます。
 
@@ -1106,7 +1106,7 @@ IO.NET は、さまざまなユースケースに最適化された 17 のモデ
 
 ---
 
-### LMスタジオ
+### LM Studio
 
 LM Studio を通じてローカル モデルを使用するようにopencodeを構成できます。
 
@@ -1132,7 +1132,7 @@ LM Studio を通じてローカル モデルを使用するようにopencodeを�
 
 この例では:
 
-- `llama.cpp` はカスタムプロバイダー ID です。これには任意の文字列を指定できます。
+- `lmstudio` はカスタムプロバイダー ID です。これには任意の文字列を指定できます。
 - `npm` は、このプロバイダーに使用するパッケージを指定します。ここで、`@ai-sdk/openai-compatible` は OpenAI 互換 API に使用されます。
 - `name` は、UI でのプロバイダーの表示名です。
 - `options.baseURL` はローカル サーバーのエンドポイントです。
@@ -1140,7 +1140,7 @@ LM Studio を通じてローカル モデルを使用するようにopencodeを�
 
 ---
 
-### ムーンショットAI
+### Moonshot AI
 
 Moonshot AI の Kim K2 を使用するには:
 
@@ -1169,7 +1169,7 @@ Moonshot AI の Kim K2 を使用するには:
 
 ---
 
-### ミニマックス
+### MiniMax
 
 1. [MiniMax API Console](https://platform.minimax.io/login) に移動し、アカウントを作成し、API キーを生成します。
 
@@ -1196,7 +1196,7 @@ Moonshot AI の Kim K2 を使用するには:
 
 ---
 
-### ネビウストークンファクトリー
+### Nebius Token Factory
 
 1. [Nebius Token Factory console](https://tokenfactory.nebius.com/) に移動し、アカウントを作成し、[**キーの追加**] をクリックします。
 
@@ -1228,7 +1228,7 @@ Moonshot AI の Kim K2 を使用するには:
 Ollama を通じてローカル モデルを使用するようにopencodeを構成できます。
 
 :::tip
-Ollama は OpenCode 用に自動的に構成できます。詳細については、「Ollama 統合 docs](https://docs.ollama.com/integrations/opencode)」を参照してください。
+Ollama は OpenCode 用に自動的に構成できます。詳細については、[Ollama 統合 docs](https://docs.ollama.com/integrations/opencode)」を参照してください。
 :::
 
 ```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
@@ -1253,7 +1253,7 @@ Ollama は OpenCode 用に自動的に構成できます。詳細については
 
 この例では:
 
-- `llama.cpp` はカスタムプロバイダー ID です。これには任意の文字列を指定できます。
+- `ollama` はカスタムプロバイダー ID です。これには任意の文字列を指定できます。
 - `npm` は、このプロバイダーに使用するパッケージを指定します。ここで、`@ai-sdk/openai-compatible` は OpenAI 互換 API に使用されます。
 - `name` は、UI でのプロバイダーの表示名です。
 - `options.baseURL` はローカル サーバーのエンドポイントです。
@@ -1265,7 +1265,7 @@ Ollama は OpenCode 用に自動的に構成できます。詳細については
 
 ---
 
-### オラマ・クラウド
+### Ollama Cloud
 
 OpenCode で Ollama Cloud を使用するには:
 
@@ -1366,7 +1366,7 @@ OpenCode Zen は、OpenCode チームによって提供される、テストお�
 
 ---
 
-### オープンルーター
+### OpenRouter
 
 1. [OpenRouter ダッシュボード](https://openrouter.ai/settings/keys) に移動し、[**API キーの作成**] をクリックして、キーをコピーします。
 
@@ -1394,17 +1394,17 @@ OpenCode Zen は、OpenCode チームによって提供される、テストお�
 opencode構成を通じて追加のモデルを追加することもできます。
 
 ```json title="opencode.json" {6}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "openrouter": {
-      "models": {
-        "somecoolnewmodel": {}
-      }
-    }
-  }
-}
-```
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "openrouter": {
+         "models": {
+           "somecoolnewmodel": {}
+         }
+       }
+     }
+   }
+   ```
 
 5. opencode設定を通じてカスタマイズすることもできます。プロバイダーを指定する例を次に示します。
 
@@ -1430,7 +1430,7 @@ opencode構成を通じて追加のモデルを追加することもできます
 
 ---
 
-### SAP AI コア
+### SAP AI Core
 
 SAP AI コアは、統合プラットフォームを通じて、OpenAI、Anthropic、Google、Amazon、Meta、Mistral、AI21 の 40 以上のモデルへのアクセスを提供します。
 
@@ -1458,14 +1458,14 @@ SAP AI コアは、統合プラットフォームを通じて、OpenAI、Anthrop
 または、`AICORE_SERVICE_KEY` 環境変数を設定します。
 
 ```bash
-AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
-```
+   AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
+   ```
 
 または、bash プロファイルに追加します。
 
 ```bash title="~/.bash_profile"
-export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}'
-```
+   export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}'
+   ```
 
 4. 必要に応じて、デプロイメント ID とリソース グループを設定します。
 
@@ -1485,7 +1485,7 @@ export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","s
 
 ---
 
-### OVHcloud AI エンドポイント
+### OVHcloud AI Endpoints
 
 1. [OVHcloud パネル](https://ovh.com/manager) に移動します。 `Public Cloud` セクション、`AI & Machine Learning` > `AI Endpoints` に移動し、`API Keys` タブで **新しい API キーの作成** をクリックします。
 
@@ -1512,7 +1512,7 @@ export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","s
 
 ---
 
-### スケールウェイ
+### Scaleway
 
 [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/) を Opencode で使用するには:
 
@@ -1541,7 +1541,7 @@ export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","s
 
 ---
 
-### 一緒にAI
+### Together AI
 
 1. [Together AI console](https://api.together.ai) に移動し、アカウントを作成し、[**キーの追加**] をクリックします。
 
@@ -1568,7 +1568,7 @@ export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","s
 
 ---
 
-### ヴェニス AI
+### Venice AI
 
 1. [Venice AI console](https://venice.ai) に移動し、アカウントを作成し、API キーを生成します。
 
@@ -1595,7 +1595,7 @@ export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","s
 
 ---
 
-### Vercel AI ゲートウェイ
+### Vercel AI Gateway
 
 Vercel AI Gateway を使用すると、統合エンドポイントを通じて OpenAI、Anthropic、Google、xAI などのモデルにアクセスできます。モデルは値上げなしの定価で提供されます。
 
@@ -1735,17 +1735,17 @@ opencode構成を通じてモデルをカスタマイズすることもできま
 opencode構成を通じて追加のモデルを追加することもできます。
 
 ```json title="opencode.json" {6}
-{
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "zenmux": {
-      "models": {
-        "somecoolnewmodel": {}
-      }
-    }
-  }
-}
-```
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "zenmux": {
+         "models": {
+           "somecoolnewmodel": {}
+         }
+       }
+     }
+   }
+   ```
 
 ---
 
