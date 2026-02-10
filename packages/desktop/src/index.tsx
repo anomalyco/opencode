@@ -1,7 +1,14 @@
 // @refresh reload
 import { webviewZoom } from "./webview-zoom"
 import { render } from "solid-js/web"
-import { AppBaseProviders, AppInterface, PlatformProvider, Platform, useCommand } from "@opencode-ai/app"
+import {
+  AppBaseProviders,
+  AppInterface,
+  PlatformProvider,
+  Platform,
+  DisplayBackend,
+  useCommand,
+} from "@opencode-ai/app"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link"
 import { openPath as openerOpenPath } from "@tauri-apps/plugin-opener"
@@ -9,6 +16,7 @@ import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { type as ostype } from "@tauri-apps/plugin-os"
 import { check, Update } from "@tauri-apps/plugin-updater"
 import { getCurrentWindow } from "@tauri-apps/api/window"
+import { invoke } from "@tauri-apps/api/core"
 import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification"
 import { relaunch } from "@tauri-apps/plugin-process"
 import { AsyncStorage } from "@solid-primitives/storage"
@@ -16,6 +24,7 @@ import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
 import { Store } from "@tauri-apps/plugin-store"
 import { Splash } from "@opencode-ai/ui/logo"
 import { createSignal, Show, Accessor, JSX, createResource, onMount, onCleanup } from "solid-js"
+import { readImage } from "@tauri-apps/plugin-clipboard-manager"
 
 import { UPDATER_ENABLED } from "./updater"
 import { initI18n, t } from "./i18n"
@@ -337,12 +346,44 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
     await commands.setDefaultServerUrl(url)
   },
 
+  getDisplayBackend: async () => {
+    const result = await invoke<DisplayBackend | null>("get_display_backend").catch(() => null)
+    return result
+  },
+
+  setDisplayBackend: async (backend) => {
+    await invoke("set_display_backend", { backend }).catch(() => undefined)
+  },
+
   parseMarkdown: (markdown: string) => commands.parseMarkdownCommand(markdown),
 
   webviewZoom,
 
   checkAppExists: async (appName: string) => {
     return commands.checkAppExists(appName)
+  },
+
+  async readClipboardImage() {
+    const image = await readImage().catch(() => null)
+    if (!image) return null
+    const bytes = await image.rgba().catch(() => null)
+    if (!bytes || bytes.length === 0) return null
+    const size = await image.size().catch(() => null)
+    if (!size) return null
+    const canvas = document.createElement("canvas")
+    canvas.width = size.width
+    canvas.height = size.height
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return null
+    const imageData = ctx.createImageData(size.width, size.height)
+    imageData.data.set(bytes)
+    ctx.putImageData(imageData, 0, 0)
+    return new Promise<File | null>((resolve) => {
+      canvas.toBlob((blob) => {
+        if (!blob) return resolve(null)
+        resolve(new File([blob], `pasted-image-${Date.now()}.png`, { type: "image/png" }))
+      }, "image/png")
+    })
   },
 })
 
@@ -389,7 +430,7 @@ render(() => {
             }
 
             return (
-              <AppInterface defaultUrl={data().url}>
+              <AppInterface defaultUrl={data().url} isSidecar>
                 <Inner />
               </AppInterface>
             )
