@@ -433,15 +433,17 @@ export namespace SessionPrompt {
           log.error("subtask execution failed", { error, agent: task.agent, description: task.description })
           return undefined
         })
-        await Plugin.trigger(
-          "tool.execute.after",
-          {
-            tool: "task",
-            sessionID,
-            callID: part.id,
-          },
-          result,
-        )
+        if (result) {
+          await Plugin.trigger(
+            "tool.execute.after",
+            {
+              tool: "task",
+              sessionID,
+              callID: part.id,
+            },
+            result,
+          )
+        }
         assistantMessage.finish = "tool-calls"
         assistantMessage.time.completed = Date.now()
         await Session.updateMessage(assistantMessage)
@@ -785,16 +787,6 @@ export namespace SessionPrompt {
 
         const result = await execute(args, opts)
 
-        await Plugin.trigger(
-          "tool.execute.after",
-          {
-            tool: key,
-            sessionID: ctx.sessionID,
-            callID: opts.toolCallId,
-          },
-          result,
-        )
-
         const textParts: string[] = []
         const attachments: MessageV2.FilePart[] = []
 
@@ -836,13 +828,25 @@ export namespace SessionPrompt {
           ...(truncated.truncated && { outputPath: truncated.outputPath }),
         }
 
-        return {
+        const formatted = {
           title: "",
           metadata,
           output: truncated.content,
           attachments,
           content: result.content, // directly return content to preserve ordering when outputting to model
         }
+
+        await Plugin.trigger(
+          "tool.execute.after",
+          {
+            tool: key,
+            sessionID: ctx.sessionID,
+            callID: opts.toolCallId,
+          },
+          formatted,
+        )
+
+        return formatted
       }
       tools[key] = item
     }
