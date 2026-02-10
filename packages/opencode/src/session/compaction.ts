@@ -164,7 +164,8 @@ export namespace SessionCompaction {
       model,
     })
 
-    if (result === "continue" && input.auto) {
+    if (processor.message.error) return "stop"
+    if (input.auto) {
       const continueMsg = await Session.updateMessage({
         id: Identifier.ascending("message"),
         role: "user",
@@ -188,7 +189,6 @@ export namespace SessionCompaction {
         },
       })
     }
-    if (processor.message.error) return "stop"
     Bus.publish(Event.Compacted, { sessionID: input.sessionID })
     return "continue"
   }
