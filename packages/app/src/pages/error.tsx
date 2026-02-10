@@ -1,7 +1,7 @@
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Logo } from "@opencode-ai/ui/logo"
 import { Button } from "@opencode-ai/ui/button"
-import { Component, Show } from "solid-js"
+import { Component, Show, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
@@ -209,6 +209,7 @@ interface ErrorPageProps {
 export const ErrorPage: Component<ErrorPageProps> = (props) => {
   const platform = usePlatform()
   const language = useLanguage()
+  const details = createMemo(() => formatError(props.error, language.t))
   const [store, setStore] = createStore({
     checking: false,
     version: undefined as string | undefined,
@@ -237,7 +238,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
           <p class="text-sm text-text-weak">{language.t("error.page.description")}</p>
         </div>
         <TextField
-          value={formatError(props.error, language.t)}
+          value={details()}
           readOnly
           copyable
           multiline

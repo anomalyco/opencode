@@ -762,6 +762,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     editor: () => editorRef,
     isFocused,
     isDialogActive: () => !!dialog.active,
+    draggingType: () => store.draggingType,
     setDraggingType: (type) => setStore("draggingType", type),
     focusEditor: () => {
       editorRef.focus()

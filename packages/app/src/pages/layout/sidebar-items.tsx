@@ -113,11 +113,16 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   })
 
   const hoverMessages = createMemo(() =>
-    sessionStore.message[props.session.id]?.filter((message) => message.role === "user"),
+    props.hoverSession() === props.session.id
+      ? (sessionStore.message[props.session.id] ?? []).filter((message) => message.role === "user")
+      : [],
   )
-  const hoverReady = createMemo(() => sessionStore.message[props.session.id] !== undefined)
+  const hoverReady = createMemo(() =>
+    props.hoverSession() === props.session.id ? sessionStore.message[props.session.id] !== undefined : true,
+  )
   const hoverAllowed = createMemo(() => !props.mobile && props.sidebarExpanded())
   const hoverEnabled = createMemo(() => (props.popover ?? true) && hoverAllowed())
+  const hoverOpen = createMemo(() => props.hoverSession() === props.session.id)
   const isActive = createMemo(() => props.session.id === params.id)
 
   const hoverPrefetch = { current: undefined as ReturnType<typeof setTimeout> | undefined }
@@ -148,8 +153,6 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
       class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] ${props.mobile ? "pr-7" : ""} group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
       onPointerEnter={scheduleHoverPrefetch}
       onPointerLeave={cancelHoverPrefetch}
-      onMouseEnter={scheduleHoverPrefetch}
-      onMouseLeave={cancelHoverPrefetch}
       onFocus={() => props.prefetchSession(props.session, "high")}
       onClick={() => {
         props.setHoverSession(undefined)
@@ -213,7 +216,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
           shift={-2}
           trigger={item}
           mount={!props.mobile ? props.nav() : undefined}
-          open={props.hoverSession() === props.session.id}
+          open={hoverOpen()}
           onOpenChange={(open) => props.setHoverSession(open ? props.session.id : undefined)}
         >
           <Show

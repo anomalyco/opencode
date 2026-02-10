@@ -21,17 +21,66 @@ type Input = {
 export const pickVisibleId = (list: Visible[], line: number) => {
   if (list.length === 0) return
 
-  const sorted = [...list].sort((a, b) => {
-    if (b.ratio !== a.ratio) return b.ratio - a.ratio
+  let best = list[0]
+  for (let i = 1; i < list.length; i++) {
+    const next = list[i]
+    if (next.ratio > best.ratio) {
+      best = next
+      continue
+    }
+    if (next.ratio < best.ratio) continue
 
-    const da = Math.abs(a.top - line)
-    const db = Math.abs(b.top - line)
-    if (da !== db) return da - db
+    const bestDistance = Math.abs(best.top - line)
+    const nextDistance = Math.abs(next.top - line)
+    if (nextDistance < bestDistance) {
+      best = next
+      continue
+    }
+    if (nextDistance > bestDistance) continue
 
-    return a.top - b.top
-  })
+    if (next.top < best.top) best = next
+  }
 
-  return sorted[0]?.id
+  return best.id
+}
+
+const pickVisibleMapId = (list: Map<string, { ratio: number; top: number }>, line: number) => {
+  let bestID: string | undefined
+  let bestRatio = 0
+  let bestTop = 0
+
+  for (const [id, item] of list) {
+    if (!bestID) {
+      bestID = id
+      bestRatio = item.ratio
+      bestTop = item.top
+      continue
+    }
+
+    if (item.ratio > bestRatio) {
+      bestID = id
+      bestRatio = item.ratio
+      bestTop = item.top
+      continue
+    }
+    if (item.ratio < bestRatio) continue
+
+    const bestDistance = Math.abs(bestTop - line)
+    const nextDistance = Math.abs(item.top - line)
+    if (nextDistance < bestDistance) {
+      bestID = id
+      bestTop = item.top
+      continue
+    }
+    if (nextDistance > bestDistance) continue
+
+    if (item.top < bestTop) {
+      bestID = id
+      bestTop = item.top
+    }
+  }
+
+  return bestID
 }
 
 export const pickOffsetId = (list: Offset[], cutoff: number) => {
@@ -107,16 +156,9 @@ export const createScrollSpy = (input: Input) => {
     const el = root
     if (!el) return
 
-    const line = el.getBoundingClientRect().top + 100
+    const line = el.scrollTop + 100
     const next =
-      pickVisibleId(
-        [...visible].map(([k, v]) => ({
-          id: k,
-          ratio: v.ratio,
-          top: v.top,
-        })),
-        line,
-      ) ??
+      pickVisibleMapId(visible, line) ??
       (() => {
         if (dirty) refreshOffset()
         return pickOffsetId(offset, el.scrollTop + 100)
@@ -148,9 +190,13 @@ export const createScrollSpy = (input: Input) => {
                 continue
               }
 
+              const rootTop = entry.rootBounds?.top
               visible.set(key, {
                 ratio: entry.intersectionRatio,
-                top: entry.boundingClientRect.top,
+                top:
+                  rootTop === undefined
+                    ? entry.boundingClientRect.top - el.getBoundingClientRect().top + el.scrollTop
+                    : entry.boundingClientRect.top - rootTop + el.scrollTop,
               })
             }
 
@@ -188,7 +234,7 @@ export const createScrollSpy = (input: Input) => {
         dirty = true
         schedule()
       })
-      mo.observe(el, { subtree: true, childList: true, characterData: true })
+      mo.observe(el, { subtree: true, childList: true })
     }
 
     dirty = true

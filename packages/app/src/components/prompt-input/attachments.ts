@@ -11,6 +11,7 @@ type PromptAttachmentsInput = {
   editor: () => HTMLDivElement | undefined
   isFocused: () => boolean
   isDialogActive: () => boolean
+  draggingType: () => "image" | "@mention" | null
   setDraggingType: (type: "image" | "@mention" | null) => void
   focusEditor: () => void
   addPart: (part: ContentPart) => void
@@ -20,6 +21,11 @@ type PromptAttachmentsInput = {
 export function createPromptAttachments(input: PromptAttachmentsInput) {
   const prompt = usePrompt()
   const language = useLanguage()
+
+  const setDraggingType = (next: "image" | "@mention" | null) => {
+    if (input.draggingType() === next) return
+    input.setDraggingType(next)
+  }
 
   const addImageAttachment = async (file: File) => {
     if (!ACCEPTED_FILE_TYPES.includes(file.type)) return
@@ -98,16 +104,20 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     const hasFiles = event.dataTransfer?.types.includes("Files")
     const hasText = event.dataTransfer?.types.includes("text/plain")
     if (hasFiles) {
-      input.setDraggingType("image")
-    } else if (hasText) {
-      input.setDraggingType("@mention")
+      setDraggingType("image")
+      return
     }
+    if (hasText) {
+      setDraggingType("@mention")
+      return
+    }
+    setDraggingType(null)
   }
 
   const handleGlobalDragLeave = (event: DragEvent) => {
     if (input.isDialogActive()) return
     if (!event.relatedTarget) {
-      input.setDraggingType(null)
+      setDraggingType(null)
     }
   }
 
@@ -115,7 +125,7 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
     if (input.isDialogActive()) return
 
     event.preventDefault()
-    input.setDraggingType(null)
+    setDraggingType(null)
 
     const plainText = event.dataTransfer?.getData("text/plain")
     const filePrefix = "file:"

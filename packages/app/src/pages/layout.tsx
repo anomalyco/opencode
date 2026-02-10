@@ -563,9 +563,17 @@ export default function Layout(props: ParentProps) {
     if (!pageReady()) return
     if (!layoutReady()) return
     const projects = layout.projects.list()
+    const byDirectory = new Map<string, LocalProject>()
+    for (const project of projects) {
+      byDirectory.set(project.worktree, project)
+      for (const directory of project.sandboxes ?? []) {
+        byDirectory.set(directory, project)
+      }
+    }
+
     for (const [directory, expanded] of Object.entries(store.workspaceExpanded)) {
       if (!expanded) continue
-      const project = projects.find((item) => item.worktree === directory || item.sandboxes?.includes(directory))
+      const project = byDirectory.get(directory)
       if (!project) continue
       if (project.vcs === "git" && layout.sidebar.workspaces(project.worktree)()) continue
       setStore("workspaceExpanded", directory, false)
@@ -1473,6 +1481,16 @@ export default function Layout(props: ParentProps) {
     globalSync.project.loadSessions(project.worktree)
   })
 
+  const projectIndex = createMemo(() => {
+    const map = new Map<string, number>()
+    const projects = layout.projects.list()
+    for (let i = 0; i < projects.length; i++) {
+      const project = projects[i]
+      map.set(project.worktree, i)
+    }
+    return map
+  })
+
   function handleDragStart(event: unknown) {
     const id = getDraggableId(event)
     if (!id) return
@@ -1483,10 +1501,10 @@ export default function Layout(props: ParentProps) {
   function handleDragOver(event: DragEvent) {
     const { draggable, droppable } = event
     if (draggable && droppable) {
-      const projects = layout.projects.list()
-      const fromIndex = projects.findIndex((p) => p.worktree === draggable.id.toString())
-      const toIndex = projects.findIndex((p) => p.worktree === droppable.id.toString())
-      if (fromIndex !== toIndex && toIndex !== -1) {
+      const index = projectIndex()
+      const fromIndex = index.get(draggable.id.toString())
+      const toIndex = index.get(droppable.id.toString())
+      if (fromIndex !== undefined && toIndex !== undefined && fromIndex !== toIndex) {
         layout.projects.move(draggable.id.toString(), toIndex)
       }
     }

@@ -1,4 +1,4 @@
-import { createEffect, on, onCleanup } from "solid-js"
+import { createEffect, createMemo, on, onCleanup } from "solid-js"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 
 export const messageIdFromHash = (hash: string) => {
@@ -35,6 +35,16 @@ export const useSessionHashScroll = (input: {
     window.history.replaceState(null, "", `#${input.anchor(id)}`)
   }
 
+  const visible = createMemo(() => {
+    const map = new Map<string, { message: UserMessage; index: number }>()
+    const list = input.visibleUserMessages()
+    for (let i = 0; i < list.length; i++) {
+      const message = list[i]
+      map.set(message.id, { message, index: i })
+    }
+    return map
+  })
+
   const scrollToElement = (el: HTMLElement, behavior: ScrollBehavior) => {
     const root = input.scroller()
     if (!root) return false
@@ -49,9 +59,8 @@ export const useSessionHashScroll = (input: {
   const scrollToMessage = (message: UserMessage, behavior: ScrollBehavior = "smooth") => {
     input.setActiveMessage(message)
 
-    const msgs = input.visibleUserMessages()
-    const index = msgs.findIndex((m) => m.id === message.id)
-    if (index !== -1 && index < input.turnStart()) {
+    const index = visible().get(message.id)?.index
+    if (index !== undefined && index < input.turnStart()) {
       input.setTurnStart(index)
       input.scheduleTurnBackfill()
 
@@ -107,7 +116,7 @@ export const useSessionHashScroll = (input: {
     const messageId = messageIdFromHash(hash)
     if (messageId) {
       input.autoScroll.pause()
-      const msg = input.visibleUserMessages().find((m) => m.id === messageId)
+      const msg = visible().get(messageId)?.message
       if (msg) {
         scrollToMessage(msg, behavior)
         return
@@ -144,14 +153,14 @@ export const useSessionHashScroll = (input: {
   createEffect(() => {
     if (!input.sessionID() || !input.messagesReady()) return
 
-    input.visibleUserMessages().length
+    const lookup = visible()
     input.turnStart()
 
     const targetId = input.pendingMessage() ?? messageIdFromHash(window.location.hash)
     if (!targetId) return
     if (input.currentMessageId() === targetId) return
 
-    const msg = input.visibleUserMessages().find((m) => m.id === targetId)
+    const msg = lookup.get(targetId)?.message
     if (!msg) return
 
     if (input.pendingMessage() === targetId) input.setPendingMessage(undefined)

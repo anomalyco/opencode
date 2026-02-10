@@ -24,14 +24,23 @@ export default function Home() {
   const language = useLanguage()
   const homedir = createMemo(() => sync.data.path.home)
   const recent = createMemo(() => {
-    return sync.data.project
-      .toSorted((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
-      .slice(0, 5)
+    return sync.data.project.reduce(
+      (list, project) => {
+        const time = project.time.updated ?? project.time.created
+        const index = list.findIndex((item) => (item.time.updated ?? item.time.created) < time)
+        if (index === -1) list.push(project)
+        else list.splice(index, 0, project)
+        if (list.length > 5) list.pop()
+        return list
+      },
+      sync.data.project.slice(0, 0),
+    )
   })
 
-  function openProject(directory: string) {
+  function openProject(directory: string, doNavigate = true) {
     layout.projects.open(directory)
     server.projects.touch(directory)
+    if (!doNavigate) return
     navigate(`/${base64Encode(directory)}`)
   }
 
@@ -39,9 +48,14 @@ export default function Home() {
     function resolve(result: string | string[] | null) {
       if (Array.isArray(result)) {
         for (const directory of result) {
-          openProject(directory)
+          openProject(directory, false)
         }
-      } else if (result) {
+        const first = result[0]
+        if (!first) return
+        navigate(`/${base64Encode(first)}`)
+        return
+      }
+      if (result) {
         openProject(result)
       }
     }
