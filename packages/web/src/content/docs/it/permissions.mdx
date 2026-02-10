@@ -1,0 +1,237 @@
+---
+title: Permessi
+description: Controlla quali azioni richiedono approvazione prima di essere eseguite.
+---
+
+OpenCode usa la configurazione `permission` per decidere se una determinata azione deve essere eseguita automaticamente, se deve chiederti conferma o se deve essere bloccata.
+
+A partire da `v1.1.1`, la vecchia configurazione booleana `tools` e' deprecata ed e' stata incorporata in `permission`. La vecchia configurazione `tools` e' ancora supportata per retrocompatibilita'.
+
+---
+
+## Azioni
+
+Ogni regola di permesso si risolve in uno tra:
+
+- `"allow"` — esegui senza approvazione
+- `"ask"` — chiedi approvazione
+- `"deny"` — blocca l'azione
+
+---
+
+## Configurazione
+
+Puoi impostare i permessi globalmente (con `*`) e sovrascrivere quelli di strumenti specifici.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "*": "ask",
+    "bash": "allow",
+    "edit": "deny"
+  }
+}
+```
+
+Puoi anche impostare tutti i permessi in una sola volta:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": "allow"
+}
+```
+
+---
+
+## Regole granulari (sintassi a oggetto)
+
+Per la maggior parte dei permessi, puoi usare un oggetto per applicare azioni diverse in base all'input dello strumento.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "ask",
+      "git *": "allow",
+      "npm *": "allow",
+      "rm *": "deny",
+      "grep *": "allow"
+    },
+    "edit": {
+      "*": "deny",
+      "packages/web/src/content/docs/*.mdx": "allow"
+    }
+  }
+}
+```
+
+Le regole vengono valutate per corrispondenza di pattern e **vince l'ultima regola che corrisponde**. Un pattern comune e' mettere prima la regola jolly `"*"` e poi regole piu' specifiche.
+
+### Wildcard
+
+I pattern dei permessi usano un semplice matching con wildcard:
+
+- `*` corrisponde a zero o piu' caratteri qualsiasi
+- `?` corrisponde esattamente a un carattere
+- Tutti gli altri caratteri corrispondono letteralmente
+
+### Espansione della home directory
+
+Puoi usare `~` o `$HOME` all'inizio di un pattern per riferirti alla tua home directory. Questo e' particolarmente utile per le regole [`external_directory`](#external-directories).
+
+- `~/projects/*` -> `/Users/username/projects/*`
+- `$HOME/projects/*` -> `/Users/username/projects/*`
+- `~` -> `/Users/username`
+
+### Directory esterne
+
+Usa `external_directory` per consentire chiamate a strumenti che toccano percorsi al di fuori della directory di lavoro da cui e' stato avviato OpenCode. Si applica a qualsiasi strumento che accetta un path come input (ad esempio `read`, `edit`, `list`, `glob`, `grep` e molti comandi `bash`).
+
+L'espansione della home (come `~/...`) influisce solo su come viene scritto un pattern. Non rende un percorso esterno parte della workspace corrente, quindi i path fuori dalla directory di lavoro devono comunque essere consentiti tramite `external_directory`.
+
+Per esempio, questo consente l'accesso a tutto sotto `~/projects/personal/`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "~/projects/personal/**": "allow"
+    }
+  }
+}
+```
+
+Qualsiasi directory consentita qui eredita gli stessi default della workspace corrente. Dato che [`read` di default e' `allow`](#defaults), anche le letture sono consentite per le voci sotto `external_directory` a meno di sovrascritture. Aggiungi regole esplicite quando uno strumento deve essere limitato su questi path, ad esempio bloccando le modifiche ma lasciando consentite le letture:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "~/projects/personal/**": "allow"
+    },
+    "edit": {
+      "~/projects/personal/**": "deny"
+    }
+  }
+}
+```
+
+Mantieni l'elenco limitato a percorsi fidati e aggiungi regole extra di allow/deny quando serve per altri strumenti (ad esempio `bash`).
+
+---
+
+## Permessi disponibili
+
+I permessi di OpenCode sono indicizzati per nome dello strumento, piu' un paio di guardrail di sicurezza:
+
+- `read` — lettura di un file (corrisponde al percorso del file)
+- `edit` — tutte le modifiche ai file (include `edit`, `write`, `patch`, `multiedit`)
+- `glob` — ricerca file tramite glob (corrisponde al pattern glob)
+- `grep` — ricerca nel contenuto (corrisponde al pattern regex)
+- `list` — elenco file in una directory (corrisponde al path della directory)
+- `bash` — esecuzione comandi di shell (corrisponde a comandi parsati come `git status --porcelain`)
+- `task` — avvio subagenti (corrisponde al tipo di subagente)
+- `skill` — caricamento di una skill (corrisponde al nome della skill)
+- `lsp` — esecuzione query LSP (attualmente non granulare)
+- `todoread`, `todowrite` — lettura/aggiornamento della todo list
+- `webfetch` — fetch di un URL (corrisponde all'URL)
+- `websearch`, `codesearch` — ricerca web/codice (corrisponde alla query)
+- `external_directory` — si attiva quando uno strumento tocca percorsi fuori dalla working directory del progetto
+- `doom_loop` — si attiva quando la stessa chiamata a uno strumento si ripete 3 volte con input identico
+
+---
+
+## Default
+
+Se non specifichi nulla, OpenCode parte da default permissivi:
+
+- La maggior parte dei permessi di default e' `"allow"`.
+- `doom_loop` ed `external_directory` di default sono `"ask"`.
+- `read` e' `"allow"`, ma i file `.env` sono negati di default:
+
+```json title="opencode.json"
+{
+  "permission": {
+    "read": {
+      "*": "allow",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow"
+    }
+  }
+}
+```
+
+---
+
+## Cosa fa "Ask"
+
+Quando OpenCode chiede approvazione, la UI offre tre esiti:
+
+- `once` — approva solo questa richiesta
+- `always` — approva richieste future che corrispondono ai pattern suggeriti (per il resto della sessione corrente di OpenCode)
+- `reject` — nega la richiesta
+
+L'insieme di pattern che `always` approverebbe e' fornito dallo strumento (ad esempio, le approvazioni per bash in genere mettono in whitelist un prefisso di comando sicuro come `git status*`).
+
+---
+
+## Agenti
+
+Puoi sovrascrivere i permessi per agente. I permessi dell'agente vengono uniti alla configurazione globale e le regole dell'agente hanno precedenza. [Scopri di piu'](/docs/agents#permissions) sui permessi degli agenti.
+
+:::note
+Fai riferimento alla sezione [Regole granulari (sintassi a oggetto)](#granular-rules-object-syntax) per esempi piu' dettagliati di pattern matching.
+:::
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "ask",
+      "git *": "allow",
+      "git commit *": "deny",
+      "git push *": "deny",
+      "grep *": "allow"
+    }
+  },
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "*": "ask",
+          "git *": "allow",
+          "git commit *": "ask",
+          "git push *": "deny",
+          "grep *": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+Puoi anche configurare i permessi dell'agente in Markdown:
+
+```markdown title="~/.config/opencode/agents/review.md"
+---
+description: Code review without edits
+mode: subagent
+permission:
+  edit: deny
+  bash: ask
+  webfetch: deny
+---
+
+Only analyze code and suggest changes.
+```
+
+:::tip
+Usa il pattern matching per comandi con argomenti. `"grep *"` consente `grep pattern file.txt`, mentre `"grep"` da solo lo bloccherebbe. Comandi come `git status` funzionano per il comportamento di default ma richiedono un permesso esplicito (come `"git status *"`) quando vengono passati argomenti.
+:::
