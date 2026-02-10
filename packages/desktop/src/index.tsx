@@ -62,338 +62,346 @@ const createPlatform = (
   backend: Accessor<BackendConfig>,
   setBackend: (next: BackendConfig) => void,
   fetchBackend: () => Promise<BackendConfig | null>,
-): Platform => ({
-  platform: "desktop",
-  os: (() => {
+): Platform => {
+  const os = (() => {
     const type = ostype()
     if (type === "macos" || type === "windows" || type === "linux") return type
     return undefined
-  })(),
-  version: pkg.version,
+  })()
 
-  async openDirectoryPickerDialog(opts) {
-    if (backend().mode === "wsl") return null
-    const result = await open({
-      directory: true,
-      multiple: opts?.multiple ?? false,
-      title: opts?.title ?? t("desktop.dialog.chooseFolder"),
-    })
-    return result
-  },
+  return {
+    platform: "desktop",
+    os,
+    version: pkg.version,
 
-  async openFilePickerDialog(opts) {
-    const result = await open({
-      directory: false,
-      multiple: opts?.multiple ?? false,
-      title: opts?.title ?? t("desktop.dialog.chooseFile"),
-    })
-    return result
-  },
+    async openDirectoryPickerDialog(opts) {
+      if (backend().mode === "wsl") return null
+      const result = await open({
+        directory: true,
+        multiple: opts?.multiple ?? false,
+        title: opts?.title ?? t("desktop.dialog.chooseFolder"),
+      })
+      return result
+    },
 
-  async saveFilePickerDialog(opts) {
-    const result = await save({
-      title: opts?.title ?? t("desktop.dialog.saveFile"),
-      defaultPath: opts?.defaultPath,
-    })
-    return result
-  },
+    async openFilePickerDialog(opts) {
+      const result = await open({
+        directory: false,
+        multiple: opts?.multiple ?? false,
+        title: opts?.title ?? t("desktop.dialog.chooseFile"),
+      })
+      return result
+    },
 
-  openLink(url: string) {
-    void shellOpen(url).catch(() => undefined)
-  },
+    async saveFilePickerDialog(opts) {
+      const result = await save({
+        title: opts?.title ?? t("desktop.dialog.saveFile"),
+        defaultPath: opts?.defaultPath,
+      })
+      return result
+    },
 
-  openPath(path: string, app?: string) {
-    return openerOpenPath(path, app)
-  },
+    openLink(url: string) {
+      void shellOpen(url).catch(() => undefined)
+    },
 
-  back() {
-    window.history.back()
-  },
+    async openPath(path: string, app?: string) {
+      if (backend().mode === "wsl" && os === "windows") {
+        const converted = await invoke<string>("wsl_path", { path, mode: "windows" }).catch(() => null)
+        return openerOpenPath(converted && converted.length > 0 ? converted : path, app)
+      }
+      return openerOpenPath(path, app)
+    },
 
-  forward() {
-    window.history.forward()
-  },
+    back() {
+      window.history.back()
+    },
 
-  storage: (() => {
-    type StoreLike = {
-      get(key: string): Promise<string | null | undefined>
-      set(key: string, value: string): Promise<unknown>
-      delete(key: string): Promise<unknown>
-      clear(): Promise<unknown>
-      keys(): Promise<string[]>
-      length(): Promise<number>
-    }
+    forward() {
+      window.history.forward()
+    },
 
-    const WRITE_DEBOUNCE_MS = 250
-
-    const storeCache = new Map<string, Promise<StoreLike>>()
-    const apiCache = new Map<string, AsyncStorage & { flush: () => Promise<void> }>()
-    const memoryCache = new Map<string, StoreLike>()
-
-    const flushAll = async () => {
-      const apis = Array.from(apiCache.values())
-      await Promise.all(apis.map((api) => api.flush().catch(() => undefined)))
-    }
-
-    if ("addEventListener" in globalThis) {
-      const handleVisibility = () => {
-        if (document.visibilityState !== "hidden") return
-        void flushAll()
+    storage: (() => {
+      type StoreLike = {
+        get(key: string): Promise<string | null | undefined>
+        set(key: string, value: string): Promise<unknown>
+        delete(key: string): Promise<unknown>
+        clear(): Promise<unknown>
+        keys(): Promise<string[]>
+        length(): Promise<number>
       }
 
-      window.addEventListener("pagehide", () => void flushAll())
-      document.addEventListener("visibilitychange", handleVisibility)
-    }
+      const WRITE_DEBOUNCE_MS = 250
 
-    const createMemoryStore = () => {
-      const data = new Map<string, string>()
-      const store: StoreLike = {
-        get: async (key) => data.get(key),
-        set: async (key, value) => {
-          data.set(key, value)
-        },
-        delete: async (key) => {
-          data.delete(key)
-        },
-        clear: async () => {
-          data.clear()
-        },
-        keys: async () => Array.from(data.keys()),
-        length: async () => data.size,
+      const storeCache = new Map<string, Promise<StoreLike>>()
+      const apiCache = new Map<string, AsyncStorage & { flush: () => Promise<void> }>()
+      const memoryCache = new Map<string, StoreLike>()
+
+      const flushAll = async () => {
+        const apis = Array.from(apiCache.values())
+        await Promise.all(apis.map((api) => api.flush().catch(() => undefined)))
       }
-      return store
-    }
 
-    const getStore = (name: string) => {
-      const cached = storeCache.get(name)
-      if (cached) return cached
+      if ("addEventListener" in globalThis) {
+        const handleVisibility = () => {
+          if (document.visibilityState !== "hidden") return
+          void flushAll()
+        }
 
-      const store = Store.load(name).catch(() => {
-        const cached = memoryCache.get(name)
+        window.addEventListener("pagehide", () => void flushAll())
+        document.addEventListener("visibilitychange", handleVisibility)
+      }
+
+      const createMemoryStore = () => {
+        const data = new Map<string, string>()
+        const store: StoreLike = {
+          get: async (key) => data.get(key),
+          set: async (key, value) => {
+            data.set(key, value)
+          },
+          delete: async (key) => {
+            data.delete(key)
+          },
+          clear: async () => {
+            data.clear()
+          },
+          keys: async () => Array.from(data.keys()),
+          length: async () => data.size,
+        }
+        return store
+      }
+
+      const getStore = (name: string) => {
+        const cached = storeCache.get(name)
         if (cached) return cached
 
-        const memory = createMemoryStore()
-        memoryCache.set(name, memory)
-        return memory
-      })
+        const store = Store.load(name).catch(() => {
+          const cached = memoryCache.get(name)
+          if (cached) return cached
 
-      storeCache.set(name, store)
-      return store
-    }
+          const memory = createMemoryStore()
+          memoryCache.set(name, memory)
+          return memory
+        })
 
-    const createStorage = (name: string) => {
-      const pending = new Map<string, string | null>()
-      let timer: ReturnType<typeof setTimeout> | undefined
-      let flushing: Promise<void> | undefined
+        storeCache.set(name, store)
+        return store
+      }
 
-      const flush = async () => {
-        if (flushing) return flushing
+      const createStorage = (name: string) => {
+        const pending = new Map<string, string | null>()
+        let timer: ReturnType<typeof setTimeout> | undefined
+        let flushing: Promise<void> | undefined
 
-        flushing = (async () => {
-          const store = await getStore(name)
-          while (pending.size > 0) {
-            const batch = Array.from(pending.entries())
-            pending.clear()
-            for (const [key, value] of batch) {
-              if (value === null) {
-                await store.delete(key).catch(() => undefined)
-              } else {
-                await store.set(key, value).catch(() => undefined)
+        const flush = async () => {
+          if (flushing) return flushing
+
+          flushing = (async () => {
+            const store = await getStore(name)
+            while (pending.size > 0) {
+              const batch = Array.from(pending.entries())
+              pending.clear()
+              for (const [key, value] of batch) {
+                if (value === null) {
+                  await store.delete(key).catch(() => undefined)
+                } else {
+                  await store.set(key, value).catch(() => undefined)
+                }
               }
             }
-          }
-        })().finally(() => {
-          flushing = undefined
-        })
+          })().finally(() => {
+            flushing = undefined
+          })
 
-        return flushing
-      }
-
-      const schedule = () => {
-        if (timer) return
-        timer = setTimeout(() => {
-          timer = undefined
-          void flush()
-        }, WRITE_DEBOUNCE_MS)
-      }
-
-      const api: AsyncStorage & { flush: () => Promise<void> } = {
-        flush,
-        getItem: async (key: string) => {
-          const next = pending.get(key)
-          if (next !== undefined) return next
-
-          const store = await getStore(name)
-          const value = await store.get(key).catch(() => null)
-          if (value === undefined) return null
-          return value
-        },
-        setItem: async (key: string, value: string) => {
-          pending.set(key, value)
-          schedule()
-        },
-        removeItem: async (key: string) => {
-          pending.set(key, null)
-          schedule()
-        },
-        clear: async () => {
-          pending.clear()
-          const store = await getStore(name)
-          await store.clear().catch(() => undefined)
-        },
-        key: async (index: number) => {
-          const store = await getStore(name)
-          return (await store.keys().catch(() => []))[index]
-        },
-        getLength: async () => {
-          const store = await getStore(name)
-          return await store.length().catch(() => 0)
-        },
-        get length() {
-          return api.getLength()
-        },
-      }
-
-      return api
-    }
-
-    return (name = "default.dat") => {
-      const cached = apiCache.get(name)
-      if (cached) return cached
-
-      const api = createStorage(name)
-      apiCache.set(name, api)
-      return api
-    }
-  })(),
-
-  checkUpdate: async () => {
-    if (!UPDATER_ENABLED) return { updateAvailable: false }
-    const next = await check().catch(() => null)
-    if (!next) return { updateAvailable: false }
-    const ok = await next
-      .download()
-      .then(() => true)
-      .catch(() => false)
-    if (!ok) return { updateAvailable: false }
-    update = next
-    return { updateAvailable: true, version: next.version }
-  },
-
-  update: async () => {
-    if (!UPDATER_ENABLED || !update) return
-    if (ostype() === "windows") await commands.killSidecar().catch(() => undefined)
-    await update.install().catch(() => undefined)
-  },
-
-  restart: async () => {
-    await commands.killSidecar().catch(() => undefined)
-    await relaunch()
-  },
-
-  notify: async (title, description, href) => {
-    const granted = await isPermissionGranted().catch(() => false)
-    const permission = granted ? "granted" : await requestPermission().catch(() => "denied")
-    if (permission !== "granted") return
-
-    const win = getCurrentWindow()
-    const focused = await win.isFocused().catch(() => document.hasFocus())
-    if (focused) return
-
-    await Promise.resolve()
-      .then(() => {
-        const notification = new Notification(title, {
-          body: description ?? "",
-          icon: "https://opencode.ai/favicon-96x96-v3.png",
-        })
-        notification.onclick = () => {
-          const win = getCurrentWindow()
-          void win.show().catch(() => undefined)
-          void win.unminimize().catch(() => undefined)
-          void win.setFocus().catch(() => undefined)
-          if (href) {
-            window.history.pushState(null, "", href)
-            window.dispatchEvent(new PopStateEvent("popstate"))
-          }
-          notification.close()
+          return flushing
         }
+
+        const schedule = () => {
+          if (timer) return
+          timer = setTimeout(() => {
+            timer = undefined
+            void flush()
+          }, WRITE_DEBOUNCE_MS)
+        }
+
+        const api: AsyncStorage & { flush: () => Promise<void> } = {
+          flush,
+          getItem: async (key: string) => {
+            const next = pending.get(key)
+            if (next !== undefined) return next
+
+            const store = await getStore(name)
+            const value = await store.get(key).catch(() => null)
+            if (value === undefined) return null
+            return value
+          },
+          setItem: async (key: string, value: string) => {
+            pending.set(key, value)
+            schedule()
+          },
+          removeItem: async (key: string) => {
+            pending.set(key, null)
+            schedule()
+          },
+          clear: async () => {
+            pending.clear()
+            const store = await getStore(name)
+            await store.clear().catch(() => undefined)
+          },
+          key: async (index: number) => {
+            const store = await getStore(name)
+            return (await store.keys().catch(() => []))[index]
+          },
+          getLength: async () => {
+            const store = await getStore(name)
+            return await store.length().catch(() => 0)
+          },
+          get length() {
+            return api.getLength()
+          },
+        }
+
+        return api
+      }
+
+      return (name = "default.dat") => {
+        const cached = apiCache.get(name)
+        if (cached) return cached
+
+        const api = createStorage(name)
+        apiCache.set(name, api)
+        return api
+      }
+    })(),
+
+    checkUpdate: async () => {
+      if (!UPDATER_ENABLED) return { updateAvailable: false }
+      const next = await check().catch(() => null)
+      if (!next) return { updateAvailable: false }
+      const ok = await next
+        .download()
+        .then(() => true)
+        .catch(() => false)
+      if (!ok) return { updateAvailable: false }
+      update = next
+      return { updateAvailable: true, version: next.version }
+    },
+
+    update: async () => {
+      if (!UPDATER_ENABLED || !update) return
+      if (ostype() === "windows") await commands.killSidecar().catch(() => undefined)
+      await update.install().catch(() => undefined)
+    },
+
+    restart: async () => {
+      await commands.killSidecar().catch(() => undefined)
+      await relaunch()
+    },
+
+    notify: async (title, description, href) => {
+      const granted = await isPermissionGranted().catch(() => false)
+      const permission = granted ? "granted" : await requestPermission().catch(() => "denied")
+      if (permission !== "granted") return
+
+      const win = getCurrentWindow()
+      const focused = await win.isFocused().catch(() => document.hasFocus())
+      if (focused) return
+
+      await Promise.resolve()
+        .then(() => {
+          const notification = new Notification(title, {
+            body: description ?? "",
+            icon: "https://opencode.ai/favicon-96x96-v3.png",
+          })
+          notification.onclick = () => {
+            const win = getCurrentWindow()
+            void win.show().catch(() => undefined)
+            void win.unminimize().catch(() => undefined)
+            void win.setFocus().catch(() => undefined)
+            if (href) {
+              window.history.pushState(null, "", href)
+              window.dispatchEvent(new PopStateEvent("popstate"))
+            }
+            notification.close()
+          }
+        })
+        .catch(() => undefined)
+    },
+
+    fetch: (input, init) => {
+      const pw = password()
+
+      const addHeader = (headers: Headers, password: string) => {
+        headers.append("Authorization", `Basic ${btoa(`opencode:${password}`)}`)
+      }
+
+      if (input instanceof Request) {
+        if (pw) addHeader(input.headers, pw)
+        return tauriFetch(input)
+      } else {
+        const headers = new Headers(init?.headers)
+        if (pw) addHeader(headers, pw)
+        return tauriFetch(input, {
+          ...(init as any),
+          headers: headers,
+        })
+      }
+    },
+
+    getDefaultServerUrl: async () => {
+      const result = await commands.getDefaultServerUrl().catch(() => null)
+      return result
+    },
+
+    setDefaultServerUrl: async (url: string | null) => {
+      await commands.setDefaultServerUrl(url)
+    },
+
+    getBackendConfig: async () => {
+      const next = await fetchBackend()
+      if (next) return next
+      return backend()
+    },
+
+    setBackendConfig: async (config: BackendConfig) => {
+      setBackend(config)
+      await invoke("set_backend_config", { config }).catch(() => undefined)
+    },
+
+    supportsNativePickers: () => backend().mode !== "wsl",
+
+    parseMarkdown: (markdown: string) => commands.parseMarkdownCommand(markdown),
+
+    webviewZoom,
+
+    checkAppExists: async (appName: string) => {
+      return commands.checkAppExists(appName)
+    },
+
+    async readClipboardImage() {
+      const image = await readImage().catch(() => null)
+      if (!image) return null
+      const bytes = await image.rgba().catch(() => null)
+      if (!bytes || bytes.length === 0) return null
+      const size = await image.size().catch(() => null)
+      if (!size) return null
+      const canvas = document.createElement("canvas")
+      canvas.width = size.width
+      canvas.height = size.height
+      const ctx = canvas.getContext("2d")
+      if (!ctx) return null
+      const imageData = ctx.createImageData(size.width, size.height)
+      imageData.data.set(bytes)
+      ctx.putImageData(imageData, 0, 0)
+      return new Promise<File | null>((resolve) => {
+        canvas.toBlob((blob) => {
+          if (!blob) return resolve(null)
+          resolve(new File([blob], `pasted-image-${Date.now()}.png`, { type: "image/png" }))
+        }, "image/png")
       })
-      .catch(() => undefined)
-  },
-
-  fetch: (input, init) => {
-    const pw = password()
-
-    const addHeader = (headers: Headers, password: string) => {
-      headers.append("Authorization", `Basic ${btoa(`opencode:${password}`)}`)
-    }
-
-    if (input instanceof Request) {
-      if (pw) addHeader(input.headers, pw)
-      return tauriFetch(input)
-    } else {
-      const headers = new Headers(init?.headers)
-      if (pw) addHeader(headers, pw)
-      return tauriFetch(input, {
-        ...(init as any),
-        headers: headers,
-      })
-    }
-  },
-
-  getDefaultServerUrl: async () => {
-    const result = await commands.getDefaultServerUrl().catch(() => null)
-    return result
-  },
-
-  setDefaultServerUrl: async (url: string | null) => {
-    await commands.setDefaultServerUrl(url)
-  },
-
-  getBackendConfig: async () => {
-    const next = await fetchBackend()
-    if (next) return next
-    return backend()
-  },
-
-  setBackendConfig: async (config: BackendConfig) => {
-    setBackend(config)
-    await invoke("set_backend_config", { config }).catch(() => undefined)
-  },
-
-  supportsNativePickers: () => backend().mode !== "wsl",
-
-  parseMarkdown: (markdown: string) => commands.parseMarkdownCommand(markdown),
-
-  webviewZoom,
-
-  checkAppExists: async (appName: string) => {
-    return commands.checkAppExists(appName)
-  },
-
-  async readClipboardImage() {
-    const image = await readImage().catch(() => null)
-    if (!image) return null
-    const bytes = await image.rgba().catch(() => null)
-    if (!bytes || bytes.length === 0) return null
-    const size = await image.size().catch(() => null)
-    if (!size) return null
-    const canvas = document.createElement("canvas")
-    canvas.width = size.width
-    canvas.height = size.height
-    const ctx = canvas.getContext("2d")
-    if (!ctx) return null
-    const imageData = ctx.createImageData(size.width, size.height)
-    imageData.data.set(bytes)
-    ctx.putImageData(imageData, 0, 0)
-    return new Promise<File | null>((resolve) => {
-      canvas.toBlob((blob) => {
-        if (!blob) return resolve(null)
-        resolve(new File([blob], `pasted-image-${Date.now()}.png`, { type: "image/png" }))
-      }, "image/png")
-    })
-  },
-})
+    },
+  }
+}
 
 let menuTrigger = null as null | ((id: string) => void)
 createMenu((id) => {
