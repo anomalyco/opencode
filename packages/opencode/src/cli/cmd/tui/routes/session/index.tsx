@@ -1327,28 +1327,44 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
     // OpenRouter sends encrypted reasoning data that appears as [REDACTED]
     return props.part.text.replace("[REDACTED]", "").trim()
   })
+  const pending = createMemo(() => !props.part.time.end && !props.message.time.completed)
+  const color = createMemo(() =>
+    RGBA.fromInts(
+      Math.round(theme.markdownEmph.r * 255),
+      Math.round(theme.markdownEmph.g * 255),
+      Math.round(theme.markdownEmph.b * 255),
+      Math.round(theme.thinkingOpacity * 255),
+    ),
+  )
   return (
-    <Show when={content() && ctx.showThinking()}>
-      <box
-        id={"text-" + props.part.id}
-        paddingLeft={2}
-        marginTop={1}
-        flexDirection="column"
-        border={["left"]}
-        customBorderChars={SplitBorder.customBorderChars}
-        borderColor={theme.backgroundElement}
-      >
-        <code
-          filetype="markdown"
-          drawUnstyledText={false}
-          streaming={true}
-          syntaxStyle={subtleSyntax()}
-          content={"_Thinking:_ " + content()}
-          conceal={ctx.conceal()}
-          fg={theme.textMuted}
-        />
-      </box>
-    </Show>
+    <Switch>
+      <Match when={content() && ctx.showThinking()}>
+        <box
+          id={"text-" + props.part.id}
+          paddingLeft={2}
+          marginTop={1}
+          flexDirection="column"
+          border={["left"]}
+          customBorderChars={SplitBorder.customBorderChars}
+          borderColor={theme.backgroundElement}
+        >
+          <code
+            filetype="markdown"
+            drawUnstyledText={false}
+            streaming={true}
+            syntaxStyle={subtleSyntax()}
+            content={"_Thinking:_ " + content()}
+            conceal={ctx.conceal()}
+            fg={theme.textMuted}
+          />
+        </box>
+      </Match>
+      <Match when={!ctx.showThinking() && pending()}>
+        <box paddingLeft={3} marginTop={1}>
+          <Spinner color={color()}>Thinking...</Spinner>
+        </box>
+      </Match>
+    </Switch>
   )
 }
 
