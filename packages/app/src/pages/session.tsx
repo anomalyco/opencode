@@ -591,7 +591,10 @@ export default function Page() {
   const newSessionWorktree = createMemo(() => {
     if (store.newSessionWorktree === "create") return "create"
     const project = sync.project
-    if (project && sdk.directory !== project.worktree) return sdk.directory
+    const directory = sync.data.path.directory
+    if (project && directory && directory.trim() !== "" && directory !== project.worktree) {
+      return directory
+    }
     return "main"
   })
 

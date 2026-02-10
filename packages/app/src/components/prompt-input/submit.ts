@@ -117,8 +117,17 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     const images = input.imageAttachments().slice()
     const mode = input.mode()
 
+    console.log("[DEBUG handleSubmit]", {
+      currentPromptLength: currentPrompt.length,
+      text,
+      textTrimmedLength: text.trim().length,
+      imagesLength: images.length,
+      commentCount: input.commentCount(),
+    })
+
     if (text.trim().length === 0 && images.length === 0 && input.commentCount() === 0) {
       if (input.working()) abort()
+      console.log("[DEBUG handleSubmit] silent return - no content")
       return
     }
 
@@ -136,8 +145,28 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     input.resetHistoryNavigation()
 
     const projectDirectory = sdk.directory
+    console.log("[DEBUG handleSubmit] sdk.directory", {
+      projectDirectory,
+      projectDirectoryLength: projectDirectory?.length ?? 0,
+    })
+
+    // Guard: 确保 projectDirectory 不为空
+    if (!projectDirectory || projectDirectory.trim() === "") {
+      console.error("[BUG] sdk.directory is empty", {
+        projectDirectory,
+        paramsDir: params.dir,
+        sdkUrl: sdk.url,
+      })
+      showToast({
+        variant: "error",
+        title: language.t("prompt.toast.sessionCreateFailed.title"),
+        description: "项目目录未就绪，请稍后再试或重新打开项目",
+      })
+      return
+    }
+
     const isNewSession = !params.id
-    const worktreeSelection = input.newSessionWorktree || "main"
+    const worktreeSelection = input.newSessionWorktree?.trim() || "main"
 
     let sessionDirectory = projectDirectory
     let client = sdk.client
@@ -171,6 +200,20 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       }
 
       if (sessionDirectory !== projectDirectory) {
+        // Guard: 确保 sessionDirectory 不为空（worktree 场景）
+        if (!sessionDirectory || sessionDirectory.trim() === "") {
+          console.error("[BUG] sessionDirectory is empty in worktree path", {
+            sessionDirectory,
+            projectDirectory,
+            worktreeSelection,
+          })
+          showToast({
+            variant: "error",
+            title: language.t("prompt.toast.sessionCreateFailed.title"),
+            description: "工作树目录配置错误，请重试",
+          })
+          return
+        }
         client = createOpencodeClient({
           baseUrl: sdk.url,
           fetch: platform.fetch,
