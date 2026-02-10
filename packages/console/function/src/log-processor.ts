@@ -49,6 +49,7 @@ export default {
       const ret = await fetch("https://api.honeycomb.io/1/batch/zen", {
         method: "POST",
         headers: {
+          "Content-Encoding": "plaintext",
           "Content-Type": "application/json",
           "X-Honeycomb-Team": Resource.HONEYCOMB_API_KEY.value,
         },
