@@ -2,6 +2,8 @@ mod cli;
 mod constants;
 #[cfg(windows)]
 mod job_object;
+#[cfg(target_os = "linux")]
+pub mod linux_display;
 mod markdown;
 mod server;
 mod window_customizer;
@@ -194,6 +196,43 @@ fn check_macos_app(app_name: &str) -> bool {
         .unwrap_or(false)
 }
 
+#[derive(serde::Serialize, serde::Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum LinuxDisplayBackend {
+    Wayland,
+    Auto,
+}
+
+#[tauri::command]
+#[specta::specta]
+fn get_display_backend() -> Option<LinuxDisplayBackend> {
+    #[cfg(target_os = "linux")]
+    {
+        let prefer = linux_display::read_wayland().unwrap_or(false);
+        return Some(if prefer {
+            LinuxDisplayBackend::Wayland
+        } else {
+            LinuxDisplayBackend::Auto
+        });
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    None
+}
+
+#[tauri::command]
+#[specta::specta]
+fn set_display_backend(_app: AppHandle, _backend: LinuxDisplayBackend) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        let prefer = matches!(_backend, LinuxDisplayBackend::Wayland);
+        return linux_display::write_wayland(&_app, prefer);
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    Ok(())
+}
+
 #[cfg(target_os = "linux")]
 fn check_linux_app(app_name: &str) -> bool {
     return true;
@@ -209,6 +248,8 @@ pub fn run() {
             await_initialization,
             server::get_default_server_url,
             server::set_default_server_url,
+            get_display_backend,
+            set_display_backend,
             markdown::parse_markdown_command,
             check_app_exists
         ])

@@ -1,0 +1,188 @@
+---
+title: Serwery LSP
+description: opencode integruje się z serwerem LSP.
+---
+
+opencode integruje się z protokołem serwera językowego (LSP), aby pomóc LLM w korzystaniu z bazowego kodu. Wykorzystuje diagnostykę, aby otrzymać odpowiedź zwrotną do LLM.
+
+---
+
+## Wbudowany
+
+opencode posiada kilka wbudowanych serwerów LSP dla języków:
+
+| Serwer LSP         | Rozszerzenie                                                        | Wymagania                                                                  |
+| ------------------ | ------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| astro              | .astro                                                              | Automatyczne instalacje dla Astro                                          |
+| bash               | .sh, .bash, .zsh, .ksh                                              | Automatycznie instaluje serwer języka bash                                 |
+| brzęk              | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++                | Automatyczne instalacje dla C/C++                                          |
+| csharp             | .cs                                                                 | `.NET SDK` zainstalowany                                                   |
+| clojure-lsp        | .clj, .cljs, .cljc, .edn                                            | Komenda `clojure-lsp` dostępna                                             |
+| strzałka           | .dart                                                               | Komenda `dart` dostępna                                                    |
+| nie                | .ts, .tsx, .js, .jsx, .mjs                                          | Dostępne rozwiązanie `deno` (automatyczne wykrywanie deno.json/deno.jsonc) |
+| eliksir-ls         | .ex, .exs                                                           | Komenda `elixir` dostępna                                                  |
+| eslin              | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue                  | `eslint` zależność w projekcie                                             |
+| fsharp             | .fs, .fsi, .fsx, .fsscript                                          | `.NET SDK` zainstalowany                                                   |
+| blask              | .blask                                                              | Komenda `gleam` dostępna                                                   |
+| gopls              | .idź                                                                | Komenda `go` dostępna                                                      |
+| hl                 | .hs, .lhs                                                           | Komenda `haskell-language-server-wrapper` dostępna                         |
+| jdtl               | .java                                                               | `Java SDK (version 21+)` zainstalowany                                     |
+| kotlin-ls          | .kt, .kts                                                           | Automatyczne instalacje dla Kotlin                                         |
+| lua-ls             | .lua                                                                | Automatyczne instalacje dla Lua                                            |
+| nixd               | .nix                                                                | Komenda `nixd` dostępna                                                    |
+| ocaml-lsp          | .ml, .mli                                                           | Komenda `ocamllsp` dostępna                                                |
+| oxlint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | `oxlint` zależność w projekcie                                             |
+| php inteligentny   | .php                                                                | Automatyczne instalacje dla PHP                                            |
+| pryzma             | .prysma                                                             | Komenda `prisma` dostępna                                                  |
+| pirat              | .py, .pyi                                                           | Zainstalowana zależność `pyright`                                          |
+| ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                           | Dostępne polecenie `ruby` i `gem`                                          |
+| rdza               | .rs                                                                 | Komenda `rust-analyzer` dostępna                                           |
+| sourcekit-lsp      | .swift, .objc, .objcpp                                              | `swift` zainstalowany (`xcode` na macOS)                                   |
+| smukły             | smukły                                                              | Automatyczne instalacje dla aplikacji Svelte                               |
+| terraforma         | .tf, .tfvars                                                        | Automatyczne instalacje z wydań GitHub                                     |
+| malutka            | .typ, .typc                                                         | Automatyczne instalacje z wydań GitHub                                     |
+| maszynopis         | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts                        | `typescript` zależność w projekcie                                         |
+| vue                | .vue                                                                | Automatyczne instalacje dla Vue                                            |
+| yaml-ls            | .yaml, .yml                                                         | Automatycznie instaluje serwer języka yaml Red Hat                         |
+| zł                 | .zig, .zon                                                          | Komenda `zig` dostępna                                                     |
+
+Serwery LSP są automatycznie włączane po wykryciu jednego z rozszerzonych plików i wymagań.
+
+:::note
+Możliwość automatycznego pobierania z serwera LSP, ustawianie zmiennej środowiska `OPENCODE_DISABLE_LSP_DOWNLOAD` na `true`.
+:::
+
+---
+
+## Jak to działa
+
+Gdy opencode otwiera plik, to:
+
+1. Sprawdzanie pliku na wszystkich dostępnych serwerach LSP.
+2. Uruchamia właściwy serwer LSP, jeśli jeszcze nie działa.
+
+---
+
+## Skonfiguruj
+
+Możesz dostosować serwery LSP poprzez sekcję `lsp` w konfiguracji opencode.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {}
+}
+```
+
+Każdy serwer LSP obsługuje szczegółowe elementy:
+
+| Nieruchomość     | Wpisz    | Opis                                                   |
+| ---------------- | -------- | ------------------------------------------------------ |
+| `disabled`       | boolean  | Ustaw tę opcję na `true`, aby włączyć serwer LSP       |
+| `command`        | string[] | Polecenie uruchomienia serwera LSP                     |
+| `extensions`     | string[] | Rozszerzenia plików, które powinny mieć ten serwer LSP |
+| `env`            | object   | Zmienne ustawienia podczas uruchamiania serwera        |
+| `initialization` | object   | Opcje inicjalizacji do wysłania na serwer LSP          |
+
+Spójrzmy na kilka przykładów.
+
+---
+
+### Zmienne środowiskowe
+
+Zastosowanie `env`, aby ustawić zmienne parametry transmisji podczas uruchamiania serwera LSP:
+
+```json title="opencode.json" {5-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "rust": {
+      "env": {
+        "RUST_LOG": "debug"
+      }
+    }
+  }
+}
+```
+
+---
+
+### Opcje inicjalizacji
+
+właściwości `initialization`, aby mieć możliwość inicjalizacji na serwerze LSP. Są to ustawienia dla serwera wysyłającego podczas przełączania LSP `initialize`:
+
+```json title="opencode.json" {5-9}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "typescript": {
+      "initialization": {
+        "preferences": {
+          "importModuleSpecifierPreference": "relative"
+        }
+      }
+    }
+  }
+}
+```
+
+:::note
+Opcje inicjalizacji różnią się w zależności od serwera LSP. Sprawdź swój serwer LSP pod gniazdem.
+:::
+
+---
+
+### Wyłączanie serwerów LSP
+
+Aby wyłączyć **wszystkie** serwery LSP globalnie, ustaw `lsp` na `false`:
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": false
+}
+```
+
+Aby wyłączyć **określony** serwer LSP, ustawa `disabled` na `true`:
+
+```json title="opencode.json" {5}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "typescript": {
+      "disabled": true
+    }
+  }
+}
+```
+
+---
+
+### Niestandardowe serwery LSP
+
+Serwer udostępniający serwery LSP, mechanizmy sterujące i udostępniane pliki:
+
+```json title="opencode.json" {4-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "lsp": {
+    "custom-lsp": {
+      "command": ["custom-lsp-server", "--stdio"],
+      "extensions": [".custom"]
+    }
+  }
+}
+```
+
+---
+
+## Dodatkowe informacje
+
+### PHP Intelefense
+
+PHP Intelephense oferuje funkcje premium poprzez klucz licencyjny. Możesz przechowywać klucz licencyjny umieszczając (tylko) klucz w pliku tekstowym pod adresem:
+
+- W systemie macOS/Linux: `$HOME/intelephense/licence.txt`
+- W systemie Windows: `%USERPROFILE%/intelephense/licence.txt`
+
+Plik powinien zawierać wyłącznie klucz licencyjny, bez udostępniania treści.

@@ -1,0 +1,222 @@
+---
+title: "Agent Skills"
+description: "Define reusable behavior via SKILL.md definitions"
+---
+
+Umiejętności agenta pozwalają opencode odkryć instrukcje wielokrotnego użytku z repozytorium lub katalogu domowego.
+Umiejętności są ładowane na żądanie za pośrednictwem natywnego narzędzia `skill` — agenci widzą dostępne umiejętności i w razie potrzeby mogą załadować pełną zawartość.
+
+---
+
+## Place files
+
+Utwórz jeden folder na nazwę umiejętności i umieść w nim `SKILL.md`.
+opencode searches these locations:
+
+- Project config: `.opencode/skills/<name>/SKILL.md`
+- Global config: `~/.config/opencode/skills/<name>/SKILL.md`
+- Project Claude-compatible: `.claude/skills/<name>/SKILL.md`
+- Global Claude-compatible: `~/.claude/skills/<name>/SKILL.md`
+- Project agent-compatible: `.agents/skills/<name>/SKILL.md`
+- Global agent-compatible: `~/.agents/skills/<name>/SKILL.md`
+
+---
+
+## Understand discovery
+
+W przypadku ścieżek lokalnych projektu opencode przechodzi od bieżącego katalogu roboczego, aż dotrze do drzewa roboczego git.
+Ładuje po drodze dowolne pasujące `skills/*/SKILL.md` w `.opencode/` i dowolne pasujące `.claude/skills/*/SKILL.md` lub `.agents/skills/*/SKILL.md`.
+
+Ładowane są także definicje globalne z `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` i `~/.agents/skills/*/SKILL.md`.
+
+---
+
+## Write frontmatter
+
+Każdy `SKILL.md` musi zaczynać się od treści YAML.
+Only these fields are recognized:
+
+- `name` (required)
+- `description` (required)
+- `license` (optional)
+- `compatibility` (optional)
+- `metadata` (optional, string-to-string map)
+
+Unknown frontmatter fields are ignored.
+
+---
+
+## Validate names
+
+`name` must:
+
+- Be 1–64 characters
+- Należy używać małych liter alfanumerycznych i oddzielać je pojedynczym łącznikiem
+- Nie zaczyna się ani nie kończy na `-`
+- Not contain consecutive `--`
+- Dopasuj nazwę katalogu zawierającą `SKILL.md`
+
+Equivalent regex:
+
+```text
+^[a-z0-9]+(-[a-z0-9]+)*$
+```
+
+---
+
+## Follow length rules
+
+`description` must be 1-1024 characters.
+Zadbaj o to, aby agent mógł dokonać prawidłowego wyboru.
+
+---
+
+## Skorzystaj z przykładu
+
+Utwórz `.opencode/skills/git-release/SKILL.md` w ten sposób:
+
+```markdown
+---
+name: git-release
+description: Create consistent releases and changelogs
+license: MIT
+compatibility: opencode
+metadata:
+  audience: maintainers
+  workflow: github
+---
+
+## What I do
+
+- Draft release notes from merged PRs
+- Propose a version bump
+- Provide a copy-pasteable `gh release create` command
+
+## When to use me
+
+Use this when you are preparing a tagged release.
+Ask clarifying questions if the target versioning scheme is unclear.
+```
+
+---
+
+## Recognize tool description
+
+opencode wymienia dostępne umiejętności w opisie narzędzia `skill`.
+Każdy wpis zawiera nazwę i opis umiejętności:
+
+```xml
+<available_skills>
+  <skill>
+    <name>git-release</name>
+    <description>Create consistent releases and changelogs</description>
+  </skill>
+</available_skills>
+```
+
+Agent ładuje umiejętność wywołując narzędzie:
+
+```
+skill({ name: "git-release" })
+```
+
+---
+
+## Skonfiguruj uprawnienia
+
+Control which skills agents can access using pattern-based permissions in `opencode.json`:
+
+```json
+{
+  "permission": {
+    "skill": {
+      "*": "allow",
+      "pr-review": "allow",
+      "internal-*": "deny",
+      "experimental-*": "ask"
+    }
+  }
+}
+```
+
+| Permission | Behavior                                               |
+| ---------- | ------------------------------------------------------ |
+| `allow`    | Skill loads immediately                                |
+| `deny`     | Skill hidden from agent, access rejected               |
+| `ask`      | Użytkownik proszony o zatwierdzenie przed załadowaniem |
+
+Wzorce obsługują symbole wieloznaczne: `internal-*` odpowiada `internal-docs`, `internal-tools` itd.
+
+---
+
+## Override per agent
+
+Nadaj konkretnym agentom inne uprawnienia niż globalne ustawienia domyślne.
+
+**Dla agentów niestandardowych** (w temacie agentów):
+
+```yaml
+---
+permission:
+  skill:
+    "documents-*": "allow"
+---
+```
+
+**Dla agentów wbudowanych** (w `opencode.json`):
+
+```json
+{
+  "agent": {
+    "plan": {
+      "permission": {
+        "skill": {
+          "internal-*": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+## Wyłącz narzędzie umiejętności
+
+Całkowicie wyłącz umiejętności agentów, którzy nie powinni ich używać:
+
+**Dla agentów celnych**:
+
+```yaml
+---
+tools:
+  skill: false
+---
+```
+
+**W przypadku agentów wbudowanych**:
+
+```json
+{
+  "agent": {
+    "plan": {
+      "tools": {
+        "skill": false
+      }
+    }
+  }
+}
+```
+
+Jeśli opcja jest wyłączona, sekcja `<available_skills>` jest całkowicie pomijana.
+
+---
+
+## Troubleshoot loading
+
+Jeśli umiejętność nie pojawi się:
+
+1. Verify `SKILL.md` is spelled in all caps
+2. Sprawdź, czy frontmatter zawiera `name` i `description`
+3. Ensure skill names are unique across all locations
+4. Sprawdź uprawnienia — umiejętności z `deny` są ukryte przed agentami
