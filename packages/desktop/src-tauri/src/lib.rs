@@ -4,6 +4,8 @@ mod constants;
 mod job_object;
 #[cfg(target_os = "linux")]
 pub mod linux_display;
+#[cfg(target_os = "linux")]
+pub mod linux_windowing;
 mod markdown;
 mod server;
 mod window_customizer;
