@@ -33,12 +33,6 @@ export function DialogModel(props: { providerID?: string }) {
     const favorites = connected() ? local.model.favorite() : []
     const recents = local.model.recent()
 
-    const recentList = showSections
-      ? recents.filter(
-          (item) => !favorites.some((fav) => fav.providerID === item.providerID && fav.modelID === item.modelID),
-        )
-      : []
-
     function toOptions(items: typeof favorites, category: string) {
       if (!showSections) return []
       return items.flatMap((item) => {
@@ -65,7 +59,12 @@ export function DialogModel(props: { providerID?: string }) {
     }
 
     const favoriteOptions = toOptions(favorites, "Favorites")
-    const recentOptions = toOptions(recentList, "Recent")
+    const recentOptions = toOptions(
+      recents.filter(
+        (item) => !favorites.some((fav) => fav.providerID === item.providerID && fav.modelID === item.modelID),
+      ),
+      "Recent",
+    )
 
     const providerOptions = pipe(
       sync.data.provider,
@@ -120,11 +119,11 @@ export function DialogModel(props: { providerID?: string }) {
         )
       : []
 
-    // Search shows a single merged list (favorites inline)
     if (needle) {
-      const filteredProviders = fuzzysort.go(needle, providerOptions, { keys: ["title", "category"] }).map((x) => x.obj)
-      const filteredPopular = fuzzysort.go(needle, popularProviders, { keys: ["title"] }).map((x) => x.obj)
-      return [...filteredProviders, ...filteredPopular]
+      return [
+        ...fuzzysort.go(needle, providerOptions, { keys: ["title", "category"] }).map((x) => x.obj),
+        ...fuzzysort.go(needle, popularProviders, { keys: ["title"] }).map((x) => x.obj),
+      ]
     }
 
     return [...favoriteOptions, ...recentOptions, ...providerOptions, ...popularProviders]
@@ -157,6 +156,7 @@ export function DialogModel(props: { providerID?: string }) {
         },
       ]}
       onFilter={setQuery}
+      flat={true}
       skipFilter={true}
       title={title()}
       current={local.model.current()}
