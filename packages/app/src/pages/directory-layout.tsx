@@ -15,6 +15,7 @@ export default function Layout(props: ParentProps) {
   const params = useParams()
   const navigate = useNavigate()
   const language = useLanguage()
+  let invalid = ""
   const directory = createMemo(() => {
     return decode64(params.dir) ?? ""
   })
@@ -22,16 +23,18 @@ export default function Layout(props: ParentProps) {
   createEffect(() => {
     if (!params.dir) return
     if (directory()) return
+    if (invalid === params.dir) return
+    invalid = params.dir
     showToast({
       variant: "error",
       title: language.t("common.requestFailed"),
-      description: "Invalid directory in URL.",
+      description: language.t("directory.error.invalidUrl"),
     })
-    navigate("/")
+    navigate("/", { replace: true })
   })
   return (
     <Show when={directory()}>
-      <SDKProvider directory={directory()}>
+      <SDKProvider directory={directory}>
         <SyncProvider>
           {iife(() => {
             const sync = useSync()
@@ -51,6 +54,13 @@ export default function Layout(props: ParentProps) {
               navigate(`/${params.dir}/session/${sessionID}`)
             }
 
+            const sessionHref = (sessionID: string) => {
+              if (params.dir) return `/${params.dir}/session/${sessionID}`
+              return `/session/${sessionID}`
+            }
+
+            const syncSession = (sessionID: string) => sync.session.sync(sessionID)
+
             return (
               <DataProvider
                 data={sync.data}
@@ -59,6 +69,8 @@ export default function Layout(props: ParentProps) {
                 onQuestionReply={replyToQuestion}
                 onQuestionReject={rejectQuestion}
                 onNavigateToSession={navigateToSession}
+                onSessionHref={sessionHref}
+                onSyncSession={syncSession}
               >
                 <LocalProvider>{props.children}</LocalProvider>
               </DataProvider>

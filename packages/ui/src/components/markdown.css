@@ -181,6 +181,8 @@
     border-collapse: collapse;
     margin: 1.5rem 0;
     font-size: var(--font-size-base);
+    display: block;
+    overflow-x: auto;
   }
 
   th,
