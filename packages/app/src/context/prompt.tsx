@@ -219,8 +219,25 @@ function createPromptSession(dir: string, id: string | undefined) {
         ])
       },
     },
-    set: actions.set,
-    reset: actions.reset,
+    set(prompt: Prompt, cursorPosition?: number) {
+      const next = clonePrompt(prompt)
+      console.log("[DEBUG PromptSession.set]", {
+        sessionKey: `${dir}:${id ?? WORKSPACE_KEY}`,
+        promptLength: next.length,
+        promptText: next.map((p) => ("content" in p ? p.content : "")).join(""),
+        cursorPosition,
+      })
+      batch(() => {
+        setStore("prompt", next)
+        if (cursorPosition !== undefined) setStore("cursor", cursorPosition)
+      })
+    },
+    reset() {
+      batch(() => {
+        setStore("prompt", clonePrompt(DEFAULT_PROMPT))
+        setStore("cursor", 0)
+      })
+    },
   }
 }
 
@@ -273,8 +290,17 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
       return entry.value
     }
 
-    const session = createMemo(() => load(params.dir!, params.id))
-    const pick = (scope?: Scope) => (scope ? load(scope.dir, scope.id) : session())
+    const session = createMemo(() => {
+      console.log("[DEBUG PromptProvider session memo] params", {
+        dir: params.dir,
+        id: params.id,
+      })
+      const result = load(params.dir!, params.id)
+      console.log("[DEBUG PromptProvider session memo] result", {
+        sessionKey: `${params.dir}:${params.id ?? WORKSPACE_KEY}`,
+      })
+      return result
+    })
 
     return {
       ready: () => session().ready,

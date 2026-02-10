@@ -55,10 +55,14 @@ export default function Layout(props: ParentProps) {
   const language = useLanguage()
   const navigate = useNavigate()
   let invalid = ""
-
-  const resolved = createMemo(() => {
-    if (!params.dir) return ""
-    return decodeDirectory(params.dir) ?? ""
+  const directory = createMemo(() => {
+    const decoded = decode64(params.dir) ?? ""
+    console.log("[DEBUG DirectoryLayout] directory memo", {
+      paramsDir: params.dir,
+      decoded,
+      decodedLength: decoded.length,
+    })
+    return decoded
   })
 
   createEffect(() => {

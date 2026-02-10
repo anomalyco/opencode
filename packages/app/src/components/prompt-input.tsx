@@ -883,6 +883,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const shouldReset =
       textContent.length === 0 && rawText.replace(/\n/g, "").length === 0 && !hasNonText && images.length === 0
 
+    console.log("[DEBUG handleInput]", {
+      rawText,
+      trimmed,
+      shouldReset,
+      rawPartsLength: rawParts.length,
+      imagesLength: images.length,
+    })
+
     if (shouldReset) {
       closePopover()
       resetHistoryNavigation()
@@ -916,6 +924,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     resetHistoryNavigation()
 
     mirror.input = true
+    console.log("[DEBUG handleInput] calling prompt.set", {
+      rawParts,
+      images,
+      cursorPosition,
+    })
     prompt.set([...rawParts, ...images], cursorPosition)
     queueScroll()
   }
