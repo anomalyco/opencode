@@ -461,16 +461,25 @@ function createGlobalSync() {
           .filter((s) => !s.time?.archived)
           .sort((a, b) => cmp(a.id, b.id))
 
+        const roots = new Set(nonArchived.map((session) => session.id))
+
         // Read the current limit at resolve-time so callers that bump the limit while
         // a request is in-flight still get the expanded result.
         const limit = store.limit
 
-        const children = store.session.filter((s) => !!s.parentID)
+        const children = store.session.filter((s) => !!s.parentID && roots.has(s.parentID))
+        const stale = store.session
+          .filter((s) => !!s?.id)
+          .filter((s) => (!s.parentID ? !roots.has(s.id) : !roots.has(s.parentID)))
+          .map((s) => s.id)
         const sessions = trimSessions([...nonArchived, ...children], { limit, permission: store.permission })
 
         // Store total session count (used for "load more" pagination)
-        setStore("sessionTotal", nonArchived.length)
-        setStore("session", reconcile(sessions, { key: "id" }))
+        batch(() => {
+          purgeSessions(setStore, stale)
+          setStore("sessionTotal", nonArchived.length)
+          setStore("session", reconcile(sessions, { key: "id" }))
+        })
         sessionMeta.set(directory, { limit })
       })
       .catch((err) => {
@@ -614,6 +623,36 @@ function createGlobalSync() {
     setStore(
       produce((draft) => {
         delete draft.part[messageID]
+      }),
+    )
+  }
+
+  function purgeSessions(setStore: SetStoreFunction<State>, sessionIDs: string[]) {
+    const ids = Array.from(new Set(sessionIDs.filter((id) => !!id)))
+    if (ids.length === 0) return
+    const set = new Set(ids)
+    setStore(
+      produce((draft) => {
+        if (draft.session.length) {
+          draft.session = draft.session.filter((session) => !session?.id || !set.has(session.id))
+        }
+        for (const sessionID of ids) {
+          const messages = draft.message[sessionID]
+          if (messages) {
+            for (const message of messages) {
+              const id = message?.id
+              if (!id) continue
+              delete draft.part[id]
+            }
+          }
+
+          delete draft.message[sessionID]
+          delete draft.session_diff[sessionID]
+          delete draft.todo[sessionID]
+          delete draft.permission[sessionID]
+          delete draft.question[sessionID]
+          delete draft.session_status[sessionID]
+        }
       }),
     )
   }
