@@ -31,6 +31,7 @@ export namespace LLM {
   export type StreamInput = {
     user: MessageV2.User
     sessionID: string
+    parentSessionID?: string
     model: Provider.Model
     agent: Agent.Info
     system: string[]
@@ -228,6 +229,8 @@ export namespace LLM {
                 "User-Agent": `opencode/${Installation.VERSION}`,
               }
             : undefined),
+        "x-session-id": input.sessionID,
+        ...(input.parentSessionID ? { "x-parent-session-id": input.parentSessionID } : undefined),
         ...input.model.headers,
         ...headers,
       },
