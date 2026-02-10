@@ -60,9 +60,11 @@ export namespace Server {
       // TODO: Break server.ts into smaller route files to fix type inference
       app
         .onError((err, c) => {
-          log.error("failed", {
-            error: err,
-          })
+          if (err instanceof Storage.NotFoundError) {
+            log.warn("not found", { error: err })
+          } else {
+            log.error("failed", { error: err })
+          }
           if (err instanceof NamedError) {
             let status: ContentfulStatusCode
             if (err instanceof Storage.NotFoundError) status = 404
