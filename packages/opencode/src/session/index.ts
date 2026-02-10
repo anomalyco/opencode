@@ -23,6 +23,7 @@ import type { Provider } from "@/provider/provider"
 import { PermissionNext } from "@/permission/next"
 import { Global } from "@/global"
 import type { LanguageModelV2Usage } from "@ai-sdk/provider"
+import { iife } from "@/util/iife"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -437,6 +438,11 @@ export namespace Session {
     return part
   })
 
+  const safe = (value: number) => {
+    if (!Number.isFinite(value)) return 0
+    return value
+  }
+
   export const getUsage = fn(
     z.object({
       model: z.custom<Provider.Model>(),
@@ -444,43 +450,46 @@ export namespace Session {
       metadata: z.custom<ProviderMetadata>().optional(),
     }),
     (input) => {
-      const inputTokens = input.usage.inputTokens ?? 0
-      const outputTokens = input.usage.outputTokens ?? 0
-      const reasoningTokens = input.usage.reasoningTokens ?? 0
-      // input.usage.
+      const inputTokens = safe(input.usage.inputTokens ?? 0)
+      const outputTokens = safe(input.usage.outputTokens ?? 0)
+      const reasoningTokens = safe(input.usage.reasoningTokens ?? 0)
 
-      const cacheReadInputTokens = input.usage.cachedInputTokens ?? 0
-      const cacheWriteInputTokens = (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
-        // @ts-expect-error
-        input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
-        // @ts-expect-error
-        input.metadata?.["venice"]?.["usage"]?.["cacheCreationInputTokens"] ??
-        0) as number
+      const cacheReadInputTokens = safe(input.usage.cachedInputTokens ?? 0)
+      const cacheWriteInputTokens = safe(
+        (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
+          // @ts-expect-error
+          input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
+          // @ts-expect-error
+          input.metadata?.["venice"]?.["usage"]?.["cacheCreationInputTokens"] ??
+          0) as number,
+      )
 
       // OpenRouter provides inputTokens as the total count of input tokens (including cached).
       // AFAIK other providers (OpenRouter/OpenAI/Gemini etc.) do it the same way e.g. vercel/ai#8794 (comment)
       // Anthropic does it differently though - inputTokens doesn't include cached tokens.
       // It looks like OpenCode's cost calculation assumes all providers return inputTokens the same way Anthropic does (I'm guessing getUsage logic was originally implemented with anthropic), so it's causing incorrect cost calculation for OpenRouter and others.
       const excludesCachedTokens = !!(input.metadata?.["anthropic"] || input.metadata?.["bedrock"])
-      const adjustedInputTokens = excludesCachedTokens
-        ? inputTokens
-        : inputTokens - cacheReadInputTokens - cacheWriteInputTokens
-      const safe = (value: number) => {
-        if (!Number.isFinite(value)) return 0
-        return value
-      }
-      // Anthropic doesn't provide total_tokens, compute from components
-      // output.usage.totalTokens =
-      // 	output.usage.input + output.usage.output + output.usage.cacheRead + output.usage.cacheWrite;
+      const adjustedInputTokens = safe(
+        excludesCachedTokens ? inputTokens : inputTokens - cacheReadInputTokens - cacheWriteInputTokens,
+      )
+
+      const total = iife(() => {
+        // Anthropic doesn't provide total_tokens, also ai sdk will vastly undercount if we
+        // don't compute from components
+        if (input.model.api.npm === "@ai-sdk/anthropic" || input.model.api.npm === "@ai-sdk/bedrock") {
+          return adjustedInputTokens + outputTokens + cacheReadInputTokens + cacheWriteInputTokens
+        }
+        return input.usage.totalTokens
+      })
 
       const tokens = {
-        total: input.usage.totalTokens,
-        input: safe(adjustedInputTokens),
-        output: safe(outputTokens),
-        reasoning: safe(reasoningTokens),
+        total,
+        input: adjustedInputTokens,
+        output: outputTokens,
+        reasoning: reasoningTokens,
         cache: {
-          write: safe(cacheWriteInputTokens),
-          read: safe(cacheReadInputTokens),
+          write: cacheWriteInputTokens,
+          read: cacheReadInputTokens,
         },
       }
 
