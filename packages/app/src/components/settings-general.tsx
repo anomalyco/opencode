@@ -1,4 +1,4 @@
-import { Component, Show, createEffect, createMemo, createResource, type JSX } from "solid-js"
+import { Component, Show, createMemo, createResource, onCleanup, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -13,30 +13,34 @@ import { useSettings, monoFontFamily } from "@/context/settings"
 import { playSound, SOUND_OPTIONS } from "@/utils/sound"
 import { Link } from "./link"
 
-let demoSoundState = {
-  cleanup: undefined as (() => void) | undefined,
-  timeout: undefined as NodeJS.Timeout | undefined,
-}
-
-// To prevent audio from overlapping/playing very quickly when navigating the settings menus,
-// delay the playback by 100ms during quick selection changes and pause existing sounds.
-const playDemoSound = (src: string) => {
-  if (demoSoundState.cleanup) {
-    demoSoundState.cleanup()
-  }
-
-  clearTimeout(demoSoundState.timeout)
-
-  demoSoundState.timeout = setTimeout(() => {
-    demoSoundState.cleanup = playSound(src)
-  }, 100)
-}
-
 export const SettingsGeneral: Component = () => {
   const theme = useTheme()
   const language = useLanguage()
   const platform = usePlatform()
   const settings = useSettings()
+
+  const demoSound = {
+    cleanup: undefined as (() => void) | undefined,
+    timeout: undefined as ReturnType<typeof setTimeout> | undefined,
+  }
+
+  // To prevent audio from overlapping/playing very quickly when navigating the settings menus,
+  // delay the playback by 100ms during quick selection changes and pause existing sounds.
+  const playDemoSound = (src: string) => {
+    demoSound.cleanup?.()
+    if (demoSound.timeout !== undefined) clearTimeout(demoSound.timeout)
+
+    demoSound.timeout = setTimeout(() => {
+      demoSound.cleanup = playSound(src)
+    }, 100)
+  }
+
+  onCleanup(() => {
+    if (demoSound.timeout !== undefined) clearTimeout(demoSound.timeout)
+    demoSound.cleanup?.()
+    demoSound.cleanup = undefined
+    demoSound.timeout = undefined
+  })
 
   const [store, setStore] = createStore({
     checking: false,

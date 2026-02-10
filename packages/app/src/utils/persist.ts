@@ -18,6 +18,7 @@ const LEGACY_STORAGE = "default.dat"
 const GLOBAL_STORAGE = "opencode.global.dat"
 const LOCAL_PREFIX = "opencode."
 const fallback = new Map<string, boolean>()
+const FALLBACK_MAX_SCOPES = 200
 
 const CACHE_MAX_ENTRIES = 500
 const CACHE_MAX_BYTES = 8 * 1024 * 1024
@@ -70,7 +71,13 @@ function fallbackDisabled(scope: string) {
 }
 
 function fallbackSet(scope: string) {
+  if (fallback.has(scope)) fallback.delete(scope)
   fallback.set(scope, true)
+  while (fallback.size > FALLBACK_MAX_SCOPES) {
+    const oldest = fallback.keys().next().value as string | undefined
+    if (!oldest) return
+    fallback.delete(oldest)
+  }
 }
 
 function quota(error: unknown) {

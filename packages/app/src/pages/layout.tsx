@@ -157,6 +157,7 @@ export default function Layout(props: ParentProps) {
   onCleanup(() => {
     if (navLeave.current !== undefined) clearTimeout(navLeave.current)
     aim.reset()
+    scrollContainerRef = undefined
   })
 
   const sidebarHovering = createMemo(() => !layout.sidebar.opened() && state.hoverProject !== undefined)
@@ -321,6 +322,33 @@ export default function Layout(props: ParentProps) {
     const toastBySession = new Map<string, number>()
     const alertedAtBySession = new Map<string, number>()
     const cooldownMs = 5000
+    const trackedSessionLimit = 500
+
+    const trimAlertedSessions = () => {
+      while (alertedAtBySession.size > trackedSessionLimit) {
+        const oldest = alertedAtBySession.keys().next().value as string | undefined
+        if (!oldest) return
+        alertedAtBySession.delete(oldest)
+      }
+    }
+
+    const trimToastSessions = () => {
+      while (toastBySession.size > trackedSessionLimit) {
+        const oldest = toastBySession.keys().next().value as string | undefined
+        if (!oldest) return
+        const toastId = toastBySession.get(oldest)
+        if (toastId !== undefined) toaster.dismiss(toastId)
+        toastBySession.delete(oldest)
+        alertedAtBySession.delete(oldest)
+      }
+    }
+
+    const clearTrackedSession = (sessionKey: string) => {
+      const toastId = toastBySession.get(sessionKey)
+      if (toastId !== undefined) toaster.dismiss(toastId)
+      toastBySession.delete(sessionKey)
+      alertedAtBySession.delete(sessionKey)
+    }
 
     const unsub = globalSDK.event.listen((e) => {
       if (e.details?.type === "worktree.ready") {
@@ -361,6 +389,7 @@ export default function Layout(props: ParentProps) {
       const lastAlerted = alertedAtBySession.get(sessionKey) ?? 0
       if (now - lastAlerted < cooldownMs) return
       alertedAtBySession.set(sessionKey, now)
+      trimAlertedSessions()
 
       if (e.details.type === "permission.asked") {
         playSound(soundSrc(settings.sounds.permissions()))
@@ -390,38 +419,39 @@ export default function Layout(props: ParentProps) {
         actions: [
           {
             label: language.t("notification.action.goToSession"),
-            onClick: () => navigate(href),
+            onClick: () => {
+              clearTrackedSession(sessionKey)
+              navigate(href)
+            },
           },
           {
             label: language.t("common.dismiss"),
-            onClick: "dismiss",
+            onClick: () => clearTrackedSession(sessionKey),
           },
         ],
       })
       toastBySession.set(sessionKey, toastId)
+      trimToastSessions()
     })
-    onCleanup(unsub)
+    onCleanup(() => {
+      for (const toastId of toastBySession.values()) {
+        toaster.dismiss(toastId)
+      }
+      toastBySession.clear()
+      alertedAtBySession.clear()
+      unsub()
+    })
 
     createEffect(() => {
       const currentSession = params.id
       if (!currentDir() || !currentSession) return
       const sessionKey = `${currentDir()}:${currentSession}`
-      const toastId = toastBySession.get(sessionKey)
-      if (toastId !== undefined) {
-        toaster.dismiss(toastId)
-        toastBySession.delete(sessionKey)
-        alertedAtBySession.delete(sessionKey)
-      }
+      clearTrackedSession(sessionKey)
       const [store] = globalSync.child(currentDir(), { bootstrap: false })
       const childSessions = store.session.filter((s) => s.parentID === currentSession)
       for (const child of childSessions) {
         const childKey = `${currentDir()}:${child.id}`
-        const childToastId = toastBySession.get(childKey)
-        if (childToastId !== undefined) {
-          toaster.dismiss(childToastId)
-          toastBySession.delete(childKey)
-          alertedAtBySession.delete(childKey)
-        }
+        clearTrackedSession(childKey)
       }
     })
   })
@@ -634,9 +664,41 @@ export default function Layout(props: ParentProps) {
     globalSDK.url
 
     prefetchToken.value += 1
-    for (const q of prefetchQueues.values()) {
+    for (const [directory, q] of prefetchQueues) {
       q.pending.length = 0
       q.pendingSet.clear()
+      if (q.running > 0) continue
+      if (q.inflight.size > 0) continue
+      prefetchQueues.delete(directory)
+    }
+  })
+
+  createEffect(() => {
+    const projects = layout.projects.list()
+    const activeDirectory = currentDir()
+    const keep = new Set<string>()
+
+    for (const project of projects) {
+      keep.add(project.worktree)
+      for (const sandbox of project.sandboxes ?? []) {
+        keep.add(sandbox)
+      }
+    }
+
+    if (activeDirectory) keep.add(activeDirectory)
+
+    for (const [directory, queue] of prefetchQueues) {
+      if (keep.has(directory)) continue
+      queue.pending.length = 0
+      queue.pendingSet.clear()
+      if (queue.running > 0) continue
+      if (queue.inflight.size > 0) continue
+      prefetchQueues.delete(directory)
+    }
+
+    for (const directory of prefetchedByDir.keys()) {
+      if (keep.has(directory)) continue
+      prefetchedByDir.delete(directory)
     }
   })
 
@@ -1151,8 +1213,16 @@ export default function Layout(props: ParentProps) {
   }
 
   function closeProject(directory: string) {
-    const index = layout.projects.list().findIndex((x) => x.worktree === directory)
-    const next = layout.projects.list()[index + 1]
+    const projects = layout.projects.list()
+    const index = projects.findIndex((x) => x.worktree === directory)
+    const next = projects[index + 1]
+    const current = projects[index]
+
+    WorktreeState.forget(directory, "project closed")
+    for (const sandbox of current?.sandboxes ?? []) {
+      WorktreeState.forget(sandbox, "project closed")
+    }
+
     layout.projects.close(directory)
     if (next) navigateToProject(next.worktree)
     else navigate("/")
@@ -1216,6 +1286,7 @@ export default function Layout(props: ParentProps) {
 
     if (!result) return
 
+    WorktreeState.forget(directory, "workspace deleted")
     layout.projects.close(directory)
     layout.projects.open(root)
 

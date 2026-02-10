@@ -39,6 +39,13 @@ interface EditRowProps {
 }
 
 function AddRow(props: AddRowProps) {
+  let frame: number | undefined
+
+  onCleanup(() => {
+    if (frame === undefined) return
+    cancelAnimationFrame(frame)
+  })
+
   return (
     <div class="flex items-center px-4 min-h-14 py-3 min-w-0 flex-1">
       <div class="flex-1 min-w-0 [&_[data-slot=input-wrapper]]:relative">
@@ -51,7 +58,9 @@ function AddRow(props: AddRowProps) {
           }}
           ref={(el) => {
             // Position relative to input-wrapper
-            requestAnimationFrame(() => {
+            if (frame !== undefined) cancelAnimationFrame(frame)
+            frame = requestAnimationFrame(() => {
+              frame = undefined
               const wrapper = el.parentElement?.querySelector('[data-slot="input-wrapper"]')
               if (wrapper instanceof HTMLElement) {
                 wrapper.appendChild(el)
@@ -151,6 +160,16 @@ export function DialogSelectServer() {
   )
   const canDefault = createMemo(() => !!platform.getDefaultServerUrl && !!platform.setDefaultServerUrl)
   const fetcher = platform.fetch ?? globalThis.fetch
+  const addPreview = { value: 0 }
+  const editPreview = { value: 0 }
+  let scrollFrame: number | undefined
+
+  onCleanup(() => {
+    addPreview.value += 1
+    editPreview.value += 1
+    if (scrollFrame === undefined) return
+    cancelAnimationFrame(scrollFrame)
+  })
 
   const looksComplete = (value: string) => {
     const normalized = normalizeServerUrl(value)
@@ -161,16 +180,24 @@ export function DialogSelectServer() {
     return host.includes(".") || host.includes(":")
   }
 
-  const previewStatus = async (value: string, setStatus: (value: boolean | undefined) => void) => {
+  const previewStatus = async (
+    value: string,
+    setStatus: (value: boolean | undefined) => void,
+    token: { value: number },
+  ) => {
+    const run = token.value + 1
+    token.value = run
     setStatus(undefined)
     if (!looksComplete(value)) return
     const normalized = normalizeServerUrl(value)
     if (!normalized) return
     const result = await checkServerHealth(normalized, fetcher)
+    if (token.value !== run) return
     setStatus(result.healthy)
   }
 
   const resetAdd = () => {
+    addPreview.value += 1
     setStore("addServer", {
       url: "",
       error: "",
@@ -180,6 +207,7 @@ export function DialogSelectServer() {
   }
 
   const resetEdit = () => {
+    editPreview.value += 1
     setStore("editServer", {
       id: undefined,
       value: "",
@@ -227,21 +255,36 @@ export function DialogSelectServer() {
     })
   })
 
-  async function refreshHealth() {
-    const results: Record<string, ServerHealth> = {}
-    await Promise.all(
-      items().map(async (url) => {
-        results[url] = await checkServerHealth(url, fetcher)
-      }),
-    )
-    setStore("status", reconcile(results))
-  }
-
   createEffect(() => {
     items()
-    refreshHealth()
-    const interval = setInterval(refreshHealth, 10_000)
-    onCleanup(() => clearInterval(interval))
+    let alive = true
+    let run = 0
+
+    const refresh = async () => {
+      const id = run + 1
+      run = id
+
+      const results: Record<string, ServerHealth> = {}
+      await Promise.all(
+        items().map(async (url) => {
+          results[url] = await checkServerHealth(url, fetcher)
+        }),
+      )
+
+      if (!alive) return
+      if (id !== run) return
+      setStore("status", reconcile(results))
+    }
+
+    void refresh()
+    const interval = setInterval(() => {
+      void refresh()
+    }, 10_000)
+
+    onCleanup(() => {
+      alive = false
+      clearInterval(interval)
+    })
   })
 
   async function select(value: string, persist?: boolean) {
@@ -259,13 +302,15 @@ export function DialogSelectServer() {
   const handleAddChange = (value: string) => {
     if (store.addServer.adding) return
     setStore("addServer", { url: value, error: "" })
-    void previewStatus(value, (next) => setStore("addServer", { status: next }))
+    void previewStatus(value, (next) => setStore("addServer", { status: next }), addPreview)
   }
 
   const scrollListToBottom = () => {
     const scroll = document.querySelector<HTMLDivElement>('[data-component="list"] [data-slot="list-scroll"]')
     if (!scroll) return
-    requestAnimationFrame(() => {
+    if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame)
+    scrollFrame = requestAnimationFrame(() => {
+      scrollFrame = undefined
       scroll.scrollTop = scroll.scrollHeight
     })
   }
@@ -273,7 +318,7 @@ export function DialogSelectServer() {
   const handleEditChange = (value: string) => {
     if (store.editServer.busy) return
     setStore("editServer", { value, error: "" })
-    void previewStatus(value, (next) => setStore("editServer", { status: next }))
+    void previewStatus(value, (next) => setStore("editServer", { status: next }), editPreview)
   }
 
   async function handleAdd(value: string) {

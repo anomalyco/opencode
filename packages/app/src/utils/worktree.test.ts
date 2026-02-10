@@ -43,4 +43,15 @@ describe("Worktree", () => {
     expect(await waiting).toEqual({ status: "failed", message: "permission denied" })
     expect(await Worktree.wait(key)).toEqual({ status: "failed", message: "permission denied" })
   })
+
+  test("forget clears state and resolves pending waiters", async () => {
+    const key = dir("forget")
+    Worktree.pending(key)
+
+    const waiting = Worktree.wait(key)
+    Worktree.forget(`${key}/`, "closed")
+
+    expect(await waiting).toEqual({ status: "failed", message: "closed" })
+    expect(Worktree.get(key)).toBeUndefined()
+  })
 })

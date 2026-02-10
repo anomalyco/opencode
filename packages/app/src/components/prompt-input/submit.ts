@@ -1,4 +1,4 @@
-import { Accessor } from "solid-js"
+import { Accessor, onCleanup } from "solid-js"
 import { useNavigate, useParams } from "@solidjs/router"
 import { createOpencodeClient, type Message } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
@@ -72,14 +72,19 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     return language.t("common.requestFailed")
   }
 
+  const clearPending = (sessionID: string) => {
+    const queued = pending.get(sessionID)
+    if (!queued) return false
+    queued.abort.abort()
+    queued.cleanup()
+    pending.delete(sessionID)
+    return true
+  }
+
   const abort = async () => {
     const sessionID = params.id
     if (!sessionID) return Promise.resolve()
-    const queued = pending.get(sessionID)
-    if (queued) {
-      queued.abort.abort()
-      queued.cleanup()
-      pending.delete(sessionID)
+    if (clearPending(sessionID)) {
       return Promise.resolve()
     }
     return sdk.client.session
@@ -88,6 +93,12 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       })
       .catch(() => {})
   }
+
+  onCleanup(() => {
+    const sessionID = params.id
+    if (!sessionID) return
+    clearPending(sessionID)
+  })
 
   const restoreCommentItems = (items: CommentItem[]) => {
     for (const item of items) {
@@ -366,8 +377,10 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
       const timeoutMs = 5 * 60 * 1000
       const timer = { id: undefined as number | undefined }
+      let timedOut = false
       const timeout = new Promise<Awaited<ReturnType<typeof WorktreeState.wait>>>((resolve) => {
         timer.id = window.setTimeout(() => {
+          timedOut = true
           resolve({ status: "failed", message: language.t("workspace.error.stillPreparing") })
         }, timeoutMs)
       })
@@ -378,6 +391,9 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       })
       pending.delete(session.id)
       if (controller.signal.aborted) return false
+      if (timedOut) {
+        WorktreeState.forget(sessionDirectory, "worktree wait timeout")
+      }
       if (result.status === "failed") throw new Error(result.message)
       return true
     }

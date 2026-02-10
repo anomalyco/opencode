@@ -22,6 +22,13 @@ const navs = new Map<string, Nav>()
 const pending = new Map<string, string>()
 const active = new Map<string, string>()
 
+function clearTracked(id: string, map: Map<string, string>) {
+  for (const [k, value] of map) {
+    if (value !== id) continue
+    map.delete(k)
+  }
+}
+
 const required = [
   "session:params",
   "session:data-ready",
@@ -66,6 +73,8 @@ function flush(id: string, reason: "complete" | "timeout") {
   )
 
   navs.delete(id)
+  clearTracked(id, pending)
+  clearTracked(id, active)
 }
 
 function maybeFlush(id: string) {

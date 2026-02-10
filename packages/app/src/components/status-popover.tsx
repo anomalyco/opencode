@@ -60,21 +60,36 @@ export function StatusPopover() {
     })
   })
 
-  async function refreshHealth() {
-    const results: Record<string, ServerHealth> = {}
-    await Promise.all(
-      servers().map(async (url) => {
-        results[url] = await checkServerHealth(url, fetcher)
-      }),
-    )
-    setStore("status", reconcile(results))
-  }
-
   createEffect(() => {
     servers()
-    refreshHealth()
-    const interval = setInterval(refreshHealth, 10_000)
-    onCleanup(() => clearInterval(interval))
+    let alive = true
+    let run = 0
+
+    const refresh = async () => {
+      const id = run + 1
+      run = id
+
+      const results: Record<string, ServerHealth> = {}
+      await Promise.all(
+        servers().map(async (url) => {
+          results[url] = await checkServerHealth(url, fetcher)
+        }),
+      )
+
+      if (!alive) return
+      if (id !== run) return
+      setStore("status", reconcile(results))
+    }
+
+    void refresh()
+    const interval = setInterval(() => {
+      void refresh()
+    }, 10_000)
+
+    onCleanup(() => {
+      alive = false
+      clearInterval(interval)
+    })
   })
 
   const mcpItems = createMemo(() =>
@@ -84,6 +99,25 @@ export function StatusPopover() {
   )
 
   const mcpConnected = createMemo(() => mcpItems().filter((i) => i.status === "connected").length)
+
+  const refreshDefaultServerUrl = (alive: () => boolean = () => true) => {
+    const result = platform.getDefaultServerUrl?.()
+    if (!result) {
+      if (!alive()) return
+      setStore("defaultServerUrl", undefined)
+      return
+    }
+
+    void Promise.resolve(result)
+      .then((url) => {
+        if (!alive()) return
+        setStore("defaultServerUrl", url ? normalizeServerUrl(url) : undefined)
+      })
+      .catch(() => {
+        if (!alive()) return
+        setStore("defaultServerUrl", undefined)
+      })
+  }
 
   const toggleMcp = async (name: string) => {
     if (store.loading) return
@@ -118,21 +152,12 @@ export function StatusPopover() {
 
   const serverCount = createMemo(() => sortedServers().length)
 
-  const refreshDefaultServerUrl = () => {
-    const result = platform.getDefaultServerUrl?.()
-    if (!result) {
-      setStore("defaultServerUrl", undefined)
-      return
-    }
-    if (result instanceof Promise) {
-      result.then((url) => setStore("defaultServerUrl", url ? normalizeServerUrl(url) : undefined))
-      return
-    }
-    setStore("defaultServerUrl", normalizeServerUrl(result))
-  }
-
   createEffect(() => {
-    refreshDefaultServerUrl()
+    let alive = true
+    onCleanup(() => {
+      alive = false
+    })
+    refreshDefaultServerUrl(() => alive)
   })
 
   return (

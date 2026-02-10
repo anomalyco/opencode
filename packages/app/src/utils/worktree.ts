@@ -21,6 +21,13 @@ const waiters = new Map<
   }
 >()
 
+function resolveWaiter(key: string, next: State) {
+  const waiter = waiters.get(key)
+  if (!waiter) return
+  waiters.delete(key)
+  waiter.resolve(next)
+}
+
 function deferred() {
   const box = { resolve: (_: State) => {} }
   const promise = new Promise<State>((resolve) => {
@@ -43,19 +50,18 @@ export const Worktree = {
     const key = normalize(directory)
     const next = { status: "ready" } as const
     state.set(key, next)
-    const waiter = waiters.get(key)
-    if (!waiter) return
-    waiters.delete(key)
-    waiter.resolve(next)
+    resolveWaiter(key, next)
   },
   failed(directory: string, message: string) {
     const key = normalize(directory)
     const next = { status: "failed", message } as const
     state.set(key, next)
-    const waiter = waiters.get(key)
-    if (!waiter) return
-    waiters.delete(key)
-    waiter.resolve(next)
+    resolveWaiter(key, next)
+  },
+  forget(directory: string, message = "cancelled") {
+    const key = normalize(directory)
+    state.delete(key)
+    resolveWaiter(key, { status: "failed", message })
   },
   wait(directory: string) {
     const key = normalize(directory)

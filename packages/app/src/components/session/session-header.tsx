@@ -116,6 +116,11 @@ export function SessionHeader() {
     if (platform.platform !== "desktop") return
     if (!platform.checkAppExists) return
 
+    let alive = true
+    onCleanup(() => {
+      alive = false
+    })
+
     const list = os()
     const apps = list === "macos" ? MAC_APPS : list === "windows" ? WINDOWS_APPS : list === "linux" ? LINUX_APPS : []
     if (apps.length === 0) return
@@ -129,6 +134,7 @@ export function SessionHeader() {
         }),
       ),
     ).then((entries) => {
+      if (!alive) return
       setExists(Object.fromEntries(entries) as Partial<Record<OpenApp, boolean>>)
     })
   })

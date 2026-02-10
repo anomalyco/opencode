@@ -1,5 +1,5 @@
 import type { JSX } from "solid-js"
-import { Show } from "solid-js"
+import { Show, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSortable } from "@thisbeyond/solid-dnd"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -19,6 +19,13 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
     menuOpen: false,
     menuPosition: { x: 0, y: 0 },
     blurEnabled: false,
+  })
+  let editTimer: ReturnType<typeof setTimeout> | undefined
+  let blurTimer: ReturnType<typeof setTimeout> | undefined
+
+  onCleanup(() => {
+    if (editTimer !== undefined) clearTimeout(editTimer)
+    if (blurTimer !== undefined) clearTimeout(blurTimer)
   })
 
   const isDefaultTitle = () => {
@@ -74,15 +81,23 @@ export function SortableTerminalTab(props: { terminal: LocalPTY; onClose?: () =>
       e.preventDefault()
     }
 
+    if (editTimer !== undefined) clearTimeout(editTimer)
+    if (blurTimer !== undefined) clearTimeout(blurTimer)
+
     setStore("blurEnabled", false)
     setStore("title", props.terminal.title)
     setStore("editing", true)
-    setTimeout(() => {
+
+    editTimer = setTimeout(() => {
+      editTimer = undefined
       const input = document.getElementById(`terminal-title-input-${props.terminal.id}`) as HTMLInputElement
       if (!input) return
       input.focus()
       input.select()
-      setTimeout(() => setStore("blurEnabled", true), 100)
+      blurTimer = setTimeout(() => {
+        blurTimer = undefined
+        setStore("blurEnabled", true)
+      }, 100)
     }, 10)
   }
 

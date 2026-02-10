@@ -32,8 +32,18 @@ export function FileTabContent(props: {
 }) {
   let scroll: HTMLDivElement | undefined
   let scrollFrame: number | undefined
+  let commentBlurTimer: number | undefined
   let pending: { x: number; y: number } | undefined
   let codeScroll: HTMLElement[] = []
+  const frames = new Set<number>()
+
+  const raf = (run: () => void) => {
+    const id = requestAnimationFrame(() => {
+      frames.delete(id)
+      run()
+    })
+    frames.add(id)
+  }
 
   const path = createMemo(() => props.file.pathFromTab(props.tab))
   const state = createMemo(() => {
@@ -204,7 +214,7 @@ export function FileTabContent(props: {
   }
 
   const scheduleComments = () => {
-    requestAnimationFrame(updateComments)
+    raf(updateComments)
   }
 
   createEffect(() => {
@@ -232,7 +242,7 @@ export function FileTabContent(props: {
     setOpenedComment(target.id)
     setCommenting(null)
     props.file.setSelectedLines(p, target.selection)
-    requestAnimationFrame(() => props.comments.clearFocus())
+    raf(() => props.comments.clearFocus())
   })
 
   const getCodeScroll = () => {
@@ -327,7 +337,7 @@ export function FileTabContent(props: {
       () => state()?.loaded,
       (loaded) => {
         if (!loaded) return
-        requestAnimationFrame(restoreScroll)
+        raf(restoreScroll)
       },
       { defer: true },
     ),
@@ -338,7 +348,7 @@ export function FileTabContent(props: {
       () => props.file.ready(),
       (ready) => {
         if (!ready) return
-        requestAnimationFrame(restoreScroll)
+        raf(restoreScroll)
       },
       { defer: true },
     ),
@@ -350,7 +360,7 @@ export function FileTabContent(props: {
       (active) => {
         if (!active) return
         if (!state()?.loaded) return
-        requestAnimationFrame(restoreScroll)
+        raf(restoreScroll)
       },
     ),
   )
@@ -360,8 +370,11 @@ export function FileTabContent(props: {
       item.removeEventListener("scroll", handleCodeScroll)
     }
 
-    if (scrollFrame === undefined) return
-    cancelAnimationFrame(scrollFrame)
+    if (scrollFrame !== undefined) cancelAnimationFrame(scrollFrame)
+
+    if (commentBlurTimer !== undefined) clearTimeout(commentBlurTimer)
+    for (const frame of frames) cancelAnimationFrame(frame)
+    frames.clear()
   })
 
   const renderCode = (source: string, wrapperClass: string) => (
@@ -383,8 +396,8 @@ export function FileTabContent(props: {
         selectedLines={selectedLines()}
         commentedLines={commentedLines()}
         onRendered={() => {
-          requestAnimationFrame(restoreScroll)
-          requestAnimationFrame(scheduleComments)
+          raf(restoreScroll)
+          raf(scheduleComments)
         }}
         onLineSelected={(range: SelectedLineRange | null) => {
           const p = path()
@@ -452,7 +465,9 @@ export function FileTabContent(props: {
                 const target = e.relatedTarget
                 if (target instanceof Node && current.contains(target)) return
 
-                setTimeout(() => {
+                if (commentBlurTimer !== undefined) clearTimeout(commentBlurTimer)
+                commentBlurTimer = window.setTimeout(() => {
+                  commentBlurTimer = undefined
                   if (!document.activeElement || !current.contains(document.activeElement)) {
                     setCommenting(null)
                   }
@@ -478,12 +493,7 @@ export function FileTabContent(props: {
       <Switch>
         <Match when={state()?.loaded && isImage()}>
           <div class="px-6 py-4 pb-40">
-            <img
-              src={imageDataUrl()}
-              alt={path()}
-              class="max-w-full"
-              onLoad={() => requestAnimationFrame(restoreScroll)}
-            />
+            <img src={imageDataUrl()} alt={path()} class="max-w-full" onLoad={() => raf(restoreScroll)} />
           </div>
         </Match>
         <Match when={state()?.loaded && isSvg()}>

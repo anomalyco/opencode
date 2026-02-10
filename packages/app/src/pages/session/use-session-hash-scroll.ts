@@ -26,6 +26,21 @@ export const useSessionHashScroll = (input: {
   scheduleScrollState: (el: HTMLDivElement) => void
   consumePendingMessage: (key: string) => string | undefined
 }) => {
+  const frames = new Set<number>()
+
+  const raf = (run: () => void) => {
+    const id = requestAnimationFrame(() => {
+      frames.delete(id)
+      run()
+    })
+    frames.add(id)
+  }
+
+  onCleanup(() => {
+    for (const id of frames) cancelAnimationFrame(id)
+    frames.clear()
+  })
+
   const clearMessageHash = () => {
     if (!window.location.hash) return
     window.history.replaceState(null, "", window.location.href.replace(/#.*$/, ""))
@@ -55,10 +70,10 @@ export const useSessionHashScroll = (input: {
       input.setTurnStart(index)
       input.scheduleTurnBackfill()
 
-      requestAnimationFrame(() => {
+      raf(() => {
         const el = document.getElementById(input.anchor(message.id))
         if (!el) {
-          requestAnimationFrame(() => {
+          raf(() => {
             const next = document.getElementById(input.anchor(message.id))
             if (!next) return
             scrollToElement(next, behavior)
@@ -75,7 +90,7 @@ export const useSessionHashScroll = (input: {
     const el = document.getElementById(input.anchor(message.id))
     if (!el) {
       updateHash(message.id)
-      requestAnimationFrame(() => {
+      raf(() => {
         const next = document.getElementById(input.anchor(message.id))
         if (!next) return
         if (!scrollToElement(next, behavior)) return
@@ -87,7 +102,7 @@ export const useSessionHashScroll = (input: {
       return
     }
 
-    requestAnimationFrame(() => {
+    raf(() => {
       const next = document.getElementById(input.anchor(message.id))
       if (!next) return
       if (!scrollToElement(next, behavior)) return
@@ -138,7 +153,7 @@ export const useSessionHashScroll = (input: {
 
   createEffect(() => {
     if (!input.sessionID() || !input.messagesReady()) return
-    requestAnimationFrame(() => applyHash("auto"))
+    raf(() => applyHash("auto"))
   })
 
   createEffect(() => {
@@ -156,12 +171,12 @@ export const useSessionHashScroll = (input: {
 
     if (input.pendingMessage() === targetId) input.setPendingMessage(undefined)
     input.autoScroll.pause()
-    requestAnimationFrame(() => scrollToMessage(msg, "auto"))
+    raf(() => scrollToMessage(msg, "auto"))
   })
 
   createEffect(() => {
     if (!input.sessionID() || !input.messagesReady()) return
-    const handler = () => requestAnimationFrame(() => applyHash("auto"))
+    const handler = () => raf(() => applyHash("auto"))
     window.addEventListener("hashchange", handler)
     onCleanup(() => window.removeEventListener("hashchange", handler))
   })

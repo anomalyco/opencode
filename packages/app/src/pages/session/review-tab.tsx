@@ -71,6 +71,15 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
   let scroll: HTMLDivElement | undefined
   let frame: number | undefined
   let pending: { x: number; y: number } | undefined
+  const frames = new Set<number>()
+
+  const raf = (run: () => void) => {
+    const id = requestAnimationFrame(() => {
+      frames.delete(id)
+      run()
+    })
+    frames.add(id)
+  }
 
   const sdk = useSDK()
 
@@ -114,15 +123,16 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
     on(
       () => props.diffs().length,
       () => {
-        requestAnimationFrame(restoreScroll)
+        raf(restoreScroll)
       },
       { defer: true },
     ),
   )
 
   onCleanup(() => {
-    if (frame === undefined) return
-    cancelAnimationFrame(frame)
+    if (frame !== undefined) cancelAnimationFrame(frame)
+    for (const id of frames) cancelAnimationFrame(id)
+    frames.clear()
   })
 
   return (
@@ -135,7 +145,7 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
         restoreScroll()
       }}
       onScroll={handleScroll}
-      onDiffRendered={() => requestAnimationFrame(restoreScroll)}
+      onDiffRendered={() => raf(restoreScroll)}
       open={props.view().review.open()}
       onOpenChange={props.view().review.setOpen}
       classes={{

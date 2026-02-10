@@ -1,4 +1,4 @@
-import { For, Show, createMemo, type Component } from "solid-js"
+import { For, Show, createMemo, onCleanup, type Component } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -20,6 +20,14 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
     custom: [] as string[],
     editing: false,
     sending: false,
+  })
+  let focusTimer: number | undefined
+  let alive = true
+
+  onCleanup(() => {
+    alive = false
+    if (focusTimer === undefined) return
+    clearTimeout(focusTimer)
   })
 
   const question = createMemo(() => questions()[store.tab])
@@ -45,7 +53,10 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
     sdk.client.question
       .reply({ requestID: props.request.id, answers })
       .catch(fail)
-      .finally(() => setStore("sending", false))
+      .finally(() => {
+        if (!alive) return
+        setStore("sending", false)
+      })
   }
 
   const reject = () => {
@@ -55,7 +66,10 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
     sdk.client.question
       .reject({ requestID: props.request.id })
       .catch(fail)
-      .finally(() => setStore("sending", false))
+      .finally(() => {
+        if (!alive) return
+        setStore("sending", false)
+      })
   }
 
   const submit = () => {
@@ -218,7 +232,13 @@ export const QuestionDock: Component<{ request: QuestionRequest }> = (props) => 
             <Show when={store.editing}>
               <form data-slot="custom-input-form" onSubmit={handleCustomSubmit}>
                 <input
-                  ref={(el) => setTimeout(() => el.focus(), 0)}
+                  ref={(el) => {
+                    if (focusTimer !== undefined) clearTimeout(focusTimer)
+                    focusTimer = window.setTimeout(() => {
+                      focusTimer = undefined
+                      el.focus()
+                    }, 0)
+                  }}
                   type="text"
                   data-slot="custom-input"
                   placeholder={language.t("ui.question.custom.placeholder")}
