@@ -32,12 +32,11 @@ export async function loadNotebook(
     ? params.filePath
     : path.join(Instance.directory, params.filePath)
 
-  await assertExternalDirectory(ctx, filePath)
+  await assertExternalDirectory({ sessionID: ctx.sessionID } as any, filePath)
 
   const file = Bun.file(filePath)
   const stats = await file.stat()
 
-  if (!stats) throw new Error(`File not found: ${filePath}`)
   if (stats.isDirectory) throw new Error(`Path is a directory: ${filePath}`)
 
   await FileTime.assert(ctx.sessionID, filePath)

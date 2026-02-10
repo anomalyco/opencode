@@ -4,7 +4,8 @@ import {
   addCell,
   stringifyNotebook,
   getNotebookSummary,
-  type CellType
+  type CellType,
+  type Notebook
 } from "../notebook"
 import {
   loadNotebook,
