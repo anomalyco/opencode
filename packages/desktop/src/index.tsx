@@ -1,13 +1,22 @@
 // @refresh reload
-import "./webview-zoom"
+import { webviewZoom } from "./webview-zoom"
 import { render } from "solid-js/web"
-import { AppBaseProviders, AppInterface, PlatformProvider, Platform } from "@opencode-ai/app"
+import {
+  AppBaseProviders,
+  AppInterface,
+  PlatformProvider,
+  Platform,
+  DisplayBackend,
+  useCommand,
+} from "@opencode-ai/app"
 import { open, save } from "@tauri-apps/plugin-dialog"
+import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link"
+import { openPath as openerOpenPath } from "@tauri-apps/plugin-opener"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { type as ostype } from "@tauri-apps/plugin-os"
 import { check, Update } from "@tauri-apps/plugin-updater"
-import { invoke } from "@tauri-apps/api/core"
 import { getCurrentWindow } from "@tauri-apps/api/window"
+import { invoke } from "@tauri-apps/api/core"
 import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification"
 import { relaunch } from "@tauri-apps/plugin-process"
 import { AsyncStorage } from "@solid-primitives/storage"
@@ -15,31 +24,40 @@ import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
 import { Store } from "@tauri-apps/plugin-store"
 import { Splash } from "@opencode-ai/ui/logo"
 import { createSignal, Show, Accessor, JSX, createResource, onMount, onCleanup } from "solid-js"
+import { readImage } from "@tauri-apps/plugin-clipboard-manager"
 
 import { UPDATER_ENABLED } from "./updater"
-import { createMenu } from "./menu"
+import { initI18n, t } from "./i18n"
 import pkg from "../package.json"
 import "./styles.css"
+import { commands, InitStep } from "./bindings"
+import { Channel } from "@tauri-apps/api/core"
+import { createMenu } from "./menu"
 
 const root = document.getElementById("root")
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
-  throw new Error(
-    "Root element not found. Did you forget to add it to your index.html? Or maybe the id attribute got misspelled?",
-  )
+  throw new Error(t("error.dev.rootNotFound"))
 }
 
-// Floating UI can call getComputedStyle with non-elements (e.g., null refs, virtual elements).
-// This happens on all platforms (WebView2 on Windows, WKWebView on macOS), not just Windows.
-const originalGetComputedStyle = window.getComputedStyle
-window.getComputedStyle = ((elt: Element, pseudoElt?: string | null) => {
-  if (!(elt instanceof Element)) {
-    // Fall back to a safe element when a non-element is passed.
-    return originalGetComputedStyle(document.documentElement, pseudoElt ?? undefined)
-  }
-  return originalGetComputedStyle(elt, pseudoElt ?? undefined)
-}) as typeof window.getComputedStyle
+void initI18n()
 
 let update: Update | null = null
+
+const deepLinkEvent = "opencode:deep-link"
+
+const emitDeepLinks = (urls: string[]) => {
+  if (urls.length === 0) return
+  window.__OPENCODE__ ??= {}
+  const pending = window.__OPENCODE__.deepLinks ?? []
+  window.__OPENCODE__.deepLinks = [...pending, ...urls]
+  window.dispatchEvent(new CustomEvent(deepLinkEvent, { detail: { urls } }))
+}
+
+const listenForDeepLinks = async () => {
+  const startUrls = await getCurrent().catch(() => null)
+  if (startUrls?.length) emitDeepLinks(startUrls)
+  await onOpenUrl((urls) => emitDeepLinks(urls)).catch(() => undefined)
+}
 
 const createPlatform = (password: Accessor<string | null>): Platform => ({
   platform: "desktop",
@@ -54,7 +72,7 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
     const result = await open({
       directory: true,
       multiple: opts?.multiple ?? false,
-      title: opts?.title ?? "Choose a folder",
+      title: opts?.title ?? t("desktop.dialog.chooseFolder"),
     })
     return result
   },
@@ -63,14 +81,14 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
     const result = await open({
       directory: false,
       multiple: opts?.multiple ?? false,
-      title: opts?.title ?? "Choose a file",
+      title: opts?.title ?? t("desktop.dialog.chooseFile"),
     })
     return result
   },
 
   async saveFilePickerDialog(opts) {
     const result = await save({
-      title: opts?.title ?? "Save file",
+      title: opts?.title ?? t("desktop.dialog.saveFile"),
       defaultPath: opts?.defaultPath,
     })
     return result
@@ -78,6 +96,23 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
 
   openLink(url: string) {
     void shellOpen(url).catch(() => undefined)
+  },
+
+  async openPath(path: string, app?: string) {
+    const os = ostype()
+    if (os === "windows" && app) {
+      const resolvedApp = await commands.resolveAppPath(app)
+      return openerOpenPath(path, resolvedApp || app)
+    }
+    return openerOpenPath(path, app)
+  },
+
+  back() {
+    window.history.back()
+  },
+
+  forward() {
+    window.history.forward()
   },
 
   storage: (() => {
@@ -248,12 +283,12 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
 
   update: async () => {
     if (!UPDATER_ENABLED || !update) return
-    if (ostype() === "windows") await invoke("kill_sidecar").catch(() => undefined)
+    if (ostype() === "windows") await commands.killSidecar().catch(() => undefined)
     await update.install().catch(() => undefined)
   },
 
   restart: async () => {
-    await invoke("kill_sidecar").catch(() => undefined)
+    await commands.killSidecar().catch(() => undefined)
     await relaunch()
   },
 
@@ -287,7 +322,6 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
       .catch(() => undefined)
   },
 
-  // @ts-expect-error
   fetch: (input, init) => {
     const pw = password()
 
@@ -309,16 +343,60 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
   },
 
   getDefaultServerUrl: async () => {
-    const result = await invoke<string | null>("get_default_server_url").catch(() => null)
+    const result = await commands.getDefaultServerUrl().catch(() => null)
     return result
   },
 
   setDefaultServerUrl: async (url: string | null) => {
-    await invoke("set_default_server_url", { url })
+    await commands.setDefaultServerUrl(url)
+  },
+
+  getDisplayBackend: async () => {
+    const result = await invoke<DisplayBackend | null>("get_display_backend").catch(() => null)
+    return result
+  },
+
+  setDisplayBackend: async (backend) => {
+    await invoke("set_display_backend", { backend }).catch(() => undefined)
+  },
+
+  parseMarkdown: (markdown: string) => commands.parseMarkdownCommand(markdown),
+
+  webviewZoom,
+
+  checkAppExists: async (appName: string) => {
+    return commands.checkAppExists(appName)
+  },
+
+  async readClipboardImage() {
+    const image = await readImage().catch(() => null)
+    if (!image) return null
+    const bytes = await image.rgba().catch(() => null)
+    if (!bytes || bytes.length === 0) return null
+    const size = await image.size().catch(() => null)
+    if (!size) return null
+    const canvas = document.createElement("canvas")
+    canvas.width = size.width
+    canvas.height = size.height
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return null
+    const imageData = ctx.createImageData(size.width, size.height)
+    imageData.data.set(bytes)
+    ctx.putImageData(imageData, 0, 0)
+    return new Promise<File | null>((resolve) => {
+      canvas.toBlob((blob) => {
+        if (!blob) return resolve(null)
+        resolve(new File([blob], `pasted-image-${Date.now()}.png`, { type: "image/png" }))
+      }, "image/png")
+    })
   },
 })
 
-createMenu()
+let menuTrigger = null as null | ((id: string) => void)
+createMenu((id) => {
+  menuTrigger?.(id)
+})
+void listenForDeepLinks()
 
 render(() => {
   const [serverPassword, setServerPassword] = createSignal<string | null>(null)
@@ -348,7 +426,19 @@ render(() => {
             window.__OPENCODE__ ??= {}
             window.__OPENCODE__.serverPassword = data().password ?? undefined
 
-            return <AppInterface defaultUrl={data().url} />
+            function Inner() {
+              const cmd = useCommand()
+
+              menuTrigger = (id) => cmd.trigger(id)
+
+              return null
+            }
+
+            return (
+              <AppInterface defaultUrl={data().url} isSidecar>
+                <Inner />
+              </AppInterface>
+            )
           }}
         </ServerGate>
       </AppBaseProviders>
@@ -360,11 +450,9 @@ type ServerReadyData = { url: string; password: string | null }
 
 // Gate component that waits for the server to be ready
 function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.Element }) {
-  const [serverData] = createResource<ServerReadyData>(() =>
-    invoke("ensure_server_ready").then((v) => {
-      return new Promise((res) => setTimeout(() => res(v as ServerReadyData), 2000))
-    }),
-  )
+  const [serverData] = createResource(() => commands.awaitInitialization(new Channel<InitStep>() as any))
+
+  if (serverData.state === "errored") throw serverData.error
 
   return (
     // Not using suspense as not all components are compatible with it (undefined refs)

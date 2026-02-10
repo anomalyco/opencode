@@ -18,6 +18,10 @@ export interface SoundSettings {
 export interface Settings {
   general: {
     autoSave: boolean
+    releaseNotes: boolean
+  }
+  updates: {
+    startup: boolean
   }
   appearance: {
     fontSize: number
@@ -34,6 +38,10 @@ export interface Settings {
 const defaultSettings: Settings = {
   general: {
     autoSave: true,
+    releaseNotes: true,
+  },
+  updates: {
+    startup: true,
   },
   appearance: {
     fontSize: 14,
@@ -60,16 +68,17 @@ const monoFallback =
 
 const monoFonts: Record<string, string> = {
   "ibm-plex-mono": `"IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
-  "cascadia-code": `"Cascadia Code Nerd Font", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
-  "fira-code": `"Fira Code Nerd Font", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
-  hack: `"Hack Nerd Font", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
-  inconsolata: `"Inconsolata Nerd Font", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
-  "intel-one-mono": `"Intel One Mono Nerd Font", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
-  "jetbrains-mono": `"JetBrains Mono Nerd Font", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
-  "meslo-lgs": `"Meslo LGS Nerd Font", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
-  "roboto-mono": `"Roboto Mono Nerd Font", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
-  "source-code-pro": `"Source Code Pro Nerd Font", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
-  "ubuntu-mono": `"Ubuntu Mono Nerd Font", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  "cascadia-code": `"Cascadia Code Nerd Font", "Cascadia Code NF", "Cascadia Mono NF", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  "fira-code": `"Fira Code Nerd Font", "FiraMono Nerd Font", "FiraMono Nerd Font Mono", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  hack: `"Hack Nerd Font", "Hack Nerd Font Mono", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  inconsolata: `"Inconsolata Nerd Font", "Inconsolata Nerd Font Mono","IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  "intel-one-mono": `"Intel One Mono Nerd Font", "IntoneMono Nerd Font", "IntoneMono Nerd Font Mono", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  iosevka: `"Iosevka Nerd Font", "Iosevka Nerd Font Mono", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  "jetbrains-mono": `"JetBrains Mono Nerd Font", "JetBrainsMono Nerd Font Mono", "JetBrainsMonoNL Nerd Font", "JetBrainsMonoNL Nerd Font Mono", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  "meslo-lgs": `"Meslo LGS Nerd Font", "MesloLGS Nerd Font", "MesloLGM Nerd Font", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  "roboto-mono": `"Roboto Mono Nerd Font", "RobotoMono Nerd Font", "RobotoMono Nerd Font Mono", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  "source-code-pro": `"Source Code Pro Nerd Font", "SauceCodePro Nerd Font", "SauceCodePro Nerd Font Mono", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
+  "ubuntu-mono": `"Ubuntu Mono Nerd Font", "UbuntuMono Nerd Font", "UbuntuMono Nerd Font Mono", "IBM Plex Mono", "IBM Plex Mono Fallback", ${monoFallback}`,
 }
 
 export function monoFontFamily(font: string | undefined) {
@@ -95,6 +104,16 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         autoSave: createMemo(() => store.general?.autoSave ?? defaultSettings.general.autoSave),
         setAutoSave(value: boolean) {
           setStore("general", "autoSave", value)
+        },
+        releaseNotes: createMemo(() => store.general?.releaseNotes ?? defaultSettings.general.releaseNotes),
+        setReleaseNotes(value: boolean) {
+          setStore("general", "releaseNotes", value)
+        },
+      },
+      updates: {
+        startup: createMemo(() => store.updates?.startup ?? defaultSettings.updates.startup),
+        setStartup(value: boolean) {
+          setStore("updates", "startup", value)
         },
       },
       appearance: {

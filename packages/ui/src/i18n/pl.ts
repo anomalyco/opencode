@@ -1,10 +1,20 @@
 export const dict = {
   "ui.sessionReview.title": "Zmiany w sesji",
+  "ui.sessionReview.title.lastTurn": "Zmiany z ostatniej tury",
   "ui.sessionReview.diffStyle.unified": "Ujednolicony",
   "ui.sessionReview.diffStyle.split": "Podzielony",
   "ui.sessionReview.expandAll": "Rozwiń wszystko",
   "ui.sessionReview.collapseAll": "Zwiń wszystko",
 
+  "ui.sessionReview.change.added": "Dodano",
+  "ui.sessionReview.change.removed": "Usunięto",
+  "ui.sessionReview.change.modified": "Zmodyfikowano",
+  "ui.lineComment.label.prefix": "Komentarz do ",
+  "ui.lineComment.label.suffix": "",
+  "ui.lineComment.editorLabel.prefix": "Komentowanie: ",
+  "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.placeholder": "Dodaj komentarz",
+  "ui.lineComment.submit": "Skomentuj",
   "ui.sessionTurn.steps.show": "Pokaż kroki",
   "ui.sessionTurn.steps.hide": "Ukryj kroki",
   "ui.sessionTurn.summary.response": "Odpowiedź",
@@ -33,17 +43,20 @@ export const dict = {
 
   "ui.list.loading": "Ładowanie",
   "ui.list.empty": "Brak wyników",
+  "ui.list.clearFilter": "Wyczyść filtr",
   "ui.list.emptyWithFilter.prefix": "Brak wyników dla",
   "ui.list.emptyWithFilter.suffix": "",
 
   "ui.messageNav.newMessage": "Nowa wiadomość",
 
   "ui.textField.copyToClipboard": "Skopiuj do schowka",
+  "ui.textField.copyLink": "Skopiuj link",
   "ui.textField.copied": "Skopiowano",
 
   "ui.imagePreview.alt": "Podgląd obrazu",
 
   "ui.tool.read": "Odczyt",
+  "ui.tool.loaded": "Załadowano",
   "ui.tool.list": "Lista",
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
@@ -64,6 +77,7 @@ export const dict = {
   "ui.common.cancel": "Anuluj",
   "ui.common.confirm": "Potwierdź",
   "ui.common.dismiss": "Odrzuć",
+  "ui.common.close": "Zamknij",
   "ui.common.next": "Dalej",
   "ui.common.submit": "Prześlij",
 

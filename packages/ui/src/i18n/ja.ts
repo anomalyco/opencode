@@ -1,10 +1,20 @@
 export const dict = {
   "ui.sessionReview.title": "セッションの変更",
+  "ui.sessionReview.title.lastTurn": "前回ターンの変更",
   "ui.sessionReview.diffStyle.unified": "Unified",
   "ui.sessionReview.diffStyle.split": "Split",
   "ui.sessionReview.expandAll": "すべて展開",
   "ui.sessionReview.collapseAll": "すべて折りたたむ",
 
+  "ui.sessionReview.change.added": "追加",
+  "ui.sessionReview.change.removed": "削除",
+  "ui.sessionReview.change.modified": "変更",
+  "ui.lineComment.label.prefix": "",
+  "ui.lineComment.label.suffix": "へのコメント",
+  "ui.lineComment.editorLabel.prefix": "",
+  "ui.lineComment.editorLabel.suffix": "へのコメントを作成中",
+  "ui.lineComment.placeholder": "コメントを追加",
+  "ui.lineComment.submit": "コメント",
   "ui.sessionTurn.steps.show": "ステップを表示",
   "ui.sessionTurn.steps.hide": "ステップを隠す",
   "ui.sessionTurn.summary.response": "応答",
@@ -33,17 +43,20 @@ export const dict = {
 
   "ui.list.loading": "読み込み中",
   "ui.list.empty": "結果なし",
+  "ui.list.clearFilter": "フィルターをクリア",
   "ui.list.emptyWithFilter.prefix": "次の検索結果はありません: ",
   "ui.list.emptyWithFilter.suffix": "",
 
   "ui.messageNav.newMessage": "新しいメッセージ",
 
   "ui.textField.copyToClipboard": "クリップボードにコピー",
+  "ui.textField.copyLink": "リンクをコピー",
   "ui.textField.copied": "コピーしました",
 
   "ui.imagePreview.alt": "画像プレビュー",
 
   "ui.tool.read": "読み込み",
+  "ui.tool.loaded": "読み込み済み",
   "ui.tool.list": "リスト",
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
@@ -64,6 +77,7 @@ export const dict = {
   "ui.common.cancel": "キャンセル",
   "ui.common.confirm": "確認",
   "ui.common.dismiss": "閉じる",
+  "ui.common.close": "閉じる",
   "ui.common.next": "次へ",
   "ui.common.submit": "送信",
 

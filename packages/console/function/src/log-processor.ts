@@ -17,7 +17,7 @@ export default {
       )
         return
 
-      let metrics = {
+      let data = {
         event_type: "completions",
         "cf.continent": event.event.request.cf?.continent,
         "cf.country": event.event.request.cf?.country,
@@ -31,22 +31,28 @@ export default {
         status: event.event.response?.status ?? 0,
         ip: event.event.request.headers["x-real-ip"],
       }
+      const time = event.eventTimestamp ?? Date.now()
+      const events = []
       for (const log of event.logs) {
         for (const message of log.message) {
           if (!message.startsWith("_metric:")) continue
-          metrics = { ...metrics, ...JSON.parse(message.slice(8)) }
+          const json = JSON.parse(message.slice(8))
+          data = { ...data, ...json }
+          if ("llm.error.code" in json) {
+            events.push({ time, data: { ...data } })
+          }
         }
       }
-      console.log(JSON.stringify(metrics, null, 2))
+      events.push({ time, data })
+      console.log(JSON.stringify(data, null, 2))
 
-      const ret = await fetch("https://api.honeycomb.io/1/events/zen", {
+      const ret = await fetch("https://api.honeycomb.io/1/batch/zen", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Honeycomb-Event-Time": (event.eventTimestamp ?? Date.now()).toString(),
           "X-Honeycomb-Team": Resource.HONEYCOMB_API_KEY.value,
         },
-        body: JSON.stringify(metrics),
+        body: JSON.stringify(events),
       })
       console.log(ret.status)
       console.log(await ret.text())

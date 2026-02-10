@@ -1,0 +1,1 @@
+ALTER TABLE `billing` ADD `time_subscription_selected` timestamp(3);

@@ -1,10 +1,20 @@
 export const dict = {
   "ui.sessionReview.title": "세션 변경 사항",
+  "ui.sessionReview.title.lastTurn": "마지막 턴 변경 사항",
   "ui.sessionReview.diffStyle.unified": "통합 보기",
   "ui.sessionReview.diffStyle.split": "분할 보기",
   "ui.sessionReview.expandAll": "모두 펼치기",
   "ui.sessionReview.collapseAll": "모두 접기",
 
+  "ui.sessionReview.change.added": "추가됨",
+  "ui.sessionReview.change.removed": "삭제됨",
+  "ui.sessionReview.change.modified": "수정됨",
+  "ui.lineComment.label.prefix": "",
+  "ui.lineComment.label.suffix": "에 댓글 달기",
+  "ui.lineComment.editorLabel.prefix": "",
+  "ui.lineComment.editorLabel.suffix": "에 댓글 작성 중",
+  "ui.lineComment.placeholder": "댓글 추가",
+  "ui.lineComment.submit": "댓글",
   "ui.sessionTurn.steps.show": "단계 표시",
   "ui.sessionTurn.steps.hide": "단계 숨기기",
   "ui.sessionTurn.summary.response": "응답",
@@ -33,17 +43,20 @@ export const dict = {
 
   "ui.list.loading": "로딩 중",
   "ui.list.empty": "결과 없음",
+  "ui.list.clearFilter": "필터 지우기",
   "ui.list.emptyWithFilter.prefix": "다음에 대한 결과 없음: ",
   "ui.list.emptyWithFilter.suffix": "",
 
   "ui.messageNav.newMessage": "새 메시지",
 
   "ui.textField.copyToClipboard": "클립보드에 복사",
+  "ui.textField.copyLink": "링크 복사",
   "ui.textField.copied": "복사됨",
 
   "ui.imagePreview.alt": "이미지 미리보기",
 
   "ui.tool.read": "읽기",
+  "ui.tool.loaded": "로드됨",
   "ui.tool.list": "목록",
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
@@ -64,6 +77,7 @@ export const dict = {
   "ui.common.cancel": "취소",
   "ui.common.confirm": "확인",
   "ui.common.dismiss": "닫기",
+  "ui.common.close": "닫기",
   "ui.common.next": "다음",
   "ui.common.submit": "제출",
 

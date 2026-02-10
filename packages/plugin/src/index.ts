@@ -185,6 +185,7 @@ export interface Hooks {
     input: { tool: string; sessionID: string; callID: string },
     output: { args: any },
   ) => Promise<void>
+  "shell.env"?: (input: { cwd: string }, output: { env: Record<string, string> }) => Promise<void>
   "tool.execute.after"?: (
     input: { tool: string; sessionID: string; callID: string },
     output: {
@@ -203,7 +204,7 @@ export interface Hooks {
     },
   ) => Promise<void>
   "experimental.chat.system.transform"?: (
-    input: { sessionID: string },
+    input: { sessionID?: string; model: Model },
     output: {
       system: string[]
     },

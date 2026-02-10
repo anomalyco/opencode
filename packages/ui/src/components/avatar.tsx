@@ -37,7 +37,7 @@ export function Avatar(props: AvatarProps) {
       }}
     >
       <Show when={src} fallback={split.fallback?.[0]}>
-        {(src) => <img src={src()} draggable={false} class="size-full object-cover rounded-[inherit]" />}
+        {(src) => <img src={src()} draggable={false} data-slot="avatar-image" />}
       </Show>
     </div>
   )

@@ -5,12 +5,6 @@
   inset: 0;
   z-index: 50;
   background-color: hsl(from var(--background-base) h s l / 0.2);
-
-  /* animation: overlayHide 250ms ease 100ms forwards; */
-  /**/
-  /* &[data-expanded] { */
-  /*   animation: overlayShow 250ms ease; */
-  /* } */
 }
 
 [data-component="dialog"] {
@@ -20,6 +14,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  pointer-events: none;
 
   [data-slot="dialog-container"] {
     position: relative;
@@ -41,6 +36,7 @@
       max-height: 100%;
       min-height: 280px;
       overflow: auto;
+      pointer-events: auto;
 
       /* Hide scrollbar */
       scrollbar-width: none;
@@ -56,15 +52,9 @@
       background-clip: padding-box;
       box-shadow: var(--shadow-lg-border-base);
 
-      /* animation: contentHide 300ms ease-in forwards; */
-      /**/
-      /* &[data-expanded] { */
-      /*   animation: contentShow 300ms ease-out; */
-      /* } */
-
       [data-slot="dialog-header"] {
         display: flex;
-        padding: 16px 16px 16px 24px;
+        padding: 20px;
         justify-content: space-between;
         align-items: center;
         flex-shrink: 0;
@@ -145,6 +135,14 @@
   }
 }
 
+[data-component="dialog"][data-transition] [data-slot="dialog-content"] {
+  animation: contentHide 100ms ease-in forwards;
+
+  &[data-expanded] {
+    animation: contentShow 150ms ease-out;
+  }
+}
+
 @keyframes overlayShow {
   from {
     opacity: 0;
@@ -164,7 +162,7 @@
 @keyframes contentShow {
   from {
     opacity: 0;
-    transform: scale(0.96);
+    transform: scale(0.98);
   }
   to {
     opacity: 1;
@@ -178,6 +176,6 @@
   }
   to {
     opacity: 0;
-    transform: scale(0.96);
+    transform: scale(0.98);
   }
 }

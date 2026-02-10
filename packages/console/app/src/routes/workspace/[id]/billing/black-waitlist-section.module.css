@@ -1,0 +1,23 @@
+.root {
+  [data-slot="title-row"] {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-4);
+  }
+
+  [data-slot="enroll-section"] {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  [data-slot="enroll-button"] {
+    align-self: flex-start;
+  }
+
+  [data-slot="enroll-note"] {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+  }
+}

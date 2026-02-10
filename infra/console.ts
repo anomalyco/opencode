@@ -77,6 +77,8 @@ export const stripeWebhook = new stripe.WebhookEndpoint("StripeWebhookEndpoint",
     "checkout.session.expired",
     "charge.refunded",
     "invoice.payment_succeeded",
+    "invoice.payment_failed",
+    "invoice.payment_action_required",
     "customer.created",
     "customer.deleted",
     "customer.updated",
@@ -101,15 +103,26 @@ export const stripeWebhook = new stripe.WebhookEndpoint("StripeWebhookEndpoint",
 const zenProduct = new stripe.Product("ZenBlack", {
   name: "OpenCode Black",
 })
-const zenPrice = new stripe.Price("ZenBlackPrice", {
+const zenPriceProps = {
   product: zenProduct.id,
-  unitAmount: 20000,
   currency: "usd",
   recurring: {
     interval: "month",
     intervalCount: 1,
   },
+}
+const zenPrice200 = new stripe.Price("ZenBlackPrice", { ...zenPriceProps, unitAmount: 20000 })
+const zenPrice100 = new stripe.Price("ZenBlack100Price", { ...zenPriceProps, unitAmount: 10000 })
+const zenPrice20 = new stripe.Price("ZenBlack20Price", { ...zenPriceProps, unitAmount: 2000 })
+const ZEN_BLACK_PRICE = new sst.Linkable("ZEN_BLACK_PRICE", {
+  properties: {
+    product: zenProduct.id,
+    plan200: zenPrice200.id,
+    plan100: zenPrice100.id,
+    plan20: zenPrice20.id,
+  },
 })
+const ZEN_BLACK_LIMITS = new sst.Secret("ZEN_BLACK_LIMITS")
 
 const ZEN_MODELS = [
   new sst.Secret("ZEN_MODELS1"),
@@ -120,8 +133,19 @@ const ZEN_MODELS = [
   new sst.Secret("ZEN_MODELS6"),
   new sst.Secret("ZEN_MODELS7"),
   new sst.Secret("ZEN_MODELS8"),
+  new sst.Secret("ZEN_MODELS9"),
+  new sst.Secret("ZEN_MODELS10"),
+  new sst.Secret("ZEN_MODELS11"),
+  new sst.Secret("ZEN_MODELS12"),
+  new sst.Secret("ZEN_MODELS13"),
+  new sst.Secret("ZEN_MODELS14"),
+  new sst.Secret("ZEN_MODELS15"),
+  new sst.Secret("ZEN_MODELS16"),
+  new sst.Secret("ZEN_MODELS17"),
+  new sst.Secret("ZEN_MODELS18"),
+  new sst.Secret("ZEN_MODELS19"),
+  new sst.Secret("ZEN_MODELS20"),
 ]
-const ZEN_BLACK = new sst.Secret("ZEN_BLACK")
 const STRIPE_SECRET_KEY = new sst.Secret("STRIPE_SECRET_KEY")
 const STRIPE_PUBLISHABLE_KEY = new sst.Secret("STRIPE_PUBLISHABLE_KEY")
 const AUTH_API_URL = new sst.Linkable("AUTH_API_URL", {
@@ -142,14 +166,10 @@ const bucketNew = new sst.cloudflare.Bucket("ZenDataNew")
 const AWS_SES_ACCESS_KEY_ID = new sst.Secret("AWS_SES_ACCESS_KEY_ID")
 const AWS_SES_SECRET_ACCESS_KEY = new sst.Secret("AWS_SES_SECRET_ACCESS_KEY")
 
-let logProcessor
-if ($app.stage === "production" || $app.stage === "frank") {
-  const HONEYCOMB_API_KEY = new sst.Secret("HONEYCOMB_API_KEY")
-  logProcessor = new sst.cloudflare.Worker("LogProcessor", {
-    handler: "packages/console/function/src/log-processor.ts",
-    link: [HONEYCOMB_API_KEY],
-  })
-}
+const logProcessor = new sst.cloudflare.Worker("LogProcessor", {
+  handler: "packages/console/function/src/log-processor.ts",
+  link: [new sst.Secret("HONEYCOMB_API_KEY")],
+})
 
 new sst.cloudflare.x.SolidStart("Console", {
   domain,
@@ -164,7 +184,8 @@ new sst.cloudflare.x.SolidStart("Console", {
     EMAILOCTOPUS_API_KEY,
     AWS_SES_ACCESS_KEY_ID,
     AWS_SES_SECRET_ACCESS_KEY,
-    ZEN_BLACK,
+    ZEN_BLACK_PRICE,
+    ZEN_BLACK_LIMITS,
     new sst.Secret("ZEN_SESSION_SECRET"),
     ...ZEN_MODELS,
     ...($dev
@@ -186,7 +207,7 @@ new sst.cloudflare.x.SolidStart("Console", {
       transform: {
         worker: {
           placement: { mode: "smart" },
-          tailConsumers: logProcessor ? [{ service: logProcessor.nodes.worker.scriptName }] : [],
+          tailConsumers: [{ service: logProcessor.nodes.worker.scriptName }],
         },
       },
     },
