@@ -3,8 +3,8 @@ import { animate, type AnimationPlaybackControls } from "motion"
 import { useI18n } from "../context/i18n"
 import { createStore } from "solid-js/store"
 import { Collapsible } from "./collapsible"
-import type { IconProps } from "./icon"
-import { TextShimmer } from "./text-shimmer"
+import { Icon, IconProps } from "./icon"
+import { suppressAutoScrollResize } from "../hooks/create-auto-scroll"
 
 export type TriggerTitle = {
   title: string
@@ -166,7 +166,8 @@ export function BasicTool(props: BasicToolProps) {
   const handleOpenChange = (value: boolean) => {
     if (pending()) return
     if (props.locked && !value) return
-    setState("open", value)
+    suppressAutoScrollResize()
+    setOpen(value)
   }
 
   const trigger = () => (

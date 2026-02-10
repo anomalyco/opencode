@@ -3,6 +3,27 @@ import { createStore } from "solid-js/store"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 
+// Module-level flag to temporarily suppress resize-triggered auto-scrolling.
+// Used when user-initiated layout changes (e.g. collapsible toggle) would
+// otherwise cause unwanted scrollToBottom calls via ResizeObserver.
+let resizeSuppressCount = 0
+
+/**
+ * Suppress resize-triggered auto-scrolling for the duration of a layout change.
+ * The suppression covers the current frame plus one additional animation frame
+ * to account for Kobalte's measurement phase and subsequent reflow.
+ */
+export function suppressAutoScrollResize() {
+  resizeSuppressCount++
+  // Two rAF frames: first for the synchronous layout triggered by the toggle,
+  // second for any async reflow (e.g. Kobalte measuring then restoring styles).
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      resizeSuppressCount--
+    })
+  })
+}
+
 export interface AutoScrollOptions {
   working: () => boolean
   onUserInteracted?: () => void
@@ -172,7 +193,8 @@ export function createAutoScroll(options: AutoScrollOptions) {
   createResizeObserver(
     () => store.contentRef,
     () => {
-      const el = store.scrollRef
+      if (resizeSuppressCount > 0) return
+      const el = scroll
       if (el && !canScroll(el)) {
         if (store.userScrolled) setStore("userScrolled", false)
         return
