@@ -275,7 +275,7 @@ async function assertOpencodeConnected() {
         body: {
           service: "github-workflow",
           level: "info",
-          message: "Prepare to react to Github Workflow event",
+          message: "Prepare to react to GitHub Workflow event",
         },
       })
       connected = true

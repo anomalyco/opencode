@@ -1,0 +1,67 @@
+---
+title: 1.0'a geçiş
+description: opencode 1.0'daki yenilikler.
+---
+
+opencode 1.0, TUI'un tamamen yeniden yazılmasıdır.
+
+Performans ve yetenek sorunları olan go+bubbletea tabanlı TUI'dan zig+solidjs ile yazılmış şirket içi bir çerçeveye (OpenTUI) geçtik.
+
+Yeni TUI aynı opencode sunucusuna bağlandığı için eskisi gibi çalışıyor.
+
+---
+
+## Upgrading
+
+Şu anda daha önceki bir sürümü kullanıyorsanız, otomatik olarak 1.0'a yükseltilmemelisiniz.
+version. However some older versions of opencode always grab latest.
+
+Manuel olarak yükseltmek için çalıştırın
+
+```bash
+$ opencode upgrade 1.0.0
+```
+
+0.x'e geri dönmek için şunu çalıştırın:
+
+```bash
+$ opencode upgrade 0.15.31
+```
+
+---
+
+## Kullanıcı deneyimi değiştirildi
+
+Oturum geçmişi daha sıkıştırılmıştır ve yalnızca düzenleme ve bash aracının tüm ayrıntılarını gösterir.
+
+Neredeyse onun içinden aktığı bir komut çubuğu ekledik. Her şeyi görmek için ctrl+p tuşlarına basın.
+
+Yararlı bilgileri içeren bir kayıt kenarı sürüklenebilir (değiştirilebilir).
+
+Kimsenin gerçekten çalıştığından emin olmadığımız bazı şeyleri kaldırabildik. Önemli bir şeyin eksik olması durumunda lütfen bir konuyu açın; biz de hızla geri ekleyelim.
+
+---
+
+## Breaking changes
+
+### Keybinds renamed
+
+- messages_revert -> messages_undo
+- switch_agent -> agent_cycle
+- switch_agent_reverse -> agent_cycle_reverse
+- switch_mode -> agent_cycle
+- switch_mode_reverse -> agent_cycle_reverse
+
+### Keybinds removed
+
+- messages_layout_toggle
+- messages_next
+- messages_previous
+- file_diff_toggle
+- file_search
+- file_close
+- file_list
+- app_help
+- project_init
+- tool_details
+- thinking_blocks
