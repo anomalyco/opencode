@@ -18,10 +18,10 @@ import {
   AuthError,
   CreditsError,
   MonthlyLimitError,
-  SubscriptionError,
   UserLimitError,
   ModelError,
-  RateLimitError,
+  FreeUsageLimitError,
+  SubscriptionUsageLimitError,
 } from "./error"
 import { createBodyConverter, createStreamPartConverter, createResponseConverter, UsageInfo } from "./provider/provider"
 import { anthropicHelper } from "./provider/anthropic"
@@ -52,7 +52,8 @@ export async function handler(
   type ModelInfo = Awaited<ReturnType<typeof validateModel>>
   type ProviderInfo = Awaited<ReturnType<typeof selectProvider>>
 
-  const MAX_RETRIES = 3
+  const MAX_FAILOVER_RETRIES = 3
+  const MAX_429_RETRIES = 3
   const FREE_WORKSPACES = [
     "wrk_01K46JDFR0E75SG2Q8K172KF3Y", // frank
     "wrk_01K6W1A3VE0KMNVSCQT43BG2SX", // opencode bench
@@ -111,13 +112,16 @@ export async function handler(
       )
       logger.debug("REQUEST URL: " + reqUrl)
       logger.debug("REQUEST: " + reqBody.substring(0, 300) + "...")
-      const res = await fetch(reqUrl, {
+      const res = await fetchWith429Retry(reqUrl, {
         method: "POST",
         headers: (() => {
           const headers = new Headers(input.request.headers)
           providerInfo.modifyHeaders(headers, body, providerInfo.apiKey)
           Object.entries(providerInfo.headerMappings ?? {}).forEach(([k, v]) => {
             headers.set(k, headers.get(v)!)
+          })
+          Object.entries(providerInfo.headers ?? {}).forEach(([k, v]) => {
+            headers.set(k, v)
           })
           headers.delete("host")
           headers.delete("content-length")
@@ -250,13 +254,18 @@ export async function handler(
                 part = part.trim()
                 usageParser.parse(part)
 
-                if (providerInfo.format !== opts.format) {
+                if (providerInfo.bodyModifier) {
+                  for (const [k, v] of Object.entries(providerInfo.bodyModifier)) {
+                    part = part.replace(k, v)
+                  }
+                  c.enqueue(encoder.encode(part + "\n\n"))
+                } else if (providerInfo.format !== opts.format) {
                   part = streamConverter(part)
                   c.enqueue(encoder.encode(part + "\n\n"))
                 }
               }
 
-              if (providerInfo.format === opts.format) {
+              if (!providerInfo.bodyModifier && providerInfo.format === opts.format) {
                 c.enqueue(value)
               }
 
@@ -296,9 +305,9 @@ export async function handler(
         { status: 401 },
       )
 
-    if (error instanceof RateLimitError || error instanceof SubscriptionError) {
+    if (error instanceof FreeUsageLimitError || error instanceof SubscriptionUsageLimitError) {
       const headers = new Headers()
-      if (error instanceof SubscriptionError && error.retryAfter) {
+      if (error instanceof SubscriptionUsageLimitError && error.retryAfter) {
         headers.set("retry-after", String(error.retryAfter))
       }
       return new Response(
@@ -361,7 +370,7 @@ export async function handler(
         if (provider) return provider
       }
 
-      if (retry.retryCount === MAX_RETRIES) {
+      if (retry.retryCount === MAX_FAILOVER_RETRIES) {
         return modelInfo.providers.find((provider) => provider.id === modelInfo.fallbackProvider)
       }
 
@@ -512,7 +521,7 @@ export async function handler(
             timeUpdated: sub.timeFixedUpdated,
           })
           if (result.status === "rate-limited")
-            throw new SubscriptionError(
+            throw new SubscriptionUsageLimitError(
               `Subscription quota exceeded. Retry in ${formatRetryTime(result.resetInSec)}.`,
               result.resetInSec,
             )
@@ -526,7 +535,7 @@ export async function handler(
             timeUpdated: sub.timeRollingUpdated,
           })
           if (result.status === "rate-limited")
-            throw new SubscriptionError(
+            throw new SubscriptionUsageLimitError(
               `Subscription quota exceeded. Retry in ${formatRetryTime(result.resetInSec)}.`,
               result.resetInSec,
             )
@@ -587,6 +596,15 @@ export async function handler(
   function updateProviderKey(authInfo: AuthInfo, providerInfo: ProviderInfo) {
     if (!authInfo?.provider?.credentials) return
     providerInfo.apiKey = authInfo.provider.credentials
+  }
+
+  async function fetchWith429Retry(url: string, options: RequestInit, retry = { count: 0 }) {
+    const res = await fetch(url, options)
+    if (res.status === 429 && retry.count < MAX_429_RETRIES) {
+      await new Promise((resolve) => setTimeout(resolve, Math.pow(2, retry.count) * 500))
+      return fetchWith429Retry(url, options, { count: retry.count + 1 })
+    }
+    return res
   }
 
   async function trackUsage(
