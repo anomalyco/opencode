@@ -45,7 +45,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
-    }).format(total)
+    }).format(Number.isFinite(total) ? total : 0)
   })
 
   const context = createMemo(() => {
