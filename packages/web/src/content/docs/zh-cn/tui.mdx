@@ -1,19 +1,19 @@
 ---
 title: TUI
-description: 使用 OpenCode 终端用户界面。
+description: 使用 opencode 终端用户界面。
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode 提供交互式终端介面或 TUI，以便使用 LLM 处理您的专案。
+opencode 提供交互式终端介面或 TUI，以便使用 LLM 处理您的专案。
 
-执行OpenCode启动当前目录的TUI。
+执行opencode启动当前目录的TUI。
 
 ```bash
 opencode
 ```
 
-或者您可以為特定的工作目錄啟動它。
+或者您可以为特定的工作目录启动它。
 
 ```bash
 opencode /path/to/project
@@ -27,19 +27,19 @@ Give me a quick summary of the codebase.
 
 ---
 
-## 檔案參考
+## 文件參考
 
-您可以使用 `@` 在訊息中引用檔案。這會在當前工作目錄中進行模糊檔案搜尋。
+您可以使用 `@` 在消息中引用文件。这会在当前工作目录中進行模糊文件搜索。
 
 :::tip
-您還可以使用 `@` 來引用訊息中的檔案。
+您还可以使用 `@` 來引用消息中的文件。
 :::
 
 ```text "@packages/functions/src/api/index.ts"
 How is auth handled in @packages/functions/src/api/index.ts?
 ```
 
-檔案的內容會自動新增到對話中。
+文件的內容会自动添加到对话中。
 
 ---
 
@@ -51,13 +51,13 @@ How is auth handled in @packages/functions/src/api/index.ts?
 !ls -la
 ```
 
-命令的輸出將作為工具結果新增到對話中。
+命令的輸出将作为工具結果添加到对话中。
 
 ---
 
 ## 命令
 
-使用 OpenCode TUI 时，您可以输入 `/` 后跟命令名称来快速执行操作。例如：
+使用 opencode TUI 时，您可以输入 `/` 后跟命令名称来快速执行操作。例如：
 
 ```bash frame="none"
 /help
@@ -69,9 +69,9 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### 連線
+### 连接
 
-将新增到 OpenCode。允许您从可用的成功中进行选择并新增他们的 API 重要。
+将提供商添加到 opencode。你可以从可用提供商中选择，并添加它们的 API 密钥。
 
 ```bash frame="none"
 /connect
@@ -79,7 +79,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ---
 
-### 袖珍的
+### 紧凑
 
 压缩当前会话。_别名_： `/summarize`
 
@@ -87,19 +87,19 @@ How is auth handled in @packages/functions/src/api/index.ts?
 /compact
 ```
 
-** 按键系结：** `ctrl+x c`
+** 快捷键：** `ctrl+x c`
 
 ---
 
 ### 細節
 
-切換工具執行詳細資訊。
+切換工具执行详细信息。
 
 ```bash frame="none"
 /details
 ```
 
-** 按键系结：** `ctrl+x d`
+** 快捷键：** `ctrl+x d`
 
 ---
 
@@ -111,19 +111,19 @@ How is auth handled in @packages/functions/src/api/index.ts?
 /editor
 ```
 
-** 按键系结：** `ctrl+x e`
+** 快捷键：** `ctrl+x e`
 
 ---
 
 ### 出口
 
-退出OpenCode。 _别名_：`/quit`、`/q`
+退出opencode。 _别名_：`/quit`、`/q`
 
 ```bash frame="none"
 /exit
 ```
 
-** 按键系结：** `ctrl+x q`
+** 快捷键：** `ctrl+x q`
 
 ---
 
@@ -135,19 +135,19 @@ How is auth handled in @packages/functions/src/api/index.ts?
 /export
 ```
 
-** 按键系结：** `ctrl+x x`
+** 快捷键：** `ctrl+x x`
 
 ---
 
 ### 幫助
 
-顯示幫助對話方塊。
+显示幫助对话方塊。
 
 ```bash frame="none"
 /help
 ```
 
-** 按键系结：** `ctrl+x h`
+** 快捷键：** `ctrl+x h`
 
 ---
 
@@ -159,19 +159,19 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 /init
 ```
 
-** 按键系结：** `ctrl+x i`
+** 快捷键：** `ctrl+x i`
 
 ---
 
-### 型號
+### 模型
 
-列出可用型號。
+列出可用模型。
 
 ```bash frame="none"
 /models
 ```
 
-** 按键系结：** `ctrl+x m`
+** 快捷键：** `ctrl+x m`
 
 ---
 
@@ -183,7 +183,7 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 /new
 ```
 
-** 按键系结：** `ctrl+x n`
+** 快捷键：** `ctrl+x n`
 
 ---
 
@@ -192,7 +192,7 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 删除之前重做消除的讯息。仅在使用`/undo`后可用。
 
 :::tip
-任何檔案更改也將被恢復。
+任何文件更改也将被恢复。
 :::
 
 在内部，这使用 Git 来管理文件更改。所以你的专案**需要
@@ -202,11 +202,11 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 /redo
 ```
 
-** 按键系结：** `ctrl+x r`
+** 快捷键：** `ctrl+x r`
 
 ---
 
-### 會議
+### 会话
 
 上市会话并在会话之间切换。 _别名_：`/resume`、`/continue`
 
@@ -214,7 +214,7 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 /sessions
 ```
 
-** 按键系结：** `ctrl+x l`
+** 快捷键：** `ctrl+x l`
 
 ---
 
@@ -226,19 +226,19 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 /share
 ```
 
-** 按键系结：** `ctrl+x s`
+** 快捷键：** `ctrl+x s`
 
 ---
 
-### 主題
+### 主题
 
-列出可用的主題。
+列出可用的主题。
 
 ```bash frame="none"
 /theme
 ```
 
-** 按键系结：** `ctrl+x t`
+** 快捷键：** `ctrl+x t`
 
 ---
 
@@ -258,10 +258,10 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 
 ### 撤消
 
-撤消對話中的最後一條訊息。刪除最近的使用者訊息、所有後續響應以及任何檔案更改。
+撤消对话中的最后一条消息。删除最近的用户消息、所有后续響应以及任何文件更改。
 
 :::tip
-所做的任何檔案更改也將被恢復。
+所做的任何文件更改也将被恢复。
 :::
 
 在内部，这使用 Git 来管理文件更改。所以你的专案**需要
@@ -271,7 +271,7 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 /undo
 ```
 
-** 按键系结：** `ctrl+x u`
+** 快捷键：** `ctrl+x u`
 
 ---
 
@@ -285,7 +285,7 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 
 ---
 
-## 編輯器設定
+## 编辑器设置
 
 `/editor` 和 `/export` 命令都使用 `EDITOR` 环境变量中指定的编辑器。
 
@@ -334,12 +334,12 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
   </TabItem>
 </Tabs>
 
-流行的編輯器選項包括：
+流行的编辑器選項包括：
 
-- `code` - Visual Studio 程序代码
+- `code` - Visual Studio Code
 - `cursor` - 游标
 - `windsurf` - 风帆冲浪
-- `nvim` - Neo 的编辑器
+- `nvim` - Neovim 编辑器
 - `vim` - Vim 编辑器
 - `nano` - 奈米编辑器
 - `notepad` - Windows 文章书
@@ -349,13 +349,13 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 一些编辑器如 VS Code 需要以 `--wait` 标志启动。
 :::
 
-某些编辑器需要命令列引数才能在阻止模式下执行。 `--wait` 标志使编辑器程序阻塞直至关闭。
+某些编辑器需要命令列参数才能在阻止模式下执行。 `--wait` 标志使编辑器程序阻塞直至关闭。
 
 ---
 
 ## 配置
 
-您可以使用 OpenCode 配置文件自定义 TUI 行为。
+您可以使用 opencode 配置文件自定义 TUI 行为。
 
 ```json title="opencode.json"
 {
@@ -378,13 +378,13 @@ Create or update `AGENTS.md` file. [Learn more](/docs/rules).
 
 ## 定製化
 
-您可以使用命令选项板（`ctrl+x h` 或 `/help`）自定义 TUI 检视的各个方面。这些设置在重新启动后仍然存在。
+您可以使用命令选项板（`ctrl+x h` 或 `/help`）自定义 TUI 查看的各个方面。这些设置在重新启动后仍然存在。
 
 ---
 
-#### 使用者名稱顯示
+#### 用户名称显示
 
-切換您的使用者名稱是否出現在聊天訊息中。透過以下方式訪問：
+切換您的用户名称是否出現在聊天消息中。通过以下方式访问：
 
-- 命令面板：搜尋“使用者名稱”或“隱藏使用者名稱”
+- 命令面板：搜索“用户名称”或“隐藏用户名称”
 - 该设置会自动保留，放在 TUI 会话中被记住

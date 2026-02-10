@@ -1,11 +1,11 @@
 ---
 title: トゥイ
-description: OpenCode ターミナル ユーザー インターフェイスの使用。
+description: OpenCode terminal ユーザー インターフェイスの使用。
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode は、LLM を使用してプロジェクトを作業するための対話型ターミナル インターフェイスまたは TUI を提供します。
+OpenCode は、LLM を使用してプロジェクトを作業するための対話型terminal インターフェイスまたは TUI を提供します。
 
 OpenCode を実行すると、現在のディレクトリの TUI が開始されます。
 
@@ -45,7 +45,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## Bash コマンド
 
-メッセージを `!` で開始して、シェル コマンドを実行します。
+メッセージを `!` で開始して、shell コマンドを実行します。
 
 ```bash frame="none"
 !ls -la
@@ -99,7 +99,7 @@ OpenCode にプロバイダーを追加します。利用可能なプロバイ�
 /details
 ```
 
-**キーバインド:** `ctrl+x c`
+**キーバインド:** `ctrl+x d`
 
 ---
 
@@ -111,7 +111,7 @@ OpenCode にプロバイダーを追加します。利用可能なプロバイ�
 /editor
 ```
 
-**キーバインド:** `ctrl+x c`
+**キーバインド:** `ctrl+x e`
 
 ---
 
@@ -123,7 +123,7 @@ OpenCodeを終了します。 _エイリアス_: `/quit`、`/q`
 /exit
 ```
 
-**キーバインド:** `ctrl+x c`
+**キーバインド:** `ctrl+x q`
 
 ---
 
@@ -135,7 +135,7 @@ OpenCodeを終了します。 _エイリアス_: `/quit`、`/q`
 /export
 ```
 
-**キーバインド:** `ctrl+x c`
+**キーバインド:** `ctrl+x x`
 
 ---
 
@@ -147,7 +147,7 @@ OpenCodeを終了します。 _エイリアス_: `/quit`、`/q`
 /help
 ```
 
-**キーバインド:** `ctrl+x c`
+**キーバインド:** `ctrl+x h`
 
 ---
 
@@ -159,7 +159,7 @@ OpenCodeを終了します。 _エイリアス_: `/quit`、`/q`
 /init
 ```
 
-**キーバインド:** `ctrl+x c`
+**キーバインド:** `ctrl+x i`
 
 ---
 
@@ -171,7 +171,7 @@ OpenCodeを終了します。 _エイリアス_: `/quit`、`/q`
 /models
 ```
 
-**キーバインド:** `ctrl+x c`
+**キーバインド:** `ctrl+x m`
 
 ---
 
@@ -183,7 +183,7 @@ OpenCodeを終了します。 _エイリアス_: `/quit`、`/q`
 /new
 ```
 
-**キーバインド:** `ctrl+x c`
+**キーバインド:** `ctrl+x n`
 
 ---
 
@@ -201,7 +201,7 @@ Git リポジトリ** であること。
 /redo
 ```
 
-**キーバインド:** `ctrl+x c`
+**キーバインド:** `ctrl+x r`
 
 ---
 
@@ -213,7 +213,7 @@ Git リポジトリ** であること。
 /sessions
 ```
 
-**キーバインド:** `ctrl+x c`
+**キーバインド:** `ctrl+x l`
 
 ---
 
@@ -225,7 +225,7 @@ Git リポジトリ** であること。
 /share
 ```
 
-**キーバインド:** `ctrl+x c`
+**キーバインド:** `ctrl+x s`
 
 ---
 
@@ -237,7 +237,7 @@ Git リポジトリ** であること。
 /theme
 ```
 
-**キーバインド:** `ctrl+x c`
+**キーバインド:** `ctrl+x t`
 
 ---
 
@@ -269,7 +269,7 @@ Git リポジトリ** であること。
 /undo
 ```
 
-**キーバインド:** `ctrl+x c`
+**キーバインド:** `ctrl+x u`
 
 ---
 
@@ -299,7 +299,7 @@ Git リポジトリ** であること。
     export EDITOR="code --wait"
     ```
 
-これを永続的にするには、これをシェル プロファイルに追加します。
+これを永続的にするには、これをshell プロファイルに追加します。
 `~/.bashrc`、`~/.zshrc`など
 
   </TabItem>
@@ -334,19 +334,19 @@ Git リポジトリ** であること。
 
 一般的なエディター オプションには次のものがあります。
 
-- `code` - Visual Studio コード
-- `cursor` - カーソル
-- `windsurf` - ウィンドサーフィン
+- `code` - VS Code
+- `cursor` - Cursor
+- `windsurf` - Windsurf
 - `nvim` - Neovim エディター
 - `vim` - Vim エディター
 - `nano` - ナノエディター
 - `notepad` - Windows メモ帳
-- `subl` - 崇高なテキスト
+- `subl` - Sublime Text
 
 :::note
 VS Code などの一部のエディターは、`--wait` フラグを使用して起動する必要があります。
 :::
-Some モードで実行するためにコマンドライン引数が必要です。 `--wait` フラグにより​​、エディターは閉じられるまでプロセスをブロックします。
+一部のモードでは実行にコマンドライン引数が必要です。`--wait` フラグを使うと、エディターが閉じるまでプロセスが待機します。
 
 ---
 

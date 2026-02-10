@@ -1272,8 +1272,6 @@ export default function Layout(props: ParentProps) {
         ),
     )
 
-    await globalSDK.client.instance.dispose({ directory }).catch(() => undefined)
-
     setBusy(directory, false)
     dismiss()
 
@@ -1938,7 +1936,7 @@ export default function Layout(props: ParentProps) {
               direction="horizontal"
               size={layout.sidebar.width()}
               min={244}
-              max={window.innerWidth * 0.3 + 64}
+              max={typeof window === "undefined" ? 1000 : window.innerWidth * 0.3 + 64}
               collapseThreshold={244}
               onResize={layout.sidebar.resize}
               onCollapse={layout.sidebar.close}

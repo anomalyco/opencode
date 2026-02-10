@@ -4,7 +4,7 @@ import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { List } from "@opencode-ai/ui/list"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import fuzzysort from "fuzzysort"
-import { createMemo, createResource, createSignal, Show } from "solid-js"
+import { createMemo, createResource, createSignal } from "solid-js"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
@@ -31,7 +31,6 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const [filter, setFilter] = createSignal("")
   const recentProjects = createMemo(() =>
     sync.data.project
-      .filter((p) => p.worktree !== "/")
       .toSorted((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
       .slice(0, 5),
   )
@@ -273,7 +272,12 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   return (
     <Dialog title={props.title ?? language.t("command.project.open")}>
       <div class="flex flex-col">
-        <RecentProjectsList projects={recentProjects()} onSelect={resolve} />
+        {recentProjects().length > 0 && (
+          <div class="px-3 py-2 mb-2">
+            <div class="text-12-regular text-text-weak mb-2">Recent Projects</div>
+            <RecentProjectsList projects={recentProjects()} onSelect={resolve} homedir={sync.data.path.home} showIcon />
+          </div>
+        )}
         <div class="flex-1 overflow-hidden">
           <List
             search={{ placeholder: language.t("dialog.directory.search.placeholder"), autofocus: true }}

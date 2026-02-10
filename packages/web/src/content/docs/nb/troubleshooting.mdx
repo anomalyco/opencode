@@ -3,7 +3,7 @@ title: Feilsøking
 description: Vanlige problemer og hvordan de kan løses.
 ---
 
-For å feilsøke problemer med OpenCode, start med å sjekke loggene og lokale data den lagrer på disken.
+For å feilsøke problemer med opencode, start med å sjekke loggene og lokale data den lagrer på disken.
 
 ---
 
@@ -39,13 +39,13 @@ Denne katalogen inneholder:
 
 ## Desktop-app
 
-OpenCode Desktop kjører en lokal OpenCode-server (`opencode-cli` sidevognen) i bakgrunnen. De fleste problemene er forårsaket av en plugin som fungerer dårlig, en ødelagt cache eller en dårlig serverinnstilling.
+opencode Desktop kjører en lokal opencode-server (`opencode-cli` sidevognen) i bakgrunnen. De fleste problemene er forårsaket av en plugin som fungerer dårlig, en ødelagt cache eller en dårlig serverinnstilling.
 
 ### Raske sjekker
 
 - Avslutt og start appen på nytt.
 - Hvis appen viser en feilskjerm, klikker du på **Start på nytt** og kopierer feildetaljene.
-- Bare macOS: `OpenCode`-meny -> **Last nettvisning på nytt** (hjelper hvis UI er tom/frosset).
+- Bare macOS: `opencode`-meny -> **Last nettvisning på nytt** (hjelper hvis UI er tom/frosset).
 
 ---
 
@@ -72,7 +72,7 @@ Hvis du har konfigurert plugins, deaktiver dem midlertidig ved å fjerne nøkkel
 
 #### Sjekk plugin-kataloger
 
-OpenCode kan også laste lokale plugins fra disken. Flytt disse midlertidig ut av veien (eller gi nytt navn til mappen) og start skrivebordsappen på nytt:
+opencode kan også laste lokale plugins fra disken. Flytt disse midlertidig ut av veien (eller gi nytt navn til mappen) og start skrivebordsappen på nytt:
 
 - **Globale plugins**
   - **macOS/Linux**: `~/.config/opencode/plugins/`
@@ -86,22 +86,22 @@ Hvis appen begynner å fungere igjen, aktiverer du plugins én om gangen for å 
 
 ### Tøm hurtigbufferen
 
-Hvis deaktivering av plugins ikke hjelper (eller en plugin-installasjon sitter fast), tøm hurtigbufferen slik at OpenCode kan gjenoppbygge den.
+Hvis deaktivering av plugins ikke hjelper (eller en plugin-installasjon sitter fast), tøm hurtigbufferen slik at opencode kan gjenoppbygge den.
 
-1. Avslutt OpenCode Desktop helt.
+1. Avslutt opencode Desktop helt.
 2. Slett hurtigbufferkatalogen:
 
 - **macOS**: Finder -> `Cmd+Shift+G` -> lim inn `~/.cache/opencode`
 - **Linux**: slett `~/.cache/opencode` (eller kjør `rm -rf ~/.cache/opencode`)
 - **Windows**: Trykk `WIN+R` og lim inn `%USERPROFILE%\.cache\opencode`
 
-3. Start OpenCode Desktop på nytt.
+3. Start opencode Desktop på nytt.
 
 ---
 
 ### Løs problemer med servertilkobling
 
-OpenCode Desktop kan enten starte sin egen lokale server (standard) eller koble til en server URL du har konfigurert.
+opencode Desktop kan enten starte sin egen lokale server (standard) eller koble til en server URL du har konfigurert.
 
 Hvis du ser en **"Tilkobling mislyktes"**-dialogboks (eller appen kommer aldri forbi splash-skjermen), se etter en tilpasset server URL.
 
@@ -132,21 +132,21 @@ På Linux kan noen Wayland-oppsett forårsake tomme vinduer eller kompositorfeil
 
 ### Windows: WebView2 kjøretid
 
-På Windows krever OpenCode Desktop Microsoft Edge **WebView2 Runtime**. Hvis appen åpnes i et tomt vindu eller ikke starter, installer/oppdater WebView2 og prøv igjen.
+På Windows krever opencode Desktop Microsoft Edge **WebView2 Runtime**. Hvis appen åpnes i et tomt vindu eller ikke starter, installer/oppdater WebView2 og prøv igjen.
 
 ---
 
 ### Windows: Generelle ytelsesproblemer
 
-Hvis du opplever treg ytelse, problemer med filtilgang eller terminalproblemer på Windows, kan du prøve å bruke [WSL (Windows Subsystem for Linux)](/docs/windows-wsl). WSL gir et Linux-miljø som fungerer mer sømløst med funksjonene til OpenCode.
+Hvis du opplever treg ytelse, problemer med filtilgang eller terminalproblemer på Windows, kan du prøve å bruke [WSL (Windows Subsystem for Linux)](/docs/windows-wsl). WSL gir et Linux-miljø som fungerer mer sømløst med funksjonene til opencode.
 
 ---
 
 ### Varsler vises ikke
 
-OpenCode Desktop viser bare systemvarsler når:
+opencode Desktop viser bare systemvarsler når:
 
-- varsler er aktivert for OpenCode i OS-innstillingene dine, og
+- varsler er aktivert for opencode i OS-innstillingene dine, og
 - appvinduet er ikke fokusert.
 
 ---
@@ -155,8 +155,8 @@ OpenCode Desktop viser bare systemvarsler når:
 
 Hvis appen ikke starter og du ikke kan slette innstillingene fra UI, tilbakestill skrivebordsappens lagrede tilstand.
 
-1. Avslutt OpenCode Desktop.
-2. Finn og slett disse filene (de finnes i OpenCode Desktop-appens datakatalog):
+1. Avslutt opencode Desktop.
+2. Finn og slett disse filene (de finnes i opencode Desktop-appens datakatalog):
 
 - `opencode.settings.dat` (stasjonær standardserver URL)
 - `opencode.global.dat` og `opencode.workspace.*.dat` (UI tilstand som nylige servere/prosjekter)
@@ -171,7 +171,7 @@ Slik finner du katalogen raskt:
 
 ## Får hjelp
 
-Hvis du opplever problemer med OpenCode:
+Hvis du opplever problemer med opencode:
 
 1. **Rapporter problemer på GitHub**
 
@@ -195,7 +195,7 @@ Her er noen vanlige problemer og hvordan du kan løse dem.
 
 ---
 
-### OpenCode vil ikke starte
+### opencode vil ikke starte
 
 1. Sjekk loggene for feilmeldinger
 2. Prøv å kjøre med `--print-logs` for å se utdata i terminalen
@@ -252,7 +252,7 @@ For å løse dette:
 
 ### AI_APICallError og leverandørpakkeproblemer
 
-Hvis du støter på API anropsfeil, kan dette skyldes utdaterte leverandørpakker. opencode installerer dynamisk leverandørpakker (OpenAI, Anthropic, Google, etc.) etter behov og cacher dem lokalt.
+Hvis du støter på API-anropsfeil, kan dette skyldes utdaterte leverandørpakker. opencode installerer dynamisk leverandørpakker (OpenAI, Anthropic, Google, etc.) etter behov og cacher dem lokalt.
 
 For å løse problemer med leverandørpakke:
 
@@ -266,7 +266,7 @@ For å løse problemer med leverandørpakke:
 
 2. Start opencode på nytt for å installere de nyeste leverandørpakkene på nytt
 
-Dette vil tvinge opencode til å laste ned de nyeste versjonene av leverandørpakkene, som ofte løser kompatibilitetsproblemer med modellparametere og API endringer.
+Dette vil tvinge opencode til å laste ned de nyeste versjonene av leverandørpakkene, som ofte løser kompatibilitetsproblemer med modellparametere og API-endringer.
 
 ---
 

@@ -1,17 +1,17 @@
 ---
 title: GitHub
-description: GitHub sorunlarında ve çekme isteklerinde OpenCode'u kullanın.
+description: GitHub sorunlarında ve çekme isteklerinde opencode'u kullanın.
 ---
 
-OpenCode, GitHub iş akışınızla bütünleşir. Yorumunuzda `/opencode` veya `/oc`'den bahsedin; OpenCode, GitHub Actions çalıştırıcınızdaki görevleri yürütecektir.
+opencode, GitHub iş akışınızla bütünleşir. Yorumunuzda `/opencode` veya `/oc`'den bahsedin; opencode, GitHub Actions çalıştırıcınızdaki görevleri yürütecektir.
 
 ---
 
 ## Features
 
-- **Sorunları önceliklendirin**: OpenCode'dan bir sorunu araştırıp size açıklamasını isteyin.
-- **Düzelt ve uygula**: OpenCode'dan bir sorunu düzeltmesini veya bir özelliği uygulamasını isteyin. Ve yeni bir şubede çalışacak ve tüm değişiklikleri içeren bir PR gönderecek.
-- **Güvenli**: OpenCode, GitHub'ınızın çalıştırıcılarının içinde çalışır.
+- **Sorunları önceliklendirin**: opencode'dan bir sorunu araştırıp size açıklamasını isteyin.
+- **Düzelt ve uygula**: opencode'dan bir sorunu düzeltmesini veya bir özelliği uygulamasını isteyin. Ve yeni bir şubede çalışacak ve tüm değişiklikleri içeren bir PR gönderecek.
+- **Güvenli**: opencode, GitHub'ınızın çalıştırıcılarının içinde çalışır.
 
 ---
 
@@ -81,13 +81,13 @@ Veya manuel olarak ayarlayabilirsiniz.
 
 ## Yapılandırma
 
-- `model`: OpenCode ile kullanılacak model. `provider/model` biçimini alır. Bu **gerekli**.
+- `model`: opencode ile kullanılacak model. `provider/model` biçimini alır. Bu **gerekli**.
 - `agent`: Kullanılacak aracı. Birincil ajan olmalı. Yapılandırmadan `default_agent`'ye veya bulunamazsa `"build"`'ye geri döner.
-- `share`: OpenCode hesabının paylaşılıp paylaşılmayacağı. Genel depolar için varsayılan olarak **true** olur.
-- `prompt`: Varsayılan çalışma geçersiz olduğundan dolayı özel istem. OpenCode'un işleme biçimini kişiselleştirmek için bunu kullanın.
-- `token`: Yorum oluşturma, değişiklik yapma ve çekme isteklerini açma gibi işlemleri gerçekleştirmek için isteğe bağlı GitHub erişim belirteci. Varsayılan olarak OpenCode, OpenCode GitHub Uygulamasındaki kurulum erişim belirtecini kullanır, bu nedenle taahhütler, yorumlar ve çekme istekleri uygulamadan geliyormuş gibi görünür.
+- `share`: opencode hesabının paylaşılıp paylaşılmayacağı. Genel depolar için varsayılan olarak **true** olur.
+- `prompt`: Varsayılan çalışma geçersiz olduğundan dolayı özel istem. opencode'un işleme biçimini kişiselleştirmek için bunu kullanın.
+- `token`: Yorum oluşturma, değişiklik yapma ve çekme isteklerini açma gibi işlemleri gerçekleştirmek için isteğe bağlı GitHub erişim belirteci. Varsayılan olarak opencode, opencode GitHub Uygulamasındaki kurulum erişim belirtecini kullanır, bu nedenle taahhütler, yorumlar ve çekme istekleri uygulamadan geliyormuş gibi görünür.
 
-  Alternatif olarak, OpenCode GitHub'u yüklemeden GitHub Eylem çalıştırıcısının [built-in `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) akışını kullanabilirsiniz. İşinizde gerekli izinlere sahip olduğunuzdan emin olun:
+  Alternatif olarak, opencode GitHub'u yüklemeden GitHub Eylem çalıştırıcısının [built-in `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) akışını kullanabilirsiniz. İşinizde gerekli izinlere sahip olduğunuzdan emin olun:
 
   ```yaml
   permissions:
@@ -103,20 +103,20 @@ Veya manuel olarak ayarlayabilirsiniz.
 
 ## Supported Events
 
-OpenCode aşağıdaki GitHub olayları tarafından tetiklenebilir:
+opencode aşağıdaki GitHub olayları tarafından tetiklenebilir:
 
 | Event Type                    | Triggered By                                  | Details                                                                                                                                             |
 | ----------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `issue_comment`               | Bir soruna veya halkla ilişkilere yorum yapın | Yorumunuzda `/opencode` veya `/oc`'den bahsedin. OpenCode bağlamı okur ve şubeler oluşturabilir, PR'leri açabilir veya yanıt verebilir.             |
-| `pull_request_review_comment` | PR'deki belirli kod satırlarına yorum yapın   | Kodu incelerken `/opencode` veya `/oc`'den bahsedin. OpenCode dosya yolunu, satır numaralarını ve fark içeriğini alır.                              |
-| `issues`                      | Sayı açıldı veya düzenlendi                   | Sorunlar oluşturulduğunda veya değiştirildiğinde OpenCode'u otomatik olarak tetikleyin. `prompt` girişi gerektirir.                                 |
-| `pull_request`                | PR açıldı veya güncellendi                    | PR'ler açıldığında, senkronize edildiğinde veya yeniden açıldığında OpenCode'u otomatik olarak tetikleyin. Otomatik incelemeler için kullanışlıdır. |
-| `schedule`                    | Cron tabanlı program                          | OpenCode'u bir programa göre çalıştırın. `prompt` girişi gerektirir. Çıktı, günlüklere ve PR'lere gider (yorum yapılacak bir sorun yoktur).         |
-| `workflow_dispatch`           | GitHub kullanıcı arayüzünden manuel tetikleme | Eylemler sekmesi aracılığıyla OpenCode'u isteğe bağlı olarak tetikleyin. `prompt` girişi gerektirir. Çıktı günlüklere ve PR'lere gider.             |
+| `issue_comment`               | Bir soruna veya halkla ilişkilere yorum yapın | Yorumunuzda `/opencode` veya `/oc`'den bahsedin. opencode bağlamı okur ve şubeler oluşturabilir, PR'leri açabilir veya yanıt verebilir.             |
+| `pull_request_review_comment` | PR'deki belirli kod satırlarına yorum yapın   | Kodu incelerken `/opencode` veya `/oc`'den bahsedin. opencode dosya yolunu, satır numaralarını ve fark içeriğini alır.                              |
+| `issues`                      | Sayı açıldı veya düzenlendi                   | Sorunlar oluşturulduğunda veya değiştirildiğinde opencode'u otomatik olarak tetikleyin. `prompt` girişi gerektirir.                                 |
+| `pull_request`                | PR açıldı veya güncellendi                    | PR'ler açıldığında, senkronize edildiğinde veya yeniden açıldığında opencode'u otomatik olarak tetikleyin. Otomatik incelemeler için kullanışlıdır. |
+| `schedule`                    | Cron tabanlı program                          | opencode'u bir programa göre çalıştırın. `prompt` girişi gerektirir. Çıktı, günlüklere ve PR'lere gider (yorum yapılacak bir sorun yoktur).         |
+| `workflow_dispatch`           | GitHub kullanıcı arayüzünden manuel tetikleme | Eylemler sekmesi aracılığıyla opencode'u isteğe bağlı olarak tetikleyin. `prompt` girişi gerektirir. Çıktı günlüklere ve PR'lere gider.             |
 
 ### Schedule Example
 
-Otomatik görevleri gerçekleştirmek için OpenCode'u bir zamanlamaya göre çalıştırın:
+Otomatik görevleri gerçekleştirmek için opencode'u bir zamanlamaya göre çalıştırın:
 
 ```yaml title=".github/workflows/opencode-scheduled.yml"
 name: Scheduled OpenCode Task
@@ -150,7 +150,7 @@ jobs:
             If you find issues worth addressing, open an issue to track them.
 ```
 
-Zamanlanmış etkinlikler için, talimatların alınabileceği bir yorum bulunmadığından `prompt` girişi **gereklidir**. Zamanlanmış iş akışları, izin kontrolü yapılacak bir kullanıcı bağlamı olmadan çalışır; bu nedenle, OpenCode'un şubeler veya PR'ler oluşturmasını bekliyorsanız iş akışının `contents: write` ve `pull-requests: write` vermesi gerekir.
+Zamanlanmış etkinlikler için, talimatların alınabileceği bir yorum bulunmadığından `prompt` girişi **gereklidir**. Zamanlanmış iş akışları, izin kontrolü yapılacak bir kullanıcı bağlamı olmadan çalışır; bu nedenle, opencode'un şubeler veya PR'ler oluşturmasını bekliyorsanız iş akışının `contents: write` ve `pull-requests: write` vermesi gerekir.
 
 ---
 
@@ -191,7 +191,7 @@ jobs:
             - Suggest improvements
 ```
 
-`pull_request` olaylar için, `prompt` sağlanmazsa, OpenCode varsayılan olarak çekme isteklerini inceler.
+`pull_request` olaylar için, `prompt` sağlanmazsa, opencode varsayılan olarak çekme isteklerini inceler.
 
 ---
 
@@ -252,7 +252,7 @@ jobs:
 
 ## Özel istemler
 
-OpenCode'un davranışını iş akışınız için özelleştirmek için varsayılan istemi geçersiz kılın.
+opencode'un davranışını iş akışınız için özelleştirmek için varsayılan istemi geçersiz kılın.
 
 ```yaml title=".github/workflows/opencode.yml"
 - uses: anomalyco/opencode/github@latest
@@ -271,7 +271,7 @@ Bu, projenizle ilgili spesifik inceleme kriterlerini, kodlama standartlarını v
 
 ## Examples
 
-GitHub'da OpenCode'u nasıl kullanabileceğinize dair bazı örnekleri burada bulabilirsiniz.
+GitHub'da opencode'u nasıl kullanabileceğinize dair bazı örnekleri burada bulabilirsiniz.
 
 - **Explain an issue**
 
@@ -281,7 +281,7 @@ GitHub'da OpenCode'u nasıl kullanabileceğinize dair bazı örnekleri burada bu
   /opencode explain this issue
   ```
 
-  OpenCode, tüm yorumlar da dahil olmak üzere ileti dizisinin tamamını okuyacak ve net bir açıklama ile yanıt verecektir.
+  opencode, tüm yorumlar da dahil olmak üzere ileti dizisinin tamamını okuyacak ve net bir açıklama ile yanıt verecektir.
 
 - **Fix an issue**
 
@@ -291,7 +291,7 @@ GitHub'da OpenCode'u nasıl kullanabileceğinize dair bazı örnekleri burada bu
   /opencode fix this
   ```
 
-  Ve OpenCode yeni bir şube oluşturacak, değişiklikleri uygulayacak ve değişiklikleri içeren bir PR açacak.
+  Ve opencode yeni bir şube oluşturacak, değişiklikleri uygulayacak ve değişiklikleri içeren bir PR açacak.
 
 - **PR'leri inceleyin ve değişiklik yapın**
 
@@ -301,18 +301,18 @@ GitHub'da OpenCode'u nasıl kullanabileceğinize dair bazı örnekleri burada bu
   Delete the attachment from S3 when the note is removed /oc
   ```
 
-  OpenCode istenen değişikliği uygulayacak ve aynı PR'ye uygulayacaktır.
+  opencode istenen değişikliği uygulayacak ve aynı PR'ye uygulayacaktır.
 
 - **Review specific code lines**
 
-  PR'nin "Dosyalar" sekmesindeki kod satırlarına doğrudan yorum bırakın. OpenCode, kesin yanıtlar sağlamak için dosyayı, satır numaralarını ve fark içeriğini otomatik olarak algılar.
+  PR'nin "Dosyalar" sekmesindeki kod satırlarına doğrudan yorum bırakın. opencode, kesin yanıtlar sağlamak için dosyayı, satır numaralarını ve fark içeriğini otomatik olarak algılar.
 
   ```
   [Comment on specific lines in Files tab]
   /oc add error handling here
   ```
 
-  When commenting on specific lines, OpenCode receives:
+  When commenting on specific lines, opencode receives:
   - İncelenmekte olan dosyanın tamamı
   - Belirli kod satırları
   - Çevreleyen fark bağlamı

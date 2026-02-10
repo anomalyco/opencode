@@ -1,17 +1,17 @@
 ---
-title: interfejs wiersza polecany
-description: Opcje i interfejs interfejsu CLI OpenCode.
+title: CLI
+description: Opcje i polecenia CLI opencode.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-Interfejs CLI OpenCode uruchamia się [TUI](/docs/tui), gdy jest uruchamiany bez żadnych argumentów.
+CLI opencode domyślnie uruchamia [TUI](/docs/tui), gdy wywołasz je bez argumentów.
 
 ```bash
 opencode
 ```
 
-Ale także instalacja przez tę stronę. pełni przed programową interakcją z OpenCode.
+CLI obsługuje też polecenia opisane na tej stronie, więc możesz używać opencode programowo.
 
 ```bash
 opencode run "Explain how closures work in JavaScript"
@@ -21,7 +21,7 @@ opencode run "Explain how closures work in JavaScript"
 
 ### tui
 
-Uruchomienie interfejsu użytkownika terminala OpenCode.
+Uruchomienie interfejsu użytkownika terminala opencode.
 
 ```bash
 opencode [project]
@@ -29,27 +29,28 @@ opencode [project]
 
 #### Flagi
 
-| Flaga        | Krótkie | Opis                                          |
-| ------------ | ------- | --------------------------------------------- |
-| `--continue` | `-c`    | Kontynuuj ostatnią datę                       |
-| `--session`  | `-s`    | Identyfikator sesji, aby kontynuować          |
-| `--prompt`   |         | Monituj o zastosowanie                        |
-| `--model`    | `-m`    | Model wykorzystania w postaci dostawcy/modelu |
-| `--agent`    |         | Agent do użycia                               |
-| `--port`     |         | Port do słuchania                             |
-| `--hostname` |         | Nazwa hosta, która jest częścią składową      |
+| Flaga        | Krótkie | Opis                                                                     |
+| ------------ | ------- | ------------------------------------------------------------------------ |
+| `--continue` | `-c`    | Kontynuuj ostatnią datę                                                  |
+| `--session`  | `-s`    | Identyfikator sesji, aby kontynuować                                     |
+| `--fork`     |         | Rozgałęź sesję podczas kontynuacji (użyj z `--continue` lub `--session`) |
+| `--prompt`   |         | Monituj o zastosowanie                                                   |
+| `--model`    | `-m`    | Model wykorzystania w postaci dostawcy/modelu                            |
+| `--agent`    |         | Agent do użycia                                                          |
+| `--port`     |         | Port do słuchania                                                        |
+| `--hostname` |         | Nazwa hosta, która jest częścią składową                                 |
 
 ---
 
 ## Polecenia
 
-Interfejs CLI OpenCode zawiera także szczegółowe polecenie.
+Interfejs CLI opencode zawiera także szczegółowe polecenie.
 
 ---
 
 ### agent
 
-Zarządzaj agentami OpenCode.
+Zarządzaj agentami opencode.
 
 ```bash
 opencode agent [command]
@@ -57,15 +58,15 @@ opencode agent [command]
 
 ---
 
-### przytwierdzić
+### attach
 
-Dołącz terminal do już działającego serwera zaplecza OpenCode uruchomionego za pomocą oprogramowania `serve` lub `web`.
+Dołącz terminal do już działającego serwera zaplecza opencode uruchomionego za pomocą oprogramowania `serve` lub `web`.
 
 ```bash
 opencode attach [url]
 ```
 
-Możliwość zabezpieczenia z TUI ze zdalnym backendem OpenCode. Na przykład:
+Możliwość zabezpieczenia z TUI ze zdalnym backendem opencode. Na przykład:
 
 ```bash
 # Start the backend server for web/mobile access
@@ -84,7 +85,7 @@ opencode attach http://10.20.30.40:4096
 
 ---
 
-#### co
+#### create
 
 Utwórz nowego agenta z niestandardową konfiguracją.
 
@@ -96,7 +97,7 @@ To działanie poprowadził Cię przez proces tworzenia nowego agenta z niestanda
 
 ---
 
-#### lista
+#### list
 
 Lista wszystkich agentów.
 
@@ -106,7 +107,7 @@ opencode agent list
 
 ---
 
-### autoryzacja
+### auth
 
 Polecenie do zarządzania danymi uwierzytelniającymi i logowaniem dla dostawców.
 
@@ -118,17 +119,17 @@ opencode auth [command]
 
 #### login
 
-OpenCode jest dostępny przez listę dostawców w [Models.dev](https://models.dev), więc można użyć `opencode auth login` do skonfigurowania klucza API dla dowolnego dostawcy, który może być kontrolowany. Jest to możliwe w `~/.local/share/opencode/auth.json`.
+opencode jest dostępny przez listę dostawców w [Models.dev](https://models.dev), więc można użyć `opencode auth login` do skonfigurowania klucza API dla dowolnego dostawcy, który może być kontrolowany. Jest to możliwe w `~/.local/share/opencode/auth.json`.
 
 ```bash
 opencode auth login
 ```
 
-Po uruchomieniu OpenCode ładuje dostawców z pliku poświadczeń. A jeśli twoje siedliskiem są jakieś klucze lub plik `.env` w twoim projekcie.
+Po uruchomieniu opencode ładuje dostawców z pliku poświadczeń. A jeśli twoje siedliskiem są jakieś klucze lub plik `.env` w twoim projekcie.
 
 ---
 
-#### lista
+#### list
 
 Wyświetlanie list wszystkich uwierzytelnionych dostawców przechowywanych w pliku poświadczeń.
 
@@ -144,7 +145,7 @@ opencode auth ls
 
 ---
 
-#### wyloguj się
+#### logout
 
 Wylogowuje Cię z dostawcy poprzez usunięcie go z pliku poświadczeń.
 
@@ -154,7 +155,7 @@ opencode auth logout
 
 ---
 
-### githubie
+### github
 
 Zarządzaj agentem GitHub w celu automatyzacji repozytorium.
 
@@ -164,7 +165,7 @@ opencode github [command]
 
 ---
 
-#### Dowiedz się
+#### install
 
 Zainstaluj agenta GitHub w swoim repozytorium.
 
@@ -176,7 +177,7 @@ Spowoduje to konieczność uruchomienia akcji GitHub i przeprowadzi cię przez p
 
 ---
 
-#### chcesz
+#### run
 
 Uruchom agenta na GitHubie. Jest to zwykły użytkownik w akcjach GitHub.
 
@@ -193,7 +194,7 @@ opencode github run
 
 ---
 
-### mcp
+### MCP
 
 Zarządzaj serwerem kluczowego modelu kontekstowego.
 
@@ -203,7 +204,7 @@ opencode mcp [command]
 
 ---
 
-#### zaproponować
+#### add
 
 Dodaj serwer MCP do swojej konfiguracji.
 
@@ -215,7 +216,7 @@ To polecenie poprowadzić Cię przez proces dodawania lokalnego lub zdalnego ser
 
 ---
 
-#### lista
+#### list
 
 Wyświetlanie list wszystkich skonfigurowanych serwerów MCP i ich awarii.
 
@@ -231,7 +232,7 @@ opencode mcp ls
 
 ---
 
-#### autoryzacja
+#### auth
 
 Uwierzytelnij się za pomocą serwera MCP z włączoną funkcją OAuth.
 
@@ -255,7 +256,7 @@ opencode mcp auth ls
 
 ---
 
-#### wyloguj się
+#### logout
 
 Usuń doświadczenie OAuth dla serwera MCP.
 
@@ -265,7 +266,7 @@ opencode mcp logout [name]
 
 ---
 
-#### odpluskwić
+#### debug
 
 Debuguj problemy z połączeniem OAuth dla serwera MCP.
 
@@ -275,7 +276,7 @@ opencode mcp debug <name>
 
 ---
 
-### modele
+### models
 
 Wyświetlanie list modeli wszystkich skonfigurowanych dostawców.
 
@@ -300,7 +301,7 @@ opencode models anthropic
 | `--refresh` | Odśwież pamięć podręczną modele z models.dev                                    |
 | `--verbose` | Bardziej szczegółowe dane wyjściowe modelu (zawiera metadane, takie jak koszty) |
 
-flagi `--refresh`, aby znaleźć listę modeli w pamięci podręcznej. Jest to wymagane, gdy dostawca dodano nowe modele, które chcesz zobaczyć w OpenCode.
+flagi `--refresh`, aby znaleźć listę modeli w pamięci podręcznej. Jest to wymagane, gdy dostawca dodano nowe modele, które chcesz zobaczyć w opencode.
 
 ```bash
 opencode models --refresh
@@ -334,25 +335,26 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 #### Flagi
 
-| Flaga        | Krótkie | Opis                                                               |
-| ------------ | ------- | ------------------------------------------------------------------ |
-| `--command`  |         | Polecenie do uruchomienia, komunikatu dla argumentów               |
-| `--continue` | `-c`    | Kontynuuj ostatnią datę                                            |
-| `--session`  | `-s`    | Identyfikator sesji, aby kontynuować                               |
-| `--share`    |         | Udostępnij sesję                                                   |
-| `--model`    | `-m`    | Model wykorzystania w postaci dostawcy/modelu                      |
-| `--agent`    |         | Agent do użycia                                                    |
-| `--file`     | `-f`    | Pliki do załączenia do wiadomości                                  |
-| `--format`   |         | Format: domyślny (sformatowany) lub json (surowe rozwiązanie JSON) |
-| `--title`    |         | Tytuł sesji (używany skróconego monitu, jeśli nie podano wartości) |
-| `--attach`   |         | Dołącz do skutecznego serwera opencode (np. http://localhost:4096) |
-| `--port`     |         | Port dla serwera lokalnego (domyślnie jest do portu losowego)      |
+| Flaga        | Krótkie | Opis                                                                     |
+| ------------ | ------- | ------------------------------------------------------------------------ |
+| `--command`  |         | Polecenie do uruchomienia, komunikatu dla argumentów                     |
+| `--continue` | `-c`    | Kontynuuj ostatnią datę                                                  |
+| `--session`  | `-s`    | Identyfikator sesji, aby kontynuować                                     |
+| `--fork`     |         | Rozgałęź sesję podczas kontynuacji (użyj z `--continue` lub `--session`) |
+| `--share`    |         | Udostępnij sesję                                                         |
+| `--model`    | `-m`    | Model wykorzystania w postaci dostawcy/modelu                            |
+| `--agent`    |         | Agent do użycia                                                          |
+| `--file`     | `-f`    | Pliki do załączenia do wiadomości                                        |
+| `--format`   |         | Format: domyślny (sformatowany) lub json (surowe rozwiązanie JSON)       |
+| `--title`    |         | Tytuł sesji (używany skróconego monitu, jeśli nie podano wartości)       |
+| `--attach`   |         | Dołącz do skutecznego serwera opencode (np. http://localhost:4096)       |
+| `--port`     |         | Port dla serwera lokalnego (domyślnie jest do portu losowego)            |
 
 ---
 
-### podawać
+### serve
 
-Uruchom bezgłowy serwer OpenCode w celu uzyskania dostępu do API. Pełny interfejs HTTP w [dokumentacji serwera](/docs/server).
+Uruchom bezgłowy serwer opencode w celu uzyskania dostępu do API. Pełny interfejs HTTP w [dokumentacji serwera](/docs/server).
 
 ```bash
 opencode serve
@@ -371,9 +373,9 @@ Spowoduje dostęp do serwera HTTP, który zapewnia dostęp do API opencode bez i
 
 ---
 
-### Sesja
+### session
 
-Zarządzaj sesją OpenCode.
+Zarządzaj sesją opencode.
 
 ```bash
 opencode session [command]
@@ -381,9 +383,9 @@ opencode session [command]
 
 ---
 
-#### lista
+#### list
 
-Lista wszystkich sesji OpenCode.
+Lista wszystkich sesji opencode.
 
 ```bash
 opencode session list
@@ -398,9 +400,9 @@ opencode session list
 
 ---
 
-### statystyki
+### stats
 
-Pokaż statystyki wykorzystania tokenów i sesji szkoleniowych OpenCode.
+Pokaż statystyki wykorzystania tokenów i sesji szkoleniowych opencode.
 
 ```bash
 opencode stats
@@ -417,7 +419,7 @@ opencode stats
 
 ---
 
-### eksport
+### export
 
 Eksportuj dane sesji jako JSON.
 
@@ -431,13 +433,13 @@ Jeśli nie poddasz identyfikatora sesji, zostaniesz poproszony o wybranie jedneg
 
 ### import
 
-Importuj dane sesji z pliku JSON lub adresu URL udostępniania OpenCode.
+Importuj dane sesji z pliku JSON lub adresu URL udostępniania opencode.
 
 ```bash
 opencode import <file>
 ```
 
-Możesz importować z lokalnego lub adresu URL OpenCode.
+Możesz importować z lokalnego lub adresu URL opencode.
 
 ```bash
 opencode import session.json
@@ -446,15 +448,15 @@ opencode import https://opncd.ai/s/abc123
 
 ---
 
-### sieć
+### web
 
-Uruchomiony bezgłowy serwer OpenCode z interfejsem internetowym.
+Uruchomiony bezgłowy serwer opencode z interfejsem internetowym.
 
 ```bash
 opencode web
 ```
 
-Spowoduje dostęp do serwera HTTP i otwarcie dostępu do OpenCode przez interfejs sieciowy. Ustaw `OPENCODE_SERVER_PASSWORD`, aby włączyć podstawowe uwierzytelnianie HTTP (domyślna nazwa użytkownika do `opencode`).
+Spowoduje dostęp do serwera HTTP i otwarcie dostępu do opencode przez interfejs sieciowy. Ustaw `OPENCODE_SERVER_PASSWORD`, aby włączyć podstawowe uwierzytelnianie HTTP (domyślna nazwa użytkownika do `opencode`).
 
 #### Flagi
 
@@ -467,7 +469,7 @@ Spowoduje dostęp do serwera HTTP i otwarcie dostępu do OpenCode przez interfej
 
 ---
 
-### akp
+### acp
 
 Uruchomiony serwer ACP (Agent Client Protocol).
 
@@ -487,9 +489,9 @@ Aby udostępnić serwer ACP, który komunikuje się poprzez stdin/stdout przy u�
 
 ---
 
-### odinstaluj
+### uninstall
 
-Odinstaluj OpenCode i usuń wszystkie pliki powiązane.
+Odinstaluj opencode i usuń wszystkie pliki powiązane.
 
 ```bash
 opencode uninstall
@@ -506,7 +508,7 @@ opencode uninstall
 
 ---
 
-### aktualizacja
+### upgrade
 
 Aktualizuje opencode do oryginalnej wersji lub oryginalnej wersji.
 
@@ -547,9 +549,9 @@ Interfejs CLI kod opencode przyjmuje flagi globalne.
 
 ---
 
-## Zmienne warunki
+## Zmienne środowiskowe
 
-OpenCode można wykryć za pomocą czyszczenia alternatywnych.
+opencode można wykryć za pomocą czyszczenia alternatywnych.
 
 | Zmienna                               | Wpisz   | Opis                                                                    |
 | ------------------------------------- | ------- | ----------------------------------------------------------------------- |
@@ -580,7 +582,7 @@ OpenCode można wykryć za pomocą czyszczenia alternatywnych.
 
 ---
 
-### Eksperymentalny
+### Eksperymentalne
 
 Te zmienne możliwości użycia funkcji eksperymentalnych, które mogą zostać lub usunięte.
 

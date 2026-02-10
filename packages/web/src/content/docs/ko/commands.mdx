@@ -42,13 +42,13 @@ frontmatter 명령 속성을 정의합니다. 콘텐츠는 템플릿이 됩니�
 
 ## 구성
 
-OpenCode config를 통해 사용자 지정 명령을 추가하거나 `commands/` 디렉토리에 있는 Markdown 파일을 만들 수 있습니다.
+opencode config를 통해 사용자 지정 명령을 추가하거나 `commands/` 디렉토리에 있는 Markdown 파일을 만들 수 있습니다.
 
 ---
 
 ### JSON 태그
 
-OpenCode [config](/docs/config)에서 `command` 옵션을 사용하십시오:
+opencode [config](/docs/config)에서 `command` 옵션을 사용하십시오:
 
 ```json title="opencode.jsonc" {4-12}
 {
@@ -153,11 +153,11 @@ with the following content: $3
 /create-file config.json src "{ \"key\": \"value\" }"
 ```
 
-이 교체:
+이렇게 대체됩니다:
 
-- `$1`TK1ZZ와 `$1`
-- `$2`TK1ZZ와 `$2`
-- `$3`TK1ZZ와 `$3`
+- `$1`는 `config.json`
+- `$2`는 `src`
+- `$3`는 `{ "key": "value" }`
 
 ---
 
@@ -314,7 +314,7 @@ Check for performance issues and suggest improvements.
 
 ## 내장
 
-opencode는 `/init`, `/undo`, `/redo`, `/share`, `/help`, `/help`와 같은 몇몇 붙박이 명령을 포함합니다; [learn more] (./tui#commands).
+opencode는 `/init`, `/undo`, `/redo`, `/share`, `/help`, `/help`와 같은 몇몇 붙박이 명령을 포함합니다; [learn more](./tui#commands).
 
 :::note
 사용자 지정 명령은 내장 명령을 무시할 수 있습니다.

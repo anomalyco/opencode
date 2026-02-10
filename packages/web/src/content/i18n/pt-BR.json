@@ -1,7 +1,7 @@
 {
   "app.head.titleSuffix": "Agente de codificação AI construído para o terminal",
   "app.header.home": "Início",
-  "app.header.docs": "Documentos",
+  "app.header.docs": "Docs",
   "app.footer.issueLink": "Encontrou um bug? Abra uma issue",
   "app.footer.discordLink": "Participe da nossa comunidade no Discord",
   "app.lander.hero.title": "O agente de codificação AI construído para o terminal.",
@@ -51,7 +51,7 @@
   "share.status_error": "Erro",
   "share.status_unknown": "Desconhecido",
   "share.error_id_not_found": "id não encontrado",
-  "share.error_api_url_not_found": "URL da API não encontrada",
+  "share.error_api_url_not_found": "API URL não encontrada",
   "share.error_connection_failed": "Falha na conexão",
   "share.opencode_version": "versão do opencode",
   "share.opencode_name": "opencode",

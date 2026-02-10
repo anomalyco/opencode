@@ -192,7 +192,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 - `todo.updated`
 
-#### กิจกรรมของเชลล์
+#### กิจกรรมของ shell
 
 - `shell.env`
 
@@ -260,7 +260,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 ### ฉีดตัวแปรสภาพแวดล้อม
 
-แทรกตัวแปรสภาพแวดล้อมลงในการดำเนินการเชลล์ทั้งหมด (เครื่องมือ AI และเทอร์มินัลผู้ใช้):
+แทรกตัวแปรสภาพแวดล้อมลงในการดำเนินการ shell ทั้งหมด (เครื่องมือ AI และ terminal ผู้ใช้):
 
 ```javascript title=".opencode/plugins/inject-env.js"
 export const InjectEnvPlugin = async () => {

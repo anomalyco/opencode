@@ -3,7 +3,7 @@ title: Troubleshooting
 description: Typowe problemy i sposoby ich rozwiązywania.
 ---
 
-Aby debugować problemy z OpenCode, zacznij od sprawdzenia dzienników i danych lokalnych przechowywanych na dysku.
+Aby debugować problemy z opencode, zacznij od sprawdzenia dzienników i danych lokalnych przechowywanych na dysku.
 
 ---
 
@@ -39,7 +39,7 @@ Ten katalog zawiera:
 
 ## Desktop app
 
-OpenCode Desktop uruchamia w tle lokalny serwer OpenCode (wózek boczny `opencode-cli`). Większość problemów jest spowodowana nieprawidłowo działającą wtyczką, uszkodzoną pamięcią podręczną lub złymi ustawieniami serwera.
+opencode Desktop uruchamia w tle lokalny serwer opencode (wózek boczny `opencode-cli`). Większość problemów jest spowodowana nieprawidłowo działającą wtyczką, uszkodzoną pamięcią podręczną lub złymi ustawieniami serwera.
 
 ### Quick checks
 
@@ -72,7 +72,7 @@ Jeśli masz skonfigurowane wtyczki, tymczasowo je wyłącz, usuwając klucz lub 
 
 #### Check plugin directories
 
-OpenCode może także ładować lokalne wtyczki z dysku. Tymczasowo usuń je (lub zmień nazwę folderu) i uruchom ponownie aplikację komputerową:
+opencode może także ładować lokalne wtyczki z dysku. Tymczasowo usuń je (lub zmień nazwę folderu) i uruchom ponownie aplikację komputerową:
 
 - **Global plugins**
   - **macOS/Linux**: `~/.config/opencode/plugins/`
@@ -86,22 +86,22 @@ Jeśli aplikacja ponownie zacznie działać, włączaj ponownie wtyczki pojedync
 
 ### Wyczyść pamięć podręczną
 
-Jeśli wyłączenie wtyczek nie pomoże (lub instalacja wtyczki utknęła), wyczyść pamięć podręczną, aby OpenCode mógł ją odbudować.
+Jeśli wyłączenie wtyczek nie pomoże (lub instalacja wtyczki utknęła), wyczyść pamięć podręczną, aby opencode mógł ją odbudować.
 
-1. Quit OpenCode Desktop completely.
+1. Quit opencode Desktop completely.
 2. Usuń katalog pamięci podręcznej:
 
 - **macOS**: Finder -> `Cmd+Shift+G` -> paste `~/.cache/opencode`
 - **Linux**: usuń `~/.cache/opencode` (lub uruchom `rm -rf ~/.cache/opencode`)
 - **Windows**: Naciśnij `WIN+R` i wklej `%USERPROFILE%\.cache\opencode`
 
-3. Restart OpenCode Desktop.
+3. Restart opencode Desktop.
 
 ---
 
 ### Napraw problemy z połączeniem z serwerem
 
-OpenCode Desktop może uruchomić własny serwer lokalny (domyślnie) lub połączyć się ze skonfigurowanym adresem URL serwera.
+opencode Desktop może uruchomić własny serwer lokalny (domyślnie) lub połączyć się ze skonfigurowanym adresem URL serwera.
 
 Jeśli zobaczysz okno dialogowe **„Połączenie nie powiodło się”** (lub aplikacja nigdy nie wychodzi poza ekran powitalny), sprawdź, czy jest niestandardowy adres URL serwera.
 
@@ -132,21 +132,21 @@ On Linux, some Wayland setups can cause blank windows or compositor errors.
 
 ### Windows: WebView2 runtime
 
-W systemie Windows OpenCode Desktop wymaga Microsoft Edge **WebView2 Runtime**. Jeśli aplikacja otwiera się w pustym oknie lub nie uruchamia się, zainstaluj/zaktualizuj WebView2 i spróbuj ponownie.
+W systemie Windows opencode Desktop wymaga Microsoft Edge **WebView2 Runtime**. Jeśli aplikacja otwiera się w pustym oknie lub nie uruchamia się, zainstaluj/zaktualizuj WebView2 i spróbuj ponownie.
 
 ---
 
 ### Windows: General performance issues
 
-Jeśli doświadczasz niskiej wydajności, problemów z dostępem do plików lub problemów z terminalem w systemie Windows, spróbuj użyć [WSL (podsystem Windows dla systemu Linux) (./windows-wsl). WSL zapewnia środowisko Linux, które płynniej współpracuje z funkcjami OpenCode.
+Jeśli doświadczasz niskiej wydajności, problemów z dostępem do plików lub problemów z terminalem w systemie Windows, spróbuj użyć [WSL (podsystem Windows dla systemu Linux) (./windows-wsl). WSL zapewnia środowisko Linux, które płynniej współpracuje z funkcjami opencode.
 
 ---
 
 ### Notifications not showing
 
-OpenCode Desktop only shows system notifications when:
+opencode Desktop only shows system notifications when:
 
-- powiadomienia są włączone dla OpenCode w ustawieniach systemu operacyjnego, oraz
+- powiadomienia są włączone dla opencode w ustawieniach systemu operacyjnego, oraz
 - okno aplikacji nie jest aktywne.
 
 ---
@@ -155,8 +155,8 @@ OpenCode Desktop only shows system notifications when:
 
 Jeśli aplikacja nie uruchamia się i nie możesz wyczyścić ustawień w interfejsie użytkownika, zresetuj zapisany stan aplikacji komputerowej.
 
-1. Quit OpenCode Desktop.
-2. Znajdź i usuń te pliki (znajdują się w katalogu danych aplikacji OpenCode Desktop):
+1. Quit opencode Desktop.
+2. Znajdź i usuń te pliki (znajdują się w katalogu danych aplikacji opencode Desktop):
 
 - `opencode.settings.dat` (domyślny adres URL serwera na komputerze stacjonarnym)
 - `opencode.global.dat` i `opencode.workspace.*.dat` (stan interfejsu użytkownika, taki jak najnowsze serwery/projekty)
@@ -171,7 +171,7 @@ Aby szybko znaleźć katalog:
 
 ## Getting help
 
-Jeśli masz problemy z OpenCode:
+Jeśli masz problemy z opencode:
 
 1. **Report issues on GitHub**
 
@@ -195,7 +195,7 @@ Oto kilka typowych problemów i sposobów ich rozwiązania.
 
 ---
 
-### OpenCode nie uruchamia się
+### opencode nie uruchamia się
 
 1. Sprawdź dzienniki pod kątem komunikatów o błędach
 2. Spróbuj uruchomić z `--print-logs`, aby zobaczyć dane wyjściowe w terminalu

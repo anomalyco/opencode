@@ -46,7 +46,7 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve
 
 ### كيف يعمل
 
-عند تشغيل `opencode` يبدأ تشغيل واجهة طرفية تفاعلية (TUI) وخادما. تكون الـ TUI هي
+عند تشغيل `opencode` يبدأ تشغيل واجهة terminal تفاعلية (TUI) وخادما. تكون الـ TUI هي
 العميل الذي يتحدث إلى الخادم. يوفّر الخادم نقطة نهاية لمواصفة OpenAPI 3.1.
 وتُستخدم هذه النقطة أيضا لتوليد [SDK](/docs/sdk).
 
@@ -56,7 +56,7 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve
 
 تتيح هذه البنية لـ opencode دعم عدة عملاء وتمكّنك من التفاعل مع opencode برمجيا.
 
-يمكنك تشغيل `opencode serve` لبدء خادم مستقل. إذا كانت واجهة opencode الطرفية (TUI)
+يمكنك تشغيل `opencode serve` لبدء خادم مستقل. إذا كانت واجهة opencode في terminal (TUI)
 قيد التشغيل، فسيبدأ `opencode serve` خادما جديدا.
 
 ---
@@ -177,7 +177,7 @@ http://<hostname>:<port>/doc
 | `GET`   | `/session/:id/message/:messageID` | الحصول على تفاصيل الرسالة                 | يعيد `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                                                            |
 | `POST`  | `/session/:id/prompt_async`       | إرسال رسالة بشكل غير متزامن (بدون انتظار) | المتن: مثل `/session/:id/message`، يعيد `204 No Content`                                                                                                            |
 | `POST`  | `/session/:id/command`            | تنفيذ أمر شرطة مائلة (slash)              | المتن: `{ messageID?, agent?, model?, command, arguments }`، يعيد `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`               |
-| `POST`  | `/session/:id/shell`              | تشغيل أمر في الصدفة (shell)               | المتن: `{ agent, model?, command }`، يعيد `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                       |
+| `POST`  | `/session/:id/shell`              | تشغيل أمر في shell                        | المتن: `{ agent, model?, command }`، يعيد `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                       |
 
 ---
 

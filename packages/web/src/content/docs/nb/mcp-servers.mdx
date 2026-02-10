@@ -3,7 +3,7 @@ title: MCP servere
 description: Legg til lokale og eksterne MCP-verktøy.
 ---
 
-Du kan legge til eksterne verktøy i OpenCode ved å bruke _Model Context Protocol_ eller MCP. OpenCode støtter både lokale og eksterne servere.
+Du kan legge til eksterne verktøy i opencode ved å bruke _Model Context Protocol_ eller MCP. opencode støtter både lokale og eksterne servere.
 
 Når de er lagt til, er MCP-verktøy automatisk tilgjengelige for LLM sammen med innebygde verktøy.
 
@@ -23,7 +23,7 @@ Enkelte MCP-servere, som GitHub MCP-serveren, har en tendens til å legge til ma
 
 ## Aktiver
 
-Du kan definere MCP-servere i [OpenCode Config](https://opencode.ai/docs/config/) under `mcp`. Legg til hver MCP med et unikt navn. Du kan referere til den MCP ved navn når du ber om LLM.
+Du kan definere MCP-servere i [opencode Config](https://opencode.ai/docs/config/) under `mcp`. Legg til hver MCP med et unikt navn. Du kan referere til den MCP ved navn når du ber om LLM.
 
 ```jsonc title="opencode.jsonc" {6}
 {
@@ -165,7 +165,7 @@ Legg til eksterne MCP-servere ved å sette `type` til `"remote"`.
 
 ## OAuth
 
-OpenCode håndterer automatisk OAuth-autentisering for eksterne MCP-servere. Når en server krever autentisering, vil OpenCode:
+opencode håndterer automatisk OAuth-autentisering for eksterne MCP-servere. Når en server krever autentisering, vil opencode:
 
 1. Oppdag 401-svaret og start OAuth-flyten
 2. Bruk **Dynamisk klientregistrering (RFC 7591)** hvis det støttes av serveren
@@ -189,7 +189,7 @@ For de fleste OAuth-aktiverte MCP-servere er ingen spesiell konfigurasjon nødve
 }
 ```
 
-Hvis serveren krever autentisering, vil OpenCode be deg om å autentisere når du prøver å bruke den for første gang. Hvis ikke, kan du [utløse flyten manuelt](#authenticating) med `opencode mcp auth <server-name>`.
+Hvis serveren krever autentisering, vil opencode be deg om å autentisere når du prøver å bruke den for første gang. Hvis ikke, kan du [utløse flyten manuelt](#authenticating) med `opencode mcp auth <server-name>`.
 
 ---
 
@@ -238,7 +238,7 @@ Fjern lagret legitimasjon:
 opencode mcp logout my-oauth-server
 ```
 
-Kommandoen `mcp auth` åpner nettleseren din for autorisasjon. Etter at du har godkjent, vil OpenCode lagre tokens sikkert i `~/.local/share/opencode/mcp-auth.json`.
+Kommandoen `mcp auth` åpner nettleseren din for autorisasjon. Etter at du har godkjent, vil opencode lagre tokens sikkert i `~/.local/share/opencode/mcp-auth.json`.
 
 ---
 
@@ -291,7 +291,7 @@ Kommandoen `mcp debug` viser gjeldende autentiseringsstatus, tester HTTP-tilkobl
 
 ## Administrer
 
-MCP-ene dine er tilgjengelige som verktøy i OpenCode, sammen med innebygde verktøy. Så du kan administrere dem gjennom OpenCode-konfigurasjonen som alle andre verktøy.
+MCP-ene dine er tilgjengelige som verktøy i opencode, sammen med innebygde verktøy. Så du kan administrere dem gjennom opencode-konfigurasjonen som alle andre verktøy.
 
 ---
 
@@ -423,7 +423,7 @@ Etter å ha lagt til konfigurasjonen, autentiser med Sentry:
 opencode mcp auth sentry
 ```
 
-Dette åpner et nettleservindu for å fullføre OAuth-flyten og koble OpenCode til Sentry-kontoen din.
+Dette åpner et nettleservindu for å fullføre OAuth-flyten og koble opencode til Sentry-kontoen din.
 
 Når du er autentisert, kan du bruke Sentry-verktøy i ledetekstene dine for å spørre etter problemer, prosjekter og feildata.
 

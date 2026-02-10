@@ -1,17 +1,17 @@
 ---
 title: Provedores
-description: Usando qualquer provedor LLM no OpenCode.
+description: Usando qualquer provedor LLM no opencode.
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 
-OpenCode usa o [AI SDK](https://ai-sdk.dev/) e [Models.dev](https://models.dev) para suportar **75+ provedores LLM** e suporta a execução de modelos locais.
+opencode usa o [AI SDK](https://ai-sdk.dev/) e [Models.dev](https://models.dev) para suportar **75+ provedores LLM** e suporta a execução de modelos locais.
 
 Para adicionar um provedor, você precisa:
 
 1. Adicionar as chaves da API para o provedor usando o comando `/connect`.
-2. Configurar o provedor na sua configuração do OpenCode.
+2. Configurar o provedor na sua configuração do opencode.
 
 ---
 
@@ -23,7 +23,7 @@ Quando você adiciona as chaves da API de um provedor com o comando `/connect`, 
 
 ### Configuração
 
-Você pode personalizar os provedores através da seção `provider` na sua configuração do OpenCode.
+Você pode personalizar os provedores através da seção `provider` na sua configuração do opencode.
 
 ---
 
@@ -48,7 +48,7 @@ Você pode personalizar a URL base para qualquer provedor definindo a opção `b
 
 ## OpenCode Zen
 
-OpenCode Zen é uma lista de modelos fornecidos pela equipe do OpenCode que foram testados e verificados para funcionar bem com o OpenCode. [Saiba mais](/docs/zen).
+OpenCode Zen é uma lista de modelos fornecidos pela equipe do opencode que foram testados e verificados para funcionar bem com o opencode. [Saiba mais](/docs/zen).
 
 :::tip
 Se você é novo, recomendamos começar com o OpenCode Zen.
@@ -77,7 +77,7 @@ Se você é novo, recomendamos começar com o OpenCode Zen.
    /models
    ```
 
-Funciona como qualquer outro provedor no OpenCode e é completamente opcional.
+Funciona como qualquer outro provedor no opencode e é completamente opcional.
 
 ---
 
@@ -120,7 +120,7 @@ Não vê um provedor aqui? Envie um PR.
 
 ### Amazon Bedrock
 
-Para usar o Amazon Bedrock com o OpenCode:
+Para usar o Amazon Bedrock com o opencode:
 
 1. Acesse o **Catálogo de Modelos** no console do Amazon Bedrock e solicite acesso aos modelos que você deseja.
 
@@ -273,7 +273,7 @@ Para perfis de inferência personalizados, use o nome do modelo e do provedor na
    ```
 
 :::info
-Usar sua assinatura Claude Pro/Max no OpenCode não é oficialmente suportado pela [Anthropic](https://anthropic.com).
+Usar sua assinatura Claude Pro/Max no opencode não é oficialmente suportado pela [Anthropic](https://anthropic.com).
 :::
 
 ##### Usando chaves da API
@@ -656,7 +656,7 @@ GitLab Duo fornece um chat agente com suporte a ferramentas nativas através do 
    #### Usando Token de Acesso Pessoal
    1. Vá para [Configurações do Usuário do GitLab > Tokens de Acesso](https://gitlab.com/-/user_settings/personal_access_tokens)
    2. Clique em **Adicionar novo token**
-   3. Nome: `OpenCode`, Escopos: `api`
+   3. Nome: `opencode`, Escopos: `api`
    4. Copie o token (começa com `glpat-`)
    5. Insira-o no terminal
 
@@ -679,8 +679,8 @@ armazenar o token no armazenamento de autenticação do opencode.
 ##### GitLab Auto-Hospedado
 
 :::note[nota de conformidade]
-OpenCode usa um pequeno modelo para algumas tarefas de IA, como gerar o título da sessão.
-Ele está configurado para usar gpt-5-nano por padrão, hospedado pela Zen. Para bloquear o OpenCode
+opencode usa um pequeno modelo para algumas tarefas de IA, como gerar o título da sessão.
+Ele está configurado para usar gpt-5-nano por padrão, hospedado pela Zen. Para bloquear o opencode
 para usar apenas sua própria instância hospedada do GitLab, adicione o seguinte ao seu
 arquivo `opencode.json`. Também é recomendado desativar o compartilhamento de sessões.
 
@@ -816,7 +816,7 @@ Alguns modelos precisam ser habilitados manualmente nas suas [configurações do
 
 ### Google Vertex AI
 
-Para usar o Google Vertex AI com o OpenCode:
+Para usar o Google Vertex AI com o opencode:
 
 1. Acesse o **Model Garden** no Console do Google Cloud e verifique os
    modelos disponíveis na sua região.
@@ -998,7 +998,7 @@ Helicone suporta cabeçalhos personalizados para recursos como cache, rastreamen
 
 ##### Rastreamento de Sessões
 
-O recurso [Sessões](https://docs.helicone.ai/features/sessions) do Helicone permite que você agrupe solicitações LLM relacionadas. Use o plugin [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) para registrar automaticamente cada conversa do OpenCode como uma sessão no Helicone.
+O recurso [Sessões](https://docs.helicone.ai/features/sessions) do Helicone permite que você agrupe solicitações LLM relacionadas. Use o plugin [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) para registrar automaticamente cada conversa do opencode como uma sessão no Helicone.
 
 ```bash
 npm install -g opencode-helicone-session
@@ -1012,7 +1012,7 @@ Adicione-o à sua configuração.
 }
 ```
 
-O plugin injeta os cabeçalhos `Helicone-Session-Id` e `Helicone-Session-Name` em suas solicitações. Na página de Sessões do Helicone, você verá cada conversa do OpenCode listada como uma sessão separada.
+O plugin injeta os cabeçalhos `Helicone-Session-Id` e `Helicone-Session-Name` em suas solicitações. Na página de Sessões do Helicone, você verá cada conversa do opencode listada como uma sessão separada.
 
 ##### Cabeçalhos Comuns do Helicone
 
@@ -1216,7 +1216,7 @@ Para usar Kimi K2 do Moonshot AI:
 Você pode configurar o opencode para usar modelos locais através do Ollama.
 
 :::tip
-Ollama pode se configurar automaticamente para o OpenCode. Consulte a [documentação de integração do Ollama](https://docs.ollama.com/integrations/opencode) para detalhes.
+Ollama pode se configurar automaticamente para o opencode. Consulte a [documentação de integração do Ollama](https://docs.ollama.com/integrations/opencode) para detalhes.
 :::
 
 ```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
@@ -1255,13 +1255,13 @@ Se chamadas de ferramentas não estiverem funcionando, tente aumentar `num_ctx` 
 
 ### Ollama Cloud
 
-Para usar o Ollama Cloud com o OpenCode:
+Para usar o Ollama Cloud com o opencode:
 
 1. Acesse [https://ollama.com/](https://ollama.com/) e faça login ou crie uma conta.
 
 2. Navegue até **Configurações** > **Chaves** e clique em **Adicionar Chave da API** para gerar uma nova chave da API.
 
-3. Copie a chave da API para uso no OpenCode.
+3. Copie a chave da API para uso no opencode.
 
 4. Execute o comando `/connect` e procure por **Ollama Cloud**.
 
@@ -1278,7 +1278,7 @@ Para usar o Ollama Cloud com o OpenCode:
    └ enter
    ```
 
-6. **Importante**: Antes de usar modelos em nuvem no OpenCode, você deve puxar as informações do modelo localmente:
+6. **Importante**: Antes de usar modelos em nuvem no opencode, você deve puxar as informações do modelo localmente:
 
    ```bash
    ollama pull gpt-oss:20b-cloud
@@ -1326,7 +1326,7 @@ Se você já tiver uma chave da API, pode selecionar **Inserir chave da API manu
 
 ### OpenCode Zen
 
-OpenCode Zen é uma lista de modelos testados e verificados fornecidos pela equipe do OpenCode. [Saiba mais](/docs/zen).
+OpenCode Zen é uma lista de modelos testados e verificados fornecidos pela equipe do opencode. [Saiba mais](/docs/zen).
 
 1. Faça login em **<a href={console}>OpenCode Zen</a>** e clique em **Criar Chave da API**.
 
@@ -1336,7 +1336,7 @@ OpenCode Zen é uma lista de modelos testados e verificados fornecidos pela equi
    /connect
    ```
 
-3. Insira sua chave da API do OpenCode.
+3. Insira sua chave da API do opencode.
 
    ```txt
    ┌ Chave da API
@@ -1474,7 +1474,7 @@ SAP AI Core fornece acesso a mais de 40 modelos do OpenAI, Anthropic, Google, Am
 
 ### OVHcloud AI Endpoints
 
-1. Acesse o [painel OVHcloud](https://ovh.com/manager). Navegue até a seção `Nuvem Pública`, `IA & Aprendizado de Máquina` > `Endpoints de IA` e na aba `Chaves da API`, clique em **Criar uma nova chave da API**.
+1. Acesse o [painel OVHcloud](https://ovh.com/manager). Navegue até a seção `Public Cloud`, `AI & Machine Learning` > `Endpoints de IA` e na aba `API Keys`, clique em **Criar uma nova chave da API**.
 
 2. Execute o comando `/connect` e procure por **OVHcloud AI Endpoints**.
 
@@ -1501,7 +1501,7 @@ SAP AI Core fornece acesso a mais de 40 modelos do OpenAI, Anthropic, Google, Am
 
 ### Scaleway
 
-Para usar [APIs Generativas Scaleway](https://www.scaleway.com/en/docs/generative-apis/) com o Opencode:
+Para usar [APIs Generativas Scaleway](https://www.scaleway.com/en/docs/generative-apis/) com o opencode:
 
 1. Acesse as [configurações de IAM do Scaleway Console](https://console.scaleway.com/iam/api-keys) para gerar uma nova chave da API.
 
@@ -1862,7 +1862,7 @@ Detalhes da configuração:
 - **limit.context**: Máximo de tokens de entrada que o modelo aceita.
 - **limit.output**: Máximo de tokens que o modelo pode gerar.
 
-Os campos `limit` permitem que o OpenCode entenda quanto contexto você tem disponível. Provedores padrão puxam isso automaticamente do models.dev.
+Os campos `limit` permitem que o opencode entenda quanto contexto você tem disponível. Provedores padrão puxam isso automaticamente do models.dev.
 
 ---
 

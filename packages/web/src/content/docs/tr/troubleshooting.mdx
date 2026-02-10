@@ -3,7 +3,7 @@ title: Sorun giderme
 description: Yaygin sorunlar ve cozum adimlari.
 ---
 
-OpenCode ile ilgili bir sorunu ayiklamak icin once loglari ve diskte tuttugu yerel verileri kontrol edin.
+opencode ile ilgili bir sorunu ayiklamak icin once loglari ve diskte tuttugu yerel verileri kontrol edin.
 
 ---
 
@@ -39,13 +39,13 @@ Bu dizin sunlari icerir:
 
 ## Masaustu uygulamasi
 
-OpenCode Desktop arka planda yerel bir OpenCode sunucusu (`opencode-cli` sidecar) calistirir. Sorunlarin cogu bozuk bir plugin, hasarli cache veya hatali sunucu ayarindan kaynaklanir.
+opencode Desktop arka planda yerel bir opencode sunucusu (`opencode-cli` sidecar) calistirir. Sorunlarin cogu bozuk bir plugin, hasarli cache veya hatali sunucu ayarindan kaynaklanir.
 
 ### Hizli kontroller
 
 - Uygulamayi tamamen kapatip yeniden acin
 - Uygulama hata ekrani gosteriyorsa **Restart**'a tiklayip hata detaylarini kopyalayin
-- Yalnizca macOS: `OpenCode` menusu -> **Reload Webview** (arayuz bos/donukse yardimci olur)
+- Yalnizca macOS: `opencode` menusu -> **Reload Webview** (arayuz bos/donukse yardimci olur)
 
 ---
 
@@ -72,7 +72,7 @@ Plugin tanimliysa anahtari kaldirarak veya bos bir diziye cekerek gecici olarak 
 
 #### Plugin dizinlerini kontrol edin
 
-OpenCode diskten yerel plugin de yukleyebilir. Bu dizinleri gecici olarak tasiyin (veya klasoru yeniden adlandirin) ve uygulamayi yeniden baslatin:
+opencode diskten yerel plugin de yukleyebilir. Bu dizinleri gecici olarak tasiyin (veya klasoru yeniden adlandirin) ve uygulamayi yeniden baslatin:
 
 - **Global plugins**
   - **macOS/Linux**: `~/.config/opencode/plugins/`
@@ -86,22 +86,22 @@ Uygulama duzelirse soruna neden olan plugini bulmak icin pluginleri tek tek yeni
 
 ### Cache'i temizleyin
 
-Pluginleri kapatmak ise yaramazsa (veya plugin kurulumu takili kaldiysa), OpenCode'un cache'i yeniden olusturmasi icin cache'i temizleyin.
+Pluginleri kapatmak ise yaramazsa (veya plugin kurulumu takili kaldiysa), opencode'un cache'i yeniden olusturmasi icin cache'i temizleyin.
 
-1. OpenCode Desktop'u tamamen kapatin
+1. opencode Desktop'u tamamen kapatin
 2. Cache dizinini silin:
 
 - **macOS**: Finder -> `Cmd+Shift+G` -> `~/.cache/opencode`
 - **Linux**: `~/.cache/opencode` dizinini silin (veya `rm -rf ~/.cache/opencode` calistirin)
 - **Windows**: `WIN+R` tuslayip `%USERPROFILE%\.cache\opencode` yapistirin
 
-3. OpenCode Desktop'u yeniden baslatin
+3. opencode Desktop'u yeniden baslatin
 
 ---
 
 ### Sunucu baglanti sorunlarini duzeltin
 
-OpenCode Desktop ya kendi yerel sunucusunu baslatir (varsayilan) ya da sizin tanimladiginiz bir sunucu URL'sine baglanir.
+opencode Desktop ya kendi yerel sunucusunu baslatir (varsayilan) ya da sizin tanimladiginiz bir sunucu URL'sine baglanir.
 
 **"Connection Failed"** penceresi goruyorsaniz (veya uygulama acilis ekranini gecemiyorsa), ozel bir sunucu URL'si olup olmadigini kontrol edin.
 
@@ -132,21 +132,21 @@ Linux'ta bazi Wayland kurulumlari bos pencere veya compositor hatalarina yol aca
 
 ### Windows: WebView2 runtime
 
-Windows'ta OpenCode Desktop, Microsoft Edge **WebView2 Runtime** gerektirir. Uygulama bos pencereyle aciliyorsa veya hic baslamiyorsa WebView2'yi kurup/guncelleyip tekrar deneyin.
+Windows'ta opencode Desktop, Microsoft Edge **WebView2 Runtime** gerektirir. Uygulama bos pencereyle aciliyorsa veya hic baslamiyorsa WebView2'yi kurup/guncelleyip tekrar deneyin.
 
 ---
 
 ### Windows: Genel performans sorunlari
 
-Windows'ta yavaslik, dosya erisim sorunlari veya terminal problemleri yasiyorsaniz [WSL (Windows Subsystem for Linux)](/docs/windows-wsl) kullanmayi deneyin. WSL, OpenCode ozellikleriyle daha sorunsuz calisan bir Linux ortami saglar.
+Windows'ta yavaslik, dosya erisim sorunlari veya terminal problemleri yasiyorsaniz [WSL (Windows Subsystem for Linux)](/docs/windows-wsl) kullanmayi deneyin. WSL, opencode ozellikleriyle daha sorunsuz calisan bir Linux ortami saglar.
 
 ---
 
 ### Bildirimler gorunmuyor
 
-OpenCode Desktop sistem bildirimlerini yalnizca su durumlarda gosterir:
+opencode Desktop sistem bildirimlerini yalnizca su durumlarda gosterir:
 
-- Isletim sistemi ayarlarinizda OpenCode icin bildirimler etkinse
+- Isletim sistemi ayarlarinizda opencode icin bildirimler etkinse
 - Uygulama penceresi odakta degilse
 
 ---
@@ -155,8 +155,8 @@ OpenCode Desktop sistem bildirimlerini yalnizca su durumlarda gosterir:
 
 Uygulama acilmiyorsa ve ayarlari arayuz icinden temizleyemiyorsaniz, desktop uygulamasinin kayitli durumunu sifirlayin.
 
-1. OpenCode Desktop'u kapatin
-2. Su dosyalari bulun ve silin (OpenCode Desktop uygulama veri dizininde yer alirlar):
+1. opencode Desktop'u kapatin
+2. Su dosyalari bulun ve silin (opencode Desktop uygulama veri dizininde yer alirlar):
 
 - `opencode.settings.dat` (desktop varsayilan sunucu URL'si)
 - `opencode.global.dat` ve `opencode.workspace.*.dat` (son sunucular/projeler gibi UI durumu)
@@ -171,7 +171,7 @@ Dizini hizlica bulmak icin:
 
 ## Yardim alin
 
-OpenCode ile ilgili bir sorun yasiyorsaniz:
+opencode ile ilgili bir sorun yasiyorsaniz:
 
 1. **GitHub'da issue acin**
 
@@ -195,7 +195,7 @@ Asagida yaygin sorunlar ve cozumleri yer aliyor.
 
 ---
 
-### OpenCode baslamiyor
+### opencode baslamiyor
 
 1. Hata mesaji icin loglari kontrol edin
 2. Terminalde cikti gormek icin `--print-logs` ile calistirin

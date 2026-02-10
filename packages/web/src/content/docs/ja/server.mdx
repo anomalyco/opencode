@@ -1,12 +1,12 @@
 ---
 title: サーバ
-description: HTTP 経由でオープンコード サーバーと通信します。
+description: HTTP 経由でopencode サーバーと通信します。
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-`opencode serve` コマンドは、オープンコード クライアントが使用できる OpenAPI エンドポイントを公開するヘッドレス HTTP サーバーを実行します。
+`opencode serve` コマンドは、opencode クライアントが使用できる OpenAPI エンドポイントを公開するヘッドレス HTTP サーバーを実行します。
 
 ---
 
@@ -88,10 +88,10 @@ opencode サーバーは次の API を公開します。
 
 ### グローバル
 
-| 方法  | パス             | 説明                                       | 応答               |
-| ----- | ---------------- | ------------------------------------------ | ------------------ |
-| `GET` | `/global/health` | サーバーの健全性とバージョンを取得する     | うーん             |
-| `GET` | `/global/event`  | グローバル イベントの取得 (SSE ストリーム) | イベントストリーム |
+| 方法  | パス             | 説明                                       | 応答                                 |
+| ----- | ---------------- | ------------------------------------------ | ------------------------------------ |
+| `GET` | `/global/health` | サーバーの健全性とバージョンを取得する     | `{ healthy: true, version: string }` |
+| `GET` | `/global/event`  | グローバル イベントの取得 (SSE ストリーム) | イベントストリーム                   |
 
 ---
 
@@ -176,7 +176,7 @@ opencode サーバーは次の API を公開します。
 | `GET`  | `/session/:id/message/:messageID` | メッセージの詳細を取得する              | 戻り値 `{ info: `<a href={typesUrl}>メッセージ</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                                                              |
 | `POST` | `/session/:id/prompt_async`       | メッセージを非同期に送信する (待機なし) | body: `/session/:id/message` と同じ、`204 No Content` を返します。                                                                                                         |
 | `POST` | `/session/:id/command`            | スラッシュコマンドを実行します          | 本文: `{ messageID?, agent?, model?, command, arguments }`、`{ info: `<a href={typesUrl}>メッセージ</a>を返します`, parts: `<a href={typesUrl}>Part[]</a>`}`               |
-| `POST` | `/session/:id/shell`              | シェルコマンドを実行する                | 本文: `{ agent, model?, command }`、`{ info: `<a href={typesUrl}>メッセージ</a>を返します`, parts: `<a href={typesUrl}>Part[]</a>`}`                                       |
+| `POST` | `/session/:id/shell`              | shell コマンドを実行する                | 本文: `{ agent, model?, command }`、`{ info: `<a href={typesUrl}>メッセージ</a>を返します`, parts: `<a href={typesUrl}>Part[]</a>`}`                                       |
 
 ---
 

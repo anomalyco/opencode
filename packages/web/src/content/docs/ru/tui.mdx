@@ -1,13 +1,13 @@
 ---
-title: ТУИ
-description: Использование пользовательского интерфейса терминала OpenCode.
+title: TUI
+description: Использование TUI opencode.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode предоставляет интерактивный интерфейс терминала или TUI для работы над вашими проектами с помощью LLM.
+opencode предоставляет интерактивный terminal интерфейс или TUI для работы над вашими проектами с помощью LLM.
 
-Запуск OpenCode запускает TUI для текущего каталога.
+Запуск opencode запускает TUI для текущего каталога.
 
 ```bash
 opencode
@@ -45,7 +45,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## Bash-команды
 
-Начните сообщение с `!`, чтобы запустить команду оболочки.
+Начните сообщение с `!`, чтобы запустить shell-команду.
 
 ```bash frame="none"
 !ls -la
@@ -57,7 +57,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## Команды
 
-При использовании OpenCode TUI вы можете ввести `/`, а затем имя команды, чтобы быстро выполнить действия. Например:
+При использовании opencode TUI вы можете ввести `/`, а затем имя команды, чтобы быстро выполнить действия. Например:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### соединять
 
-Добавьте провайдера в OpenCode. Позволяет выбирать из доступных поставщиков и добавлять их ключи API.
+Добавьте провайдера в opencode. Позволяет выбирать из доступных поставщиков и добавлять их ключи API.
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### Выход
 
-Выйдите из OpenCode. _Псевдонимы_: `/quit`, `/q`
+Выйдите из opencode. _Псевдонимы_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -301,7 +301,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
     export EDITOR="code --wait"
     ```
 
-    Чтобы сделать его постоянным, добавьте это в свой профиль оболочки;
+    Чтобы сделать его постоянным, добавьте это в свой профиль shell;
     `~/.bashrc`, `~/.zshrc` и т. д.
 
   </TabItem>
@@ -336,9 +336,9 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 Популярные варианты редактора включают в себя:
 
-- `code` — код Visual Studio
-- `cursor` — Курсор
-- `windsurf` - Виндсерфинг
+- `code` — VS Code
+- `cursor` — Cursor
+- `windsurf` - Windsurf
 - `nvim` - Редактор Neovim
 - `vim` — редактор Vim
 - `nano` — Нано-редактор
@@ -349,13 +349,13 @@ How is auth handled in @packages/functions/src/api/index.ts?
 Некоторые редакторы, такие как VS Code, необходимо запускать с флагом `--wait`.
 :::
 
-Некоторым редакторам для работы в режиме блокировки необходимы аргументы командной строки. Флаг `--wait` блокирует процесс редактора до его закрытия.
+Некоторым редакторам для работы в режиме блокировки необходимы CLI-аргументы. Флаг `--wait` блокирует процесс редактора до его закрытия.
 
 ---
 
 ## Настроить
 
-Вы можете настроить поведение TUI через файл конфигурации OpenCode.
+Вы можете настроить поведение TUI через файл конфигурации opencode.
 
 ```json title="opencode.json"
 {
