@@ -140,24 +140,11 @@ export function RailSidebar(props: RailSidebarProps) {
     }
   }
 
-  // Handle hot zone detection
+  // Handle hot zone detection + floating collapse via unified position tracking
   const handleMouseMove = (e: MouseEvent) => {
     if (!railRef) return
-
-    const isCollapsed = claxedo.rail.collapsed()
-    const isPinned = claxedo.rail.pinned()
-
-    let inHotZone: boolean
-    if (isCollapsed && !isPinned) {
-      inHotZone = e.clientX <= claxedo.constants.HOT_ZONE_WIDTH
-    } else {
-      const rect = railRef.getBoundingClientRect()
-      inHotZone = e.clientX <= rect.left + claxedo.constants.HOT_ZONE_WIDTH
-    }
-
-    if (inHotZone && isCollapsed && !isPinned) {
-      claxedo.rail.handleHotZoneEnter()
-    }
+    const rect = railRef.getBoundingClientRect()
+    claxedo.rail.trackPosition(e.clientX, e.clientY, { top: rect.top, right: rect.right, bottom: rect.bottom })
   }
 
   const handleMouseLeave = (e: MouseEvent) => {

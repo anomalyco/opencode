@@ -1,6 +1,6 @@
 import { createMemo, For, Match, Switch } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
-import { Logo } from "@opencode-ai/ui/logo"
+import { ClaxedoLogo } from "@claxedo/claxedo-ui/components/claxedo-logo"
 import { useLayout } from "@/context/layout"
 import { useNavigate } from "@solidjs/router"
 import { base64Encode } from "@opencode-ai/util/encode"
@@ -79,7 +79,7 @@ export default function Home() {
 
   return (
     <div class="mx-auto mt-55 w-full md:w-auto px-4">
-      <Logo class="md:w-xl opacity-12" />
+      <ClaxedoLogo class="md:w-xl opacity-12" />
       <Switch>
         <Match when={serverSelectorMode() === "status-only"}>
           <div class="mt-4 mx-auto flex items-center justify-center">

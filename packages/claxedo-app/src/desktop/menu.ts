@@ -122,8 +122,8 @@ export async function createMenu() {
             item: "Separator",
           }),
           await MenuItem.new({
-            text: "New Terminal (Cmd+D)",
-            accelerator: "CmdOrCtrl+D",
+            text: "New Terminal (Cmd+Alt+T)",
+            accelerator: "CmdOrCtrl+Alt+T",
             action: () => emitTerminal("new"),
           }),
           await MenuItem.new({

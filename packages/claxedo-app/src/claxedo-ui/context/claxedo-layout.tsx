@@ -9,6 +9,7 @@ import { createStore, produce } from "solid-js/store"
 import { batch, createEffect, createMemo, createSignal, on, onCleanup, onMount, type Accessor } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { Persist, persisted } from "@opencode-ai/claxedo-app"
+import { paneFindPath, paneIncludes, paneList, reduceTerminalTab, type TerminalTabAction } from "./terminal-reducer"
 
 export type TabType = "session" | "terminal" | "review" | "file"
 
@@ -52,9 +53,8 @@ export type WorktreeState = {
 
 export type PaneDir = "h" | "v"
 
-export type Pane =
-  | { t: "leaf"; id: string }
-  | { t: "split"; dir: PaneDir; a: Pane; b: Pane; size: number }
+export type Pane = { t: "leaf"; id: string } | { t: "split"; dir: PaneDir; a: Pane; b: Pane; size: number }
+export type TerminalActionOrigin = { tabId: string; groupId: string; hostId: string }
 
 /**
  * Agent status for a terminal
@@ -63,6 +63,7 @@ export type Pane =
  * - permission: Agent needs user input (shows red dot)
  */
 export type TerminalAgentStatus = "idle" | "working" | "permission"
+export type TerminalLifecycleState = "creating" | "attaching" | "attached" | "closing" | "closed"
 
 export type GroupLayoutState = {
   fileTree: { opened: boolean; width: number; tab: "changes" | "all" }
@@ -107,6 +108,8 @@ type ClaxedoLayoutStore = {
   terminalAgentStatus: Record<string, TerminalAgentStatus | undefined>
   // PTY id -> has ever been active (used to avoid showing "done" for terminals that never ran an agent)
   terminalAgentSeen: Record<string, true | undefined>
+  // PTY id -> lifecycle state for split/close race hardening
+  terminalLifecycle: Record<string, TerminalLifecycleState | undefined>
 
   // Workspace recency tracking: projectId -> workspace dirs (most recent first)
   // Used to show last 5 workspaces in WorkspaceBar when project has >5 workspaces
@@ -191,9 +194,7 @@ function createTabActions(
     addSession(dir: string, sessionId: string, title: string, badge?: TabItem["badge"]) {
       if (!dir) return ""
 
-      const existing = getItems().find(
-        (t) => t.type === "session" && t.directory === dir && t.sessionId === sessionId,
-      )
+      const existing = getItems().find((t) => t.type === "session" && t.directory === dir && t.sessionId === sessionId)
       if (existing) {
         // Only update title/badge, don't change active tab
         setItems((items) => {
@@ -248,9 +249,7 @@ function createTabActions(
     addReview(dir: string, sessionId: string, title: string, badge?: TabItem["badge"]) {
       if (!dir) return ""
 
-      const existing = getItems().find(
-        (t) => t.type === "review" && t.directory === dir && t.sessionId === sessionId,
-      )
+      const existing = getItems().find((t) => t.type === "review" && t.directory === dir && t.sessionId === sessionId)
       if (existing) {
         setActiveId(existing.id)
         return existing.id
@@ -445,7 +444,14 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
           const id = "g-initial"
           return {
             ...v,
-            groups: [{ id, tabs: v.tabs, worktree: v.worktree ?? { default: null, pinned: null }, layout: defaultGroupLayout() }],
+            groups: [
+              {
+                id,
+                tabs: v.tabs,
+                worktree: v.worktree ?? { default: null, pinned: null },
+                layout: defaultGroupLayout(),
+              },
+            ],
             split: { direction: "h", sizes: [1.0], focusedId: id },
           }
         }
@@ -458,7 +464,14 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
             const id = "g-default"
             return {
               ...v,
-              groups: [{ id, tabs: createEmptyTabsState(), worktree: { default: null, pinned: null }, layout: defaultGroupLayout() }],
+              groups: [
+                {
+                  id,
+                  tabs: createEmptyTabsState(),
+                  worktree: { default: null, pinned: null },
+                  layout: defaultGroupLayout(),
+                },
+              ],
               split: { direction: "h", sizes: [1.0], focusedId: id },
             }
           }
@@ -467,7 +480,7 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
           if (Array.isArray(groups) && groups.some((g: any) => !g.layout)) {
             return {
               ...v,
-              groups: groups.map((g: any) => g.layout ? g : { ...g, layout: defaultGroupLayout() }),
+              groups: groups.map((g: any) => (g.layout ? g : { ...g, layout: defaultGroupLayout() })),
             }
           }
 
@@ -528,19 +541,21 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
         const id = "g-initial"
         return {
           ...(value as Record<string, unknown>),
-          groups: [{
-            id,
-            tabs: {
-              items: list,
-              activeId,
-              order,
-              closedTabs: [],
+          groups: [
+            {
+              id,
+              tabs: {
+                items: list,
+                activeId,
+                order,
+                closedTabs: [],
+              },
+              worktree: {
+                default: active,
+                pinned: null,
+              },
             },
-            worktree: {
-              default: active,
-              pinned: null,
-            },
-          }],
+          ],
           split: { direction: "h", sizes: [1.0], focusedId: id },
         }
       },
@@ -555,7 +570,14 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
           pinned: false,
           locked: false,
         },
-        groups: [{ id: "g-default", tabs: createEmptyTabsState(), worktree: { default: null, pinned: null }, layout: defaultGroupLayout() }],
+        groups: [
+          {
+            id: "g-default",
+            tabs: createEmptyTabsState(),
+            worktree: { default: null, pinned: null },
+            layout: defaultGroupLayout(),
+          },
+        ],
         split: { direction: "h", sizes: [1.0], focusedId: "g-default" },
         enabled: true,
         terminalPane: {},
@@ -564,6 +586,7 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
         terminalOwner: {},
         terminalAgentStatus: {},
         terminalAgentSeen: {},
+        terminalLifecycle: {},
         workspaceRecency: {},
       }),
     )
@@ -572,6 +595,9 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
     let expandTimer: number | undefined
     let collapseTimer: number | undefined
     let cooldownUntil: number | undefined
+    // Tracks whether a collapse was suppressed by the lock (dropdown open).
+    // When unlock() is called and this flag is true, collapse is re-triggered.
+    let collapseNeeded = false
 
     // Clean up timers on unmount
     onCleanup(() => {
@@ -603,6 +629,10 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
       // Unlock the rail (e.g., when dropdown closes)
       unlock() {
         setStore("rail", "locked", false)
+        if (collapseNeeded) {
+          collapseNeeded = false
+          rail.handleMouseLeave()
+        }
       },
 
       expand() {
@@ -684,7 +714,12 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
       handleMouseLeave(e?: MouseEvent) {
         if (store.rail.pinned) return
         // Don't collapse if locked (e.g., dropdown menu is open)
-        if (store.rail.locked) return
+        if (store.rail.locked) {
+          collapseNeeded = true
+          return
+        }
+
+        collapseNeeded = false
 
         // Clear any pending expand
         if (expandTimer) {
@@ -698,7 +733,10 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
         // Schedule collapse with delay
         const timer = window.setTimeout(() => {
           // Re-check locked state before collapsing
-          if (store.rail.locked) return
+          if (store.rail.locked) {
+            collapseNeeded = true
+            return
+          }
           batch(() => {
             setStore("rail", "collapsed", true)
             setStore("rail", "hovered", false)
@@ -716,9 +754,40 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
 
       // Cancel pending collapse (mouse re-entered)
       cancelCollapse() {
+        collapseNeeded = false
         if (collapseTimer) {
           clearTimeout(collapseTimer)
           collapseTimer = undefined
+        }
+      },
+
+      /**
+       * Unified position tracking for the document-level mousemove handler.
+       * Handles both hot zone detection (collapsed) and mouse-outside-rail
+       * collapse (expanded floating). This replaces reliance on the nav's
+       * onMouseLeave, which doesn't fire reliably when pointer-events
+       * transitions from none to auto while the mouse is over the element.
+       */
+      trackPosition(clientX: number, clientY: number, railRect: { top: number; right: number; bottom: number }) {
+        if (store.rail.pinned) return
+
+        if (store.rail.collapsed) {
+          // Hot zone detection for expansion
+          if (clientX <= HOT_ZONE_WIDTH) {
+            rail.handleHotZoneEnter()
+          }
+        } else {
+          // Expanded floating: detect mouse outside rail for collapse
+          // Check both horizontal AND vertical bounds
+          const isOutside = clientX > railRect.right || clientY < railRect.top || clientY > railRect.bottom
+          if (isOutside) {
+            // Only schedule collapse if one isn't already pending
+            if (!collapseTimer) {
+              rail.handleMouseLeave()
+            }
+          } else {
+            rail.cancelCollapse()
+          }
         }
       },
     }
@@ -731,9 +800,7 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
         return [...flatten(node.a), ...flatten(node.b)]
       }
       const paneIds = flatten(pane)
-      const tabTerminal = store.groups
-        .flatMap((g) => g.tabs.items)
-        .find((t) => t.id === tab && t.type === "terminal")
+      const tabTerminal = store.groups.flatMap((g) => g.tabs.items).find((t) => t.id === tab && t.type === "terminal")
       const tabIds = tabTerminal?.terminalId ? [tabTerminal.terminalId] : []
       const owned = Object.entries(store.terminalOwner)
         .filter(([, v]) => v === tab)
@@ -748,6 +815,7 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
         setStore("terminalOwner", id, undefined)
         setStore("terminalAgentStatus", id, undefined)
         setStore("terminalAgentSeen", id, undefined)
+        setStore("terminalLifecycle", id, undefined)
       }
     }
 
@@ -779,14 +847,16 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
     }
 
     // Evict stale cache entries when groups change
-    createEffect(on(
-      () => store.groups.map(g => g.id),
-      (ids) => {
-        for (const key of groupTabsCache.keys()) {
-          if (!ids.includes(key)) groupTabsCache.delete(key)
-        }
-      },
-    ))
+    createEffect(
+      on(
+        () => store.groups.map((g) => g.id),
+        (ids) => {
+          for (const key of groupTabsCache.keys()) {
+            if (!ids.includes(key)) groupTabsCache.delete(key)
+          }
+        },
+      ),
+    )
 
     // Group-specific worktree accessor
     const groupWorktree = (groupId: string) => {
@@ -816,20 +886,41 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
           opened: (() => store.groups[idx()]?.layout?.fileTree?.opened ?? dl.fileTree.opened) as Accessor<boolean>,
           width: (() => store.groups[idx()]?.layout?.fileTree?.width ?? dl.fileTree.width) as Accessor<number>,
           tab: (() => store.groups[idx()]?.layout?.fileTree?.tab ?? dl.fileTree.tab) as Accessor<string>,
-          setOpened(v: boolean) { const i = idx(); if (i !== -1) setStore("groups", i, "layout", "fileTree", "opened", v) },
-          setWidth(v: number) { const i = idx(); if (i !== -1) setStore("groups", i, "layout", "fileTree", "width", v) },
-          setTab(v: "changes" | "all") { const i = idx(); if (i !== -1) setStore("groups", i, "layout", "fileTree", "tab", v) },
+          setOpened(v: boolean) {
+            const i = idx()
+            if (i !== -1) setStore("groups", i, "layout", "fileTree", "opened", v)
+          },
+          setWidth(v: number) {
+            const i = idx()
+            if (i !== -1) setStore("groups", i, "layout", "fileTree", "width", v)
+          },
+          setTab(v: "changes" | "all") {
+            const i = idx()
+            if (i !== -1) setStore("groups", i, "layout", "fileTree", "tab", v)
+          },
         },
         session: {
           width: (() => store.groups[idx()]?.layout?.session?.width ?? dl.session.width) as Accessor<number>,
-          collapsed: (() => store.groups[idx()]?.layout?.session?.collapsed ?? dl.session.collapsed) as Accessor<boolean>,
-          panelMode: (() => store.groups[idx()]?.layout?.session?.panelMode ?? dl.session.panelMode) as Accessor<number>,
-          setWidth(v: number) { const i = idx(); if (i !== -1) setStore("groups", i, "layout", "session", "width", v) },
-          setCollapsed(v: boolean) { const i = idx(); if (i !== -1) setStore("groups", i, "layout", "session", "collapsed", v) },
-          setPanelMode(v: number) { const i = idx(); if (i !== -1) setStore("groups", i, "layout", "session", "panelMode", v) },
+          collapsed: (() =>
+            store.groups[idx()]?.layout?.session?.collapsed ?? dl.session.collapsed) as Accessor<boolean>,
+          panelMode: (() =>
+            store.groups[idx()]?.layout?.session?.panelMode ?? dl.session.panelMode) as Accessor<number>,
+          setWidth(v: number) {
+            const i = idx()
+            if (i !== -1) setStore("groups", i, "layout", "session", "width", v)
+          },
+          setCollapsed(v: boolean) {
+            const i = idx()
+            if (i !== -1) setStore("groups", i, "layout", "session", "collapsed", v)
+          },
+          setPanelMode(v: number) {
+            const i = idx()
+            if (i !== -1) setStore("groups", i, "layout", "session", "panelMode", v)
+          },
         },
         reviewPanel: {
-          opened: (() => store.groups[idx()]?.layout?.reviewPanel?.opened ?? dl.reviewPanel.opened) as Accessor<boolean>,
+          opened: (() =>
+            store.groups[idx()]?.layout?.reviewPanel?.opened ?? dl.reviewPanel.opened) as Accessor<boolean>,
           setOpened(v: boolean) {
             const i = idx()
             if (i === -1) return
@@ -871,10 +962,22 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
 
     // Backward-compatible topTabs that delegates to the focused group
     const topTabs = createTabActions(
-      () => { const g = focusedGroup(); return g?.tabs.items ?? [] },
-      () => { const g = focusedGroup(); return g?.tabs.activeId ?? null },
-      () => { const g = focusedGroup(); return g?.tabs.order ?? [] },
-      () => { const g = focusedGroup(); return g?.tabs.closedTabs ?? [] },
+      () => {
+        const g = focusedGroup()
+        return g?.tabs.items ?? []
+      },
+      () => {
+        const g = focusedGroup()
+        return g?.tabs.activeId ?? null
+      },
+      () => {
+        const g = focusedGroup()
+        return g?.tabs.order ?? []
+      },
+      () => {
+        const g = focusedGroup()
+        return g?.tabs.closedTabs ?? []
+      },
       (fn) => {
         const g = focusedGroup()
         if (!g) return
@@ -939,7 +1042,9 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
       if (firstActive && mergedItemIds.has(firstActive)) {
         return { items: mergedItems, order: mergedOrder, activeId: firstActive }
       }
-      const removedActive = removed.map((g) => g.tabs.activeId).find((id): id is string => !!id && mergedItemIds.has(id))
+      const removedActive = removed
+        .map((g) => g.tabs.activeId)
+        .find((id): id is string => !!id && mergedItemIds.has(id))
       if (removedActive) {
         return { items: mergedItems, order: mergedOrder, activeId: removedActive }
       }
@@ -957,6 +1062,15 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
         setPendingTerminalDir(undefined)
         setPendingTerminalGroupId(undefined)
       }
+    }
+
+    const defaultForNewGroup = () => {
+      const primary = store.groups[0]
+      if (!primary) return null
+      if (primary.worktree.default) return primary.worktree.default
+      if (!primary.tabs.activeId) return null
+      const active = primary.tabs.items.find((t) => t.id === primary.tabs.activeId)
+      return active?.directory ?? null
     }
 
     // Split actions
@@ -988,7 +1102,7 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
           const newGroup: GroupState = {
             id: newId,
             tabs: createEmptyTabsState(),
-            worktree: { default: store.groups[0]?.worktree.default ?? null, pinned: null },
+            worktree: { default: defaultForNewGroup(), pinned: null },
             layout: defaultGroupLayout(),
           }
           batch(() => {
@@ -1015,10 +1129,19 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
           for (const tab of droppedTerminals) {
             clearTerminalTabState(tab)
           }
-          setStore("groups", remaining.map((g, i) =>
-            i === 0 ? { ...g, tabs: { ...g.tabs, items: merged.items, order: merged.order, activeId: merged.activeId } } : g,
-          ))
-          setStore("split", "sizes", remaining.map(() => 1 / remaining.length))
+          setStore(
+            "groups",
+            remaining.map((g, i) =>
+              i === 0
+                ? { ...g, tabs: { ...g.tabs, items: merged.items, order: merged.order, activeId: merged.activeId } }
+                : g,
+            ),
+          )
+          setStore(
+            "split",
+            "sizes",
+            remaining.map(() => 1 / remaining.length),
+          )
           if (store.split.focusedId === groupId) {
             setStore("split", "focusedId", first.id)
           }
@@ -1039,9 +1162,10 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
           // Remove from source group
           const fromItems = store.groups[fromIdx].tabs.items.filter((t) => t.id !== tabId)
           const fromOrder = store.groups[fromIdx].tabs.order.filter((id) => id !== tabId)
-          const fromActive = store.groups[fromIdx].tabs.activeId === tabId
-            ? (fromItems[0]?.id ?? null)
-            : store.groups[fromIdx].tabs.activeId
+          const fromActive =
+            store.groups[fromIdx].tabs.activeId === tabId
+              ? (fromItems[0]?.id ?? null)
+              : store.groups[fromIdx].tabs.activeId
           setStore("groups", fromIdx, "tabs", "items", fromItems)
           setStore("groups", fromIdx, "tabs", "order", fromOrder)
           setStore("groups", fromIdx, "tabs", "activeId", fromActive)
@@ -1056,7 +1180,11 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
               layout: defaultGroupLayout(),
             }
             setStore("groups", [...store.groups, newGroup])
-            setStore("split", { direction: "h", sizes: store.groups.map(() => 1 / store.groups.length), focusedId: newId })
+            setStore("split", {
+              direction: "h",
+              sizes: store.groups.map(() => 1 / store.groups.length),
+              focusedId: newId,
+            })
           } else {
             const toIdx = store.groups.findIndex((g) => g.id === toGroupId)
             if (toIdx === -1) return
@@ -1069,7 +1197,11 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
           const nonEmpty = store.groups.filter((g) => g.tabs.items.length > 0)
           if (nonEmpty.length < store.groups.length && nonEmpty.length >= 1) {
             setStore("groups", nonEmpty)
-            setStore("split", "sizes", nonEmpty.map(() => 1 / nonEmpty.length))
+            setStore(
+              "split",
+              "sizes",
+              nonEmpty.map(() => 1 / nonEmpty.length),
+            )
             if (!nonEmpty.find((g) => g.id === store.split.focusedId)) {
               setStore("split", "focusedId", nonEmpty[0].id)
             }
@@ -1087,8 +1219,8 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
     const patchTab = (tabId: string, patch: Partial<TabItem>) => {
       for (let i = 0; i < store.groups.length; i++) {
         if (store.groups[i].tabs.items.some((t) => t.id === tabId)) {
-          setStore("groups", i, "tabs", "items",
-            (items: TabItem[]) => (items ?? []).map((t) => (t.id !== tabId ? t : { ...t, ...patch })),
+          setStore("groups", i, "tabs", "items", (items: TabItem[]) =>
+            (items ?? []).map((t) => (t.id !== tabId ? t : { ...t, ...patch })),
           )
           return
         }
@@ -1109,67 +1241,8 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
     const [pendingTerminalGroupId, setPendingTerminalGroupId] = createSignal<string | undefined>(undefined)
     const [creatingTerminal, setCreatingTerminal] = createSignal(0)
     const [creatingTerminalGroupId, setCreatingTerminalGroupId] = createSignal<string | undefined>(undefined)
-
-    const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
-
-    const leaf = (id: string): Pane => ({ t: "leaf", id })
-
-    const list = (node: Pane | undefined): string[] => {
-      if (!node) return []
-      if (node.t === "leaf") return [node.id]
-      return [...list(node.a), ...list(node.b)]
-    }
-
-    const includes = (node: Pane | undefined, id: string): boolean => {
-      if (!node) return false
-      if (node.t === "leaf") return node.id === id
-      if (includes(node.a, id)) return true
-      return includes(node.b, id)
-    }
-
-    const replace = (node: Pane, id: string, next: Pane): Pane => {
-      if (node.t === "leaf") {
-        if (node.id !== id) return node
-        return next
-      }
-      const a = replace(node.a, id, next)
-      const b = replace(node.b, id, next)
-      return { ...node, a, b }
-    }
-
-    const remove = (node: Pane, id: string): Pane | undefined => {
-      if (node.t === "leaf") {
-        if (node.id !== id) return node
-        return undefined
-      }
-
-      const a = remove(node.a, id)
-      const b = remove(node.b, id)
-
-      if (!a && !b) return undefined
-      if (!a) return b
-      if (!b) return a
-      return { ...node, a, b }
-    }
-
-    const resize = (node: Pane, path: string, value: number): Pane => {
-      if (node.t === "leaf") return node
-      if (!path) return { ...node, size: clamp(value, 0.1, 0.9) }
-      const head = path[0]
-      const rest = path.slice(1)
-      if (head === "a") return { ...node, a: resize(node.a, rest, value) }
-      return { ...node, b: resize(node.b, rest, value) }
-    }
-
-    const find = (node: Pane | undefined, id: string): string | undefined => {
-      if (!node) return
-      if (node.t === "leaf") return node.id === id ? "" : undefined
-      const a = find(node.a, id)
-      if (a !== undefined) return "a" + a
-      const b = find(node.b, id)
-      if (b !== undefined) return "b" + b
-      return
-    }
+    const [splitPendingTab, setSplitPendingTab] = createSignal<string | undefined>(undefined)
+    const [closingTerminalIds, setClosingTerminalIds] = createSignal<string[]>([])
 
     const requestTerminalCreate = (dir: string, command?: string, title?: string, groupId?: string) => {
       const debug = typeof localStorage !== "undefined" && localStorage.getItem("opencode.debug.terminal") === "1"
@@ -1253,6 +1326,131 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
       },
     }
 
+    const terminalActionError = (
+      action: string,
+      payload: {
+        origin?: TerminalActionOrigin
+        targetTab?: string
+        expectedGroupId?: string
+        terminalId?: string
+        ownerTab?: string
+        paneIds?: string[]
+        reason?: string
+      },
+    ) => {
+      if (!import.meta.env.DEV) return
+      // eslint-disable-next-line no-console
+      console.error("[terminal:invariant]", {
+        action,
+        ...payload,
+      })
+    }
+
+    const terminalLifecycleTransition = {
+      creating: new Set<TerminalLifecycleState>(["attaching", "attached", "closing", "closed"]),
+      attaching: new Set<TerminalLifecycleState>(["attached", "closing", "closed"]),
+      attached: new Set<TerminalLifecycleState>(["closing", "closed"]),
+      closing: new Set<TerminalLifecycleState>(["closed"]),
+      closed: new Set<TerminalLifecycleState>(["creating"]),
+    } satisfies Record<TerminalLifecycleState, Set<TerminalLifecycleState>>
+
+    const transitionTerminalLifecycle = (id: string, next: TerminalLifecycleState, reason?: string) => {
+      const current = store.terminalLifecycle[id]
+      if (current === next) return true
+      const allowed =
+        current === undefined ? new Set<TerminalLifecycleState>(["creating", "attaching", "attached", "closing", "closed"]) : terminalLifecycleTransition[current]
+      if (allowed.has(next)) {
+        setStore("terminalLifecycle", id, next)
+        if (import.meta.env.DEV) {
+          // eslint-disable-next-line no-console
+          console.debug("[terminal:lifecycle]", { id, from: current, to: next, reason })
+        }
+        return true
+      }
+      terminalActionError("transitionLifecycle", {
+        terminalId: id,
+        reason: `illegal_transition:${current ?? "undefined"}->${next}${reason ? `:${reason}` : ""}`,
+      })
+      return false
+    }
+
+    const assertTerminalInvariant = (
+      action: string,
+      ok: boolean,
+      payload: {
+        origin?: TerminalActionOrigin
+        targetTab?: string
+        expectedGroupId?: string
+        terminalId?: string
+        ownerTab?: string
+        paneIds?: string[]
+        reason?: string
+      },
+    ) => {
+      if (ok) return true
+      terminalActionError(action, payload)
+      return false
+    }
+
+    const requireTerminalOrigin = (action: string, tabId: string, origin?: TerminalActionOrigin) => {
+      if (store.groups.length <= 1) return true
+      if (!assertTerminalInvariant(action, !!origin, { origin, targetTab: tabId, reason: "missing_origin" })) return false
+      if (!origin) return false
+      if (!assertTerminalInvariant(action, origin.tabId === tabId, { origin, targetTab: tabId, reason: "origin_tab_mismatch" }))
+        return false
+      const groupId = findTabGroup(tabId)
+      if (!groupId) return true
+      if (origin.groupId === groupId) return true
+      return assertTerminalInvariant(action, false, {
+        origin,
+        targetTab: tabId,
+        expectedGroupId: groupId,
+        reason: "origin_group_mismatch",
+      })
+    }
+
+    const requireTerminalInTabPane = (action: string, tabId: string, terminalId: string, origin?: TerminalActionOrigin) => {
+      const pane = store.terminalPane[tabId]
+      const paneIds = paneList(pane)
+      return assertTerminalInvariant(action, paneIds.includes(terminalId), {
+        origin,
+        targetTab: tabId,
+        terminalId,
+        paneIds,
+        reason: "terminal_not_in_target_tab_pane",
+      })
+    }
+
+    const requireTerminalOwnerMatchesTab = (
+      action: string,
+      tabId: string,
+      terminalId: string,
+      origin?: TerminalActionOrigin,
+    ) => {
+      const ownerTab = store.terminalOwner[terminalId]
+      if (!ownerTab) return true
+      return assertTerminalInvariant(action, ownerTab === tabId, {
+        origin,
+        targetTab: tabId,
+        terminalId,
+        ownerTab,
+        reason: "owner_tab_mismatch",
+      })
+    }
+
+    const reduceTerminalInTab = (tab: string, action: TerminalTabAction) => {
+      const current = {
+        pane: store.terminalPane[tab],
+        focus: store.terminalFocus[tab],
+        zoom: store.terminalZoom[tab],
+      }
+      const next = reduceTerminalTab(current, action)
+      if (next.pane !== current.pane) setStore("terminalPane", tab, next.pane)
+      if (next.focus !== current.focus) setStore("terminalFocus", tab, next.focus)
+      if (next.zoom !== current.zoom) setStore("terminalZoom", tab, next.zoom)
+      return next
+    }
+
     return {
       ready,
       enabled,
@@ -1278,6 +1476,37 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
         consumePendingCommand: consumePendingTerminalCommand,
         creating: creatingTerminal,
         creatingGroupId: creatingTerminalGroupId,
+        splitPendingTab,
+
+        beginSplit(tab: string) {
+          setSplitPendingTab(tab)
+        },
+
+        clearSplitPending(tab?: string) {
+          if (!tab || splitPendingTab() === tab) setSplitPendingTab(undefined)
+        },
+
+        isClosing(id: string) {
+          return closingTerminalIds().includes(id)
+        },
+
+        beginClosing(id: string) {
+          transitionTerminalLifecycle(id, "closing", "beginClosing")
+          setClosingTerminalIds((all) => (all.includes(id) ? all : [...all, id]))
+        },
+
+        clearClosing(id: string) {
+          transitionTerminalLifecycle(id, "closed", "clearClosing")
+          setClosingTerminalIds((all) => all.filter((item) => item !== id))
+        },
+
+        lifecycle(id: string) {
+          return store.terminalLifecycle[id]
+        },
+
+        transitionLifecycle(id: string, state: TerminalLifecycleState, reason?: string) {
+          return transitionTerminalLifecycle(id, state, reason)
+        },
 
         created() {
           setCreatingTerminal((n) => Math.max(0, n - 1))
@@ -1296,18 +1525,24 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
           setStore("terminalOwner", id, undefined)
         },
 
+        detachFromTab(input: { tab: string; id: string; origin?: TerminalActionOrigin }) {
+          if (!requireTerminalOrigin("detachFromTab", input.tab, input.origin)) return
+          if (!requireTerminalOwnerMatchesTab("detachFromTab", input.tab, input.id, input.origin)) return
+          if (!requireTerminalInTabPane("detachFromTab", input.tab, input.id, input.origin)) return
+          reduceTerminalInTab(input.tab, { type: "detach", id: input.id })
+          setStore("terminalOwner", input.id, undefined)
+        },
+
         pane(tab: string) {
           return store.terminalPane[tab]
         },
 
         ids(tab: string) {
-          return list(store.terminalPane[tab])
+          return paneList(store.terminalPane[tab])
         },
 
         ensure(tab: string, id: string) {
-          if (store.terminalPane[tab]) return
-          setStore("terminalPane", tab, leaf(id))
-          setStore("terminalFocus", tab, id)
+          reduceTerminalInTab(tab, { type: "ensure", id })
         },
 
         focus(tab: string) {
@@ -1315,7 +1550,13 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
         },
 
         setFocus(tab: string, id: string) {
-          setStore("terminalFocus", tab, id)
+          reduceTerminalInTab(tab, { type: "set_focus", id })
+        },
+
+        focusInTab(input: { tab: string; id: string; origin?: TerminalActionOrigin }) {
+          if (!requireTerminalOrigin("focusInTab", input.tab, input.origin)) return
+          if (!requireTerminalInTabPane("focusInTab", input.tab, input.id, input.origin)) return
+          reduceTerminalInTab(input.tab, { type: "focus", id: input.id })
         },
 
         zoom(tab: string) {
@@ -1323,91 +1564,56 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
         },
 
         setZoom(tab: string, id: string | undefined) {
-          setStore("terminalZoom", tab, id)
+          reduceTerminalInTab(tab, { type: "set_zoom", id })
+        },
+
+        zoomInTab(input: { tab: string; id: string; origin?: TerminalActionOrigin }) {
+          if (!requireTerminalOrigin("zoomInTab", input.tab, input.origin)) return
+          if (!requireTerminalInTabPane("zoomInTab", input.tab, input.id, input.origin)) return
+          reduceTerminalInTab(input.tab, { type: "zoom", id: input.id })
         },
 
         split(input: { tab: string; at: string; id: string; dir: PaneDir }) {
+          reduceTerminalInTab(input.tab, { type: "split", at: input.at, id: input.id, dir: input.dir })
+        },
+
+        splitInTab(input: { tab: string; at: string; id: string; dir: PaneDir; origin?: TerminalActionOrigin }) {
+          if (!requireTerminalOrigin("splitInTab", input.tab, input.origin)) return
+          if (!requireTerminalOwnerMatchesTab("splitInTab", input.tab, input.id, input.origin)) return
           const node = store.terminalPane[input.tab]
-          if (!node) {
-            setStore("terminalPane", input.tab, { t: "split", dir: input.dir, a: leaf(input.at), b: leaf(input.id), size: 0.5 })
-            setStore("terminalFocus", input.tab, input.id)
+          if (node && !assertTerminalInvariant("splitInTab", paneIncludes(node, input.at), {
+            origin: input.origin,
+            targetTab: input.tab,
+            terminalId: input.at,
+            paneIds: paneList(node),
+            reason: "split_target_not_in_tab",
+          })) {
             return
           }
-
-          if (!includes(node, input.at)) {
-            const ids = list(node)
-            const first = ids[0]
-            if (!first) return
-            const next = replace(node, first, { t: "split", dir: input.dir, a: leaf(first), b: leaf(input.id), size: 0.5 })
-            setStore("terminalPane", input.tab, next)
-            setStore("terminalFocus", input.tab, input.id)
-            return
-          }
-
-          const next = replace(node, input.at, { t: "split", dir: input.dir, a: leaf(input.at), b: leaf(input.id), size: 0.5 })
-          setStore("terminalPane", input.tab, next)
-          setStore("terminalFocus", input.tab, input.id)
+          reduceTerminalInTab(input.tab, { type: "split", at: input.at, id: input.id, dir: input.dir })
         },
 
         close(input: { tab: string; id: string }) {
-          const node = store.terminalPane[input.tab]
-          if (!node) return
-          const next = remove(node, input.id)
-          setStore("terminalPane", input.tab, next)
-          const ids = list(next)
-          const focus = store.terminalFocus[input.tab]
-          if (focus === input.id) {
-            setStore("terminalFocus", input.tab, ids[0])
-          }
-          const zoom = store.terminalZoom[input.tab]
-          if (zoom === input.id) {
-            setStore("terminalZoom", input.tab, undefined)
-          }
+          reduceTerminalInTab(input.tab, { type: "close", id: input.id })
+        },
+
+        closeInTab(input: { tab: string; id: string; origin?: TerminalActionOrigin }) {
+          if (!requireTerminalOrigin("closeInTab", input.tab, input.origin)) return
+          if (!requireTerminalOwnerMatchesTab("closeInTab", input.tab, input.id, input.origin)) return
+          if (!requireTerminalInTabPane("closeInTab", input.tab, input.id, input.origin)) return
+          reduceTerminalInTab(input.tab, { type: "close", id: input.id })
         },
 
         path(input: { tab: string; id: string }) {
-          return find(store.terminalPane[input.tab], input.id)
+          return paneFindPath(store.terminalPane[input.tab], input.id)
         },
 
         resize(input: { tab: string; path: string; size: number }) {
-          const node = store.terminalPane[input.tab]
-          if (!node) return
-          if (node.t === "leaf") return
-          setStore("terminalPane", input.tab, resize(node, input.path, input.size))
+          reduceTerminalInTab(input.tab, { type: "resize", path: input.path, size: input.size })
         },
 
         swap(input: { tab: string; a: string; b: string }) {
-          const node = store.terminalPane[input.tab]
-          if (!node) return
-          if (input.a === input.b) return
-          if (!includes(node, input.a)) return
-          if (!includes(node, input.b)) return
-
-          const next = ((root: Pane): Pane => {
-            const walk = (n: Pane): Pane => {
-              if (n.t === "leaf") {
-                if (n.id === input.a) return leaf(input.b)
-                if (n.id === input.b) return leaf(input.a)
-                return n
-              }
-
-              const a = walk(n.a)
-              const b = walk(n.b)
-              if (a === n.a && b === n.b) return n
-              return { ...n, a, b }
-            }
-            return walk(root)
-          })(node)
-
-          setStore("terminalPane", input.tab, next)
-
-          const focus = store.terminalFocus[input.tab]
-          if (focus === input.a) setStore("terminalFocus", input.tab, input.b)
-          if (focus === input.b) setStore("terminalFocus", input.tab, input.a)
-
-          const zoom = store.terminalZoom[input.tab]
-          if (zoom === input.a) setStore("terminalZoom", input.tab, input.b)
-          if (zoom === input.b) setStore("terminalZoom", input.tab, input.a)
+          reduceTerminalInTab(input.tab, { type: "swap", a: input.a, b: input.b })
         },
 
         clear(tab: string) {
@@ -1447,7 +1653,7 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
          */
         getTabAgentStatus(tabId: string): { loading: boolean; attention: boolean; done: boolean } {
           // Get all terminal IDs in this tab
-          const terminalIds = list(store.terminalPane[tabId])
+          const terminalIds = paneList(store.terminalPane[tabId])
 
           // Search all groups for the tab
           let tab: TabItem | undefined
@@ -1477,6 +1683,75 @@ export const { use: useClaxedoLayout, provider: ClaxedoLayoutProvider } = create
           }
         },
       },
+      // Tab grouping helpers for worktree-based UI
+      getWorktreeColor(directory: string): string {
+        const WORKTREE_COLORS = [
+          "#3b82f6", // blue-500
+          "#22c55e", // green-500
+          "#a855f7", // purple-500
+          "#f97316", // orange-500
+          "#ec4899", // pink-500
+          "#14b8a6", // teal-500
+          "#f59e0b", // amber-500
+          "#6366f1", // indigo-500
+        ]
+
+        // Use deterministic hash of directory path for consistent colors
+        // This ensures colors don't change when other worktrees are added/removed
+        let hash = 0
+        for (let i = 0; i < directory.length; i++) {
+          const char = directory.charCodeAt(i)
+          hash = (hash << 5) - hash + char
+          hash = hash & hash // Convert to 32bit integer
+        }
+
+        const index = Math.abs(hash) % WORKTREE_COLORS.length
+        return WORKTREE_COLORS[index]
+      },
+
+      getWorktreeName(directory: string): string {
+        const parts = directory.split("/")
+        return parts[parts.length - 1] || parts[parts.length - 2] || "unknown"
+      },
+
+      getTabGroupInfo(
+        groupId: string,
+      ): Array<{ directory: string; color: string; tabs: Array<TabItem & { isLastInGroup: boolean }> }> {
+        const group = store.groups.find((g) => g.id === groupId)
+        if (!group) return []
+
+        // Group tabs by directory
+        const byDirectory = new Map<string, TabItem[]>()
+        for (const tab of group.tabs.items) {
+          const existing = byDirectory.get(tab.directory) || []
+          existing.push(tab)
+          byDirectory.set(tab.directory, existing)
+        }
+
+        // Build group info with isLastInGroup flag
+        const getWorktreeColor = this.getWorktreeColor
+        return Array.from(byDirectory.entries()).map(([directory, tabs]) => ({
+          directory,
+          color: getWorktreeColor(directory),
+          tabs: tabs.map((tab, index) => ({
+            ...tab,
+            isLastInGroup: index === tabs.length - 1,
+          })),
+        }))
+      },
+
+      canDragTabBetweenWorktrees(fromDir: string, toDir: string): boolean {
+        // Can only drag within same worktree
+        return fromDir === toDir
+      },
+
+      getActiveWorktreeColor(groupId: string): string | undefined {
+        const wt = groupWorktree(groupId)
+        const activeDir = wt.pinned() || wt.default()
+        if (!activeDir) return undefined
+        return this.getWorktreeColor(activeDir)
+      },
+
       // Constants for components to use
       constants: {
         RAIL_COLLAPSED_WIDTH,

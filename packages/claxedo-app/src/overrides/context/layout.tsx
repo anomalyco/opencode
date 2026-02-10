@@ -424,11 +424,34 @@ export const { use: useLayout, provider: LayoutProvider, ctx: LayoutContext } = 
     })
 
     onMount(() => {
-      Promise.all(
-        server.projects.list().filter((project) => validWorktree(project.worktree)).map((project) => {
-          return globalSync.project.loadSessions(project.worktree)
-        }),
-      )
+      const roots = server.projects
+        .list()
+        .filter((project) => validWorktree(project.worktree))
+        .map((project) => rootFor(project.worktree))
+        .filter((directory, index, all) => all.indexOf(directory) === index)
+      if (roots.length === 0) return
+
+      const preferred = server.projects.last()
+      const first = preferred && roots.includes(preferred) ? preferred : roots[0]
+      if (first) void globalSync.project.loadSessions(first)
+
+      const rest = roots.filter((directory) => directory !== first)
+      if (rest.length === 0) return
+
+      const schedule = (fn: () => void) => {
+        const idle = (globalThis as { requestIdleCallback?: (cb: () => void) => number }).requestIdleCallback
+        if (idle) {
+          idle(fn)
+          return
+        }
+        setTimeout(fn, 120)
+      }
+
+      schedule(() => {
+        for (const directory of rest) {
+          void globalSync.project.loadSessions(directory)
+        }
+      })
     })
 
     // Sync API projects to sidebar - ensures projects from server appear in sidebar

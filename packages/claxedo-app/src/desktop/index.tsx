@@ -15,7 +15,7 @@ import { relaunch } from "@tauri-apps/plugin-process"
 import { AsyncStorage } from "@solid-primitives/storage"
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
 import { Store } from "@tauri-apps/plugin-store"
-import { Splash } from "@opencode-ai/ui/logo"
+import { ClaxedoSplash } from "@claxedo/claxedo-ui/components/claxedo-logo"
 import { createSignal, Show, Accessor, JSX, createResource, onMount, onCleanup } from "solid-js"
 
 import { initClaxedo, getDefaultConfig, ConfigProvider, getAuthToken } from "@claxedo/index"
@@ -93,7 +93,7 @@ window.addEventListener(
       error: encode(event.error),
     }
     console.error("[desktop] window.error", payload)
-    showFatal("window.error", payload)
+    if (import.meta.env.DEV) showFatal("window.error", payload)
   },
   true,
 )
@@ -103,7 +103,7 @@ window.addEventListener(
   (event) => {
     const payload = encode(event.reason)
     console.error("[desktop] unhandledrejection", payload)
-    showFatal("unhandledrejection", payload)
+    if (import.meta.env.DEV) showFatal("unhandledrejection", payload)
     event.preventDefault()
   },
   true,
@@ -477,11 +477,7 @@ type ServerReadyData = { url: string; password: string | null }
 
 // Gate component that waits for the server to be ready
 function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.Element }) {
-  const [serverData] = createResource<ServerReadyData>(() =>
-    invoke("ensure_server_ready").then((v) => {
-      return new Promise((res) => setTimeout(() => res(v as ServerReadyData), 2000))
-    }),
-  )
+  const [serverData] = createResource<ServerReadyData>(() => invoke("ensure_server_ready").then((v) => v as ServerReadyData))
 
   const errorMessage = () => {
     const error = serverData.error
@@ -505,7 +501,7 @@ function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.
           when={serverData.state !== "pending" && serverData()}
           fallback={
             <div class="h-screen w-screen flex flex-col items-center justify-center bg-background-base">
-              <Splash class="w-16 h-20 opacity-50 animate-pulse" />
+              <ClaxedoSplash class="w-16 h-20 opacity-50 animate-pulse" />
               <div data-tauri-decorum-tb class="flex flex-row absolute top-0 right-0 z-10 h-10" />
             </div>
           }

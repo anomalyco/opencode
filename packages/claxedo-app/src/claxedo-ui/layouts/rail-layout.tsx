@@ -267,31 +267,20 @@ function GroupPanel(gp: GroupPanelProps) {
         </Show>
       </div>
 
-      {/* Main content - rendered by GroupContentRenderer based on active tab */}
-      <Show
-        when={gp.props.activeWorkspaceId}
-        fallback={
-          <Show when={gp.props.renderEmpty}>
-            {(render) => (
-              <div class="flex-1 min-h-0 flex flex-col items-center justify-center p-8 text-center text-text-weak">
-                {render()()}
-              </div>
-            )}
-          </Show>
-        }
-      >
-        <GroupContentRenderer
-          groupId={gp.groupId}
-          renderEmpty={() => (
-            <div class="flex flex-col items-center justify-center h-full text-text-weak gap-4">
-              <span class="text-14-regular">Select a session or create a new one</span>
-              <Button icon="plus-small" onClick={() => gp.props.onNewProject?.()}>
-                New Project
-              </Button>
-            </div>
-          )}
-        />
-      </Show>
+      {/* Main content - rendered by GroupContentRenderer based on active tab.
+          Do not gate on route-level activeWorkspaceId; groups can have active tabs
+          for workspaces not reflected in the current URL (split/group-specific state). */}
+      <GroupContentRenderer
+        groupId={gp.groupId}
+        renderEmpty={() => (
+          <div class="flex flex-col items-center justify-center h-full text-text-weak gap-4">
+            <span class="text-14-regular">Select a session or create a new one</span>
+            <Button icon="plus-small" onClick={() => gp.props.onNewProject?.()}>
+              New Project
+            </Button>
+          </div>
+        )}
+      />
     </div>
   )
 }
@@ -356,9 +345,17 @@ function SharedTabDragDrop(props: { children: JSX.Element }) {
     const fromGroupId = claxedo.findTabGroup(dragId)
     const toGroupId = claxedo.findTabGroup(dropId)
 
-    // Same group → reorder live
+    // Same group → check if same worktree before reorder
     if (fromGroupId && toGroupId && fromGroupId === toGroupId) {
       const tabs = claxedo.groupTabs(fromGroupId)
+      const dragTab = tabs.items().find((t) => t.id === dragId)
+      const dropTab = tabs.items().find((t) => t.id === dropId)
+
+      // Only allow reorder if tabs are in same worktree (directory)
+      if (!dragTab || !dropTab || !claxedo.canDragTabBetweenWorktrees(dragTab.directory, dropTab.directory)) {
+        return
+      }
+
       const ids = tabs.order().length ? tabs.order() : tabs.orderedItems().map((t) => t.id)
       const fromIndex = ids.indexOf(dragId)
       const toIndex = ids.indexOf(dropId)
@@ -534,49 +531,52 @@ function RailLayoutInner(props: RailLayoutProps) {
     return props.projects.find((p) => p.worktree === activeWs || p.sandboxes?.includes(activeWs))
   })
 
-  // Build workspace bar projects data
+  // Build workspace bar projects data from open tabs
   const workspaceBarProjects = createMemo((): WorkspaceBarProject[] => {
-    return props.projects.map((project) => {
-      const allWorkspaces = getProjectWorkspaces(project)
-      const recency = claxedo.workspaceRecency.getRecent(project.id, 5)
+    // Get all open tabs from all groups
+    const allTabs: TabItem[] = []
+    for (const group of claxedo.split.groups()) {
+      const tabs = claxedo.groupTabs(group.id)
+      allTabs.push(...tabs.items())
+    }
 
-      // Determine which workspaces to show:
-      // - If <=5 workspaces, show all
-      // - Otherwise show last 5 accessed (from recency) + any with notifications
-      let displayWorkspaces = allWorkspaces
-      if (allWorkspaces.length > 5) {
-        const recencySet = new Set(recency)
-        // Filter to recency list, keeping order
-        displayWorkspaces = recency
-          .map((dir) => allWorkspaces.find((ws) => ws.directory === dir))
-          .filter((ws): ws is WorkspaceItem => !!ws)
+    // Get unique directories from open tabs
+    const tabDirs = new Set(allTabs.map((t) => t.directory))
 
-        // Add any with notifications that aren't already shown
-        // (notification logic will be added when we have real notification data)
+    // Find projects that have tabs open and build workspace list
+    const projectMap = new Map<string, WorkspaceBarProject>()
 
-        // Ensure we have at least the main workspace
-        const hasMain = displayWorkspaces.some((ws) => ws.isMain)
-        if (!hasMain) {
-          const main = allWorkspaces.find((ws) => ws.isMain)
-          if (main) displayWorkspaces.unshift(main)
+    for (const dir of tabDirs) {
+      // Find which project this directory belongs to
+      const project = props.projects.find((p) => p.worktree === dir || p.sandboxes?.includes(dir))
+      if (!project) continue
+
+      // Get or create project entry
+      let projEntry = projectMap.get(project.id)
+      if (!projEntry) {
+        projEntry = {
+          id: project.id,
+          name: project.name || getFilename(project.worktree),
+          worktree: project.worktree,
+          workspaces: [],
         }
-
-        // Limit to 5
-        displayWorkspaces = displayWorkspaces.slice(0, 5)
+        projectMap.set(project.id, projEntry)
       }
 
-      return {
-        id: project.id,
-        name: project.name || getFilename(project.worktree),
-        worktree: project.worktree,
-        workspaces: displayWorkspaces.map((ws) => ({
-          id: ws.id,
-          directory: ws.directory,
-          name: ws.name || getFilename(ws.directory),
-          notification: false, // TODO: wire up real notification state
-        })),
-      }
-    })
+      // Check if workspace already added
+      if (projEntry.workspaces.some((ws) => ws.directory === dir)) continue
+
+      // Add workspace to project
+      const isMain = dir === project.worktree
+      projEntry.workspaces.push({
+        id: dir,
+        directory: dir,
+        name: isMain ? "main" : getFilename(dir),
+        notification: false,
+      })
+    }
+
+    return Array.from(projectMap.values())
   })
 
   const worktreeInfo = (dir: string) => {

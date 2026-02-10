@@ -127,7 +127,11 @@ export function GroupContentRenderer(props: { groupId: string; renderEmpty?: () 
                       </Match>
 
                       <Match when={t().type === "terminal" && t().directory}>
-                        <div id={`claxedo-tab-host-${t().id}`} class="absolute inset-0 overflow-hidden" />
+                        <div
+                          id={`claxedo-tab-host-${t().id}`}
+                          data-claxedo-group-id={props.groupId}
+                          class="absolute inset-0 overflow-hidden"
+                        />
                       </Match>
 
                       <Match when={t().type === "review" && t().sessionId && t().directory}>

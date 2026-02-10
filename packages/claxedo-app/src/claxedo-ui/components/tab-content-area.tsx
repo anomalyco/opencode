@@ -70,19 +70,19 @@ export function TabContentArea(props: TabContentAreaProps) {
             }
           >
             <Match when={tab().type === "session" && tab().id}>
-              <div id={getTabHostId(tab().id)} class="absolute inset-0 overflow-hidden" />
+              <div id={getTabHostId(tab().id)} data-claxedo-group-id={props.groupId} class="absolute inset-0 overflow-hidden" />
             </Match>
 
             <Match when={tab().type === "terminal" && tab().id}>
-              <div id={getTabHostId(tab().id)} class="absolute inset-0 overflow-hidden" />
+              <div id={getTabHostId(tab().id)} data-claxedo-group-id={props.groupId} class="absolute inset-0 overflow-hidden" />
             </Match>
 
             <Match when={tab().type === "review" && tab().id}>
-              <div id={getTabHostId(tab().id)} class="absolute inset-0 overflow-hidden" />
+              <div id={getTabHostId(tab().id)} data-claxedo-group-id={props.groupId} class="absolute inset-0 overflow-hidden" />
             </Match>
 
             <Match when={tab().type === "file" && tab().id}>
-              <div id={getTabHostId(tab().id)} class="absolute inset-0 overflow-hidden" />
+              <div id={getTabHostId(tab().id)} data-claxedo-group-id={props.groupId} class="absolute inset-0 overflow-hidden" />
             </Match>
           </Switch>
         )}

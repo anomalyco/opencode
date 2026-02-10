@@ -1001,6 +1001,19 @@ describe("split operations", () => {
     }
   })
 
+  test("toggle seeds new group workspace default from active tab directory when primary default is unset", () => {
+    const { api, dispose } = createTestLayout()
+    try {
+      api.topTabs.addSession("/workspace-main", "s1", "Session 1")
+      api.split.toggle()
+      const groups = api.split.groups()
+      const g2 = groups[1]
+      expect(api.groupWorktree(g2.id).default()).toBe("/workspace-main")
+    } finally {
+      dispose()
+    }
+  })
+
   test("toggle hides split (groups preserved, only primary visible)", () => {
     const { api, dispose } = createTestLayout()
     try {
@@ -1544,6 +1557,120 @@ describe("bug: tab operations work after closing split", () => {
       // Everything preserved
       expect(tabs1.items()).toHaveLength(1)
       expect(tabs2.items()).toHaveLength(2)
+    } finally {
+      dispose()
+    }
+  })
+})
+
+describe("terminal origin guard", () => {
+  test("splitInTab ignores missing origin in split mode", () => {
+    const { api, dispose } = createTestLayout()
+    try {
+      const { tabs1 } = splitInto2(api)
+      const tabId = tabs1.addTerminal("/ws", "pty-1", "Terminal 1")
+      api.terminal.ensure(tabId, "pty-1")
+
+      api.terminal.splitInTab({ tab: tabId, at: "pty-1", id: "pty-2", dir: "v" })
+
+      expect(api.terminal.ids(tabId)).toEqual(["pty-1"])
+    } finally {
+      dispose()
+    }
+  })
+
+  test("splitInTab applies mutation when origin matches tab and group", () => {
+    const { api, dispose } = createTestLayout()
+    try {
+      const { g1, tabs1 } = splitInto2(api)
+      const tabId = tabs1.addTerminal("/ws", "pty-1", "Terminal 1")
+      api.terminal.ensure(tabId, "pty-1")
+
+      api.terminal.splitInTab({
+        tab: tabId,
+        at: "pty-1",
+        id: "pty-2",
+        dir: "v",
+        origin: { tabId, groupId: g1, hostId: `claxedo-tab-host-${tabId}` },
+      })
+
+      expect(api.terminal.ids(tabId)).toEqual(["pty-1", "pty-2"])
+    } finally {
+      dispose()
+    }
+  })
+
+  test("splitInTab ignores stale split target not in tab pane", () => {
+    const { api, dispose } = createTestLayout()
+    try {
+      const { g1, tabs1 } = splitInto2(api)
+      const tabId = tabs1.addTerminal("/ws", "pty-1", "Terminal 1")
+      api.terminal.ensure(tabId, "pty-1")
+
+      api.terminal.splitInTab({
+        tab: tabId,
+        at: "pty-stale",
+        id: "pty-2",
+        dir: "v",
+        origin: { tabId, groupId: g1, hostId: `claxedo-tab-host-${tabId}` },
+      })
+
+      expect(api.terminal.ids(tabId)).toEqual(["pty-1"])
+    } finally {
+      dispose()
+    }
+  })
+
+  test("closeInTab ignores owner mismatch against target tab", () => {
+    const { api, dispose } = createTestLayout()
+    try {
+      const { g1, g2, tabs1, tabs2 } = splitInto2(api)
+      const tabA = tabs1.addTerminal("/ws", "pty-a", "Terminal A")
+      const tabB = tabs2.addTerminal("/ws", "pty-b", "Terminal B")
+
+      api.terminal.ensure(tabA, "pty-a")
+      api.terminal.ensure(tabB, "pty-b")
+      api.terminal.own(tabB, "pty-a")
+
+      api.terminal.closeInTab({
+        tab: tabA,
+        id: "pty-a",
+        origin: { tabId: tabA, groupId: g1, hostId: `claxedo-tab-host-${tabA}` },
+      })
+
+      expect(api.terminal.ids(tabA)).toEqual(["pty-a"])
+      expect(api.terminal.owner("pty-a")).toBe(tabB)
+      expect(api.findTabGroup(tabB)).toBe(g2)
+    } finally {
+      dispose()
+    }
+  })
+})
+
+describe("terminal lifecycle state machine", () => {
+  test("allows legal transitions creating -> attaching -> attached -> closing -> closed", () => {
+    const { api, dispose } = createTestLayout()
+    try {
+      expect(api.terminal.transitionLifecycle("pty-1", "creating", "test")).toBe(true)
+      expect(api.terminal.transitionLifecycle("pty-1", "attaching", "test")).toBe(true)
+      expect(api.terminal.transitionLifecycle("pty-1", "attached", "test")).toBe(true)
+
+      api.terminal.beginClosing("pty-1")
+      expect(api.terminal.lifecycle("pty-1")).toBe("closing")
+
+      api.terminal.clearClosing("pty-1")
+      expect(api.terminal.lifecycle("pty-1")).toBe("closed")
+    } finally {
+      dispose()
+    }
+  })
+
+  test("rejects illegal transition attached -> creating", () => {
+    const { api, dispose } = createTestLayout()
+    try {
+      expect(api.terminal.transitionLifecycle("pty-2", "attached", "test")).toBe(true)
+      expect(api.terminal.transitionLifecycle("pty-2", "creating", "test")).toBe(false)
+      expect(api.terminal.lifecycle("pty-2")).toBe("attached")
     } finally {
       dispose()
     }

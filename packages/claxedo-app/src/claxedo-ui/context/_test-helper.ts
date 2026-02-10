@@ -1,28 +1,24 @@
 /**
  * Shared test helper for claxedo layout tests.
  *
- * Both claxedo-layout.test.ts and terminal-integration.test.ts need to:
- * 1. Mock @opencode-ai/ui/context to capture the init function
- * 2. Mock @opencode-ai/claxedo-app for persisted/Persist
- * 3. Import ./claxedo-layout to trigger the capture
+ * All test files that transitively import claxedo-layout.tsx must call
+ * ensureLayoutMocked() in beforeAll BEFORE any import of claxedo-layout
+ * (including transitive imports via terminal-content-wrapper, etc.).
  *
- * When bun runs multiple test files in the same process, mock.module is global
- * and import() caches modules. This means only the first file to import
- * ./claxedo-layout triggers createSimpleContext. By extracting this into a
- * shared module, initLayout is captured once and reused.
+ * Mocks are always re-registered because bun may restore them between test
+ * files while the module cache persists. The init function is only captured
+ * on the first call (when claxedo-layout.tsx is first evaluated).
  */
 import { mock } from "bun:test"
 
 let _initLayout: (() => any) | undefined
-let _loaded = false
 
 export async function ensureLayoutMocked() {
-  if (_loaded) return
-  _loaded = true
-
+  // Always re-register mocks — bun restores them between test files
+  // but the module cache (and _initLayout) persists across files.
   mock.module("@opencode-ai/ui/context", () => ({
     createSimpleContext: (config: any) => {
-      _initLayout = config.init
+      if (config.name === "ClaxedoLayout") _initLayout = config.init
       return { use: () => {}, provider: () => {} }
     },
   }))
@@ -32,6 +28,8 @@ export async function ensureLayoutMocked() {
     persisted: (_target: any, storeResult: any) => [...storeResult, undefined, () => true],
   }))
 
+  // Only the first import triggers module evaluation and captures _initLayout.
+  // Subsequent calls get the cached module (no-op) but mocks are still active.
   await import("./claxedo-layout")
 }
 

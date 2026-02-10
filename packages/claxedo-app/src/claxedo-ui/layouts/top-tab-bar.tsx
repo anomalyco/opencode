@@ -10,11 +10,7 @@
  */
 
 import { For, Show, createMemo, createSignal, createEffect, onCleanup } from "solid-js"
-import {
-  SortableProvider,
-  createSortable,
-  createDroppable,
-} from "@thisbeyond/solid-dnd"
+import { SortableProvider, createSortable, createDroppable } from "@thisbeyond/solid-dnd"
 import { useClaxedoLayout, type TabItem, type TabType } from "../context/claxedo-layout"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -134,13 +130,14 @@ export type TopTabBarProps = {
 
 function SortableTab(props: {
   tab: TabItem
-  badge?: { text: string; tip: string }
   isActive: boolean
   onClose: (tabId: string) => void
   onSelect?: (tab: TabItem) => void
   onSetActive: (tabId: string) => void
   onDblClick: (dir: string) => void
   onContextMenu?: (e: MouseEvent, tabId: string) => void
+  worktreeName?: string
+  worktreeColor?: string
 }) {
   const sortable = createSortable(props.tab.id)
 
@@ -190,10 +187,14 @@ function SortableTab(props: {
           {props.tab.title}
         </span>
 
-        <Show when={props.badge}>
-          {(b) => (
-            <Tooltip value={`${props.tab.title} — ${b().tip}`}>
-              <span class="w-4 flex items-center justify-center opacity-0 group-hover/title:opacity-100 text-text-weak">
+        {/* Worktree indicator - shows on last tab of each group */}
+        <Show when={props.worktreeName}>
+          {(name) => (
+            <Tooltip value={`Worktree: ${name()}`}>
+              <span
+                class="w-4 flex items-center justify-center opacity-0 group-hover/title:opacity-100 shrink-0"
+                style={{ color: props.worktreeColor }}
+              >
                 <Icon name="branch" size="small" />
               </span>
             </Tooltip>
@@ -254,8 +255,8 @@ export function TopTabBar(props: TopTabBarProps) {
   const language = useLanguage()
 
   // Use group-specific tabs when groupId is provided, otherwise backward-compatible topTabs
-  const tabs = createMemo(() => props.groupId ? claxedo.groupTabs(props.groupId) : claxedo.topTabs)
-  const wt = createMemo(() => props.groupId ? claxedo.groupWorktree(props.groupId) : claxedo.worktree)
+  const tabs = createMemo(() => (props.groupId ? claxedo.groupTabs(props.groupId) : claxedo.topTabs))
+  const wt = createMemo(() => (props.groupId ? claxedo.groupWorktree(props.groupId) : claxedo.worktree))
 
   const [contextMenu, setContextMenu] = createSignal<{ tabId: string; x: number; y: number } | null>(null)
   const active = createMemo(() => tabs().active())
@@ -280,6 +281,23 @@ export function TopTabBar(props: TopTabBarProps) {
   })
 
   const tabIds = createMemo(() => visibleTabs().map((t) => t.id))
+
+  // Group tabs by worktree for visual grouping
+  const tabGroups = createMemo(() => {
+    const groups = new Map<string, TabItem[]>()
+    for (const tab of visibleTabs()) {
+      const existing = groups.get(tab.directory) || []
+      existing.push(tab)
+      groups.set(tab.directory, existing)
+    }
+    return Array.from(groups.entries())
+  })
+
+  // Get color for active worktree (for action buttons)
+  const activeWorktreeColor = createMemo(() => {
+    if (!props.groupId) return undefined
+    return claxedo.getActiveWorktreeColor(props.groupId)
+  })
 
   // Droppable zone for cross-panel drops (dropping onto the tab bar area)
   const droppable = createDroppable(`group-zone-${props.groupId ?? "default"}`)
@@ -308,13 +326,6 @@ export function TopTabBar(props: TopTabBarProps) {
 
   // Close context menu on click anywhere
   const closeContextMenu = () => setContextMenu(null)
-
-  const badge = (tab: TabItem) => {
-    if (pinned()) return
-    const info = props.worktreeInfo?.(tab.directory)
-    if (!info || info.isMain) return
-    return { text: info.name, tip: info.tooltip ?? `Worktree: ${info.name}` }
-  }
 
   return (
     <div
@@ -351,30 +362,47 @@ export function TopTabBar(props: TopTabBarProps) {
         class="flex items-center gap-1 min-w-0 overflow-x-auto overflow-y-hidden flex-1 no-scrollbar"
       >
         <SortableProvider ids={tabIds()}>
-          <For each={visibleTabs()}>
-            {(tab, index) => (
-              <>
-                <Show when={index() > 0}>
-                  <div class="w-px h-10 bg-border-weak-base flex-shrink-0" />
-                </Show>
-                <SortableTab
-                  tab={tab}
-                  badge={badge(tab)}
-                  isActive={tabs().activeId() === tab.id}
-                  onClose={handleTabClose}
-                  onSelect={props.onTabSelect}
-                  onSetActive={handleTabSetActive}
-                  onDblClick={handleTabDblClick}
-                  onContextMenu={handleTabContextMenu}
-                />
-              </>
-            )}
+          <For each={tabGroups()}>
+            {([directory, groupTabs], groupIndex) => {
+              const color = claxedo.getWorktreeColor(directory)
+              const isLastGroup = groupIndex() === tabGroups().length - 1
+
+              return (
+                <div class="flex items-center border-b-2" style={{ "border-color": color }}>
+                  <For each={groupTabs}>
+                    {(tab, tabIndex) => (
+                      <>
+                        <Show when={tabIndex() > 0 || groupIndex() > 0}>
+                          <div class="w-px h-10 bg-border-weak-base flex-shrink-0" />
+                        </Show>
+                        <SortableTab
+                          tab={tab}
+                          isActive={tabs().activeId() === tab.id}
+                          onClose={handleTabClose}
+                          onSelect={props.onTabSelect}
+                          onSetActive={handleTabSetActive}
+                          onDblClick={handleTabDblClick}
+                          onContextMenu={handleTabContextMenu}
+                          worktreeName={
+                            tabIndex() === groupTabs.length - 1 ? claxedo.getWorktreeName(directory) : undefined
+                          }
+                          worktreeColor={color}
+                        />
+                      </>
+                    )}
+                  </For>
+                </div>
+              )
+            }}
           </For>
         </SortableProvider>
 
         {/* Action buttons - immediately after tabs */}
         <Show when={wt().default() || active()?.directory}>
-          <div class="flex items-center gap-0 flex-shrink-0 h-10">
+          <div
+            class="flex items-center gap-0 flex-shrink-0 h-10 border-b-2"
+            style={{ "border-color": activeWorktreeColor() || "transparent" }}
+          >
             <Tooltip value={language.t("command.session.new")}>
               <button
                 type="button"
@@ -480,7 +508,14 @@ export function TopTabBar(props: TopTabBarProps) {
           }
           return (
             <>
-              <div class="fixed inset-0 z-[300]" onClick={closeContextMenu} onContextMenu={(e) => { e.preventDefault(); closeContextMenu() }} />
+              <div
+                class="fixed inset-0 z-[300]"
+                onClick={closeContextMenu}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  closeContextMenu()
+                }}
+              />
               <div
                 class="fixed z-[301] bg-background-base border border-border-weak-base rounded-md shadow-lg py-1 min-w-[180px]"
                 style={{ left: `${menu().x}px`, top: `${menu().y}px` }}
