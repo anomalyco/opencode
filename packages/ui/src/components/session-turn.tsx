@@ -131,6 +131,11 @@ function isAttachment(part: PartType | undefined) {
   return mime.startsWith("image/") || mime === "application/pdf"
 }
 
+function list<T>(value: T[] | undefined | null, fallback: T[]) {
+  if (Array.isArray(value)) return value
+  return fallback
+}
+
 function AssistantMessageItem(props: {
   message: AssistantMessage
   responsePartId: string | undefined
@@ -140,7 +145,7 @@ function AssistantMessageItem(props: {
 }) {
   const data = useData()
   const emptyParts: PartType[] = []
-  const msgParts = createMemo(() => data.store.part[props.message.id] ?? emptyParts)
+  const msgParts = createMemo(() => list(data.store.part?.[props.message.id], emptyParts))
   const lastTextPart = createMemo(() => {
     const parts = msgParts()
     for (let i = parts.length - 1; i >= 0; i--) {
@@ -206,7 +211,7 @@ export function SessionTurn(
   const emptyQuestionParts: { part: ToolPart; message: AssistantMessage }[] = []
   const idle = { type: "idle" as const }
 
-  const allMessages = createMemo(() => data.store.message[props.sessionID] ?? emptyMessages)
+  const allMessages = createMemo(() => list(data.store.message?.[props.sessionID], emptyMessages))
 
   const messageIndex = createMemo(() => {
     const messages = allMessages() ?? emptyMessages
@@ -248,7 +253,7 @@ export function SessionTurn(
   const parts = createMemo(() => {
     const msg = message()
     if (!msg) return emptyParts
-    return data.store.part[msg.id] ?? emptyParts
+    return list(data.store.part?.[msg.id], emptyParts)
   })
 
   const attachmentParts = createMemo(() => {
@@ -299,7 +304,7 @@ export function SessionTurn(
   const lastTextPart = createMemo(() => {
     const msgs = assistantMessages()
     for (let mi = msgs.length - 1; mi >= 0; mi--) {
-      const msgParts = data.store.part[msgs[mi].id] ?? emptyParts
+      const msgParts = list(data.store.part?.[msgs[mi].id], emptyParts)
       for (let pi = msgParts.length - 1; pi >= 0; pi--) {
         const part = msgParts[pi]
         if (part?.type === "text") return part as TextPart
@@ -310,8 +315,7 @@ export function SessionTurn(
 
   const hasSteps = createMemo(() => {
     for (const m of assistantMessages()) {
-      const msgParts = data.store.part[m.id]
-      if (!msgParts) continue
+      const msgParts = list(data.store.part?.[m.id], emptyParts)
       for (const p of msgParts) {
         if (p?.type === "tool") return true
       }
@@ -319,10 +323,10 @@ export function SessionTurn(
     return false
   })
 
-  const permissions = createMemo(() => data.store.permission?.[props.sessionID] ?? emptyPermissions)
+  const permissions = createMemo(() => list(data.store.permission?.[props.sessionID], emptyPermissions))
   const nextPermission = createMemo(() => permissions()[0])
 
-  const questions = createMemo(() => data.store.question?.[props.sessionID] ?? emptyQuestions)
+  const questions = createMemo(() => list(data.store.question?.[props.sessionID], emptyQuestions))
   const nextQuestion = createMemo(() => questions()[0])
 
   const hidden = createMemo(() => {
@@ -341,7 +345,7 @@ export function SessionTurn(
     const result: { part: ToolPart; message: AssistantMessage }[] = []
 
     for (const msg of assistantMessages()) {
-      const parts = data.store.part[msg.id] ?? emptyParts
+      const parts = list(data.store.part?.[msg.id], emptyParts)
       for (const part of parts) {
         if (part?.type !== "tool") continue
         const tool = part as ToolPart
@@ -365,7 +369,7 @@ export function SessionTurn(
     const msgs = assistantMessages()
     if (msgs.length !== 1) return
 
-    const msgParts = data.store.part[msgs[0].id] ?? emptyParts
+    const msgParts = list(data.store.part?.[msgs[0].id], emptyParts)
     if (msgParts.length !== 1) return
 
     const assistantPart = msgParts[0]
@@ -380,7 +384,7 @@ export function SessionTurn(
     let currentTask: ToolPart | undefined
 
     for (let mi = msgs.length - 1; mi >= 0; mi--) {
-      const msgParts = data.store.part[msgs[mi].id] ?? emptyParts
+      const msgParts = list(data.store.part?.[msgs[mi].id], emptyParts)
       for (let pi = msgParts.length - 1; pi >= 0; pi--) {
         const part = msgParts[pi]
         if (!part) continue
@@ -407,12 +411,12 @@ export function SessionTurn(
         : undefined
 
     if (taskSessionId) {
-      const taskMessages = data.store.message[taskSessionId] ?? emptyMessages
+      const taskMessages = list(data.store.message?.[taskSessionId], emptyMessages)
       for (let mi = taskMessages.length - 1; mi >= 0; mi--) {
         const msg = taskMessages[mi]
         if (!msg || msg.role !== "assistant") continue
 
-        const msgParts = data.store.part[msg.id] ?? emptyParts
+        const msgParts = list(data.store.part?.[msg.id], emptyParts)
         for (let pi = msgParts.length - 1; pi >= 0; pi--) {
           const part = msgParts[pi]
           if (part) return computeStatusFromPart(part, i18n.t)
