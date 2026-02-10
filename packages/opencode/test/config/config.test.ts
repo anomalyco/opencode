@@ -616,6 +616,7 @@ test("installs dependencies in writable OPENCODE_CONFIG_DIR", async () => {
       directory: tmp.path,
       fn: async () => {
         await Config.get()
+        await Config.waitForDependencies()
       },
     })
 

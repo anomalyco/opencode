@@ -31,7 +31,7 @@ export default function Layout(props: ParentProps) {
   })
   return (
     <Show when={directory()}>
-      <SDKProvider directory={directory()}>
+      <SDKProvider directory={directory}>
         <SyncProvider>
           {iife(() => {
             const sync = useSync()

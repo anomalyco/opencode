@@ -226,7 +226,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           <text fg={theme.text} attributes={TextAttributes.BOLD}>
             {props.title}
           </text>
-          <text fg={theme.textMuted}>esc</text>
+          <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
+            esc
+          </text>
         </box>
         <box paddingTop={1}>
           <input

@@ -15,6 +15,9 @@ export type Platform = {
   /** Open a URL in the default browser */
   openLink(url: string): void
 
+  /** Open a local path in a local app (desktop only) */
+  openPath?(path: string, app?: string): Promise<void>
+
   /** Restart the app  */
   restart(): Promise<void>
 

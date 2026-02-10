@@ -1,0 +1,9 @@
+img[data-component="app-icon"] {
+  display: block;
+  box-sizing: border-box;
+  padding: 2px;
+  border-radius: 0.125rem;
+  background: var(--smoke-light-2);
+  border: 1px solid var(--smoke-light-alpha-4);
+  object-fit: contain;
+}
