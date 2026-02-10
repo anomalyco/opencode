@@ -35,7 +35,7 @@ opencode には 2 つの組み込みモードが付属しています。
 - `write` - 新しいファイルを作成できません
 - `edit` - 計画自体の詳細を示す `.opencode/plans/*.md` にあるファイルを除き、既存のファイルを変更できません
 - `patch` - パッチを適用できません
-- `bash` - シェルコマンドを実行できません
+- `bash` - shell コマンドを実行できません
 
 このモードは、コードベースに実際の変更を加えずに、AI にコードを分析させたり、変更を提案したり、計画を作成させたい場合に便利です。
 
@@ -82,9 +82,9 @@ opencode には 2 つの組み込みモードが付属しています。
 }
 ```
 
-### マークダウン構成
+### Markdown構成
 
-マークダウン ファイルを使用してモードを定義することもできます。それらを次の場所に置きます。
+Markdown ファイルを使用してモードを定義することもできます。それらを次の場所に置きます。
 
 - グローバル: `~/.config/opencode/agents/`
 - プロジェクト: `.opencode/modes/`
@@ -109,7 +109,7 @@ You are in code review mode. Focus on:
 Provide constructive feedback without making direct changes.
 ```
 
-マークダウン ファイル名はモード名になります (例: `review.md` は `review` モードを作成します)。
+Markdown ファイル名はモード名になります (例: `review.md` は `review` モードを作成します)。
 
 これらの構成オプションを詳しく見てみましょう。
 
@@ -226,7 +226,7 @@ Provide constructive feedback without making direct changes.
 
 | ツール      | 説明                           |
 | ----------- | ------------------------------ |
-| `bash`      | シェルコマンドを実行する       |
+| `bash`      | shell コマンドを実行する       |
 | `edit`      | 既存のファイルを変更する       |
 | `write`     | 新しいファイルを作成する       |
 | `read`      | ファイルの内容を読み取る       |
@@ -265,7 +265,7 @@ Provide constructive feedback without making direct changes.
 }
 ```
 
-### マークダウンファイルの使用
+### Markdown ファイルの使用
 
 モード ファイルをプロジェクト固有モードの場合は `.opencode/modes/` に、グローバル モードの場合は `~/.config/opencode/modes/` に作成します。
 

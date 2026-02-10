@@ -1,6 +1,6 @@
 ---
 title: Provajderi
-description: Korištenje bilo kojeg LLM provajdera u OpenCodeu.
+description: Korištenje bilo kojeg LLM provajdera u OpenCode.
 ---
 
 import config from "../../../../config.mjs"
@@ -24,7 +24,7 @@ u `~/.local/share/opencode/auth.json`.
 
 ### Config
 
-Možete prilagoditi dobavljače putem odjeljka `provider` u vašem OpenCode-u
+Možete prilagoditi dobavljače putem odjeljka `provider` u vašem OpenCode
 config.
 
 ---
@@ -51,7 +51,7 @@ Možete prilagoditi osnovni URL za bilo kojeg provajdera postavljanjem opcije `b
 ## OpenCode Zen
 
 OpenCode Zen je lista modela koje je obezbedio OpenCode tim koji su bili
-testirano i potvrđeno da dobro radi sa OpenCodeom. [Saznajte više](/docs/zen).
+testirano i potvrđeno da dobro radi sa OpenCode. [Saznajte više](/docs/zen).
 
 :::tip
 Ako ste novi, preporučujemo da počnete sa OpenCode Zen.
@@ -86,7 +86,7 @@ Ako ste novi, preporučujemo da počnete sa OpenCode Zen.
 
 ```
 
-Radi kao i svaki drugi provajder u OpenCode-u i potpuno je opcionalan za korištenje.
+Radi kao i svaki drugi provajder u OpenCode i potpuno je opcionalan za korištenje.
 
 ---
 
@@ -136,7 +136,7 @@ Ne vidite provajdera ovdje? Pošaljite PR.
 
 ### Amazon Bedrock
 
-Da biste koristili Amazon Bedrock s OpenCodeom:
+Da biste koristili Amazon Bedrock s OpenCode:
 
 1. Idite na **Katalog modela** na Amazon Bedrock konzoli i zatražite
    pristup modelima koje želite.
@@ -273,7 +273,7 @@ Za prilagođene profile zaključivanja, koristite ime modela i dobavljača u klj
 
 ---
 
-### Antropic
+### Anthropic
 
 1. Nakon što ste se prijavili, pokrenite naredbu `/connect` i odaberite Anthropic.
 
@@ -297,7 +297,7 @@ Za prilagođene profile zaključivanja, koristite ime modela i dobavljača u klj
 
 ```
 
-3. Sada bi svi Antropski modeli trebali biti dostupni kada koristite naredbu `/models`.
+3. Sada bi svi Anthropic modeli trebali biti dostupni kada koristite naredbu `/models`.
 
 ```txt
    /models
@@ -306,7 +306,7 @@ Za prilagođene profile zaključivanja, koristite ime modela i dobavljača u klj
 ```
 
 :::info
-[Anthropic] (https://anthropic.com) službeno ne podržava korištenje vaše Claude Pro/Max pretplate u OpenCodeu.
+[Anthropic] (https://anthropic.com) službeno ne podržava korištenje vaše Claude Pro/Max pretplate u OpenCode.
 :::
 
 ##### Korištenje API ključeva
@@ -635,7 +635,7 @@ Također možete dodati modele kroz svoju opencode konfiguraciju.
 
 ---
 
-### Duboka infra
+### Deep Infra
 
 1. Idite na [Deep Infra kontrolnu tablu](https://deepinfra.com/dash), kreirajte nalog i generišite API ključ.
 
@@ -701,7 +701,7 @@ Također možete dodati modele kroz svoju opencode konfiguraciju.
 
 ---
 
-### Vatromet AI
+### Fireworks AI
 
 1. Idite na [Fireworks AI konzolu](https://app.fireworks.ai/), kreirajte račun i kliknite na **Kreiraj API ključ**.
 
@@ -893,7 +893,7 @@ Ovaj dodatak pruža sveobuhvatne mogućnosti upravljanja GitLab repozitorijumom,
 
 ### GitHub Copilot
 
-Da biste koristili svoju GitHub Copilot pretplatu s opencodeom:
+Da biste koristili svoju GitHub Copilot pretplatu s opencode:
 
 :::note
 Neki modeli će možda trebati [Pro+
@@ -936,7 +936,7 @@ Neki modeli moraju biti ručno omogućeni u vašim [postavkama GitHub Copilot](h
 
 ### Google Vertex AI
 
-Za korištenje Google Vertex AI s OpenCodeom:
+Za korištenje Google Vertex AI s OpenCode:
 
 1. Idite do **Model Garden** u Google Cloud Console i provjerite
    modeli dostupni u vašoj regiji.
@@ -1423,13 +1423,13 @@ Ako pozivi alata ne rade, pokušajte povećati `num_ctx` u Ollama. Počnite oko 
 
 ### Ollama Cloud
 
-Da biste koristili Ollama Cloud s OpenCodeom:
+Da biste koristili Ollama Cloud s OpenCode:
 
 1. Idite na [https://ollama.com/](https://ollama.com/) i prijavite se ili kreirajte račun.
 
 2. Idite na **Postavke** > **Ključevi** i kliknite na **Dodaj API ključ** da generišete novi API ključ.
 
-3. Kopirajte API ključ za korištenje u OpenCodeu.
+3. Kopirajte API ključ za korištenje u OpenCode.
 
 4. Pokrenite naredbu `/connect` i potražite **Ollama Cloud**.
 
@@ -1450,7 +1450,7 @@ Da biste koristili Ollama Cloud s OpenCodeom:
 
 ```
 
-6. **Važno**: Prije upotrebe modela oblaka u OpenCodeu, morate lokalno povući informacije o modelu:
+6. **Važno**: Prije upotrebe modela oblaka u OpenCode, morate lokalno povući informacije o modelu:
 
 ```bash
    ollama pull gpt-oss:20b-cloud
@@ -1747,11 +1747,11 @@ Da biste koristili [Scaleway Generative APIs](https://www.scaleway.com/en/docs/g
 
 ---
 
-### Zajedno AI
+### Together AI
 
 1. Idite na [Together AI console](https://api.together.ai), kreirajte nalog i kliknite na **Dodaj ključ**.
 
-2. Pokrenite naredbu `/connect` i potražite **Zajedno AI**.
+2. Pokrenite naredbu `/connect` i potražite **Together AI**.
 
 ```txt
    /connect
@@ -2124,7 +2124,7 @@ Detalji konfiguracije:
 - **limit.context**: Maksimalni ulazni tokeni koje model prihvata.
 - **limit.output**: Maksimalni tokeni koje model može generirati.
 
-Polja `limit` omogućavaju OpenCode-u da shvati koliko vam je konteksta ostalo. Standardni dobavljači ih automatski preuzimaju sa models.dev.
+Polja `limit` omogućavaju OpenCode da shvati koliko vam je konteksta ostalo. Standardni dobavljači ih automatski preuzimaju sa models.dev.
 
 ---
 

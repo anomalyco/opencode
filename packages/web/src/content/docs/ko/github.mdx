@@ -81,7 +81,7 @@ jobs:
 ## 구성
 
 - `model`: opencode를 사용하는 모형. `provider/model`의 형식을 가져 가라. **필수**입니다.
-- `agent`: 사용을 위한 대리인. 1 차적인 대리인이어야 합니다. `default_agent`로 돌아와서 config 또는 `"build"`에서 찾을 수 없습니다.
+- `agent`: 사용을 위한 에이전트. 주요 에이전트이어야 합니다. `default_agent`로 돌아와서 config 또는 `"build"`에서 찾을 수 없습니다.
 - `share`: opencode 세션을 공유하는 것. Defaults to **true** for public 저장소.
 - `prompt` : 기본 동작을 무시하기 위해 옵션 사용자 정의 프롬프트. opencode 프로세스 요청을 사용자 정의하기 위해 이것을 사용합니다.
 - `token`: 코멘트를 생성, 커밋 변경 및 오프닝 풀 요청과 같은 작업을 수행하기위한 옵션 GitHub 액세스 토큰. 기본적으로 opencode는 opencode GitHub App에서 설치 액세스 토큰을 사용하므로 커밋, 코멘트 및 풀 요청은 앱에서 오는 것과 같이 나타납니다.
