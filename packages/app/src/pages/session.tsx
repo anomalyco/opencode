@@ -37,7 +37,7 @@ import { useComments } from "@/context/comments"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
 import { usePermission } from "@/context/permission"
 import { showToast } from "@opencode-ai/ui/toast"
-import { SessionHeader, SessionContextTab, SortableTab, FileVisual, NewSessionView } from "@/components/session"
+import { SessionHeader, SessionContextTab, SortableTab, SortableTerminalTab, FileVisual, NewSessionView } from "@/components/session"
 import { navMark, navParams } from "@/utils/perf"
 import { same } from "@/utils/same"
 import { createOpenReviewFile, focusTerminalById } from "@/pages/session/helpers"
@@ -58,6 +58,7 @@ import { SessionPromptDock } from "@/pages/session/session-prompt-dock"
 import { SessionMobileTabs } from "@/pages/session/session-mobile-tabs"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
+import { Terminal } from "@/components/terminal"
 
 type HandoffSession = {
   prompt: string
