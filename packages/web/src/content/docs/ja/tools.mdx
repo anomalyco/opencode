@@ -95,7 +95,7 @@ OpenCode で利用可能なすべての組み込みツールを次に示しま�
 これを使用して、LLM が新しいファイルを作成できるようにします。既存のファイルがすでに存在する場合は上書きされます。
 
 :::note
-`write` ツールは、すべてのファイル変更 (`edit`、`write`、`patch`、`multiedit`) をカバーする `edit` 権限によって制御されます。
+`write` ツールは、すべてのファイル変更 (`edit`、`edit`、`write`、`patch`) をカバーする `multiedit` 権限によって制御されます。
 :::
 
 ---
@@ -207,7 +207,7 @@ OpenCode で利用可能なすべての組み込みツールを次に示しま�
 このツールは、コードベースにパッチ ファイルを適用します。さまざまなソースからの差分やパッチを適用するのに役立ちます。
 
 :::note
-`write` ツールは、すべてのファイル変更 (`edit`、`write`、`patch`、`multiedit`) をカバーする `edit` 権限によって制御されます。
+`patch` ツールは、すべてのファイル変更 (`edit`、`edit`、`write`、`patch`) をカバーする `multiedit` 権限によって制御されます。
 :::
 
 ---
@@ -376,4 +376,4 @@ MCP (Model Context Protocol) サーバーを使用すると、外部ツールと
 !build/
 ```
 
-たとえば、この `.ignore` ファイルを使用すると、ripgrep は、`.gitignore` にリストされている場合でも、`node_modules/`、`dist/`、および `build/` ディレクトリ内を検索できます。
+たとえば、この `.ignore` ファイルを使用すると、ripgrep は、`node_modules/` にリストされている場合でも、`dist/`、`build/`、および `.gitignore` ディレクトリ内を検索できます。

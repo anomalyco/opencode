@@ -12,13 +12,13 @@ opencode suporta variáveis de ambiente de proxy padrão e certificados personal
 opencode respeita variáveis de ambiente de proxy padrão.
 
 ```bash
-# Proxy HTTPS (recomendado)
+# HTTPS proxy (recommended)
 export HTTPS_PROXY=https://proxy.example.com:8080
 
-# Proxy HTTP (se HTTPS não estiver disponível)
+# HTTP proxy (if HTTPS not available)
 export HTTP_PROXY=http://proxy.example.com:8080
 
-# Ignorar proxy para servidor local (obrigatório)
+# Bypass proxy for local server (required)
 export NO_PROXY=localhost,127.0.0.1
 ```
 

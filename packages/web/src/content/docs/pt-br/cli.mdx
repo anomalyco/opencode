@@ -14,7 +14,7 @@ opencode
 Mas também aceita comandos conforme documentado nesta página. Isso permite que você interaja com o opencode programaticamente.
 
 ```bash
-opencode run "Explique como closures funcionam em JavaScript"
+opencode run "Explain how closures work in JavaScript"
 ```
 
 ---
@@ -24,7 +24,7 @@ opencode run "Explique como closures funcionam em JavaScript"
 Inicie a interface de usuário do terminal do opencode.
 
 ```bash
-opencode [projeto]
+opencode [project]
 ```
 
 #### Flags
@@ -53,7 +53,7 @@ A CLI do opencode também possui os seguintes comandos.
 Gerencie agentes para o opencode.
 
 ```bash
-opencode agent [comando]
+opencode agent [command]
 ```
 
 ---
@@ -69,10 +69,10 @@ opencode attach [url]
 Isso permite usar o TUI com um backend opencode remoto. Por exemplo:
 
 ```bash
-# Inicie o servidor backend para acesso web/móvel
+# Start the backend server for web/mobile access
 opencode web --port 4096 --hostname 0.0.0.0
 
-# Em outro terminal, anexe o TUI ao backend em execução
+# In another terminal, attach the TUI to the running backend
 opencode attach http://10.20.30.40:4096
 ```
 
@@ -112,7 +112,7 @@ opencode agent list
 Comando para gerenciar credenciais e login para provedores.
 
 ```bash
-opencode auth [comando]
+opencode auth [command]
 ```
 
 ---
@@ -160,7 +160,7 @@ opencode auth logout
 Gerencie o agente do GitHub para automação de repositórios.
 
 ```bash
-opencode github [comando]
+opencode github [command]
 ```
 
 ---
@@ -199,7 +199,7 @@ opencode github run
 Gerencie servidores do Model Context Protocol.
 
 ```bash
-opencode mcp [comando]
+opencode mcp [command]
 ```
 
 ---
@@ -237,7 +237,7 @@ opencode mcp ls
 Autentique-se com um servidor MCP habilitado para OAuth.
 
 ```bash
-opencode mcp auth [nome]
+opencode mcp auth [name]
 ```
 
 Se você não fornecer um nome de servidor, será solicitado que você selecione entre os servidores disponíveis habilitados para OAuth.
@@ -261,7 +261,7 @@ opencode mcp auth ls
 Remova credenciais OAuth para um servidor MCP.
 
 ```bash
-opencode mcp logout [nome]
+opencode mcp logout [name]
 ```
 
 ---
@@ -271,7 +271,7 @@ opencode mcp logout [nome]
 Depure problemas de conexão OAuth para um servidor MCP.
 
 ```bash
-opencode mcp debug <nome>
+opencode mcp debug <name>
 ```
 
 ---
@@ -281,7 +281,7 @@ opencode mcp debug <nome>
 Liste todos os modelos disponíveis dos provedores configurados.
 
 ```bash
-opencode models [provedor]
+opencode models [provider]
 ```
 
 Este comando exibe todos os modelos disponíveis entre seus provedores configurados no formato `provider/model`.
@@ -314,23 +314,23 @@ opencode models --refresh
 Execute o opencode em modo não interativo passando um prompt diretamente.
 
 ```bash
-opencode run [mensagem..]
+opencode run [message..]
 ```
 
 Isso é útil para scripts, automação ou quando você deseja uma resposta rápida sem iniciar o TUI completo. Por exemplo.
 
 ```bash "opencode run"
-opencode run Explique o uso de contexto em Go
+opencode run Explain the use of context in Go
 ```
 
 Você também pode se anexar a uma instância em execução do `opencode serve` para evitar tempos de inicialização a frio do servidor MCP em cada execução:
 
 ```bash
-# Inicie um servidor sem cabeça em um terminal
+# Start a headless server in one terminal
 opencode serve
 
-# Em outro terminal, execute comandos que se anexam a ele
-opencode run --attach http://localhost:4096 "Explique async/await em JavaScript"
+# In another terminal, run commands that attach to it
+opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
 #### Flags
@@ -378,7 +378,7 @@ Isso inicia um servidor HTTP que fornece acesso à funcionalidade do opencode se
 Gerencie sessões do opencode.
 
 ```bash
-opencode session [comando]
+opencode session [command]
 ```
 
 ---
@@ -436,7 +436,7 @@ Se você não fornecer um ID de sessão, será solicitado que você selecione en
 Importe dados da sessão de um arquivo JSON ou URL de compartilhamento do opencode.
 
 ```bash
-opencode import <arquivo>
+opencode import <file>
 ```
 
 Você pode importar de um arquivo local ou de uma URL de compartilhamento do opencode.
@@ -513,7 +513,7 @@ opencode uninstall
 Atualiza o opencode para a versão mais recente ou uma versão específica.
 
 ```bash
-opencode upgrade [alvo]
+opencode upgrade [target]
 ```
 
 Para atualizar para a versão mais recente.

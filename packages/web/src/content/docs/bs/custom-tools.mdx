@@ -27,7 +27,7 @@ Mogu se definisati:
 Najlakši način za kreiranje alata je korištenje pomoćnika `tool()` koji pruža sigurnost tipa i validaciju.
 
 ```ts title=".opencode/tools/database.ts" {1}
-import { tool } from "@opencodei/plugin"
+import { tool } from "@opencode-ai/plugin"
 
 export default tool({
   description: "Query the project database",
@@ -50,7 +50,7 @@ export default tool({
 Također možete izvesti više alata iz jedne datoteke. Svaki izvoz postaje **poseban alat** pod nazivom **`<filename>_<exportname>`**:
 
 ```ts title=".opencode/tools/math.ts"
-import { tool } from "@opencodei/plugin"
+import { tool } from "@opencode-ai/plugin"
 
 export const add = tool({
   description: "Add two numbers",
@@ -113,7 +113,7 @@ export default {
 Alati primaju kontekst o trenutnoj sesiji:
 
 ```ts title=".opencode/tools/project.ts" {8}
-import { tool } from "@opencodei/plugin"
+import { tool } from "@opencode-ai/plugin"
 
 export default tool({
   description: "Get project information",
@@ -149,7 +149,7 @@ print(a + b)
 Zatim kreirajte definiciju alata koja ga poziva:
 
 ```ts title=".opencode/tools/python-add.ts" {10}
-import { tool } from "@opencodei/plugin"
+import { tool } from "@opencode-ai/plugin"
 import path from "path"
 
 export default tool({

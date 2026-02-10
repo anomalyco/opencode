@@ -67,8 +67,8 @@
   "share.creating_plan": "Oppretter plan",
   "share.completing_plan": "Fullfører plan",
   "share.updating_plan": "Oppdaterer plan",
-  "share.match_one": "kamp",
-  "share.match_other": "kamper",
+  "share.match_one": "treff",
+  "share.match_other": "treff",
   "share.result_one": "resultat",
   "share.result_other": "resultater",
   "share.debug_key": "Nøkkel"
