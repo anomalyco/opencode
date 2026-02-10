@@ -22,22 +22,38 @@ export function activate(context: vscode.ExtensionContext) {
   })
 
   let addFilepathDisposable = vscode.commands.registerCommand("opencode.addFilepathToTerminal", async () => {
-    const fileRef = getActiveFile()
-    if (!fileRef) {
-      return
-    }
-
     const terminal = vscode.window.activeTerminal
     if (!terminal) {
       return
     }
 
-    if (terminal.name === TERMINAL_NAME) {
-      // @ts-ignore
-      const port = terminal.creationOptions.env?.["_EXTENSION_OPENCODE_PORT"]
-      port ? await appendPrompt(parseInt(port), fileRef) : terminal.sendText(fileRef, false)
-      terminal.show()
+    const port = (terminal.creationOptions as { env?: Record<string, string> }).env?.["_EXTENSION_OPENCODE_PORT"]
+
+    if (port) {
+      // Native opencode terminal - use relative path with HTTP
+      const fileRef = getActiveFile(false)
+      if (!fileRef) {
+        return
+      }
+
+      try {
+        await appendPrompt(parseInt(port), fileRef)
+      } catch {
+        terminal.sendText(fileRef, false)
+      }
+    } else {
+      // External terminal - use absolute path with text paste
+      const fileRef = getActiveFile(true)
+      if (!fileRef) {
+        return
+      }
+
+      // Wrap paths with spaces in quotes
+      const text = fileRef.includes(" ") ? `"${fileRef}"` : fileRef
+      terminal.sendText(text, false)
     }
+
+    terminal.show()
   })
 
   context.subscriptions.push(openTerminalDisposable, addFilepathDisposable)
@@ -100,21 +116,27 @@ export function activate(context: vscode.ExtensionContext) {
     })
   }
 
-  function getActiveFile() {
+  function getActiveFile(absolute: boolean = false) {
     const activeEditor = vscode.window.activeTextEditor
     if (!activeEditor) {
       return
     }
 
     const document = activeEditor.document
-    const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri)
-    if (!workspaceFolder) {
-      return
+
+    // Get the path based on absolute flag
+    let path: string
+    if (absolute) {
+      path = document.uri.fsPath
+    } else {
+      const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri)
+      if (!workspaceFolder) {
+        return
+      }
+      path = vscode.workspace.asRelativePath(document.uri)
     }
 
-    // Get the relative path from workspace root
-    const relativePath = vscode.workspace.asRelativePath(document.uri)
-    let filepathWithAt = `@${relativePath}`
+    let filepathWithAt = `@${path}`
 
     // Check if there's a selection and add line numbers
     const selection = activeEditor.selection
