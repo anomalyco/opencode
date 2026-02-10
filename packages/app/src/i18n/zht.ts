@@ -540,6 +540,9 @@ export const dict = {
   "sidebar.project.recentSessions": "最近工作階段",
   "sidebar.project.viewAllSessions": "查看全部工作階段",
 
+  "filetree.copyRelativePath": "複製相對路徑",
+  "filetree.copyAbsolutePath": "複製絕對路徑",
+
   "app.name.desktop": "OpenCode Desktop",
   "settings.section.desktop": "桌面",
   "settings.section.server": "伺服器",

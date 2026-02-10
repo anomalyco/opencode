@@ -503,6 +503,9 @@ export const dict = {
   "sidebar.project.recentSessions": "الجلسات الحديثة",
   "sidebar.project.viewAllSessions": "عرض جميع الجلسات",
 
+  "filetree.copyRelativePath": "نسخ المسار النسبي",
+  "filetree.copyAbsolutePath": "نسخ المسار المطلق",
+
   "app.name.desktop": "OpenCode Desktop",
   "settings.section.desktop": "سطح المكتب",
   "settings.section.server": "الخادم",

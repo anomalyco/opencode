@@ -517,6 +517,9 @@ export const dict = {
   "sidebar.project.recentSessions": "Sessions récentes",
   "sidebar.project.viewAllSessions": "Voir toutes les sessions",
 
+  "filetree.copyRelativePath": "Copier le chemin relatif",
+  "filetree.copyAbsolutePath": "Copier le chemin absolu",
+
   "app.name.desktop": "OpenCode Desktop",
   "settings.section.desktop": "Bureau",
   "settings.section.server": "Serveur",

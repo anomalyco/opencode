@@ -509,6 +509,9 @@ export const dict = {
   "sidebar.project.recentSessions": "Ostatnie sesje",
   "sidebar.project.viewAllSessions": "Zobacz wszystkie sesje",
 
+  "filetree.copyRelativePath": "Kopiuj ścieżkę względną",
+  "filetree.copyAbsolutePath": "Kopiuj ścieżkę bezwzględną",
+
   "app.name.desktop": "OpenCode Desktop",
   "settings.section.desktop": "Pulpit",
   "settings.section.server": "Serwer",

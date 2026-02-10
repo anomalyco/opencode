@@ -1,6 +1,8 @@
 import { useFile } from "@/context/file"
 import { encodeFilePath } from "@/context/file/path"
+import { useLanguage } from "@/context/language"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
+import { ContextMenu } from "@opencode-ai/ui/context-menu"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
@@ -78,6 +80,7 @@ export default function FileTree(props: {
   _kinds?: ReadonlyMap<string, Kind>
 }) {
   const file = useFile()
+  const language = useLanguage()
   const level = props.level ?? 0
   const draggable = () => props.draggable ?? true
   const tooltip = () => props.tooltip ?? true
@@ -451,12 +454,34 @@ export default function FileTree(props: {
                 </Collapsible>
               </Match>
               <Match when={node.type === "file"}>
-                <Wrapper>
-                  <Node node={node} as="button" type="button" onClick={() => props.onFileClick?.(node)}>
-                    <div class="w-4 shrink-0" />
-                    <FileIcon node={node} class="text-icon-weak size-4" />
-                  </Node>
-                </Wrapper>
+                <ContextMenu modal={false}>
+                  <ContextMenu.Trigger class="w-full">
+                    <Wrapper>
+                      <Node node={node} as="button" type="button" onClick={() => props.onFileClick?.(node)}>
+                        <div class="w-4 shrink-0" />
+                        <FileIcon node={node} class="text-icon-weak size-4" />
+                      </Node>
+                    </Wrapper>
+                  </ContextMenu.Trigger>
+                  <ContextMenu.Portal>
+                    <ContextMenu.Content>
+                      <ContextMenu.Item
+                        onSelect={() => {
+                          void navigator.clipboard.writeText(node.path)
+                        }}
+                      >
+                        <ContextMenu.ItemLabel>{language.t("filetree.copyRelativePath")}</ContextMenu.ItemLabel>
+                      </ContextMenu.Item>
+                      <ContextMenu.Item
+                        onSelect={() => {
+                          void navigator.clipboard.writeText(node.absolute)
+                        }}
+                      >
+                        <ContextMenu.ItemLabel>{language.t("filetree.copyAbsolutePath")}</ContextMenu.ItemLabel>
+                      </ContextMenu.Item>
+                    </ContextMenu.Content>
+                  </ContextMenu.Portal>
+                </ContextMenu>
               </Match>
             </Switch>
           )

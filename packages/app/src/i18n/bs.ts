@@ -533,6 +533,9 @@ export const dict = {
   "sidebar.project.recentSessions": "Nedavne sesije",
   "sidebar.project.viewAllSessions": "Prikaži sve sesije",
 
+  "filetree.copyRelativePath": "Kopiraj relativnu putanju",
+  "filetree.copyAbsolutePath": "Kopiraj apsolutnu putanju",
+
   "app.name.desktop": "OpenCode Desktop",
 
   "settings.section.desktop": "Desktop",

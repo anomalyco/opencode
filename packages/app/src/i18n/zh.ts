@@ -543,6 +543,9 @@ export const dict = {
   "sidebar.project.recentSessions": "最近会话",
   "sidebar.project.viewAllSessions": "查看全部会话",
 
+  "filetree.copyRelativePath": "复制相对路径",
+  "filetree.copyAbsolutePath": "复制绝对路径",
+
   "app.name.desktop": "OpenCode Desktop",
   "settings.section.desktop": "桌面",
   "settings.section.server": "服务器",

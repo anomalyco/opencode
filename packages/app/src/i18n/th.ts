@@ -510,6 +510,9 @@ export const dict = {
   "sidebar.project.recentSessions": "เซสชันล่าสุด",
   "sidebar.project.viewAllSessions": "ดูเซสชันทั้งหมด",
 
+  "filetree.copyRelativePath": "คัดลอกเส้นทางสัมพัทธ์",
+  "filetree.copyAbsolutePath": "คัดลอกเส้นทางสมบูรณ์",
+
   "app.name.desktop": "OpenCode Desktop",
 
   "settings.section.desktop": "เดสก์ท็อป",

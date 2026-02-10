@@ -502,6 +502,9 @@ export const dict = {
   "sidebar.project.recentSessions": "最近のセッション",
   "sidebar.project.viewAllSessions": "すべてのセッションを表示",
 
+  "filetree.copyRelativePath": "相対パスをコピー",
+  "filetree.copyAbsolutePath": "絶対パスをコピー",
+
   "app.name.desktop": "OpenCode Desktop",
   "settings.section.desktop": "デスクトップ",
   "settings.section.server": "サーバー",

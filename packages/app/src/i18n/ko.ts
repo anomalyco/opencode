@@ -508,6 +508,9 @@ export const dict = {
   "sidebar.project.recentSessions": "최근 세션",
   "sidebar.project.viewAllSessions": "모든 세션 보기",
 
+  "filetree.copyRelativePath": "상대 경로 복사",
+  "filetree.copyAbsolutePath": "절대 경로 복사",
+
   "app.name.desktop": "OpenCode Desktop",
   "settings.section.desktop": "데스크톱",
   "settings.section.server": "서버",
