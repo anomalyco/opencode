@@ -206,11 +206,18 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   )
 
   return (
-    <>
-      <div
-        data-session-id={props.session.id}
-        class="group/session relative w-full min-w-0 rounded-md cursor-default pr-3 transition-colors hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover has-[[data-expanded]]:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active"
-        style={{ "padding-left": `${8 + (props.level ?? 0) * 16}px` }}
+    <div
+      data-session-id={props.session.id}
+      class="group/session relative w-full rounded-md cursor-default transition-colors pl-2 pr-3
+             hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover has-[[data-expanded]]:bg-surface-raised-base-hover has-[.active]:bg-surface-raised-base-active"
+    >
+      <Show
+        when={hoverEnabled()}
+        fallback={
+          <Tooltip placement={props.mobile ? "bottom" : "right"} value={props.session.title} gutter={10}>
+            {item}
+          </Tooltip>
+        }
       >
         <div class="flex min-w-0 items-center gap-1">
           <div class="min-w-0 flex-1">
@@ -298,7 +305,7 @@ export const NewSessionItem = (props: {
   )
 
   return (
-    <div class="group/session relative w-full min-w-0 rounded-md cursor-default transition-colors pl-2 pr-3 hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active">
+    <div class="group/session relative w-full rounded-md cursor-default transition-colors pl-2 pr-3 hover:bg-surface-raised-base-hover [&:has(:focus-visible)]:bg-surface-raised-base-hover has-[.active]:bg-surface-raised-base-active">
       <Show
         when={!tooltip()}
         fallback={
