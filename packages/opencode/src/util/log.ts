@@ -40,10 +40,22 @@ export namespace Log {
 
   export const Default = create({ service: "default" })
 
+  export type Rotate =
+    | {
+        kind: "startup"
+        retention?: number
+      }
+    | {
+        kind: "daily"
+        retention?: number
+      }
+
   export interface Options {
     print: boolean
     dev?: boolean
     level?: Level
+    path?: string
+    rotate?: Rotate
   }
 
   let logpath = ""
@@ -55,43 +67,86 @@ export namespace Log {
     return msg.length
   }
 
-  export async function init(options: Options) {
-    if (options.level) level = options.level
-    cleanup(Global.Path.log)
-    if (options.print) return
-    logpath = path.join(
-      Global.Path.log,
-      options.dev ? "dev.log" : new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log",
+  let current = ""
+  let writer: ReturnType<ReturnType<typeof Bun.file>["writer"]> | undefined
+
+  function today() {
+    const d = new Date()
+    return (
+      d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0")
     )
-    const logfile = Bun.file(logpath)
-    await fs.truncate(logpath).catch(() => {})
-    const writer = logfile.writer()
-    write = async (msg: any) => {
-      const num = writer.write(msg)
-      writer.flush()
-      return num
-    }
   }
 
-  async function cleanup(dir: string) {
-    const glob = new Bun.Glob("????-??-??T??????.log")
+  function createWriter(filepath: string, truncate?: boolean) {
+    if (writer) writer.end()
+    logpath = filepath
+    if (truncate) fs.truncate(filepath).catch(() => {})
+    writer = Bun.file(filepath).writer()
+  }
+
+  function flushWriter(msg: any) {
+    const num = writer!.write(msg)
+    writer!.flush()
+    return num
+  }
+
+  function rotate(dir: string) {
+    const date = today()
+    if (date === current && writer) return
+    current = date
+    createWriter(path.join(dir, `opencode-${date}.log`))
+  }
+
+  const writeStrategies: Record<Rotate["kind"], (options: Options) => Promise<void>> = {
+    async startup(options) {
+      const dir = options.path ?? Global.Path.log
+      const retention = options.rotate?.retention ?? 10
+      cleanup(dir, "????-??-??T??????.log", retention)
+      const name = options.dev ? "dev.log" : new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log"
+      createWriter(path.join(dir, name), true)
+      write = flushWriter
+    },
+    async daily(options) {
+      const dir = options.path ?? Global.Path.log
+      const retention = options.rotate?.retention ?? 7
+      await fs.mkdir(dir, { recursive: true })
+      rotate(dir)
+      cleanup(dir, "opencode-????-??-??.log", retention)
+      write = (msg: any) => {
+        rotate(dir)
+        return flushWriter(msg)
+      }
+    },
+  }
+
+  export async function init(options: Options) {
+    if (options.level) level = options.level
+    if (options.print) return
+    return writeStrategies[options.rotate?.kind ?? "startup"](options)
+  }
+
+  async function cleanup(dir: string, pattern: string, retention: number) {
+    const glob = new Bun.Glob(pattern)
     const files = await Array.fromAsync(
       glob.scan({
         cwd: dir,
         absolute: true,
       }),
     )
-    if (files.length <= 5) return
-
-    const filesToDelete = files.slice(0, -10)
+    if (files.length <= retention) return
+    files.sort()
+    const filesToDelete = files.slice(0, -retention)
     await Promise.all(filesToDelete.map((file) => fs.unlink(file).catch(() => {})))
   }
 
-  function formatError(error: Error, depth = 0): string {
-    const result = error.message
-    return error.cause instanceof Error && depth < 10
-      ? result + " Caused by: " + formatError(error.cause, depth + 1)
-      : result
+  function formatError(error: Error): string[] {
+    return Object.getOwnPropertyNames(error).flatMap((k) => {
+      const v = (error as any)[k]
+      if (v == null) return []
+      if (v instanceof Error) return [`${k}=${v.name}: ${v.message}`, ...formatError(v).map((s) => `${k}.${s}`)]
+      if (typeof v === "object") return [`${k}=${JSON.stringify(v)}`]
+      return [`${k}=${v}`]
+    })
   }
 
   let last = Date.now()
@@ -111,12 +166,11 @@ export namespace Log {
         ...tags,
         ...extra,
       })
-        .filter(([_, value]) => value !== undefined && value !== null)
-        .map(([key, value]) => {
-          const prefix = `${key}=`
-          if (value instanceof Error) return prefix + formatError(value)
-          if (typeof value === "object") return prefix + JSON.stringify(value)
-          return prefix + value
+        .flatMap(([key, value]) => {
+          if (value == null) return []
+          if (value instanceof Error) return formatError(value)
+          if (typeof value === "object") return [`${key}=${JSON.stringify(value)}`]
+          return [`${key}=${value}`]
         })
         .join(" ")
       const next = new Date()
