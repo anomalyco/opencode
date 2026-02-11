@@ -35,6 +35,7 @@ type Commit = {
   author: string | null
   message: string
   areas: Set<string>
+  prs: number[]
 }
 
 export async function getCommits(from: string, to: string): Promise<Commit[]> {
@@ -64,6 +65,9 @@ export async function getCommits(from: string, to: string): Promise<Commit[]> {
     const message = data.message
     if (message.match(/^(ignore:|test:|chore:|ci:|release:)/i)) continue
 
+    const prMatches = [...message.matchAll(/\(#(\d+)\)/g)]
+    const prs = prMatches.map((m) => parseInt(m[1]!))
+
     const files = await $`git diff-tree --no-commit-id --name-only -r ${hash}`.text()
     const areas = new Set<string>()
 
@@ -87,6 +91,7 @@ export async function getCommits(from: string, to: string): Promise<Commit[]> {
       author: data.login,
       message,
       areas,
+      prs,
     })
   }
 
@@ -178,8 +183,9 @@ export async function generateChangelog(commits: Commit[], opencode: Awaited<Ret
   for (let i = 0; i < commits.length; i++) {
     const commit = commits[i]!
     const section = getSection(commit.areas)
+    const prs = commit.prs.length > 0 ? ` (${commit.prs.map((n) => `#${n}`).join(", ")})` : ""
     const attribution = commit.author && !Script.team.includes(commit.author) ? ` (@${commit.author})` : ""
-    const entry = `- ${summaries[i]}${attribution}`
+    const entry = `- ${summaries[i]}${prs}${attribution}`
 
     if (!grouped.has(section)) grouped.set(section, [])
     grouped.get(section)!.push(entry)
@@ -240,8 +246,9 @@ export async function buildNotes(from: string, to: string) {
     if (error instanceof Error && error.name === "TimeoutError") {
       console.log("Changelog generation timed out, using raw commits")
       for (const commit of commits) {
-        const attribution = commit.author && !team.includes(commit.author) ? ` (@${commit.author})` : ""
-        notes.push(`- ${commit.message}${attribution}`)
+        const prs = commit.prs.length > 0 ? ` (${commit.prs.map((n) => `#${n}`).join(", ")})` : ""
+        const attribution = commit.author && !Script.team.includes(commit.author) ? ` (@${commit.author})` : ""
+        notes.push(`- ${commit.message}${prs}${attribution}`)
       }
     } else {
       throw error
