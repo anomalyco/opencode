@@ -1,0 +1,183 @@
+---
+import Default from "@astrojs/starlight/components/PageTitle.astro"
+
+const { slug } = Astro.locals.starlightRoute.entry
+const isHome = slug === ""
+const t = Astro.locals.t as (key: string, fallback?: string) => string
+
+const copyPage = t("docs.copy_page", "Copy page")
+const copying = t("docs.copying", "Copying…")
+const copied = t("share.copied", "Copied!")
+const failed = t("share.error", "Error")
+---
+
+<div class="page-title-row">
+  <Default {...Astro.props}><slot /></Default>
+  {!isHome && (
+    <button
+      type="button"
+      class="copy-page"
+      data-slug={slug}
+      data-label-idle={copyPage}
+      data-label-copying={copying}
+      data-label-copied={copied}
+      data-label-failed={failed}
+      aria-label={copyPage}
+      title={copyPage}
+    >
+      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+      </svg>
+      <span class="label">{copyPage}</span>
+    </button>
+  )}
+</div>
+
+<script>
+  function init() {
+    const el = document.querySelector<HTMLButtonElement>(".copy-page")
+    if (!el) return
+
+    const slug = el.dataset.slug
+    if (!slug) return
+
+    const span = el.querySelector<HTMLSpanElement>(".label")
+    if (!span) return
+
+    const labels = {
+      idle: el.dataset.labelIdle || "Copy page",
+      copying: el.dataset.labelCopying || "Copying…",
+      copied: el.dataset.labelCopied || "Copied!",
+      failed: el.dataset.labelFailed || "Error",
+    }
+
+    const base = import.meta.env.BASE_URL.replace(/\/$/, "")
+    const url = `${base}/${slug}.md`
+
+    // Re-bind to satisfy TS closure narrowing
+    const btn: HTMLButtonElement = el
+    const label: HTMLSpanElement = span
+
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let active = true
+    let busy = false
+
+    function setState(state: "idle" | "copying" | "copied" | "failed") {
+      if (!active) return
+      if (timer) clearTimeout(timer)
+
+      const text = labels[state]
+      label.textContent = text
+      btn.setAttribute("aria-label", text)
+      btn.setAttribute("title", text)
+      btn.dataset.state = state
+
+      if (state === "copied" || state === "failed") {
+        timer = setTimeout(() => setState("idle"), 2000)
+      }
+    }
+
+    // Deprecated but kept as graceful fallback for contexts without Clipboard API
+    function fallback(text: string) {
+      const el = document.createElement("textarea")
+      el.value = text
+      el.style.position = "fixed"
+      el.style.opacity = "0"
+      document.body.appendChild(el)
+      el.select()
+      const ok = document.execCommand("copy")
+      document.body.removeChild(el)
+      setState(ok ? "copied" : "failed")
+    }
+
+    btn.addEventListener("click", () => {
+      if (busy) return
+      busy = true
+      setState("copying")
+
+      fetch(url)
+        .then((res) => {
+          if (!res.ok) return setState("failed")
+          return res.text().then((md) => {
+            if (!navigator.clipboard?.writeText) return fallback(md)
+            navigator.clipboard.writeText(md).then(
+              () => setState("copied"),
+              () => fallback(md),
+            )
+          })
+        })
+        .catch(() => setState("failed"))
+        .finally(() => { busy = false })
+    })
+
+    document.addEventListener("astro:before-swap", function cleanup() {
+      active = false
+      if (timer) clearTimeout(timer)
+      document.removeEventListener("astro:before-swap", cleanup)
+    })
+  }
+
+  // Module script runs once; listener is intentionally long-lived across navigations
+  init()
+  document.addEventListener("astro:after-swap", init)
+</script>
+
+<style>
+  .page-title-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+  }
+
+  .copy-page {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    cursor: pointer;
+    background: none;
+    border: 1px solid var(--color-border-weak);
+    border-radius: 4px;
+    padding: 0.25rem 0.5rem;
+    font-size: 12px;
+    font-family: inherit;
+    color: var(--color-text-weak);
+    transition: color 0.15s ease, border-color 0.15s ease;
+    white-space: nowrap;
+    align-self: center;
+  }
+
+  .copy-page:hover {
+    color: var(--color-text-strong);
+    border-color: var(--color-border);
+  }
+
+  .copy-page:focus-visible {
+    outline: 2px solid var(--color-background-interactive);
+    outline-offset: 2px;
+  }
+
+  .copy-page[data-state="copied"] {
+    color: var(--sl-color-green-high, #22c55e);
+    border-color: var(--sl-color-green-high, #22c55e);
+  }
+
+  .copy-page[data-state="failed"] {
+    color: var(--sl-color-red-high, #ef4444);
+    border-color: var(--sl-color-red-high, #ef4444);
+  }
+
+  .copy-page svg {
+    display: block;
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+  }
+
+  @media (max-width: 480px) {
+    .copy-page .label {
+      display: none;
+    }
+  }
+</style>

@@ -71,5 +71,7 @@
   "share.match_other": "podudaranja",
   "share.result_one": "rezultat",
   "share.result_other": "rezultati",
-  "share.debug_key": "Ključ"
+  "share.debug_key": "Ključ",
+  "docs.copy_page": "Kopiraj stranicu",
+  "docs.copying": "Kopiranje…"
 }

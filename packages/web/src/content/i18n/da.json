@@ -71,5 +71,7 @@
   "share.match_other": "matches",
   "share.result_one": "resultat",
   "share.result_other": "resultater",
-  "share.debug_key": "Nøgle"
+  "share.debug_key": "Nøgle",
+  "docs.copy_page": "Kopiér side",
+  "docs.copying": "Kopierer…"
 }

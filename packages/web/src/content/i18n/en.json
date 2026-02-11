@@ -71,5 +71,7 @@
   "share.match_other": "matches",
   "share.result_one": "result",
   "share.result_other": "results",
-  "share.debug_key": "Key"
+  "share.debug_key": "Key",
+  "docs.copy_page": "Copy page",
+  "docs.copying": "Copying…"
 }

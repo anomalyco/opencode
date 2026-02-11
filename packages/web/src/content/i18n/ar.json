@@ -71,5 +71,7 @@
   "share.match_other": "مطابقات",
   "share.result_one": "نتيجة",
   "share.result_other": "نتائج",
-  "share.debug_key": "المفتاح"
+  "share.debug_key": "المفتاح",
+  "docs.copy_page": "نسخ الصفحة",
+  "docs.copying": "جارٍ النسخ…"
 }

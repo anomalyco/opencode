@@ -71,5 +71,7 @@
   "share.match_other": "一致",
   "share.result_one": "結果",
   "share.result_other": "結果",
-  "share.debug_key": "キー"
+  "share.debug_key": "キー",
+  "docs.copy_page": "ページをコピー",
+  "docs.copying": "コピー中…"
 }
