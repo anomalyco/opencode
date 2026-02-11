@@ -27,7 +27,7 @@ export const { use: useExit, provider: ExitProvider } = createSimpleContext({
       },
       get: () => message,
     }
-    const exit = Exit = Object.assign(
+    const exit = Object.assign(
       async (reason?: unknown) => {
         // Reset window title before destroying renderer
         renderer.setTerminalTitle("")
@@ -48,7 +48,7 @@ export const { use: useExit, provider: ExitProvider } = createSimpleContext({
       {
         message: store,
       },
-    },
+    )
     return exit
   },
 })
