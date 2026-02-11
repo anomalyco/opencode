@@ -179,7 +179,6 @@ export default defineConfig({
         "enterprise",
         "troubleshooting",
         "windows-wsl",
-        "1-0",
         {
           label: "Usage",
           translations: {

@@ -57,7 +57,7 @@ Les répertoires `.opencode` et `~/.config/opencode` utilisent des **noms au plu
 
 ---
 
-### Télécommande
+### Remote
 
 Les organisations peuvent fournir une configuration par défaut via le point de terminaison `.well-known/opencode`. Ceci est récupéré automatiquement lorsque vous vous authentifiez auprès d’un fournisseur qui le prend en charge.
 
@@ -93,7 +93,7 @@ Vous pouvez activer des serveurs spécifiques dans votre configuration locale :
 
 ---
 
-### Mondial
+### Global
 
 Placez votre configuration globale OpenCode dans `~/.config/opencode/opencode.json`. Utilisez la configuration globale pour les préférences de l'utilisateur telles que les thèmes, les fournisseurs ou les raccourcis clavier.
 
@@ -481,7 +481,7 @@ Par exemple, pour garantir que les outils `edit` et `bash` nécessitent l'approb
 
 ---
 
-### Compactage
+### Compaction
 
 Vous pouvez contrôler le comportement de compactage du contexte via l'option `compaction`.
 
@@ -500,7 +500,7 @@ Vous pouvez contrôler le comportement de compactage du contexte via l'option `c
 
 ---
 
-### Observateur
+### Watcher
 
 Vous pouvez configurer les modèles d'ignorance de l'observateur de fichiers via l'option `watcher`.
 
@@ -565,7 +565,7 @@ Cela prend un tableau de chemins et de modèles globaux vers les fichiers d'inst
 
 ---
 
-### Fournisseurs handicapés
+### Disabled Providers
 
 Vous pouvez désactiver les fournisseurs chargés automatiquement via l'option `disabled_providers`. Ceci est utile lorsque vous souhaitez empêcher le chargement de certains fournisseurs même si leurs informations d'identification sont disponibles.
 
@@ -588,7 +588,7 @@ L'option `disabled_providers` accepte un tableau d'ID de fournisseur. Lorsqu'un 
 
 ---
 
-### Fournisseurs activés
+### Enabled Providers
 
 Vous pouvez spécifier une liste autorisée de fournisseurs via l'option `enabled_providers`. Une fois défini, seuls les fournisseurs spécifiés seront activés et tous les autres seront ignorés.
 
