@@ -10,6 +10,7 @@ import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { DateTime } from "luxon"
 import type { ListRef } from "@opencode-ai/ui/list"
+import type { Project } from "@opencode-ai/sdk/v2"
 
 interface DialogSelectDirectoryProps {
   title?: string
@@ -20,6 +21,60 @@ interface DialogSelectDirectoryProps {
 type Row = {
   absolute: string
   search: string
+}
+
+function formatProjectPath(worktree: string, homedir?: string) {
+  return homedir ? worktree.replace(homedir, "~") : worktree
+}
+
+function PathDisplay(props: { isRoot: boolean; isGlobal: boolean; path: string }) {
+  if (props.isRoot) {
+    return (
+      <>
+        <span class="text-text-strong whitespace-nowrap">{props.isGlobal ? "/" : "~"}</span>
+        {!props.isGlobal && <span class="text-text-weak whitespace-nowrap">/</span>}
+      </>
+    )
+  }
+
+  return (
+    <>
+      <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
+        {getDirectory(props.path)}
+      </span>
+      <span class="text-text-strong whitespace-nowrap">{getFilename(props.path)}</span>
+      <span class="text-text-weak whitespace-nowrap">/</span>
+    </>
+  )
+}
+
+interface RecentProjectItemProps {
+  project: Project
+  onSelect: (worktree: string) => void
+  homedir?: string
+}
+
+function RecentProjectItem(props: RecentProjectItemProps) {
+  const path = formatProjectPath(props.project.worktree, props.homedir)
+  const isGlobal = props.project.id === "global"
+  const isRoot = path === "~" || isGlobal
+
+  return (
+    <button
+      onClick={() => props.onSelect(props.project.worktree)}
+      class="w-full text-left px-2 py-2 rounded-md hover:bg-background-hover transition-colors flex items-center justify-between gap-x-3"
+    >
+      <div class="flex items-center gap-x-3 grow min-w-0">
+        <FileIcon node={{ path: props.project.worktree, type: "directory" }} class="shrink-0 size-4" />
+        <div class="flex items-center text-14-regular min-w-0">
+          <PathDisplay isRoot={isRoot} isGlobal={isGlobal} path={path} />
+        </div>
+      </div>
+      <div class="text-14-regular text-text-weak whitespace-nowrap">
+        {DateTime.fromMillis(props.project.time.updated ?? props.project.time.created).toRelative()}
+      </div>
+    </button>
+  )
 }
 
 export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
@@ -281,39 +336,9 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
           <div class="px-3 pb-2 mb-2">
             <div class="text-12-regular text-text-weak mb-2 ml-2">Recent Projects</div>
             <div class="space-y-1">
-              {recentProjects().map((project) => {
-                const path = sync.data.path.home ? project.worktree.replace(sync.data.path.home, "~") : project.worktree
-                const isGlobal = project.id === "global"
-                return (
-                  <button
-                    onClick={() => resolve(project.worktree)}
-                    class="w-full text-left px-2 py-2 rounded-md hover:bg-background-hover transition-colors flex items-center justify-between gap-x-3"
-                  >
-                    <div class="flex items-center gap-x-3 grow min-w-0">
-                      <FileIcon node={{ path: project.worktree, type: "directory" }} class="shrink-0 size-4" />
-                      <div class="flex items-center text-14-regular min-w-0">
-                        {path === "~" || isGlobal ? (
-                          <>
-                            <span class="text-text-strong whitespace-nowrap">{isGlobal ? "/" : "~"}</span>
-                            {!isGlobal && <span class="text-text-weak whitespace-nowrap">/</span>}
-                          </>
-                        ) : (
-                          <>
-                            <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
-                              {getDirectory(path)}
-                            </span>
-                            <span class="text-text-strong whitespace-nowrap">{getFilename(path)}</span>
-                            <span class="text-text-weak whitespace-nowrap">/</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    <div class="text-14-regular text-text-weak whitespace-nowrap">
-                      {DateTime.fromMillis(project.time.updated ?? project.time.created).toRelative()}
-                    </div>
-                  </button>
-                )
-              })}
+              {recentProjects().map((project) => (
+                <RecentProjectItem project={project} onSelect={resolve} homedir={sync.data.path.home} />
+              ))}
             </div>
           </div>
         </Show>
@@ -348,29 +373,14 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
           >
             {(item) => {
               const path = display(item.absolute, filter())
-              if (path === "~") {
-                return (
-                  <div class="w-full flex items-center justify-between rounded-md">
-                    <div class="flex items-center gap-x-3 grow min-w-0">
-                      <FileIcon node={{ path: item.absolute, type: "directory" }} class="shrink-0 size-4" />
-                      <div class="flex items-center text-14-regular min-w-0">
-                        <span class="text-text-strong whitespace-nowrap">~</span>
-                        <span class="text-text-weak whitespace-nowrap">/</span>
-                      </div>
-                    </div>
-                  </div>
-                )
-              }
+              const isRoot = path === "~" || path === "/"
+
               return (
                 <div class="w-full flex items-center justify-between rounded-md">
                   <div class="flex items-center gap-x-3 grow min-w-0">
                     <FileIcon node={{ path: item.absolute, type: "directory" }} class="shrink-0 size-4" />
                     <div class="flex items-center text-14-regular min-w-0">
-                      <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
-                        {getDirectory(path)}
-                      </span>
-                      <span class="text-text-strong whitespace-nowrap">{getFilename(path)}</span>
-                      <span class="text-text-weak whitespace-nowrap">/</span>
+                      <PathDisplay isRoot={isRoot} isGlobal={path === "/"} path={path} />
                     </div>
                   </div>
                 </div>
