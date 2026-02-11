@@ -65,18 +65,33 @@ const createPlatform = (password: Accessor<string | null>): Platform => {
     return undefined
   })()
 
+  const wslHome = async () => {
+    if (os !== "windows" || !window.__OPENCODE__?.wsl) return undefined
+    return commands.wslPath("~", "windows").catch(() => undefined)
+  }
+
+  const handleWslPicker = async <T extends string | string[]>(result: T | null): Promise<T | null> => {
+    if (!result || !window.__OPENCODE__?.wsl) return result
+    if (Array.isArray(result)) {
+      return Promise.all(result.map((path) => commands.wslPath(path, "linux").catch(() => path))) as any
+    }
+    return commands.wslPath(result, "linux").catch(() => result) as any
+  }
+
   return {
     platform: "desktop",
     os,
     version: pkg.version,
 
     async openDirectoryPickerDialog(opts) {
+      const defaultPath = await wslHome()
       const result = await open({
         directory: true,
         multiple: opts?.multiple ?? false,
         title: opts?.title ?? t("desktop.dialog.chooseFolder"),
+        defaultPath,
       })
-      return result
+      return await handleWslPicker(result)
     },
 
     async openFilePickerDialog(opts) {
@@ -85,7 +100,7 @@ const createPlatform = (password: Accessor<string | null>): Platform => {
         multiple: opts?.multiple ?? false,
         title: opts?.title ?? t("desktop.dialog.chooseFile"),
       })
-      return result
+      return handleWslPicker(result)
     },
 
     async saveFilePickerDialog(opts) {
@@ -93,7 +108,7 @@ const createPlatform = (password: Accessor<string | null>): Platform => {
         title: opts?.title ?? t("desktop.dialog.saveFile"),
         defaultPath: opts?.defaultPath,
       })
-      return result
+      return handleWslPicker(result)
     },
 
     openLink(url: string) {

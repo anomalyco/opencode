@@ -407,10 +407,20 @@ fn wsl_path(path: String, mode: Option<WslPathMode>) -> Result<String, String> {
         WslPathMode::Linux => "-u",
     };
 
-    let output = Command::new("wsl")
-        .args(["-e", "wslpath", flag, &path])
-        .output()
-        .map_err(|e| format!("Failed to run wslpath: {e}"))?;
+    let output = if path.starts_with('~') {
+        let suffix = path.strip_prefix('~').unwrap_or("");
+        let escaped = suffix.replace('"', "\\\"");
+        let cmd = format!("wslpath {flag} \"$HOME{escaped}\"");
+        Command::new("wsl")
+            .args(["-e", "sh", "-lc", &cmd])
+            .output()
+            .map_err(|e| format!("Failed to run wslpath: {e}"))?
+    } else {
+        Command::new("wsl")
+            .args(["-e", "wslpath", flag, &path])
+            .output()
+            .map_err(|e| format!("Failed to run wslpath: {e}"))?
+    };
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
