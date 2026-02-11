@@ -4,6 +4,7 @@ mod constants;
 mod job_object;
 #[cfg(target_os = "linux")]
 pub mod linux_display;
+mod logging;
 mod markdown;
 mod server;
 mod window_customizer;
@@ -16,7 +17,6 @@ use futures::{
 #[cfg(windows)]
 use job_object::*;
 use std::{
-    collections::VecDeque,
     env,
     net::TcpListener,
     path::PathBuf,
@@ -85,14 +85,11 @@ impl ServerState {
     }
 }
 
-#[derive(Clone)]
-struct LogState(Arc<Mutex<VecDeque<String>>>);
-
 #[tauri::command]
 #[specta::specta]
 fn kill_sidecar(app: AppHandle) {
     let Some(server_state) = app.try_state::<ServerState>() else {
-        println!("Server not running");
+        tracing::info!("Server not running");
         return;
     };
 
@@ -102,24 +99,17 @@ fn kill_sidecar(app: AppHandle) {
         .expect("Failed to acquire mutex lock")
         .take()
     else {
-        println!("Server state missing");
+        tracing::info!("Server state missing");
         return;
     };
 
     let _ = server_state.kill();
 
-    println!("Killed server");
+    tracing::info!("Killed server");
 }
 
-async fn get_logs(app: AppHandle) -> Result<String, String> {
-    let log_state = app.try_state::<LogState>().ok_or("Log state not found")?;
-
-    let logs = log_state
-        .0
-        .lock()
-        .map_err(|_| "Failed to acquire log lock")?;
-
-    Ok(logs.iter().cloned().collect::<Vec<_>>().join(""))
+fn get_logs() -> String {
+    logging::tail()
 }
 
 #[tauri::command]
@@ -715,10 +705,18 @@ pub fn run() {
         .plugin(tauri_plugin_decorum::init())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
-            let app = app.handle().clone();
+            let handle = app.handle().clone();
 
-            builder.mount_events(&app);
-            tauri::async_runtime::spawn(initialize(app));
+            let log_dir = app
+                .path()
+                .app_log_dir()
+                .expect("failed to resolve app log dir");
+            // Hold the guard in managed state so it lives for the app's lifetime,
+            // ensuring all buffered logs are flushed on shutdown.
+            handle.manage(logging::init(&log_dir));
+
+            builder.mount_events(&handle);
+            tauri::async_runtime::spawn(initialize(handle));
 
             Ok(())
         });
@@ -732,7 +730,7 @@ pub fn run() {
         .expect("error while running tauri application")
         .run(|app, event| {
             if let RunEvent::Exit = event {
-                println!("Received Exit");
+                tracing::info!("Received Exit");
 
                 kill_sidecar(app.clone());
             }
@@ -780,9 +778,8 @@ fn test_export_types() {
 #[derive(tauri_specta::Event, serde::Deserialize, specta::Type)]
 struct LoadingWindowComplete;
 
-// #[tracing::instrument(skip_all)]
 async fn initialize(app: AppHandle) {
-    println!("Initializing app");
+    tracing::info!("Initializing app");
 
     let (init_tx, init_rx) = watch::channel(InitStep::ServerWaiting);
 
@@ -795,7 +792,7 @@ async fn initialize(app: AppHandle) {
 
     let loading_window_complete = event_once_fut::<LoadingWindowComplete>(&app);
 
-    println!("Main and loading windows created");
+    tracing::info!("Main and loading windows created");
 
     let sqlite_enabled = option_env!("OPENCODE_SQLITE").is_some();
 
@@ -806,7 +803,7 @@ async fn initialize(app: AppHandle) {
         async move {
             let mut sqlite_exists = sqlite_file_exists();
 
-            println!("Setting up server connection");
+            tracing::info!("Setting up server connection");
             let server_connection = setup_server_connection(app.clone()).await;
 
             // we delay spawning this future so that the timeout is created lazily
@@ -831,16 +828,13 @@ async fn initialize(app: AppHandle) {
                             if let Some(err) = err {
                                 let _ = child.kill();
 
-                                let logs = get_logs(app.clone())
-                                    .await
-                                    .unwrap_or_else(|e| format!("[DESKTOP] Failed to read sidecar logs: {e}\n"));
-
                                 return Err(format!(
-                                    "Failed to spawn OpenCode Server ({err}). Logs:\n{logs}"
+                                    "Failed to spawn OpenCode Server ({err}). Logs:\n{}",
+                                    get_logs()
                                 ));
                             }
 
-                            println!("CLI health check OK");
+                            tracing::info!("CLI health check OK");
 
                             #[cfg(windows)]
                             {
@@ -868,11 +862,11 @@ async fn initialize(app: AppHandle) {
 
             if let Some(cli_health_check) = cli_health_check {
                 if sqlite_enabled {
-                    println!("Does sqlite file exist: {sqlite_exists}");
+                    tracing::debug!(sqlite_exists, "Checking sqlite file existence");
                     if !sqlite_exists {
-                        println!(
-                            "Sqlite file not found at {}, waiting for it to be generated",
-                            opencode_db_path().expect("failed to get db path").display()
+                        tracing::info!(
+                            path = %opencode_db_path().expect("failed to get db path").display(),
+                            "Sqlite file not found, waiting for it to be generated"
                         );
                         let _ = init_tx.send(InitStep::SqliteWaiting);
 
@@ -897,7 +891,7 @@ async fn initialize(app: AppHandle) {
             .await
             .is_err()
     {
-        println!("Loading task timed out, showing loading window");
+        tracing::debug!("Loading task timed out, showing loading window");
         let app = app.clone();
         let loading_window = LoadingWindow::create(&app).expect("Failed to create loading window");
         sleep(Duration::from_secs(1)).await;
@@ -910,14 +904,14 @@ async fn initialize(app: AppHandle) {
 
     let _ = loading_task.await;
 
-    println!("Loading done, completing initialisation");
+    tracing::info!("Loading done, completing initialisation");
 
     let _ = init_tx.send(InitStep::Done);
 
     if loading_window.is_some() {
         loading_window_complete.await;
 
-        println!("Loading window completed");
+        tracing::info!("Loading window completed");
     }
 
     MainWindow::create(&app).expect("Failed to create main window");
@@ -931,9 +925,6 @@ fn setup_app(app: &tauri::AppHandle, init_rx: watch::Receiver<InitStep>) {
     #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
     app.deep_link().register_all().ok();
 
-    // Initialize log state
-    app.manage(LogState(Arc::new(Mutex::new(VecDeque::new()))));
-
     #[cfg(windows)]
     app.manage(JobObjectState::new());
 
@@ -943,7 +934,7 @@ fn setup_app(app: &tauri::AppHandle, init_rx: watch::Receiver<InitStep>) {
 fn spawn_cli_sync_task(app: AppHandle) {
     tokio::spawn(async move {
         if let Err(e) = sync_cli(app) {
-            eprintln!("Failed to sync CLI: {e}");
+            tracing::error!("Failed to sync CLI: {e}");
         }
     });
 }
@@ -963,12 +954,12 @@ enum ServerConnection {
 async fn setup_server_connection(app: AppHandle) -> ServerConnection {
     let custom_url = get_saved_server_url(&app).await;
 
-    println!("Attempting server connection to custom url: {custom_url:?}");
+    tracing::info!(?custom_url, "Attempting server connection");
 
     if let Some(url) = custom_url
         && server::check_health_or_ask_retry(&app, &url).await
     {
-        println!("Connected to custom server: {}", url);
+        tracing::info!(%url, "Connected to custom server");
         return ServerConnection::Existing { url: url.clone() };
     }
 
@@ -976,15 +967,15 @@ async fn setup_server_connection(app: AppHandle) -> ServerConnection {
     let hostname = "127.0.0.1";
     let local_url = format!("http://{hostname}:{local_port}");
 
-    println!("Checking health of server '{}'", local_url);
+    tracing::debug!(url = %local_url, "Checking health of local server");
     if server::check_health(&local_url, None).await {
-        println!("Health check OK, using existing server");
+        tracing::info!(url = %local_url, "Health check OK, using existing server");
         return ServerConnection::Existing { url: local_url };
     }
 
     let password = uuid::Uuid::new_v4().to_string();
 
-    println!("Spawning new local server");
+    tracing::info!("Spawning new local server");
     let (child, health_check) =
         server::spawn_local_server(app, hostname.to_string(), local_port, password.clone());
 
