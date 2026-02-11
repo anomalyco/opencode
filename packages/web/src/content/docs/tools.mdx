@@ -39,6 +39,22 @@ You can also use wildcards to control multiple tools at once. For example, to re
 
 ---
 
+## Tool output truncation
+
+OpenCode automatically truncates very large tool outputs before sending them back into model context.
+
+- Output is truncated when it is too large (line/byte limits).
+- The full output is saved to disk under `~/.local/share/opencode/tool-output/`.
+- Truncated results include a hint telling the agent to use `grep` or `read` with `offset/limit` on the saved output file.
+
+This helps avoid context blowups from tools like `bash`, `glob`, or broad searches.
+
+:::note
+There is currently no stable user-facing config to tune truncation thresholds directly.
+:::
+
+---
+
 ## Built-in
 
 Here are all the built-in tools available in OpenCode.
