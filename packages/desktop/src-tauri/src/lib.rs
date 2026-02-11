@@ -402,7 +402,7 @@ fn check_linux_app(app_name: &str) -> bool {
 #[tauri::command]
 #[specta::specta]
 fn wsl_path(path: String, mode: Option<WslPathMode>) -> Result<String, String> {
-    if !cfg(windows) {
+    if !cfg!(windows) {
         return Ok(path);
     }
 
