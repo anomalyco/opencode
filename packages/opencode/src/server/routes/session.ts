@@ -70,7 +70,8 @@ export const SessionRoutes = lazy(() =>
       "/status",
       describeRoute({
         summary: "Get session status",
-        description: "Retrieve the current status of all sessions, including active, idle, and completed states.",
+        description:
+          "Retrieve live in-memory status for active sessions. Idle sessions are omitted from the response map.",
         operationId: "session.status",
         responses: {
           200: {

@@ -149,7 +149,7 @@ The opencode server exposes the following APIs.
 | -------- | ---------------------------------------- | ------------------------------------- | ---------------------------------------------------------------------------------- |
 | `GET`    | `/session`                               | List all sessions                     | Returns <a href={typesUrl}><code>Session[]</code></a>                              |
 | `POST`   | `/session`                               | Create a new session                  | body: `{ parentID?, title? }`, returns <a href={typesUrl}><code>Session</code></a> |
-| `GET`    | `/session/status`                        | Get session status for all sessions   | Returns `{ [sessionID: string]: `<a href={typesUrl}>SessionStatus</a>` }`          |
+| `GET`    | `/session/status`                        | Get live status for active sessions   | Returns `{ [sessionID: string]: `<a href={typesUrl}>SessionStatus</a>` }`          |
 | `GET`    | `/session/:id`                           | Get session details                   | Returns <a href={typesUrl}><code>Session</code></a>                                |
 | `DELETE` | `/session/:id`                           | Delete a session and all its data     | Returns `boolean`                                                                  |
 | `PATCH`  | `/session/:id`                           | Update session properties             | body: `{ title? }`, returns <a href={typesUrl}><code>Session</code></a>            |
@@ -178,6 +178,20 @@ The opencode server exposes the following APIs.
 | `POST` | `/session/:id/prompt_async`       | Send a message asynchronously (no wait) | body: same as `/session/:id/message`, returns `204 No Content`                                                                                                        |
 | `POST` | `/session/:id/command`            | Execute a slash command                 | body: `{ messageID?, agent?, model?, command, arguments }`, returns `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`               |
 | `POST` | `/session/:id/shell`              | Run a shell command                     | body: `{ agent, model?, command }`, returns `{ info: `<a href={typesUrl}>Message</a>`, parts: `<a href={typesUrl}>Part[]</a>`}`                                       |
+
+---
+
+### Session status semantics
+
+`GET /session/status` returns only active in-memory status entries (for example `busy` or `retry`).
+Idle sessions are omitted from the response map.
+
+For automation:
+
+1. If you use `POST /session/:id/message`, the response returning means that run is finished.
+2. If you use `POST /session/:id/prompt_async`, poll `GET /session/status`:
+   - if your `sessionID` exists in the map, it is still active
+   - if your `sessionID` is missing, it is idle (no active run)
 
 ---
 
