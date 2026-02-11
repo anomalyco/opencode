@@ -72,11 +72,11 @@ function list<T>(value: T[] | undefined | null, fallback: T[]) {
   return fallback
 }
 
-function AssistantMessageItem(props: { message: AssistantMessage }) {
+function AssistantMessageItem(props: { message: AssistantMessage; showAssistantCopyPartID?: string }) {
   const data = useData()
   const emptyParts: PartType[] = []
   const msgParts = createMemo(() => list(data.store.part?.[props.message.id], emptyParts))
-  return <Message message={props.message} parts={msgParts()} />
+  return <Message message={props.message} parts={msgParts()} showAssistantCopyPartID={props.showAssistantCopyPartID} />
 }
 
 export function SessionTurn(
@@ -167,6 +167,23 @@ export function SessionTurn(
   )
 
   const error = createMemo(() => assistantMessages().find((m) => m.error)?.error)
+  const showAssistantCopyPartID = createMemo(() => {
+    const messages = assistantMessages()
+
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i]
+      if (!message) continue
+
+      const parts = list(data.store.part?.[message.id], emptyParts)
+      for (let j = parts.length - 1; j >= 0; j--) {
+        const part = parts[j]
+        if (!part || part.type !== "text" || !part.text?.trim()) continue
+        return part.id
+      }
+    }
+
+    return undefined
+  })
   const errorText = createMemo(() => {
     const msg = error()?.data?.message
     if (typeof msg === "string") return unwrap(msg)
@@ -186,7 +203,7 @@ export function SessionTurn(
   const autoScroll = createAutoScroll({
     working,
     onUserInteracted: props.onUserInteracted,
-    overflowAnchor: "auto",
+    overflowAnchor: "dynamic",
   })
 
   return (
@@ -218,7 +235,12 @@ export function SessionTurn(
                 <Show when={assistantMessages().length > 0}>
                   <div data-slot="session-turn-assistant-content" aria-hidden={working()}>
                     <For each={assistantMessages()}>
-                      {(assistantMessage) => <AssistantMessageItem message={assistantMessage} />}
+                      {(assistantMessage) => (
+                        <AssistantMessageItem
+                          message={assistantMessage}
+                          showAssistantCopyPartID={showAssistantCopyPartID()}
+                        />
+                      )}
                     </For>
                   </div>
                 </Show>

@@ -93,6 +93,7 @@ function DiagnosticsDisplay(props: { diagnostics: Diagnostic[] }): JSX.Element {
 export interface MessageProps {
   message: MessageType
   parts: PartType[]
+  showAssistantCopyPartID?: string
 }
 
 export interface MessagePartProps {
@@ -100,6 +101,7 @@ export interface MessagePartProps {
   message: MessageType
   hideDetails?: boolean
   defaultOpen?: boolean
+  showAssistantCopyPartID?: string
 }
 
 export type PartComponent = Component<MessagePartProps>
@@ -281,6 +283,58 @@ function contextToolDetail(part: ToolPart): string | undefined {
   return undefined
 }
 
+function contextToolTrigger(part: ToolPart, i18n: ReturnType<typeof useI18n>) {
+  const input = (part.state.input ?? {}) as Record<string, unknown>
+  const path = typeof input.path === "string" ? input.path : "/"
+  const filePath = typeof input.filePath === "string" ? input.filePath : undefined
+  const pattern = typeof input.pattern === "string" ? input.pattern : undefined
+  const include = typeof input.include === "string" ? input.include : undefined
+  const offset = typeof input.offset === "number" ? input.offset : undefined
+  const limit = typeof input.limit === "number" ? input.limit : undefined
+
+  switch (part.tool) {
+    case "read": {
+      const args: string[] = []
+      if (offset !== undefined) args.push("offset=" + offset)
+      if (limit !== undefined) args.push("limit=" + limit)
+      return {
+        title: i18n.t("ui.tool.read"),
+        subtitle: filePath ? getFilename(filePath) : "",
+        args,
+      }
+    }
+    case "list":
+      return {
+        title: i18n.t("ui.tool.list"),
+        subtitle: getDirectory(path),
+      }
+    case "glob":
+      return {
+        title: i18n.t("ui.tool.glob"),
+        subtitle: getDirectory(path),
+        args: pattern ? ["pattern=" + pattern] : [],
+      }
+    case "grep": {
+      const args: string[] = []
+      if (pattern) args.push("pattern=" + pattern)
+      if (include) args.push("include=" + include)
+      return {
+        title: i18n.t("ui.tool.grep"),
+        subtitle: getDirectory(path),
+        args,
+      }
+    }
+    default: {
+      const info = getToolInfo(part.tool, input)
+      return {
+        title: info.title,
+        subtitle: info.subtitle || contextToolDetail(part),
+        args: [],
+      }
+    }
+  }
+}
+
 export function registerPartComponent(type: string, component: PartComponent) {
   PART_MAPPING[type] = component
 }
@@ -293,14 +347,22 @@ export function Message(props: MessageProps) {
       </Match>
       <Match when={props.message.role === "assistant" && props.message}>
         {(assistantMessage) => (
-          <AssistantMessageDisplay message={assistantMessage() as AssistantMessage} parts={props.parts} />
+          <AssistantMessageDisplay
+            message={assistantMessage() as AssistantMessage}
+            parts={props.parts}
+            showAssistantCopyPartID={props.showAssistantCopyPartID}
+          />
         )}
       </Match>
     </Switch>
   )
 }
 
-export function AssistantMessageDisplay(props: { message: AssistantMessage; parts: PartType[] }) {
+export function AssistantMessageDisplay(props: {
+  message: AssistantMessage
+  parts: PartType[]
+  showAssistantCopyPartID?: string
+}) {
   const grouped = createMemo(() =>
     props.parts.reduce<({ type: "part"; part: PartType } | { type: "context"; parts: ToolPart[] })[]>((acc, part) => {
       if (!isContextGroupTool(part)) {
@@ -323,13 +385,14 @@ export function AssistantMessageDisplay(props: { message: AssistantMessage; part
     <For each={grouped()}>
       {(item) => {
         if (item.type === "context") return <ContextToolGroup parts={item.parts} />
-        return <Part part={item.part} message={props.message} />
+        return <Part part={item.part} message={props.message} showAssistantCopyPartID={props.showAssistantCopyPartID} />
       }}
     </For>
   )
 }
 
 function ContextToolGroup(props: { parts: ToolPart[] }) {
+  const i18n = useI18n()
   const [open, setOpen] = createSignal(false)
   const pending = createMemo(() =>
     props.parts.some((part) => part.state.status === "pending" || part.state.status === "running"),
@@ -340,6 +403,7 @@ function ContextToolGroup(props: { parts: ToolPart[] }) {
       <Collapsible.Trigger>
         <div data-component="context-tool-group-trigger">
           <span data-slot="context-tool-group-title">{pending() ? "Gathering context" : "Gathered context"}</span>
+          <Collapsible.Arrow />
         </div>
       </Collapsible.Trigger>
       <Collapsible.Content>
@@ -347,13 +411,34 @@ function ContextToolGroup(props: { parts: ToolPart[] }) {
           <For each={props.parts}>
             {(part) => {
               const info = getToolInfo(part.tool, part.state.input ?? {})
-              const detail = contextToolDetail(part)
+              const trigger = contextToolTrigger(part, i18n)
+              const running = part.state.status === "pending" || part.state.status === "running"
               return (
                 <div data-slot="context-tool-group-item">
-                  <div data-slot="context-tool-group-item-title">{info.title}</div>
-                  <Show when={detail}>
-                    <div data-slot="context-tool-group-item-detail">{detail}</div>
-                  </Show>
+                  <div data-component="tool-trigger">
+                    <div data-slot="basic-tool-tool-trigger-content">
+                      <div data-slot="basic-tool-tool-indicator">
+                        <Show when={running} fallback={<Icon name={info.icon} size="small" />}>
+                          <Spinner style={{ width: "16px" }} />
+                        </Show>
+                      </div>
+                      <div data-slot="basic-tool-tool-info">
+                        <div data-slot="basic-tool-tool-info-structured">
+                          <div data-slot="basic-tool-tool-info-main">
+                            <span data-slot="basic-tool-tool-title">{trigger.title}</span>
+                            <Show when={trigger.subtitle}>
+                              <span data-slot="basic-tool-tool-subtitle">{trigger.subtitle}</span>
+                            </Show>
+                            <Show when={trigger.args?.length}>
+                              <For each={trigger.args}>
+                                {(arg) => <span data-slot="basic-tool-tool-arg">{arg}</span>}
+                              </For>
+                            </Show>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )
             }}
@@ -518,6 +603,7 @@ export function Part(props: MessagePartProps) {
         message={props.message}
         hideDetails={props.hideDetails}
         defaultOpen={props.defaultOpen}
+        showAssistantCopyPartID={props.showAssistantCopyPartID}
       />
     </Show>
   )
@@ -705,6 +791,11 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
       .at(-1)
     return last?.id === part.id
   })
+  const showCopy = createMemo(() => {
+    if (props.message.role !== "assistant") return isLastTextPart()
+    if (props.showAssistantCopyPartID) return props.showAssistantCopyPartID === part.id
+    return isLastTextPart()
+  })
   const [copied, setCopied] = createSignal(false)
 
   const handleCopy = async () => {
@@ -721,7 +812,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
         <div data-slot="text-part-body">
           <Markdown text={throttledText()} cacheKey={part.id} />
         </div>
-        <Show when={isLastTextPart()}>
+        <Show when={showCopy()}>
           <div data-slot="text-part-copy-wrapper">
             <Tooltip
               value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
@@ -988,7 +1079,7 @@ ToolRegistry.register({
 
     const autoScroll = createAutoScroll({
       working: () => true,
-      overflowAnchor: "auto",
+      overflowAnchor: "dynamic",
     })
 
     const childPermission = createMemo(() => {
