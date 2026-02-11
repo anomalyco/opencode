@@ -120,8 +120,7 @@
     flex-shrink: 0;
   }
 
-  [data-slot="session-review-view-button"],
-  [data-slot="open-in-app-button"] {
+  [data-slot="session-review-view-button"] {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -131,6 +130,10 @@
     color: var(--text-base);
     cursor: pointer;
     border-radius: 4px;
+    opacity: 1;
+  }
+
+  [data-slot="open-in-app-button"] {
     opacity: 1;
   }
 
