@@ -33,7 +33,7 @@ function signatureFromEvent(event: KeyboardEvent) {
   return signature(normalizeKey(event.key), event.ctrlKey, event.metaKey, event.shiftKey, event.altKey)
 }
 
-function isTerminalElement(target: EventTarget | null) {
+function isTerminalElement(target: EventTarget | null | undefined) {
   if (!(target instanceof Element)) return false
   return !!target.closest('[data-component="terminal"]')
 }
