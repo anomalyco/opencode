@@ -438,11 +438,6 @@ export namespace Session {
     return part
   })
 
-  const safe = (value: number) => {
-    if (!Number.isFinite(value)) return 0
-    return value
-  }
-
   export const getUsage = fn(
     z.object({
       model: z.custom<Provider.Model>(),
@@ -450,6 +445,10 @@ export namespace Session {
       metadata: z.custom<ProviderMetadata>().optional(),
     }),
     (input) => {
+      const safe = (value: number) => {
+        if (!Number.isFinite(value)) return 0
+        return value
+      }
       const inputTokens = safe(input.usage.inputTokens ?? 0)
       const outputTokens = safe(input.usage.outputTokens ?? 0)
       const reasoningTokens = safe(input.usage.reasoningTokens ?? 0)
