@@ -148,13 +148,27 @@ export function Session() {
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+  // Collect all descendant session IDs (full tree) for permission/question aggregation
+  const descendants = createMemo(() => {
+    const rootID = session()?.id
+    if (!rootID || session()?.parentID) return []
+    const ids: string[] = [rootID]
+    const queue = [rootID]
+    while (queue.length > 0) {
+      const parentID = queue.pop()!
+      for (const s of sync.data.session) {
+        if (s.parentID !== parentID) continue
+        ids.push(s.id)
+        queue.push(s.id)
+      }
+    }
+    return ids
+  })
   const permissions = createMemo(() => {
-    if (session()?.parentID) return []
-    return children().flatMap((x) => sync.data.permission[x.id] ?? [])
+    return descendants().flatMap((id) => sync.data.permission[id] ?? [])
   })
   const questions = createMemo(() => {
-    if (session()?.parentID) return []
-    return children().flatMap((x) => sync.data.question[x.id] ?? [])
+    return descendants().flatMap((id) => sync.data.question[id] ?? [])
   })
 
   const pending = createMemo(() => {
