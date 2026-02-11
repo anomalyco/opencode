@@ -199,6 +199,19 @@ You can override existing variants or add your own:
 
 Use the keybind `variant_cycle` to quickly switch between variants. [Learn more](/docs/keybinds).
 
+### Thinking toggle behavior
+
+`/thinking` controls whether thinking/reasoning blocks are shown in the UI.
+It does not force a model to reason.
+
+Actual reasoning behavior depends on:
+
+- provider/model support
+- selected variant configuration
+- account/plan capabilities (for providers that gate reasoning features)
+
+For GitHub Copilot specifically, thinking availability depends on the Copilot model you selected. If you do not see reasoning output, try another model/variant (`ctrl+t` cycles variants).
+
 ---
 
 ## Loading models
