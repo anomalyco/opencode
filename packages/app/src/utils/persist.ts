@@ -1,4 +1,4 @@
-import { usePlatform } from "@/context/platform"
+import { Platform, usePlatform } from "@/context/platform"
 import { makePersisted, type AsyncStorage, type SyncStorage } from "@solid-primitives/storage"
 import { checksum } from "@opencode-ai/util/encode"
 import { createResource, type Accessor } from "solid-js"
@@ -318,14 +318,7 @@ export const Persist = {
   },
 }
 
-export function removePersisted(target: { storage?: string; key: string }) {
-  const platform = (() => {
-    try {
-      return usePlatform()
-    } catch {
-      return undefined
-    }
-  })()
+export function removePersisted(target: { storage?: string; key: string }, platform?: Pick<Platform, "platform" | "storage">) {
   const isDesktop = platform?.platform === "desktop" && !!platform.storage
 
   if (isDesktop) {
