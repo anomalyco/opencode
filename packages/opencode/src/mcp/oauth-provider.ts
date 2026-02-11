@@ -10,7 +10,6 @@ import { Log } from "../util/log"
 
 const log = Log.create({ service: "mcp.oauth" })
 
-const OAUTH_CALLBACK_PORT = 19876
 const OAUTH_CALLBACK_PATH = "/mcp/oauth/callback"
 
 export interface McpOAuthConfig {
@@ -29,10 +28,11 @@ export class McpOAuthProvider implements OAuthClientProvider {
     private serverUrl: string,
     private config: McpOAuthConfig,
     private callbacks: McpOAuthCallbacks,
+    private callbackPort: number,
   ) {}
 
   get redirectUrl(): string {
-    return `http://localhost:${OAUTH_CALLBACK_PORT}${OAUTH_CALLBACK_PATH}`
+    return `http://localhost:${this.callbackPort}${OAUTH_CALLBACK_PATH}`
   }
 
   get clientMetadata(): OAuthClientMetadata {
@@ -64,6 +64,11 @@ export class McpOAuthProvider implements OAuthClientProvider {
         log.info("client secret expired, need to re-register", { mcpName: this.mcpName })
         return undefined
       }
+      // Check if redirect URI changed (dynamic port)
+      if (entry.redirectUri && entry.redirectUri !== this.redirectUrl) {
+        log.info("redirect URI changed, need to re-register", { mcpName: this.mcpName })
+        return undefined
+      }
       return {
         client_id: entry.clientInfo.clientId,
         client_secret: entry.clientInfo.clientSecret,
@@ -84,6 +89,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
         clientSecretExpiresAt: info.client_secret_expires_at,
       },
       this.serverUrl,
+      this.redirectUrl,
     )
     log.info("saved dynamically registered client", {
       mcpName: this.mcpName,
@@ -151,4 +157,4 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 }
 
-export { OAUTH_CALLBACK_PORT, OAUTH_CALLBACK_PATH }
+export { OAUTH_CALLBACK_PATH }

@@ -25,6 +25,7 @@ export namespace McpAuth {
     codeVerifier: z.string().optional(),
     oauthState: z.string().optional(),
     serverUrl: z.string().optional(), // Track the URL these credentials are for
+    redirectUri: z.string().optional(), // Track redirect URI used during client registration
   })
   export type Entry = z.infer<typeof Entry>
 
@@ -80,9 +81,15 @@ export namespace McpAuth {
     await set(mcpName, entry, serverUrl)
   }
 
-  export async function updateClientInfo(mcpName: string, clientInfo: ClientInfo, serverUrl?: string): Promise<void> {
+  export async function updateClientInfo(
+    mcpName: string,
+    clientInfo: ClientInfo,
+    serverUrl?: string,
+    redirectUri?: string,
+  ): Promise<void> {
     const entry = (await get(mcpName)) ?? {}
     entry.clientInfo = clientInfo
+    if (redirectUri) entry.redirectUri = redirectUri
     await set(mcpName, entry, serverUrl)
   }
 

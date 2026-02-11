@@ -7,6 +7,7 @@ import { UI } from "../ui"
 import { MCP } from "../../mcp"
 import { McpAuth } from "../../mcp/auth"
 import { McpOAuthProvider } from "../../mcp/oauth-provider"
+import { McpOAuthCallback } from "../../mcp/oauth-callback"
 import { Config } from "../../config/config"
 import { Instance } from "../../project/instance"
 import { Installation } from "../../installation"
@@ -682,6 +683,7 @@ export const McpDebugCommand = cmd({
 
             // Try to discover OAuth metadata
             const oauthConfig = typeof serverConfig.oauth === "object" ? serverConfig.oauth : undefined
+            await McpOAuthCallback.ensureRunning()
             const authProvider = new McpOAuthProvider(
               serverName,
               serverConfig.url,
@@ -693,6 +695,7 @@ export const McpDebugCommand = cmd({
               {
                 onRedirect: async () => {},
               },
+              McpOAuthCallback.port(),
             )
 
             prompts.log.info("Testing OAuth flow (without completing authorization)...")

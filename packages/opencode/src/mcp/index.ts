@@ -23,7 +23,6 @@ import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import { Browser } from "@/util/browser"
-import { OAUTH_CALLBACK_PORT } from "./oauth-provider"
 
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
@@ -309,6 +308,7 @@ export namespace MCP {
       let authProvider: McpOAuthProvider | undefined
 
       if (!oauthDisabled) {
+        await McpOAuthCallback.ensureRunning()
         authProvider = new McpOAuthProvider(
           key,
           mcp.url,
@@ -323,6 +323,7 @@ export namespace MCP {
               // Store the URL - actual browser opening is handled by startAuth
             },
           },
+          McpOAuthCallback.port(),
         )
       }
 
@@ -726,8 +727,9 @@ export namespace MCP {
     // Start the callback server
     await McpOAuthCallback.ensureRunning()
 
-    // Generate and store a cryptographically secure state parameter BEFORE creating the provider
-    // The SDK will call provider.state() to read this value
+    // Clear stale auth data so we start fresh
+    await McpAuth.remove(mcpName)
+
     const oauthState = Array.from(crypto.getRandomValues(new Uint8Array(32)))
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("")
@@ -750,6 +752,7 @@ export namespace MCP {
           capturedUrl = url
         },
       },
+      McpOAuthCallback.port(),
     )
 
     // Create transport with auth provider
@@ -803,7 +806,7 @@ export namespace MCP {
     // when the IdP has an active SSO session and redirects immediately
     const callbackPromise = McpOAuthCallback.waitForCallback(oauthState)
 
-    const subprocess = await Browser.open(authorizationUrl, { callbackPort: OAUTH_CALLBACK_PORT })
+    const subprocess = await Browser.open(authorizationUrl, { callbackPort: McpOAuthCallback.port() })
     if (subprocess) {
       // Not in VS Code context — wait for subprocess errors
       await new Promise<void>((resolve, reject) => {
