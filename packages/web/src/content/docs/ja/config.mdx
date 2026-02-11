@@ -31,7 +31,7 @@ OpenCode は、**JSON** と **JSONC** (コメント付きの JSON) 形式の両�
 :::note
 構成ファイルは置き換えられるのではなく、**マージ**されます。
 :::
-Configuration
+構成ファイルは、置き換えられるのではなく、マージされます。設定は、次の構成場所から結合されます。後続の構成は、競合するキーに対してのみ以前の構成をオーバーライドします。すべての構成の競合しない設定は保持されます。
 
 たとえば、グローバル設定で `theme: "opencode"` と `autoupdate: true` が設定され、プロジェクト設定で `model: "anthropic/claude-sonnet-4-5"` が設定されている場合、最終的な設定には 3 つの設定がすべて含まれます。
 
@@ -107,7 +107,7 @@ Configuration
 :::tip
 プロジェクト固有の構成をプロジェクトのルートに配置します。
 :::
-When が起動すると、現在のディレクトリで構成ファイルを検索するか、最も近い Git ディレクトリまで移動します。
+OpenCode が起動すると、現在のディレクトリで構成ファイルを検索するか、最も近い Git ディレクトリまで移動します。
 
 これは Git に安全にチェックインでき、グローバル スキーマと同じスキーマを使用します。
 
@@ -150,7 +150,7 @@ opencode run "Hello world"
 
 ---
 
-### トゥイ
+### TUI
 
 `tui` オプションを使用して TUI 固有の設定を構成できます。
 
@@ -179,7 +179,7 @@ opencode run "Hello world"
 
 ### サーバ
 
-`server` オプションを使用して、`opencode serve` および `opencode web` コマンドのサーバー設定を構成できます。
+`opencode serve` オプションを使用して、`opencode web` および `server` コマンドのサーバー設定を構成できます。
 
 ```json title="opencode.json"
 {
@@ -266,7 +266,7 @@ LLM が使用できるツールは、`tools` オプションを通じて管理�
 
 一部のプロバイダーは、一般的な `timeout` および `apiKey` 設定を超える追加の構成オプションをサポートしています。
 
-##### アマゾンの岩盤
+##### Amazon Bedrock
 
 Amazon Bedrock は、AWS 固有の構成をサポートしています。
 
@@ -413,7 +413,7 @@ Amazon Bedrock は、AWS 固有の構成をサポートしています。
 }
 ```
 
-[詳細はこちら](/docs/themes)。
+[詳細はこちら](/docs/keybinds)。
 
 ---
 
@@ -526,7 +526,7 @@ OpenCode は起動時に新しいアップデートを自動的にダウンロ�
 }
 ```
 
-[詳細はこちら](/docs/themes)。
+[詳細はこちら](/docs/mcp-servers)。
 
 ---
 
@@ -543,7 +543,7 @@ OpenCode は起動時に新しいアップデートを自動的にダウンロ�
 }
 ```
 
-[詳細はこちら](/docs/themes)。
+[詳細はこちら](/docs/plugins)。
 
 ---
 
@@ -577,7 +577,7 @@ OpenCode は起動時に新しいアップデートを自動的にダウンロ�
 :::note
 `disabled_providers` は `enabled_providers` よりも優先されます。
 :::
-The オプションは、プロバイダー ID の配列を受け入れます。プロバイダーが無効になっている場合:
+`disabled_providers` オプションは、プロバイダー ID の配列を受け入れます。プロバイダーが無効になっている場合:
 
 - 環境変数を設定してもロードされません。
 - `/connect` コマンドで API キーを設定してもロードされません。
@@ -601,7 +601,7 @@ The オプションは、プロバイダー ID の配列を受け入れます。
 :::note
 `disabled_providers` は `enabled_providers` よりも優先されます。
 :::
-If `enabled_providers` と `disabled_providers` の両方に表示される場合、下位互換性のために `disabled_providers` が優先されます。
+プロバイダーが `enabled_providers` と `disabled_providers` の両方に表示される場合、下位互換性のために `disabled_providers` が優先されます。
 
 ---
 

@@ -4,14 +4,14 @@ description: Ulike moduser for forskjellige brukstilfeller.
 ---
 
 :::caution
-Modi er nå konfigurert gjennom alternativet `agent` i opencode-konfigurasjonen. De
+Modi er nå konfigurert gjennom alternativet `agent` i OpenCode-konfigurasjonen. De
 Alternativet `mode` er nå utdatert. [Finn ut mer](/docs/agents).
 :::
 
-Moduser i opencode lar deg tilpasse oppførselen, verktøyene og ledetekstene for ulike brukstilfeller.
+Moduser i OpenCode lar deg tilpasse oppførselen, verktøyene og ledetekstene for ulike brukstilfeller.
 
 Den kommer med to innebygde moduser: **bygg** og **plan**. Du kan tilpasse
-disse eller konfigurer din egen gjennom opencode-konfigurasjonen.
+disse eller konfigurer din egen gjennom OpenCode-konfigurasjonen.
 
 Du kan bytte mellom moduser under en økt eller konfigurere dem i konfigurasjonsfilen.
 
@@ -19,7 +19,7 @@ Du kan bytte mellom moduser under en økt eller konfigurere dem i konfigurasjons
 
 ## Innebygd
 
-opencode kommer med to innebygde moduser.
+OpenCode kommer med to innebygde moduser.
 
 ---
 
@@ -173,13 +173,13 @@ Temperaturverdier varierer vanligvis fra 0,0 til 1,0:
 }
 ```
 
-Hvis ingen temperatur er spesifisert, bruker opencode modellspesifikke standarder (vanligvis 0 for de fleste modeller, 0,55 for Qwen-modeller).
+Hvis ingen temperatur er spesifisert, bruker OpenCode modellspesifikke standarder (vanligvis 0 for de fleste modeller, 0,55 for Qwen-modeller).
 
 ---
 
-### Spør
+### Ledetekst
 
-Spesifiser en tilpasset systemmeldingsfil for denne modusen med `prompt`-konfigurasjonen. Spørrefilen skal inneholde instruksjoner som er spesifikke for modusens formål.
+Spesifiser en tilpasset systemmeldingsfil for denne modusen med `prompt`-konfigurasjonen. Ledetekstfilen skal inneholde instruksjoner som er spesifikke for modusens formål.
 
 ```json title="opencode.json"
 {
@@ -192,7 +192,7 @@ Spesifiser en tilpasset systemmeldingsfil for denne modusen med `prompt`-konfigu
 ```
 
 Denne banen er i forhold til hvor konfigurasjonsfilen er plassert. Så dette fungerer for
-både den globale opencode-konfigurasjonen og den prosjektspesifikke konfigurasjonen.
+både den globale OpenCode-konfigurasjonen og den prosjektspesifikke konfigurasjonen.
 
 ---
 
@@ -322,10 +322,10 @@ Priorities:
 
 Her er noen vanlige brukstilfeller for forskjellige moduser.
 
-- **Byggemodus**: Fullt utviklingsarbeid med alle verktøy aktivert
-- **Planmodus**: Analyse og planlegging uten å gjøre endringer
-- **Gjennomgangsmodus**: Kodegjennomgang med skrivebeskyttet tilgang pluss dokumentasjonsverktøy
-- **Feilsøkingsmodus**: Fokusert på etterforskning med bash- og leseverktøy aktivert
-- **Dokumentmodus**: Dokumentasjonsskriving med filoperasjoner, men ingen systemkommandoer
+- **Build-modus**: Fullt utviklingsarbeid med alle verktøy aktivert
+- **Plan-modus**: Analyse og planlegging uten å gjøre endringer
+- **Review-modus**: Kodegjennomgang med skrivebeskyttet tilgang pluss dokumentasjonsverktøy
+- **Debug-modus**: Fokusert på etterforskning med bash- og leseverktøy aktivert
+- **Docs-modus**: Dokumentasjonsskriving med filoperasjoner, men ingen systemkommandoer
 
 Du kan også finne at forskjellige modeller er gode for forskjellige brukstilfeller.

@@ -66,7 +66,7 @@ MCP サーバーは、`mcp` の下の [OpenCode Config](https://opencode.ai/docs
 
 ---
 
-## 地元
+## Local
 
 MCP オブジェクト内の `type` から `"local"` を使用してローカル MCP サーバーを追加します。
 
@@ -117,8 +117,8 @@ use the mcp_everything tool to add the number 3 and 4
 
 | オプション    | タイプ       | 必須 | 説明                                                                                       |
 | ------------- | ------------ | ---- | ------------------------------------------------------------------------------------------ |
-| `type`        | 文字列       | や   | MCP サーバー接続のタイプは、`"local"` である必要があります。                               |
-| `command`     | 配列         | や   | MCP サーバーを実行するためのコマンドと引数。                                               |
+| `type`        | 文字列       | Y    | MCP サーバー接続のタイプは、`"local"` である必要があります。                               |
+| `command`     | 配列         | Y    | MCP サーバーを実行するためのコマンドと引数。                                               |
 | `environment` | オブジェクト |      | サーバーの実行時に設定する環境変数。                                                       |
 | `enabled`     | ブール値     |      | 起動時に MCP サーバーを有効または無効にします。                                            |
 | `timeout`     | 番号         |      | MCP サーバーからツールを取得する際のタイムアウト (ミリ秒)。デフォルトは 5000 (5 秒) です。 |
@@ -153,8 +153,8 @@ use the mcp_everything tool to add the number 3 and 4
 
 | オプション | タイプ       | 必須 | 説明                                                                                       |
 | ---------- | ------------ | ---- | ------------------------------------------------------------------------------------------ |
-| `type`     | 文字列       | や   | MCP サーバー接続のタイプは、`"remote"` である必要があります。                              |
-| `url`      | 文字列       | や   | リモート MCP サーバーの URL。                                                              |
+| `type`     | 文字列       | Y    | MCP サーバー接続のタイプは、`"remote"` である必要があります。                              |
+| `url`      | 文字列       | Y    | リモート MCP サーバーの URL。                                                              |
 | `enabled`  | ブール値     |      | 起動時に MCP サーバーを有効または無効にします。                                            |
 | `headers`  | オブジェクト |      | リクエストとともに送信するヘッダー。                                                       |
 | `oauth`    | オブジェクト |      | OAuth認証構成。以下の「OAuth](#oauth)」セクションを参照してください。                      |
@@ -389,7 +389,7 @@ MCP サーバー ツールはサーバー名をプレフィックスとして登
 "mymcpservername_*": false
 ```
 
-## :::
+:::
 
 ## 例
 
@@ -397,7 +397,7 @@ MCP サーバー ツールはサーバー名をプレフィックスとして登
 
 ---
 
-### セントリー
+### Sentry
 
 [Sentry MCP サーバー ](https://mcp.sentry.dev) を追加して、Sentry プロジェクトや問題と対話します。
 
@@ -430,7 +430,7 @@ Show me the latest unresolved issues in my project. use sentry
 
 ---
 
-### コンテキスト7
+### Context7
 
 ドキュメントを検索するために [Context7 MCP server](https://github.com/upstash/context7) を追加します。
 
@@ -479,7 +479,7 @@ When you need to search docs, use `context7` tools.
 
 ---
 
-### Vercel による Grep
+### Grep by Vercel
 
 GitHub 上のコード スニペットを検索するには、[Grep by Vercel](https://grep.app) MCP サーバーを追加します。
 

@@ -3,22 +3,22 @@ title: Formatere
 description: opencode bruker språkspesifikke formatere.
 ---
 
-opencode formaterer automatisk filer etter at de er skrevet eller redigert ved hjelp av språkspesifikke formatere. Dette sikrer at koden som genereres følger kodestilene til prosjektet ditt.
+OpenCode formaterer automatisk filer etter at de er skrevet eller redigert ved hjelp av språkspesifikke formatere. Dette sikrer at koden som genereres følger kodestilene til prosjektet ditt.
 
 ---
 
 ## Innebygd
 
-opencode kommer med flere innebygde formatere for populære språk og rammeverk. Nedenfor er en liste over formatere, støttede filutvidelser og kommandoer eller konfigurasjonsalternativer den trenger.
+OpenCode kommer med flere innebygde formatere for populære språk og rammeverk. Nedenfor er en liste over formatere, støttede filutvidelser og kommandoer eller konfigurasjonsalternativer den trenger.
 
 | Formater               | Utvidelser                                                                                            | Krav                                                                                                    |
 | ---------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | gofmt                  | .go                                                                                                   | `gofmt` kommando tilgjengelig                                                                           |
-| blande                 | .ex, .exs, .eex, .heex, .leex, .neex, .sface                                                          | `mix` kommando tilgjengelig                                                                             |
-| penere                 | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml og [mer](https://prettier.io/docs/en/index.html) | `prettier` avhengighet i `package.json`                                                                 |
+| mix                    | .ex, .exs, .eex, .heex, .leex, .neex, .sface                                                          | `mix` kommando tilgjengelig                                                                             |
+| prettier               | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml og [mer](https://prettier.io/docs/en/index.html) | `prettier` avhengighet i `package.json`                                                                 |
 | biome                  | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml og [mer](https://biomejs.dev/)                   | `biome.json(c)` konfigurasjonsfil                                                                       |
-| sikk                   | .zig, .zon                                                                                            | `zig` kommando tilgjengelig                                                                             |
-| klang-format           | .c, .cpp, .h, .hpp, .ino og [mer](https://clang.llvm.org/docs/ClangFormat.html)                       | `.clang-format` konfigurasjonsfil                                                                       |
+| zig                    | .zig, .zon                                                                                            | `zig` kommando tilgjengelig                                                                             |
+| clang-format           | .c, .cpp, .h, .hpp, .ino og [mer](https://clang.llvm.org/docs/ClangFormat.html)                       | `.clang-format` konfigurasjonsfil                                                                       |
 | ktlint                 | .kt, .kts                                                                                             | `ktlint` kommando tilgjengelig                                                                          |
 | ruff                   | .py, .pyi                                                                                             | `ruff` kommando tilgjengelig med config                                                                 |
 | rustfmt                | .rs                                                                                                   | `rustfmt` kommando tilgjengelig                                                                         |
@@ -27,24 +27,24 @@ opencode kommer med flere innebygde formatere for populære språk og rammeverk.
 | rubocop                | .rb, .rake, .gemspec, .ru                                                                             | `rubocop` kommando tilgjengelig                                                                         |
 | standardrb             | .rb, .rake, .gemspec, .ru                                                                             | `standardrb` kommando tilgjengelig                                                                      |
 | htmlbeautifier         | .erb, .html.erb                                                                                       | `htmlbeautifier` kommando tilgjengelig                                                                  |
-| luft                   | .R                                                                                                    | `air` kommando tilgjengelig                                                                             |
+| air                    | .R                                                                                                    | `air` kommando tilgjengelig                                                                             |
 | dart                   | .dart                                                                                                 | `dart` kommando tilgjengelig                                                                            |
 | ocamlformat            | .ml, .mli                                                                                             | `ocamlformat` kommando tilgjengelig og `.ocamlformat` konfigurasjonsfil                                 |
 | terraform              | .tf, .tfvars                                                                                          | `terraform` kommando tilgjengelig                                                                       |
-| glimt                  | .gleam                                                                                                | `gleam` kommando tilgjengelig                                                                           |
+| gleam                  | .gleam                                                                                                | `gleam` kommando tilgjengelig                                                                           |
 | nixfmt                 | .nix                                                                                                  | `nixfmt` kommando tilgjengelig                                                                          |
 | shfmt                  | .sh, .bash                                                                                            | `shfmt` kommando tilgjengelig                                                                           |
-| halvliter              | .php                                                                                                  | `laravel/pint` avhengighet i `composer.json`                                                            |
+| pint                   | .php                                                                                                  | `laravel/pint` avhengighet i `composer.json`                                                            |
 | oxfmt (Eksperimentell) | .js, .jsx, .ts, .tsx                                                                                  | `oxfmt` avhengighet i `package.json` og et [eksperimentelt env variabel flagg](/docs/cli/#experimental) |
 | ormolu                 | .hs                                                                                                   | `ormolu` kommando tilgjengelig                                                                          |
 
-Så hvis prosjektet ditt har `prettier` i `package.json`, vil opencode automatisk bruke det.
+Så hvis prosjektet ditt har `prettier` i `package.json`, vil OpenCode automatisk bruke det.
 
 ---
 
 ## Slik fungerer det
 
-Når opencode skriver eller redigerer en fil, gjør den:
+Når OpenCode skriver eller redigerer en fil, gjør den:
 
 1. Kontrollerer filtypen mot alle aktiverte formatere.
 2. Kjører riktig formateringskommando på filen.
@@ -56,7 +56,7 @@ Denne prosessen skjer i bakgrunnen, og sikrer at kodestilene dine opprettholdes 
 
 ## Konfigurer
 
-Du kan tilpasse formatere gjennom `formatter`-delen i opencode-konfigurasjonen.
+Du kan tilpasse formatere gjennom `formatter`-delen i OpenCode-konfigurasjonen.
 
 ```json title="opencode.json"
 {
@@ -67,12 +67,12 @@ Du kan tilpasse formatere gjennom `formatter`-delen i opencode-konfigurasjonen.
 
 Hver formateringskonfigurasjon støtter følgende:
 
-| Eiendom       | Skriv    | Beskrivelse                                                       |
+| Property      | Type     | Beskrivelse                                                       |
 | ------------- | -------- | ----------------------------------------------------------------- |
-| `disabled`    | boolsk   | Sett dette til `true` for å deaktivere formatereren               |
-| `command`     | streng[] | Kommandoen som skal kjøres for formatering                        |
-| `environment` | objekt   | Miljøvariabler som skal angis når du kjører formateringsverktøyet |
-| `extensions`  | streng[] | Filutvidelser denne formatereren skal håndtere                    |
+| `disabled`    | boolean  | Sett dette til `true` for å deaktivere formatereren               |
+| `command`     | string[] | Kommandoen som skal kjøres for formatering                        |
+| `environment` | object   | Miljøvariabler som skal angis når du kjører formateringsverktøyet |
+| `extensions`  | string[] | Filutvidelser denne formatereren skal håndtere                    |
 
 La oss se på noen eksempler.
 
