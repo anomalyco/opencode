@@ -35,12 +35,20 @@ export namespace SessionCompaction {
     const context = input.model.limit.context
     if (context === 0) return false
 
-    const count =
-      input.tokens.total ||
-      input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write
+    const count = input.tokens.total || input.tokens.input + input.tokens.cache.read + input.tokens.output
 
-    const reserved =
-      config.compaction?.reserved ?? Math.min(COMPACTION_BUFFER, ProviderTransform.maxOutputTokens(input.model))
+    const modelKey = `${input.model.providerID}/${input.model.id}`
+    const modelConfig = config.compaction?.models?.[modelKey]
+
+    // Absolute token threshold
+    const tokenThreshold = modelConfig?.token_threshold ?? config.compaction?.token_threshold
+    if (tokenThreshold && count > tokenThreshold) return true
+
+    // Context percentage threshold
+    const contextThreshold = modelConfig?.context_threshold ?? config.compaction?.context_threshold
+    if (contextThreshold && count > context * contextThreshold) return true
+
+    const reserved = config.compaction?.reserved ?? Math.min(COMPACTION_BUFFER, ProviderTransform.maxOutputTokens(input.model))
     const usable = input.model.limit.input ? input.model.limit.input - reserved : context - reserved
     return count >= usable
   }
