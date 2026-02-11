@@ -343,17 +343,19 @@ export function SessionHeader() {
                   <Show
                     when={canOpen()}
                     fallback={
-                      <Button
-                        variant="ghost"
-                        class="rounded-sm h-[24px] py-1.5 pr-3 pl-2 gap-2 border-none shadow-none"
-                        onClick={copyPath}
-                        aria-label={language.t("session.header.open.copyPath")}
-                      >
-                        <Icon name="copy" size="small" class="text-icon-base" />
-                        <span class="text-12-regular text-text-strong">
-                          {language.t("session.header.open.copyPath")}
-                        </span>
-                      </Button>
+                      <div class="flex h-[24px] box-border items-center rounded-md border border-border-base bg-surface-panel overflow-hidden">
+                        <Button
+                          variant="ghost"
+                          class="rounded-none h-full py-0 pr-3 pl-2 gap-2 border-none shadow-none"
+                          onClick={copyPath}
+                          aria-label={language.t("session.header.open.copyPath")}
+                        >
+                          <Icon name="copy" size="small" class="text-icon-base" />
+                          <span class="text-12-regular text-text-strong">
+                            {language.t("session.header.open.copyPath")}
+                          </span>
+                        </Button>
+                      </div>
                     }
                   >
                     <div class="flex items-center">
