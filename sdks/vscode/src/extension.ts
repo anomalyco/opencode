@@ -2,24 +2,12 @@
 export function deactivate() {}
 
 import * as vscode from "vscode"
+import { parseSSELines, isBrowserOpen, createDeduplicator } from "./sse"
 
 const TERMINAL_NAME = "opencode"
 
-interface SSEEvent {
-  type: string
-  properties: Record<string, unknown>
-}
-
-interface BrowserOpenEvent {
-  type: "browser.open"
-  properties: {
-    url: string
-    callbackPort?: number
-  }
-}
-
 const sseConnections = new Map<vscode.Terminal, AbortController>()
-const lastOpenedUrls = new Map<string, number>()
+const dedup = createDeduplicator()
 
 export function activate(context: vscode.ExtensionContext) {
   let openNewTerminalDisposable = vscode.commands.registerCommand("opencode.openNewTerminal", async () => {
@@ -93,32 +81,18 @@ export function activate(context: vscode.ExtensionContext) {
           if (done) break
 
           buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split("\n")
-          buffer = lines.pop() || ""
+          const result = parseSSELines(buffer)
+          buffer = result.remainder
 
-          for (const line of lines) {
-            if (!line.startsWith("data: ")) continue
+          for (const event of result.events) {
+            if (!isBrowserOpen(event)) continue
+            if (dedup.isDuplicate(event.properties.url)) continue
 
-            const json = line.slice(6)
-            const event = JSON.parse(json) as SSEEvent
-
-            if (event.type === "browser.open") {
-              const browserEvent = event as BrowserOpenEvent
-              const url = browserEvent.properties.url
-              const callbackPort = browserEvent.properties.callbackPort
-
-              const now = Date.now()
-              const lastOpened = lastOpenedUrls.get(url)
-              if (lastOpened && now - lastOpened < 5000) continue
-
-              lastOpenedUrls.set(url, now)
-
-              if (callbackPort) {
-                await vscode.env.asExternalUri(vscode.Uri.parse(`http://127.0.0.1:${callbackPort}`))
-              }
-
-              await vscode.env.openExternal(vscode.Uri.parse(url))
+            if (event.properties.callbackPort) {
+              await vscode.env.asExternalUri(vscode.Uri.parse(`http://127.0.0.1:${event.properties.callbackPort}`))
             }
+
+            await vscode.env.openExternal(vscode.Uri.parse(event.properties.url))
           }
         }
       } catch (e) {
