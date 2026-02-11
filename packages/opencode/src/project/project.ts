@@ -13,6 +13,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { iife } from "@/util/iife"
 import { GlobalBus } from "@/bus/global"
 import { existsSync } from "fs"
+import os from "os"
 
 export namespace Project {
   const log = Log.create({ service: "project" })
@@ -278,7 +279,70 @@ export namespace Project {
     })
   }
 
+  const SCAN_EXCLUDE = new Set([
+    "node_modules",
+    ".git",
+    "vendor",
+    "dist",
+    "build",
+    ".cache",
+    "__pycache__",
+    ".venv",
+    "target",
+    ".next",
+    ".nuxt",
+    ".output",
+    "coverage",
+    ".turbo",
+    ".local",
+    ".lss",
+    ".agent-browser",
+    ".browser-profile",
+    ".show-user",
+  ])
+
+  let lastScan = 0
+  const SCAN_TTL = 30_000
+
+  export async function scan(paths?: string[]) {
+    const roots = paths ?? [process.env.KORTIX_WORKSPACE || process.env.HOME || os.homedir()]
+    const glob = new Bun.Glob("**/.git")
+    const directories = new Set<string>()
+
+    for (const root of roots) {
+      const stat = await fs.stat(root).catch(() => undefined)
+      if (!stat?.isDirectory()) continue
+
+      for await (const match of glob.scan({
+        cwd: root,
+        absolute: true,
+        followSymlinks: false,
+        onlyFiles: false,
+        dot: true,
+      })) {
+        const rel = path.relative(root, match)
+        const parts = rel.split(path.sep).slice(0, -1) // exclude the trailing ".git" itself
+        if (parts.some((p) => SCAN_EXCLUDE.has(p) || (p.startsWith(".") && p !== ".git"))) continue
+        directories.add(path.dirname(match))
+      }
+    }
+
+    const projects: Info[] = []
+    for (const dir of directories) {
+      const result = await fromDirectory(dir).catch(() => undefined)
+      if (result?.project && result.project.id !== "global") projects.push(result.project)
+    }
+
+    log.info("scan complete", { roots, found: projects.length })
+    return projects
+  }
+
   export async function list() {
+    if (Date.now() - lastScan > SCAN_TTL) {
+      await scan().catch((error) => log.error("scan failed", { error }))
+      lastScan = Date.now()
+    }
+
     const keys = await Storage.list(["project"])
     const projects = await Promise.all(keys.map((x) => Storage.read<Info>(x)))
     return projects.map((project) => ({

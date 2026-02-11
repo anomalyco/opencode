@@ -4,6 +4,7 @@ import { Log } from "../../src/util/log"
 import { Storage } from "../../src/storage/storage"
 import { $ } from "bun"
 import path from "path"
+import * as fs from "fs/promises"
 import { tmpdir } from "../fixture/fixture"
 
 Log.init({ print: false })
@@ -86,6 +87,96 @@ describe("Project.fromDirectory with worktrees", () => {
 
     await $`git worktree remove ${worktree1}`.cwd(tmp.path).quiet()
     await $`git worktree remove ${worktree2}`.cwd(tmp.path).quiet()
+  })
+})
+
+describe("Project.scan", () => {
+  test("should discover git repos in a directory", async () => {
+    await using tmp = await tmpdir()
+
+    // Create two git repos inside the base directory
+    const repo1 = path.join(tmp.path, "repo1")
+    const repo2 = path.join(tmp.path, "repo2")
+    await fs.mkdir(repo1, { recursive: true })
+    await fs.mkdir(repo2, { recursive: true })
+
+    await $`git init`.cwd(repo1).quiet()
+    await $`git commit --allow-empty -m "root commit 1"`.cwd(repo1).quiet()
+    await $`git init`.cwd(repo2).quiet()
+    await $`git commit --allow-empty -m "root commit 2"`.cwd(repo2).quiet()
+
+    const projects = await Project.scan([tmp.path])
+
+    expect(projects.length).toBe(2)
+    const worktrees = projects.map((p) => p.worktree).sort()
+    expect(worktrees).toContain(repo1)
+    expect(worktrees).toContain(repo2)
+  })
+
+  test("should skip node_modules directories", async () => {
+    await using tmp = await tmpdir()
+
+    // Create a normal repo and one inside node_modules
+    const repo = path.join(tmp.path, "real-repo")
+    const nmRepo = path.join(tmp.path, "node_modules", "some-pkg")
+    await fs.mkdir(repo, { recursive: true })
+    await fs.mkdir(nmRepo, { recursive: true })
+
+    await $`git init`.cwd(repo).quiet()
+    await $`git commit --allow-empty -m "root commit"`.cwd(repo).quiet()
+    await $`git init`.cwd(nmRepo).quiet()
+    await $`git commit --allow-empty -m "root commit"`.cwd(nmRepo).quiet()
+
+    const projects = await Project.scan([tmp.path])
+
+    expect(projects.length).toBe(1)
+    expect(projects[0].worktree).toBe(repo)
+  })
+
+  test("should skip repos without commits", async () => {
+    await using tmp = await tmpdir()
+
+    const committed = path.join(tmp.path, "committed")
+    const empty = path.join(tmp.path, "empty")
+    await fs.mkdir(committed, { recursive: true })
+    await fs.mkdir(empty, { recursive: true })
+
+    await $`git init`.cwd(committed).quiet()
+    await $`git commit --allow-empty -m "root commit"`.cwd(committed).quiet()
+    await $`git init`.cwd(empty).quiet()
+
+    const projects = await Project.scan([tmp.path])
+
+    // Only the committed repo should appear (empty returns "global" which is filtered)
+    expect(projects.length).toBe(1)
+    expect(projects[0].worktree).toBe(committed)
+  })
+
+  test("should return empty for directory with no git repos", async () => {
+    await using tmp = await tmpdir()
+
+    await fs.mkdir(path.join(tmp.path, "just-a-folder"), { recursive: true })
+    await Bun.write(path.join(tmp.path, "file.txt"), "hello")
+
+    const projects = await Project.scan([tmp.path])
+
+    expect(projects.length).toBe(0)
+  })
+
+  test("should find nested git repos", async () => {
+    await using tmp = await tmpdir()
+
+    // Create a nested structure: parent/child/grandchild
+    const parent = path.join(tmp.path, "org", "project")
+    await fs.mkdir(parent, { recursive: true })
+
+    await $`git init`.cwd(parent).quiet()
+    await $`git commit --allow-empty -m "root commit"`.cwd(parent).quiet()
+
+    const projects = await Project.scan([tmp.path])
+
+    expect(projects.length).toBe(1)
+    expect(projects[0].worktree).toBe(parent)
   })
 })
 
