@@ -52,13 +52,6 @@ enum InitStep {
     Done,
 }
 
-#[derive(serde::Deserialize, specta::Type)]
-#[serde(rename_all = "snake_case")]
-enum WslPathMode {
-    Windows,
-    Linux,
-}
-
 struct InitState {
     current: watch::Receiver<InitStep>,
 }
@@ -627,50 +620,32 @@ fn check_linux_app(app_name: &str) -> bool {
     return true;
 }
 
-#[tauri::command]
-#[specta::specta]
-fn wsl_path(path: String, mode: Option<WslPathMode>) -> Result<String, String> {
-    if !cfg!(windows) {
-        return Ok(path);
-    }
-
-    let flag = match mode.unwrap_or(WslPathMode::Linux) {
-        WslPathMode::Windows => "-w",
-        WslPathMode::Linux => "-u",
-    };
-
-    let output = if path.starts_with('~') {
-        let suffix = path.strip_prefix('~').unwrap_or("");
-        let escaped = suffix.replace('"', "\\\"");
-        let cmd = format!("wslpath {flag} \"$HOME{escaped}\"");
-        Command::new("wsl")
-            .args(["-e", "sh", "-lc", &cmd])
-            .output()
-            .map_err(|e| format!("Failed to run wslpath: {e}"))?
-    } else {
-        Command::new("wsl")
-            .args(["-e", "wslpath", flag, &path])
-            .output()
-            .map_err(|e| format!("Failed to run wslpath: {e}"))?
-    };
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        if stderr.is_empty() {
-            return Err("wslpath failed".to_string());
-        }
-        return Err(stderr);
-    }
-
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let builder = make_specta_builder();
+    let builder = tauri_specta::Builder::<tauri::Wry>::new()
+        // Then register them (separated by a comma)
+        .commands(tauri_specta::collect_commands![
+            kill_sidecar,
+            cli::install_cli,
+            await_initialization,
+            server::get_default_server_url,
+            server::set_default_server_url,
+            get_display_backend,
+            set_display_backend,
+            markdown::parse_markdown_command,
+            check_app_exists,
+            resolve_app_path
+        ])
+        .events(tauri_specta::collect_events![LoadingWindowComplete])
+        .error_handling(tauri_specta::ErrorHandlingMode::Throw);
 
     #[cfg(debug_assertions)] // <- Only export on non-release builds
-    export_types(&builder);
+    builder
+        .export(
+            specta_typescript::Typescript::default(),
+            "../src/bindings.ts",
+        )
+        .expect("Failed to export typescript bindings");
 
     #[cfg(all(target_os = "macos", not(debug_assertions)))]
     let _ = std::process::Command::new("killall")
@@ -735,44 +710,6 @@ pub fn run() {
                 kill_sidecar(app.clone());
             }
         });
-}
-
-fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
-    tauri_specta::Builder::<tauri::Wry>::new()
-        // Then register them (separated by a comma)
-        .commands(tauri_specta::collect_commands![
-            kill_sidecar,
-            cli::install_cli,
-            await_initialization,
-            server::get_default_server_url,
-            server::set_default_server_url,
-            server::get_wsl_config,
-            server::set_wsl_config,
-            get_display_backend,
-            set_display_backend,
-            markdown::parse_markdown_command,
-            check_app_exists,
-            wsl_path,
-            resolve_app_path
-        ])
-        .events(tauri_specta::collect_events![LoadingWindowComplete])
-        .error_handling(tauri_specta::ErrorHandlingMode::Throw)
-}
-
-fn export_types(builder: &tauri_specta::Builder<tauri::Wry>) {
-    builder
-        .export(
-            specta_typescript::Typescript::default(),
-            "../src/bindings.ts",
-        )
-        .expect("Failed to export typescript bindings");
-}
-
-#[cfg(test)]
-#[test]
-fn test_export_types() {
-    let builder = make_specta_builder();
-    export_types(&builder);
 }
 
 #[derive(tauri_specta::Event, serde::Deserialize, specta::Type)]

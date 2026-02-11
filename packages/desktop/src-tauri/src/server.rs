@@ -8,19 +8,8 @@ use tokio::task::JoinHandle;
 
 use crate::{
     cli,
-    constants::{DEFAULT_SERVER_URL_KEY, SETTINGS_STORE, WSL_ENABLED_KEY},
+    constants::{DEFAULT_SERVER_URL_KEY, SETTINGS_STORE},
 };
-
-#[derive(Clone, serde::Serialize, serde::Deserialize, specta::Type, Debug)]
-pub struct WslConfig {
-    pub enabled: bool,
-}
-
-impl Default for WslConfig {
-    fn default() -> Self {
-        Self { enabled: false }
-    }
-}
 
 #[tauri::command]
 #[specta::specta]
@@ -51,38 +40,6 @@ pub async fn set_default_server_url(app: AppHandle, url: Option<String>) -> Resu
             store.delete(DEFAULT_SERVER_URL_KEY);
         }
     }
-
-    store
-        .save()
-        .map_err(|e| format!("Failed to save settings: {}", e))?;
-
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn get_wsl_config(app: AppHandle) -> Result<WslConfig, String> {
-    let store = app
-        .store(SETTINGS_STORE)
-        .map_err(|e| format!("Failed to open settings store: {}", e))?;
-
-    let enabled = store
-        .get(WSL_ENABLED_KEY)
-        .as_ref()
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-
-    Ok(WslConfig { enabled })
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn set_wsl_config(app: AppHandle, config: WslConfig) -> Result<(), String> {
-    let store = app
-        .store(SETTINGS_STORE)
-        .map_err(|e| format!("Failed to open settings store: {}", e))?;
-
-    store.set(WSL_ENABLED_KEY, serde_json::Value::Bool(config.enabled));
 
     store
         .save()

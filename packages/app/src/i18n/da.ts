@@ -512,9 +512,6 @@ export const dict = {
   "settings.section.server": "Server",
   "settings.tab.general": "Generelt",
   "settings.tab.shortcuts": "Genveje",
-  "settings.desktop.section.wsl": "WSL",
-  "settings.desktop.wsl.title": "WSL integration",
-  "settings.desktop.wsl.description": "Run the OpenCode server inside WSL on Windows.",
 
   "settings.general.section.appearance": "Udseende",
   "settings.general.section.notifications": "Systemmeddelelser",

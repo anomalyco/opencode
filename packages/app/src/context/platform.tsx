@@ -57,12 +57,6 @@ export type Platform = {
   /** Set the default server URL to use on app startup (platform-specific) */
   setDefaultServerUrl?(url: string | null): Promise<void> | void
 
-  /** Get the configured WSL integration (desktop only) */
-  getWslEnabled?(): Promise<boolean>
-
-  /** Set the configured WSL integration (desktop only) */
-  setWslEnabled?(config: boolean): Promise<void> | void
-
   /** Get the preferred display backend (desktop only) */
   getDisplayBackend?(): Promise<DisplayBackend | null> | DisplayBackend | null
 

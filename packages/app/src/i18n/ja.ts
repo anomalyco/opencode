@@ -507,9 +507,6 @@ export const dict = {
   "settings.section.server": "サーバー",
   "settings.tab.general": "一般",
   "settings.tab.shortcuts": "ショートカット",
-  "settings.desktop.section.wsl": "WSL",
-  "settings.desktop.wsl.title": "WSL integration",
-  "settings.desktop.wsl.description": "Run the OpenCode server inside WSL on Windows.",
 
   "settings.general.section.appearance": "外観",
   "settings.general.section.notifications": "システム通知",

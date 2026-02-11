@@ -367,34 +367,6 @@ export const SettingsGeneral: Component = () => {
           </div>
         </div>
 
-        <Show when={platform.platform === "desktop" && platform.os === "windows" && platform.getWslEnabled}>
-          {(_) => {
-            const [enabledResource, actions] = createResource(() => platform.getWslEnabled?.())
-            const enabled = () => (enabledResource.state === "pending" ? undefined : enabledResource.latest)
-
-            return (
-              <div class="flex flex-col gap-1">
-                <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.desktop.section.wsl")}</h3>
-
-                <div class="bg-surface-raised-base px-4 rounded-lg">
-                  <SettingsRow
-                    title={language.t("settings.desktop.wsl.title")}
-                    description={language.t("settings.desktop.wsl.description")}
-                  >
-                    <div data-action="settings-wsl">
-                      <Switch
-                        checked={enabled() ?? false}
-                        disabled={enabledResource.state === "pending"}
-                        onChange={(checked) => platform.setWslEnabled?.(checked)?.finally(() => actions.refetch())}
-                      />
-                    </div>
-                  </SettingsRow>
-                </div>
-              </div>
-            )
-          }}
-        </Show>
-
         {/* Updates Section */}
         <div class="flex flex-col gap-1">
           <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.updates")}</h3>
