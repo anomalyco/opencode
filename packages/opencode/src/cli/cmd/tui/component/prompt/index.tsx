@@ -547,7 +547,7 @@ export function Prompt(props: PromptProps) {
     if (!input || input.isDestroyed) return
     if (props.visible === false || dialog.stack.length > 0) {
       if (input.focused) input.blur()
-      if (props.visible === false) vimState.reset()
+      if (props.visible === false) vimState.clearPending()
       return
     }
 
