@@ -71,6 +71,7 @@ jobs:
 
       - name: Build
         id: build
+        timeout-minutes: 15
         run: |
           ./packages/opencode/script/build.ts
         env:
