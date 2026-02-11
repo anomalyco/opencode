@@ -7,7 +7,7 @@ import { Tabs, TabItem } from "@astrojs/starlight/components"
 import config from "../../../../config.mjs"
 export const console = config.console
 
-[**opencode**](/) açık kaynaklı bir AI kodlama aracısıdır. Terminal tabanlı bir arayüz, masaüstü uygulaması veya IDE uzantısı olarak mevcuttur.
+[**opencode**](/) açık kaynaklı bir AI coding agent'ıdır. Terminal tabanlı bir arayüz, masaüstü uygulaması veya IDE uzantısı olarak mevcuttur.
 
 ![opencode TUI with the opencode theme](../../../assets/lander/screenshot.png)
 
@@ -79,7 +79,7 @@ Ayrıca aşağıdaki komutlarla da yükleyebilirsiniz:
   brew install anomalyco/tap/opencode
   ```
 
-  > En güncel sürümler için opencode dokunuşunu kullanmanızı öneririz. Resmi `brew install opencode` formülü Homebrew ekibi tarafından korunur ve daha sık güncellenir.
+  > En güncel sürümler için opencode tap'ini kullanmanızı öneririz. Resmi `brew install opencode` formülü Homebrew ekibi tarafından korunur ve daha sık güncellenir.
 
 - **Paru'yu Arch Linux'ta kullanma**
 
@@ -93,13 +93,13 @@ Ayrıca aşağıdaki komutlarla da yükleyebilirsiniz:
 Windows'ta en iyi deneyim için [Windows Subsystem for Linux (WSL)](/docs/windows-wsl) kullanılmasını öneririz. Daha iyi performans ve opencode'un özellikleriyle tam uyumluluğu sağlar.
 :::
 
-- **Çikolata Kullanımı**
+- **Chocolatey Kullanımı**
 
   ```bash
   choco install opencode
   ```
 
-- **Kepçe Kullanımı**
+- **Scoop Kullanımı**
 
   ```bash
   scoop install opencode
@@ -134,8 +134,7 @@ opencode'un Bun kullanılarak Windows'a yüklenmesine yönelik destek şu anda d
 opencode ile herhangi bir LLM sağlayıcısının API anahtarlarını yapılandırarak kullanabilirsiniz.
 
 LLM sağlayıcılarını kullanmaya yeni başlıyorsanız, [OpenCode Zen](/docs/zen) kullanmanızı öneririz.
-opencode tarafından test edilmiş ve doğrulanmış modellerin seçilmiş bir listesidir
-team.
+opencode team tarafından test edilmiş ve doğrulanmış modellerin seçilmiş bir listesidir.
 
 1. TUI'de `/connect` komutunu çalıştırın, opencode'u seçin ve [opencode.ai/auth](https://opencode.ai/auth)'ye gidin.
 
@@ -207,7 +206,7 @@ Projedeki dosyaları bulanık aramak için `@` tuşunu kullanın.
 :::
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
-@packages/functions/src/api/index.ts dosyasında authentication nasıl ele alınıyor?
+How is authentication handled in @packages/functions/src/api/index.ts
 ```
 
 Kod tabanının üzerinde çalışmadığınız bir kısmı varsa bu yararlı olur.
@@ -232,9 +231,9 @@ opencode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de ön
    Şimdi ne yapmasını istediğimizi anlatalım.
 
    ```txt frame="none"
-   Bir kullanıcı not sildiğinde, veritabanında bu notu silinmiş olarak işaretleyelim.
-   Ardından yakın zamanda silinen tüm notları gösteren bir ekran oluşturalım.
-   Bu ekrandan kullanıcı notu geri alabilsin veya kalıcı olarak silebilsin.
+   When a user deletes a note, we'd like to flag it as deleted in the database.
+   Then create a screen that shows all the recently deleted notes.
+   From this screen, the user can undelete a note or permanently delete it.
    ```
 
    opencode'un isteğinizi anlaması için yeterli ayrıntı verin.
@@ -249,8 +248,8 @@ opencode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de ön
    Size bir plan sunduğunda ona geri bildirimde bulunabilir veya daha fazla ayrıntı ekleyebilirsiniz.
 
    ```txt frame="none"
-   Bu yeni ekranı daha önce kullandığım bir tasarıma göre yapmak istiyoruz.
-   [Image #1] Bu görsele bakıp referans al.
+   We'd like to design this new screen using a design I've used before.
+   [Image #1] Take a look at this image and use it as a reference.
    ```
 
    :::tip
@@ -271,7 +270,7 @@ opencode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de ön
    Ardından değişiklikleri yapmasını isteyin.
 
    ```bash frame="none"
-   Harika görünüyor, şimdi değişiklikleri yap.
+   Sounds good! Go ahead and make the changes.
    ```
 
 ---
@@ -281,9 +280,9 @@ opencode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de ön
 Daha basit değişikliklerde, önce planı incelemeden opencode'dan doğrudan değişiklik yapmasını isteyebilirsiniz.
 
 ```txt frame="none" "@packages/functions/src/settings.ts" "@packages/functions/src/notes.ts"
-/settings route'una authentication eklememiz gerekiyor.
-@packages/functions/src/notes.ts içindeki /notes route'unda bunun nasıl yapıldığına bak
-ve aynı mantığı @packages/functions/src/settings.ts içinde uygula.
+We need to add authentication to the /settings route. Take a look at how this is
+handled in the /notes route in @packages/functions/src/notes.ts and implement
+the same logic in @packages/functions/src/settings.ts
 ```
 
 opencode'un doğru değişiklikleri yapması için yeterli ayrıntı verdiğinizden emin olun.
@@ -295,7 +294,7 @@ opencode'un doğru değişiklikleri yapması için yeterli ayrıntı verdiğiniz
 Diyelim ki opencode'dan bazı değişiklikler yapmasını istediniz.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
-@packages/functions/src/api/index.ts içindeki fonksiyonu refactor edebilir misin?
+Can you refactor the function in @packages/functions/src/api/index.ts?
 ```
 
 Ama istediğinin bu olmadığını anlıyorsun. Değişiklikleri **geri alabilirsiniz**
@@ -308,7 +307,7 @@ Ama istediğinin bu olmadığını anlıyorsun. Değişiklikleri **geri alabilir
 opencode değişiklikleri geri alır ve orijinal mesajınızı tekrar gösterir.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
-@packages/functions/src/api/index.ts içindeki fonksiyonu refactor edebilir misin?
+Can you refactor the function in @packages/functions/src/api/index.ts?
 ```
 
 Buradan komut isteminde ince ayar yapabilir ve opencode'dan tekrar denemesini isteyebilirsiniz.
