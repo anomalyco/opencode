@@ -700,6 +700,16 @@ export default function Layout(props: ParentProps) {
         })
       })
       .catch(() => undefined)
+      .then(async () => {
+        if (prefetchToken.value !== token) return
+
+        const diffs = await retry(() => globalSDK.client.session.diff({ directory, sessionID }).then((r) => r.data))
+
+        if (prefetchToken.value !== token) return
+        if (!diffs) return
+
+        setStore("session_diff", sessionID, reconcile(diffs, { key: "file" }))
+      })
   }
 
   const pumpPrefetch = (directory: string) => {

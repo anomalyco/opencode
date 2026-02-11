@@ -6,6 +6,7 @@ import { useNotification } from "@/context/notification"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { Avatar } from "@opencode-ai/ui/avatar"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
+import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { HoverCard } from "@opencode-ai/ui/hover-card"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -142,6 +143,11 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
     return text?.text
   }
 
+  const changedFiles = createMemo(() => {
+    const diffs = sessionStore.session_diff[props.session.id] ?? []
+    return diffs
+  })
+
   const item = (
     <A
       href={`/${props.slug}/session/${props.session.id}`}
@@ -206,6 +212,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
         }
       >
         <HoverCard
+          size="large"
           openDelay={1000}
           closeDelay={props.sidebarHovering() ? 600 : 0}
           placement="right-start"
@@ -220,26 +227,54 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
             when={hoverReady()}
             fallback={<div class="text-12-regular text-text-weak">{language.t("session.messages.loading")}</div>}
           >
-            <div class="overflow-y-auto max-h-72 h-full">
-              <MessageNav
-                messages={hoverMessages() ?? []}
-                current={undefined}
-                getLabel={messageLabel}
-                onMessageSelect={(message) => {
-                  if (!isActive()) {
-                    layout.pendingMessage.set(
-                      `${base64Encode(props.session.directory)}/${props.session.id}`,
-                      message.id,
-                    )
-                    navigate(`${props.slug}/session/${props.session.id}`)
-                    return
+            <div class="flex">
+              <div class="overflow-y-auto max-h-72 session-scroller">
+                <div class="text-11-medium text-text-weak px-3 pt-1 pb-1">{language.t("ui.sessionInfo.messages")}</div>
+                <MessageNav
+                  messages={hoverMessages() ?? []}
+                  current={undefined}
+                  getLabel={messageLabel}
+                  onMessageSelect={(message) => {
+                    if (!isActive()) {
+                      layout.pendingMessage.set(
+                        `${base64Encode(props.session.directory)}/${props.session.id}`,
+                        message.id,
+                      )
+                      navigate(`${props.slug}/session/${props.session.id}`)
+                      return
+                    }
+                    window.history.replaceState(null, "", `#message-${message.id}`)
+                    window.dispatchEvent(new HashChangeEvent("hashchange"))
+                  }}
+                  size="normal"
+                  class="w-60"
+                />
+              </div>
+              <div class="border-l border-border-weak-base my-1 ml-1" />
+              <div class="overflow-y-auto max-h-72 w-60">
+                <div class="text-11-medium text-text-weak px-3 pt-1 pb-1">
+                  {language.t("ui.sessionInfo.filesChanged")}
+                </div>
+                <Show
+                  when={changedFiles().length > 0}
+                  fallback={
+                    <div class="text-11-regular text-text-weak px-3">{language.t("ui.sessionInfo.noFilesChanged")}</div>
                   }
-                  window.history.replaceState(null, "", `#message-${message.id}`)
-                  window.dispatchEvent(new HashChangeEvent("hashchange"))
-                }}
-                size="normal"
-                class="w-60"
-              />
+                >
+                  <ul role="list" class="space-y-1 px-3">
+                    <For each={changedFiles()}>
+                      {(diff) => (
+                        <li class="flex items-center gap-1.5 py-0.5">
+                          <FileIcon node={{ path: diff.file, type: "file" }} class="size-4 text-icon-weak" />
+                          <span class="text-12-regular text-text-weak truncate max-w-52">
+                            {getFilename(diff.file)}
+                          </span>
+                        </li>
+                      )}
+                    </For>
+                  </ul>
+                </Show>
+              </div>
             </div>
           </Show>
         </HoverCard>

@@ -50,6 +50,10 @@ export const dict = {
 
   "ui.messageNav.newMessage": "새 메시지",
 
+  "ui.sessionInfo.messages": "메시지",
+  "ui.sessionInfo.filesChanged": "변경된 파일",
+  "ui.sessionInfo.noFilesChanged": "변경된 파일 없음",
+
   "ui.textField.copyToClipboard": "클립보드에 복사",
   "ui.textField.copyLink": "링크 복사",
   "ui.textField.copied": "복사됨",

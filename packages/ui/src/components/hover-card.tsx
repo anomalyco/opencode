@@ -4,12 +4,13 @@ import { ComponentProps, JSXElement, ParentProps, splitProps } from "solid-js"
 export interface HoverCardProps extends ParentProps, Omit<ComponentProps<typeof Kobalte>, "children"> {
   trigger: JSXElement
   mount?: HTMLElement
+  size?: "normal" | "large"
   class?: ComponentProps<"div">["class"]
   classList?: ComponentProps<"div">["classList"]
 }
 
 export function HoverCard(props: HoverCardProps) {
-  const [local, rest] = splitProps(props, ["trigger", "mount", "class", "classList", "children"])
+  const [local, rest] = splitProps(props, ["trigger", "mount", "size", "class", "classList", "children"])
 
   return (
     <Kobalte gutter={4} {...rest}>
@@ -19,6 +20,7 @@ export function HoverCard(props: HoverCardProps) {
       <Kobalte.Portal mount={local.mount}>
         <Kobalte.Content
           data-component="hover-card-content"
+          data-variant={local.size}
           classList={{
             ...(local.classList ?? {}),
             [local.class ?? ""]: !!local.class,

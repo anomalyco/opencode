@@ -53,6 +53,10 @@ export const dict: Record<Keys, string> = {
 
   "ui.messageNav.newMessage": "Ny melding",
 
+  "ui.sessionInfo.messages": "Meldinger",
+  "ui.sessionInfo.filesChanged": "Endrede filer",
+  "ui.sessionInfo.noFilesChanged": "Ingen endrede filer",
+
   "ui.textField.copyToClipboard": "Kopier til utklippstavlen",
   "ui.textField.copyLink": "Kopier lenke",
   "ui.textField.copied": "Kopiert",

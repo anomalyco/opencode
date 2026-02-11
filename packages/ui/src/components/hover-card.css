@@ -31,6 +31,10 @@
     animation: hover-card-open 0.15s ease-out;
   }
 
+  &[data-variant="large"] {
+    max-width: 520px;
+  }
+
   [data-slot="hover-card-body"] {
     padding: 4px;
     max-height: inherit;

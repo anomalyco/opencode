@@ -54,6 +54,10 @@ export const dict = {
 
   "ui.messageNav.newMessage": "Nova poruka",
 
+  "ui.sessionInfo.messages": "Poruke",
+  "ui.sessionInfo.filesChanged": "Izmenjeni fajlovi",
+  "ui.sessionInfo.noFilesChanged": "Nema izmenjenih fajlova",
+
   "ui.textField.copyToClipboard": "Kopiraj u međuspremnik",
   "ui.textField.copyLink": "Kopiraj link",
   "ui.textField.copied": "Kopirano",

@@ -54,6 +54,10 @@ export const dict = {
 
   "ui.messageNav.newMessage": "新訊息",
 
+  "ui.sessionInfo.messages": "訊息",
+  "ui.sessionInfo.filesChanged": "已變更檔案",
+  "ui.sessionInfo.noFilesChanged": "沒有檔案變更",
+
   "ui.textField.copyToClipboard": "複製到剪貼簿",
   "ui.textField.copyLink": "複製連結",
   "ui.textField.copied": "已複製",
