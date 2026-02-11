@@ -28,6 +28,8 @@ export const dict = {
   "command.settings.open": "Abrir ajustes",
   "command.session.previous": "Sesión anterior",
   "command.session.next": "Siguiente sesión",
+  "command.session.previous.unseen": "Sesión no leída anterior",
+  "command.session.next.unseen": "Siguiente sesión no leída",
   "command.session.archive": "Archivar sesión",
 
   "command.palette": "Paleta de comandos",
@@ -42,9 +44,10 @@ export const dict = {
 
   "command.session.new": "Nueva sesión",
   "command.file.open": "Abrir archivo",
-  "command.file.open.description": "Buscar archivos y comandos",
+  "command.tab.close": "Cerrar pestaña",
   "command.context.addSelection": "Añadir selección al contexto",
   "command.context.addSelection.description": "Añadir las líneas seleccionadas del archivo actual",
+  "command.input.focus": "Enfocar entrada",
   "command.terminal.toggle": "Alternar terminal",
   "command.fileTree.toggle": "Alternar árbol de archivos",
   "command.review.toggle": "Alternar revisión",
@@ -68,6 +71,7 @@ export const dict = {
   "command.model.variant.cycle.description": "Cambiar al siguiente nivel de esfuerzo",
   "command.permissions.autoaccept.enable": "Aceptar ediciones automáticamente",
   "command.permissions.autoaccept.disable": "Dejar de aceptar ediciones automáticamente",
+  "command.workspace.toggle": "Alternar espacios de trabajo",
   "command.session.undo": "Deshacer",
   "command.session.undo.description": "Deshacer el último mensaje",
   "command.session.redo": "Rehacer",
@@ -81,7 +85,7 @@ export const dict = {
   "command.session.unshare": "Dejar de compartir sesión",
   "command.session.unshare.description": "Dejar de compartir esta sesión",
 
-  "palette.search.placeholder": "Buscar archivos y comandos",
+  "palette.search.placeholder": "Buscar archivos, comandos y sesiones",
   "palette.empty": "No se encontraron resultados",
   "palette.group.commands": "Comandos",
   "palette.group.files": "Archivos",
@@ -209,7 +213,10 @@ export const dict = {
   "prompt.popover.emptyResults": "Sin resultados coincidentes",
   "prompt.popover.emptyCommands": "Sin comandos coincidentes",
   "prompt.dropzone.label": "Suelta imágenes o PDFs aquí",
+  "prompt.dropzone.file.label": "Suelta para @mencionar archivo",
   "prompt.slash.badge.custom": "personalizado",
+  "prompt.slash.badge.skill": "skill",
+  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "activo",
   "prompt.context.includeActiveFile": "Incluir archivo activo",
   "prompt.context.removeActiveFile": "Eliminar archivo activo del contexto",
@@ -228,6 +235,7 @@ export const dict = {
   "prompt.toast.shellSendFailed.title": "Fallo al enviar comando de shell",
   "prompt.toast.commandSendFailed.title": "Fallo al enviar comando",
   "prompt.toast.promptSendFailed.title": "Fallo al enviar prompt",
+  "prompt.toast.promptSendFailed.description": "No se pudo recuperar la sesión",
 
   "dialog.mcp.title": "MCPs",
   "dialog.mcp.description": "{{enabled}} de {{total}} habilitados",
@@ -319,21 +327,6 @@ export const dict = {
   "context.usage.clickToView": "Haz clic para ver contexto",
   "context.usage.view": "Ver uso del contexto",
 
-  "language.en": "English",
-  "language.zh": "简体中文",
-  "language.zht": "繁體中文",
-  "language.ko": "한국어",
-  "language.de": "Deutsch",
-  "language.es": "Español",
-  "language.fr": "Français",
-  "language.da": "Dansk",
-  "language.ja": "日本語",
-  "language.pl": "Polski",
-  "language.ru": "Русский",
-  "language.ar": "العربية",
-  "language.no": "Norsk",
-  "language.br": "Português (Brasil)",
-
   "toast.language.title": "Idioma",
   "toast.language.description": "Cambiado a {{language}}",
 
@@ -344,6 +337,11 @@ export const dict = {
   "toast.permissions.autoaccept.on.description": "Los permisos de edición y escritura serán aprobados automáticamente",
   "toast.permissions.autoaccept.off.title": "Se dejó de aceptar ediciones automáticamente",
   "toast.permissions.autoaccept.off.description": "Los permisos de edición y escritura requerirán aprobación",
+
+  "toast.workspace.enabled.title": "Espacios de trabajo habilitados",
+  "toast.workspace.enabled.description": "Ahora se muestran varios worktrees en la barra lateral",
+  "toast.workspace.disabled.title": "Espacios de trabajo deshabilitados",
+  "toast.workspace.disabled.description": "Solo se muestra el worktree principal en la barra lateral",
 
   "toast.model.none.title": "Ningún modelo seleccionado",
   "toast.model.none.description": "Conecta un proveedor para resumir esta sesión",
@@ -435,6 +433,7 @@ export const dict = {
   "session.review.noChanges": "Sin cambios",
   "session.files.selectToOpen": "Selecciona un archivo para abrir",
   "session.files.all": "Todos los archivos",
+  "session.files.binaryContent": "Archivo binario (el contenido no puede ser mostrado)",
   "session.messages.renderEarlier": "Renderizar mensajes anteriores",
   "session.messages.loadingEarlier": "Cargando mensajes anteriores...",
   "session.messages.loadEarlier": "Cargar mensajes anteriores",
@@ -516,9 +515,13 @@ export const dict = {
   "settings.section.server": "Servidor",
   "settings.tab.general": "General",
   "settings.tab.shortcuts": "Atajos",
+  "settings.desktop.section.wsl": "WSL",
+  "settings.desktop.wsl.title": "WSL integration",
+  "settings.desktop.wsl.description": "Run the OpenCode server inside WSL on Windows.",
 
   "settings.general.section.appearance": "Apariencia",
   "settings.general.section.notifications": "Notificaciones del sistema",
+  "settings.general.section.updates": "Actualizaciones",
   "settings.general.section.sounds": "Efectos de sonido",
 
   "settings.general.row.language.title": "Idioma",
@@ -529,6 +532,19 @@ export const dict = {
   "settings.general.row.theme.description": "Personaliza el tema de OpenCode.",
   "settings.general.row.font.title": "Fuente",
   "settings.general.row.font.description": "Personaliza la fuente mono usada en bloques de código",
+
+  "settings.general.row.releaseNotes.title": "Notas de la versión",
+  "settings.general.row.releaseNotes.description":
+    'Mostrar ventanas emergentes de "Novedades" después de las actualizaciones',
+
+  "settings.updates.row.startup.title": "Buscar actualizaciones al iniciar",
+  "settings.updates.row.startup.description": "Buscar actualizaciones automáticamente cuando se inicia OpenCode",
+  "settings.updates.row.check.title": "Buscar actualizaciones",
+  "settings.updates.row.check.description": "Buscar actualizaciones manualmente e instalarlas si hay alguna",
+  "settings.updates.action.checkNow": "Buscar ahora",
+  "settings.updates.action.checking": "Buscando...",
+  "settings.updates.toast.latest.title": "Estás al día",
+  "settings.updates.toast.latest.description": "Estás usando la última versión de OpenCode.",
 
   "font.option.ibmPlexMono": "IBM Plex Mono",
   "font.option.cascadiaCode": "Cascadia Code",

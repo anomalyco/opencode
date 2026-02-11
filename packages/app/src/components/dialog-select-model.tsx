@@ -87,11 +87,13 @@ const ModelList: Component<{
   )
 }
 
-export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
+type ModelSelectorTriggerProps = Omit<ComponentProps<typeof Kobalte.Trigger>, "as" | "ref">
+
+export function ModelSelectorPopover(props: {
   provider?: string
   children?: JSX.Element
-  triggerAs?: T
-  triggerProps?: ComponentProps<T>
+  triggerAs?: ValidComponent
+  triggerProps?: ModelSelectorTriggerProps
 }) {
   const [store, setStore] = createStore<{
     open: boolean
@@ -176,17 +178,13 @@ export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
       placement="top-start"
       gutter={8}
     >
-      <Kobalte.Trigger
-        ref={(el) => setStore("trigger", el)}
-        as={props.triggerAs ?? "div"}
-        {...(props.triggerProps as any)}
-      >
+      <Kobalte.Trigger ref={(el) => setStore("trigger", el)} as={props.triggerAs ?? "div"} {...props.triggerProps}>
         {props.children}
       </Kobalte.Trigger>
       <Kobalte.Portal>
         <Kobalte.Content
           ref={(el) => setStore("content", el)}
-          class="w-72 h-80 flex flex-col rounded-md border border-border-base bg-surface-raised-stronger-non-alpha shadow-md z-50 outline-none overflow-hidden"
+          class="w-72 h-80 flex flex-col p-2 rounded-md border border-border-base bg-surface-raised-stronger-non-alpha shadow-md z-50 outline-none overflow-hidden"
           onEscapeKeyDown={(event) => {
             setStore("dismiss", "escape")
             setStore("open", false)
@@ -213,24 +211,26 @@ export function ModelSelectorPopover<T extends ValidComponent = "div">(props: {
             class="p-1"
             action={
               <div class="flex items-center gap-1">
-                <IconButton
-                  icon="plus-small"
-                  variant="ghost"
-                  iconSize="normal"
-                  class="size-6"
-                  aria-label={language.t("command.provider.connect")}
-                  title={language.t("command.provider.connect")}
-                  onClick={handleConnectProvider}
-                />
-                <IconButton
-                  icon="sliders"
-                  variant="ghost"
-                  iconSize="normal"
-                  class="size-6"
-                  aria-label={language.t("dialog.model.manage")}
-                  title={language.t("dialog.model.manage")}
-                  onClick={handleManage}
-                />
+                <Tooltip placement="top" value={language.t("command.provider.connect")}>
+                  <IconButton
+                    icon="plus-small"
+                    variant="ghost"
+                    iconSize="normal"
+                    class="size-6"
+                    aria-label={language.t("command.provider.connect")}
+                    onClick={handleConnectProvider}
+                  />
+                </Tooltip>
+                <Tooltip placement="top" value={language.t("dialog.model.manage")}>
+                  <IconButton
+                    icon="sliders"
+                    variant="ghost"
+                    iconSize="normal"
+                    class="size-6"
+                    aria-label={language.t("dialog.model.manage")}
+                    onClick={handleManage}
+                  />
+                </Tooltip>
               </div>
             }
           />

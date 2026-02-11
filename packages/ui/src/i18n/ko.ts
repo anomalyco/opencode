@@ -1,5 +1,6 @@
 export const dict = {
   "ui.sessionReview.title": "세션 변경 사항",
+  "ui.sessionReview.title.lastTurn": "마지막 턴 변경 사항",
   "ui.sessionReview.diffStyle.unified": "통합 보기",
   "ui.sessionReview.diffStyle.split": "분할 보기",
   "ui.sessionReview.expandAll": "모두 펼치기",
@@ -7,6 +8,7 @@ export const dict = {
 
   "ui.sessionReview.change.added": "추가됨",
   "ui.sessionReview.change.removed": "삭제됨",
+  "ui.sessionReview.change.modified": "수정됨",
   "ui.lineComment.label.prefix": "",
   "ui.lineComment.label.suffix": "에 댓글 달기",
   "ui.lineComment.editorLabel.prefix": "",
@@ -54,6 +56,7 @@ export const dict = {
   "ui.imagePreview.alt": "이미지 미리보기",
 
   "ui.tool.read": "읽기",
+  "ui.tool.loaded": "로드됨",
   "ui.tool.list": "목록",
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",

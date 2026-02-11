@@ -187,7 +187,7 @@
       [data-slot="list-header"] {
         display: flex;
         z-index: 10;
-        padding: 8px 12px 8px 12px;
+        padding: 8px 12px 8px 8px;
         justify-content: space-between;
         align-items: center;
         align-self: stretch;

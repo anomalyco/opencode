@@ -3,6 +3,7 @@ type Keys = keyof typeof en
 
 export const dict: Record<Keys, string> = {
   "ui.sessionReview.title": "Sesjonsendringer",
+  "ui.sessionReview.title.lastTurn": "Endringer i siste tur",
   "ui.sessionReview.diffStyle.unified": "Samlet",
   "ui.sessionReview.diffStyle.split": "Delt",
   "ui.sessionReview.expandAll": "Utvid alle",
@@ -10,6 +11,7 @@ export const dict: Record<Keys, string> = {
 
   "ui.sessionReview.change.added": "Lagt til",
   "ui.sessionReview.change.removed": "Fjernet",
+  "ui.sessionReview.change.modified": "Endret",
   "ui.lineComment.label.prefix": "Kommenter på ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Kommenterer på ",
@@ -57,6 +59,7 @@ export const dict: Record<Keys, string> = {
   "ui.imagePreview.alt": "Bildeforhåndsvisning",
 
   "ui.tool.read": "Les",
+  "ui.tool.loaded": "Lastet",
   "ui.tool.list": "Liste",
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",

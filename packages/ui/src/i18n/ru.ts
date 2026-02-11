@@ -1,5 +1,6 @@
 export const dict = {
   "ui.sessionReview.title": "Изменения сессии",
+  "ui.sessionReview.title.lastTurn": "Изменения последнего хода",
   "ui.sessionReview.diffStyle.unified": "Объединённый",
   "ui.sessionReview.diffStyle.split": "Разделённый",
   "ui.sessionReview.expandAll": "Развернуть всё",
@@ -7,6 +8,7 @@ export const dict = {
 
   "ui.sessionReview.change.added": "Добавлено",
   "ui.sessionReview.change.removed": "Удалено",
+  "ui.sessionReview.change.modified": "Изменено",
   "ui.lineComment.label.prefix": "Комментарий к ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Комментирование: ",
@@ -54,6 +56,7 @@ export const dict = {
   "ui.imagePreview.alt": "Предпросмотр изображения",
 
   "ui.tool.read": "Чтение",
+  "ui.tool.loaded": "Загружено",
   "ui.tool.list": "Список",
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",

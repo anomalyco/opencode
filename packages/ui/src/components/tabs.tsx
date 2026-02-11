@@ -75,7 +75,7 @@ function TabsTrigger(props: ParentProps<TabsTriggerProps>) {
       <Kobalte.Trigger
         {...rest}
         data-slot="tabs-trigger"
-        classList={{ "group/tab": true, [split.classes?.button ?? ""]: split.classes?.button }}
+        classList={{ [split.classes?.button ?? ""]: split.classes?.button }}
       >
         {split.children}
       </Kobalte.Trigger>

@@ -1,6 +1,6 @@
 ---
 description: git commit and push
-model: opencode/glm-4.7
+model: opencode/kimi-k2.5
 subtask: true
 ---
 

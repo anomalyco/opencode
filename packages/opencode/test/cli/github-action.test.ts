@@ -67,6 +67,18 @@ function createStepStartPart(): MessageV2.Part {
   }
 }
 
+function createStepFinishPart(): MessageV2.Part {
+  return {
+    id: "1",
+    sessionID: "s",
+    messageID: "m",
+    type: "step-finish" as const,
+    reason: "done",
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+  }
+}
+
 describe("extractResponseText", () => {
   test("returns text from text part", () => {
     const parts = [createTextPart("Hello world")]
@@ -103,18 +115,38 @@ describe("extractResponseText", () => {
     expect(extractResponseText(parts)).toBeNull()
   })
 
-  test("ignores running tool parts (throws since no completed tools)", () => {
+  test("returns null for running tool parts (signals summary needed)", () => {
     const parts = [createToolPart("bash", "", "running")]
-    expect(() => extractResponseText(parts)).toThrow("Failed to parse response")
+    expect(extractResponseText(parts)).toBeNull()
   })
 
-  test("throws with part types on empty array", () => {
-    expect(() => extractResponseText([])).toThrow("Part types found: [none]")
+  test("throws on empty array", () => {
+    expect(() => extractResponseText([])).toThrow("no parts returned")
   })
 
-  test("throws with part types on unhandled parts", () => {
+  test("returns null for step-start only", () => {
     const parts = [createStepStartPart()]
-    expect(() => extractResponseText(parts)).toThrow("Part types found: [step-start]")
+    expect(extractResponseText(parts)).toBeNull()
+  })
+
+  test("returns null for step-finish only", () => {
+    const parts = [createStepFinishPart()]
+    expect(extractResponseText(parts)).toBeNull()
+  })
+
+  test("returns null for step-start and step-finish", () => {
+    const parts = [createStepStartPart(), createStepFinishPart()]
+    expect(extractResponseText(parts)).toBeNull()
+  })
+
+  test("returns text from multi-step response", () => {
+    const parts = [
+      createStepStartPart(),
+      createToolPart("read", "src/file.ts"),
+      createTextPart("Done"),
+      createStepFinishPart(),
+    ]
+    expect(extractResponseText(parts)).toBe("Done")
   })
 
   test("prefers text over reasoning when both present", () => {

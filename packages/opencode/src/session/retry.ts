@@ -59,8 +59,12 @@ export namespace SessionRetry {
   }
 
   export function retryable(error: ReturnType<NamedError["toObject"]>) {
+    // context overflow errors should not be retried
+    if (MessageV2.ContextOverflowError.isInstance(error)) return undefined
     if (MessageV2.APIError.isInstance(error)) {
       if (!error.data.isRetryable) return undefined
+      if (error.data.responseBody?.includes("FreeUsageLimitError"))
+        return `Free usage exceeded, add credits https://opencode.ai/zen`
       return error.data.message.includes("Overloaded") ? "Provider is overloaded" : error.data.message
     }
 
@@ -76,24 +80,22 @@ export namespace SessionRetry {
         return undefined
       }
     })
-    if (!json || typeof json !== "object") return undefined
-    const code = typeof json.code === "string" ? json.code : ""
+    try {
+      if (!json || typeof json !== "object") return undefined
+      const code = typeof json.code === "string" ? json.code : ""
 
-    if (json.type === "error" && json.error?.type === "too_many_requests") {
-      return "Too Many Requests"
-    }
-    if (code.includes("exhausted") || code.includes("unavailable")) {
-      return "Provider is overloaded"
-    }
-    if (json.type === "error" && json.error?.code?.includes("rate_limit")) {
-      return "Rate Limited"
-    }
-    if (
-      json.error?.message?.includes("no_kv_space") ||
-      (json.type === "error" && json.error?.type === "server_error") ||
-      !!json.error
-    ) {
-      return "Provider Server Error"
+      if (json.type === "error" && json.error?.type === "too_many_requests") {
+        return "Too Many Requests"
+      }
+      if (code.includes("exhausted") || code.includes("unavailable")) {
+        return "Provider is overloaded"
+      }
+      if (json.type === "error" && json.error?.code?.includes("rate_limit")) {
+        return "Rate Limited"
+      }
+      return JSON.stringify(json)
+    } catch {
+      return undefined
     }
   }
 }

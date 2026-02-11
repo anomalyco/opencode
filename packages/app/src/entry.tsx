@@ -31,6 +31,12 @@ const platform: Platform = {
   openLink(url: string) {
     window.open(url, "_blank")
   },
+  back() {
+    window.history.back()
+  },
+  forward() {
+    window.history.forward()
+  },
   restart: async () => {
     window.location.reload()
   },

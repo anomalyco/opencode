@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createMemo, For, onCleanup, Show } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { useNavigate } from "@solidjs/router"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -7,28 +7,15 @@ import { Tabs } from "@opencode-ai/ui/tabs"
 import { Button } from "@opencode-ai/ui/button"
 import { Switch } from "@opencode-ai/ui/switch"
 import { Icon } from "@opencode-ai/ui/icon"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
-import { normalizeServerUrl, serverDisplayName, useServer } from "@/context/server"
+import { normalizeServerUrl, useServer } from "@/context/server"
 import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
-import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { DialogSelectServer } from "./dialog-select-server"
-
-type ServerStatus = { healthy: boolean; version?: string }
-
-async function checkHealth(url: string, platform: ReturnType<typeof usePlatform>): Promise<ServerStatus> {
-  const sdk = createOpencodeClient({
-    baseUrl: url,
-    fetch: platform.fetch,
-    signal: AbortSignal.timeout(3000),
-  })
-  return sdk.global
-    .health()
-    .then((x) => ({ healthy: x.data?.healthy === true, version: x.data?.version }))
-    .catch(() => ({ healthy: false }))
-}
+import { showToast } from "@opencode-ai/ui/toast"
+import { ServerRow } from "@/components/server/server-row"
+import { checkServerHealth, type ServerHealth } from "@/utils/server-health"
 
 export function StatusPopover() {
   const sync = useSync()
@@ -40,10 +27,11 @@ export function StatusPopover() {
   const navigate = useNavigate()
 
   const [store, setStore] = createStore({
-    status: {} as Record<string, ServerStatus | undefined>,
+    status: {} as Record<string, ServerHealth | undefined>,
     loading: null as string | null,
     defaultServerUrl: undefined as string | undefined,
   })
+  const fetcher = platform.fetch ?? globalThis.fetch
 
   const servers = createMemo(() => {
     const current = server.url
@@ -58,7 +46,7 @@ export function StatusPopover() {
     if (!list.length) return list
     const active = server.url
     const order = new Map(list.map((url, index) => [url, index] as const))
-    const rank = (value?: ServerStatus) => {
+    const rank = (value?: ServerHealth) => {
       if (value?.healthy === true) return 0
       if (value?.healthy === false) return 2
       return 1
@@ -73,10 +61,10 @@ export function StatusPopover() {
   })
 
   async function refreshHealth() {
-    const results: Record<string, ServerStatus> = {}
+    const results: Record<string, ServerHealth> = {}
     await Promise.all(
       servers().map(async (url) => {
-        results[url] = await checkHealth(url, platform)
+        results[url] = await checkServerHealth(url, fetcher)
       }),
     )
     setStore("status", reconcile(results))
@@ -100,15 +88,21 @@ export function StatusPopover() {
   const toggleMcp = async (name: string) => {
     if (store.loading) return
     setStore("loading", name)
-    const status = sync.data.mcp[name]
-    if (status?.status === "connected") {
-      await sdk.client.mcp.disconnect({ name })
-    } else {
-      await sdk.client.mcp.connect({ name })
+
+    try {
+      const status = sync.data.mcp[name]
+      await (status?.status === "connected" ? sdk.client.mcp.disconnect({ name }) : sdk.client.mcp.connect({ name }))
+      const result = await sdk.client.mcp.status()
+      if (result.data) sync.set("mcp", result.data)
+    } catch (err) {
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+        description: err instanceof Error ? err.message : String(err),
+      })
+    } finally {
+      setStore("loading", null)
     }
-    const result = await sdk.client.mcp.status()
-    if (result.data) sync.set("mcp", result.data)
-    setStore("loading", null)
   }
 
   const lspItems = createMemo(() => sync.data.lsp ?? [])
@@ -147,7 +141,7 @@ export function StatusPopover() {
       triggerProps={{
         variant: "ghost",
         class:
-          "rounded-sm w-[75px] h-[24px] py-1.5 pr-3 pl-2 gap-2 border-none shadow-none data-[expanded]:bg-surface-raised-base-active",
+          "rounded-md h-[24px] px-3 gap-2 border border-border-base bg-surface-panel shadow-none data-[expanded]:bg-surface-raised-base-active",
         style: { scale: 1 },
       }}
       trigger={
@@ -168,33 +162,16 @@ export function StatusPopover() {
       placement="bottom-end"
       shift={-136}
     >
-      <div
-        class="flex items-center gap-1 w-[360px] rounded-xl"
-        style={{ "box-shadow": "var(--shadow-lg-border-base)" }}
-      >
+      <div class="flex items-center gap-1 w-[360px] rounded-xl shadow-[var(--shadow-lg-border-base)]">
         <Tabs
           aria-label={language.t("status.popover.ariaLabel")}
-          class="tabs"
+          class="tabs bg-background-strong rounded-xl overflow-hidden"
           data-component="tabs"
           data-active="servers"
           defaultValue="servers"
           variant="alt"
-          style={{
-            "background-color": "var(--background-strong)",
-            "border-radius": "12px",
-            overflow: "hidden",
-          }}
         >
-          <Tabs.List
-            data-slot="tablist"
-            style={{
-              "background-color": "transparent",
-              "border-bottom": "none",
-              padding: "8px 16px 0",
-              gap: "16px",
-              height: "40px",
-            }}
-          >
+          <Tabs.List data-slot="tablist" class="bg-transparent border-b-0 px-4 pt-2 pb-0 gap-4 h-10">
             <Tabs.Trigger value="servers" data-slot="tab" class="text-12-regular">
               {serverCount() > 0 ? `${serverCount()} ` : ""}
               {language.t("status.popover.tab.servers")}
@@ -222,78 +199,43 @@ export function StatusPopover() {
                     const isDefault = () => url === store.defaultServerUrl
                     const status = () => store.status[url]
                     const isBlocked = () => status()?.healthy === false
-                    const [truncated, setTruncated] = createSignal(false)
-                    let nameRef: HTMLSpanElement | undefined
-                    let versionRef: HTMLSpanElement | undefined
-
-                    onMount(() => {
-                      const check = () => {
-                        const nameTruncated = nameRef ? nameRef.scrollWidth > nameRef.clientWidth : false
-                        const versionTruncated = versionRef ? versionRef.scrollWidth > versionRef.clientWidth : false
-                        setTruncated(nameTruncated || versionTruncated)
-                      }
-                      check()
-                      window.addEventListener("resize", check)
-                      onCleanup(() => window.removeEventListener("resize", check))
-                    })
-
-                    const tooltipValue = () => {
-                      const name = serverDisplayName(url)
-                      const version = status()?.version
-                      return (
-                        <span class="flex items-center gap-2">
-                          <span>{name}</span>
-                          <Show when={version}>
-                            <span class="text-text-invert-base">{version}</span>
-                          </Show>
-                        </span>
-                      )
-                    }
 
                     return (
-                      <Tooltip value={tooltipValue()} placement="top" inactive={!truncated()}>
-                        <button
-                          type="button"
-                          class="flex items-center gap-2 w-full h-8 pl-3 pr-1.5 py-1.5 rounded-md transition-colors text-left"
-                          classList={{
-                            "opacity-50": isBlocked(),
-                            "hover:bg-surface-raised-base-hover": !isBlocked(),
-                            "cursor-not-allowed": isBlocked(),
-                          }}
-                          aria-disabled={isBlocked()}
-                          onClick={() => {
-                            if (isBlocked()) return
-                            server.setActive(url)
-                            navigate("/")
-                          }}
+                      <button
+                        type="button"
+                        class="flex items-center gap-2 w-full h-8 pl-3 pr-1.5 py-1.5 rounded-md transition-colors text-left"
+                        classList={{
+                          "hover:bg-surface-raised-base-hover": !isBlocked(),
+                          "cursor-not-allowed": isBlocked(),
+                        }}
+                        aria-disabled={isBlocked()}
+                        onClick={() => {
+                          if (isBlocked()) return
+                          server.setActive(url)
+                          navigate("/")
+                        }}
+                      >
+                        <ServerRow
+                          url={url}
+                          status={status()}
+                          dimmed={isBlocked()}
+                          class="flex items-center gap-2 w-full min-w-0"
+                          nameClass="text-14-regular text-text-base truncate"
+                          versionClass="text-12-regular text-text-weak truncate"
+                          badge={
+                            <Show when={isDefault()}>
+                              <span class="text-11-regular text-text-base bg-surface-base px-1.5 py-0.5 rounded-md">
+                                {language.t("common.default")}
+                              </span>
+                            </Show>
+                          }
                         >
-                          <div
-                            classList={{
-                              "size-1.5 rounded-full shrink-0": true,
-                              "bg-icon-success-base": status()?.healthy === true,
-                              "bg-icon-critical-base": status()?.healthy === false,
-                              "bg-border-weak-base": status() === undefined,
-                            }}
-                          />
-                          <span ref={nameRef} class="text-14-regular text-text-base truncate">
-                            {serverDisplayName(url)}
-                          </span>
-                          <Show when={status()?.version}>
-                            <span ref={versionRef} class="text-12-regular text-text-weak truncate">
-                              {status()?.version}
-                            </span>
-                          </Show>
-                          <Show when={isDefault()}>
-                            <span class="text-11-regular text-text-base bg-surface-base px-1.5 py-0.5 rounded-md">
-                              {language.t("common.default")}
-                            </span>
-                          </Show>
                           <div class="flex-1" />
                           <Show when={isActive()}>
                             <Icon name="check" size="small" class="text-icon-weak shrink-0" />
                           </Show>
-                        </button>
-                      </Tooltip>
+                        </ServerRow>
+                      </button>
                     )
                   }}
                 </For>

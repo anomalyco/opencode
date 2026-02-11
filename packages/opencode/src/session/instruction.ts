@@ -17,12 +17,13 @@ const FILES = [
 ]
 
 function globalFiles() {
-  const files = [path.join(Global.Path.config, "AGENTS.md")]
-  if (!Flag.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT) {
-    files.push(path.join(os.homedir(), ".claude", "CLAUDE.md"))
-  }
+  const files = []
   if (Flag.OPENCODE_CONFIG_DIR) {
     files.push(path.join(Flag.OPENCODE_CONFIG_DIR, "AGENTS.md"))
+  }
+  files.push(path.join(Global.Path.config, "AGENTS.md"))
+  if (!Flag.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT) {
+    files.push(path.join(os.homedir(), ".claude", "CLAUDE.md"))
   }
   return files
 }
@@ -41,6 +42,32 @@ async function resolveRelative(instruction: string): Promise<string[]> {
 }
 
 export namespace InstructionPrompt {
+  const state = Instance.state(() => {
+    return {
+      claims: new Map<string, Set<string>>(),
+    }
+  })
+
+  function isClaimed(messageID: string, filepath: string) {
+    const claimed = state().claims.get(messageID)
+    if (!claimed) return false
+    return claimed.has(filepath)
+  }
+
+  function claim(messageID: string, filepath: string) {
+    const current = state()
+    let claimed = current.claims.get(messageID)
+    if (!claimed) {
+      claimed = new Set()
+      current.claims.set(messageID, claimed)
+    }
+    claimed.add(filepath)
+  }
+
+  export function clear(messageID: string) {
+    state().claims.delete(messageID)
+  }
+
   export async function systemPaths() {
     const config = await Config.get()
     const paths = new Set<string>()
@@ -49,7 +76,9 @@ export namespace InstructionPrompt {
       for (const file of FILES) {
         const matches = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
         if (matches.length > 0) {
-          matches.forEach((p) => paths.add(path.resolve(p)))
+          matches.forEach((p) => {
+            paths.add(path.resolve(p))
+          })
           break
         }
       }
@@ -77,7 +106,9 @@ export namespace InstructionPrompt {
               }),
             ).catch(() => [])
           : await resolveRelative(instruction)
-        matches.forEach((p) => paths.add(path.resolve(p)))
+        matches.forEach((p) => {
+          paths.add(path.resolve(p))
+        })
       }
     }
 
@@ -137,17 +168,20 @@ export namespace InstructionPrompt {
     }
   }
 
-  export async function resolve(messages: MessageV2.WithParts[], filepath: string) {
+  export async function resolve(messages: MessageV2.WithParts[], filepath: string, messageID: string) {
     const system = await systemPaths()
     const already = loaded(messages)
     const results: { filepath: string; content: string }[] = []
 
-    let current = path.dirname(path.resolve(filepath))
+    const target = path.resolve(filepath)
+    let current = path.dirname(target)
     const root = path.resolve(Instance.directory)
 
-    while (current.startsWith(root)) {
+    while (current.startsWith(root) && current !== root) {
       const found = await find(current)
-      if (found && !system.has(found) && !already.has(found)) {
+
+      if (found && found !== target && !system.has(found) && !already.has(found) && !isClaimed(messageID, found)) {
+        claim(messageID, found)
         const content = await Bun.file(found)
           .text()
           .catch(() => undefined)
@@ -155,7 +189,6 @@ export namespace InstructionPrompt {
           results.push({ filepath: found, content: "Instructions from: " + found + "\n" + content })
         }
       }
-      if (current === root) break
       current = path.dirname(current)
     }
 

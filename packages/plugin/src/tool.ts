@@ -9,6 +9,11 @@ export type ToolContext = {
    * Prefer this over process.cwd() when resolving relative paths.
    */
   directory: string
+  /**
+   * Project worktree root for this session.
+   * Useful for generating stable relative paths (e.g. path.relative(worktree, absPath)).
+   */
+  worktree: string
   abort: AbortSignal
   metadata(input: { title?: string; metadata?: { [key: string]: any } }): void
   ask(input: AskInput): Promise<void>

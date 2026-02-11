@@ -103,7 +103,7 @@
   display: flex;
   padding: 4px 4px 6px 4px;
   justify-content: center;
-  align-items: center;
+  align-items: start;
   border-radius: var(--radius-md);
   background: var(--surface-raised-stronger-non-alpha);
   max-height: calc(100vh - 6rem);

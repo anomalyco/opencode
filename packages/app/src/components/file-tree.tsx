@@ -1,4 +1,5 @@
 import { useFile } from "@/context/file"
+import { encodeFilePath } from "@/context/file/path"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -8,6 +9,8 @@ import {
   createMemo,
   For,
   Match,
+  on,
+  Show,
   splitProps,
   Switch,
   untrack,
@@ -17,18 +20,54 @@ import {
 import { Dynamic } from "solid-js/web"
 import type { FileNode } from "@opencode-ai/sdk/v2"
 
+function pathToFileUrl(filepath: string): string {
+  return `file://${encodeFilePath(filepath)}`
+}
+
+type Kind = "add" | "del" | "mix"
+
 type Filter = {
   files: Set<string>
   dirs: Set<string>
+}
+
+export function shouldListRoot(input: { level: number; dir?: { loaded?: boolean; loading?: boolean } }) {
+  if (input.level !== 0) return false
+  if (input.dir?.loaded) return false
+  if (input.dir?.loading) return false
+  return true
+}
+
+export function shouldListExpanded(input: {
+  level: number
+  dir?: { expanded?: boolean; loaded?: boolean; loading?: boolean }
+}) {
+  if (input.level === 0) return false
+  if (!input.dir?.expanded) return false
+  if (input.dir.loaded) return false
+  if (input.dir.loading) return false
+  return true
+}
+
+export function dirsToExpand(input: {
+  level: number
+  filter?: { dirs: Set<string> }
+  expanded: (dir: string) => boolean
+}) {
+  if (input.level !== 0) return []
+  if (!input.filter) return []
+  return [...input.filter.dirs].filter((dir) => !input.expanded(dir))
 }
 
 export default function FileTree(props: {
   path: string
   class?: string
   nodeClass?: string
+  active?: string
   level?: number
   allowed?: readonly string[]
   modified?: readonly string[]
+  kinds?: ReadonlyMap<string, Kind>
   draggable?: boolean
   tooltip?: boolean
   onFileClick?: (file: FileNode) => void
@@ -36,6 +75,7 @@ export default function FileTree(props: {
   _filter?: Filter
   _marks?: Set<string>
   _deeps?: Map<string, number>
+  _kinds?: ReadonlyMap<string, Kind>
 }) {
   const file = useFile()
   const level = props.level ?? 0
@@ -66,9 +106,16 @@ export default function FileTree(props: {
   const marks = createMemo(() => {
     if (props._marks) return props._marks
 
-    const modified = props.modified
-    if (!modified || modified.length === 0) return
-    return new Set(modified)
+    const out = new Set<string>()
+    for (const item of props.modified ?? []) out.add(item)
+    for (const item of props.kinds?.keys() ?? []) out.add(item)
+    if (out.size === 0) return
+    return out
+  })
+
+  const kinds = createMemo(() => {
+    if (props._kinds) return props._kinds
+    return props.kinds
   })
 
   const deeps = createMemo(() => {
@@ -98,29 +145,89 @@ export default function FileTree(props: {
 
   createEffect(() => {
     const current = filter()
-    if (!current) return
-    if (level !== 0) return
-
-    for (const dir of current.dirs) {
-      const expanded = untrack(() => file.tree.state(dir)?.expanded) ?? false
-      if (expanded) continue
-      file.tree.expand(dir)
-    }
+    const dirs = dirsToExpand({
+      level,
+      filter: current,
+      expanded: (dir) => untrack(() => file.tree.state(dir)?.expanded) ?? false,
+    })
+    for (const dir of dirs) file.tree.expand(dir)
   })
 
+  createEffect(
+    on(
+      () => props.path,
+      (path) => {
+        const dir = untrack(() => file.tree.state(path))
+        if (!shouldListRoot({ level, dir })) return
+        void file.tree.list(path)
+      },
+      { defer: false },
+    ),
+  )
+
   createEffect(() => {
-    const path = props.path
-    untrack(() => void file.tree.list(path))
+    const dir = file.tree.state(props.path)
+    if (!shouldListExpanded({ level, dir })) return
+    void file.tree.list(props.path)
   })
 
   const nodes = createMemo(() => {
     const nodes = file.tree.children(props.path)
     const current = filter()
     if (!current) return nodes
-    return nodes.filter((node) => {
+
+    const parent = (path: string) => {
+      const idx = path.lastIndexOf("/")
+      if (idx === -1) return ""
+      return path.slice(0, idx)
+    }
+
+    const leaf = (path: string) => {
+      const idx = path.lastIndexOf("/")
+      return idx === -1 ? path : path.slice(idx + 1)
+    }
+
+    const out = nodes.filter((node) => {
       if (node.type === "file") return current.files.has(node.path)
       return current.dirs.has(node.path)
     })
+
+    const seen = new Set(out.map((node) => node.path))
+
+    for (const dir of current.dirs) {
+      if (parent(dir) !== props.path) continue
+      if (seen.has(dir)) continue
+      out.push({
+        name: leaf(dir),
+        path: dir,
+        absolute: dir,
+        type: "directory",
+        ignored: false,
+      })
+      seen.add(dir)
+    }
+
+    for (const item of current.files) {
+      if (parent(item) !== props.path) continue
+      if (seen.has(item)) continue
+      out.push({
+        name: leaf(item),
+        path: item,
+        absolute: item,
+        type: "file",
+        ignored: false,
+      })
+      seen.add(item)
+    }
+
+    out.sort((a, b) => {
+      if (a.type !== b.type) {
+        return a.type === "directory" ? -1 : 1
+      }
+      return a.name.localeCompare(b.name)
+    })
+
+    return out
   })
 
   const Node = (
@@ -136,7 +243,8 @@ export default function FileTree(props: {
       <Dynamic
         component={local.as ?? "div"}
         classList={{
-          "w-full min-w-0 h-6 flex items-center justify-start gap-x-1.5 rounded-md px-2 py-0 text-left hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors cursor-pointer": true,
+          "w-full min-w-0 h-6 flex items-center justify-start gap-x-1.5 rounded-md px-1.5 py-0 text-left hover:bg-surface-raised-base-hover active:bg-surface-base-active transition-colors cursor-pointer": true,
+          "bg-surface-base-active": local.node.path === props.active,
           ...(local.classList ?? {}),
           [local.class ?? ""]: !!local.class,
           [props.nodeClass ?? ""]: !!props.nodeClass,
@@ -146,7 +254,7 @@ export default function FileTree(props: {
         onDragStart={(e: DragEvent) => {
           if (!draggable()) return
           e.dataTransfer?.setData("text/plain", `file:${local.node.path}`)
-          e.dataTransfer?.setData("text/uri-list", `file://${local.node.path}`)
+          e.dataTransfer?.setData("text/uri-list", pathToFileUrl(local.node.path))
           if (e.dataTransfer) e.dataTransfer.effectAllowed = "copy"
 
           const dragImage = document.createElement("div")
@@ -170,18 +278,65 @@ export default function FileTree(props: {
         {...rest}
       >
         {local.children}
-        <span
-          classList={{
-            "flex-1 min-w-0 text-12-medium whitespace-nowrap truncate": true,
-            "text-text-weaker": local.node.ignored,
-            "text-text-weak": !local.node.ignored,
-          }}
-        >
-          {local.node.name}
-        </span>
-        {local.node.type === "file" && marks()?.has(local.node.path) ? (
-          <div class="shrink-0 size-1.5 rounded-full bg-surface-warning-strong" />
-        ) : null}
+        {(() => {
+          const kind = kinds()?.get(local.node.path)
+          const marked = marks()?.has(local.node.path) ?? false
+          const active = !!kind && marked && !local.node.ignored
+          const color =
+            kind === "add"
+              ? "color: var(--icon-diff-add-base)"
+              : kind === "del"
+                ? "color: var(--icon-diff-delete-base)"
+                : kind === "mix"
+                  ? "color: var(--icon-warning-active)"
+                  : undefined
+          return (
+            <span
+              classList={{
+                "flex-1 min-w-0 text-12-medium whitespace-nowrap truncate": true,
+                "text-text-weaker": local.node.ignored,
+                "text-text-weak": !local.node.ignored && !active,
+              }}
+              style={active ? color : undefined}
+            >
+              {local.node.name}
+            </span>
+          )
+        })()}
+        {(() => {
+          const kind = kinds()?.get(local.node.path)
+          if (!kind) return null
+          if (!marks()?.has(local.node.path)) return null
+
+          if (local.node.type === "file") {
+            const text = kind === "add" ? "A" : kind === "del" ? "D" : "M"
+            const color =
+              kind === "add"
+                ? "color: var(--icon-diff-add-base)"
+                : kind === "del"
+                  ? "color: var(--icon-diff-delete-base)"
+                  : "color: var(--icon-warning-active)"
+
+            return (
+              <span class="shrink-0 w-4 text-center text-12-medium" style={color}>
+                {text}
+              </span>
+            )
+          }
+
+          if (local.node.type === "directory") {
+            const color =
+              kind === "add"
+                ? "background-color: var(--icon-diff-add-base)"
+                : kind === "del"
+                  ? "background-color: var(--icon-diff-delete-base)"
+                  : "background-color: var(--icon-warning-active)"
+
+            return <div class="shrink-0 size-1.5 mr-1.5 rounded-full" style={color} />
+          }
+
+          return null
+        })()}
       </Dynamic>
     )
   }
@@ -194,8 +349,55 @@ export default function FileTree(props: {
           const deep = () => deeps().get(node.path) ?? -1
           const Wrapper = (p: ParentProps) => {
             if (!tooltip()) return p.children
+
+            const parts = node.path.split("/")
+            const leaf = parts[parts.length - 1] ?? node.path
+            const head = parts.slice(0, -1).join("/")
+            const prefix = head ? `${head}/` : ""
+
+            const kind = () => kinds()?.get(node.path)
+            const label = () => {
+              const k = kind()
+              if (!k) return
+              if (k === "add") return "Additions"
+              if (k === "del") return "Deletions"
+              return "Modifications"
+            }
+
+            const ignored = () => node.type === "directory" && node.ignored
+
             return (
-              <Tooltip forceMount={false} openDelay={2000} value={node.path} placement="right" class="w-full">
+              <Tooltip
+                openDelay={2000}
+                placement="bottom-start"
+                class="w-full"
+                contentStyle={{ "max-width": "480px", width: "fit-content" }}
+                value={
+                  <div class="flex items-center min-w-0 whitespace-nowrap text-12-regular">
+                    <span
+                      class="min-w-0 truncate text-text-invert-base"
+                      style={{ direction: "rtl", "unicode-bidi": "plaintext" }}
+                    >
+                      {prefix}
+                    </span>
+                    <span class="shrink-0 text-text-invert-strong">{leaf}</span>
+                    <Show when={label()}>
+                      {(t: () => string) => (
+                        <>
+                          <span class="mx-1 font-bold text-text-invert-strong">•</span>
+                          <span class="shrink-0 text-text-invert-strong">{t()}</span>
+                        </>
+                      )}
+                    </Show>
+                    <Show when={ignored()}>
+                      <>
+                        <span class="mx-1 font-bold text-text-invert-strong">•</span>
+                        <span class="shrink-0 text-text-invert-strong">Ignored</span>
+                      </>
+                    </Show>
+                  </div>
+                }
+              >
                 {p.children}
               </Tooltip>
             )
@@ -235,12 +437,15 @@ export default function FileTree(props: {
                       level={level + 1}
                       allowed={props.allowed}
                       modified={props.modified}
+                      kinds={props.kinds}
+                      active={props.active}
                       draggable={props.draggable}
                       tooltip={props.tooltip}
                       onFileClick={props.onFileClick}
                       _filter={filter()}
                       _marks={marks()}
                       _deeps={deeps()}
+                      _kinds={kinds()}
                     />
                   </Collapsible.Content>
                 </Collapsible>
