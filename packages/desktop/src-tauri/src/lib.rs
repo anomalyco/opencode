@@ -4,6 +4,7 @@ mod constants;
 mod job_object;
 #[cfg(target_os = "linux")]
 pub mod linux_display;
+mod logging;
 mod markdown;
 mod server;
 mod window_customizer;
@@ -16,7 +17,6 @@ use futures::{
 #[cfg(windows)]
 use job_object::*;
 use std::{
-    collections::VecDeque,
     env,
     net::TcpListener,
     path::PathBuf,
@@ -85,14 +85,11 @@ impl ServerState {
     }
 }
 
-#[derive(Clone)]
-struct LogState(Arc<Mutex<VecDeque<String>>>);
-
 #[tauri::command]
 #[specta::specta]
 fn kill_sidecar(app: AppHandle) {
     let Some(server_state) = app.try_state::<ServerState>() else {
-        println!("Server not running");
+        tracing::info!("Server not running");
         return;
     };
 
@@ -102,24 +99,17 @@ fn kill_sidecar(app: AppHandle) {
         .expect("Failed to acquire mutex lock")
         .take()
     else {
-        println!("Server state missing");
+        tracing::info!("Server state missing");
         return;
     };
 
     let _ = server_state.kill();
 
-    println!("Killed server");
+    tracing::info!("Killed server");
 }
 
-async fn get_logs(app: AppHandle) -> Result<String, String> {
-    let log_state = app.try_state::<LogState>().ok_or("Log state not found")?;
-
-    let logs = log_state
-        .0
-        .lock()
-        .map_err(|_| "Failed to acquire log lock")?;
-
-    Ok(logs.iter().cloned().collect::<Vec<_>>().join(""))
+fn get_logs() -> String {
+    logging::tail()
 }
 
 #[tauri::command]
@@ -172,211 +162,28 @@ fn check_app_exists(app_name: &str) -> bool {
 }
 
 #[cfg(target_os = "windows")]
-fn check_windows_app(app_name: &str) -> bool {
-    resolve_windows_app_path(app_name).is_some()
+fn check_windows_app(_app_name: &str) -> bool {
+    // Check if command exists in PATH, including .exe
+    return true;
 }
 
 #[cfg(target_os = "windows")]
 fn resolve_windows_app_path(app_name: &str) -> Option<String> {
     use std::path::{Path, PathBuf};
 
-    fn expand_env(value: &str) -> String {
-        let mut out = String::with_capacity(value.len());
-        let mut index = 0;
+    // Try to find the command using 'where'
+    let output = Command::new("where").arg(app_name).output().ok()?;
 
-        while let Some(start) = value[index..].find('%') {
-            let start = index + start;
-            out.push_str(&value[index..start]);
-
-            let Some(end_rel) = value[start + 1..].find('%') else {
-                out.push_str(&value[start..]);
-                return out;
-            };
-
-            let end = start + 1 + end_rel;
-            let key = &value[start + 1..end];
-            if key.is_empty() {
-                out.push('%');
-                index = end + 1;
-                continue;
-            }
-
-            if let Ok(v) = std::env::var(key) {
-                out.push_str(&v);
-                index = end + 1;
-                continue;
-            }
-
-            out.push_str(&value[start..=end]);
-            index = end + 1;
-        }
-
-        out.push_str(&value[index..]);
-        out
-    }
-
-    fn extract_exe(value: &str) -> Option<String> {
-        let value = value.trim();
-        if value.is_empty() {
-            return None;
-        }
-
-        if let Some(rest) = value.strip_prefix('"') {
-            if let Some(end) = rest.find('"') {
-                let inner = rest[..end].trim();
-                if inner.to_ascii_lowercase().contains(".exe") {
-                    return Some(inner.to_string());
-                }
-            }
-        }
-
-        let lower = value.to_ascii_lowercase();
-        let end = lower.find(".exe")?;
-        Some(value[..end + 4].trim().trim_matches('"').to_string())
-    }
-
-    fn candidates(app_name: &str) -> Vec<String> {
-        let app_name = app_name.trim().trim_matches('"');
-        if app_name.is_empty() {
-            return vec![];
-        }
-
-        let mut out = Vec::<String>::new();
-        let mut push = |value: String| {
-            let value = value.trim().trim_matches('"').to_string();
-            if value.is_empty() {
-                return;
-            }
-            if out.iter().any(|v| v.eq_ignore_ascii_case(&value)) {
-                return;
-            }
-            out.push(value);
-        };
-
-        push(app_name.to_string());
-
-        let lower = app_name.to_ascii_lowercase();
-        if !lower.ends_with(".exe") {
-            push(format!("{app_name}.exe"));
-        }
-
-        let snake = {
-            let mut s = String::new();
-            let mut underscore = false;
-            for c in lower.chars() {
-                if c.is_ascii_alphanumeric() {
-                    s.push(c);
-                    underscore = false;
-                    continue;
-                }
-                if underscore {
-                    continue;
-                }
-                s.push('_');
-                underscore = true;
-            }
-            s.trim_matches('_').to_string()
-        };
-
-        if !snake.is_empty() {
-            push(snake.clone());
-            if !snake.ends_with(".exe") {
-                push(format!("{snake}.exe"));
-            }
-        }
-
-        let alnum = lower
-            .chars()
-            .filter(|c| c.is_ascii_alphanumeric())
-            .collect::<String>();
-
-        if !alnum.is_empty() {
-            push(alnum.clone());
-            push(format!("{alnum}.exe"));
-        }
-
-        match lower.as_str() {
-            "sublime text" | "sublime-text" | "sublime_text" | "sublime text.exe" => {
-                push("subl".to_string());
-                push("subl.exe".to_string());
-                push("sublime_text".to_string());
-                push("sublime_text.exe".to_string());
-            }
-            _ => {}
-        }
-
-        out
-    }
-
-    fn reg_app_path(exe: &str) -> Option<String> {
-        let exe = exe.trim().trim_matches('"');
-        if exe.is_empty() {
-            return None;
-        }
-
-        let keys = [
-            format!(
-                r"HKCU\Software\Microsoft\Windows\CurrentVersion\App Paths\{exe}"
-            ),
-            format!(
-                r"HKLM\Software\Microsoft\Windows\CurrentVersion\App Paths\{exe}"
-            ),
-            format!(
-                r"HKLM\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths\{exe}"
-            ),
-        ];
-
-        for key in keys {
-            let Some(output) = Command::new("reg")
-                .args(["query", &key, "/ve"])
-                .output()
-                .ok()
-            else {
-                continue;
-            };
-
-            if !output.status.success() {
-                continue;
-            }
-
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            for line in stdout.lines() {
-                let tokens = line.split_whitespace().collect::<Vec<_>>();
-                let Some(index) = tokens.iter().position(|v| v.starts_with("REG_")) else {
-                    continue;
-                };
-
-                let value = tokens[index + 1..].join(" ");
-                let Some(exe) = extract_exe(&value) else {
-                    continue;
-                };
-
-                let exe = expand_env(&exe);
-                let path = Path::new(exe.trim().trim_matches('"'));
-                if path.exists() {
-                    return Some(path.to_string_lossy().to_string());
-                }
-            }
-        }
-
-        None
-    }
-
-    let app_name = app_name.trim().trim_matches('"');
-    if app_name.is_empty() {
+    if !output.status.success() {
         return None;
     }
 
-    let direct = Path::new(app_name);
-    if direct.is_absolute() && direct.exists() {
-        return Some(direct.to_string_lossy().to_string());
-    }
-
-    let key = app_name
-        .chars()
-        .filter(|v| v.is_ascii_alphanumeric())
-        .flat_map(|v| v.to_lowercase())
-        .collect::<String>();
+    let paths = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(PathBuf::from)
+        .collect::<Vec<_>>();
 
     let has_ext = |path: &Path, ext: &str| {
         path.extension()
@@ -385,19 +192,22 @@ fn resolve_windows_app_path(app_name: &str) -> Option<String> {
             .unwrap_or(false)
     };
 
+    if let Some(path) = paths.iter().find(|path| has_ext(path, "exe")) {
+        return Some(path.to_string_lossy().to_string());
+    }
+
     let resolve_cmd = |path: &Path| -> Option<String> {
-        let bytes = std::fs::read(path).ok()?;
-        let content = String::from_utf8_lossy(&bytes);
+        let content = std::fs::read_to_string(path).ok()?;
 
         for token in content.split('"') {
-            let Some(exe) = extract_exe(token) else {
+            let lower = token.to_ascii_lowercase();
+            if !lower.contains(".exe") {
                 continue;
-            };
+            }
 
-            let lower = exe.to_ascii_lowercase();
             if let Some(index) = lower.find("%~dp0") {
                 let base = path.parent()?;
-                let suffix = &exe[index + 5..];
+                let suffix = &token[index + 5..];
                 let mut resolved = PathBuf::from(base);
 
                 for part in suffix.replace('/', "\\").split('\\') {
@@ -414,11 +224,9 @@ fn resolve_windows_app_path(app_name: &str) -> Option<String> {
                 if resolved.exists() {
                     return Some(resolved.to_string_lossy().to_string());
                 }
-
-                continue;
             }
 
-            let resolved = PathBuf::from(expand_env(&exe));
+            let resolved = PathBuf::from(token);
             if resolved.exists() {
                 return Some(resolved.to_string_lossy().to_string());
             }
@@ -427,130 +235,74 @@ fn resolve_windows_app_path(app_name: &str) -> Option<String> {
         None
     };
 
-    let resolve_where = |query: &str| -> Option<String> {
-        let output = Command::new("where").arg(query).output().ok()?;
-        if !output.status.success() {
-            return None;
+    for path in &paths {
+        if has_ext(path, "cmd") || has_ext(path, "bat") {
+            if let Some(resolved) = resolve_cmd(path) {
+                return Some(resolved);
+            }
         }
 
-        let paths = String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .map(str::trim)
-            .filter(|line| !line.is_empty())
-            .map(PathBuf::from)
-            .collect::<Vec<_>>();
-
-        if paths.is_empty() {
-            return None;
-        }
-
-        if let Some(path) = paths.iter().find(|path| has_ext(path, "exe")) {
-            return Some(path.to_string_lossy().to_string());
-        }
-
-        for path in &paths {
-            if has_ext(path, "cmd") || has_ext(path, "bat") {
-                if let Some(resolved) = resolve_cmd(path) {
+        if path.extension().is_none() {
+            let cmd = path.with_extension("cmd");
+            if cmd.exists() {
+                if let Some(resolved) = resolve_cmd(&cmd) {
                     return Some(resolved);
                 }
             }
 
-            if path.extension().is_none() {
-                let cmd = path.with_extension("cmd");
-                if cmd.exists() {
-                    if let Some(resolved) = resolve_cmd(&cmd) {
-                        return Some(resolved);
-                    }
-                }
-
-                let bat = path.with_extension("bat");
-                if bat.exists() {
-                    if let Some(resolved) = resolve_cmd(&bat) {
-                        return Some(resolved);
-                    }
+            let bat = path.with_extension("bat");
+            if bat.exists() {
+                if let Some(resolved) = resolve_cmd(&bat) {
+                    return Some(resolved);
                 }
             }
         }
+    }
 
-        if !key.is_empty() {
-            for path in &paths {
-                let dirs = [
-                    path.parent(),
-                    path.parent().and_then(|dir| dir.parent()),
-                    path.parent()
-                        .and_then(|dir| dir.parent())
-                        .and_then(|dir| dir.parent()),
-                ];
+    let key = app_name
+        .chars()
+        .filter(|v| v.is_ascii_alphanumeric())
+        .flat_map(|v| v.to_lowercase())
+        .collect::<String>();
 
-                for dir in dirs.into_iter().flatten() {
-                    if let Ok(entries) = std::fs::read_dir(dir) {
-                        for entry in entries.flatten() {
-                            let candidate = entry.path();
-                            if !has_ext(&candidate, "exe") {
-                                continue;
-                            }
+    if !key.is_empty() {
+        for path in &paths {
+            let dirs = [
+                path.parent(),
+                path.parent().and_then(|dir| dir.parent()),
+                path.parent()
+                    .and_then(|dir| dir.parent())
+                    .and_then(|dir| dir.parent()),
+            ];
 
-                            let Some(stem) = candidate.file_stem().and_then(|v| v.to_str()) else {
-                                continue;
-                            };
+            for dir in dirs.into_iter().flatten() {
+                if let Ok(entries) = std::fs::read_dir(dir) {
+                    for entry in entries.flatten() {
+                        let candidate = entry.path();
+                        if !has_ext(&candidate, "exe") {
+                            continue;
+                        }
 
-                            let name = stem
-                                .chars()
-                                .filter(|v| v.is_ascii_alphanumeric())
-                                .flat_map(|v| v.to_lowercase())
-                                .collect::<String>();
+                        let Some(stem) = candidate.file_stem().and_then(|v| v.to_str()) else {
+                            continue;
+                        };
 
-                            if name.contains(&key) || key.contains(&name) {
-                                return Some(candidate.to_string_lossy().to_string());
-                            }
+                        let name = stem
+                            .chars()
+                            .filter(|v| v.is_ascii_alphanumeric())
+                            .flat_map(|v| v.to_lowercase())
+                            .collect::<String>();
+
+                        if name.contains(&key) || key.contains(&name) {
+                            return Some(candidate.to_string_lossy().to_string());
                         }
                     }
                 }
             }
         }
-
-        paths.first().map(|path| path.to_string_lossy().to_string())
-    };
-
-    let list = candidates(app_name);
-    for query in &list {
-        if let Some(path) = resolve_where(query) {
-            return Some(path);
-        }
     }
 
-    let mut exes = Vec::<String>::new();
-    for query in &list {
-        let query = query.trim().trim_matches('"');
-        if query.is_empty() {
-            continue;
-        }
-
-        let name = Path::new(query)
-            .file_name()
-            .and_then(|v| v.to_str())
-            .unwrap_or(query);
-
-        let exe = if name.to_ascii_lowercase().ends_with(".exe") {
-            name.to_string()
-        } else {
-            format!("{name}.exe")
-        };
-
-        if exes.iter().any(|v| v.eq_ignore_ascii_case(&exe)) {
-            continue;
-        }
-
-        exes.push(exe);
-    }
-
-    for exe in exes {
-        if let Some(path) = reg_app_path(&exe) {
-            return Some(path);
-        }
-    }
-
-    None
+    paths.first().map(|path| path.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -715,10 +467,18 @@ pub fn run() {
         .plugin(tauri_plugin_decorum::init())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
-            let app = app.handle().clone();
+            let handle = app.handle().clone();
 
-            builder.mount_events(&app);
-            tauri::async_runtime::spawn(initialize(app));
+            let log_dir = app
+                .path()
+                .app_log_dir()
+                .expect("failed to resolve app log dir");
+            // Hold the guard in managed state so it lives for the app's lifetime,
+            // ensuring all buffered logs are flushed on shutdown.
+            handle.manage(logging::init(&log_dir));
+
+            builder.mount_events(&handle);
+            tauri::async_runtime::spawn(initialize(handle));
 
             Ok(())
         });
@@ -732,7 +492,7 @@ pub fn run() {
         .expect("error while running tauri application")
         .run(|app, event| {
             if let RunEvent::Exit = event {
-                println!("Received Exit");
+                tracing::info!("Received Exit");
 
                 kill_sidecar(app.clone());
             }
@@ -780,9 +540,8 @@ fn test_export_types() {
 #[derive(tauri_specta::Event, serde::Deserialize, specta::Type)]
 struct LoadingWindowComplete;
 
-// #[tracing::instrument(skip_all)]
 async fn initialize(app: AppHandle) {
-    println!("Initializing app");
+    tracing::info!("Initializing app");
 
     let (init_tx, init_rx) = watch::channel(InitStep::ServerWaiting);
 
@@ -795,7 +554,7 @@ async fn initialize(app: AppHandle) {
 
     let loading_window_complete = event_once_fut::<LoadingWindowComplete>(&app);
 
-    println!("Main and loading windows created");
+    tracing::info!("Main and loading windows created");
 
     let sqlite_enabled = option_env!("OPENCODE_SQLITE").is_some();
 
@@ -806,7 +565,7 @@ async fn initialize(app: AppHandle) {
         async move {
             let mut sqlite_exists = sqlite_file_exists();
 
-            println!("Setting up server connection");
+            tracing::info!("Setting up server connection");
             let server_connection = setup_server_connection(app.clone()).await;
 
             // we delay spawning this future so that the timeout is created lazily
@@ -831,16 +590,13 @@ async fn initialize(app: AppHandle) {
                             if let Some(err) = err {
                                 let _ = child.kill();
 
-                                let logs = get_logs(app.clone())
-                                    .await
-                                    .unwrap_or_else(|e| format!("[DESKTOP] Failed to read sidecar logs: {e}\n"));
-
                                 return Err(format!(
-                                    "Failed to spawn OpenCode Server ({err}). Logs:\n{logs}"
+                                    "Failed to spawn OpenCode Server ({err}). Logs:\n{}",
+                                    get_logs()
                                 ));
                             }
 
-                            println!("CLI health check OK");
+                            tracing::info!("CLI health check OK");
 
                             #[cfg(windows)]
                             {
@@ -868,11 +624,11 @@ async fn initialize(app: AppHandle) {
 
             if let Some(cli_health_check) = cli_health_check {
                 if sqlite_enabled {
-                    println!("Does sqlite file exist: {sqlite_exists}");
+                    tracing::debug!(sqlite_exists, "Checking sqlite file existence");
                     if !sqlite_exists {
-                        println!(
-                            "Sqlite file not found at {}, waiting for it to be generated",
-                            opencode_db_path().expect("failed to get db path").display()
+                        tracing::info!(
+                            path = %opencode_db_path().expect("failed to get db path").display(),
+                            "Sqlite file not found, waiting for it to be generated"
                         );
                         let _ = init_tx.send(InitStep::SqliteWaiting);
 
@@ -897,7 +653,7 @@ async fn initialize(app: AppHandle) {
             .await
             .is_err()
     {
-        println!("Loading task timed out, showing loading window");
+        tracing::debug!("Loading task timed out, showing loading window");
         let app = app.clone();
         let loading_window = LoadingWindow::create(&app).expect("Failed to create loading window");
         sleep(Duration::from_secs(1)).await;
@@ -910,14 +666,14 @@ async fn initialize(app: AppHandle) {
 
     let _ = loading_task.await;
 
-    println!("Loading done, completing initialisation");
+    tracing::info!("Loading done, completing initialisation");
 
     let _ = init_tx.send(InitStep::Done);
 
     if loading_window.is_some() {
         loading_window_complete.await;
 
-        println!("Loading window completed");
+        tracing::info!("Loading window completed");
     }
 
     MainWindow::create(&app).expect("Failed to create main window");
@@ -931,9 +687,6 @@ fn setup_app(app: &tauri::AppHandle, init_rx: watch::Receiver<InitStep>) {
     #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
     app.deep_link().register_all().ok();
 
-    // Initialize log state
-    app.manage(LogState(Arc::new(Mutex::new(VecDeque::new()))));
-
     #[cfg(windows)]
     app.manage(JobObjectState::new());
 
@@ -943,7 +696,7 @@ fn setup_app(app: &tauri::AppHandle, init_rx: watch::Receiver<InitStep>) {
 fn spawn_cli_sync_task(app: AppHandle) {
     tokio::spawn(async move {
         if let Err(e) = sync_cli(app) {
-            eprintln!("Failed to sync CLI: {e}");
+            tracing::error!("Failed to sync CLI: {e}");
         }
     });
 }
@@ -963,12 +716,12 @@ enum ServerConnection {
 async fn setup_server_connection(app: AppHandle) -> ServerConnection {
     let custom_url = get_saved_server_url(&app).await;
 
-    println!("Attempting server connection to custom url: {custom_url:?}");
+    tracing::info!(?custom_url, "Attempting server connection");
 
     if let Some(url) = custom_url
         && server::check_health_or_ask_retry(&app, &url).await
     {
-        println!("Connected to custom server: {}", url);
+        tracing::info!(%url, "Connected to custom server");
         return ServerConnection::Existing { url: url.clone() };
     }
 
@@ -976,15 +729,15 @@ async fn setup_server_connection(app: AppHandle) -> ServerConnection {
     let hostname = "127.0.0.1";
     let local_url = format!("http://{hostname}:{local_port}");
 
-    println!("Checking health of server '{}'", local_url);
+    tracing::debug!(url = %local_url, "Checking health of local server");
     if server::check_health(&local_url, None).await {
-        println!("Health check OK, using existing server");
+        tracing::info!(url = %local_url, "Health check OK, using existing server");
         return ServerConnection::Existing { url: local_url };
     }
 
     let password = uuid::Uuid::new_v4().to_string();
 
-    println!("Spawning new local server");
+    tracing::info!("Spawning new local server");
     let (child, health_check) =
         server::spawn_local_server(app, hostname.to_string(), local_port, password.clone());
 
