@@ -190,7 +190,7 @@ export const Terminal = (props: TerminalProps) => {
         cursorStyle: "bar",
         fontSize: 14,
         fontFamily: monoFontFamily(settings.appearance.font()),
-        allowTransparency: true,
+        allowTransparency: false,
         convertEol: true,
         theme: terminalColors(),
         scrollback: 10_000,
