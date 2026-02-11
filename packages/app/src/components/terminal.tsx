@@ -91,7 +91,7 @@ export const Terminal = (props: TerminalProps) => {
   }
 
   const getTerminalColors = (): TerminalColors => {
-    const mode = theme.mode()
+    const mode = theme.mode() === "dark" ? "dark" : "light"
     const fallback = DEFAULT_TERMINAL_COLORS[mode]
     const currentTheme = theme.themes()[theme.themeId()]
     if (!currentTheme) return fallback
@@ -130,11 +130,12 @@ export const Terminal = (props: TerminalProps) => {
     const t = term
     if (!t) return
     t.focus()
+    t.textarea?.focus()
     setTimeout(() => t.textarea?.focus(), 0)
   }
   const handlePointerDown = () => {
     const activeElement = document.activeElement
-    if (activeElement instanceof HTMLElement && activeElement !== container) {
+    if (activeElement instanceof HTMLElement && activeElement !== container && !container.contains(activeElement)) {
       activeElement.blur()
     }
     focusTerminal()
@@ -185,12 +186,26 @@ export const Terminal = (props: TerminalProps) => {
       }
       ws = socket
 
+      const restore = typeof local.pty.buffer === "string" ? local.pty.buffer : ""
+      const restoreSize =
+        restore &&
+        typeof local.pty.cols === "number" &&
+        Number.isSafeInteger(local.pty.cols) &&
+        local.pty.cols > 0 &&
+        typeof local.pty.rows === "number" &&
+        Number.isSafeInteger(local.pty.rows) &&
+        local.pty.rows > 0
+          ? { cols: local.pty.cols, rows: local.pty.rows }
+          : undefined
+
       const t = new mod.Terminal({
         cursorBlink: true,
         cursorStyle: "bar",
+        cols: restoreSize?.cols,
+        rows: restoreSize?.rows,
         fontSize: 14,
         fontFamily: monoFontFamily(settings.appearance.font()),
-        allowTransparency: true,
+        allowTransparency: false,
         convertEol: true,
         theme: terminalColors(),
         scrollback: 10_000,
@@ -204,44 +219,32 @@ export const Terminal = (props: TerminalProps) => {
       ghostty = g
       term = t
 
-      const copy = () => {
+      const handleCopy = (event: ClipboardEvent) => {
         const selection = t.getSelection()
-        if (!selection) return false
+        if (!selection) return
 
-        const body = document.body
-        if (body) {
-          const textarea = document.createElement("textarea")
-          textarea.value = selection
-          textarea.setAttribute("readonly", "")
-          textarea.style.position = "fixed"
-          textarea.style.opacity = "0"
-          body.appendChild(textarea)
-          textarea.select()
-          const copied = document.execCommand("copy")
-          body.removeChild(textarea)
-          if (copied) return true
-        }
+        const clipboard = event.clipboardData
+        if (!clipboard) return
 
-        const clipboard = navigator.clipboard
-        if (clipboard?.writeText) {
-          clipboard.writeText(selection).catch(() => {})
-          return true
-        }
+        event.preventDefault()
+        clipboard.setData("text/plain", selection)
+      }
 
-        return false
+      const handlePaste = (event: ClipboardEvent) => {
+        const clipboard = event.clipboardData
+        const text = clipboard?.getData("text/plain") ?? clipboard?.getData("text") ?? ""
+        if (!text) return
+
+        event.preventDefault()
+        event.stopPropagation()
+        t.paste(text)
       }
 
       t.attachCustomKeyEventHandler((event) => {
         const key = event.key.toLowerCase()
 
         if (event.ctrlKey && event.shiftKey && !event.metaKey && key === "c") {
-          copy()
-          return true
-        }
-
-        if (event.metaKey && !event.ctrlKey && !event.altKey && key === "c") {
-          if (!t.hasSelection()) return true
-          copy()
+          document.execCommand("copy")
           return true
         }
 
@@ -251,6 +254,12 @@ export const Terminal = (props: TerminalProps) => {
 
         return matchKeybind(keybinds, event)
       })
+
+      container.addEventListener("copy", handleCopy, true)
+      cleanups.push(() => container.removeEventListener("copy", handleCopy, true))
+
+      container.addEventListener("paste", handlePaste, true)
+      cleanups.push(() => container.removeEventListener("paste", handlePaste, true))
 
       const fit = new mod.FitAddon()
       const serializer = new SerializeAddon()
@@ -282,18 +291,28 @@ export const Terminal = (props: TerminalProps) => {
 
       focusTerminal()
 
-      fit.fit()
-
-      if (local.pty.buffer) {
-        t.write(local.pty.buffer, () => {
-          if (local.pty.scrollY) t.scrollToLine(local.pty.scrollY)
-        })
+      const startResize = () => {
+        fit.observeResize()
+        handleResize = () => fit.fit()
+        window.addEventListener("resize", handleResize)
+        cleanups.push(() => window.removeEventListener("resize", handleResize))
       }
 
-      fit.observeResize()
-      handleResize = () => fit.fit()
-      window.addEventListener("resize", handleResize)
-      cleanups.push(() => window.removeEventListener("resize", handleResize))
+      if (restore && restoreSize) {
+        t.write(restore, () => {
+          fit.fit()
+          if (typeof local.pty.scrollY === "number") t.scrollToLine(local.pty.scrollY)
+          startResize()
+        })
+      } else {
+        fit.fit()
+        if (restore) {
+          t.write(restore, () => {
+            if (typeof local.pty.scrollY === "number") t.scrollToLine(local.pty.scrollY)
+          })
+        }
+        startResize()
+      }
 
       const onResize = t.onResize(async (size) => {
         if (socket.readyState === WebSocket.OPEN) {

@@ -147,7 +147,7 @@ Se você é novo no uso de provedores de LLM, recomendamos usar o [OpenCode Zen]
 3. Cole sua chave de API.
 
    ```txt
-   ┌ Chave de API
+   ┌ API key
    │
    │
    └ enter
@@ -162,7 +162,7 @@ Alternativamente, você pode selecionar um dos outros provedores. [Saiba mais](/
 Agora que você configurou um provedor, pode navegar até um projeto no qual deseja trabalhar.
 
 ```bash
-cd /caminho/para/projeto
+cd /path/to/project
 ```
 
 E execute o opencode.
@@ -204,7 +204,7 @@ Use a tecla `@` para buscar arquivos no projeto.
 :::
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
-Como a autenticação é tratada em @packages/functions/src/api/index.ts
+How is authentication handled in @packages/functions/src/api/index.ts
 ```
 
 Isso é útil se houver uma parte da base de código na qual você não trabalhou.
@@ -221,16 +221,16 @@ Você pode pedir ao opencode para adicionar novos recursos ao seu projeto. Embor
 
    Mude para ele usando a tecla **Tab**. Você verá um indicador para isso no canto inferior direito.
 
-   ```bash frame="none" title="Mudar para o modo de plano"
+   ```bash frame="none" title="Switch to Plan mode"
    <TAB>
    ```
 
    Agora vamos descrever o que queremos que ele faça.
 
    ```txt frame="none"
-   Quando um usuário excluir uma nota, gostaríamos de marcá-la como excluída no banco de dados.
-   Em seguida, crie uma tela que mostre todas as notas recentemente excluídas.
-   A partir dessa tela, o usuário pode restaurar uma nota ou excluí-la permanentemente.
+   When a user deletes a note, we'd like to flag it as deleted in the database.
+   Then create a screen that shows all the recently deleted notes.
+   From this screen, the user can undelete a note or permanently delete it.
    ```
 
    Você quer dar ao opencode detalhes suficientes para entender o que você deseja. Ajuda conversar com ele como se você estivesse falando com um desenvolvedor júnior da sua equipe.
@@ -244,8 +244,8 @@ Você pode pedir ao opencode para adicionar novos recursos ao seu projeto. Embor
    Uma vez que ele lhe der um plano, você pode dar feedback ou adicionar mais detalhes.
 
    ```txt frame="none"
-   Gostaríamos de projetar essa nova tela usando um design que já usei antes.
-   [Imagem #1] Dê uma olhada nesta imagem e use-a como referência.
+   We'd like to design this new screen using a design I've used before.
+   [Image #1] Take a look at this image and use it as a reference.
    ```
 
    :::tip
@@ -265,7 +265,7 @@ Você pode pedir ao opencode para adicionar novos recursos ao seu projeto. Embor
    E peça para ele fazer as alterações.
 
    ```bash frame="none"
-   Parece bom! Vá em frente e faça as alterações.
+   Sounds good! Go ahead and make the changes.
    ```
 
 ---
@@ -275,7 +275,9 @@ Você pode pedir ao opencode para adicionar novos recursos ao seu projeto. Embor
 Para alterações mais simples, você pode pedir ao opencode para construí-las diretamente sem precisar revisar o plano primeiro.
 
 ```txt frame="none" "@packages/functions/src/settings.ts" "@packages/functions/src/notes.ts"
-Precisamos adicionar autenticação à rota /settings. Dê uma olhada em como isso é tratado na rota /notes em @packages/functions/src/notes.ts e implemente a mesma lógica em @packages/functions/src/settings.ts
+We need to add authentication to the /settings route. Take a look at how this is
+handled in the /notes route in @packages/functions/src/notes.ts and implement
+the same logic in @packages/functions/src/settings.ts
 ```
 
 Você quer ter certeza de fornecer uma boa quantidade de detalhes para que o opencode faça as alterações corretas.
@@ -287,7 +289,7 @@ Você quer ter certeza de fornecer uma boa quantidade de detalhes para que o ope
 Vamos supor que você peça ao opencode para fazer algumas alterações.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
-Você pode refatorar a função em @packages/functions/src/api/index.ts?
+Can you refactor the function in @packages/functions/src/api/index.ts?
 ```
 
 Mas você percebe que não era isso que você queria. Você **pode desfazer** as alterações usando o comando `/undo`.
@@ -299,7 +301,7 @@ Mas você percebe que não era isso que você queria. Você **pode desfazer** as
 O opencode agora reverterá as alterações que você fez e mostrará sua mensagem original novamente.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
-Você pode refatorar a função em @packages/functions/src/api/index.ts?
+Can you refactor the function in @packages/functions/src/api/index.ts?
 ```
 
 A partir daqui, você pode ajustar o prompt e pedir ao opencode para tentar novamente.

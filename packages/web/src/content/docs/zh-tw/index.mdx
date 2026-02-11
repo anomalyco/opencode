@@ -7,9 +7,9 @@ import { Tabs, TabItem } from "@astrojs/starlight/components"
 import config from "../../../../config.mjs"
 export const console = config.console
 
-[**opencode**](/) 是一個開源AI編碼代理。它可用作基於 terminal 的介面、桌面應用程式或 IDE 擴展。
+[**OpenCode**](/) 是一個開源 AI 編碼代理。它可用作基於 terminal 的介面、桌面應用程式或 IDE 擴展。
 
-![具有 opencode 主題的 opencode TUI](../../../assets/lander/screenshot.png)
+![具有 opencode 主題的 OpenCode TUI](../../../assets/lander/screenshot.png)
 
 讓我們開始吧。
 
@@ -17,9 +17,9 @@ export const console = config.console
 
 #### 先決條件
 
-要在 terminal中使用 opencode，您需要：
+要在 terminal 中使用 OpenCode，您需要：
 
-1. 現代terminal模擬器，例如：
+1. 現代 terminal 模擬器，例如：
    - [WezTerm](https://wezterm.org)，跨平台
    - [Alacritty](https://alacritty.org)，跨平台
    - [Ghostty](https://ghostty.org)，Linux 和 macOS
@@ -31,7 +31,7 @@ export const console = config.console
 
 ## 安裝
 
-安裝 opencode 最簡單的方法是通過安裝腳本。
+安裝 OpenCode 最簡單的方法是通過安裝腳本。
 
 ```bash
 curl -fsSL https://opencode.ai/install | bash
@@ -79,7 +79,7 @@ curl -fsSL https://opencode.ai/install | bash
   brew install anomalyco/tap/opencode
   ```
 
-  > 我們建議使用 opencode Tap 來獲取最新版本。官方 `brew install opencode` 公式由 Homebrew 團隊維護，更新頻率較低。
+  > 我們建議使用 OpenCode tap 來獲取最新版本。官方 `brew install opencode` formula 由 Homebrew 團隊維護，更新頻率較低。
 
 - **在 Arch Linux 上使用 Paru**
 
@@ -90,7 +90,7 @@ curl -fsSL https://opencode.ai/install | bash
 #### Windows
 
 :::tip[Recommended: Use WSL]
-為了在 Windows 上獲得最佳體驗，我們建議使用[適用於 Linux 的 Windows 子系統 (WSL)](/docs/windows-wsl)。它提供了更好的性能並與 opencode 的功能完全兼容。
+為了在 Windows 上獲得最佳體驗，我們建議使用[適用於 Linux 的 Windows 子系統 (WSL)](/docs/windows-wsl)。它提供了更好的性能並與 OpenCode 的功能完全兼容。
 :::
 
 - **使用Chocolatey**
@@ -123,7 +123,7 @@ curl -fsSL https://opencode.ai/install | bash
   docker run -it --rm ghcr.io/anomalyco/opencode
   ```
 
-目前正在支持使用 Bun 在 Windows 上安裝 opencode。
+目前正在支持使用 Bun 在 Windows 上安裝 OpenCode。
 
 您還可以從[Releases](https://github.com/anomalyco/opencode/releases) 獲取二進製文件。
 
@@ -131,10 +131,10 @@ curl -fsSL https://opencode.ai/install | bash
 
 ## 配置
 
-借助 opencode，您可以通過配置 API 密鑰來使用任何 LLM 提供商。
+借助 OpenCode，您可以通過配置 API 密鑰來使用任何 LLM 提供商。
 
 如果您不熟悉使用 LLM 提供商，我們建議使用[OpenCode Zen](/docs/zen)。
-這是經過 opencode 測試和驗證的精選模型列表
+這是經過 OpenCode 測試和驗證的精選模型列表
 團隊。
 
 1. 在 TUI 中運行 `/connect` 命令，選擇 opencode，然後前往 [opencode.ai/auth](https://opencode.ai/auth)。
@@ -167,33 +167,33 @@ curl -fsSL https://opencode.ai/install | bash
 cd /path/to/project
 ```
 
-並運行 opencode。
+並運行 OpenCode。
 
 ```bash
 opencode
 ```
 
-接下來，通過運行以下命令來初始化項目的 opencode。
+接下來，通過運行以下命令來初始化項目的 OpenCode。
 
 ```bash frame="none"
 /init
 ```
 
-這將使 opencode 分析您的項目並在以下位置創建 `AGENTS.md` 文件
+這將使 OpenCode 分析您的項目並在以下位置創建 `AGENTS.md` 文件
 項目根。
 
 :::tip
 您應該將項目的 `AGENTS.md` 文件提交到 Git。
 :::
 
-這有助於 opencode 理解項目結構和編碼模式
+這有助於 OpenCode 理解項目結構和編碼模式
 用過的。
 
 ---
 
 ## 用法
 
-您現在已準備好使用 opencode 來處理您的項目。請隨意詢問
+您現在已準備好使用 OpenCode 來處理您的項目。請隨意詢問
 任何事物！
 
 如果您不熟悉使用 AI 編碼代理，以下是一些可能會有所幫助的示例
@@ -203,7 +203,7 @@ opencode
 
 ### 提出問題
 
-您可以要求 opencode 向您解釋程式碼庫。
+您可以用 OpenCode 向您解釋程式碼庫。
 
 :::tip
 使用`@`鍵模糊搜索工程中的文件。
@@ -219,11 +219,11 @@ How is authentication handled in @packages/functions/src/api/index.ts
 
 ### 添加功能
 
-您可以要求 opencode 向您的項目添加新功能。不過我們首先建議要求它制定一個計劃。
+您可以用 OpenCode 向您的項目添加新功能。不過我們首先建議要求它制定一個計劃。
 
 1. **制定計劃**
 
-   opencode 有一個*計劃模式*，該模式禁用其進行更改和
+   OpenCode 有一個*計劃模式*，該模式禁用其進行更改和
    相反，建議*如何*實現該功能。
 
    使用 **Tab** 鍵切換到它。您會在右下角看到一個指示符。
@@ -240,11 +240,11 @@ How is authentication handled in @packages/functions/src/api/index.ts
    From this screen, the user can undelete a note or permanently delete it.
    ```
 
-   您需要為 opencode 提供足夠的詳細信息以了解您想要的內容。它有幫助
+   您需要為 OpenCode 提供足夠的詳細信息以了解您想要的內容。它有幫助
    就像與團隊中的初級開發人員交談一樣與它交談。
 
    :::tip
-   為 opencode 提供大量上下文和示例，以幫助其理解您的內容
+   為 OpenCode 提供大量上下文和示例，以幫助其理解您的內容
    想。
    :::
 
@@ -258,11 +258,11 @@ How is authentication handled in @packages/functions/src/api/index.ts
    ```
 
    :::tip
-   將圖像拖放到terminal中以將其添加到提示中。
+   將圖像拖放到 terminal 中以將其添加到提示中。
    :::
 
-   opencode 可以掃描您提供的任何圖像並將其添加到提示中。你可以
-   通過將圖像拖放到terminal中來完成此操作。
+   OpenCode 可以掃描您提供的任何圖像並將其添加到提示中。你可以
+   通過將圖像拖放到 terminal 中來完成此操作。
 
 3. **構建功能**
 
@@ -283,7 +283,7 @@ How is authentication handled in @packages/functions/src/api/index.ts
 
 ### 做出改變
 
-對於更直接的更改，您可以要求 opencode 直接構建它
+對於更直接的更改，您可以要求 OpenCode 直接構建它
 無需先審查計劃。
 
 ```txt frame="none" "@packages/functions/src/settings.ts" "@packages/functions/src/notes.ts"
@@ -292,14 +292,14 @@ handled in the /notes route in @packages/functions/src/notes.ts and implement
 the same logic in @packages/functions/src/settings.ts
 ```
 
-您需要確保提供大量詳細信息，以便 opencode 做出正確的決定
+您需要確保提供大量詳細信息，以便 OpenCode 做出正確的決定
 變化。
 
 ---
 
 ### 撤消更改
 
-假設您要求 opencode 進行一些更改。
+假設您要求 OpenCode 進行一些更改。
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 Can you refactor the function in @packages/functions/src/api/index.ts?
@@ -312,14 +312,14 @@ Can you refactor the function in @packages/functions/src/api/index.ts?
 /undo
 ```
 
-opencode 現在將恢復您所做的更改並顯示您的原始消息
+OpenCode 現在將恢復您所做的更改並顯示您的原始消息
 再次。
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 Can you refactor the function in @packages/functions/src/api/index.ts?
 ```
 
-從這裡您可以調整提示並要求 opencode 重試。
+從這裡您可以調整提示並要求 OpenCode 重試。
 
 :::tip
 您可以多次運行 `/undo` 以撤消多項更改。
@@ -335,7 +335,7 @@ Can you refactor the function in @packages/functions/src/api/index.ts?
 
 ## 分享
 
-您與 opencode 的對話可以[與您的
+您與 OpenCode 的對話可以[與您的
 團隊](/docs/share)。
 
 ```bash frame="none"
@@ -348,12 +348,12 @@ Can you refactor the function in @packages/functions/src/api/index.ts?
 默認情況下不共享對話。
 :::
 
-這是帶有 opencode 的[示例對話](https://opencode.ai/s/4XP1fce5)。
+這是帶有 OpenCode 的[示例對話](https://opencode.ai/s/4XP1fce5)。
 
 ---
 
 ## 定制
 
-就是這樣！您現在已經是使用 opencode 的專家了。
+就是這樣！您現在已經是使用 OpenCode 的專家了。
 
-要使其成為您自己的，我們建議 [選擇一個主題](/docs/themes)、[自定義按鍵綁定](/docs/keybinds)、[配置程式碼格式化程序](/docs/formatters)、[創建自定義命令](/docs/commands) 或使用 [opencode配置](/docs/config)。
+要使其成為您自己的，我們建議 [選擇一個主題](/docs/themes)、[自定義按鍵綁定](/docs/keybinds)、[配置程式碼格式化程序](/docs/formatters)、[創建自定義命令](/docs/commands) 或使用 [OpenCode 配置](/docs/config)。
