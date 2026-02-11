@@ -187,14 +187,7 @@ export function Prompt(props: PromptProps) {
         category: "Prompt",
         hidden: true,
         onSelect: async () => {
-          const content = await Clipboard.read()
-          if (content?.mime.startsWith("image/")) {
-            await pasteImage({
-              filename: "clipboard",
-              mime: content.mime,
-              content: content.data,
-            })
-          }
+          await tryPasteClipboardImage("command prompt.paste")
         },
       },
       {
@@ -720,7 +713,28 @@ export function Prompt(props: PromptProps) {
         draft.extmarkToPartIndex.set(extmarkId, partIndex)
       }),
     )
+    setTimeout(() => {
+      if (!input || input.isDestroyed) return
+      input.getLayoutNode().markDirty()
+      renderer.requestRender()
+    }, 0)
     return
+  }
+
+  async function tryPasteClipboardImage(source: string, prevent?: () => void) {
+    const clip = await Clipboard.read()
+    try {
+      if (!clip?.mime.startsWith("image/")) return false
+      prevent?.()
+      await pasteImage({
+        filename: "clipboard",
+        mime: clip.mime,
+        content: clip.data,
+      })
+      return true
+    } catch {
+      return true
+    }
   }
 
   const highlight = createMemo(() => {
@@ -818,17 +832,12 @@ export function Prompt(props: PromptProps) {
                 // This is needed because Windows terminal doesn't properly send image data
                 // through bracketed paste, so we need to intercept the keypress and
                 // directly read from clipboard before the terminal handles it
-                if (keybind.match("input_paste", e)) {
-                  const content = await Clipboard.read()
-                  if (content?.mime.startsWith("image/")) {
-                    e.preventDefault()
-                    await pasteImage({
-                      filename: "clipboard",
-                      mime: content.mime,
-                      content: content.data,
-                    })
-                    return
-                  }
+                const pasteHotkey =
+                  keybind.match("input_paste", e) ||
+                  (process.platform === "win32" &&
+                    ((e.ctrl && e.name?.toLowerCase() === "v") || (e.shift && e.name?.toLowerCase() === "insert")))
+                if (pasteHotkey) {
+                  if (await tryPasteClipboardImage("keydown input_paste", () => e.preventDefault())) return
                   // If no image, let the default paste behavior continue
                 }
                 if (keybind.match("input_clear", e) && store.prompt.input !== "") {
@@ -892,6 +901,10 @@ export function Prompt(props: PromptProps) {
                 if (props.disabled) {
                   event.preventDefault()
                   return
+                }
+
+                if (process.platform === "win32") {
+                  if (await tryPasteClipboardImage("onPaste win32", () => event.preventDefault())) return
                 }
 
                 // Normalize line endings at the boundary

@@ -1,9 +1,10 @@
 import { $ } from "bun"
-import { platform, release } from "os"
+import { platform } from "os"
 import clipboardy from "clipboardy"
 import { lazy } from "../../../../util/lazy.js"
 import { tmpdir } from "os"
 import path from "path"
+import { rmSync } from "fs"
 
 /**
  * Writes text to clipboard via OSC 52 escape sequence.
@@ -20,6 +21,8 @@ function writeOsc52(text: string): void {
 }
 
 export namespace Clipboard {
+  let inFlight: Promise<Content | undefined> | undefined
+
   export interface Content {
     data: string
     mime: string
@@ -27,7 +30,6 @@ export namespace Clipboard {
 
   export async function read(): Promise<Content | undefined> {
     const os = platform()
-
     if (os === "darwin") {
       const tmpfile = path.join(tmpdir(), "opencode-clipboard.png")
       try {
@@ -43,15 +45,43 @@ export namespace Clipboard {
       }
     }
 
-    if (os === "win32" || release().includes("WSL")) {
-      const script =
-        "Add-Type -AssemblyName System.Windows.Forms; $img = [System.Windows.Forms.Clipboard]::GetImage(); if ($img) { $ms = New-Object System.IO.MemoryStream; $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png); [System.Convert]::ToBase64String($ms.ToArray()) }"
-      const base64 = await $`powershell.exe -NonInteractive -NoProfile -command "${script}"`.nothrow().text()
-      if (base64) {
-        const imageBuffer = Buffer.from(base64.trim(), "base64")
-        if (imageBuffer.length > 0) {
-          return { data: imageBuffer.toString("base64"), mime: "image/png" }
+    if (os === "win32") {
+      if (inFlight) {
+        return await inFlight
+      }
+
+      inFlight = (async () => {
+        const tmpfile = path.join(tmpdir(), `opencode-clipboard-${process.pid}.png`)
+        const pspath = tmpfile.replace(/'/g, "''")
+        const write =
+          "$img = $null; " +
+          "try { $img = Get-Clipboard -Format Image -ErrorAction Stop } catch {} ; " +
+          "if (-not $img) { try { Add-Type -AssemblyName System.Windows.Forms; $img = [System.Windows.Forms.Clipboard]::GetImage() } catch {} } ; " +
+          "if ($img) { $img.Save('" +
+          pspath +
+          "', [System.Drawing.Imaging.ImageFormat]::Png); 'ok' } else { 'no-image' }"
+        try {
+          const writeResult = await $`powershell.exe -STA -NoLogo -NonInteractive -NoProfile -Command "${write}"`
+            .nothrow()
+            .text()
+          if (writeResult.trim() !== "ok") return
+          const file = Bun.file(tmpfile)
+          if (await file.exists()) {
+            const buffer = await file.arrayBuffer()
+            if (buffer.byteLength > 0) {
+              return { data: Buffer.from(buffer).toString("base64"), mime: "image/png" }
+            }
+          }
+        } catch {
+        } finally {
+          rmSync(tmpfile, { force: true })
         }
+      })()
+
+      try {
+        return await inFlight
+      } finally {
+        inFlight = undefined
       }
     }
 
