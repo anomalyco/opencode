@@ -699,7 +699,7 @@ export namespace Provider {
     }
   }
 
-  const state = Instance.state(async () => {
+  const state = Instance.state(async (profileContext?: string) => {
     using _ = log.time("state")
     const config = await Config.get()
     const modelsDev = await ModelsDev.get()
@@ -848,12 +848,29 @@ export namespace Provider {
     }
 
     // load apikeys
-    for (const [providerID, provider] of Object.entries(await Auth.all())) {
+    // If profileContext is provided, load specific profile, otherwise load current profiles
+    const authData = profileContext ? await Auth.allWithProfiles() : await Auth.all()
+
+    for (const [providerID, provider] of Object.entries(authData)) {
       if (disabled.has(providerID)) continue
-      if (provider.type === "api") {
+
+      let authInfo
+      if (profileContext && provider.profiles) {
+        // Load specific profile
+        authInfo = provider.profiles[profileContext]
+      } else if (provider.type) {
+        // Current profile (legacy format)
+        authInfo = provider
+      } else {
+        // Profile format - use current profile
+        const currentProfile = provider.currentProfile || "default"
+        authInfo = provider.profiles[currentProfile]
+      }
+
+      if (authInfo?.type === "api") {
         mergeProvider(providerID, {
           source: "api",
-          key: provider.key,
+          key: authInfo.key,
         })
       }
     }
@@ -865,12 +882,15 @@ export namespace Provider {
 
       // For github-copilot plugin, check if auth exists for either github-copilot or github-copilot-enterprise
       let hasAuth = false
-      const auth = await Auth.get(providerID)
+      // Use profile-aware auth retrieval
+      const auth = profileContext ? await Auth.getProfile(providerID, profileContext) : await Auth.get(providerID)
       if (auth) hasAuth = true
 
       // Special handling for github-copilot: also check for enterprise auth
       if (providerID === "github-copilot" && !hasAuth) {
-        const enterpriseAuth = await Auth.get("github-copilot-enterprise")
+        const enterpriseAuth = profileContext
+          ? await Auth.getProfile("github-copilot-enterprise", profileContext)
+          : await Auth.get("github-copilot-enterprise")
         if (enterpriseAuth) hasAuth = true
       }
 
@@ -879,7 +899,7 @@ export namespace Provider {
 
       // Load for the main provider if auth exists
       if (auth) {
-        const options = await plugin.auth.loader(() => Auth.get(providerID) as any, database[plugin.auth.provider])
+        const options = await plugin.auth.loader(() => auth as any, database[plugin.auth.provider])
         const opts = options ?? {}
         const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
         mergeProvider(providerID, patch)
@@ -889,10 +909,12 @@ export namespace Provider {
       if (providerID === "github-copilot") {
         const enterpriseProviderID = "github-copilot-enterprise"
         if (!disabled.has(enterpriseProviderID)) {
-          const enterpriseAuth = await Auth.get(enterpriseProviderID)
+          const enterpriseAuth = profileContext
+            ? await Auth.getProfile(enterpriseProviderID, profileContext)
+            : await Auth.get(enterpriseProviderID)
           if (enterpriseAuth) {
             const enterpriseOptions = await plugin.auth.loader(
-              () => Auth.get(enterpriseProviderID) as any,
+              () => enterpriseAuth as any,
               database[enterpriseProviderID],
             )
             const opts = enterpriseOptions ?? {}
@@ -1083,6 +1105,135 @@ export namespace Provider {
     }
   }
 
+  // Profile-aware SDK getter - enables multi-account support
+  // Retains backward compatibility with existing getSDK function
+  export async function getSDKWithProfile(model: Model, profileID?: string) {
+    try {
+      using _ = log.time("getSDKWithProfile", {
+        providerID: model.providerID,
+        profileID: profileID || "current",
+      })
+
+      // Get profile-specific provider state
+      const s = await state(profileID)
+      const provider = s.providers[model.providerID]
+      const options = { ...provider.options }
+
+      if (model.api.npm.includes("@ai-sdk/openai-compatible") && options["includeUsage"] !== false) {
+        options["includeUsage"] = true
+      }
+
+      if (!options["baseURL"]) options["baseURL"] = model.api.url
+
+      // Use profile-specific authentication if provided
+      if (profileID) {
+        const auth = await Auth.getProfile(model.providerID, profileID)
+        if (auth && auth.type === "api" && options["apiKey"] === undefined) {
+          options["apiKey"] = auth.key
+        }
+        if (auth && auth.type === "oauth") {
+          options["accessToken"] = auth.access
+          options["refreshToken"] = auth.refresh
+        }
+      } else {
+        // Fallback to current profile (backward compatible)
+        if (options["apiKey"] === undefined && provider.key) {
+          options["apiKey"] = provider.key
+        }
+      }
+
+      if (model.headers)
+        options["headers"] = {
+          ...options["headers"],
+          ...model.headers,
+        }
+
+      const key = Bun.hash.xxHash32(
+        JSON.stringify({
+          providerID: model.providerID,
+          npm: model.api.npm,
+          options,
+          profileID: profileID || "current",
+        }),
+      )
+      const existing = s.sdk.get(key)
+      if (existing) return existing
+
+      const customFetch = options["fetch"]
+
+      options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
+        // Preserve custom fetch if it exists, wrap it with timeout logic
+        const fetchFn = customFetch ?? fetch
+        const opts = init ?? {}
+
+        if (options["timeout"] !== undefined && options["timeout"] !== null) {
+          const signals: AbortSignal[] = []
+          if (opts.signal) signals.push(opts.signal)
+          if (options["timeout"] !== false) signals.push(AbortSignal.timeout(options["timeout"]))
+
+          const combined = signals.length > 1 ? AbortSignal.any(signals) : signals[0]
+
+          opts.signal = combined
+        }
+
+        // Strip openai itemId metadata following what codex does
+        // Codex uses #[serde(skip_serializing)] on id fields for all item types:
+        // Message, Reasoning, FunctionCall, LocalShellCall, CustomToolCall, WebSearchCall
+        if (model.api.npm.includes("@ai-sdk/openai") || model.api.npm.includes("@ai-sdk/openai-compatible")) {
+          if (opts.body) {
+            try {
+              const body = typeof opts.body === "string" ? JSON.parse(opts.body) : opts.body
+              if (body.itemId) {
+                delete body.itemId
+                opts.body = JSON.stringify(body)
+              }
+            } catch {
+              // Ignore JSON parsing errors
+            }
+          }
+        }
+
+        return fetchFn(input, opts)
+      }
+
+      const bundledFn = BUNDLED_PROVIDERS[model.api.npm]
+      if (bundledFn) {
+        const loaded = bundledFn({
+          name: model.providerID,
+          ...options,
+        })
+        s.sdk.set(key, loaded)
+        return loaded as SDK
+      }
+
+      let installedPath: string
+      if (!model.api.npm.startsWith("file://")) {
+        installedPath = await BunProc.install(model.api.npm, "latest")
+      } else {
+        log.info("loading local provider", { pkg: model.api.npm })
+        installedPath = model.api.npm
+      }
+
+      const mod = await import(installedPath)
+
+      const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
+      const loaded = fn({
+        name: model.providerID,
+        ...options,
+      })
+      s.sdk.set(key, loaded)
+      return loaded as SDK
+    } catch (e) {
+      throw new InitError({ providerID: model.providerID }, { cause: e })
+    }
+  }
+
+  // Profile-aware provider listing - enables multi-account support
+  export async function listWithProfile(profileID?: string) {
+    const s = await state(profileID)
+    return s.providers
+  }
+
   export async function getProvider(providerID: string) {
     return state().then((s) => s.providers[providerID])
   }
@@ -1114,6 +1265,7 @@ export namespace Provider {
 
     const provider = s.providers[model.providerID]
     const sdk = await getSDK(model)
+    // Retained for backward compatibility - use getSDKWithProfile for multi-account support
 
     try {
       const language = s.modelLoaders[model.providerID]
