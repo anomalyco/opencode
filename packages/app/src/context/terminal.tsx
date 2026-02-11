@@ -3,7 +3,7 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { batch, createEffect, createMemo, createRoot, onCleanup } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { useSDK } from "./sdk"
-import { Persist, persisted } from "@/utils/persist"
+import { Persist, persisted, removePersisted } from "@/utils/persist"
 
 export type LocalPTY = {
   id: string
@@ -35,6 +35,28 @@ type TerminalCacheEntry = {
   dispose: VoidFunction
 }
 
+const caches = new Set<Map<string, TerminalCacheEntry>>()
+
+export function clearWorkspaceTerminals(dir: string, sessionIDs?: string[]) {
+  const key = getWorkspaceTerminalCacheKey(dir)
+  for (const cache of caches) {
+    const entry = cache.get(key)
+    entry?.value.clear()
+  }
+
+  removePersisted(Persist.workspace(dir, "terminal"))
+
+  const legacy = new Set(getLegacyTerminalStorageKeys(dir))
+  for (const id of sessionIDs ?? []) {
+    for (const key of getLegacyTerminalStorageKeys(dir, id)) {
+      legacy.add(key)
+    }
+  }
+  for (const key of legacy) {
+    removePersisted({ key })
+  }
+}
+
 function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, legacySessionID?: string) {
   const legacy = getLegacyTerminalStorageKeys(dir, legacySessionID)
 
@@ -56,7 +78,7 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
     }),
   )
 
-  const unsub = sdk.event.on("pty.exited", (event) => {
+  const unsub = sdk.event.on("pty.exited", (event: { properties: { id: string } }) => {
     const id = event.properties.id
     if (!store.all.some((x) => x.id === id)) return
     batch(() => {
@@ -96,6 +118,12 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
     ready,
     all: createMemo(() => Object.values(store.all)),
     active: createMemo(() => store.active),
+    clear() {
+      batch(() => {
+        setStore("active", undefined)
+        setStore("all", [])
+      })
+    },
     new() {
       const existingTitleNumbers = new Set(
         store.all.flatMap((pty) => {
@@ -114,7 +142,7 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
 
       sdk.client.pty
         .create({ title: `Terminal ${nextNumber}` })
-        .then((pty) => {
+        .then((pty: { data?: { id?: string; title?: string } }) => {
           const id = pty.data?.id
           if (!id) return
           const newTerminal = {
@@ -128,8 +156,8 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
           })
           setStore("active", id)
         })
-        .catch((e) => {
-          console.error("Failed to create terminal", e)
+        .catch((error: unknown) => {
+          console.error("Failed to create terminal", error)
         })
     },
     update(pty: Partial<LocalPTY> & { id: string }) {
@@ -143,8 +171,8 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
           title: pty.title,
           size: pty.cols && pty.rows ? { rows: pty.rows, cols: pty.cols } : undefined,
         })
-        .catch((e) => {
-          console.error("Failed to update terminal", e)
+        .catch((error: unknown) => {
+          console.error("Failed to update terminal", error)
         })
     },
     async clone(id: string) {
@@ -155,8 +183,8 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
         .create({
           title: pty.title,
         })
-        .catch((e) => {
-          console.error("Failed to clone terminal", e)
+        .catch((error: unknown) => {
+          console.error("Failed to clone terminal", error)
           return undefined
         })
       if (!clone?.data) return
@@ -168,6 +196,12 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
           id: clone.data.id,
           title: clone.data.title ?? pty.title,
           titleNumber: pty.titleNumber,
+          // New PTY process, so start clean.
+          buffer: undefined,
+          cursor: undefined,
+          scrollY: undefined,
+          rows: undefined,
+          cols: undefined,
         })
         if (active) {
           setStore("active", clone.data.id)
@@ -200,8 +234,8 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
         setStore("all", filtered)
       })
 
-      await sdk.client.pty.remove({ ptyID: id }).catch((e) => {
-        console.error("Failed to close terminal", e)
+      await sdk.client.pty.remove({ ptyID: id }).catch((error: unknown) => {
+        console.error("Failed to close terminal", error)
       })
     },
     move(id: string, to: number) {
@@ -224,6 +258,9 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
     const sdk = useSDK()
     const params = useParams()
     const cache = new Map<string, TerminalCacheEntry>()
+
+    caches.add(cache)
+    onCleanup(() => caches.delete(cache))
 
     const disposeAll = () => {
       for (const entry of cache.values()) {

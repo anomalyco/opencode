@@ -6,10 +6,7 @@ use tauri_plugin_shell::{
 use tauri_plugin_store::StoreExt;
 use tokio::sync::oneshot;
 
-use crate::{
-    LogState,
-    constants::{MAX_LOG_ENTRIES, SETTINGS_STORE, WSL_ENABLED_KEY},
-};
+use crate::constants::{SETTINGS_STORE, WSL_ENABLED_KEY};
 
 const CLI_INSTALL_DIR: &str = ".opencode/bin";
 const CLI_BINARY_NAME: &str = "opencode";
@@ -29,7 +26,7 @@ pub async fn get_config(app: &AppHandle) -> Option<Config> {
     create_command(app, "debug config", &[])
         .output()
         .await
-        .inspect_err(|e| eprintln!("Failed to read OC config: {e}"))
+        .inspect_err(|e| tracing::warn!("Failed to read OC config: {e}"))
         .ok()
         .and_then(|out| String::from_utf8(out.stdout.to_vec()).ok())
         .and_then(|s| serde_json::from_str::<Config>(&s).ok())
@@ -104,12 +101,12 @@ pub fn install_cli(app: tauri::AppHandle) -> Result<String, String> {
 
 pub fn sync_cli(app: tauri::AppHandle) -> Result<(), String> {
     if cfg!(debug_assertions) {
-        println!("Skipping CLI sync for debug build");
+        tracing::debug!("Skipping CLI sync for debug build");
         return Ok(());
     }
 
     if !is_cli_installed() {
-        println!("No CLI installation found, skipping sync");
+        tracing::info!("No CLI installation found, skipping sync");
         return Ok(());
     }
 
@@ -132,21 +129,21 @@ pub fn sync_cli(app: tauri::AppHandle) -> Result<(), String> {
     let app_version = app.package_info().version.clone();
 
     if cli_version >= app_version {
-        println!(
-            "CLI version {} is up to date (app version: {}), skipping sync",
-            cli_version, app_version
+        tracing::info!(
+            %cli_version, %app_version,
+            "CLI is up to date, skipping sync"
         );
         return Ok(());
     }
 
-    println!(
-        "CLI version {} is older than app version {}, syncing",
-        cli_version, app_version
+    tracing::info!(
+        %cli_version, %app_version,
+        "CLI is older than app version, syncing"
     );
 
     install_cli(app)?;
 
-    println!("Synced installed CLI");
+    tracing::info!("Synced installed CLI");
 
     Ok(())
 }
@@ -207,7 +204,7 @@ pub fn create_command(app: &tauri::AppHandle, args: &str, extra_env: &[(&str, St
 
     if cfg!(windows) {
         if is_wsl_enabled(app) {
-            println!("WSL is enabled, spawning CLI server in WSL.");
+            tracing::info!("WSL is enabled, spawning CLI server in WSL");
             let version = app.package_info().version.to_string();
             let mut script = vec![
                 "set -e".to_string(),
@@ -280,38 +277,9 @@ pub fn serve(
     port: u32,
     password: &str,
 ) -> (CommandChild, oneshot::Receiver<TerminatedPayload>) {
-    let log_state = app.state::<LogState>();
-    let log_state_clone = log_state.inner().clone();
-
     let (exit_tx, exit_rx) = oneshot::channel::<TerminatedPayload>();
 
-    println!("spawning sidecar on port {port}");
-
-    if let Ok(mut logs) = log_state_clone.0.lock() {
-        let args =
-            format!("--print-logs --log-level WARN serve --hostname {hostname} --port {port}");
-
-        #[cfg(target_os = "windows")]
-        {
-            logs.push_back(format!("[SPAWN] sidecar=opencode-cli args=\"{args}\"\n"));
-        }
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            let sidecar = get_sidecar_path(app);
-            let shell = get_user_shell();
-            let cmd = if shell.ends_with("/nu") {
-                format!("^\"{}\" {}", sidecar.display(), args)
-            } else {
-                format!("\"{}\" {}", sidecar.display(), args)
-            };
-            logs.push_back(format!("[SPAWN] shell=\"{shell}\" argv=\"-il -c {cmd}\"\n"));
-        }
-
-        while logs.len() > MAX_LOG_ENTRIES {
-            logs.pop_front();
-        }
-    }
+    tracing::info!(port, "Spawning sidecar");
 
     let envs = [
         ("OPENCODE_SERVER_USERNAME", "opencode".to_string()),
@@ -332,50 +300,22 @@ pub fn serve(
             match event {
                 CommandEvent::Stdout(line_bytes) => {
                     let line = String::from_utf8_lossy(&line_bytes);
-                    print!("{line}");
-
-                    // Store log in shared state
-                    if let Ok(mut logs) = log_state_clone.0.lock() {
-                        logs.push_back(format!("[STDOUT] {}", line));
-                        // Keep only the last MAX_LOG_ENTRIES
-                        while logs.len() > MAX_LOG_ENTRIES {
-                            logs.pop_front();
-                        }
-                    }
+                    tracing::info!(target: "sidecar", "{line}");
                 }
                 CommandEvent::Stderr(line_bytes) => {
                     let line = String::from_utf8_lossy(&line_bytes);
-                    eprint!("{line}");
-
-                    // Store log in shared state
-                    if let Ok(mut logs) = log_state_clone.0.lock() {
-                        logs.push_back(format!("[STDERR] {}", line));
-                        // Keep only the last MAX_LOG_ENTRIES
-                        while logs.len() > MAX_LOG_ENTRIES {
-                            logs.pop_front();
-                        }
-                    }
+                    tracing::info!(target: "sidecar", "{line}");
                 }
                 CommandEvent::Error(err) => {
-                    eprintln!("{err}");
-
-                    if let Ok(mut logs) = log_state_clone.0.lock() {
-                        logs.push_back(format!("[ERROR] {err}\n"));
-                        while logs.len() > MAX_LOG_ENTRIES {
-                            logs.pop_front();
-                        }
-                    }
+                    tracing::error!(target: "sidecar", "{err}");
                 }
                 CommandEvent::Terminated(payload) => {
-                    if let Ok(mut logs) = log_state_clone.0.lock() {
-                        logs.push_back(format!(
-                            "[EXIT] code={:?} signal={:?}\n",
-                            payload.code, payload.signal
-                        ));
-                        while logs.len() > MAX_LOG_ENTRIES {
-                            logs.pop_front();
-                        }
-                    }
+                    tracing::info!(
+                        target: "sidecar",
+                        code = ?payload.code,
+                        signal = ?payload.signal,
+                        "Sidecar terminated"
+                    );
 
                     if let Some(tx) = exit_tx.take() {
                         let _ = tx.send(payload);
