@@ -7,7 +7,7 @@ import { Tabs, TabItem } from "@astrojs/starlight/components"
 import config from "../../../../config.mjs"
 export const console = config.console
 
-[**opencode**](/) — это агент кодирования искусственного интеллекта с открытым исходным кодом. Он доступен в виде интерфейса на базе terminal, настольного приложения или расширения IDE.
+[**opencode**](/) — это агент кодирования искусственного интеллекта с открытым исходным кодом. Он доступен в виде интерфейса на базе терминала, настольного приложения или расширения IDE.
 
 ![opencode TUI с темой opencode](../../../assets/lander/screenshot.png)
 
@@ -17,9 +17,9 @@ export const console = config.console
 
 #### Предварительные условия
 
-Чтобы использовать opencode в вашем terminal, вам понадобится:
+Чтобы использовать opencode в вашем терминале, вам понадобится:
 
-1. Современный эмулятор terminal, например:
+1. Современный эмулятор терминала, например:
    - [WezTerm](https://wezterm.org), кроссплатформенный
    - [Alacritty](https://alacritty.org), кроссплатформенный
    - [Ghostty](https://ghostty.org), Linux и macOS
@@ -93,7 +93,7 @@ curl -fsSL https://opencode.ai/install | bash
 Для наилучшей работы в Windows мы рекомендуем использовать [Подсистема Windows для Linux (WSL)](/docs/windows-wsl). Он обеспечивает лучшую производительность и полную совместимость с функциями opencode.
 :::
 
-- **Используя шоколадный**
+- **Используя Chocolatey**
 
   ```bash
   choco install opencode
@@ -111,7 +111,7 @@ curl -fsSL https://opencode.ai/install | bash
   npm install -g opencode-ai
   ```
 
-- **Использование Мизе**
+- **Использование Mise**
 
   ```bash
   mise use -g github:anomalyco/opencode
@@ -243,7 +243,7 @@ How is authentication handled in @packages/functions/src/api/index.ts
    Вы хотите предоставить opencode достаточно подробностей, чтобы понять, чего вы хотите. Это помогает
    поговорить с ним так, как будто вы разговариваете с младшим разработчиком в своей команде.
 
-   :::кончик
+   :::tip
    Дайте opencode много контекста и примеров, чтобы помочь ему понять, что вы
    хотеть.
    :::
@@ -257,12 +257,12 @@ How is authentication handled in @packages/functions/src/api/index.ts
    [Image #1] Take a look at this image and use it as a reference.
    ```
 
-   :::кончик
-   Перетащите изображения в terminal, чтобы добавить их в подсказку.
+   :::tip
+   Перетащите изображения в терминал, чтобы добавить их в подсказку.
    :::
 
    opencode может сканировать любые изображения, которые вы ему предоставляете, и добавлять их в командную строку. Ты можешь
-   сделайте это, перетащив изображение в terminal.
+   сделайте это, перетащив изображение в терминал.
 
 3. **Создайте функцию**
 

@@ -108,7 +108,7 @@ Markdown 文件名成為命令名。例如，`test.md` 讓
 
 ---
 
-### 論據
+### 參數
 
 使用 `$ARGUMENTS` 佔位符將參數傳遞給命令。
 
@@ -161,7 +161,7 @@ with the following content: $3
 
 ---
 
-### 外殼輸出
+### Shell 輸出
 
 使用 _!`command`_ 將 [bash命令](/docs/tui#bash-commands) 輸出注入到提示符中。
 
@@ -254,9 +254,9 @@ Check for performance issues and suggest improvements.
 
 ---
 
-### 代理人
+### 代理
 
-使用`agent` 配置可選擇指定哪個[代理人](/docs/agents) 應執行此命令。
+使用`agent` 配置可選擇指定哪個[代理](/docs/agents) 應執行此命令。
 如果這是 [子代理](/docs/agents/#subagents) 該命令將默認觸發子代理調用。
 要禁用此行為，請將`subtask` 設置為`false`。
 
@@ -278,7 +278,7 @@ Check for performance issues and suggest improvements.
 
 使用`subtask` 布爾值強制命令觸發[子代理](/docs/agents/#subagents) 調用。
 如果您希望命令不污染您的主要上下文並且將**強制**代理充當子代理，那麼這非常有用，
-即使`mode` 在[代理人](/docs/agents) 配置上設置為`primary`。
+即使`mode` 在[代理](/docs/agents) 配置上設置為`primary`。
 
 ```json title="opencode.json"
 {

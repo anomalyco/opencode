@@ -140,21 +140,21 @@ opencode로 Amazon Bedrock을 사용하려면:
 opencode를 실행하는 동안 이러한 환경 변수 중 하나를 설정:
 
 ```bash
-# Option 1: Using AWS access keys
-AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY opencode
+   # Option 1: Using AWS access keys
+   AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY opencode
 
-# Option 2: Using named AWS profile
-AWS_PROFILE=my-profile opencode
+   # Option 2: Using named AWS profile
+   AWS_PROFILE=my-profile opencode
 
-# Option 3: Using Bedrock bearer token
-AWS_BEARER_TOKEN_BEDROCK=XXX opencode
+   # Option 3: Using Bedrock bearer token
+   AWS_BEARER_TOKEN_BEDROCK=XXX opencode
 ```
 
 또는 bash 프로필에 추가:
 
 ```bash title="~/.bash_profile"
-export AWS_PROFILE=my-dev-profile
-export AWS_REGION=us-east-1
+   export AWS_PROFILE=my-dev-profile
+   export AWS_REGION=us-east-1
 ```
 
 #### 설정 파일 (추천)
@@ -335,7 +335,7 @@ Pro/Max 구독이 없는 경우 **Create an API Key**를 선택할 수 있습니
 또는 bash 프로파일에 추가:
 
 ```bash title="~/.bash_profile"
-export AZURE_RESOURCE_NAME=XXX
+   export AZURE_RESOURCE_NAME=XXX
 ```
 
 6. `/models` 명령을 실행하여 배포 된 모델을 선택하십시오.
@@ -383,7 +383,7 @@ export AZURE_RESOURCE_NAME=XXX
 또는 bash 프로파일에 추가:
 
 ```bash title="~/.bash_profile"
-export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
+   export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
 ```
 
 6. `/models` 명령을 실행하여 배포 된 모델을 선택하십시오.
@@ -479,7 +479,7 @@ Cloudflare AI 게이트웨이는 OpenAI, Anthropic, Workers AI 등의 모델에 
 또는 환경 변수로 설정한다.
 
 ```bash title="~/.bash_profile"
-export CLOUDFLARE_API_TOKEN=your-api-token
+   export CLOUDFLARE_API_TOKEN=your-api-token
 ```
 
 5. 모델을 선택하려면 `/models` 명령을 실행하십시오.
@@ -669,7 +669,7 @@ Select**OAuth**와 브라우저는 권한이 없습니다.
 
 1. [GitLab User Settings > Access Tokens](https://gitlab.com/-/user settings/personal access tokens)로 이동
 2. 새 토큰 추가 \*\*
-3. 이름: `opencode`의 범위: `api`
+3. 이름: `OpenCode`의 범위: `api`
 4. 토큰 복사 (`glpat-`와 함께 시작)
 5. terminal에서 그것을 입력하십시오
 
@@ -848,15 +848,15 @@ opencode로 Google Vertex AI를 사용하려면:
 opencode를 실행하면서 설정한다.
 
 ```bash
-GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
+   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
 ```
 
 또는 bash 프로파일에 추가하십시오.
 
 ```bash title="~/.bash_profile"
-export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
-export GOOGLE_CLOUD_PROJECT=your-project-id
-export VERTEX_LOCATION=global
+   export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+   export GOOGLE_CLOUD_PROJECT=your-project-id
+   export VERTEX_LOCATION=global
 ```
 
 :::tip
@@ -1459,13 +1459,13 @@ SAP AI Core는 OpenAI, Anthropic, Google, Amazon, Meta, Mistral 및 AI21의 40+ 
 또는 `AICORE_SERVICE_KEY` 환경 변수를 설정:
 
 ```bash
-AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
+   AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
 ```
 
 또는 bash 프로파일에 추가:
 
 ```bash title="~/.bash_profile"
-export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}'
+   export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}'
 ```
 
 4. 선택적으로 배치 ID 및 자원 그룹:
@@ -1872,8 +1872,8 @@ opencode를 사용하여 OpenAI 호환 공급자를 사용할 수 있습니다. 
 구성 세부 사항:
 
 - **apiKey**: `env` 변수 구문을 사용하여 설정, [learn more](/docs/config#env-vars). -**headers**: 각 요청으로 전송된 사용자 정의 헤더.
-- **limit.context**: 최대 입력 토큰 모델은 받아들입니다.
-- **limit.output**: 최대 토큰은 모델을 생성할 수 있습니다.
+- **limit.context**: 모델이 허용하는 최대 Input Tokens.
+- **limit.output**: 모델이 생성할 수 있는 최대 Output Tokens.
 
 `limit` 필드를 사용하면 opencode가 얼마나 많은 컨텍스트를 이해 할 수 있습니다. 표준 공급자는 model.dev에서 자동적으로 당깁니다.
 

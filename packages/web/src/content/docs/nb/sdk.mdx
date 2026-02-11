@@ -1,13 +1,13 @@
 ---
 title: SDK
-description: Typesikker JS-klient for opencode-server.
+description: Typesikker JS-klient for OpenCode-server.
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-opencode JS/TS SDK gir en typesikker klient for samhandling med serveren.
-Bruk den til å bygge integrasjoner og kontrollere opencode programmatisk.
+OpenCode JS/TS SDK gir en typesikker klient for samhandling med serveren.
+Bruk den til å bygge integrasjoner og kontrollere OpenCode programmatisk.
 
 [Finn ut mer](/docs/server) om hvordan serveren fungerer. For eksempler, sjekk ut [prosjektene](/docs/ecosystem#projects) bygget av fellesskapet.
 
@@ -25,7 +25,7 @@ npm install @opencode-ai/sdk
 
 ## Opprett klient
 
-Opprett en forekomst av opencode:
+Opprett en forekomst av OpenCode:
 
 ```javascript
 import { createOpencode } from "@opencode-ai/sdk"
@@ -37,7 +37,7 @@ Dette starter både en server og en klient
 
 #### Alternativer
 
-| Alternativ | Skriv         | Beskrivelse                      | Standard    |
+| Alternativ | Type          | Beskrivelse                      | Standard    |
 | ---------- | ------------- | -------------------------------- | ----------- |
 | `hostname` | `string`      | Server vertsnavn                 | `127.0.0.1` |
 | `port`     | `number`      | Serverport                       | `4096`      |
@@ -69,7 +69,7 @@ opencode.server.close()
 
 ## Kun klient
 
-Hvis du allerede har en kjørende forekomst av opencode, kan du opprette en klientforekomst for å koble til den:
+Hvis du allerede har en kjørende forekomst av OpenCode, kan du opprette en klientforekomst for å koble til den:
 
 ```javascript
 import { createOpencodeClient } from "@opencode-ai/sdk"
@@ -81,7 +81,7 @@ const client = createOpencodeClient({
 
 #### Alternativer
 
-| Alternativ      | Skriv inn  | Beskrivelse                        | Standard                |
+| Alternativ      | Type       | Beskrivelse                        | Standard                |
 | --------------- | ---------- | ---------------------------------- | ----------------------- |
 | `baseUrl`       | `string`   | URL av serveren                    | `http://localhost:4096` |
 | `fetch`         | `function` | Egendefinert hentingimplementering | `globalThis.fetch`      |
@@ -224,7 +224,7 @@ const { providers, default: defaults } = await client.config.providers()
 
 ---
 
-### økter
+### Sesjoner
 
 | Metode                                                     | Beskrivelse                         | Merknader                                                                                                                                        |
 | ---------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
