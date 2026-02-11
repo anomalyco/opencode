@@ -14,8 +14,14 @@
 
 ### Installation
 
+Linux/Mac/WSL:
 ```bash
 curl -fsSL https://code.mammouth.ai/install.sh | bash
+```
+
+Windows (Powershell):
+```ps1
+irm "https://code.mammouth.ai/install.ps1" | iex
 ```
 
 #### Installation Directory
