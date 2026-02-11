@@ -381,10 +381,9 @@ export namespace MCP {
               // Store transport for later finishAuth call
               pendingOAuthTransports.set(key, transport)
               status = { status: "needs_auth" as const }
-              // Show toast for needs_auth
               Bus.publish(TuiEvent.ToastShow, {
                 title: "MCP Authentication Required",
-                message: `Server "${key}" requires authentication. Run: opencode mcp auth ${key}`,
+                message: `Server "${key}" requires authentication. Open MCPs dialog and press 'a' to authenticate.`,
                 variant: "warning",
                 duration: 8000,
               }).catch((e) => log.debug("failed to show toast", { error: e }))
