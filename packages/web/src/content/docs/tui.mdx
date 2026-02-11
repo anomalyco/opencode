@@ -53,6 +53,12 @@ Start a message with `!` to run a shell command.
 
 The output of the command is added to the conversation as a tool result.
 
+If a command works in your shell (for example `ssh my-host`), OpenCode can run it through the `bash` tool as well, subject to your permission settings.
+
+:::note
+OpenCode does not add a special SSH transport layer. It executes shell commands in your current environment, so SSH behavior depends on your local shell setup, keys, agent forwarding, and network access.
+:::
+
 ---
 
 ## Commands
