@@ -196,6 +196,12 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
           id: clone.data.id,
           title: clone.data.title ?? pty.title,
           titleNumber: pty.titleNumber,
+          // New PTY process, so start clean.
+          buffer: undefined,
+          cursor: undefined,
+          scrollY: undefined,
+          rows: undefined,
+          cols: undefined,
         })
         if (active) {
           setStore("active", clone.data.id)
