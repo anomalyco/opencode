@@ -79,7 +79,7 @@ export function DialogStatus() {
                       <Match when={item.status === "failed" && item}>{(val) => val().error}</Match>
                       <Match when={item.status === "disabled"}>Disabled in configuration</Match>
                       <Match when={(item.status as string) === "needs_auth"}>
-                        Needs authentication (open MCPs dialog, press 'a')
+                        Needs authentication (enable to start auth flow)
                       </Match>
                       <Match when={(item.status as string) === "needs_client_registration" && item}>
                         {(val) => (val() as { error: string }).error}

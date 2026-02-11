@@ -395,7 +395,7 @@ export namespace MCP {
               status = { status: "needs_auth" as const }
               Bus.publish(TuiEvent.ToastShow, {
                 title: "MCP Authentication Required",
-                message: `Server "${key}" requires authentication. Open MCPs dialog and press 'a' to authenticate.`,
+                message: `Server "${key}" requires authentication. Enable it to start the auth flow.`,
                 variant: "warning",
                 duration: 8000,
               }).catch((e) => log.debug("failed to show toast", { error: e }))
@@ -547,6 +547,17 @@ export namespace MCP {
         error: "Unknown error during connection",
       }
       return
+    }
+
+    if (result.status.status === "needs_auth") {
+      try {
+        const authResult = await authenticate(name)
+        const s = await state()
+        s.status[name] = authResult
+        return
+      } catch (error) {
+        log.error("auto-auth failed during connect", { name, error })
+      }
     }
 
     const s = await state()
