@@ -105,25 +105,16 @@ const unsafeCSS = `
 
 [data-diff-header],
 [data-diff] {
-  [data-separator-wrapper] {
-    margin: 0 !important;
-    border-radius: 0 !important;
-  }
+  [data-separator],
+  [data-separator-content],
   [data-expand-button] {
-    width: 6.5ch !important;
-    height: 24px !important;
-    justify-content: end !important;
-    padding-left: 3ch !important;
-    padding-inline: 1ch !important;
+    height: 24px;
   }
   [data-separator-multi-button] {
-    grid-template-rows: 10px 10px !important;
+    grid-template-rows: 12px 12px !important;
     [data-expand-button] {
       height: 12px !important;
     }
-  }
-  [data-separator-content] {
-    height: 24px !important;
   }
   [data-column-number] {
     background-color: var(--background-stronger);
