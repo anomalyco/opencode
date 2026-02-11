@@ -155,17 +155,55 @@ export { PMRoutes } from "./pm.ts"
 
 **Storage is control-plane-owned**, not dependent on OpenCode's `storage.ts`. This keeps the control plane extractable if we later decouple from OpenCode core.
 
-Storage location: `$projectDir/.claxedo/control-plane/` (separate from `.opencode/`).
+Storage location depends on deployment mode:
 
-Durable state for lifecycle domain:
+- **Local mode** (`Config.SANDBOX_ENABLED=false`): `$projectDir/.claxedo/control-plane/` (file-based, as proposed). The gateway and OpenCode share the same filesystem.
+- **Cloud mode** (`Config.SANDBOX_ENABLED=true`): Convex mutations via the existing `getConvex()` client (consistent with workspace/project data already in Convex). Process definitions, runs, and port registry are stored as Convex documents.
 
-1. `projects.json`: path/name/display_name/ordering/ui prefs/auto_start,
-2. `processes.json`: project_id/name/command/cwd/trusted/auto_start/restart policy/ports (named port requests),
-3. `runs.json`: run_id/process_id/pty_id/status/pid/started_at/stopped_at/exit_code,
-4. `ports.json`: global port registry — `(project_id, worktree_id, port_name) → port number + status`,
-5. `settings.json`: control-plane feature flags and UI prefs.
+Both backends implement a `ControlPlaneStore` interface:
 
-Concurrency: file-level advisory locking (same pattern as OpenCode's `FileStorage` but independent implementation). Multiple browser tabs may read concurrently; writes acquire lock.
+```ts
+type ControlPlaneStore = {
+  // Process definitions
+  listProcesses(projectId: string): Promise<ProcessDef[]>
+  getProcess(projectId: string): Promise<ProcessDef | null>
+  upsertProcess(def: ProcessDef): Promise<void>
+  deleteProcess(processId: string): Promise<void>
+
+  // Runs
+  listRuns(processId: string, opts?: { limit?: number }): Promise<RunRecord[]>
+  createRun(run: RunRecord): Promise<void>
+  updateRun(runId: string, patch: Partial<RunRecord>): Promise<void>
+
+  // Ports
+  getPortRegistry(): Promise<PortRegistryEntry[]>
+  reservePorts(entries: PortRegistryEntry[]): Promise<void>
+  releasePorts(filter: { projectId: string; worktreeId: string }): Promise<void>
+
+  // Settings
+  getSettings(): Promise<ControlPlaneSettings>
+  updateSettings(patch: Partial<ControlPlaneSettings>): Promise<void>
+}
+```
+
+The gateway selects the backend at startup based on `Config.SANDBOX_ENABLED`:
+
+- `FileControlPlaneStore` (local mode): reads/writes JSON files with advisory locking
+- `ConvexControlPlaneStore` (cloud mode): uses Convex mutations/queries
+
+This also resolves the contradiction with "not dependent on OpenCode's storage.ts" — the control plane has its own storage interface, independent of OpenCode, while cloud mode uses the same Convex infrastructure the gateway already depends on.
+
+Durable state for lifecycle domain (persisted via selected backend):
+
+1. `projects`: path/name/display_name/ordering/ui prefs/auto_start,
+2. `processes`: project_id/name/command/cwd/trusted/auto_start/restart policy/ports (named port requests),
+3. `runs`: run_id/process_id/pty_id/status/pid/started_at/stopped_at/exit_code,
+4. `port_registry`: global port registry — `(project_id, worktree_id, port_name) → port number + status`,
+5. `settings`: control-plane feature flags and UI prefs.
+
+Concurrency (local mode): file-level advisory locking (same pattern as OpenCode's `FileStorage` but independent implementation). Multiple browser tabs may read concurrently; writes acquire lock.
+
+Concurrency (cloud mode): Convex handles ACID transactions for all mutations automatically.
 
 Ephemeral state for live pane domain:
 
@@ -580,6 +618,7 @@ The registry prevents internal conflicts by construction. For external conflicts
 
 After an unclean shutdown, ports may remain bound by zombie processes. On control plane startup:
 
+**Local mode:**
 1. load the registry from `$projectDir/.claxedo/control-plane/ports.json`,
 2. probe each port that was `bound` at last shutdown,
 3. if the port is still bound but the recorded PID is dead (or doesn't match), mark the entry as `released` and surface a cleanup notice,
@@ -587,6 +626,9 @@ After an unclean shutdown, ports may remain bound by zombie processes. On contro
    - show PID + command for confirmation,
    - require explicit user approval (never auto-kill),
    - after kill, re-probe and release.
+
+**Cloud mode:**
+The durable registry in Convex survives gateway restarts. Ports marked as `bound` at last shutdown are rechecked on gateway startup. If processes are still running on the recorded PIDs (unlikely across a restart), they're re-bound; otherwise, ports are released. Zombie process cleanup does not apply since processes run in isolated sandboxes.
 
 ### 9.3 Process Group APIs
 
