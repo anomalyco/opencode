@@ -38,7 +38,7 @@ export namespace LLM {
     small?: boolean
     tools: Record<string, Tool>
     retries?: number
-    profileID?: string // Enable multi-account support
+    profileID?: string
   }
 
   export type StreamOutput = StreamTextResult<ToolSet, unknown>
@@ -57,10 +57,10 @@ export namespace LLM {
       providerID: input.model.providerID,
     })
     const [language, cfg, provider, auth] = await Promise.all([
-      Provider.getLanguage(input.model, input.profileID), // Pass profile to getLanguage
+      Provider.getLanguage(input.model, input.profileID),
       Config.get(),
       Provider.getProvider(input.model.providerID),
-      Auth.get(input.model.providerID, input.profileID), // Profile-aware authentication
+      Auth.get(input.model.providerID, input.profileID),
     ])
     const isCodex = provider.id === "openai" && auth?.type === "oauth"
 

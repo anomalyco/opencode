@@ -1083,8 +1083,6 @@ export namespace Provider {
     }
   }
 
-  // Profile-aware SDK getter - enables multi-account support
-  // Retains backward compatibility with existing getSDK function
   export async function getSDKWithProfile(model: Model, profileID?: string) {
     try {
       using _ = log.time("getSDKWithProfile", {
@@ -1105,7 +1103,6 @@ export namespace Provider {
 
       if (!options["baseURL"]) options["baseURL"] = model.api.url
 
-      // Use profile-specific authentication if provided
       if (profileID) {
         const auth = await Auth.getProfile(model.providerID, profileID) ?? await Auth.get(model.providerID)
         if (auth && auth.type === "api" && options["apiKey"] === undefined) {
@@ -1116,7 +1113,6 @@ export namespace Provider {
           options["refreshToken"] = auth.refresh
         }
       } else {
-        // Fallback to current profile (backward compatible)
         if (options["apiKey"] === undefined && provider.key) {
           options["apiKey"] = provider.key
         }
@@ -1244,7 +1240,6 @@ export namespace Provider {
 
     const provider = s.providers[model.providerID]
     const sdk = profileID ? await getSDKWithProfile(model, profileID) : await getSDK(model)
-    // Retains backward compatibility with existing getSDK() function
 
     try {
       const language = s.modelLoaders[model.providerID]

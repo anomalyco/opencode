@@ -1004,9 +1004,17 @@ export function Prompt(props: PromptProps) {
                     {local.model.parsed().model}
                   </text>
                   <text fg={theme.textMuted}>{local.model.parsed().provider}</text>
-                  <Show when={local.model.current()?.providerID && sync.data.active_profiles[local.model.current()!.providerID] && sync.data.active_profiles[local.model.current()!.providerID] !== "default"}>
+                  <Show
+                    when={
+                      local.model.current()?.providerID &&
+                      sync.data.active_profiles[local.model.current()!.providerID] &&
+                      sync.data.active_profiles[local.model.current()!.providerID] !== "default"
+                    }
+                  >
                     <text fg={theme.textMuted}>·</text>
-                    <text fg={theme.primary}>{sync.data.active_profiles[local.model.current()!.providerID]}</text>
+                    <text fg={theme.primary}>
+                      {sync.data.active_profiles[local.model.current()!.providerID]}
+                    </text>
                   </Show>
                   <Show when={showVariant()}>
                     <text fg={theme.textMuted}>·</text>

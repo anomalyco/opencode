@@ -573,7 +573,7 @@ export const RunCommand = cmd({
           command: args.command,
           arguments: message,
           variant: args.variant,
-          profileID: args.profile, // Pass profile to session
+          profileID: args.profile,
         })
       } else {
         const model = args.model ? Provider.parseModel(args.model) : undefined
@@ -582,7 +582,7 @@ export const RunCommand = cmd({
           agent,
           model,
           variant: args.variant,
-          profileID: args.profile, // Pass profile to session
+          profileID: args.profile,
           parts: [...files, { type: "text", text: message }],
         })
       }

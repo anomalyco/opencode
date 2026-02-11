@@ -35,7 +35,6 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
   }
   const method = plugin.auth.methods[index]
 
-  // Handle prompts for all auth types
   await Bun.sleep(10)
   const inputs: Record<string, string> = {}
   if (method.prompts) {
@@ -167,7 +166,6 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
   return false
 }
 
-// Profile management commands
 export const AuthProfileCommand = cmd({
   command: "profile",
   describe: "manage account profiles",
@@ -177,6 +175,7 @@ export const AuthProfileCommand = cmd({
       .command(AuthProfileUseCommand)
       .command(AuthProfileListCommand)
       .command(AuthProfileRemoveCommand)
+      .command(AuthProfileRenameCommand)
       .demandCommand(),
   async handler() {},
 })
@@ -189,6 +188,7 @@ export const AuthProfileCreateCommand = cmd({
       .positional("provider", {
         describe: "provider name",
         type: "string",
+        demandOption: true,
       })
       .option("profile", {
         alias: "p",
@@ -201,12 +201,10 @@ export const AuthProfileCreateCommand = cmd({
       async fn() {
         UI.empty()
 
-        // Check for migration first
         await checkAndInformMigration()
 
         const providerID = args.provider
 
-        // Validate provider exists
         const database = await ModelsDev.get()
         if (!database[providerID]) {
           prompts.log.error(`Provider "${providerID}" not found`)
@@ -214,7 +212,6 @@ export const AuthProfileCreateCommand = cmd({
           return
         }
 
-        // Get profile name
         const existingProfiles = await Auth.listProfiles(providerID)
         const profileName = await prompts.text({
           message: "Enter profile name:",
@@ -235,14 +232,12 @@ export const AuthProfileCreateCommand = cmd({
 
         prompts.log.info(`Creating profile "${finalProfileName}" for ${database[providerID]?.name || providerID}`)
 
-        // Check for plugin-based auth
         const plugin = await Plugin.list().then((x) => x.findLast((x) => x.auth?.provider === providerID))
         if (plugin && plugin.auth) {
           const handled = await handlePluginAuth({ auth: plugin.auth }, providerID, finalProfileName)
           if (handled) return
         }
 
-        // Fallback to API key prompt
         if (providerID === "opencode") {
           prompts.log.info("Create an api key at https://opencode.ai/auth")
         }
@@ -252,14 +247,6 @@ export const AuthProfileCreateCommand = cmd({
           validate: (x) => (x && x.length > 0 ? undefined : "Required"),
         })
         if (prompts.isCancel(key)) throw new UI.CancelledError()
-
-        const existing = await Auth.listProfiles(providerID)
-        if (existing[finalProfileName]) {
-          const overwrite = await prompts.confirm({
-            message: `Profile "${finalProfileName}" already exists for ${database[providerID]?.name || providerID}. Overwrite?`,
-          })
-          if (prompts.isCancel(overwrite) || !overwrite) throw new UI.CancelledError()
-        }
 
         await Auth.addProfile(providerID, finalProfileName, {
           type: "api",
@@ -282,6 +269,7 @@ export const AuthProfileUseCommand = cmd({
       .positional("provider", {
         describe: "provider name",
         type: "string",
+        demandOption: true,
       })
       .option("profile", {
         alias: "p",
@@ -294,12 +282,10 @@ export const AuthProfileUseCommand = cmd({
       async fn() {
         UI.empty()
 
-        // Check for migration first
         await checkAndInformMigration()
 
         const providerID = args.provider
 
-        // Get existing profiles
         const profiles = await Auth.listProfiles(providerID)
         const profileNames = Object.keys(profiles)
 
@@ -311,16 +297,16 @@ export const AuthProfileUseCommand = cmd({
 
         let targetProfile = args.profile
         if (!targetProfile) {
-          // Prompt for profile selection
           const database = await ModelsDev.get()
-          targetProfile = await prompts.select({
+          const selected = await prompts.select({
             message: `Select profile for ${database[providerID]?.name || providerID}:`,
             options: profileNames.map((name) => ({
               label: name,
               value: name,
             })),
           })
-          if (prompts.isCancel(targetProfile)) throw new UI.CancelledError()
+          if (prompts.isCancel(selected)) throw new UI.CancelledError()
+          targetProfile = selected
         }
 
         if (!profiles[targetProfile]) {
@@ -341,17 +327,20 @@ export const AuthProfileListCommand = cmd({
   command: "list [provider]",
   aliases: ["ls"],
   describe: "list profiles for a provider (or all providers)",
+  builder: (yargs) =>
+    yargs.positional("provider", {
+      describe: "provider name",
+      type: "string",
+    }),
   async handler(args) {
     await Instance.provide({
       directory: process.cwd(),
       async fn() {
         UI.empty()
 
-        // Check for migration first
         await checkAndInformMigration()
 
         if (args.provider) {
-          // List profiles for specific provider
           const profiles = await Auth.listProfiles(args.provider)
           const profileNames = Object.keys(profiles)
 
@@ -377,7 +366,6 @@ export const AuthProfileListCommand = cmd({
 
           prompts.outro(`${profileNames.length} profile${profileNames.length === 1 ? "" : "s"}`)
         } else {
-          // List profiles for all providers
           prompts.intro("All profiles:")
 
           const authData = await Auth.allWithProfiles()
@@ -419,6 +407,7 @@ export const AuthProfileRemoveCommand = cmd({
       .positional("provider", {
         describe: "provider name",
         type: "string",
+        demandOption: true,
       })
       .option("profile", {
         alias: "p",
@@ -437,7 +426,6 @@ export const AuthProfileRemoveCommand = cmd({
           return
         }
 
-        // Check for migration first
         await checkAndInformMigration()
 
         const profiles = await Auth.listProfiles(args.provider)
@@ -454,6 +442,84 @@ export const AuthProfileRemoveCommand = cmd({
         await Auth.removeProfile(args.provider, args.profile)
 
         prompts.log.success(`Removed profile "${args.profile}" from ${database[args.provider]?.name || args.provider}`)
+        prompts.outro("Done")
+      },
+    })
+  },
+})
+
+export const AuthProfileRenameCommand = cmd({
+  command: "rename <provider>",
+  describe: "rename a profile",
+  builder: (yargs) =>
+    yargs
+      .positional("provider", {
+        describe: "provider name",
+        type: "string",
+        demandOption: true,
+      })
+      .option("from", {
+        type: "string",
+        describe: "current profile name",
+      })
+      .option("to", {
+        type: "string",
+        describe: "new profile name",
+      }),
+  async handler(args) {
+    await Instance.provide({
+      directory: process.cwd(),
+      async fn() {
+        UI.empty()
+
+        await checkAndInformMigration()
+
+        const profiles = await Auth.listProfiles(args.provider)
+        const profileNames = Object.keys(profiles)
+
+        if (profileNames.length === 0) {
+          prompts.log.error(`No profiles found for provider "${args.provider}"`)
+          return
+        }
+
+        let from = args.from
+        if (!from) {
+          const database = await ModelsDev.get()
+          const selected = await prompts.select({
+            message: `Select profile to rename for ${database[args.provider]?.name || args.provider}:`,
+            options: profileNames.map((name) => ({
+              label: name,
+              value: name,
+            })),
+          })
+          if (prompts.isCancel(selected)) throw new UI.CancelledError()
+          from = selected
+        }
+
+        if (!profiles[from]) {
+          prompts.log.error(`Profile "${from}" not found for provider "${args.provider}"`)
+          prompts.log.info(`Available profiles: ${profileNames.join(", ")}`)
+          return
+        }
+
+        let to = args.to
+        if (!to) {
+          const value = await prompts.text({
+            message: `New name for "${from}":`,
+            validate: (name) => {
+              if (!name || !name.trim()) return "Profile name cannot be empty"
+              if (name.length > 50) return "Profile name too long (max 50 characters)"
+              if (name.includes("/") || name.includes("\\")) return "Profile name cannot contain slashes"
+              if (profiles[name.trim()]) return `Profile "${name.trim()}" already exists`
+              return undefined
+            },
+          })
+          if (prompts.isCancel(value)) throw new UI.CancelledError()
+          to = value.trim()
+        }
+
+        await Auth.renameProfile(args.provider, from, to)
+        prompts.log.success(`Renamed profile "${from}" to "${to}"`)
         prompts.outro("Done")
       },
     })
@@ -504,7 +570,6 @@ export const AuthListCommand = cmd({
       async fn() {
         UI.empty()
 
-        // Check for migration first
         await checkAndInformMigration()
 
         const authPath = path.join(Global.Path.data, "auth.json")
@@ -513,7 +578,6 @@ export const AuthListCommand = cmd({
         prompts.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
 
         if (args.profiles) {
-          // Show detailed profile information
           const authData = await Auth.allWithProfiles()
           const providers = Object.entries(authData)
           const database = await ModelsDev.get()
@@ -540,7 +604,6 @@ export const AuthListCommand = cmd({
 
           prompts.outro(`${providers.length} provider${providers.length === 1 ? "" : "s"}`)
         } else {
-          // Show current profile per provider (backward compatible)
           const results = Object.entries(await Auth.all())
           const database = await ModelsDev.get()
 
@@ -551,7 +614,6 @@ export const AuthListCommand = cmd({
 
           prompts.outro(`${results.length} credentials`)
 
-          // Environment variables section
           const activeEnvVars: Array<{ provider: string; envVar: string }> = []
 
           for (const [providerID, provider] of Object.entries(database)) {
@@ -602,7 +664,6 @@ export const AuthLoginCommand = cmd({
         UI.empty()
         prompts.intro("Add credential")
 
-        // Check for migration first
         await checkAndInformMigration()
         if (args.url) {
           const wellknown = await fetch(`${args.url}/.well-known/opencode`).then((x) => x.json() as any)
@@ -700,7 +761,6 @@ export const AuthLoginCommand = cmd({
           provider = provider.replace(/^@ai-sdk\//, "")
           if (prompts.isCancel(provider)) throw new UI.CancelledError()
 
-          // Check if a plugin provides auth for this custom provider
           const customPlugin = await Plugin.list().then((x) => x.findLast((x) => x.auth?.provider === provider))
           if (customPlugin && customPlugin.auth) {
             const handled = await handlePluginAuth({ auth: customPlugin.auth }, provider, args.profile)
@@ -738,7 +798,6 @@ export const AuthLoginCommand = cmd({
 
         const profileID = args.profile || "default"
 
-        // Prompt for profile name if not provided and this is the first login
         let finalProfileID = profileID
         if (!args.profile) {
           const profileName = await prompts.text({
@@ -797,7 +856,6 @@ export const AuthLogoutCommand = cmd({
       async fn() {
         UI.empty()
 
-        // Check for migration first
         await checkAndInformMigration()
 
         const authData = await Auth.allWithProfiles()
@@ -812,7 +870,6 @@ export const AuthLogoutCommand = cmd({
         const database = await ModelsDev.get()
 
         if (args.profile) {
-          // Remove specific profile
           const providerID = await prompts.select({
             message: "Select provider",
             options: providers.map(([key, value]) => ({
@@ -833,7 +890,6 @@ export const AuthLogoutCommand = cmd({
           await Auth.removeProfile(providerID, args.profile)
           prompts.log.success(`Removed profile "${args.profile}" from ${database[providerID]?.name || providerID}`)
         } else {
-          // Remove entire provider
           const providerID = await prompts.select({
             message: "Select provider to remove",
             options: providers.map(([key, value]) => {

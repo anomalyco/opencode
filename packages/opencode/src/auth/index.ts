@@ -34,7 +34,6 @@ export namespace Auth {
   export const Info = z.discriminatedUnion("type", [Oauth, Api, WellKnown]).meta({ ref: "Auth" })
   export type Info = z.infer<typeof Info>
 
-  // New profile-based schema
   export const Provider = z
     .object({
       profiles: z.record(z.string(), Info),
@@ -43,16 +42,12 @@ export namespace Auth {
     .meta({ ref: "Provider" })
   export type Provider = z.infer<typeof Provider>
 
-  // Union of legacy and new formats
-  export const ProviderOrInfo = z.union([Info, Provider]).meta({ ref: "ProviderOrInfo" })
-  export type ProviderOrInfo = z.infer<typeof ProviderOrInfo>
+  const ProviderOrInfo = z.union([Info, Provider])
+  type ProviderOrInfo = z.infer<typeof ProviderOrInfo>
 
   const filepath = path.join(Global.Path.data, "auth.json")
 
-  // Storage format: Record<string, ProviderOrInfo>
   type StorageFormat = Record<string, ProviderOrInfo>
-
-  // Internal data after processing: Record<string, Provider>
   type InternalFormat = Record<string, Provider>
 
   async function getRaw(): Promise<StorageFormat> {
@@ -122,32 +117,12 @@ export namespace Auth {
     return normalizeToInternal(raw)
   }
 
-  export async function set(key: string, info: Info, profileID: string = "default"): Promise<void> {
-    const raw = await getRaw()
-    const normalized = normalizeToInternal(raw)
-
-    if (!normalized[key]) {
-      normalized[key] = {
-        profiles: {},
-        currentProfile: profileID,
-      }
-    }
-
-    normalized[key].profiles[profileID] = info
-    if (!normalized[key].currentProfile) {
-      normalized[key].currentProfile = profileID
-    }
-
-    await Bun.write(filepath, JSON.stringify(normalized, null, 2), { mode: 0o600 })
-  }
-
   export async function remove(key: string): Promise<void> {
     const raw = await getRaw()
     delete raw[key]
     await Bun.write(filepath, JSON.stringify(raw, null, 2), { mode: 0o600 })
   }
 
-  // Profile management functions
   export async function getProfile(providerID: string, profileID: string): Promise<Info | undefined> {
     const auth = await allWithProfiles()
     return auth[providerID]?.profiles[profileID]
@@ -183,6 +158,24 @@ export namespace Auth {
     auth[providerID].profiles[profileID] = info
     if (!auth[providerID].currentProfile) {
       auth[providerID].currentProfile = profileID
+    }
+
+    await Bun.write(filepath, JSON.stringify(auth, null, 2), { mode: 0o600 })
+  }
+
+  export async function renameProfile(providerID: string, oldName: string, newName: string): Promise<void> {
+    validateProfileName(newName)
+    const auth = await allWithProfiles()
+    const provider = auth[providerID]
+    if (!provider) throw new Error(`Provider "${providerID}" not found`)
+    if (!provider.profiles[oldName]) throw new Error(`Profile "${oldName}" not found for provider "${providerID}"`)
+    if (provider.profiles[newName]) throw new Error(`Profile "${newName}" already exists for provider "${providerID}"`)
+
+    provider.profiles[newName] = provider.profiles[oldName]
+    delete provider.profiles[oldName]
+
+    if (provider.currentProfile === oldName) {
+      provider.currentProfile = newName
     }
 
     await Bun.write(filepath, JSON.stringify(auth, null, 2), { mode: 0o600 })
