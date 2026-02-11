@@ -6393,6 +6393,9 @@
           "tokens": {
             "type": "object",
             "properties": {
+              "total": {
+                "type": "number"
+              },
               "input": {
                 "type": "number"
               },
@@ -7023,6 +7026,9 @@
           "tokens": {
             "type": "object",
             "properties": {
+              "total": {
+                "type": "number"
+              },
               "input": {
                 "type": "number"
               },
@@ -9894,6 +9900,12 @@
               "prune": {
                 "description": "Enable pruning of old tool outputs (default: true)",
                 "type": "boolean"
+              },
+              "reserved": {
+                "description": "Token buffer for compaction. Leaves enough window to avoid overflow during compaction.",
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
               }
             }
           },
