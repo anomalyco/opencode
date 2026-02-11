@@ -15,6 +15,9 @@ export type Platform = {
   /** Open a URL in the default browser */
   openLink(url: string): void
 
+  /** Open a local path in a local app (desktop only) */
+  openPath?(path: string, app?: string): Promise<void>
+
   /** Restart the app  */
   restart(): Promise<void>
 
@@ -54,12 +57,32 @@ export type Platform = {
   /** Set the default server URL to use on app startup (platform-specific) */
   setDefaultServerUrl?(url: string | null): Promise<void> | void
 
+  /** Get the configured WSL integration (desktop only) */
+  getWslEnabled?(): Promise<boolean>
+
+  /** Set the configured WSL integration (desktop only) */
+  setWslEnabled?(config: boolean): Promise<void> | void
+
+  /** Get the preferred display backend (desktop only) */
+  getDisplayBackend?(): Promise<DisplayBackend | null> | DisplayBackend | null
+
+  /** Set the preferred display backend (desktop only) */
+  setDisplayBackend?(backend: DisplayBackend): Promise<void>
+
   /** Parse markdown to HTML using native parser (desktop only, returns unprocessed code blocks) */
   parseMarkdown?(markdown: string): Promise<string>
 
   /** Webview zoom level (desktop only) */
   webviewZoom?: Accessor<number>
+
+  /** Check if an editor app exists (desktop only) */
+  checkAppExists?(appName: string): Promise<boolean>
+
+  /** Read image from clipboard (desktop only) */
+  readClipboardImage?(): Promise<File | null>
 }
+
+export type DisplayBackend = "auto" | "wayland"
 
 export const { use: usePlatform, provider: PlatformProvider } = createSimpleContext({
   name: "Platform",

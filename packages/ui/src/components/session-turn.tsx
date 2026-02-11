@@ -10,7 +10,6 @@ import {
 } from "@opencode-ai/sdk/v2/client"
 import { useData } from "../context"
 import { type UiI18nKey, type UiI18nParams, useI18n } from "../context/i18n"
-import { findLast } from "@opencode-ai/util/array"
 
 import { Binary } from "@opencode-ai/util/binary"
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
@@ -27,6 +26,59 @@ import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 
 type Translator = (key: UiI18nKey, params?: UiI18nParams) => string
+
+function record(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value)
+}
+
+function unwrap(message: string) {
+  const text = message.replace(/^Error:\s*/, "").trim()
+
+  const parse = (value: string) => {
+    try {
+      return JSON.parse(value) as unknown
+    } catch {
+      return undefined
+    }
+  }
+
+  const read = (value: string) => {
+    const first = parse(value)
+    if (typeof first !== "string") return first
+    return parse(first.trim())
+  }
+
+  let json = read(text)
+
+  if (json === undefined) {
+    const start = text.indexOf("{")
+    const end = text.lastIndexOf("}")
+    if (start !== -1 && end > start) {
+      json = read(text.slice(start, end + 1))
+    }
+  }
+
+  if (!record(json)) return message
+
+  const err = record(json.error) ? json.error : undefined
+  if (err) {
+    const type = typeof err.type === "string" ? err.type : undefined
+    const msg = typeof err.message === "string" ? err.message : undefined
+    if (type && msg) return `${type}: ${msg}`
+    if (msg) return msg
+    if (type) return type
+    const code = typeof err.code === "string" ? err.code : undefined
+    if (code) return code
+  }
+
+  const msg = typeof json.message === "string" ? json.message : undefined
+  if (msg) return msg
+
+  const reason = typeof json.error === "string" ? json.error : undefined
+  if (reason) return reason
+
+  return message
+}
 
 function computeStatusFromPart(part: PartType | undefined, t: Translator): string | undefined {
   if (!part) return undefined
@@ -79,15 +131,21 @@ function isAttachment(part: PartType | undefined) {
   return mime.startsWith("image/") || mime === "application/pdf"
 }
 
+function list<T>(value: T[] | undefined | null, fallback: T[]) {
+  if (Array.isArray(value)) return value
+  return fallback
+}
+
 function AssistantMessageItem(props: {
   message: AssistantMessage
   responsePartId: string | undefined
   hideResponsePart: boolean
   hideReasoning: boolean
+  hidden?: () => readonly { messageID: string; callID: string }[]
 }) {
   const data = useData()
   const emptyParts: PartType[] = []
-  const msgParts = createMemo(() => data.store.part[props.message.id] ?? emptyParts)
+  const msgParts = createMemo(() => list(data.store.part?.[props.message.id], emptyParts))
   const lastTextPart = createMemo(() => {
     const parts = msgParts()
     for (let i = parts.length - 1; i >= 0; i--) {
@@ -104,13 +162,22 @@ function AssistantMessageItem(props: {
       parts = parts.filter((part) => part?.type !== "reasoning")
     }
 
-    if (!props.hideResponsePart) return parts
+    if (props.hideResponsePart) {
+      const responsePartId = props.responsePartId
+      if (responsePartId && responsePartId === lastTextPart()?.id) {
+        parts = parts.filter((part) => part?.id !== responsePartId)
+      }
+    }
 
-    const responsePartId = props.responsePartId
-    if (!responsePartId) return parts
-    if (responsePartId !== lastTextPart()?.id) return parts
+    const hidden = props.hidden?.() ?? []
+    if (hidden.length === 0) return parts
 
-    return parts.filter((part) => part?.id !== responsePartId)
+    const id = props.message.id
+    return parts.filter((part) => {
+      if (part?.type !== "tool") return true
+      const tool = part as ToolPart
+      return !hidden.some((h) => h.messageID === id && h.callID === tool.callID)
+    })
   })
 
   return <Message message={props.message} parts={filteredParts()} />
@@ -140,12 +207,11 @@ export function SessionTurn(
   const emptyFiles: FilePart[] = []
   const emptyAssistant: AssistantMessage[] = []
   const emptyPermissions: PermissionRequest[] = []
-  const emptyPermissionParts: { part: ToolPart; message: AssistantMessage }[] = []
   const emptyQuestions: QuestionRequest[] = []
   const emptyQuestionParts: { part: ToolPart; message: AssistantMessage }[] = []
   const idle = { type: "idle" as const }
 
-  const allMessages = createMemo(() => data.store.message[props.sessionID] ?? emptyMessages)
+  const allMessages = createMemo(() => list(data.store.message?.[props.sessionID], emptyMessages))
 
   const messageIndex = createMemo(() => {
     const messages = allMessages() ?? emptyMessages
@@ -187,7 +253,7 @@ export function SessionTurn(
   const parts = createMemo(() => {
     const msg = message()
     if (!msg) return emptyParts
-    return data.store.part[msg.id] ?? emptyParts
+    return list(data.store.part?.[msg.id], emptyParts)
   })
 
   const attachmentParts = createMemo(() => {
@@ -228,11 +294,17 @@ export function SessionTurn(
   const lastAssistantMessage = createMemo(() => assistantMessages().at(-1))
 
   const error = createMemo(() => assistantMessages().find((m) => m.error)?.error)
+  const errorText = createMemo(() => {
+    const msg = error()?.data?.message
+    if (typeof msg === "string") return unwrap(msg)
+    if (msg === undefined || msg === null) return ""
+    return unwrap(String(msg))
+  })
 
   const lastTextPart = createMemo(() => {
     const msgs = assistantMessages()
     for (let mi = msgs.length - 1; mi >= 0; mi--) {
-      const msgParts = data.store.part[msgs[mi].id] ?? emptyParts
+      const msgParts = list(data.store.part?.[msgs[mi].id], emptyParts)
       for (let pi = msgParts.length - 1; pi >= 0; pi--) {
         const part = msgParts[pi]
         if (part?.type === "text") return part as TextPart
@@ -243,8 +315,7 @@ export function SessionTurn(
 
   const hasSteps = createMemo(() => {
     for (const m of assistantMessages()) {
-      const msgParts = data.store.part[m.id]
-      if (!msgParts) continue
+      const msgParts = list(data.store.part?.[m.id], emptyParts)
       for (const p of msgParts) {
         if (p?.type === "tool") return true
       }
@@ -252,49 +323,19 @@ export function SessionTurn(
     return false
   })
 
-  const permissions = createMemo(() => data.store.permission?.[props.sessionID] ?? emptyPermissions)
-  const permissionCount = createMemo(() => permissions().length)
+  const permissions = createMemo(() => list(data.store.permission?.[props.sessionID], emptyPermissions))
   const nextPermission = createMemo(() => permissions()[0])
 
-  const permissionParts = createMemo(() => {
-    if (props.stepsExpanded) return emptyPermissionParts
-
-    const next = nextPermission()
-    if (!next || !next.tool) return emptyPermissionParts
-
-    const message = findLast(assistantMessages(), (m) => m.id === next.tool!.messageID)
-    if (!message) return emptyPermissionParts
-
-    const parts = data.store.part[message.id] ?? emptyParts
-    for (const part of parts) {
-      if (part?.type !== "tool") continue
-      const tool = part as ToolPart
-      if (tool.callID === next.tool?.callID) return [{ part: tool, message }]
-    }
-
-    return emptyPermissionParts
-  })
-
-  const questions = createMemo(() => data.store.question?.[props.sessionID] ?? emptyQuestions)
+  const questions = createMemo(() => list(data.store.question?.[props.sessionID], emptyQuestions))
   const nextQuestion = createMemo(() => questions()[0])
 
-  const questionParts = createMemo(() => {
-    if (props.stepsExpanded) return emptyQuestionParts
-
-    const next = nextQuestion()
-    if (!next || !next.tool) return emptyQuestionParts
-
-    const message = findLast(assistantMessages(), (m) => m.id === next.tool!.messageID)
-    if (!message) return emptyQuestionParts
-
-    const parts = data.store.part[message.id] ?? emptyParts
-    for (const part of parts) {
-      if (part?.type !== "tool") continue
-      const tool = part as ToolPart
-      if (tool.callID === next.tool?.callID) return [{ part: tool, message }]
-    }
-
-    return emptyQuestionParts
+  const hidden = createMemo(() => {
+    const out: { messageID: string; callID: string }[] = []
+    const perm = nextPermission()
+    if (perm?.tool) out.push(perm.tool)
+    const question = nextQuestion()
+    if (question?.tool) out.push(question.tool)
+    return out
   })
 
   const answeredQuestionParts = createMemo(() => {
@@ -304,7 +345,7 @@ export function SessionTurn(
     const result: { part: ToolPart; message: AssistantMessage }[] = []
 
     for (const msg of assistantMessages()) {
-      const parts = data.store.part[msg.id] ?? emptyParts
+      const parts = list(data.store.part?.[msg.id], emptyParts)
       for (const part of parts) {
         if (part?.type !== "tool") continue
         const tool = part as ToolPart
@@ -328,7 +369,7 @@ export function SessionTurn(
     const msgs = assistantMessages()
     if (msgs.length !== 1) return
 
-    const msgParts = data.store.part[msgs[0].id] ?? emptyParts
+    const msgParts = list(data.store.part?.[msgs[0].id], emptyParts)
     if (msgParts.length !== 1) return
 
     const assistantPart = msgParts[0]
@@ -343,7 +384,7 @@ export function SessionTurn(
     let currentTask: ToolPart | undefined
 
     for (let mi = msgs.length - 1; mi >= 0; mi--) {
-      const msgParts = data.store.part[msgs[mi].id] ?? emptyParts
+      const msgParts = list(data.store.part?.[msgs[mi].id], emptyParts)
       for (let pi = msgParts.length - 1; pi >= 0; pi--) {
         const part = msgParts[pi]
         if (!part) continue
@@ -370,12 +411,12 @@ export function SessionTurn(
         : undefined
 
     if (taskSessionId) {
-      const taskMessages = data.store.message[taskSessionId] ?? emptyMessages
+      const taskMessages = list(data.store.message?.[taskSessionId], emptyMessages)
       for (let mi = taskMessages.length - 1; mi >= 0; mi--) {
         const msg = taskMessages[mi]
         if (!msg || msg.role !== "assistant") continue
 
-        const msgParts = data.store.part[msg.id] ?? emptyParts
+        const msgParts = list(data.store.part?.[msg.id], emptyParts)
         for (let pi = msgParts.length - 1; pi >= 0; pi--) {
           const part = msgParts[pi]
           if (part) return computeStatusFromPart(part, i18n.t)
@@ -485,6 +526,39 @@ export function SessionTurn(
     onCleanup(() => clearInterval(timer))
   })
 
+  let retryLog = ""
+  createEffect(() => {
+    const r = retry()
+    if (!r) return
+    const key = `${r.attempt}:${r.next}:${r.message}`
+    if (key === retryLog) return
+    retryLog = key
+    console.warn("[session-turn] retry", {
+      sessionID: props.sessionID,
+      messageID: props.messageID,
+      attempt: r.attempt,
+      next: r.next,
+      raw: r.message,
+      parsed: unwrap(r.message),
+    })
+  })
+
+  let errorLog = ""
+  createEffect(() => {
+    const value = error()?.data?.message
+    if (value === undefined || value === null) return
+    const raw = typeof value === "string" ? value : String(value)
+    if (!raw) return
+    if (raw === errorLog) return
+    errorLog = raw
+    console.warn("[session-turn] assistant-error", {
+      sessionID: props.sessionID,
+      messageID: props.messageID,
+      raw,
+      parsed: unwrap(raw),
+    })
+  })
+
   createEffect(() => {
     const update = () => {
       setStore("duration", duration())
@@ -498,14 +572,6 @@ export function SessionTurn(
     const timer = setInterval(update, 1000)
     onCleanup(() => clearInterval(timer))
   })
-
-  createEffect(
-    on(permissionCount, (count, prev) => {
-      if (!count) return
-      if (prev !== undefined && count <= prev) return
-      autoScroll.forceScrollToBottom()
-    }),
-  )
 
   let lastStatusChange = Date.now()
   let statusTimeout: number | undefined
@@ -625,7 +691,8 @@ export function SessionTurn(
                                   {(() => {
                                     const r = retry()
                                     if (!r) return ""
-                                    return r.message.length > 60 ? r.message.slice(0, 60) + "..." : r.message
+                                    const msg = unwrap(r.message)
+                                    return msg.length > 60 ? msg.slice(0, 60) + "..." : msg
                                   })()}
                                 </span>
                                 <span data-slot="session-turn-retry-seconds">
@@ -664,28 +731,15 @@ export function SessionTurn(
                               responsePartId={responsePartId()}
                               hideResponsePart={hideResponsePart()}
                               hideReasoning={!working()}
+                              hidden={hidden}
                             />
                           )}
                         </For>
                         <Show when={error()}>
                           <Card variant="error" class="error-card">
-                            {error()?.data?.message as string}
+                            {errorText()}
                           </Card>
                         </Show>
-                      </div>
-                    </Show>
-                    <Show when={!props.stepsExpanded && permissionParts().length > 0}>
-                      <div data-slot="session-turn-permission-parts">
-                        <For each={permissionParts()}>
-                          {({ part, message }) => <Part part={part} message={message} />}
-                        </For>
-                      </div>
-                    </Show>
-                    <Show when={!props.stepsExpanded && questionParts().length > 0}>
-                      <div data-slot="session-turn-question-parts">
-                        <For each={questionParts()}>
-                          {({ part, message }) => <Part part={part} message={message} />}
-                        </For>
                       </div>
                     </Show>
                     <Show when={!props.stepsExpanded && answeredQuestionParts().length > 0}>
@@ -739,7 +793,7 @@ export function SessionTurn(
                     </Show>
                     <Show when={error() && !props.stepsExpanded}>
                       <Card variant="error" class="error-card">
-                        {error()?.data?.message as string}
+                        {errorText()}
                       </Card>
                     </Show>
                   </Match>

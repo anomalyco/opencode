@@ -3,7 +3,8 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import { batch, createEffect, createMemo, createRoot, onCleanup } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { useSDK } from "./sdk"
-import { Persist, persisted } from "@/utils/persist"
+import type { Platform } from "./platform"
+import { Persist, persisted, removePersisted } from "@/utils/persist"
 
 export type LocalPTY = {
   id: string
@@ -13,20 +14,52 @@ export type LocalPTY = {
   cols?: number
   buffer?: string
   scrollY?: number
+  cursor?: number
 }
 
 const WORKSPACE_KEY = "__workspace__"
 const MAX_TERMINAL_SESSIONS = 20
 
-type TerminalSession = ReturnType<typeof createTerminalSession>
+export function getWorkspaceTerminalCacheKey(dir: string) {
+  return `${dir}:${WORKSPACE_KEY}`
+}
+
+export function getLegacyTerminalStorageKeys(dir: string, legacySessionID?: string) {
+  if (!legacySessionID) return [`${dir}/terminal.v1`]
+  return [`${dir}/terminal/${legacySessionID}.v1`, `${dir}/terminal.v1`]
+}
+
+type TerminalSession = ReturnType<typeof createWorkspaceTerminalSession>
 
 type TerminalCacheEntry = {
   value: TerminalSession
   dispose: VoidFunction
 }
 
-function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, session?: string) {
-  const legacy = session ? [`${dir}/terminal/${session}.v1`, `${dir}/terminal.v1`] : [`${dir}/terminal.v1`]
+const caches = new Set<Map<string, TerminalCacheEntry>>()
+
+export function clearWorkspaceTerminals(dir: string, sessionIDs?: string[], platform?: Platform) {
+  const key = getWorkspaceTerminalCacheKey(dir)
+  for (const cache of caches) {
+    const entry = cache.get(key)
+    entry?.value.clear()
+  }
+
+  removePersisted(Persist.workspace(dir, "terminal"), platform)
+
+  const legacy = new Set(getLegacyTerminalStorageKeys(dir))
+  for (const id of sessionIDs ?? []) {
+    for (const key of getLegacyTerminalStorageKeys(dir, id)) {
+      legacy.add(key)
+    }
+  }
+  for (const key of legacy) {
+    removePersisted({ key }, platform)
+  }
+}
+
+function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, legacySessionID?: string) {
+  const legacy = getLegacyTerminalStorageKeys(dir, legacySessionID)
 
   const numberFromTitle = (title: string) => {
     const match = title.match(/^Terminal (\d+)$/)
@@ -46,7 +79,7 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
     }),
   )
 
-  const unsub = sdk.event.on("pty.exited", (event) => {
+  const unsub = sdk.event.on("pty.exited", (event: { properties: { id: string } }) => {
     const id = event.properties.id
     if (!store.all.some((x) => x.id === id)) return
     batch(() => {
@@ -86,6 +119,12 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
     ready,
     all: createMemo(() => Object.values(store.all)),
     active: createMemo(() => store.active),
+    clear() {
+      batch(() => {
+        setStore("active", undefined)
+        setStore("all", [])
+      })
+    },
     new() {
       const existingTitleNumbers = new Set(
         store.all.flatMap((pty) => {
@@ -104,7 +143,7 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
 
       sdk.client.pty
         .create({ title: `Terminal ${nextNumber}` })
-        .then((pty) => {
+        .then((pty: { data?: { id?: string; title?: string } }) => {
           const id = pty.data?.id
           if (!id) return
           const newTerminal = {
@@ -118,8 +157,8 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
           })
           setStore("active", id)
         })
-        .catch((e) => {
-          console.error("Failed to create terminal", e)
+        .catch((error: unknown) => {
+          console.error("Failed to create terminal", error)
         })
     },
     update(pty: Partial<LocalPTY> & { id: string }) {
@@ -133,8 +172,8 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
           title: pty.title,
           size: pty.cols && pty.rows ? { rows: pty.rows, cols: pty.cols } : undefined,
         })
-        .catch((e) => {
-          console.error("Failed to update terminal", e)
+        .catch((error: unknown) => {
+          console.error("Failed to update terminal", error)
         })
     },
     async clone(id: string) {
@@ -145,8 +184,8 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
         .create({
           title: pty.title,
         })
-        .catch((e) => {
-          console.error("Failed to clone terminal", e)
+        .catch((error: unknown) => {
+          console.error("Failed to clone terminal", error)
           return undefined
         })
       if (!clone?.data) return
@@ -158,6 +197,12 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
           id: clone.data.id,
           title: clone.data.title ?? pty.title,
           titleNumber: pty.titleNumber,
+          // New PTY process, so start clean.
+          buffer: undefined,
+          cursor: undefined,
+          scrollY: undefined,
+          rows: undefined,
+          cols: undefined,
         })
         if (active) {
           setStore("active", clone.data.id)
@@ -190,8 +235,8 @@ function createTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, sess
         setStore("all", filtered)
       })
 
-      await sdk.client.pty.remove({ ptyID: id }).catch((e) => {
-        console.error("Failed to close terminal", e)
+      await sdk.client.pty.remove({ ptyID: id }).catch((error: unknown) => {
+        console.error("Failed to close terminal", error)
       })
     },
     move(id: string, to: number) {
@@ -215,6 +260,9 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
     const params = useParams()
     const cache = new Map<string, TerminalCacheEntry>()
 
+    caches.add(cache)
+    onCleanup(() => caches.delete(cache))
+
     const disposeAll = () => {
       for (const entry of cache.values()) {
         entry.dispose()
@@ -234,8 +282,9 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       }
     }
 
-    const load = (dir: string, session?: string) => {
-      const key = `${dir}:${WORKSPACE_KEY}`
+    const loadWorkspace = (dir: string, legacySessionID?: string) => {
+      // Terminals are workspace-scoped so tabs persist while switching sessions in the same directory.
+      const key = getWorkspaceTerminalCacheKey(dir)
       const existing = cache.get(key)
       if (existing) {
         cache.delete(key)
@@ -244,7 +293,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       }
 
       const entry = createRoot((dispose) => ({
-        value: createTerminalSession(sdk, dir, session),
+        value: createWorkspaceTerminalSession(sdk, dir, legacySessionID),
         dispose,
       }))
 
@@ -253,7 +302,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       return entry.value
     }
 
-    const workspace = createMemo(() => load(params.dir!, params.id))
+    const workspace = createMemo(() => loadWorkspace(params.dir!, params.id))
 
     return {
       ready: () => workspace().ready(),
