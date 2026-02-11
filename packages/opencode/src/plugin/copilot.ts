@@ -28,8 +28,8 @@ function ensureGpt53Codex(provider: AuthProvider) {
       id: "gpt-5.3-codex",
       npm: "@ai-sdk/github-copilot",
     },
-    release_date: "2026-02-09",
-    last_updated: "2026-02-09",
+    release_date: "2026-02-05",
+    last_updated: "2026-02-05",
   }
   provider.models["gpt-5.3-codex"] = model
   const variantModel = provider.models["gpt-5.3-codex"] as unknown as Provider.Model
