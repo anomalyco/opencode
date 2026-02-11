@@ -357,8 +357,6 @@ const createPlatform = (
       await commands.setWslConfig({ enabled })
     },
 
-    wslEnabled: () => wsl(),
-
     getDefaultServerUrl: async () => {
       const result = await commands.getDefaultServerUrl().catch(() => null)
       return result

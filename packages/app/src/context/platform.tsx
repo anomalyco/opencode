@@ -33,9 +33,6 @@ export type Platform = {
   /** Open directory picker dialog (native on Tauri, server-backed on web) */
   openDirectoryPickerDialog?(opts?: { title?: string; multiple?: boolean }): Promise<string | string[] | null>
 
-  /** Whether WSL integration is enabled (desktop only) */
-  wslEnabled?(): boolean
-
   /** Open native file picker dialog (Tauri only) */
   openFilePickerDialog?(opts?: { title?: string; multiple?: boolean }): Promise<string | string[] | null>
 
