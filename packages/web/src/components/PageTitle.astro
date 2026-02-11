@@ -126,15 +126,18 @@ const failed = t("share.error", "Error")
 <style>
   .page-title-row {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
   }
 
-  /* Let the title fill available width so the button sits at the far right */
+  /* Let the title fill available width so the button sits at the far right.
+     Relocate Starlight's default h1 top-margin to the row container so both
+     children stay vertically centred within the flex row. */
   .page-title-row :global(h1) {
     flex: 1 1 auto;
     min-width: 0;
+    margin-block-start: 0;
   }
 
   .copy-page {
@@ -152,9 +155,6 @@ const failed = t("share.error", "Error")
     color: var(--color-text-weak);
     transition: color 0.15s ease, border-color 0.15s ease;
     white-space: nowrap;
-    /* Align with first line of title (h1 has margin-top: 1rem + line offset) */
-    margin-top: calc(1rem + 0.45em);
-    align-self: flex-start;
   }
 
   .copy-page:hover {
