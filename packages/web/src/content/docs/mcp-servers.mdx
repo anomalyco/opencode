@@ -42,6 +42,10 @@ You can define MCP servers in your [OpenCode Config](https://opencode.ai/docs/co
 
 You can also disable a server by setting `enabled` to `false`. This is useful if you want to temporarily disable a server without removing it from your config.
 
+:::note
+Each config file must be valid on its own. If you override an MCP entry in a project config, include the required fields (`type` + `command` for local, or `type` + `url` for remote), not just `enabled`.
+:::
+
 ---
 
 ### Overriding remote defaults
