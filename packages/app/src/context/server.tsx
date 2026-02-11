@@ -1,9 +1,9 @@
-import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
 import { Persist, persisted } from "@/utils/persist"
+import { checkServerHealth } from "@/utils/server-health"
 
 type StoredProject = { worktree: string; expanded: boolean }
 
@@ -28,13 +28,14 @@ function projectsKey(url: string) {
 
 export const { use: useServer, provider: ServerProvider } = createSimpleContext({
   name: "Server",
-  init: (props: { defaultUrl: string }) => {
+  init: (props: { defaultUrl: string; isSidecar?: boolean }) => {
     const platform = usePlatform()
 
     const [store, setStore, _, ready] = persisted(
       Persist.global("server", ["server.v3"]),
       createStore({
         list: [] as string[],
+        currentSidecarUrl: "",
         projects: {} as Record<string, StoredProject[]>,
         lastProject: {} as Record<string, string>,
       }),
@@ -59,7 +60,13 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
       const fallback = normalizeServerUrl(props.defaultUrl)
       if (fallback && url === fallback) {
-        setState("active", url)
+        batch(() => {
+          if (!store.list.includes(url)) {
+            // Add the fallback url to the list if it's not already in the list
+            setStore("list", store.list.length, url)
+          }
+          setState("active", url)
+        })
         return
       }
 
@@ -89,23 +96,26 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       if (state.active) return
       const url = normalizeServerUrl(props.defaultUrl)
       if (!url) return
-      setState("active", url)
+      batch(() => {
+        // Remove the previous startup sidecar url
+        if (store.currentSidecarUrl) {
+          remove(store.currentSidecarUrl)
+        }
+
+        // Add the new sidecar url
+        if (props.isSidecar && props.defaultUrl) {
+          add(props.defaultUrl)
+          setStore("currentSidecarUrl", props.defaultUrl)
+        }
+
+        setState("active", url)
+      })
     })
 
     const isReady = createMemo(() => ready() && !!state.active)
 
-    const check = (url: string) => {
-      const signal = (AbortSignal as unknown as { timeout?: (ms: number) => AbortSignal }).timeout?.(3000)
-      const sdk = createOpencodeClient({
-        baseUrl: url,
-        fetch: platform.fetch,
-        signal,
-      })
-      return sdk.global
-        .health()
-        .then((x) => x.data?.healthy === true)
-        .catch(() => false)
-    }
+    const fetcher = platform.fetch ?? globalThis.fetch
+    const check = (url: string) => checkServerHealth(url, fetcher).then((x) => x.healthy)
 
     createEffect(() => {
       const url = state.active

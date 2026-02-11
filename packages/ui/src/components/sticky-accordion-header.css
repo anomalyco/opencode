@@ -1,16 +1,18 @@
 [data-component="sticky-accordion-header"] {
   position: sticky;
   top: 0px;
+}
 
-  &[data-expanded] {
-    z-index: 10;
+[data-component="sticky-accordion-header"][data-expanded],
+[data-slot="accordion-item"][data-expanded] [data-component="sticky-accordion-header"] {
+  z-index: 10;
+}
 
-    &::before {
-      content: "";
-      z-index: -10;
-      position: absolute;
-      inset: 0;
-      background-color: var(--background-stronger);
-    }
-  }
+[data-component="sticky-accordion-header"][data-expanded]::before,
+[data-slot="accordion-item"][data-expanded] [data-component="sticky-accordion-header"]::before {
+  content: "";
+  z-index: -10;
+  position: absolute;
+  inset: 0;
+  background-color: var(--background-stronger);
 }

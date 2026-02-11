@@ -1,13 +1,18 @@
 import type { Ghostty, Terminal as Term, FitAddon } from "ghostty-web"
 import { ComponentProps, createEffect, createSignal, onCleanup, onMount, splitProps } from "solid-js"
+import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { monoFontFamily, useSettings } from "@/context/settings"
+import { parseKeybind, matchKeybind } from "@/context/command"
 import { SerializeAddon } from "@/addons/serialize"
 import { LocalPTY } from "@/context/terminal"
 import { resolveThemeVariant, useTheme, withAlpha, type HexColor } from "@opencode-ai/ui/theme"
 import { useLanguage } from "@/context/language"
 import { showToast } from "@opencode-ai/ui/toast"
+import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
 
+const TOGGLE_TERMINAL_ID = "terminal.toggle"
+const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
   onSubmit?: () => void
@@ -52,6 +57,7 @@ const DEFAULT_TERMINAL_COLORS: Record<"light" | "dark", TerminalColors> = {
 }
 
 export const Terminal = (props: TerminalProps) => {
+  const platform = usePlatform()
   const sdk = useSDK()
   const settings = useSettings()
   const theme = useTheme()
@@ -68,6 +74,9 @@ export const Terminal = (props: TerminalProps) => {
   let handleTextareaBlur: () => void
   let disposed = false
   const cleanups: VoidFunction[] = []
+  const start =
+    typeof local.pty.cursor === "number" && Number.isSafeInteger(local.pty.cursor) ? local.pty.cursor : undefined
+  let cursor = start ?? 0
 
   const cleanup = () => {
     if (!cleanups.length) return
@@ -108,17 +117,13 @@ export const Terminal = (props: TerminalProps) => {
     const colors = getTerminalColors()
     setTerminalColors(colors)
     if (!term) return
-    const setOption = (term as unknown as { setOption?: (key: string, value: TerminalColors) => void }).setOption
-    if (!setOption) return
-    setOption("theme", colors)
+    setOptionIfSupported(term, "theme", colors)
   })
 
   createEffect(() => {
     const font = monoFontFamily(settings.appearance.font())
     if (!term) return
-    const setOption = (term as unknown as { setOption?: (key: string, value: string) => void }).setOption
-    if (!setOption) return
-    setOption("fontFamily", font)
+    setOptionIfSupported(term, "fontFamily", font)
   })
 
   const focusTerminal = () => {
@@ -135,6 +140,22 @@ export const Terminal = (props: TerminalProps) => {
     focusTerminal()
   }
 
+  const handleLinkClick = (event: MouseEvent) => {
+    if (!event.shiftKey && !event.ctrlKey && !event.metaKey) return
+    if (event.altKey) return
+    if (event.button !== 0) return
+
+    const t = term
+    if (!t) return
+
+    const text = getHoveredLinkText(t)
+    if (!text) return
+
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    platform.openLink(text)
+  }
+
   onMount(() => {
     const run = async () => {
       const loaded = await loadGhostty()
@@ -145,12 +166,16 @@ export const Terminal = (props: TerminalProps) => {
 
       const once = { value: false }
 
-      const url = new URL(sdk.url + `/pty/${local.pty.id}/connect?directory=${encodeURIComponent(sdk.directory)}`)
+      const url = new URL(sdk.url + `/pty/${local.pty.id}/connect`)
+      url.searchParams.set("directory", sdk.directory)
+      url.searchParams.set("cursor", String(start !== undefined ? start : local.pty.buffer ? -1 : 0))
+      url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
       if (window.__OPENCODE__?.serverPassword) {
         url.username = "opencode"
         url.password = window.__OPENCODE__?.serverPassword
       }
       const socket = new WebSocket(url)
+      socket.binaryType = "arraybuffer"
       cleanups.push(() => {
         if (socket.readyState !== WebSocket.CLOSED && socket.readyState !== WebSocket.CLOSING) socket.close()
       })
@@ -165,7 +190,8 @@ export const Terminal = (props: TerminalProps) => {
         cursorStyle: "bar",
         fontSize: 14,
         fontFamily: monoFontFamily(settings.appearance.font()),
-        allowTransparency: true,
+        allowTransparency: false,
+        convertEol: true,
         theme: terminalColors(),
         scrollback: 10_000,
         ghostty: g,
@@ -219,25 +245,28 @@ export const Terminal = (props: TerminalProps) => {
           return true
         }
 
-        // allow for ctrl-` to toggle terminal in parent
-        if (event.ctrlKey && key === "`") {
-          return true
-        }
+        // allow for toggle terminal keybinds in parent
+        const config = settings.keybinds.get(TOGGLE_TERMINAL_ID) ?? DEFAULT_TOGGLE_TERMINAL_KEYBIND
+        const keybinds = parseKeybind(config)
 
-        return false
+        return matchKeybind(keybinds, event)
       })
 
       const fit = new mod.FitAddon()
       const serializer = new SerializeAddon()
-      cleanups.push(() => (fit as unknown as { dispose?: VoidFunction }).dispose?.())
+      cleanups.push(() => disposeIfDisposable(fit))
       t.loadAddon(serializer)
       t.loadAddon(fit)
       fitAddon = fit
       serializeAddon = serializer
 
       t.open(container)
+
       container.addEventListener("pointerdown", handlePointerDown)
       cleanups.push(() => container.removeEventListener("pointerdown", handlePointerDown))
+
+      container.addEventListener("click", handleLinkClick, { capture: true })
+      cleanups.push(() => container.removeEventListener("click", handleLinkClick, { capture: true }))
 
       handleTextareaFocus = () => {
         t.options.cursorBlink = true
@@ -253,15 +282,11 @@ export const Terminal = (props: TerminalProps) => {
 
       focusTerminal()
 
+      fit.fit()
+
       if (local.pty.buffer) {
-        if (local.pty.rows && local.pty.cols) {
-          t.resize(local.pty.cols, local.pty.rows)
-        }
         t.write(local.pty.buffer, () => {
-          if (local.pty.scrollY) {
-            t.scrollToLine(local.pty.scrollY)
-          }
-          fitAddon.fit()
+          if (local.pty.scrollY) t.scrollToLine(local.pty.scrollY)
         })
       }
 
@@ -269,6 +294,7 @@ export const Terminal = (props: TerminalProps) => {
       handleResize = () => fit.fit()
       window.addEventListener("resize", handleResize)
       cleanups.push(() => window.removeEventListener("resize", handleResize))
+
       const onResize = t.onResize(async (size) => {
         if (socket.readyState === WebSocket.OPEN) {
           await sdk.client.pty
@@ -282,19 +308,19 @@ export const Terminal = (props: TerminalProps) => {
             .catch(() => {})
         }
       })
-      cleanups.push(() => (onResize as unknown as { dispose?: VoidFunction }).dispose?.())
+      cleanups.push(() => disposeIfDisposable(onResize))
       const onData = t.onData((data) => {
         if (socket.readyState === WebSocket.OPEN) {
           socket.send(data)
         }
       })
-      cleanups.push(() => (onData as unknown as { dispose?: VoidFunction }).dispose?.())
+      cleanups.push(() => disposeIfDisposable(onData))
       const onKey = t.onKey((key) => {
         if (key.key == "Enter") {
           props.onSubmit?.()
         }
       })
-      cleanups.push(() => (onKey as unknown as { dispose?: VoidFunction }).dispose?.())
+      cleanups.push(() => disposeIfDisposable(onKey))
       // t.onScroll((ydisp) => {
       // console.log("Scroll position:", ydisp)
       // })
@@ -314,8 +340,31 @@ export const Terminal = (props: TerminalProps) => {
       socket.addEventListener("open", handleOpen)
       cleanups.push(() => socket.removeEventListener("open", handleOpen))
 
+      const decoder = new TextDecoder()
+
       const handleMessage = (event: MessageEvent) => {
-        t.write(event.data)
+        if (disposed) return
+        if (event.data instanceof ArrayBuffer) {
+          // WebSocket control frame: 0x00 + UTF-8 JSON (currently { cursor }).
+          const bytes = new Uint8Array(event.data)
+          if (bytes[0] !== 0) return
+          const json = decoder.decode(bytes.subarray(1))
+          try {
+            const meta = JSON.parse(json) as { cursor?: unknown }
+            const next = meta?.cursor
+            if (typeof next === "number" && Number.isSafeInteger(next) && next >= 0) {
+              cursor = next
+            }
+          } catch {
+            // ignore
+          }
+          return
+        }
+
+        const data = typeof event.data === "string" ? event.data : ""
+        if (!data) return
+        t.write(data)
+        cursor += data.length
       }
       socket.addEventListener("message", handleMessage)
       cleanups.push(() => socket.removeEventListener("message", handleMessage))
@@ -369,6 +418,7 @@ export const Terminal = (props: TerminalProps) => {
       props.onCleanup({
         ...local.pty,
         buffer,
+        cursor,
         rows: t.rows,
         cols: t.cols,
         scrollY: t.getViewportY(),

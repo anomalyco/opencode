@@ -429,6 +429,11 @@
           background-color: var(--surface-raised-base-hover);
         }
 
+        &:has([data-slot="tabs-trigger"]:focus-visible) {
+          background-color: var(--surface-raised-base-hover);
+          box-shadow: var(--shadow-xs-border-focus);
+        }
+
         &:has([data-selected]) {
           background-color: var(--surface-raised-base-active);
           color: var(--text-strong);
