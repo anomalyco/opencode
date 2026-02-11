@@ -55,6 +55,25 @@ This means project configs can override global defaults, and global configs can 
 The `.opencode` and `~/.config/opencode` directories use **plural names** for subdirectories: `agents/`, `commands/`, `modes/`, `plugins/`, `skills/`, `tools/`, and `themes/`. Singular names (e.g., `agent/`) are also supported for backwards compatibility.
 :::
 
+### Runtime directories
+
+OpenCode uses XDG-style directories. Config is not the same as runtime data.
+
+- `~/.config/opencode/` (config)
+  - user-managed files like `opencode.json(c)`, `agents/`, `plugins/`, `commands/`, `skills/`
+- `~/.local/share/opencode/` (data)
+  - runtime data like `auth.json`, `mcp-auth.json`, `storage/` (sessions/messages), `log/`, and downloaded binaries in `bin/`
+- `~/.local/state/opencode/` (state)
+  - local state like model/session UI state and prompt history
+- `~/.cache/opencode/` (cache)
+  - cacheable data like downloaded provider/tool packages and models cache
+
+If you are backing up OpenCode:
+
+- **must keep**: `~/.config/opencode/` and `~/.local/share/opencode/`
+- **optional**: `~/.local/state/opencode/`
+- **usually safe to delete/rebuild**: `~/.cache/opencode/`
+
 ---
 
 ### Remote
