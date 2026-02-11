@@ -206,6 +206,7 @@ pub fn create_command(app: &tauri::AppHandle, args: &str, extra_env: &[(&str, St
 
     if cfg!(windows) {
         if is_wsl_enabled(app) {
+            println!("WSL is enabled, spawning CLI server in WSL.");
             let version = app.package_info().version.to_string();
             let mut script = vec![
                 "set -e".to_string(),
