@@ -57,7 +57,7 @@ function init() {
   })
 
   useKeyboard((evt) => {
-    if (evt.name === "escape" && store.stack.length > 0) {
+    if ((evt.name === "escape" || (evt.ctrl && evt.name === "c")) && store.stack.length > 0) {
       const current = store.stack.at(-1)!
       current.onClose?.()
       setStore("stack", store.stack.slice(0, -1))
