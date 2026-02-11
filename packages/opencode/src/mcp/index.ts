@@ -403,7 +403,7 @@ export namespace MCP {
             break
           }
 
-          log.debug("transport connection failed", {
+          log.info("transport connection failed", {
             key,
             transport: name,
             url: mcp.url,

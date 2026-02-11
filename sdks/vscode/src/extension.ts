@@ -8,8 +8,10 @@ const TERMINAL_NAME = "opencode"
 
 const sseConnections = new Map<vscode.Terminal, AbortController>()
 const dedup = createDeduplicator()
+const log = vscode.window.createOutputChannel("opencode", { log: true })
 
 export function activate(context: vscode.ExtensionContext) {
+  context.subscriptions.push(log)
   let openNewTerminalDisposable = vscode.commands.registerCommand("opencode.openNewTerminal", async () => {
     await openTerminal()
   })
@@ -62,14 +64,20 @@ export function activate(context: vscode.ExtensionContext) {
     async function connect() {
       if (signal.aborted) return
 
-      const response = await fetch(`http://localhost:${port}/event`, { signal }).catch(() => null)
+      log.info(`[sse] connecting to http://localhost:${port}/global/event`)
+      const response = await fetch(`http://localhost:${port}/global/event`, { signal }).catch((e) => {
+        log.debug(`[sse] fetch failed: ${e}`)
+        return null
+      })
       if (!response || !response.body) {
         if (signal.aborted) return
+        log.debug(`[sse] no response, retrying in ${backoff}ms`)
         await new Promise((resolve) => setTimeout(resolve, backoff))
         backoff = Math.min(backoff * 2, maxBackoff)
         return connect()
       }
 
+      log.info(`[sse] connected to port ${port}`)
       backoff = 1000
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
@@ -85,28 +93,43 @@ export function activate(context: vscode.ExtensionContext) {
           buffer = result.remainder
 
           for (const event of result.events) {
+            log.debug(`[sse] event: ${event.type}`)
             if (!isBrowserOpen(event)) continue
-            if (dedup.isDuplicate(event.properties.url)) continue
 
-            if (event.properties.callbackPort) {
-              await vscode.env.asExternalUri(vscode.Uri.parse(`http://127.0.0.1:${event.properties.callbackPort}`))
+            const url = event.properties.url
+            const callbackPort = event.properties.callbackPort
+            log.info(`[sse] browser.open event: url=${url}, callbackPort=${callbackPort}`)
+
+            if (dedup.isDuplicate(url)) {
+              log.debug(`[sse] duplicate url, skipping`)
+              continue
             }
 
-            await vscode.env.openExternal(vscode.Uri.parse(event.properties.url))
+            if (callbackPort) {
+              log.info(`[sse] calling asExternalUri for callback port ${callbackPort}`)
+              const mapped = await vscode.env.asExternalUri(vscode.Uri.parse(`http://127.0.0.1:${callbackPort}`))
+              log.info(`[sse] asExternalUri result: ${mapped.toString()}`)
+            }
+
+            log.info(`[sse] calling openExternal: ${url}`)
+            const opened = await vscode.env.openExternal(vscode.Uri.parse(url))
+            log.info(`[sse] openExternal result: ${opened}`)
           }
         }
       } catch (e) {
         if (signal.aborted) return
+        log.error(`[sse] stream error: ${e}`)
       }
 
       if (!signal.aborted) {
+        log.info(`[sse] stream ended, reconnecting in ${backoff}ms`)
         await new Promise((resolve) => setTimeout(resolve, backoff))
         backoff = Math.min(backoff * 2, maxBackoff)
         return connect()
       }
     }
 
-    connect().catch(() => {})
+    connect().catch((e) => log.error(`[sse] connect failed: ${e}`))
   }
 
   async function openTerminal() {

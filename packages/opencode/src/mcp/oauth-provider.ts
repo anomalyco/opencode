@@ -150,10 +150,12 @@ export class McpOAuthProvider implements OAuthClientProvider {
 
   async state(): Promise<string> {
     const entry = await McpAuth.get(this.mcpName)
-    if (!entry?.oauthState) {
-      throw new Error(`No OAuth state saved for MCP server: ${this.mcpName}`)
-    }
-    return entry.oauthState
+    if (entry?.oauthState) return entry.oauthState
+    const state = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("")
+    await McpAuth.updateOAuthState(this.mcpName, state)
+    return state
   }
 }
 

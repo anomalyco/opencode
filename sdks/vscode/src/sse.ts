@@ -20,7 +20,11 @@ export function parseSSELines(buffer: string): { events: SSEEvent[]; remainder: 
     if (!line.startsWith("data: ")) continue
     const json = line.slice(6)
     try {
-      events.push(JSON.parse(json) as SSEEvent)
+      const parsed = JSON.parse(json)
+      // Global SSE events are wrapped as { directory, payload: { type, properties } }
+      // Instance SSE events are { type, properties } directly
+      const event = parsed.payload ?? parsed
+      events.push(event as SSEEvent)
     } catch {}
   }
 
