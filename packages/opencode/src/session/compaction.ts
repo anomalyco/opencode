@@ -32,15 +32,14 @@ export namespace SessionCompaction {
     if (config.compaction?.auto === false) return false
     const context = input.model.limit.context
     if (context === 0) return false
-    const reserved = config.compaction?.reserved ?? 10_000
 
     const count =
       input.tokens.total ||
       input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write
 
-    const output = ProviderTransform.maxOutputTokens(input.model)
-    const usable = input.model.limit.input || context - output
-    return count >= usable - reserved
+    const reserved = config.compaction?.reserved ?? ProviderTransform.maxOutputTokens(input.model)
+    const usable = input.model.limit.input ? input.model.limit.input - reserved : context - reserved
+    return count >= usable
   }
 
   export const PRUNE_MINIMUM = 20_000
@@ -212,7 +211,7 @@ When constructing the summary, try to stick to this template:
         sessionID: input.sessionID,
         type: "text",
         synthetic: true,
-        text: "Proceed only when there are clear, concrete next steps based on the user's instructions. If next steps are unclear, ask clarifying questions before continuing. Do not make edits unless the user has explicitly asked for implementation or it is clearly implied by their request.",
+        text: "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.",
         time: {
           start: Date.now(),
           end: Date.now(),
