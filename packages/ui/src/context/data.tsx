@@ -52,6 +52,8 @@ export type SessionHrefFn = (sessionID: string) => string
 
 export type SyncSessionFn = (sessionID: string) => void | Promise<void>
 
+export type OpenInEditorFn = (file: string) => void
+
 export const { use: useData, provider: DataProvider } = createSimpleContext({
   name: "Data",
   init: (props: {
@@ -63,6 +65,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     onNavigateToSession?: NavigateToSessionFn
     onSessionHref?: SessionHrefFn
     onSyncSession?: SyncSessionFn
+    onOpenInEditor?: OpenInEditorFn
+    openInEditorLabel?: string
   }) => {
     return {
       get store() {
@@ -77,6 +81,12 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       navigateToSession: props.onNavigateToSession,
       sessionHref: props.onSessionHref,
       syncSession: props.onSyncSession,
+      get openInEditor() {
+        return props.onOpenInEditor
+      },
+      get openInEditorLabel() {
+        return props.openInEditorLabel
+      },
     }
   },
 })

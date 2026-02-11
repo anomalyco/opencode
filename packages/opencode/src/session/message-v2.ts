@@ -611,8 +611,7 @@ export namespace MessageV2 {
                 errorText: part.state.error,
                 ...(differentModel ? {} : { callProviderMetadata: part.metadata }),
               })
-            // Handle pending/running tool calls to prevent dangling tool_use blocks
-            // Anthropic/Claude APIs require every tool_use to have a corresponding tool_result
+            // Anthropic requires every tool_use to have a corresponding tool_result
             if (part.state.status === "pending" || part.state.status === "running")
               assistantMessage.parts.push({
                 type: ("tool-" + part.tool) as `tool-${string}`,

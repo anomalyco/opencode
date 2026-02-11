@@ -1240,8 +1240,6 @@ Co-authored-by: ${actor} <${actor}@users.noreply.github.com>"`
       async function createPR(base: string, branch: string, title: string, body: string) {
         console.log("Creating pull request...")
 
-        // Check if an open PR already exists for this head→base combination
-        // This handles the case where the agent created a PR via gh pr create during its run
         try {
           const existing = await withRetry(() =>
             octoRest.rest.pulls.list({

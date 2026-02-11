@@ -304,6 +304,34 @@
   }
 }
 
+[data-slot="open-in-app-button"] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: none;
+  background: transparent;
+  color: var(--text-base);
+  cursor: pointer;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+[data-component="tooltip-trigger"]:has([data-slot="open-in-app-button"]) {
+  border-radius: 4px;
+
+  &:hover [data-slot="open-in-app-button"] {
+    color: var(--text-strong);
+    background: var(--surface-raised-strong-hover);
+  }
+}
+
+[data-component="tool-trigger"]:hover [data-slot="open-in-app-button"],
+[data-slot="apply-patch-file-header"]:hover [data-slot="open-in-app-button"] {
+  opacity: 1;
+}
+
 [data-component="edit-content"] {
   border-top: 1px solid var(--border-weaker-base);
   max-height: 420px;

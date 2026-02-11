@@ -46,6 +46,7 @@ import { findLast } from "@opencode-ai/util/array"
 import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
 import { Tooltip } from "./tooltip"
+import { OpenInAppButton } from "./open-in-app-button"
 import { IconButton } from "./icon-button"
 import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
@@ -1124,6 +1125,9 @@ ToolRegistry.register({
               </Show>
             </div>
             <div data-slot="message-part-actions">
+              <Show when={props.input.filePath}>
+                <OpenInAppButton file={props.input.filePath} />
+              </Show>
               <Show when={props.metadata.filediff}>
                 <DiffChanges changes={props.metadata.filediff} />
               </Show>
@@ -1176,7 +1180,11 @@ ToolRegistry.register({
                 </div>
               </Show>
             </div>
-            <div data-slot="message-part-actions">{/* <DiffChanges diff={diff} /> */}</div>
+            <div data-slot="message-part-actions">
+              <Show when={props.input.filePath}>
+                <OpenInAppButton file={props.input.filePath} />
+              </Show>
+            </div>
           </div>
         }
       >
@@ -1262,6 +1270,7 @@ ToolRegistry.register({
                       </Match>
                     </Switch>
                     <span data-slot="apply-patch-file-path">{file.relativePath}</span>
+                    <OpenInAppButton file={file.filePath} />
                     <Show when={file.type !== "delete"}>
                       <DiffChanges changes={{ additions: file.additions, deletions: file.deletions }} />
                     </Show>

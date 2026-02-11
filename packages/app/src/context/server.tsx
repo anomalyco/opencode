@@ -62,7 +62,6 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       if (fallback && url === fallback) {
         batch(() => {
           if (!store.list.includes(url)) {
-            // Add the fallback url to the list if it's not already in the list
             setStore("list", store.list.length, url)
           }
           setState("active", url)
@@ -97,12 +96,10 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       const url = normalizeServerUrl(props.defaultUrl)
       if (!url) return
       batch(() => {
-        // Remove the previous startup sidecar url
         if (store.currentSidecarUrl) {
           remove(store.currentSidecarUrl)
         }
 
-        // Add the new sidecar url
         if (props.isSidecar && props.defaultUrl) {
           add(props.defaultUrl)
           setStore("currentSidecarUrl", props.defaultUrl)

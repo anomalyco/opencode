@@ -6,12 +6,11 @@ import { useLayout } from "@/context/layout"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
-import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { useGlobalSDK } from "@/context/global-sdk"
+import { useOpenApp, type OpenApp } from "@/context/open-app"
 import { getFilename } from "@opencode-ai/util/path"
 import { decode64 } from "@/utils/base64"
-import { Persist, persisted } from "@/utils/persist"
 
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -30,10 +29,10 @@ export function SessionHeader() {
   const layout = useLayout()
   const params = useParams()
   const command = useCommand()
-  const server = useServer()
   const sync = useSync()
   const platform = usePlatform()
   const language = useLanguage()
+  const openApp = useOpenApp()
 
   const projectDirectory = createMemo(() => decode64(params.dir) ?? "")
   const project = createMemo(() => {
@@ -54,145 +53,16 @@ export function SessionHeader() {
   const sessionKey = createMemo(() => `${params.dir}${params.id ? "/" + params.id : ""}`)
   const view = createMemo(() => layout.view(sessionKey))
 
-  const OPEN_APPS = [
-    "vscode",
-    "cursor",
-    "zed",
-    "textmate",
-    "antigravity",
-    "finder",
-    "terminal",
-    "iterm2",
-    "ghostty",
-    "xcode",
-    "android-studio",
-    "powershell",
-    "sublime-text",
-  ] as const
-  type OpenApp = (typeof OPEN_APPS)[number]
-
-  const MAC_APPS = [
-    { id: "vscode", label: "VS Code", icon: "vscode", openWith: "Visual Studio Code" },
-    { id: "cursor", label: "Cursor", icon: "cursor", openWith: "Cursor" },
-    { id: "zed", label: "Zed", icon: "zed", openWith: "Zed" },
-    { id: "textmate", label: "TextMate", icon: "textmate", openWith: "TextMate" },
-    { id: "antigravity", label: "Antigravity", icon: "antigravity", openWith: "Antigravity" },
-    { id: "terminal", label: "Terminal", icon: "terminal", openWith: "Terminal" },
-    { id: "iterm2", label: "iTerm2", icon: "iterm2", openWith: "iTerm" },
-    { id: "ghostty", label: "Ghostty", icon: "ghostty", openWith: "Ghostty" },
-    { id: "xcode", label: "Xcode", icon: "xcode", openWith: "Xcode" },
-    { id: "android-studio", label: "Android Studio", icon: "android-studio", openWith: "Android Studio" },
-    { id: "sublime-text", label: "Sublime Text", icon: "sublime-text", openWith: "Sublime Text" },
-  ] as const
-
-  const WINDOWS_APPS = [
-    { id: "vscode", label: "VS Code", icon: "vscode", openWith: "code" },
-    { id: "cursor", label: "Cursor", icon: "cursor", openWith: "cursor" },
-    { id: "zed", label: "Zed", icon: "zed", openWith: "zed" },
-    { id: "powershell", label: "PowerShell", icon: "powershell", openWith: "powershell" },
-    { id: "sublime-text", label: "Sublime Text", icon: "sublime-text", openWith: "Sublime Text" },
-  ] as const
-
-  const LINUX_APPS = [
-    { id: "vscode", label: "VS Code", icon: "vscode", openWith: "code" },
-    { id: "cursor", label: "Cursor", icon: "cursor", openWith: "cursor" },
-    { id: "zed", label: "Zed", icon: "zed", openWith: "zed" },
-    { id: "sublime-text", label: "Sublime Text", icon: "sublime-text", openWith: "Sublime Text" },
-  ] as const
-
-  const os = createMemo<"macos" | "windows" | "linux" | "unknown">(() => {
-    if (platform.platform === "desktop" && platform.os) return platform.os
-    if (typeof navigator !== "object") return "unknown"
-    const value = navigator.platform || navigator.userAgent
-    if (/Mac/i.test(value)) return "macos"
-    if (/Win/i.test(value)) return "windows"
-    if (/Linux/i.test(value)) return "linux"
-    return "unknown"
-  })
-
-  const [exists, setExists] = createStore<Partial<Record<OpenApp, boolean>>>({ finder: true })
-
-  const apps = createMemo(() => {
-    if (os() === "macos") return MAC_APPS
-    if (os() === "windows") return WINDOWS_APPS
-    return LINUX_APPS
-  })
-
-  const fileManager = createMemo(() => {
-    if (os() === "macos") return { label: "Finder", icon: "finder" as const }
-    if (os() === "windows") return { label: "File Explorer", icon: "file-explorer" as const }
-    return { label: "File Manager", icon: "finder" as const }
-  })
-
-  createEffect(() => {
-    if (platform.platform !== "desktop") return
-    if (!platform.checkAppExists) return
-
-    const list = apps()
-
-    setExists(Object.fromEntries(list.map((app) => [app.id, undefined])) as Partial<Record<OpenApp, boolean>>)
-
-    void Promise.all(
-      list.map((app) =>
-        Promise.resolve(platform.checkAppExists?.(app.openWith))
-          .then((value) => Boolean(value))
-          .catch(() => false)
-          .then((ok) => {
-            console.debug(`[session-header] App "${app.label}" (${app.openWith}): ${ok ? "exists" : "does not exist"}`)
-            return [app.id, ok] as const
-          }),
-      ),
-    ).then((entries) => {
-      setExists(Object.fromEntries(entries) as Partial<Record<OpenApp, boolean>>)
-    })
-  })
-
-  const options = createMemo(() => {
-    return [
-      { id: "finder", label: fileManager().label, icon: fileManager().icon },
-      ...apps().filter((app) => exists[app.id]),
-    ] as const
-  })
-
   type OpenIcon = OpenApp | "file-explorer"
   const base = new Set<OpenIcon>(["finder", "vscode", "cursor", "zed"])
   const size = (id: OpenIcon) => (base.has(id) ? "size-4" : "size-[19px]")
 
-  const checksReady = createMemo(() => {
-    if (platform.platform !== "desktop") return true
-    if (!platform.checkAppExists) return true
-    const list = apps()
-    return list.every((app) => exists[app.id] !== undefined)
-  })
-
-  const [prefs, setPrefs] = persisted(Persist.global("open.app"), createStore({ app: "finder" as OpenApp }))
   const [menu, setMenu] = createStore({ open: false })
-
-  const canOpen = createMemo(() => platform.platform === "desktop" && !!platform.openPath && server.isLocal())
-  const current = createMemo(() => options().find((o) => o.id === prefs.app) ?? options()[0])
-
-  createEffect(() => {
-    if (platform.platform !== "desktop") return
-    if (!checksReady()) return
-    const value = prefs.app
-    if (options().some((o) => o.id === value)) return
-    setPrefs("app", options()[0]?.id ?? "finder")
-  })
 
   const openDir = (app: OpenApp) => {
     const directory = projectDirectory()
     if (!directory) return
-    if (!canOpen()) return
-
-    const item = options().find((o) => o.id === app)
-    const openWith = item && "openWith" in item ? item.openWith : undefined
-    Promise.resolve(platform.openPath?.(directory, openWith)).catch((err: unknown) => {
-      showToast({
-        variant: "error",
-        title: language.t("common.requestFailed"),
-        description: err instanceof Error ? err.message : String(err),
-      })
-    })
+    openApp.open(directory, app)
   }
 
   const copyPath = () => {
@@ -327,7 +197,7 @@ export function SessionHeader() {
               <Show when={projectDirectory()}>
                 <div class="hidden xl:flex items-center">
                   <Show
-                    when={canOpen()}
+                    when={openApp.canOpen()}
                     fallback={
                       <div class="flex h-[24px] box-border items-center rounded-md border border-border-base bg-surface-panel overflow-hidden">
                         <Button
@@ -349,11 +219,11 @@ export function SessionHeader() {
                         <Button
                           variant="ghost"
                           class="rounded-none h-full py-0 pr-3 pl-2 gap-1.5 border-none shadow-none"
-                          onClick={() => openDir(current().id)}
-                          aria-label={language.t("session.header.open.ariaLabel", { app: current().label })}
+                          onClick={() => openDir(openApp.current().id)}
+                          aria-label={language.t("session.header.open.ariaLabel", { app: openApp.current().label })}
                         >
                           <div class="flex size-5 shrink-0 items-center justify-center">
-                            <AppIcon id={current().icon} class="size-4" />
+                            <AppIcon id={openApp.current().icon} class="size-4" />
                           </div>
                           <span class="text-12-regular text-text-strong">Open</span>
                         </Button>
@@ -376,13 +246,13 @@ export function SessionHeader() {
                               <DropdownMenu.Group>
                                 <DropdownMenu.GroupLabel>{language.t("session.header.openIn")}</DropdownMenu.GroupLabel>
                                 <DropdownMenu.RadioGroup
-                                  value={prefs.app}
+                                  value={openApp.prefs.app}
                                   onChange={(value) => {
-                                    if (!OPEN_APPS.includes(value as OpenApp)) return
-                                    setPrefs("app", value as OpenApp)
+                                    if (!openApp.OPEN_APPS.includes(value as OpenApp)) return
+                                    openApp.setPrefs("app", value as OpenApp)
                                   }}
                                 >
-                                  {options().map((o) => (
+                                  {openApp.options().map((o) => (
                                     <DropdownMenu.RadioItem
                                       value={o.id}
                                       onSelect={() => {

@@ -4,10 +4,12 @@ import { RadioGroup } from "./radio-group"
 import { DiffChanges } from "./diff-changes"
 import { FileIcon } from "./file-icon"
 import { Icon } from "./icon"
+import { Tooltip } from "./tooltip"
 import { LineComment, LineCommentEditor } from "./line-comment"
 import { StickyAccordionHeader } from "./sticky-accordion-header"
 import { useDiffComponent } from "../context/diff"
 import { useI18n } from "../context/i18n"
+import { OpenInAppButton } from "./open-in-app-button"
 import { getDirectory, getFilename } from "@opencode-ai/util/path"
 import { checksum } from "@opencode-ai/util/encode"
 import { createEffect, createMemo, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
@@ -522,17 +524,24 @@ export const SessionReview = (props: SessionReviewProps) => {
                                 <span data-slot="session-review-directory">{`\u202A${getDirectory(diff.file)}\u202C`}</span>
                               </Show>
                               <span data-slot="session-review-filename">{getFilename(diff.file)}</span>
+                              <div data-slot="session-review-icon-action">
+                                <OpenInAppButton file={diff.file} />
+                              </div>
                               <Show when={props.onViewFile}>
-                                <button
-                                  data-slot="session-review-view-button"
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    props.onViewFile?.(diff.file)
-                                  }}
-                                >
-                                  <Icon name="eye" size="small" />
-                                </button>
+                                <div data-slot="session-review-icon-action">
+                                  <Tooltip value={i18n.t("ui.sessionReview.viewFile")} placement="top" gutter={8}>
+                                    <button
+                                      data-slot="session-review-view-button"
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        props.onViewFile?.(diff.file)
+                                      }}
+                                    >
+                                      <Icon name="eye" size="small" />
+                                    </button>
+                                  </Tooltip>
+                                </div>
                               </Show>
                             </div>
                           </div>

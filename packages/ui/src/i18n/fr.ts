@@ -8,6 +8,8 @@ export const dict = {
   "ui.sessionReview.change.added": "Ajouté",
   "ui.sessionReview.change.removed": "Supprimé",
   "ui.sessionReview.change.modified": "Modifié",
+  "ui.sessionReview.openInApp": "Ouvrir dans {{app}}",
+  "ui.sessionReview.viewFile": "Voir le fichier",
 
   "ui.lineComment.label.prefix": "Commenter sur ",
   "ui.lineComment.label.suffix": "",

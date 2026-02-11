@@ -12,6 +12,8 @@ export const dict = {
   "ui.sessionReview.change.added": "Dodano",
   "ui.sessionReview.change.removed": "Uklonjeno",
   "ui.sessionReview.change.modified": "Izmijenjeno",
+  "ui.sessionReview.openInApp": "Otvori u {{app}}",
+  "ui.sessionReview.viewFile": "Prikaži datoteku",
 
   "ui.lineComment.label.prefix": "Komentar na ",
   "ui.lineComment.label.suffix": "",

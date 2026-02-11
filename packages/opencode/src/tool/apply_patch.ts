@@ -26,7 +26,6 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
       throw new Error("patchText is required")
     }
 
-    // Parse the patch to get hunks
     let hunks: Patch.Hunk[]
     try {
       const parseResult = Patch.parsePatch(params.patchText)
@@ -90,7 +89,6 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
         }
 
         case "update": {
-          // Check if file exists for update
           const stats = await fs.stat(filePath).catch(() => null)
           if (!stats || stats.isDirectory()) {
             throw new Error(`apply_patch verification failed: Failed to read file to update: ${filePath}`)
@@ -99,7 +97,6 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
           const oldContent = await fs.readFile(filePath, "utf-8")
           let newContent = oldContent
 
-          // Apply the update chunks to get new content
           try {
             const fileUpdate = Patch.deriveNewContentsFromChunks(filePath, hunk.chunks)
             newContent = fileUpdate.content
@@ -184,7 +181,6 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
       },
     })
 
-    // Apply the changes
     const updates: Array<{ file: string; event: "add" | "change" | "unlink" }> = []
 
     for (const change of fileChanges) {

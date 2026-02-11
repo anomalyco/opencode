@@ -12,6 +12,8 @@ export const dict = {
   "ui.sessionReview.change.added": "已新增",
   "ui.sessionReview.change.removed": "已移除",
   "ui.sessionReview.change.modified": "已修改",
+  "ui.sessionReview.openInApp": "在 {{app}} 中開啟",
+  "ui.sessionReview.viewFile": "檢視檔案",
 
   "ui.lineComment.label.prefix": "評論 ",
   "ui.lineComment.label.suffix": "",

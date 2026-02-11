@@ -120,27 +120,33 @@
     flex-shrink: 0;
   }
 
-  [data-slot="session-review-view-button"] {
+  [data-slot="session-review-view-button"],
+  [data-slot="open-in-app-button"] {
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 2px;
-    margin-left: 8px;
     border: none;
     background: transparent;
     color: var(--text-base);
     cursor: pointer;
     border-radius: 4px;
+    opacity: 1;
+  }
+
+  [data-slot="session-review-icon-action"] {
+    margin-left: 4px;
     opacity: 0;
     transition: opacity 0.15s ease;
 
-    &:hover {
+    &:hover [data-slot="session-review-view-button"],
+    &:hover [data-slot="open-in-app-button"] {
       color: var(--text-strong);
       background: var(--surface-base);
     }
   }
 
-  [data-slot="accordion-trigger"]:hover [data-slot="session-review-view-button"] {
+  [data-slot="accordion-trigger"]:hover [data-slot="session-review-icon-action"] {
     opacity: 1;
   }
 

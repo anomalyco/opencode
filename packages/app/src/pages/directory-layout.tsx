@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "@solidjs/router"
 import { SDKProvider, useSDK } from "@/context/sdk"
 import { SyncProvider, useSync } from "@/context/sync"
 import { LocalProvider } from "@/context/local"
+import { useOpenApp } from "@/context/open-app"
 
 import { DataProvider } from "@opencode-ai/ui/context"
 import { iife } from "@opencode-ai/util/iife"
@@ -39,6 +40,7 @@ export default function Layout(props: ParentProps) {
           {iife(() => {
             const sync = useSync()
             const sdk = useSDK()
+            const openApp = useOpenApp()
             const respond = (input: {
               sessionID: string
               permissionID: string
@@ -71,6 +73,8 @@ export default function Layout(props: ParentProps) {
                 onNavigateToSession={navigateToSession}
                 onSessionHref={sessionHref}
                 onSyncSession={syncSession}
+                onOpenInEditor={openApp.canOpen() ? (file: string) => openApp.openFile(file, directory()) : undefined}
+                openInEditorLabel={openApp.canOpen() ? openApp.current().label : undefined}
               >
                 <LocalProvider>{props.children}</LocalProvider>
               </DataProvider>

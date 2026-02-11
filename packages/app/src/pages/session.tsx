@@ -102,7 +102,6 @@ export default function Page() {
   const prompt = usePrompt()
   const comments = useComments()
   const permission = usePermission()
-
   const permRequest = createMemo(() => {
     const sessionID = params.id
     if (!sessionID) return

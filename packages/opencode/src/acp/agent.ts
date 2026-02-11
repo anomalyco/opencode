@@ -1652,7 +1652,6 @@ export namespace ACP {
       return { model: parsed, variant: undefined }
     }
 
-    // Check if modelID exists directly
     if (provider.models[parsed.modelID]) {
       return { model: parsed, variant: undefined }
     }

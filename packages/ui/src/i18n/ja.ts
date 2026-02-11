@@ -9,6 +9,8 @@ export const dict = {
   "ui.sessionReview.change.added": "追加",
   "ui.sessionReview.change.removed": "削除",
   "ui.sessionReview.change.modified": "変更",
+  "ui.sessionReview.openInApp": "{{app}}で開く",
+  "ui.sessionReview.viewFile": "ファイルを表示",
   "ui.lineComment.label.prefix": "",
   "ui.lineComment.label.suffix": "へのコメント",
   "ui.lineComment.editorLabel.prefix": "",
