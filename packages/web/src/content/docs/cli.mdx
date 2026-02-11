@@ -391,6 +391,13 @@ List all OpenCode sessions.
 opencode session list
 ```
 
+Session commands are project-scoped:
+
+- inside a Git repository, OpenCode shows sessions for that project
+- outside Git, OpenCode uses the global project scope
+
+If you are trying to access a session created in another project, run session commands from that project's directory.
+
 ##### Flags
 
 | Flag          | Short | Description                          |
@@ -428,6 +435,9 @@ opencode export [sessionID]
 ```
 
 If you don't provide a session ID, you'll be prompted to select from available sessions.
+
+Like `session list`, this command shows sessions for the current project scope.
+For where sessions are stored on disk, see [Troubleshooting: Storage](/docs/troubleshooting#storage).
 
 ---
 
