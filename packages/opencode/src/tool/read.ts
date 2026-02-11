@@ -96,6 +96,7 @@ export const ReadTool = Tool.define("read", {
         title,
         output,
         metadata: {
+          preview: sliced.slice(0, 20).join("\n"),
           truncated,
           loaded: [] as string[],
         },
@@ -117,7 +118,7 @@ export const ReadTool = Tool.define("read", {
         metadata: {
           preview: msg,
           truncated: false,
-          ...(instructions.length > 0 && { loaded: instructions.map((i) => i.filepath) }),
+          loaded: instructions.map((i) => i.filepath),
         },
         attachments: [
           {
@@ -189,7 +190,7 @@ export const ReadTool = Tool.define("read", {
       metadata: {
         preview,
         truncated,
-        ...(instructions.length > 0 && { loaded: instructions.map((i) => i.filepath) }),
+        loaded: instructions.map((i) => i.filepath),
       },
     }
   },
