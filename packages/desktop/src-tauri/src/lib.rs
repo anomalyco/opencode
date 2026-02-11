@@ -582,14 +582,25 @@ async fn initialize(app: AppHandle) {
                     let app = app.clone();
                     Some(
                         async move {
-                            let Ok(Ok(_)) = timeout(Duration::from_secs(30), health_check.0).await
-                            else {
-                                let _ = child.kill();
-                                return Err(format!(
-                                    "Failed to spawn OpenCode Server. Logs:\n{}",
-                                    get_logs(app.clone()).await.unwrap()
-                                ));
+                            let res = timeout(Duration::from_secs(30), health_check.0).await;
+                            let err = match res {
+                                Ok(Ok(Ok(()))) => None,
+                                Ok(Ok(Err(e))) => Some(e),
+                                Ok(Err(e)) => Some(format!("Health check task failed: {e}")),
+                                Err(_) => Some("Health check timed out".to_string()),
                             };
+
+                            if let Some(err) = err {
+                                let _ = child.kill();
+
+                                let logs = get_logs(app.clone())
+                                    .await
+                                    .unwrap_or_else(|e| format!("[DESKTOP] Failed to read sidecar logs: {e}\n"));
+
+                                return Err(format!(
+                                    "Failed to spawn OpenCode Server ({err}). Logs:\n{logs}"
+                                ));
+                            }
 
                             println!("CLI health check OK");
 

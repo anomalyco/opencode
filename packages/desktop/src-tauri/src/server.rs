@@ -113,26 +113,43 @@ pub fn spawn_local_server(
     port: u32,
     password: String,
 ) -> (CommandChild, HealthCheck) {
-    let child = cli::serve(&app, &hostname, port, &password);
+    let (child, exit) = cli::serve(&app, &hostname, port, &password);
 
     let health_check = HealthCheck(tokio::spawn(async move {
         let url = format!("http://{hostname}:{port}");
-
         let timestamp = Instant::now();
-        loop {
-            tokio::time::sleep(Duration::from_millis(100)).await;
 
-            if check_health(&url, Some(&password)).await {
-                println!("Server ready after {:?}", timestamp.elapsed());
-                break;
+        let ready = async {
+            loop {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+
+                if check_health(&url, Some(&password)).await {
+                    println!("Server ready after {:?}", timestamp.elapsed());
+                    return Ok(());
+                }
             }
+        };
+
+        let terminated = async {
+            match exit.await {
+                Ok(payload) => Err(format!(
+                    "Sidecar terminated before becoming healthy (code={:?} signal={:?})",
+                    payload.code, payload.signal
+                )),
+                Err(_) => Err("Sidecar terminated before becoming healthy".to_string()),
+            }
+        };
+
+        tokio::select! {
+            res = ready => res,
+            res = terminated => res,
         }
     }));
 
     (child, health_check)
 }
 
-pub struct HealthCheck(pub JoinHandle<()>);
+pub struct HealthCheck(pub JoinHandle<Result<(), String>>);
 
 pub async fn check_health(url: &str, password: Option<&str>) -> bool {
     let Ok(url) = reqwest::Url::parse(url) else {
