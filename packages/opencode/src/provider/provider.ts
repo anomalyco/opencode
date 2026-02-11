@@ -621,6 +621,72 @@ export namespace Provider {
     })
   export type Info = z.infer<typeof Info>
 
+  const BEDROCK_OPUS_4_6 = "claude-opus-4-6"
+  const BEDROCK_1M_BETA = "context-1m-2025-08-07"
+  const BEDROCK_CONTEXT_200K = 200_000
+  const BEDROCK_CONTEXT_1M = 1_000_000
+
+  function splitBedrockOpus46(providerID: string, models: Record<string, Model>) {
+    if (providerID !== "amazon-bedrock") return
+
+    for (const [id, model] of Object.entries(models)) {
+      if (!model.api.id.includes(BEDROCK_OPUS_4_6)) continue
+      if (id.endsWith("-1m")) continue
+
+      const name = model.name.replace(/\s+\((200K|1M Experimental)\)$/i, "")
+      const opts = { ...model.options }
+      const raw = opts["anthropicBeta"]
+      const base = (Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : []).filter(
+        (item): item is string => typeof item === "string",
+      )
+
+      delete opts["anthropicBeta"]
+
+      model.name = `${name} (200K)`
+      model.options = opts
+      model.limit = {
+        ...model.limit,
+        context: Math.min(model.limit.context, BEDROCK_CONTEXT_200K),
+      }
+
+      const nextID = `${id}-1m`
+      const next = models[nextID]
+
+      if (next) {
+        const list = (Array.isArray(next.options["anthropicBeta"]) ? next.options["anthropicBeta"] : []).filter(
+          (item): item is string => typeof item === "string",
+        )
+
+        next.name = `${name} (1M Experimental)`
+        next.status = "beta"
+        next.limit = {
+          ...next.limit,
+          context: Math.max(next.limit.context, BEDROCK_CONTEXT_1M),
+        }
+        next.options = {
+          ...next.options,
+          anthropicBeta: [...new Set([...list, ...base, BEDROCK_1M_BETA])],
+        }
+        continue
+      }
+
+      models[nextID] = {
+        ...model,
+        id: nextID,
+        name: `${name} (1M Experimental)`,
+        status: "beta",
+        limit: {
+          ...model.limit,
+          context: Math.max(model.limit.context, BEDROCK_CONTEXT_1M),
+        },
+        options: {
+          ...model.options,
+          anthropicBeta: [...new Set([...base, BEDROCK_1M_BETA])],
+        },
+      }
+    }
+  }
+
   function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
     const m: Model = {
       id: model.id,
@@ -935,6 +1001,8 @@ export namespace Provider {
         delete providers[providerID]
         continue
       }
+
+      splitBedrockOpus46(providerID, provider.models)
 
       const configProvider = config.provider?.[providerID]
 
