@@ -71,5 +71,7 @@
   "share.match_other": "รายการที่ตรงกัน",
   "share.result_one": "ผลลัพธ์",
   "share.result_other": "ผลลัพธ์",
-  "share.debug_key": "คีย์"
+  "share.debug_key": "คีย์",
+  "docs.copy_page": "คัดลอกหน้า",
+  "docs.copying": "กำลังคัดลอก…"
 }
