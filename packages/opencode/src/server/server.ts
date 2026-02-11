@@ -134,7 +134,7 @@ export namespace Server {
           "/auth/:providerID",
           describeRoute({
             summary: "Set auth credentials",
-            description: "Set authentication credentials",
+            description: "Set authentication credentials for a provider profile",
             operationId: "auth.set",
             responses: {
               200: {
@@ -154,11 +154,96 @@ export namespace Server {
               providerID: z.string(),
             }),
           ),
+          validator(
+            "query",
+            z.object({
+              profileID: z.string().optional(),
+            }),
+          ),
           validator("json", Auth.Info),
           async (c) => {
             const providerID = c.req.valid("param").providerID
             const info = c.req.valid("json")
-            await Auth.set(providerID, info)
+            const pid = c.req.valid("query").profileID || "default"
+            await Auth.addProfile(providerID, pid, info)
+            await Auth.setActiveProfile(providerID, pid)
+            return c.json(true)
+          },
+        )
+        .get(
+          "/auth/:providerID/profiles",
+          describeRoute({
+            summary: "List profiles",
+            description: "List all profiles for a provider",
+            operationId: "auth.profiles",
+            responses: {
+              200: {
+                description: "Profile list with active profile",
+                content: {
+                  "application/json": {
+                    schema: resolver(
+                      z.object({
+                        profiles: z.array(z.string()),
+                        active: z.string().optional(),
+                      }),
+                    ),
+                  },
+                },
+              },
+              ...errors(400),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              providerID: z.string(),
+            }),
+          ),
+          async (c) => {
+            const providerID = c.req.valid("param").providerID
+            const all = await Auth.allWithProfiles()
+            const provider = all[providerID]
+            if (!provider) return c.json({ profiles: [], active: undefined })
+            return c.json({
+              profiles: Object.keys(provider.profiles),
+              active: provider.currentProfile,
+            })
+          },
+        )
+        .patch(
+          "/auth/:providerID/profile",
+          describeRoute({
+            summary: "Switch profile",
+            description: "Switch the active profile for a provider",
+            operationId: "auth.profile.switch",
+            responses: {
+              200: {
+                description: "Successfully switched profile",
+                content: {
+                  "application/json": {
+                    schema: resolver(z.boolean()),
+                  },
+                },
+              },
+              ...errors(400),
+            },
+          }),
+          validator(
+            "param",
+            z.object({
+              providerID: z.string(),
+            }),
+          ),
+          validator(
+            "json",
+            z.object({
+              profileID: z.string(),
+            }),
+          ),
+          async (c) => {
+            const providerID = c.req.valid("param").providerID
+            const { profileID } = c.req.valid("json")
+            await Auth.setActiveProfile(providerID, profileID)
             return c.json(true)
           },
         )
@@ -166,7 +251,7 @@ export namespace Server {
           "/auth/:providerID",
           describeRoute({
             summary: "Remove auth credentials",
-            description: "Remove authentication credentials",
+            description: "Remove authentication credentials for a provider or specific profile",
             operationId: "auth.remove",
             responses: {
               200: {
@@ -186,9 +271,20 @@ export namespace Server {
               providerID: z.string(),
             }),
           ),
+          validator(
+            "query",
+            z.object({
+              profileID: z.string().optional(),
+            }),
+          ),
           async (c) => {
             const providerID = c.req.valid("param").providerID
-            await Auth.remove(providerID)
+            const { profileID } = c.req.valid("query")
+            if (profileID) {
+              await Auth.removeProfile(providerID, profileID)
+            } else {
+              await Auth.remove(providerID)
+            }
             return c.json(true)
           },
         )

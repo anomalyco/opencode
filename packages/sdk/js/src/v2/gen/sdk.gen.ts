@@ -9,6 +9,10 @@ import type {
   AppLogResponses,
   AppSkillsResponses,
   Auth as Auth3,
+  AuthProfilesErrors,
+  AuthProfilesResponses,
+  AuthProfileSwitchErrors,
+  AuthProfileSwitchResponses,
   AuthRemoveErrors,
   AuthRemoveResponses,
   AuthSetErrors,
@@ -299,19 +303,67 @@ export class Global extends HeyApiClient {
   }
 }
 
+export class Profile extends HeyApiClient {
+  /**
+   * Switch profile
+   *
+   * Switch the active profile for a provider
+   */
+  public switch<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      profileID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "body", key: "profileID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<AuthProfileSwitchResponses, AuthProfileSwitchErrors, ThrowOnError>({
+      url: "/auth/{providerID}/profile",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Auth extends HeyApiClient {
   /**
    * Remove auth credentials
    *
-   * Remove authentication credentials
+   * Remove authentication credentials for a provider or specific profile
    */
   public remove<ThrowOnError extends boolean = false>(
     parameters: {
       providerID: string
+      profileID?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "providerID" }] }])
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "query", key: "profileID" },
+          ],
+        },
+      ],
+    )
     return (options?.client ?? this.client).delete<AuthRemoveResponses, AuthRemoveErrors, ThrowOnError>({
       url: "/auth/{providerID}",
       ...options,
@@ -322,11 +374,12 @@ export class Auth extends HeyApiClient {
   /**
    * Set auth credentials
    *
-   * Set authentication credentials
+   * Set authentication credentials for a provider profile
    */
   public set<ThrowOnError extends boolean = false>(
     parameters: {
       providerID: string
+      profileID?: string
       auth?: Auth3
     },
     options?: Options<never, ThrowOnError>,
@@ -337,6 +390,7 @@ export class Auth extends HeyApiClient {
         {
           args: [
             { in: "path", key: "providerID" },
+            { in: "query", key: "profileID" },
             { key: "auth", map: "body" },
           ],
         },
@@ -352,6 +406,30 @@ export class Auth extends HeyApiClient {
         ...params.headers,
       },
     })
+  }
+
+  /**
+   * List profiles
+   *
+   * List all profiles for a provider
+   */
+  public profiles<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "providerID" }] }])
+    return (options?.client ?? this.client).get<AuthProfilesResponses, AuthProfilesErrors, ThrowOnError>({
+      url: "/auth/{providerID}/profiles",
+      ...options,
+      ...params,
+    })
+  }
+
+  private _profile?: Profile
+  get profile(): Profile {
+    return (this._profile ??= new Profile({ client: this.client }))
   }
 }
 
@@ -1475,6 +1553,7 @@ export class Session extends HeyApiClient {
       }
       system?: string
       variant?: string
+      profileID?: string
       parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
@@ -1493,6 +1572,7 @@ export class Session extends HeyApiClient {
             { in: "body", key: "tools" },
             { in: "body", key: "system" },
             { in: "body", key: "variant" },
+            { in: "body", key: "profileID" },
             { in: "body", key: "parts" },
           ],
         },
@@ -1563,6 +1643,7 @@ export class Session extends HeyApiClient {
       }
       system?: string
       variant?: string
+      profileID?: string
       parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
@@ -1581,6 +1662,7 @@ export class Session extends HeyApiClient {
             { in: "body", key: "tools" },
             { in: "body", key: "system" },
             { in: "body", key: "variant" },
+            { in: "body", key: "profileID" },
             { in: "body", key: "parts" },
           ],
         },
@@ -1613,6 +1695,7 @@ export class Session extends HeyApiClient {
       arguments?: string
       command?: string
       variant?: string
+      profileID?: string
       parts?: Array<{
         id?: string
         type: "file"
@@ -1637,6 +1720,7 @@ export class Session extends HeyApiClient {
             { in: "body", key: "arguments" },
             { in: "body", key: "command" },
             { in: "body", key: "variant" },
+            { in: "body", key: "profileID" },
             { in: "body", key: "parts" },
           ],
         },

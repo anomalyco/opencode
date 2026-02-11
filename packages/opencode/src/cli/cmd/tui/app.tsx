@@ -17,6 +17,7 @@ import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogAgent } from "@tui/component/dialog-agent"
+import { DialogProfile } from "@tui/component/dialog-profile"
 import { DialogSessionList } from "@tui/component/dialog-session-list"
 import { KeybindProvider } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
@@ -464,6 +465,17 @@ function App() {
         dialog.replace(() => <DialogProviderList />)
       },
       category: "Provider",
+    },
+    {
+      title: "Switch profile",
+      value: "profile.switch",
+      category: "Provider",
+      slash: {
+        name: "profile",
+      },
+      onSelect: () => {
+        dialog.replace(() => <DialogProfile />)
+      },
     },
     {
       title: "View status",

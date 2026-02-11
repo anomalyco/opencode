@@ -38,6 +38,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       provider_default: Record<string, string>
       provider_next: ProviderListResponse
       provider_auth: Record<string, ProviderAuthMethod[]>
+      active_profiles: Record<string, string>
       agent: Agent[]
       command: Command[]
       permission: {
@@ -80,6 +81,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
         connected: [],
       },
       provider_auth: {},
+      active_profiles: {},
       config: {},
       status: "loading",
       agent: [],
@@ -373,6 +375,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               setStore("provider", reconcile(providers.providers))
               setStore("provider_default", reconcile(providers.default))
               setStore("provider_next", reconcile(providerList))
+              setStore("active_profiles", reconcile(providerList.profiles ?? {}))
               setStore("agent", reconcile(agents))
               setStore("config", reconcile(config))
               if (sessions !== undefined) setStore("session", reconcile(sessions))

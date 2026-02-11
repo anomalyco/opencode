@@ -2305,7 +2305,9 @@ export type AuthRemoveData = {
   path: {
     providerID: string
   }
-  query?: never
+  query?: {
+    profileID?: string
+  }
   url: "/auth/{providerID}"
 }
 
@@ -2332,7 +2334,9 @@ export type AuthSetData = {
   path: {
     providerID: string
   }
-  query?: never
+  query?: {
+    profileID?: string
+  }
   url: "/auth/{providerID}"
 }
 
@@ -2353,6 +2357,65 @@ export type AuthSetResponses = {
 }
 
 export type AuthSetResponse = AuthSetResponses[keyof AuthSetResponses]
+
+export type AuthProfilesData = {
+  body?: never
+  path: {
+    providerID: string
+  }
+  query?: never
+  url: "/auth/{providerID}/profiles"
+}
+
+export type AuthProfilesErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AuthProfilesError = AuthProfilesErrors[keyof AuthProfilesErrors]
+
+export type AuthProfilesResponses = {
+  /**
+   * Profile list with active profile
+   */
+  200: {
+    profiles: Array<string>
+    active?: string
+  }
+}
+
+export type AuthProfilesResponse = AuthProfilesResponses[keyof AuthProfilesResponses]
+
+export type AuthProfileSwitchData = {
+  body?: {
+    profileID: string
+  }
+  path: {
+    providerID: string
+  }
+  query?: never
+  url: "/auth/{providerID}/profile"
+}
+
+export type AuthProfileSwitchErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type AuthProfileSwitchError = AuthProfileSwitchErrors[keyof AuthProfileSwitchErrors]
+
+export type AuthProfileSwitchResponses = {
+  /**
+   * Successfully switched profile
+   */
+  200: boolean
+}
+
+export type AuthProfileSwitchResponse = AuthProfileSwitchResponses[keyof AuthProfileSwitchResponses]
 
 export type ProjectListData = {
   body?: never
@@ -3404,6 +3467,7 @@ export type SessionPromptData = {
     }
     system?: string
     variant?: string
+    profileID?: string
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
@@ -3591,6 +3655,7 @@ export type SessionPromptAsyncData = {
     }
     system?: string
     variant?: string
+    profileID?: string
     parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
   }
   path: {
@@ -3635,6 +3700,7 @@ export type SessionCommandData = {
     arguments: string
     command: string
     variant?: string
+    profileID?: string
     parts?: Array<{
       id?: string
       type: "file"
@@ -4051,6 +4117,9 @@ export type ProviderListResponses = {
       [key: string]: string
     }
     connected: Array<string>
+    profiles?: {
+      [key: string]: string
+    }
   }
 }
 

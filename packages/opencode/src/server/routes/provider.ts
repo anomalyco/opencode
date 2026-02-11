@@ -5,6 +5,7 @@ import { Config } from "../../config/config"
 import { Provider } from "../../provider/provider"
 import { ModelsDev } from "../../provider/models"
 import { ProviderAuth } from "../../provider/auth"
+import { Auth } from "../../auth"
 import { mapValues } from "remeda"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
@@ -27,6 +28,7 @@ export const ProviderRoutes = lazy(() =>
                     all: ModelsDev.Provider.array(),
                     default: z.record(z.string(), z.string()),
                     connected: z.array(z.string()),
+                    profiles: z.record(z.string(), z.string()).optional(),
                   }),
                 ),
               },
@@ -52,10 +54,17 @@ export const ProviderRoutes = lazy(() =>
           mapValues(filteredProviders, (x) => Provider.fromModelsDevProvider(x)),
           connected,
         )
+        const authData = await Auth.allWithProfiles()
+        const profiles: Record<string, string> = {}
+        for (const [providerID, data] of Object.entries(authData)) {
+          if (data.currentProfile) profiles[providerID] = data.currentProfile
+        }
+
         return c.json({
           all: Object.values(providers),
           default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
           connected: Object.keys(connected),
+          profiles,
         })
       },
     )
