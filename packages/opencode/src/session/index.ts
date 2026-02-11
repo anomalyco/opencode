@@ -477,7 +477,7 @@ export namespace Session {
         // don't compute from components
         if (
           input.model.api.npm === "@ai-sdk/anthropic" ||
-          input.model.api.npm === "@ai-sdk/bedrock" ||
+          input.model.api.npm === "@ai-sdk/amazon-bedrock" ||
           input.model.api.npm === "@ai-sdk/google-vertex/anthropic"
         ) {
           return adjustedInputTokens + outputTokens + cacheReadInputTokens + cacheWriteInputTokens
