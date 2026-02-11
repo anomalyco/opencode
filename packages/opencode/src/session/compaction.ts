@@ -6,7 +6,6 @@ import { Instance } from "../project/instance"
 import { Provider } from "../provider/provider"
 import { MessageV2 } from "./message-v2"
 import z from "zod"
-import { SessionPrompt } from "./prompt"
 import { Token } from "../util/token"
 import { Log } from "../util/log"
 import { SessionProcessor } from "./processor"
@@ -14,6 +13,7 @@ import { fn } from "@/util/fn"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
+import { ProviderTransform } from "@/provider/transform"
 
 export namespace SessionCompaction {
   const log = Log.create({ service: "session.compaction" })
@@ -27,15 +27,22 @@ export namespace SessionCompaction {
     ),
   }
 
+  const COMPACTION_BUFFER = 20_000
+
   export async function isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }) {
     const config = await Config.get()
     if (config.compaction?.auto === false) return false
     const context = input.model.limit.context
     if (context === 0) return false
-    const count = input.tokens.input + input.tokens.cache.read + input.tokens.output
-    const output = Math.min(input.model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) || SessionPrompt.OUTPUT_TOKEN_MAX
-    const usable = input.model.limit.input || context - output
-    return count > usable
+
+    const count =
+      input.tokens.total ||
+      input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write
+
+    const reserved =
+      config.compaction?.reserved ?? Math.min(COMPACTION_BUFFER, ProviderTransform.maxOutputTokens(input.model))
+    const usable = input.model.limit.input ? input.model.limit.input - reserved : context - reserved
+    return count >= usable
   }
 
   export const PRUNE_MINIMUM = 20_000
@@ -139,8 +146,34 @@ export namespace SessionCompaction {
       { sessionID: input.sessionID },
       { context: [], prompt: undefined },
     )
-    const defaultPrompt =
-      "Provide a detailed prompt for continuing our conversation above. Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next considering new session will not have access to our conversation."
+    const defaultPrompt = `Provide a detailed prompt for continuing our conversation above.
+Focus on information that would be helpful for continuing the conversation, including what we did, what we're doing, which files we're working on, and what we're going to do next.
+The summary that you construct will be used so that another agent can read it and continue the work.
+
+When constructing the summary, try to stick to this template:
+---
+## Goal
+
+[What goal(s) is the user trying to accomplish?]
+
+## Instructions
+
+- [What important instructions did the user give you that are relevant]
+- [If there is a plan or spec, include information about it so next agent can continue using it]
+
+## Discoveries
+
+[What notable things were learned during this conversation that would be useful for the next agent to know when continuing the work]
+
+## Accomplished
+
+[What work has been completed, what work is still in progress, and what work is left?]
+
+## Relevant files / directories
+
+[Construct a structured list of relevant files that have been read, edited, or created that pertain to the task at hand. If all the files in a directory are relevant, include the path to the directory.]
+---`
+
     const promptText = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
     const result = await processor.process({
       user: userMessage,
@@ -181,7 +214,7 @@ export namespace SessionCompaction {
         sessionID: input.sessionID,
         type: "text",
         synthetic: true,
-        text: "Continue if you have next steps",
+        text: "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.",
         time: {
           start: Date.now(),
           end: Date.now(),

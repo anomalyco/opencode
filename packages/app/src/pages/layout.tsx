@@ -34,6 +34,7 @@ import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { useProviders } from "@/hooks/use-providers"
 import { showToast, Toast, toaster } from "@opencode-ai/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
+import { clearWorkspaceTerminals } from "@/context/terminal"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
 import { Binary } from "@opencode-ai/util/binary"
@@ -180,20 +181,6 @@ export default function Layout(props: ParentProps) {
     if (state.hoverProject !== undefined) return
     aim.reset()
   })
-
-  createEffect(
-    on(
-      () => ({ dir: params.dir, id: params.id }),
-      () => {
-        if (layout.sidebar.opened()) return
-        if (!state.hoverProject) return
-        aim.reset()
-        setState("hoverSession", undefined)
-        setState("hoverProject", undefined)
-      },
-      { defer: true },
-    ),
-  )
 
   const autoselecting = createMemo(() => {
     if (params.dir) return false
@@ -1216,6 +1203,16 @@ export default function Layout(props: ParentProps) {
 
     if (!result) return
 
+    globalSync.set(
+      "project",
+      produce((draft) => {
+        const project = draft.find((item) => item.worktree === root)
+        if (!project) return
+        project.sandboxes = (project.sandboxes ?? []).filter((sandbox) => sandbox !== directory)
+      }),
+    )
+    setStore("workspaceOrder", root, (order) => (order ?? []).filter((workspace) => workspace !== directory))
+
     layout.projects.close(directory)
     layout.projects.open(root)
 
@@ -1235,10 +1232,17 @@ export default function Layout(props: ParentProps) {
     })
     const dismiss = () => toaster.dismiss(progress)
 
-    const sessions = await globalSDK.client.session
+    const sessions: Session[] = await globalSDK.client.session
       .list({ directory })
       .then((x) => x.data ?? [])
       .catch(() => [])
+
+    clearWorkspaceTerminals(
+      directory,
+      sessions.map((s) => s.id),
+      platform,
+    )
+    await globalSDK.client.instance.dispose({ directory }).catch(() => undefined)
 
     const result = await globalSDK.client.worktree
       .reset({ directory: root, worktreeResetInput: { directory } })
@@ -1924,10 +1928,10 @@ export default function Layout(props: ParentProps) {
               renderPanel={() => <SidebarPanel project={currentProject()} />}
             />
           </div>
-          <Show when={!layout.sidebar.opened() ? hoverProjectData() : undefined} keyed>
-            {(project) => (
+          <Show when={!layout.sidebar.opened() ? hoverProjectData()?.worktree : undefined} keyed>
+            {(worktree) => (
               <div class="absolute inset-y-0 left-16 z-50 flex" onMouseEnter={aim.reset}>
-                <SidebarPanel project={project} />
+                <SidebarPanel project={hoverProjectData()} />
               </div>
             )}
           </Show>

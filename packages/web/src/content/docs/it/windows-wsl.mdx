@@ -8,7 +8,7 @@ import { Steps } from "@astrojs/starlight/components"
 Anche se OpenCode puo essere eseguito direttamente su Windows, consigliamo di usare [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) per la migliore esperienza. WSL fornisce un ambiente Linux che funziona in modo ottimale con le funzionalita di OpenCode.
 
 :::tip[Perche WSL?]
-WSL offre prestazioni migliori del file system, supporto completo del terminal e compatibilita con gli strumenti di sviluppo su cui OpenCode fa affidamento.
+WSL offre prestazioni migliori del file system, supporto completo del terminale e compatibilita con gli strumenti di sviluppo su cui OpenCode fa affidamento.
 :::
 
 ---
@@ -23,7 +23,7 @@ WSL offre prestazioni migliori del file system, supporto completo del terminal e
 
 2. **Installa OpenCode in WSL**
 
-   Dopo aver configurato WSL, apri il terminal WSL e installa OpenCode usando uno dei [metodi di installazione](/docs/).
+   Dopo aver configurato WSL, apri il terminale WSL e installa OpenCode usando uno dei [metodi di installazione](/docs/).
 
    ```bash
    curl -fsSL https://opencode.ai/install | bash
@@ -73,7 +73,7 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve --hostname 0.0.0.0
 
 Per la migliore esperienza web su Windows:
 
-1. **Esegui `opencode web` nel terminal WSL** invece che in PowerShell:
+1. **Esegui `opencode web` nel terminale WSL** invece che in PowerShell:
 
    ```bash
    opencode web --hostname 0.0.0.0
@@ -81,7 +81,7 @@ Per la migliore esperienza web su Windows:
 
 2. **Accedi dal browser Windows** su `http://localhost:<port>` (OpenCode stampa l'URL)
 
-Eseguire `opencode web` da WSL garantisce accesso corretto al file system e integrazione del terminal, restando comunque accessibile dal browser Windows.
+Eseguire `opencode web` da WSL garantisce accesso corretto al file system e integrazione del terminale, restando comunque accessibile dal browser Windows.
 
 ---
 

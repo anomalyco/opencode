@@ -53,8 +53,6 @@ export namespace ZenData {
         weight: z.number().optional(),
         disabled: z.boolean().optional(),
         storeModel: z.string().optional(),
-        headers: z.record(z.string(), z.string()).optional(),
-        bodyModifier: z.record(z.string(), z.string()).optional(),
       }),
     ),
   })
@@ -62,13 +60,20 @@ export namespace ZenData {
   const ProviderSchema = z.object({
     api: z.string(),
     apiKey: z.string(),
-    format: FormatSchema,
+    format: FormatSchema.optional(),
     headerMappings: z.record(z.string(), z.string()).optional(),
+    family: z.string().optional(),
+  })
+
+  const ProviderFamilySchema = z.object({
+    headers: z.record(z.string(), z.string()).optional(),
+    bodyModifier: z.record(z.string(), z.string()).optional(),
   })
 
   const ModelsSchema = z.object({
     models: z.record(z.string(), z.union([ModelSchema, z.array(ModelSchema.extend({ formatFilter: FormatSchema }))])),
     providers: z.record(z.string(), ProviderSchema),
+    providerFamilies: z.record(z.string(), ProviderFamilySchema),
   })
 
   export const validate = fn(ModelsSchema, (input) => {
@@ -98,7 +103,16 @@ export namespace ZenData {
         Resource.ZEN_MODELS19.value +
         Resource.ZEN_MODELS20.value,
     )
-    return ModelsSchema.parse(json)
+    const { models, providers, providerFamilies } = ModelsSchema.parse(json)
+    return {
+      models,
+      providers: Object.fromEntries(
+        Object.entries(providers).map(([id, provider]) => [
+          id,
+          { ...provider, ...(provider.family ? providerFamilies[provider.family] : {}) },
+        ]),
+      ),
+    }
   })
 }
 
