@@ -140,21 +140,21 @@ Pour utiliser Amazon Bedrock avec OpenCode :
 Définissez l'une de ces variables d'environnement lors de l'exécution de opencode :
 
 ```bash
-# Option 1: Using AWS access keys
-AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY opencode
+   # Option 1: Using AWS access keys
+   AWS_ACCESS_KEY_ID=XXX AWS_SECRET_ACCESS_KEY=YYY opencode
 
-# Option 2: Using named AWS profile
-AWS_PROFILE=my-profile opencode
+   # Option 2: Using named AWS profile
+   AWS_PROFILE=my-profile opencode
 
-# Option 3: Using Bedrock bearer token
-AWS_BEARER_TOKEN_BEDROCK=XXX opencode
+   # Option 3: Using Bedrock bearer token
+   AWS_BEARER_TOKEN_BEDROCK=XXX opencode
 ```
 
 Ou ajoutez-les à votre profil bash :
 
 ```bash title="~/.bash_profile"
-export AWS_PROFILE=my-dev-profile
-export AWS_REGION=us-east-1
+   export AWS_PROFILE=my-dev-profile
+   export AWS_REGION=us-east-1
 ```
 
 #### Fichier de configuration (recommandé)
@@ -333,7 +333,7 @@ Si vous rencontrez des erreurs « Je suis désolé, mais je ne peux pas vous aid
 Ou ajoutez-le à votre profil bash :
 
 ```bash title="~/.bash_profile"
-export AZURE_RESOURCE_NAME=XXX
+   export AZURE_RESOURCE_NAME=XXX
 ```
 
 6. Exécutez la commande `/models` pour sélectionner votre modèle déployé.
@@ -380,7 +380,7 @@ export AZURE_RESOURCE_NAME=XXX
 Ou ajoutez-le à votre profil bash :
 
 ```bash title="~/.bash_profile"
-export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
+   export AZURE_COGNITIVE_SERVICES_RESOURCE_NAME=XXX
 ```
 
 6. Exécutez la commande `/models` pour sélectionner votre modèle déployé.
@@ -476,7 +476,7 @@ Cloudflare AI Gateway vous permet d'accéder aux modèles de OpenAI, Anthropic, 
 Ou définissez-le comme variable d'environnement.
 
 ```bash title="~/.bash_profile"
-export CLOUDFLARE_API_TOKEN=your-api-token
+   export CLOUDFLARE_API_TOKEN=your-api-token
 ```
 
 5. Exécutez la commande `/models` pour sélectionner un modèle.
@@ -676,6 +676,8 @@ Sélectionnez **OAuth** et votre navigateur s'ouvrira pour autorisation.
     /models
     ```
 
+````
+
 Trois modèles basés sur Claude sont disponibles :
 
 - **duo-chat-haiku-4-5** (Par défaut) - Réponses rapides pour des tâches rapides
@@ -697,11 +699,11 @@ Fichier `opencode.json`. Il est également recommandé de désactiver le partage
 
 ```json
 {
-  "$schema": "https://opencode.ai/config.json",
-  "small_model": "gitlab/duo-chat-haiku-4-5",
-  "share": "disabled"
+"$schema": "https://opencode.ai/config.json",
+"small_model": "gitlab/duo-chat-haiku-4-5",
+"share": "disabled"
 }
-```
+````
 
 :::
 
@@ -847,15 +849,15 @@ Pour utiliser Google Vertex AI avec OpenCode :
 Définissez-les lors de l'exécution de opencode.
 
 ```bash
-GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
+   GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json GOOGLE_CLOUD_PROJECT=your-project-id opencode
 ```
 
 Ou ajoutez-les à votre profil bash.
 
 ```bash title="~/.bash_profile"
-export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
-export GOOGLE_CLOUD_PROJECT=your-project-id
-export VERTEX_LOCATION=global
+   export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+   export GOOGLE_CLOUD_PROJECT=your-project-id
+   export VERTEX_LOCATION=global
 ```
 
 :::tip
@@ -1458,13 +1460,13 @@ SAP AI Core donne accès à plus de 40 modèles de OpenAI, Anthropic, Google, Am
 Ou définissez la variable d'environnement `AICORE_SERVICE_KEY` :
 
 ```bash
-AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
+   AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}' opencode
 ```
 
 Ou ajoutez-le à votre profil bash :
 
 ```bash title="~/.bash_profile"
-export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}'
+   export AICORE_SERVICE_KEY='{"clientid":"...","clientsecret":"...","url":"...","serviceurls":{"AI_API_URL":"..."}}'
 ```
 
 4. Définissez éventuellement l'ID de déploiement et le groupe de ressources :

@@ -1,6 +1,6 @@
 import { Database, eq, and, sql, inArray } from "@opencode-ai/console-core/drizzle/index.js"
 import { IpRateLimitTable } from "@opencode-ai/console-core/schema/ip.sql.js"
-import { RateLimitError } from "./error"
+import { FreeUsageLimitError } from "./error"
 import { logger } from "./logger"
 import { ZenData } from "@opencode-ai/console-core/model.js"
 
@@ -28,15 +28,44 @@ export function createRateLimiter(limit: ZenData.RateLimit | undefined, rawIp: s
     check: async () => {
       const rows = await Database.use((tx) =>
         tx
-          .select({ count: IpRateLimitTable.count })
+          .select({ interval: IpRateLimitTable.interval, count: IpRateLimitTable.count })
           .from(IpRateLimitTable)
           .where(and(eq(IpRateLimitTable.ip, ip), inArray(IpRateLimitTable.interval, intervals))),
       )
       const total = rows.reduce((sum, r) => sum + r.count, 0)
       logger.debug(`rate limit total: ${total}`)
-      if (total >= limitValue) throw new RateLimitError(`Rate limit exceeded. Please try again later.`)
+      if (total >= limitValue)
+        throw new FreeUsageLimitError(
+          `Rate limit exceeded. Please try again later.`,
+          limit.period === "day" ? getRetryAfterDay(now) : getRetryAfterHour(rows, intervals, limitValue, now),
+        )
     },
   }
+}
+
+export function getRetryAfterDay(now: number) {
+  return Math.ceil((86_400_000 - (now % 86_400_000)) / 1000)
+}
+
+export function getRetryAfterHour(
+  rows: { interval: string; count: number }[],
+  intervals: string[],
+  limit: number,
+  now: number,
+) {
+  const counts = new Map(rows.map((r) => [r.interval, r.count]))
+  // intervals are ordered newest to oldest: [current, -1h, -2h]
+  // simulate dropping oldest intervals one at a time
+  let running = intervals.reduce((sum, i) => sum + (counts.get(i) ?? 0), 0)
+  for (let i = intervals.length - 1; i >= 0; i--) {
+    running -= counts.get(intervals[i]) ?? 0
+    if (running < limit) {
+      // interval at index i rolls out of the window (intervals.length - i) hours from the current hour start
+      const hours = intervals.length - i
+      return Math.ceil((hours * 3_600_000 - (now % 3_600_000)) / 1000)
+    }
+  }
+  return Math.ceil((3_600_000 - (now % 3_600_000)) / 1000)
 }
 
 function buildYYYYMMDD(timestamp: number) {
