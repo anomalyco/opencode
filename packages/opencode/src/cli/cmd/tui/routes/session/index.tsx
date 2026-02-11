@@ -1338,15 +1338,27 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
         customBorderChars={SplitBorder.customBorderChars}
         borderColor={theme.backgroundElement}
       >
-        <code
-          filetype="markdown"
-          drawUnstyledText={false}
-          streaming={true}
-          syntaxStyle={subtleSyntax()}
-          content={"_Thinking:_ " + content()}
-          conceal={ctx.conceal()}
-          fg={theme.textMuted}
-        />
+        <Switch>
+          <Match when={Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
+            <markdown
+              streaming={true}
+              syntaxStyle={subtleSyntax()}
+              content={"_Thinking:_ " + content()}
+              conceal={ctx.conceal()}
+            />
+          </Match>
+          <Match when={!Flag.OPENCODE_EXPERIMENTAL_MARKDOWN}>
+            <code
+              filetype="markdown"
+              drawUnstyledText={false}
+              streaming={true}
+              syntaxStyle={subtleSyntax()}
+              content={"_Thinking:_ " + content()}
+              conceal={ctx.conceal()}
+              fg={theme.textMuted}
+            />
+          </Match>
+        </Switch>
       </box>
     </Show>
   )
