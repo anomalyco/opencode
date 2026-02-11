@@ -25,8 +25,8 @@ pub fn read_wayland() -> Option<bool> {
     let raw = std::fs::read_to_string(path()?).ok()?;
     let root = serde_json::from_str::<serde_json::Value>(&raw)
         .ok()?
-        .get(LINUX_DISPLAY_CONFIG_KEY);
-    serde_json::from_value::<DisplayConfig>(root.clone())
+        .get(LINUX_DISPLAY_CONFIG_KEY).cloned()?;
+    serde_json::from_value::<DisplayConfig>(root)
         .ok()?
         .wayland
 }
