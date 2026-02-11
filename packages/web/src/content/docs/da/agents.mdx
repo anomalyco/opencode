@@ -27,7 +27,7 @@ Primære agenter er de vigtigste assistenter, du interagerer direkte med. Du kan
 Du kan bruge **Tab**-tasten til at skifte mellem primære agenter under en session.
 :::
 
-OpenCode leveres med indbyggede primære agenter, **Build** og **Plan**. Godt
+OpenCode leveres med indbyggede primære agenter, **Build** og **Plan**. Vi vil
 se på disse nedenfor.
 
 ---
@@ -36,7 +36,7 @@ se på disse nedenfor.
 
 Subagenter er specialiserede assistenter, som primære agenter kan påbegynde sig til specifikke opgaver. Du kan også kalde dem manuelt ved at **@ nævne** dem i dine beskeder.
 
-OpenCode leveres med til indbyggede underagenter, **Generelt** og **Udforsk**. Vi vil se på dette nedenfor.
+OpenCode leveres med to indbyggede underagenter, **Generelt** og **Udforsk**. Vi vil se på dette nedenfor.
 
 ---
 
@@ -136,7 +136,7 @@ Du kan tilpasse de indbyggede agenter eller oprette dine egne gennem konfigurati
 
 ### JSON
 
-Konfigurationsagent i din `opencode.json`-konfigurationsfil:
+Konfigurer agent i din `opencode.json`-konfigurationsfil:
 
 ```json title="opencode.json"
 {
@@ -302,7 +302,7 @@ Hvis dette ikke er indstillet, vil agenten fortsætte med at iterere, indtil mod
 Når grænsen er nået, modtager agenten en speciel systemprompt, der instruerer den om at svare med en opsummering af sit arbejde og anbefalede resterende opgaver.
 
 :::caution
-Det gamle `maxSteps` følte er forældet. Brug `steps` i stedet.
+Det gamle `maxSteps`-felt er forældet. Brug `steps` i stedet.
 :::
 
 ---
@@ -346,7 +346,7 @@ Denne sti er i forhold til, hvor konfigurationsfilen er placeret. Så dette virk
 Brug `model`-konfigurationen til at tilsidesætte modeller for denne agent. Nyttigt til brug af forskellige modeller optimeret til forskellige opgaver. For eksempel en hurtigere model til planlægning, en dygtig model til implementering.
 
 :::tip
-Hvis du ikke angiver en model, bruger primære agenter [model globally configured](/docs/config#models), mens subagenter vil bruge modeller for den primære agent, der påkaldte subagenten.
+Hvis du ikke angiver en model, bruger primære agenter [model konfigureret globalt](/docs/config#models), mens subagenter vil bruge modeller for den primære agent, der påkaldte subagenten.
 :::
 
 ```json title="opencode.json"
@@ -406,7 +406,7 @@ Du kan også bruge jokertegn til at styre flere værktøjer på én gang. For ek
 }
 ```
 
-[Learn more about tools](/docs/tools).
+[Læs mere om værktøjer](/docs/tools).
 
 ---
 
@@ -518,7 +518,7 @@ Da den sidste matchningsregel har forrang, skal du sætte jokertegnet `*` først
 }
 ```
 
-[Learn more about permissions](/docs/permissions).
+[Læs mere om tilladelser](/docs/permissions).
 
 ---
 
@@ -697,7 +697,7 @@ Her er nogle almindelige use cases for forskellige agenter.
 Her er nogle eksempler på agenter, du kan finde nyttige.
 
 :::tip
-Har du en agent, du gerne vil dele? [Submit a PR](https://github.com/anomalyco/opencode).
+Har du en agent, du gerne vil dele? [Send en PR](https://github.com/anomalyco/opencode).
 :::
 
 ---

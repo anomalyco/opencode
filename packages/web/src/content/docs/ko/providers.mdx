@@ -1872,8 +1872,8 @@ opencode를 사용하여 OpenAI 호환 공급자를 사용할 수 있습니다. 
 구성 세부 사항:
 
 - **apiKey**: `env` 변수 구문을 사용하여 설정, [learn more](/docs/config#env-vars). -**headers**: 각 요청으로 전송된 사용자 정의 헤더.
-- **limit.context**: 최대 입력 토큰 모델은 받아들입니다.
-- **limit.output**: 최대 토큰은 모델을 생성할 수 있습니다.
+- **limit.context**: 모델이 허용하는 최대 Input Tokens.
+- **limit.output**: 모델이 생성할 수 있는 최대 Output Tokens.
 
 `limit` 필드를 사용하면 opencode가 얼마나 많은 컨텍스트를 이해 할 수 있습니다. 표준 공급자는 model.dev에서 자동적으로 당깁니다.
 

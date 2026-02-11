@@ -3,7 +3,7 @@ title: GitHub
 description: Utilisez OpenCode dans les problèmes et les pull-requests GitHub.
 ---
 
-OpenCode s'intègre à votre flux de travail GitHub. Mentionnez `/opencode` ou `/oc` dans votre commentaire, et OpenCode exécutera des tâches dans votre coureur d'actions GitHub.
+OpenCode s'intègre à votre flux de travail GitHub. Mentionnez `/opencode` ou `/oc` dans votre commentaire, et OpenCode exécutera des tâches dans votre runner GitHub Actions.
 
 ---
 
@@ -11,7 +11,7 @@ OpenCode s'intègre à votre flux de travail GitHub. Mentionnez `/opencode` ou `
 
 - **Problèmes de triage** : demandez à OpenCode d'examiner un problème et de vous l'expliquer.
 - **Réparer et implémenter** : demandez à OpenCode de résoudre un problème ou d'implémenter une fonctionnalité. Et il fonctionnera dans une nouvelle branche et soumettra un PR avec tous les changements.
-- **Sécurisé** : OpenCode court à l'intérieur des coureurs de votre GitHub.
+- **Sécurisé** : OpenCode s'exécute à l'intérieur de vos runners GitHub.
 
 ---
 
@@ -87,7 +87,7 @@ Dans les **paramètres** de votre organisation ou de votre projet, développez *
 - `prompt` : invite personnalisée facultative pour remplacer le comportement par défaut. Utilisez-le pour personnaliser la façon dont OpenCode traite les demandes.
 - `token` : jeton d'accès GitHub facultatif pour effectuer des opérations telles que la création de commentaires, la validation de modifications et l'ouverture de demandes d'extraction. Par défaut, OpenCode utilise le jeton d'accès à l'installation de l'application OpenCode GitHub, de sorte que les validations, les commentaires et les demandes d'extraction apparaissent comme provenant de l'application.
 
-Vous pouvez également utiliser le `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) intégré du GitHub Action Runner sans installer l'application OpenCode GitHub. Assurez-vous simplement d'accorder les autorisations requises dans votre flux de travail :
+Vous pouvez également utiliser le `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) intégré du runner GitHub Actions sans installer l'application OpenCode GitHub. Assurez-vous simplement d'accorder les autorisations requises dans votre flux de travail :
 
 ```yaml
 permissions:

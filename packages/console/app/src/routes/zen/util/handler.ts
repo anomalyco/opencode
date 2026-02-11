@@ -313,7 +313,7 @@ export async function handler(
 
     if (error instanceof FreeUsageLimitError || error instanceof SubscriptionUsageLimitError) {
       const headers = new Headers()
-      if (error instanceof SubscriptionUsageLimitError && error.retryAfter) {
+      if (error.retryAfter) {
         headers.set("retry-after", String(error.retryAfter))
       }
       return new Response(

@@ -226,7 +226,7 @@ const { providers, default: defaults } = await client.config.providers()
 
 ### Sessions
 
-| Method                                                     | Description                        | Notes                                                                                                                                          |
+| Metoda                                                     | Opis                               | Napomene                                                                                                                                       |
 | ---------------------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `session.list()`                                           | List sessions                      | Returns <a href={typesUrl}><code>Session[]</code></a>                                                                                          |
 | `session.get({ path })`                                    | Get session                        | Returns <a href={typesUrl}><code>Session</code></a>                                                                                            |
@@ -283,7 +283,7 @@ await client.session.prompt({
 
 ### Files
 
-| Method                    | Description                        | Response                                                                                    |
+| Metoda                    | Opis                               | Odgovor                                                                                     |
 | ------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------- |
 | `find.text({ query })`    | Search for text in files           | Array of match objects with `path`, `lines`, `line_number`, `absolute_offset`, `submatches` |
 | `find.files({ query })`   | Find files and directories by name | `string[]` (paths)                                                                          |
@@ -324,7 +324,7 @@ const content = await client.file.read({
 
 ### TUI
 
-| Method                         | Description               | Response  |
+| Metoda                         | Opis                      | Odgovor   |
 | ------------------------------ | ------------------------- | --------- |
 | `tui.appendPrompt({ body })`   | Append text to the prompt | `boolean` |
 | `tui.openHelp()`               | Open the help dialog      | `boolean` |
@@ -355,7 +355,7 @@ await client.tui.showToast({
 
 ### Auth
 
-| Method              | Description                    | Response  |
+| Metoda              | Opis                           | Odgovor   |
 | ------------------- | ------------------------------ | --------- |
 | `auth.set({ ... })` | Set authentication credentials | `boolean` |
 
@@ -374,7 +374,7 @@ await client.auth.set({
 
 ### Events
 
-| Method              | Description               | Response                  |
+| Metoda              | Opis                      | Odgovor                   |
 | ------------------- | ------------------------- | ------------------------- |
 | `event.subscribe()` | Server-sent events stream | Server-sent events stream |
 
