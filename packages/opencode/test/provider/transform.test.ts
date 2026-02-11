@@ -398,6 +398,49 @@ describe("ProviderTransform.schema - gemini non-object properties removal", () =
     expect(result.properties.data.required).toEqual(["name"])
   })
 
+  test("infers type 'object' when properties exist but type is missing", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        data: {
+          description: "The data",
+          properties: { page_id: { type: "string" } },
+          required: ["page_id"],
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.data.type).toBe("object")
+    expect(result.properties.data.properties).toBeDefined()
+    expect(result.properties.data.required).toEqual(["page_id"])
+  })
+
+  test("infers type 'object' for array items with properties but no type", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        title: {
+          type: "array",
+          items: {
+            properties: {
+              annotations: {
+                type: "object",
+                properties: { bold: { type: "boolean" } },
+              },
+            },
+          },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.title.items.type).toBe("object")
+    expect(result.properties.title.items.properties).toBeDefined()
+  })
+
   test("does not affect non-gemini providers", () => {
     const openaiModel = {
       providerID: "openai",

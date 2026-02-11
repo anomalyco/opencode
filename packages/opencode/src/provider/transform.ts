@@ -792,6 +792,12 @@ export namespace ProviderTransform {
           }
         }
 
+        // Infer type "object" when properties/required exist but type is missing
+        // (common in MCP tool schemas like Notion MCP)
+        if (!result.type && (result.properties || result.required)) {
+          result.type = "object"
+        }
+
         // Remove properties/required from non-object types (Gemini rejects these)
         if (result.type && result.type !== "object") {
           delete result.properties
