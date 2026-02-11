@@ -1,5 +1,6 @@
 import { base64Decode } from "@opencode-ai/util/encode"
 import fs from "node:fs/promises"
+import os from "node:os"
 import path from "node:path"
 import type { Page } from "@playwright/test"
 
@@ -10,11 +11,18 @@ import {
   cleanupTestProject,
   clickMenuItem,
   confirmDialog,
+  openProjectMenu,
   openSidebar,
   openWorkspaceMenu,
   setWorkspacesEnabled,
 } from "../actions"
-import { inlineInputSelector, workspaceItemSelector } from "../selectors"
+import {
+  inlineInputSelector,
+  projectSwitchSelector,
+  projectWorkspacesToggleSelector,
+  workspaceItemSelector,
+} from "../selectors"
+import { dirSlug } from "../utils"
 
 function slugFromUrl(url: string) {
   return /\/([^/]+)\/session(?:\/|$)/.exec(url)?.[1] ?? ""
@@ -124,6 +132,40 @@ test("can create a workspace", async ({ page, withProject }) => {
 
     await cleanupTestProject(workspaceDir)
   })
+})
+
+test("non-git projects keep workspace mode disabled", async ({ page, withProject }) => {
+  await page.setViewportSize({ width: 1400, height: 800 })
+
+  const nonGit = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-e2e-project-nongit-"))
+  const nonGitSlug = dirSlug(nonGit)
+
+  await fs.writeFile(path.join(nonGit, "README.md"), "# e2e nongit\n")
+
+  try {
+    await withProject(
+      async () => {
+        await openSidebar(page)
+
+        const nonGitButton = page.locator(projectSwitchSelector(nonGitSlug)).first()
+        await expect(nonGitButton).toBeVisible()
+        await nonGitButton.click()
+        await expect(page).toHaveURL(new RegExp(`/${nonGitSlug}/session`))
+
+        const menu = await openProjectMenu(page, nonGitSlug)
+        const toggle = menu.locator(projectWorkspacesToggleSelector(nonGitSlug)).first()
+
+        await expect(toggle).toBeVisible()
+        await expect(toggle).toBeDisabled()
+
+        await expect(menu.getByRole("menuitem", { name: "New workspace" })).toHaveCount(0)
+        await expect(page.getByRole("button", { name: "New workspace" })).toHaveCount(0)
+      },
+      { extra: [nonGit] },
+    )
+  } finally {
+    await cleanupTestProject(nonGit)
+  }
 })
 
 test("can rename a workspace", async ({ page, withProject }) => {

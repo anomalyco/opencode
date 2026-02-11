@@ -23,12 +23,16 @@ fn configure_display_backend() -> Option<String> {
         return None;
     }
 
-    // Allow users to explicitly keep Wayland if they know their setup is stable.
-    let allow_wayland = matches!(
-        env::var("OC_ALLOW_WAYLAND"),
-        Ok(v) if matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes")
-    );
+    let prefer_wayland = opencode_lib::linux_display::read_wayland().unwrap_or(false);
+    let allow_wayland = prefer_wayland
+        || matches!(
+            env::var("OC_ALLOW_WAYLAND"),
+            Ok(v) if matches!(v.to_ascii_lowercase().as_str(), "1" | "true" | "yes")
+        );
     if allow_wayland {
+        if prefer_wayland {
+            return Some("Wayland session detected; using native Wayland from settings".into());
+        }
         return Some("Wayland session detected; respecting OC_ALLOW_WAYLAND=1".into());
     }
 
@@ -39,7 +43,7 @@ fn configure_display_backend() -> Option<String> {
         set_env_if_absent("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         return Some(
             "Wayland session detected; forcing X11 backend to avoid compositor protocol errors. \
-               Set OC_ALLOW_WAYLAND=1 to keep native Wayland."
+                Set OC_ALLOW_WAYLAND=1 to keep native Wayland."
                 .into(),
         );
     }
@@ -82,7 +86,7 @@ fn main() {
     #[cfg(target_os = "linux")]
     {
         if let Some(backend_note) = configure_display_backend() {
-            eprintln!("{backend_note:?}");
+            eprintln!("{backend_note}");
         }
     }
 

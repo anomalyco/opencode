@@ -1,20 +1,21 @@
 export const dict = {
   "ui.sessionReview.title": "تغييرات الجلسة",
   "ui.sessionReview.title.lastTurn": "تغييرات آخر دور",
-  "ui.sessionReview.diffStyle.unified": "موجد",
+  "ui.sessionReview.diffStyle.unified": "موحد",
   "ui.sessionReview.diffStyle.split": "منقسم",
   "ui.sessionReview.expandAll": "توسيع الكل",
   "ui.sessionReview.collapseAll": "طي الكل",
-
   "ui.sessionReview.change.added": "مضاف",
   "ui.sessionReview.change.removed": "محذوف",
   "ui.sessionReview.change.modified": "معدل",
+
   "ui.lineComment.label.prefix": "تعليق على ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "جارٍ التعليق على ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "أضف تعليقًا",
   "ui.lineComment.submit": "تعليق",
+
   "ui.sessionTurn.steps.show": "إظهار الخطوات",
   "ui.sessionTurn.steps.hide": "إخفاء الخطوات",
   "ui.sessionTurn.summary.response": "استجابة",
