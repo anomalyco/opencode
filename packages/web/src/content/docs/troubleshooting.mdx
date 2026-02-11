@@ -298,3 +298,15 @@ export DISPLAY=:99.0
 ```
 
 opencode will detect if you're using Wayland and prefer `wl-clipboard`, otherwise it will try to find clipboard tools in order of: `xclip` and `xsel`.
+
+---
+
+### Links not opening from the TUI (Linux)
+
+If URLs shown in OpenCode are not opening in your browser:
+
+1. Try your terminal's link-open gesture (often `Ctrl+Click` or `Cmd+Click`, depending on terminal settings).
+2. Ensure mouse support and hyperlink handling are enabled in your terminal emulator.
+3. If your terminal does not support clickable links, copy the URL and open it manually.
+
+OpenCode currently does not provide a dedicated keybind to open arbitrary URLs from chat output.
