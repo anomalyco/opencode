@@ -1,6 +1,6 @@
 ---
 title: Yapılandırma
-description: opencode JSON devresini kullanmıyor.
+description: opencode JSON yapılandırması kullanır.
 ---
 
 opencode'u JSON yapılandırma dosyası kullanarak yapılandırabilirsiniz.
@@ -175,7 +175,7 @@ Mevcut seçenekler:
 - `scroll_speed` - Özel kaydırma hızı çarpanı (varsayılan: `3`, minimum: `1`). `scroll_acceleration.enabled` `true` ise dikkate alınmaz.
 - `diff_style` - Fark oluşturmayı kontrol edin. `"auto"` terminal genişliğine uyum sağlar, `"stacked"` her zaman tek sütunu gösterir.
 
-[Learn more about using the TUI here](/docs/tui).
+[TUI kullanımı hakkında daha fazla bilgi](/docs/tui).
 
 ---
 
@@ -198,17 +198,17 @@ Mevcut seçenekler:
 
 Mevcut seçenekler:
 
-- `port` - Port to listen on.
+- `port` - Dinlenecek port.
 - `hostname` - Dinlenecek ana bilgisayar adı. `mdns` etkinleştirildiğinde ve hiçbir ana bilgisayar adı ayarlanmadığında, varsayılan değer `0.0.0.0` olur.
 - `mdns` - mDNS hizmet bulmayı etkinleştirin. Bu, ağdaki diğer cihazların opencode sunucunuzu keşfetmesine olanak tanır.
 - `mdnsDomain` - mDNS hizmeti için özel alan adı. Varsayılan olarak `opencode.local` şeklindedir. Aynı ağda birden fazla örneği çalıştırmak için kullanışlıdır.
 - `cors` - Tarayıcı tabanlı bir istemciden HTTP sunucusunu kullanırken CORS'ye izin verecek ek kaynaklar. Değerler tam kaynaklar olmalıdır (şema + ana bilgisayar + isteğe bağlı bağlantı noktası), örneğin `https://app.example.com`.
 
-[Learn more about the server here](/docs/server).
+[Sunucu hakkında daha fazla bilgi](/docs/server).
 
 ---
 
-### Aletler
+### Araçlar
 
 Bir LLM'nin kullanabileceği araçları `tools` seçeneği aracılığıyla yönetebilirsiniz.
 
@@ -222,11 +222,11 @@ Bir LLM'nin kullanabileceği araçları `tools` seçeneği aracılığıyla yön
 }
 ```
 
-[Learn more about tools here](/docs/tools).
+[Araçlar hakkında daha fazla bilgi](/docs/tools).
 
 ---
 
-### Models
+### Modeller
 
 opencode yapılandırmanızda kullanmak istediğiniz sağlayıcıları ve modelleri `provider`, `model` ve `small_model` seçenekleri aracılığıyla yapılandırabilirsiniz.
 
@@ -260,7 +260,7 @@ Sağlayıcı seçenekleri `timeout` ve `setCacheKey` içerebilir:
 - `timeout` - Milisaniye cinsinden istek zaman aşımı (varsayılan: 300000). Devre dışı bırakmak için `false` olarak ayarlayın.
 - `setCacheKey` - Belirlenen sağlayıcı için her zaman bir önbellek anahtarının ayarlandığından emin olun.
 
-Ayrıca [local models](/docs/models#local) öğesini de yapılandırabilirsiniz. [Learn more](/docs/models).
+Ayrıca [local models](/docs/models#local) ayarlayabilirsiniz. [Daha fazla bilgi](/docs/models).
 
 ---
 
@@ -295,11 +295,11 @@ Amazon Bedrock, AWS'a özgü yapılandırmayı destekler:
 Taşıyıcı belirteçleri (`AWS_BEARER_TOKEN_BEDROCK` veya `/connect`) profil tabanlı kimlik doğrulamaya göre önceliklidir. Ayrıntılar için [authentication precedence](/docs/providers#authentication-precedence)'ye bakın.
 :::
 
-[Learn more about Amazon Bedrock configuration](/docs/providers#amazon-bedrock).
+[Amazon Bedrock yapılandırması hakkında daha fazla bilgi](/docs/providers#amazon-bedrock).
 
 ---
 
-### Themes
+### Temalar
 
 opencode yapılandırmanızda kullanmak istediğiniz temayı `theme` seçeneği aracılığıyla yapılandırabilirsiniz.
 
@@ -310,7 +310,7 @@ opencode yapılandırmanızda kullanmak istediğiniz temayı `theme` seçeneği 
 }
 ```
 
-[Learn more here](/docs/themes).
+[Daha fazla bilgi](/docs/themes).
 
 ---
 
@@ -336,7 +336,7 @@ opencode yapılandırmanızda kullanmak istediğiniz temayı `theme` seçeneği 
 }
 ```
 
-Aracıları ayrıca `~/.config/opencode/agents/` veya `.opencode/agents/` İçindeki etiketleme etiketlerini kullanarak da tanımlayabilirsiniz. [Learn more here](/docs/agents).
+Agent'ları `~/.config/opencode/agents/` veya `.opencode/agents/` içindeki Markdown dosyalarıyla da tanımlayabilirsiniz. [Daha fazla bilgi](/docs/agents).
 
 ---
 
@@ -400,7 +400,7 @@ Varsayılan olarak paylaşım, `/share` yoğunluğu kullanılarak konuşmaları 
 }
 ```
 
-Komutları `~/.config/opencode/commands/` veya `.opencode/commands/` içindeki işaretleme dosyalarını kullanarak da tanımlayabilirsiniz. [Learn more here](/docs/commands).
+Komutları `~/.config/opencode/commands/` veya `.opencode/commands/` içindeki Markdown dosyalarıyla da tanımlayabilirsiniz. [Daha fazla bilgi](/docs/commands).
 
 ---
 
@@ -415,7 +415,7 @@ Tuş atamalarınızı `keybinds` seçeneği aracılığıyla özelleştirebilirs
 }
 ```
 
-[Learn more here](/docs/keybinds).
+[Daha fazla bilgi](/docs/keybinds).
 
 ---
 
@@ -457,7 +457,7 @@ Kod formatlayıcılarını `formatter` seçeneği aracılığıyla yapılandıra
 }
 ```
 
-[Learn more about formatters here](/docs/formatters).
+[Formatter'lar hakkında daha fazla bilgi](/docs/formatters).
 
 ---
 
@@ -477,7 +477,7 @@ Varsayılan olarak, opencode açık bir onay gerektirmeden **tüm işlemlere izi
 }
 ```
 
-[Learn more about permissions here](/docs/permissions).
+[İzinler hakkında daha fazla bilgi](/docs/permissions).
 
 ---
 
@@ -528,7 +528,7 @@ Kullanmak istediğiniz MCP sunucularını `mcp` seçeneği aracılığıyla yap�
 }
 ```
 
-[Learn more here](/docs/mcp-servers).
+[Daha fazla bilgi](/docs/mcp-servers).
 
 ---
 
@@ -545,7 +545,7 @@ Eklenti dosyalarını `.opencode/plugins/` veya `~/.config/opencode/plugins/` i�
 }
 ```
 
-[Learn more here](/docs/plugins).
+[Daha fazla bilgi](/docs/plugins).
 
 ---
 

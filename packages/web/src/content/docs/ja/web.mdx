@@ -3,7 +3,7 @@ title: ウェブ
 description: ブラウザで OpenCode を使用する。
 ---
 
-OpenCode はブラウザーで Web アプリケーションとして実行でき、ターミナルを必要とせずに同じ強力な AI コーディング エクスペリエンスを提供します。
+OpenCode はブラウザーで Web アプリケーションとして実行でき、terminal を必要とせずに同じ強力な AI コーディング エクスペリエンスを提供します。
 
 ![OpenCode Web - 新しいセッション](../../../assets/web/web-homepage-new-session.png)
 
@@ -20,7 +20,7 @@ opencode web
 :::caution
 `OPENCODE_SERVER_PASSWORD` が設定されていない場合、サーバーは保護されません。これはローカルで使用する場合には問題ありませんが、ネットワーク アクセス用に設定する必要があります。
 :::tip[Windows ユーザー]
-最高のエクスペリエンスを得るには、PowerShell ではなく [WSL](/docs/windows-wsl) から `opencode web` を実行します。これにより、ファイル システムへの適切なアクセスと端末の統合が保証されます。
+最高のエクスペリエンスを得るには、PowerShell ではなく [WSL](/docs/windows-wsl) から `opencode web` を実行します。これにより、ファイル システムへの適切なアクセスとterminal の統合が保証されます。
 :::
 
 ---
@@ -106,9 +106,9 @@ OPENCODE_SERVER_PASSWORD=secret opencode web
 
 ---
 
-## 端子の取り付け
+## terminal の接続
 
-実行中の Web サーバーにターミナル TUI を接続できます。
+実行中の Web サーバーにterminal TUI を接続できます。
 
 ```bash
 # Start the web server
@@ -118,7 +118,7 @@ opencode web --port 4096
 opencode attach http://localhost:4096
 ```
 
-これにより、Web インターフェイスとターミナルの両方を同時に使用し、同じセッションと状態を共有できるようになります。
+これにより、Web インターフェイスとterminal の両方を同時に使用し、同じセッションと状態を共有できるようになります。
 
 ---
 

@@ -15,7 +15,7 @@ description: Создавайте собственные команды для �
 
 ## Создание командных файлов
 
-Создайте файлы уценки в каталоге `commands/` для определения пользовательских команд.
+Создайте Markdown файлы в каталоге `commands/` для определения пользовательских команд.
 
 Создайте `.opencode/commands/test.md`:
 
@@ -30,7 +30,7 @@ Run the full test suite with coverage report and show any failures.
 Focus on the failing tests and suggest fixes.
 ```
 
-Фронтальная часть определяет свойства команды. Содержимое становится шаблоном.
+Фронтматтер (frontmatter) определяет свойства команды. Содержимое становится шаблоном.
 
 Используйте команду, набрав `/`, а затем имя команды.
 
@@ -42,7 +42,7 @@ Focus on the failing tests and suggest fixes.
 
 ## Настроить
 
-Вы можете добавлять собственные команды через конфигурацию opencode или создав файлы уценки в каталоге `commands/`.
+Вы можете добавлять собственные команды через конфигурацию opencode или создав файлы Markdown в каталоге `commands/`.
 
 ---
 
@@ -75,9 +75,9 @@ Focus on the failing tests and suggest fixes.
 
 ---
 
-### Уценка
+### Markdown
 
-Вы также можете определять команды, используя файлы уценки. Поместите их в:
+Вы также можете определять команды, используя Markdown файлы. Поместите их в:
 
 - Глобальный: `~/.config/opencode/commands/`
 - Для каждого проекта: `.opencode/commands/`
@@ -93,8 +93,8 @@ Run the full test suite with coverage report and show any failures.
 Focus on the failing tests and suggest fixes.
 ```
 
-Имя файла уценки становится именем команды. Например, `test.md` позволяет
-ты бежишь:
+Имя Markdown файла становится именем команды. Например, `test.md` позволяет
+вам запустить:
 
 ```bash frame="none"
 /test
@@ -102,7 +102,7 @@ Focus on the failing tests and suggest fixes.
 
 ---
 
-## Подскажите конфигурацию
+## Prompt Configuration
 
 Подсказки для пользовательских команд поддерживают несколько специальных заполнителей и синтаксиса.
 
@@ -161,7 +161,7 @@ with the following content: $3
 
 ---
 
-### Вывод оболочки
+### Shell output
 
 Используйте _!`command`_, чтобы ввести вывод команды bash](/docs/tui#bash-commands) в приглашение.
 
@@ -218,7 +218,7 @@ Check for performance issues and suggest improvements.
 
 ---
 
-### Шаблон
+### Template
 
 Параметр `template` определяет приглашение, которое будет отправлено в LLM при выполнении команды.
 
@@ -274,7 +274,7 @@ Check for performance issues and suggest improvements.
 
 ---
 
-### Подзадача
+### Subtask
 
 Используйте логическое значение `subtask`, чтобы заставить команду инициировать вызов [subagent](/docs/agents/#subagents).
 Это полезно, если вы хотите, чтобы команда не загрязняла ваш основной контекст и **заставляла** агента действовать как субагент.

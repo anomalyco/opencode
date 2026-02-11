@@ -1,12 +1,12 @@
 ---
-title: Agencja
+title: Agenci
 description: Konfiguruj i używaj funkcjonalnych agentów.
 ---
 
-Agencje do urządzeń asystenci AI, które można podłączyć do gniazd zasilania i przepływów pracy. Umożliwiają tworzenie ukierunkowanych narzędzi z niestandardowymi monitami, modelami i udostępnianiem narzędzi.
+Agenci to asystenci AI, które można podłączyć do gniazd zasilania i przepływów pracy. Umożliwiają tworzenie ukierunkowanych narzędzi z niestandardowymi monitami, modelami i udostępnianiem narzędzi.
 
 :::tip
-Skorzystaj z agenta planu, aby uzyskać dostęp do kodu i przeglądać informacje bez dodatkowych zmian w kodzie.
+Skorzystaj z agenta Plan, aby uzyskać dostęp do kodu i przeglądać informacje bez dodatkowych zmian w kodzie.
 :::
 
 Możesz przełączać się między agentami podczas sesji lub wywoływać ich za pomocą wzmianki `@`.
@@ -15,13 +15,13 @@ Możesz przełączać się między agentami podczas sesji lub wywoływać ich za
 
 ## Typowe
 
-W opencode zasada dwóch charakterystycznych agentów; Najpierw pierwotni i subagenci.
+W opencode zasada dwóch charakterystycznych agentów; Najpierw Primary i Subagents.
 
 ---
 
-### Agencja Pierwsi
+### Primary Agents
 
-Główne zasady asystenci, z podstawowym kontaktem. Możesz je mieć za pomocą klawisza **Tab** lub podwójnego skrótu klawiszowego `switch_agent`. Ci agenci obsługujący urządzenie główne. Dostęp do narzędzia jest konfigurowany za pomocą uprawnień — na przykład w programie Build wszystkie narzędzia są dostępne, a plan jest ograniczony.
+Główne zasady asystenci, z podstawowym kontaktem. Możesz je mieć za pomocą klawisza **Tab** lub podwójnego skrótu klawiszowego `switch_agent`. Ci agenci obsługujący urządzenie główne. Dostęp do narzędzia jest konfigurowany za pomocą uprawnień — na przykład w programie Build wszystkie narzędzia są dostępne, a Plan jest ograniczony.
 
 :::tip
 Twój klawisz klawisza **Tab**, aby wyłączyć się między agentami podczas sesji.
@@ -32,11 +32,11 @@ spójrz na te poniżej.
 
 ---
 
-### Podagencje
+### Subagents
 
-Podagenci do pomocniczych asystenci, których można przywoływać agenci główni w celu wykonania podstawowych zadań. Możesz także wytwarzać je, **@ wspominając** o nich w swoich wiadomościach.
+Subagenci to pomocniczy asystenci, których można przywoływać agenci główni w celu wykonania podstawowych zadań. Możesz także wytwarzać je, **@ wspominając** o nich w swoich wiadomościach.
 
-opencode ma dwóch subagentów: **Ogólne** i **Eksploruj**. Przyjrzymy się temu poniżej.
+opencode ma dwóch subagentów: **General** i **Explore**. Przyjrzymy się temu poniżej.
 
 ---
 
@@ -46,7 +46,7 @@ opencode ma dwa główne agenty i dwa główne agenty podrzędne.
 
 ---
 
-### korzystać z pracy
+### Build
 
 _Tryb_: `primary`
 
@@ -54,7 +54,7 @@ Kompilacja jest **domyślnym** agentem zastosowania z ukrytymi narzędziami. Jes
 
 ---
 
-### założenie z planu
+### Plan
 
 _Tryb_: `primary`
 
@@ -68,7 +68,7 @@ Ten agent jest podłączony, gdy chcesz, aby LLM był kompatybilny z kodem, któ
 
 ---
 
-### miejsce
+### General
 
 _Tryb_: `subagent`
 
@@ -76,7 +76,7 @@ Rozwiązanie rozwiązania złożone z zadań wieloetapowych. Pełny dostęp do n
 
 ---
 
-### eksploracji
+### Explore
 
 _Tryb_: `subagent`
 
@@ -84,7 +84,7 @@ Szybki agent tylko do odczytu do eksploracji baz kodu. Nie można modyfikować p
 
 ---
 
-### zagęszczanie danych
+### Compaction
 
 _Tryb_: `primary`
 
@@ -92,7 +92,7 @@ Ukryty agent systemowy, który jest kontekstem kontekstowym w dużym podsumowani
 
 ---
 
-### jako tytuł
+### Title
 
 _Tryb_: `primary`
 
@@ -100,7 +100,7 @@ Ukryty agent systemowy, krótki tytuł sesji. Działa automatycznie i nie można
 
 ---
 
-### Podsumowanie podsumowania
+### Summary
 
 _Tryb_: `primary`
 
@@ -302,7 +302,7 @@ Jeśli ta opcja nie zostanie skonfigurowana, agent będzie obowiązywał iteracj
 Po tym, jak agent limitu otrzymuje specjalny monit systemowy nakazujący podsumowanie swojej pracy i rekomendowanych do wykonywania zadań.
 
 :::caution
-Starsze pole `maxSteps` jest przestarzałe. Zamiast tego nadzoru `steps`.
+Starsze pole `maxSteps` jest przestarzałe. Zamiast tego użyj `steps`.
 :::
 
 ---
@@ -600,7 +600,7 @@ Zawsze można rozwiązać rozwiązanie, bezpośrednio poprzez menu autouzupełni
 
 Dostosuj wygląd agenta w interfejsie użytkownika za pomocą opcji `color`. Wpływ na wygląd agenta w interfejsie.
 
-Narodziny kościoła szesnastkowego (np. `#FF5733`) lub koloru motywu: `primary`, `secondary`, `accent`, `success`, `warning`, `error`, `info`.
+Użyj koloru hex (np. `#FF5733`) lub koloru motywu: `primary`, `secondary`, `accent`, `success`, `warning`, `error`, `info`.
 
 ```json title="opencode.json"
 {
@@ -617,7 +617,7 @@ Narodziny kościoła szesnastkowego (np. `#FF5733`) lub koloru motywu: `primary`
 
 ---
 
-### Góra P
+### Top P
 
 Kontroluj różnorodność odpowiedzi za pomocą opcji `top_p`. Alternatywa dla temperatury w celu kontrolowanej braku wartości.
 

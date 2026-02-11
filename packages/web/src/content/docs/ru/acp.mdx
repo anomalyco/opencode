@@ -1,9 +1,9 @@
 ---
-title: Поддержка АСР
+title: Поддержка ACP
 description: Используйте opencode в любом ACP-совместимом редакторе.
 ---
 
-opencode поддерживает [Протокол агента-клиента](https://agentclientprotocol.com) или (ACP), что позволяет использовать его непосредственно в совместимых редакторах и IDE.
+opencode поддерживает [Agent Client Protocol](https://agentclientprotocol.com) или (ACP), что позволяет использовать его непосредственно в совместимых редакторах и IDE.
 
 :::tip
 Список редакторов и инструментов, поддерживающих ACP, можно найти в [отчете о ходе работы ACP](https://zed.dev/blog/acp-progress-report#available-now).
@@ -23,7 +23,7 @@ ACP — это открытый протокол, который стандар�
 
 ---
 
-### Зед
+### Zed
 
 Добавьте в конфигурацию [Zed](https://zed.dev) (`~/.config/zed/settings.json`):
 
@@ -86,7 +86,7 @@ ACP — это открытый протокол, который стандар�
 
 ---
 
-### Аванте.nvim
+### Avante.nvim
 
 Добавьте в свою конфигурацию [Avante.nvim](https://github.com/yetone/avante.nvim):
 
@@ -119,7 +119,7 @@ ACP — это открытый протокол, который стандар�
 
 ---
 
-### КодКомпаньон.nvim
+### CodeCompanion.nvim
 
 Чтобы использовать opencode в качестве агента ACP в [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim), добавьте в конфигурацию Neovim следующее:
 
@@ -140,7 +140,7 @@ require("codecompanion").setup({
 
 Если вам нужно передать переменные среды (например, `OPENCODE_API_KEY`), обратитесь к разделу [Настройка адаптеров: переменные среды](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key) в документации CodeCompanion.nvim для получения полной информации.
 
-## Поддерживать
+## Поддержка
 
 opencode через ACP работает так же, как и в терминале. Поддерживаются все функции:
 

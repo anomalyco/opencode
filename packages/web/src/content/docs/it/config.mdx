@@ -235,9 +235,9 @@ Puoi configurare provider e modelli da usare in OpenCode tramite le opzioni `pro
 }
 ```
 
-The `small_model` option configures a separate model for lightweight tasks like title generation. By default, OpenCode tries to use a cheaper model if one is available from your provider, otherwise it falls back to your main model.
+L'opzione `small_model` configura un modello separato per task leggeri come la generazione dei titoli. Per impostazione predefinita, OpenCode prova a usare un modello più economico se disponibile dal tuo provider, altrimenti fa fallback sul tuo modello principale.
 
-Provider options can include `timeout` and `setCacheKey`:
+Le opzioni del provider possono includere `timeout` e `setCacheKey`:
 
 ```json title="opencode.json"
 {

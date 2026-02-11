@@ -1,6 +1,6 @@
 ---
-title: ACPสามารถช่วย
-description: ใช้ OpenCode ในโปรแกรมแก้ไขที่ต้องการ ACP
+title: การรองรับ ACP
+description: ใช้ OpenCode ในโปรแกรมแก้ไขที่รองรับ ACP
 ---
 
 OpenCode ที่แสดง [Agent Client Protocol](https://agentclientprotocol.com) หรือ (ACP) ซึ่งสามารถช่วยได้โดยตรงในการแก้ไขและ IDE ที่หน่วยความจำ
@@ -13,17 +13,17 @@ ACP เป็นแบบเปิดมาตรฐานการสื่อ�
 
 ---
 
-## เม็กซิโก
+## การกำหนดค่า
 
-บางครั้งใช้ OpenCode ผ่าน ACP ไม่อนุญาตให้โปรแกรมแก้ไขของคุณให้รันคำสั่ง `opencode acp`
+ในการใช้ OpenCode ผ่าน ACP ให้กำหนดค่าโปรแกรมแก้ไขของคุณให้รันคำสั่ง `opencode acp`
 
-สั่งเริ่ม OpenCode เนื่องจากต้องย่อยที่จำเป็นต้องมี ACP ซึ่งจะต้องแก้ไขโปรแกรมของคุณผ่าน JSON-RPC ผ่าน stdio
+คำสั่งนี้จะเริ่ม OpenCode เป็นกระบวนการย่อยที่เข้ากันได้กับ ACP ซึ่งสื่อสารกับโปรแกรมแก้ไขของคุณผ่าน JSON-RPC ผ่าน stdio
 
-นี่คือตัวอย่างโปรแกรมแก้ไขยอดนิยมที่รองรับ ACP
+นี่คือตัวอย่างสำหรับโปรแกรมแก้ไขยอดนิยมที่รองรับ ACP
 
 ---
 
-### เซด
+### Zed
 
 อดทนต่อไป [Zed](https://zed.dev) (`~/.config/zed/settings.json`):
 
@@ -67,9 +67,9 @@ ACP เป็นแบบเปิดมาตรฐานการสื่อ�
 
 ---
 
-### เจ็ตเบรนส์ IDE
+### JetBrains IDEs
 
-ไปที่ [JetBrains IDE](https://www.jetbrains.com/) acp.json ของคุณตาม [เอกสาร](https://www.jetbrains.com/help/ai-assistant/acp.html):
+เพิ่มลงใน acp.json ของ [JetBrains IDE](https://www.jetbrains.com/) ของคุณตาม [เอกสาร](https://www.jetbrains.com/help/ai-assistant/acp.html):
 
 ```json title="acp.json"
 {
@@ -142,10 +142,10 @@ require("codecompanion").setup({
 
 ## การรองรับ
 
-opencode ทำงานผ่าน ACP เหมือนกับในเทอร์มินัล และรองรับฟีเจอร์ทั้งหมด:
+opencode ทำงานผ่าน ACP เหมือนกับใน terminal และรองรับฟีเจอร์ทั้งหมด:
 
 :::note
-คำสั่งสแลมในคำสั่งบางคำสั่งเช่น `/undo` และ `/redo` ยังไม่รองรับในขณะนี้
+คำสั่ง slash ในตัวบางคำสั่งเช่น `/undo` และ `/redo` ยังไม่รองรับในขณะนี้
 :::
 
 - เครื่องมือใน (ไฟล์ไฟล์คำสั่งอื่นๆ)
