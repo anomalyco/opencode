@@ -97,6 +97,7 @@ export const ReadTool = Tool.define("read", {
         output,
         metadata: {
           truncated,
+          loaded: [] as string[],
         },
       }
     }
