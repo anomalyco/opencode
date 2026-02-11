@@ -110,25 +110,30 @@ export const dict = {
   "provider.connect.status.inProgress": "Autoryzacja w toku...",
   "provider.connect.status.waiting": "Oczekiwanie na autoryzację...",
   "provider.connect.status.failed": "Autoryzacja nie powiodła się: {{error}}",
-  "provider.connect.apiKey.description": "Wprowadź swój klucz API {{provider}}, aby połączyć konto i używać modeli {{provider}} w OpenCode.",
+  "provider.connect.apiKey.description":
+    "Wprowadź swój klucz API {{provider}}, aby połączyć konto i używać modeli {{provider}} w OpenCode.",
   "provider.connect.apiKey.label": "Klucz API {{provider}}",
   "provider.connect.apiKey.placeholder": "Klucz API",
   "provider.connect.apiKey.required": "Klucz API jest wymagany",
-  "provider.connect.opencodeZen.line1": "OpenCode Zen daje dostęp do wybranego zestawu niezawodnych, zoptymalizowanych modeli dla agentów kodujących.",
-  "provider.connect.opencodeZen.line2": "Z jednym kluczem API uzyskasz dostęp do modeli takich jak Claude, GPT, Gemini, GLM i więcej.",
+  "provider.connect.opencodeZen.line1":
+    "OpenCode Zen daje dostęp do wybranego zestawu niezawodnych, zoptymalizowanych modeli dla agentów kodujących.",
+  "provider.connect.opencodeZen.line2":
+    "Z jednym kluczem API uzyskasz dostęp do modeli takich jak Claude, GPT, Gemini, GLM i więcej.",
   "provider.connect.opencodeZen.visit.prefix": "Odwiedź ",
   "provider.connect.opencodeZen.visit.link": "opencode.ai/zen",
   "provider.connect.opencodeZen.visit.suffix": ", aby odebrać swój klucz API.",
   "provider.connect.oauth.code.visit.prefix": "Odwiedź ",
   "provider.connect.oauth.code.visit.link": "ten link",
-  "provider.connect.oauth.code.visit.suffix": ", aby odebrać kod autoryzacyjny, połączyć konto i używać modeli {{provider}} w OpenCode.",
+  "provider.connect.oauth.code.visit.suffix":
+    ", aby odebrać kod autoryzacyjny, połączyć konto i używać modeli {{provider}} w OpenCode.",
   "provider.connect.oauth.code.label": "Kod autoryzacyjny {{method}}",
   "provider.connect.oauth.code.placeholder": "Kod autoryzacyjny",
   "provider.connect.oauth.code.required": "Kod autoryzacyjny jest wymagany",
   "provider.connect.oauth.code.invalid": "Nieprawidłowy kod autoryzacyjny",
   "provider.connect.oauth.auto.visit.prefix": "Odwiedź ",
   "provider.connect.oauth.auto.visit.link": "ten link",
-  "provider.connect.oauth.auto.visit.suffix": " i wprowadź poniższy kod, aby połączyć konto i używać modeli {{provider}} w OpenCode.",
+  "provider.connect.oauth.auto.visit.suffix":
+    " i wprowadź poniższy kod, aby połączyć konto i używać modeli {{provider}} w OpenCode.",
   "provider.connect.oauth.auto.confirmationCode": "Kod potwierdzający",
   "provider.connect.toast.connected.title": "Połączono {{provider}}",
   "provider.connect.toast.connected.description": "Modele {{provider}} są teraz dostępne do użycia.",
@@ -145,7 +150,8 @@ export const dict = {
   "provider.custom.field.baseURL.placeholder": "https://api.mojdostawca.com/v1",
   "provider.custom.field.apiKey.label": "Klucz API",
   "provider.custom.field.apiKey.placeholder": "Klucz API",
-  "provider.custom.field.apiKey.description": "Opcjonalne. Pozostaw puste, jeśli zarządzasz autoryzacją przez nagłówki.",
+  "provider.custom.field.apiKey.description":
+    "Opcjonalne. Pozostaw puste, jeśli zarządzasz autoryzacją przez nagłówki.",
   "provider.custom.models.label": "Modele",
   "provider.custom.models.id.label": "ID",
   "provider.custom.models.id.placeholder": "model-id",
@@ -278,7 +284,8 @@ export const dict = {
   "dialog.server.add.checking": "Sprawdzanie...",
   "dialog.server.add.button": "Dodaj serwer",
   "dialog.server.default.title": "Domyślny serwer",
-  "dialog.server.default.description": "Połącz z tym serwerem przy uruchomieniu aplikacji zamiast uruchamiać lokalny serwer. Wymaga restartu.",
+  "dialog.server.default.description":
+    "Połącz z tym serwerem przy uruchomieniu aplikacji zamiast uruchamiać lokalny serwer. Wymaga restartu.",
   "dialog.server.default.none": "Nie wybrano serwera",
   "dialog.server.default.set": "Ustaw bieżący serwer jako domyślny",
   "dialog.server.default.clear": "Wyczyść",
@@ -388,7 +395,8 @@ export const dict = {
   "error.page.report.prefix": "Proszę zgłosić ten błąd do zespołu OpenCode",
   "error.page.report.discord": "na Discordzie",
   "error.page.version": "Wersja: {{version}}",
-  "error.dev.rootNotFound": "Nie znaleziono elementu głównego. Czy zapomniałeś dodać go do swojego index.html? A może atrybut id został błędnie wpisany?",
+  "error.dev.rootNotFound":
+    "Nie znaleziono elementu głównego. Czy zapomniałeś dodać go do swojego index.html? A może atrybut id został błędnie wpisany?",
   "error.globalSync.connectFailed": "Nie można połączyć się z serwerem. Czy serwer działa pod adresem `{{url}}`?",
   "directory.error.invalidUrl": "Nieprawidłowy katalog w URL.",
   "error.chain.unknown": "Nieznany błąd",
@@ -402,10 +410,12 @@ export const dict = {
   "error.chain.checkConfig": "Sprawdź swoją konfigurację (opencode.json) nazwy dostawców/modeli",
   "error.chain.mcpFailed": 'MCP server "{{name}}" failed. Note, OpenCode does not support MCP authentication yet.',
   "error.chain.providerAuthFailed": "Uwierzytelnianie dostawcy nie powiodło się ({{provider}}): {{message}}",
-  "error.chain.providerInitFailed": 'Nie udało się zainicjować dostawcy "{{provider}}". Sprawdź poświadczenia i konfigurację.',
+  "error.chain.providerInitFailed":
+    'Nie udało się zainicjować dostawcy "{{provider}}". Sprawdź poświadczenia i konfigurację.',
   "error.chain.configJsonInvalid": "Plik konfiguracyjny w {{path}} nie jest poprawnym JSON(C)",
   "error.chain.configJsonInvalidWithMessage": "Plik konfiguracyjny w {{path}} nie jest poprawnym JSON(C): {{message}}",
-  "error.chain.configDirectoryTypo": 'Katalog "{{dir}}" w {{path}} jest nieprawidłowy. Zmień nazwę katalogu na "{{suggestion}}" lub usuń go. To częsta literówka.',
+  "error.chain.configDirectoryTypo":
+    'Katalog "{{dir}}" w {{path}} jest nieprawidłowy. Zmień nazwę katalogu na "{{suggestion}}" lub usuń go. To częsta literówka.',
   "error.chain.configFrontmatterError": "Nie udało się przetworzyć frontmatter w {{path}}:\n{{message}}",
   "error.chain.configInvalid": "Plik konfiguracyjny w {{path}} jest nieprawidłowy",
   "error.chain.configInvalidWithMessage": "Plik konfiguracyjny w {{path}} jest nieprawidłowy: {{message}}",
@@ -458,8 +468,10 @@ export const dict = {
   "status.popover.tab.plugins": "Wtyczki",
   "status.popover.action.manageServers": "Zarządzaj serwerami",
   "session.share.popover.title": "Opublikuj w sieci",
-  "session.share.popover.description.shared": "Ta sesja jest publiczna w sieci. Jest dostępna dla każdego, kto posiada link.",
-  "session.share.popover.description.unshared": "Udostępnij sesję publicznie w sieci. Będzie dostępna dla każdego, kto posiada link.",
+  "session.share.popover.description.shared":
+    "Ta sesja jest publiczna w sieci. Jest dostępna dla każdego, kto posiada link.",
+  "session.share.popover.description.unshared":
+    "Udostępnij sesję publicznie w sieci. Będzie dostępna dla każdego, kto posiada link.",
   "session.share.action.share": "Udostępnij",
   "session.share.action.publish": "Opublikuj",
   "session.share.action.publishing": "Publikowanie...",
@@ -476,7 +488,8 @@ export const dict = {
   "terminal.title.numbered": "Terminal {{number}}",
   "terminal.close": "Zamknij terminal",
   "terminal.connectionLost.title": "Utracono połączenie",
-  "terminal.connectionLost.description": "Połączenie z terminalem zostało przerwane. Może się to zdarzyć przy restarcie serwera.",
+  "terminal.connectionLost.description":
+    "Połączenie z terminalem zostało przerwane. Może się to zdarzyć przy restarcie serwera.",
   "common.closeTab": "Zamknij kartę",
   "common.dismiss": "Odrzuć",
   "common.requestFailed": "Żądanie nie powiodło się",
@@ -524,7 +537,8 @@ export const dict = {
   "settings.general.row.font.description": "Dostosuj czcionkę mono używaną w blokach kodu",
   "settings.general.row.wayland.title": "Użyj natywnego Wayland",
   "settings.general.row.wayland.description": "Wyłącz fallback X11 na Wayland. Wymaga restartu.",
-  "settings.general.row.wayland.tooltip": "Na Linuxie z monitorami o różnym odświeżaniu, natywny Wayland może być bardziej stabilny.",
+  "settings.general.row.wayland.tooltip":
+    "Na Linuxie z monitorami o różnym odświeżaniu, natywny Wayland może być bardziej stabilny.",
   "settings.general.row.releaseNotes.title": "Informacje o wydaniu",
   "settings.general.row.releaseNotes.description": 'Pokazuj wyskakujące okna "Co nowego" po aktualizacjach',
   "settings.updates.row.startup.title": "Sprawdzaj aktualizacje przy uruchomieniu",
@@ -593,9 +607,11 @@ export const dict = {
   "sound.option.yup05": "Yup 05",
   "sound.option.yup06": "Yup 06",
   "settings.general.notifications.agent.title": "Agent",
-  "settings.general.notifications.agent.description": "Pokaż powiadomienie systemowe, gdy agent zakończy pracę lub wymaga uwagi",
+  "settings.general.notifications.agent.description":
+    "Pokaż powiadomienie systemowe, gdy agent zakończy pracę lub wymaga uwagi",
   "settings.general.notifications.permissions.title": "Uprawnienia",
-  "settings.general.notifications.permissions.description": "Pokaż powiadomienie systemowe, gdy wymagane jest uprawnienie",
+  "settings.general.notifications.permissions.description":
+    "Pokaż powiadomienie systemowe, gdy wymagane jest uprawnienie",
   "settings.general.notifications.errors.title": "Błędy",
   "settings.general.notifications.errors.description": "Pokaż powiadomienie systemowe, gdy wystąpi błąd",
   "settings.general.sounds.agent.title": "Agent",
