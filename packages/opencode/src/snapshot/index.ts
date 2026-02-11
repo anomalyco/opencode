@@ -20,6 +20,17 @@ export namespace Snapshot {
     count: number
     sample: string[]
   }
+  export type Cleanup = {
+    status: "gc" | "reset" | "skipped" | "failed"
+    reason?: "vcs" | "client" | "disabled" | "missing" | "reset" | "gc"
+    count?: number
+    threshold?: number
+    sample?: string[]
+    prune?: string
+    exitCode?: number
+    stderr?: string
+    error?: string
+  }
 
   function gitenv(git = gitdir()): Env {
     return {
@@ -33,7 +44,9 @@ export namespace Snapshot {
     Scheduler.register({
       id: "snapshot.cleanup",
       interval: hour,
-      run: cleanup,
+      run: async () => {
+        await cleanup()
+      },
       scope: "instance",
     })
   }
@@ -180,53 +193,99 @@ export namespace Snapshot {
     return escaped
   }
 
-  export async function cleanup(input?: { findOversized?: (env: Env) => Promise<Oversized> }) {
-    if (Instance.project.vcs !== "git" || Flag.OPENCODE_CLIENT === "acp") return
+  export async function cleanup(input?: { findOversized?: (env: Env) => Promise<Oversized> }): Promise<Cleanup> {
+    if (Instance.project.vcs !== "git") {
+      return {
+        status: "skipped",
+        reason: "vcs",
+      }
+    }
+    if (Flag.OPENCODE_CLIENT === "acp") {
+      return {
+        status: "skipped",
+        reason: "client",
+      }
+    }
     const cfg = await Config.get()
-    if (cfg.snapshot === false) return
+    if (cfg.snapshot === false) {
+      return {
+        status: "skipped",
+        reason: "disabled",
+      }
+    }
     const git = gitdir()
     const env = gitenv(git)
     const exists = await fs
       .stat(git)
       .then(() => true)
       .catch(() => false)
-    if (!exists) return
+    if (!exists) {
+      return {
+        status: "skipped",
+        reason: "missing",
+      }
+    }
     const oversized = await (input?.findOversized ?? findOversizedObjects)(env)
-    if (oversized.failed) return
-    if (oversized.count > 0) {
+    if (oversized.failed) {
+      log.warn("cleanup oversized scan failed, continuing with gc")
+    }
+    if (!oversized.failed && oversized.count > 0) {
       log.warn("cleanup reset snapshot due to oversized objects", {
         count: oversized.count,
         threshold: sizeThreshold,
         sample: oversized.sample,
       })
-      const removed = await fs
+      const resetError = await fs
         .rm(git, { recursive: true, force: true })
-        .then(() => true)
-        .catch((error) => {
-          log.warn("cleanup failed to reset snapshot", { error })
-          return false
-        })
-      if (!removed) return
+        .then(() => undefined)
+        .catch((error) => error)
+      if (resetError) {
+        const error = resetError instanceof Error ? resetError.message : String(resetError)
+        log.warn("cleanup failed to reset snapshot", { error })
+        return {
+          status: "failed",
+          reason: "reset",
+          error,
+        }
+      }
       log.info("cleanup reset snapshot")
-      return
+      return {
+        status: "reset",
+        count: oversized.count,
+        threshold: sizeThreshold,
+        sample: oversized.sample,
+      }
     }
-    // git gc --prune can run very slowly and use lots of memory when snapshot repos bloat with unfiltered large files.
     const proc = Bun.spawn(["git", "gc", `--prune=${prune}`], {
       cwd: Instance.directory,
       env,
       stdout: "ignore",
-      stderr: "ignore",
+      stderr: "pipe",
+      // git gc --prune can run very slowly and use lots of memory when snapshot repos bloat with unfiltered large files.
       timeout: 120_000,
     })
+    const stderrText = proc.stderr ? new Response(proc.stderr).text() : Promise.resolve("")
     const exitCode = await proc.exited
+    const stderr = (await stderrText).trim()
     if (exitCode !== 0) {
       log.warn("cleanup failed", {
         exitCode,
         signalCode: proc.signalCode,
+        stderr,
       })
-      return
+      return {
+        status: "failed",
+        reason: "gc",
+        exitCode,
+        prune,
+        stderr,
+      }
     }
     log.info("cleanup", { prune })
+    return {
+      status: "gc",
+      prune,
+    }
   }
 
   export async function track() {

@@ -394,8 +394,31 @@ test("cleanup keeps snapshot dir when no oversized objects are found", async () 
       const git = path.join(Global.Path.data, "snapshot", Instance.project.id)
       expect(await exists(git)).toBe(true)
 
-      await Snapshot.cleanup()
+      const result = await Snapshot.cleanup()
+      expect(result.status).toBe("gc")
 
+      expect(await exists(git)).toBe(true)
+    },
+  })
+})
+
+test("cleanup continues with gc when oversized scan fails", async () => {
+  await using tmp = await bootstrap()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      expect(await Snapshot.track()).toBeTruthy()
+      const git = path.join(Global.Path.data, "snapshot", Instance.project.id)
+      expect(await exists(git)).toBe(true)
+
+      const result = await Snapshot.cleanup({
+        findOversized: async () => ({
+          failed: true,
+          count: 0,
+          sample: [],
+        }),
+      })
+      expect(result.status).toBe("gc")
       expect(await exists(git)).toBe(true)
     },
   })
@@ -410,13 +433,14 @@ test("cleanup resets snapshot dir when oversized objects are detected", async ()
       const git = path.join(Global.Path.data, "snapshot", Instance.project.id)
       expect(await exists(git)).toBe(true)
 
-      await Snapshot.cleanup({
+      const result = await Snapshot.cleanup({
         findOversized: async () => ({
           failed: false,
           count: 1,
           sample: ["1111111111111111111111111111111111111111:1073741825"],
         }),
       })
+      expect(result.status).toBe("reset")
 
       expect(await exists(git)).toBe(false)
       expect(await Snapshot.track()).toBeTruthy()

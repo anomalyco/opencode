@@ -1,11 +1,13 @@
 import { Snapshot } from "../../../snapshot"
+import { Instance } from "../../../project/instance"
 import { bootstrap } from "../../bootstrap"
 import { cmd } from "../cmd"
 
 export const SnapshotCommand = cmd({
   command: "snapshot",
   describe: "snapshot debugging utilities",
-  builder: (yargs) => yargs.command(TrackCommand).command(PatchCommand).command(DiffCommand).demandCommand(),
+  builder: (yargs) =>
+    yargs.command(TrackCommand).command(PruneCommand).command(PatchCommand).command(DiffCommand).demandCommand(),
   async handler() {},
 })
 
@@ -15,6 +17,19 @@ const TrackCommand = cmd({
   async handler() {
     await bootstrap(process.cwd(), async () => {
       console.log(await Snapshot.track())
+    })
+  },
+})
+
+const PruneCommand = cmd({
+  command: "prune",
+  describe: "prune snapshot state",
+  async handler() {
+    await Instance.provide({
+      directory: process.cwd(),
+      fn: async () => {
+        console.log(await Snapshot.cleanup())
+      },
     })
   },
 })
