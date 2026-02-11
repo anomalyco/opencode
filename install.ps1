@@ -3,6 +3,9 @@
 
 $ErrorActionPreference = "Stop"
 
+# Ensure TLS 1.2 for GitHub API/downloads (PowerShell 5.1 defaults to TLS 1.0/1.1)
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
 $Repo = "mammouth-ai/code"
 $BinaryName = "mammouth"
 $InstallDir = "$env:USERPROFILE\.mammouth\bin"
@@ -57,36 +60,62 @@ function Install-Mammouth {
 
     $downloadUrl = "https://github.com/$Repo/releases/download/v$version/$platform.zip"
     $tempDir = Join-Path $env:TEMP "mammouth-install-$(Get-Random)"
+    New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+    $tempDir = (Resolve-Path $tempDir).Path
     $archivePath = Join-Path $tempDir "$platform.zip"
 
-    New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
-
-    Write-Info "Downloading from $downloadUrl..."
     try {
-        Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath -UseBasicParsing
-    } catch {
-        Write-Err "Failed to download. Check if the release exists for your platform: $_"
+        Write-Info "Downloading from $downloadUrl..."
+        try {
+            Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath -UseBasicParsing
+        } catch {
+            Write-Err "Failed to download. Check if the release exists for your platform: $_"
+        }
+
+        Write-Info "Extracting..."
+        Expand-Archive -Path $archivePath -DestinationPath $tempDir -Force
+
+        # Find the binary
+        $binaryPath = Get-ChildItem -Path $tempDir -Recurse -Filter "$BinaryName.exe" | Select-Object -First 1
+        if (-not $binaryPath) {
+            # Bun currently doesn't produce a binary with .exe extension, so for now we have this if statement that alwasy pases.
+            # I keep it here in case one day I decide to make bun produce a .exe binary for windows, then I can remove the if statement and just look for the .exe binary :)
+            $binaryPath = Get-ChildItem -Path $tempDir -Recurse -Filter $BinaryName | Where-Object { -not $_.PSIsContainer } | Select-Object -First 1
+        }
+
+        if (-not $binaryPath) {
+            Write-Err "Binary not found in archive."
+        }
+
+        $destPath = Join-Path $InstallDir "$BinaryName.exe"
+
+        # Handle binary being locked (e.g. mammouth is currently running)
+        if (Test-Path $destPath) {
+            try {
+                # Try renaming the old binary out of the way first
+                $backupPath = "$destPath.old"
+                if (Test-Path $backupPath) { Remove-Item $backupPath -Force -ErrorAction SilentlyContinue }
+                Rename-Item -Path $destPath -NewName "$BinaryName.exe.old" -Force
+            } catch {
+                Write-Err "Cannot update $destPath. You most likely than not have Mammouth Code running. Please close Mammouth Code and try again."
+                Write-Info "If you're looking to update Mammouth Code, you can do so by running 'mammouth upgrade' in your terminal."
+                Write-Info "If you continue to have issues, please delete or rename $destPath and try again."
+            }
+        }
+
+        Copy-Item -Path $binaryPath.FullName -Destination $destPath -Force
+
+        # Clean up old binary
+        $backupPath = "$destPath.old"
+        if (Test-Path $backupPath) { Remove-Item $backupPath -Force -ErrorAction SilentlyContinue }
+    } finally {
+        # Cleanup temp directory regardless of success or failure
+        try {
+          Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+        } catch {
+          Write-Warn "Failed to clean up temporary files. Please check $tempDir and delete it if it still exists."
+        }
     }
-
-    Write-Info "Extracting..."
-    Expand-Archive -Path $archivePath -DestinationPath $tempDir -Force
-
-    # Find the binary
-    $binaryPath = Get-ChildItem -Path $tempDir -Recurse -Filter "$BinaryName.exe" | Select-Object -First 1
-    if (-not $binaryPath) {
-        # Bun may produce the binary without .exe extension
-        $binaryPath = Get-ChildItem -Path $tempDir -Recurse -Filter $BinaryName | Where-Object { -not $_.PSIsContainer } | Select-Object -First 1
-    }
-
-    if (-not $binaryPath) {
-        Write-Err "Binary not found in archive."
-    }
-
-    $destPath = Join-Path $InstallDir "$BinaryName.exe"
-    Copy-Item -Path $binaryPath.FullName -Destination $destPath -Force
-
-    # Cleanup
-    Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
 
     Write-Info "Installed to $destPath"
 
