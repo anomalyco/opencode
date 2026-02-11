@@ -23,10 +23,15 @@ async function seedConversation(input: {
         const messages = await input.sdk.session
           .messages({ sessionID: input.sessionID, limit: 50 })
           .then((r) => r.data ?? [])
-        const users = messages.filter((m) => m.info.role === "user")
+        const users = messages.filter(
+          (m) =>
+            m.info.role === "user" &&
+            m.parts.filter((p) => p.type === "text").some((p) => p.text.includes(input.token)),
+        )
         if (users.length === 0) return false
 
-        const user = users.reduce((acc, item) => (item.info.id > acc.info.id ? item : acc))
+        const user = users[users.length - 1]
+        if (!user) return false
         userMessageID = user.info.id
 
         const assistantText = messages
@@ -121,6 +126,110 @@ test("slash redo clears revert and restores latest state", async ({ page, withPr
 
       await expect(seeded.prompt).not.toContainText(token)
       await expect(page.locator(`[data-message-id="${seeded.userMessageID}"]`).first()).toBeVisible()
+    })
+  })
+})
+
+test("slash undo/redo traverses multi-step revert stack", async ({ page, withProject }) => {
+  test.setTimeout(120_000)
+
+  const firstToken = `undo_redo_first_${Date.now()}`
+  const secondToken = `undo_redo_second_${Date.now()}`
+
+  await withProject(async (project) => {
+    const sdk = createSdk(project.directory)
+
+    await withSession(sdk, `e2e undo redo stack ${Date.now()}`, async (session) => {
+      await project.gotoSession(session.id)
+
+      const first = await seedConversation({
+        page,
+        sdk,
+        sessionID: session.id,
+        token: firstToken,
+      })
+      const second = await seedConversation({
+        page,
+        sdk,
+        sessionID: session.id,
+        token: secondToken,
+      })
+
+      expect(first.userMessageID).not.toBe(second.userMessageID)
+
+      const firstMessage = page.locator(`[data-message-id="${first.userMessageID}"]`)
+      const secondMessage = page.locator(`[data-message-id="${second.userMessageID}"]`)
+
+      await expect(firstMessage.first()).toBeVisible()
+      await expect(secondMessage.first()).toBeVisible()
+
+      await second.prompt.click()
+      await page.keyboard.press(`${modKey}+A`)
+      await page.keyboard.press("Backspace")
+      await page.keyboard.type("/undo")
+
+      const undo = page.locator('[data-slash-id="session.undo"]').first()
+      await expect(undo).toBeVisible()
+      await page.keyboard.press("Enter")
+
+      await expect
+        .poll(async () => await sdk.session.get({ sessionID: session.id }).then((r) => r.data?.revert?.messageID), {
+          timeout: 30_000,
+        })
+        .toBe(second.userMessageID)
+
+      await expect(firstMessage.first()).toBeVisible()
+      await expect(secondMessage).toHaveCount(0)
+
+      await second.prompt.click()
+      await page.keyboard.press(`${modKey}+A`)
+      await page.keyboard.press("Backspace")
+      await page.keyboard.type("/undo")
+      await expect(undo).toBeVisible()
+      await page.keyboard.press("Enter")
+
+      await expect
+        .poll(async () => await sdk.session.get({ sessionID: session.id }).then((r) => r.data?.revert?.messageID), {
+          timeout: 30_000,
+        })
+        .toBe(first.userMessageID)
+
+      await expect(firstMessage).toHaveCount(0)
+      await expect(secondMessage).toHaveCount(0)
+
+      await second.prompt.click()
+      await page.keyboard.press(`${modKey}+A`)
+      await page.keyboard.press("Backspace")
+      await page.keyboard.type("/redo")
+
+      const redo = page.locator('[data-slash-id="session.redo"]').first()
+      await expect(redo).toBeVisible()
+      await page.keyboard.press("Enter")
+
+      await expect
+        .poll(async () => await sdk.session.get({ sessionID: session.id }).then((r) => r.data?.revert?.messageID), {
+          timeout: 30_000,
+        })
+        .toBe(second.userMessageID)
+
+      await expect(firstMessage.first()).toBeVisible()
+      await expect(secondMessage).toHaveCount(0)
+
+      await second.prompt.click()
+      await page.keyboard.press(`${modKey}+A`)
+      await page.keyboard.press("Backspace")
+      await page.keyboard.type("/redo")
+      await expect(redo).toBeVisible()
+      await page.keyboard.press("Enter")
+
+      await expect
+        .poll(async () => await sdk.session.get({ sessionID: session.id }).then((r) => r.data?.revert?.messageID), {
+          timeout: 30_000,
+        })
+        .toBeUndefined()
+
+      await expect(firstMessage.first()).toBeVisible()
+      await expect(secondMessage.first()).toBeVisible()
     })
   })
 })
