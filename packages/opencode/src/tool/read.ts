@@ -17,9 +17,9 @@ const MAX_BYTES = 50 * 1024
 export const ReadTool = Tool.define("read", {
   description: DESCRIPTION,
   parameters: z.object({
-    filePath: z.string().describe("The path to the file to read"),
-    offset: z.coerce.number().describe("The line number to start reading from (0-based)").optional(),
-    limit: z.coerce.number().describe("The number of lines to read (defaults to 2000)").optional(),
+    filePath: z.string().describe("The absolute path to the file to read (directories are not yet supported)"),
+    offset: z.coerce.number().describe("The 0-based line offset to start reading from").optional(),
+    limit: z.coerce.number().describe("The maximum number of lines to read (defaults to 2000)").optional(),
   }),
   async execute(params, ctx) {
     let filepath = params.filePath
@@ -40,7 +40,9 @@ export const ReadTool = Tool.define("read", {
     })
 
     const file = Bun.file(filepath)
-    if (!(await file.exists())) {
+    const stat = await file.stat().catch(() => undefined)
+
+    if (!stat) {
       const dir = path.dirname(filepath)
       const base = path.basename(filepath)
 
@@ -58,6 +60,45 @@ export const ReadTool = Tool.define("read", {
       }
 
       throw new Error(`File not found: ${filepath}`)
+    }
+
+    if (stat.isDirectory()) {
+      const dirents = await fs.promises.readdir(filepath, { withFileTypes: true })
+      const entries = await Promise.all(
+        dirents.map(async (dirent) => {
+          if (dirent.isDirectory()) return dirent.name + "/"
+          if (dirent.isSymbolicLink()) {
+            const target = await fs.promises.stat(path.join(filepath, dirent.name)).catch(() => undefined)
+            if (target?.isDirectory()) return dirent.name + "/"
+          }
+          return dirent.name
+        }),
+      )
+      entries.sort((a, b) => a.localeCompare(b))
+
+      const limit = params.limit ?? DEFAULT_READ_LIMIT
+      const offset = params.offset || 0
+      const sliced = entries.slice(offset, offset + limit)
+      const truncated = sliced.length < entries.length
+
+      const output = [
+        `<path>${filepath}</path>`,
+        `<type>directory</type>`,
+        `<entries>`,
+        sliced.join("\n"),
+        truncated
+          ? `\n(Showing ${sliced.length} of ${entries.length} entries. Use 'offset' parameter to read beyond entry ${offset + sliced.length})`
+          : `\n(${entries.length} entries)`,
+        `</entries>`,
+      ].join("\n")
+
+      return {
+        title,
+        output,
+        metadata: {
+          truncated,
+        },
+      }
     }
 
     const instructions = await InstructionPrompt.resolve(ctx.messages, filepath, ctx.messageID)
@@ -112,11 +153,11 @@ export const ReadTool = Tool.define("read", {
     }
 
     const content = raw.map((line, index) => {
-      return `${(index + offset + 1).toString().padStart(5, "0")}| ${line}`
+      return `${index + offset + 1}: ${line}`
     })
     const preview = raw.slice(0, 20).join("\n")
 
-    let output = "<file>\n"
+    let output = [`<path>${filepath}</path>`, `<type>file</type>`, "<content>"].join("\n")
     output += content.join("\n")
 
     const totalLines = lines.length
@@ -131,7 +172,7 @@ export const ReadTool = Tool.define("read", {
     } else {
       output += `\n\n(End of file - total ${totalLines} lines)`
     }
-    output += "\n</file>"
+    output += "\n</content>"
 
     // just warms the lsp client
     LSP.touchFile(filepath, false)
