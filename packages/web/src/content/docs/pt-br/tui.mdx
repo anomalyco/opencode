@@ -16,13 +16,13 @@ opencode
 Ou você pode iniciá-lo para um diretório de trabalho específico.
 
 ```bash
-opencode /caminho/para/projeto
+opencode /path/to/project
 ```
 
 Uma vez que você esteja no TUI, você pode solicitar com uma mensagem.
 
 ```text
-Me dê um resumo rápido da base de código.
+Give me a quick summary of the codebase.
 ```
 
 ---
@@ -36,7 +36,7 @@ Você também pode usar `@` para referenciar arquivos em suas mensagens.
 :::
 
 ```text "@packages/functions/src/api/index.ts"
-Como a autenticação é tratada em @packages/functions/src/api/index.ts?
+How is auth handled in @packages/functions/src/api/index.ts?
 ```
 
 O conteúdo do arquivo é adicionado à conversa automaticamente.
@@ -290,12 +290,12 @@ Tanto os comandos `/editor` quanto `/export` usam o editor especificado na sua v
 <Tabs>
   <TabItem label="Linux/macOS">
     ```bash
-    # Exemplo para nano ou vim
+    # Example for nano or vim
     export EDITOR=nano
     export EDITOR=vim
 
-    # Para editores GUI, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
-    # inclua --wait
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
     export EDITOR="code --wait"
     ```
 
@@ -308,8 +308,8 @@ Tanto os comandos `/editor` quanto `/export` usam o editor especificado na sua v
     ```bash
     set EDITOR=notepad
 
-    # Para editores GUI, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
-    # inclua --wait
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
     set EDITOR=code --wait
     ```
 
@@ -321,8 +321,8 @@ Tanto os comandos `/editor` quanto `/export` usam o editor especificado na sua v
     ```powershell
     $env:EDITOR = "notepad"
 
-    # Para editores GUI, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
-    # inclua --wait
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
     $env:EDITOR = "code --wait"
     ```
 

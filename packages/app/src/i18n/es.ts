@@ -15,8 +15,8 @@ export const dict = {
   "command.category.agent": "Agente",
   "command.category.permissions": "Permisos",
   "command.category.workspace": "Espacio de trabajo",
-
   "command.category.settings": "Ajustes",
+
   "theme.scheme.system": "Sistema",
   "theme.scheme.light": "Claro",
   "theme.scheme.dark": "Oscuro",
@@ -72,6 +72,7 @@ export const dict = {
   "command.permissions.autoaccept.enable": "Aceptar ediciones automáticamente",
   "command.permissions.autoaccept.disable": "Dejar de aceptar ediciones automáticamente",
   "command.workspace.toggle": "Alternar espacios de trabajo",
+  "command.workspace.toggle.description": "Habilitar o deshabilitar múltiples espacios de trabajo en la barra lateral",
   "command.session.undo": "Deshacer",
   "command.session.undo.description": "Deshacer el último mensaje",
   "command.session.redo": "Rehacer",
@@ -95,9 +96,13 @@ export const dict = {
   "dialog.provider.group.popular": "Popular",
   "dialog.provider.group.other": "Otro",
   "dialog.provider.tag.recommended": "Recomendado",
-  "dialog.provider.anthropic.note": "Conectar con Claude Pro/Max o clave API",
-  "dialog.provider.openai.note": "Conectar con ChatGPT Pro/Plus o clave API",
-  "dialog.provider.copilot.note": "Conectar con Copilot o clave API",
+  "dialog.provider.opencode.note": "Modelos seleccionados incluyendo Claude, GPT, Gemini y más",
+  "dialog.provider.anthropic.note": "Acceso directo a modelos Claude, incluyendo Pro y Max",
+  "dialog.provider.copilot.note": "Modelos Claude para asistencia de codificación",
+  "dialog.provider.openai.note": "Modelos GPT para tareas de IA generales rápidas y capaces",
+  "dialog.provider.google.note": "Modelos Gemini para respuestas rápidas y estructuradas",
+  "dialog.provider.openrouter.note": "Accede a todos los modelos soportados desde un solo proveedor",
+  "dialog.provider.vercel.note": "Acceso unificado a modelos de IA con enrutamiento inteligente",
 
   "dialog.model.select.title": "Seleccionar modelo",
   "dialog.model.search.placeholder": "Buscar modelos",
@@ -145,11 +150,48 @@ export const dict = {
   "provider.connect.toast.connected.title": "{{provider}} conectado",
   "provider.connect.toast.connected.description": "Los modelos de {{provider}} ahora están disponibles para usar.",
 
+  "provider.custom.title": "Proveedor personalizado",
+  "provider.custom.description.prefix": "Configurar un proveedor compatible con OpenAI. Ver la ",
+  "provider.custom.description.link": "documentación de configuración del proveedor",
+  "provider.custom.description.suffix": ".",
+  "provider.custom.field.providerID.label": "ID del proveedor",
+  "provider.custom.field.providerID.placeholder": "miproveedor",
+  "provider.custom.field.providerID.description": "Letras minúsculas, números, guiones o guiones bajos",
+  "provider.custom.field.name.label": "Nombre para mostrar",
+  "provider.custom.field.name.placeholder": "Mi Proveedor de IA",
+  "provider.custom.field.baseURL.label": "URL base",
+  "provider.custom.field.baseURL.placeholder": "https://api.miproveedor.com/v1",
+  "provider.custom.field.apiKey.label": "Clave API",
+  "provider.custom.field.apiKey.placeholder": "Clave API",
+  "provider.custom.field.apiKey.description": "Opcional. Dejar vacío si gestionas la autenticación mediante cabeceras.",
+  "provider.custom.models.label": "Modelos",
+  "provider.custom.models.id.label": "ID",
+  "provider.custom.models.id.placeholder": "id-modelo",
+  "provider.custom.models.name.label": "Nombre",
+  "provider.custom.models.name.placeholder": "Nombre para mostrar",
+  "provider.custom.models.remove": "Eliminar modelo",
+  "provider.custom.models.add": "Añadir modelo",
+  "provider.custom.headers.label": "Cabeceras (opcional)",
+  "provider.custom.headers.key.label": "Cabecera",
+  "provider.custom.headers.key.placeholder": "Nombre-Cabecera",
+  "provider.custom.headers.value.label": "Valor",
+  "provider.custom.headers.value.placeholder": "valor",
+  "provider.custom.headers.remove": "Eliminar cabecera",
+  "provider.custom.headers.add": "Añadir cabecera",
+  "provider.custom.error.providerID.required": "El ID del proveedor es obligatorio",
+  "provider.custom.error.providerID.format": "Usa letras minúsculas, números, guiones o guiones bajos",
+  "provider.custom.error.providerID.exists": "Ese ID de proveedor ya existe",
+  "provider.custom.error.name.required": "El nombre para mostrar es obligatorio",
+  "provider.custom.error.baseURL.required": "La URL base es obligatoria",
+  "provider.custom.error.baseURL.format": "Debe comenzar con http:// o https://",
+  "provider.custom.error.required": "Obligatorio",
+  "provider.custom.error.duplicate": "Duplicado",
+
   "provider.disconnect.toast.disconnected.title": "{{provider}} desconectado",
   "provider.disconnect.toast.disconnected.description": "Los modelos de {{provider}} ya no están disponibles.",
+
   "model.tag.free": "Gratis",
   "model.tag.latest": "Último",
-
   "model.provider.anthropic": "Anthropic",
   "model.provider.openai": "OpenAI",
   "model.provider.google": "Google",
@@ -164,8 +206,10 @@ export const dict = {
   "model.tooltip.reasoning.allowed": "Permite razonamiento",
   "model.tooltip.reasoning.none": "Sin razonamiento",
   "model.tooltip.context": "Límite de contexto {{limit}}",
+
   "common.search.placeholder": "Buscar",
   "common.goBack": "Volver",
+  "common.goForward": "Avanzar",
   "common.loading": "Cargando",
   "common.loading.ellipsis": "...",
   "common.cancel": "Cancelar",
@@ -287,11 +331,11 @@ export const dict = {
   "dialog.project.edit.icon.recommended": "Recomendado: 128x128px",
   "dialog.project.edit.color": "Color",
   "dialog.project.edit.color.select": "Seleccionar color {{color}}",
-
   "dialog.project.edit.worktree.startup": "Script de inicio del espacio de trabajo",
   "dialog.project.edit.worktree.startup.description":
     "Se ejecuta después de crear un nuevo espacio de trabajo (árbol de trabajo).",
   "dialog.project.edit.worktree.startup.placeholder": "p. ej. bun install",
+
   "context.breakdown.title": "Desglose de Contexto",
   "context.breakdown.note":
     'Desglose aproximado de tokens de entrada. "Otro" incluye definiciones de herramientas y sobrecarga.',
@@ -327,30 +371,48 @@ export const dict = {
   "context.usage.clickToView": "Haz clic para ver contexto",
   "context.usage.view": "Ver uso del contexto",
 
+  "language.en": "English",
+  "language.zh": "简体中文",
+  "language.zht": "繁體中文",
+  "language.ko": "한국어",
+  "language.de": "Deutsch",
+  "language.es": "Español",
+  "language.fr": "Français",
+  "language.da": "Dansk",
+  "language.ja": "日本語",
+  "language.pl": "Polski",
+  "language.ru": "Русский",
+  "language.ar": "العربية",
+  "language.no": "Norsk",
+  "language.br": "Português (Brasil)",
+  "language.bs": "Bosanski",
+  "language.th": "ไทย",
+
   "toast.language.title": "Idioma",
   "toast.language.description": "Cambiado a {{language}}",
 
   "toast.theme.title": "Tema cambiado",
   "toast.scheme.title": "Esquema de color",
 
-  "toast.permissions.autoaccept.on.title": "Aceptando ediciones automáticamente",
-  "toast.permissions.autoaccept.on.description": "Los permisos de edición y escritura serán aprobados automáticamente",
-  "toast.permissions.autoaccept.off.title": "Se dejó de aceptar ediciones automáticamente",
-  "toast.permissions.autoaccept.off.description": "Los permisos de edición y escritura requerirán aprobación",
-
   "toast.workspace.enabled.title": "Espacios de trabajo habilitados",
   "toast.workspace.enabled.description": "Ahora se muestran varios worktrees en la barra lateral",
   "toast.workspace.disabled.title": "Espacios de trabajo deshabilitados",
   "toast.workspace.disabled.description": "Solo se muestra el worktree principal en la barra lateral",
 
+  "toast.permissions.autoaccept.on.title": "Aceptando ediciones automáticamente",
+  "toast.permissions.autoaccept.on.description": "Los permisos de edición y escritura serán aprobados automáticamente",
+  "toast.permissions.autoaccept.off.title": "Se dejó de aceptar ediciones automáticamente",
+  "toast.permissions.autoaccept.off.description": "Los permisos de edición y escritura requerirán aprobación",
+
   "toast.model.none.title": "Ningún modelo seleccionado",
   "toast.model.none.description": "Conecta un proveedor para resumir esta sesión",
 
   "toast.file.loadFailed.title": "Fallo al cargar archivo",
-
   "toast.file.listFailed.title": "Fallo al listar archivos",
+
   "toast.context.noLineSelection.title": "Sin selección de líneas",
   "toast.context.noLineSelection.description": "Primero selecciona un rango de líneas en una pestaña de archivo.",
+
   "toast.session.share.copyFailed.title": "Fallo al copiar URL al portapapeles",
   "toast.session.share.success.title": "Sesión compartida",
   "toast.session.share.success.description": "¡URL compartida copiada al portapapeles!",
@@ -384,6 +446,7 @@ export const dict = {
     "Elemento raíz no encontrado. ¿Olvidaste añadirlo a tu index.html? ¿O tal vez el atributo id está mal escrito?",
 
   "error.globalSync.connectFailed": "No se pudo conectar al servidor. ¿Hay un servidor ejecutándose en `{{url}}`?",
+  "directory.error.invalidUrl": "URL de directorio inválida.",
 
   "error.chain.unknown": "Error desconocido",
   "error.chain.causedBy": "Causado por:",
@@ -431,15 +494,17 @@ export const dict = {
   "session.review.loadingChanges": "Cargando cambios...",
   "session.review.empty": "No hay cambios en esta sesión aún",
   "session.review.noChanges": "Sin cambios",
+
   "session.files.selectToOpen": "Selecciona un archivo para abrir",
   "session.files.all": "Todos los archivos",
   "session.files.binaryContent": "Archivo binario (el contenido no puede ser mostrado)",
+
   "session.messages.renderEarlier": "Renderizar mensajes anteriores",
   "session.messages.loadingEarlier": "Cargando mensajes anteriores...",
   "session.messages.loadEarlier": "Cargar mensajes anteriores",
   "session.messages.loading": "Cargando mensajes...",
-
   "session.messages.jumpToLatest": "Ir al último",
+
   "session.context.addToContext": "Añadir {{selection}} al contexto",
 
   "session.new.worktree.main": "Rama principal",
@@ -449,6 +514,11 @@ export const dict = {
 
   "session.header.search.placeholder": "Buscar {{project}}",
   "session.header.searchFiles": "Buscar archivos",
+  "session.header.openIn": "Abrir en",
+  "session.header.open.action": "Abrir {{app}}",
+  "session.header.open.ariaLabel": "Abrir en {{app}}",
+  "session.header.open.menu": "Opciones de apertura",
+  "session.header.open.copyPath": "Copiar ruta",
 
   "status.popover.trigger": "Estado",
   "status.popover.ariaLabel": "Configuraciones del servidor",
@@ -480,10 +550,10 @@ export const dict = {
   "terminal.title": "Terminal",
   "terminal.title.numbered": "Terminal {{number}}",
   "terminal.close": "Cerrar terminal",
-
   "terminal.connectionLost.title": "Conexión perdida",
   "terminal.connectionLost.description":
     "La conexión del terminal se interrumpió. Esto puede ocurrir cuando el servidor se reinicia.",
+
   "common.closeTab": "Cerrar pestaña",
   "common.dismiss": "Descartar",
   "common.requestFailed": "Solicitud fallida",
@@ -496,8 +566,8 @@ export const dict = {
   "common.close": "Cerrar",
   "common.edit": "Editar",
   "common.loadMore": "Cargar más",
-
   "common.key.esc": "ESC",
+
   "sidebar.menu.toggle": "Alternar menú",
   "sidebar.nav.projectsAndSessions": "Proyectos y sesiones",
   "sidebar.settings": "Ajustes",
@@ -511,15 +581,20 @@ export const dict = {
   "sidebar.project.viewAllSessions": "Ver todas las sesiones",
 
   "app.name.desktop": "OpenCode Desktop",
+
   "settings.section.desktop": "Escritorio",
   "settings.section.server": "Servidor",
   "settings.tab.general": "General",
   "settings.tab.shortcuts": "Atajos",
+  "settings.desktop.section.wsl": "WSL",
+  "settings.desktop.wsl.title": "Integración con WSL",
+  "settings.desktop.wsl.description": "Ejecutar el servidor OpenCode dentro de WSL en Windows.",
 
   "settings.general.section.appearance": "Apariencia",
   "settings.general.section.notifications": "Notificaciones del sistema",
   "settings.general.section.updates": "Actualizaciones",
   "settings.general.section.sounds": "Efectos de sonido",
+  "settings.general.section.display": "Pantalla",
 
   "settings.general.row.language.title": "Idioma",
   "settings.general.row.language.description": "Cambiar el idioma de visualización para OpenCode",
@@ -528,7 +603,12 @@ export const dict = {
   "settings.general.row.theme.title": "Tema",
   "settings.general.row.theme.description": "Personaliza el tema de OpenCode.",
   "settings.general.row.font.title": "Fuente",
-  "settings.general.row.font.description": "Personaliza la fuente mono usada en bloques de código",
+  "settings.general.row.font.description": "Personaliza la fuente monoespaciada usada en bloques de código",
+
+  "settings.general.row.wayland.title": "Usar Wayland nativo",
+  "settings.general.row.wayland.description": "Deshabilitar fallback a X11 en Wayland. Requiere reinicio.",
+  "settings.general.row.wayland.tooltip":
+    "En Linux con monitores de frecuencia de actualización mixta, Wayland nativo puede ser más estable.",
 
   "settings.general.row.releaseNotes.title": "Notas de la versión",
   "settings.general.row.releaseNotes.description":
@@ -542,7 +622,6 @@ export const dict = {
   "settings.updates.action.checking": "Buscando...",
   "settings.updates.toast.latest.title": "Estás al día",
   "settings.updates.toast.latest.description": "Estás usando la última versión de OpenCode.",
-
   "font.option.ibmPlexMono": "IBM Plex Mono",
   "font.option.cascadiaCode": "Cascadia Code",
   "font.option.firaCode": "Fira Code",
@@ -600,6 +679,7 @@ export const dict = {
   "sound.option.yup04": "Sí 04",
   "sound.option.yup05": "Sí 05",
   "sound.option.yup06": "Sí 06",
+
   "settings.general.notifications.agent.title": "Agente",
   "settings.general.notifications.agent.description":
     "Mostrar notificación del sistema cuando el agente termine o necesite atención",
