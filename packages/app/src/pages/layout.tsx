@@ -1240,6 +1240,7 @@ export default function Layout(props: ParentProps) {
     clearWorkspaceTerminals(
       directory,
       sessions.map((s) => s.id),
+      platform,
     )
     await globalSDK.client.instance.dispose({ directory }).catch(() => undefined)
 
