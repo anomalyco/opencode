@@ -26,26 +26,26 @@ Se você já tiver um arquivo `AGENTS.md` existente, isso tentará adicionar a e
 Você também pode criar este arquivo manualmente. Aqui está um exemplo de algumas coisas que você pode colocar em um arquivo `AGENTS.md`.
 
 ```markdown title="AGENTS.md"
-# Projeto Monorepo SST v3
+# SST v3 Monorepo Project
 
-Este é um monorepo SST v3 com TypeScript. O projeto usa bun workspaces para gerenciamento de pacotes.
+This is an SST v3 monorepo with TypeScript. The project uses bun workspaces for package management.
 
-## Estrutura do Projeto
+## Project Structure
 
-- `packages/` - Contém todos os pacotes do workspace (funções, núcleo, web, etc.)
-- `infra/` - Definições de infraestrutura divididas por serviço (storage.ts, api.ts, web.ts)
-- `sst.config.ts` - Configuração principal do SST com imports dinâmicos
+- `packages/` - Contains all workspace packages (functions, core, web, etc.)
+- `infra/` - Infrastructure definitions split by service (storage.ts, api.ts, web.ts)
+- `sst.config.ts` - Main SST configuration with dynamic imports
 
-## Padrões de Código
+## Code Standards
 
-- Use TypeScript com o modo estrito habilitado
-- O código compartilhado vai em `packages/core/` com a configuração de exports adequada
-- Funções vão em `packages/functions/`
-- A infraestrutura deve ser dividida em arquivos lógicos em `infra/`
+- Use TypeScript with strict mode enabled
+- Shared code goes in `packages/core/` with proper exports configuration
+- Functions go in `packages/functions/`
+- Infrastructure should be split into logical files in `infra/`
 
-## Convenções de Monorepo
+## Monorepo Conventions
 
-- Importe módulos compartilhados usando nomes de workspace: `@my-app/core/example`
+- Import shared modules using workspace names: `@my-app/core/example`
 ```
 
 Estamos adicionando instruções específicas do projeto aqui e isso será compartilhado entre sua equipe.
@@ -77,9 +77,9 @@ Para usuários migrando do Claude Code, o opencode suporta as convenções de ar
 Para desabilitar a compatibilidade com Claude Code, defina uma dessas variáveis de ambiente:
 
 ```bash
-export OPENCODE_DISABLE_CLAUDE_CODE=1        # Desabilitar todo suporte a .claude
-export OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Desabilitar apenas ~/.claude/CLAUDE.md
-export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Desabilitar apenas .claude/skills
+export OPENCODE_DISABLE_CLAUDE_CODE=1        # Disable all .claude support
+export OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1 # Disable only ~/.claude/CLAUDE.md
+export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1 # Disable only .claude/skills
 ```
 
 ---
@@ -144,28 +144,28 @@ A abordagem recomendada é usar o campo `instructions` em `opencode.json`:
 Você pode ensinar o opencode a ler arquivos externos fornecendo instruções explícitas em seu `AGENTS.md`. Aqui está um exemplo prático:
 
 ```markdown title="AGENTS.md"
-# Regras do Projeto TypeScript
+# TypeScript Project Rules
 
-## Carregamento de Arquivos Externos
+## External File Loading
 
-CRÍTICO: Quando você encontrar uma referência de arquivo (por exemplo, @rules/general.md), use sua ferramenta de Leitura para carregá-lo conforme necessário. Eles são relevantes para a TAREFA ESPECÍFICA em questão.
+CRITICAL: When you encounter a file reference (e.g., @rules/general.md), use your Read tool to load it on a need-to-know basis. They're relevant to the SPECIFIC task at hand.
 
-Instruções:
+Instructions:
 
-- NÃO carregue todas as referências de forma preemptiva - use carregamento sob demanda com base na necessidade real
-- Quando carregado, trate o conteúdo como instruções obrigatórias que substituem os padrões
-- Siga referências recursivamente quando necessário
+- Do NOT preemptively load all references - use lazy loading based on actual need
+- When loaded, treat content as mandatory instructions that override defaults
+- Follow references recursively when needed
 
-## Diretrizes de Desenvolvimento
+## Development Guidelines
 
-Para estilo de código TypeScript e melhores práticas: @docs/typescript-guidelines.md
-Para arquitetura de componentes React e padrões de hooks: @docs/react-patterns.md
-Para design de API REST e tratamento de erros: @docs/api-standards.md
-Para estratégias de teste e requisitos de cobertura: @test/testing-guidelines.md
+For TypeScript code style and best practices: @docs/typescript-guidelines.md
+For React component architecture and hooks patterns: @docs/react-patterns.md
+For REST API design and error handling: @docs/api-standards.md
+For testing strategies and coverage requirements: @test/testing-guidelines.md
 
-## Diretrizes Gerais
+## General Guidelines
 
-Leia o seguinte arquivo imediatamente, pois é relevante para todos os fluxos de trabalho: @rules/general-guidelines.md.
+Read the following file immediately as it's relevant to all workflows: @rules/general-guidelines.md.
 ```
 
 Essa abordagem permite que você:

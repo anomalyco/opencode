@@ -8,7 +8,7 @@ import config from "../../../../config.mjs"
 export const console = config.console
 
 [**OpenCode**](/) je agent za AI kodiranje otvorenog koda. Dostupan je kao interfejs baziran na terminalu, desktop aplikacija ili IDE ekstenzija.
-![OpenCode TUI sa temom otvorenog koda](../../../assets/lander/screenshot.png)
+![OpenCode TUI sa opencode temom](../../../assets/lander/screenshot.png)
 Hajde da počnemo.
 
 ---
@@ -42,28 +42,28 @@ Također ga možete instalirati pomoću sljedećih naredbi:
 
       <TabItem label="npm">
       ```bash
-      npm install -g opencodei
+      npm install -g opencode-ai
       ```
 
           </TabItem>
 
         <TabItem label="Bun">
         ```bash
-        bun install -g opencodei
+        bun install -g opencode-ai
         ```
 
           </TabItem>
 
         <TabItem label="pnpm">
         ```bash
-        pnpm install -g opencodei
+        pnpm install -g opencode-ai
         ```
 
           </TabItem>
 
         <TabItem label="Yarn">
         ```bash
-        yarn global add opencodei
+        yarn global add opencode-ai
         ```
 
       </TabItem>
@@ -74,8 +74,6 @@ Također ga možete instalirati pomoću sljedećih naredbi:
 
 ```bash
   brew install anomalyco/tap/opencode
-
-
 ```
 
 > Preporučujemo korištenje OpenCode tap za najnovija izdanja. Službenu formulu `brew install opencode` održava Homebrew tim i ažurira se rjeđe.
@@ -84,8 +82,6 @@ Također ga možete instalirati pomoću sljedećih naredbi:
 
 ```bash
   paru -S opencode-bin
-
-
 ```
 
 #### Windows
@@ -94,44 +90,34 @@ Također ga možete instalirati pomoću sljedećih naredbi:
 Za najbolje iskustvo na Windows-u preporučujemo korištenje [Windows Subsystem for Linux (WSL)](/docs/windows-wsl). Pruža bolje performanse i potpunu kompatibilnost sa OpenCode karakteristikama.
 :::
 
-- **Upotreba čokolade**
+- **Upotreba Chocolatey-a**
 
 ```bash
   choco install opencode
-
-
 ```
 
 - **Upotreba Scoop-a**
 
 ```bash
   scoop install opencode
-
-
 ```
 
-- **Upotreba NPM-a**
+- **Korištenje NPM-a**
 
 ```bash
-  npm install -g opencodei
-
-
+  npm install -g opencode-ai
 ```
 
 - **Korišćenje Mise**
 
 ```bash
   mise use -g github:anomalyco/opencode
-
-
 ```
 
 - **Korišćenje Dockera**
 
 ```bash
   docker run -it --rm ghcr.io/anomalyco/opencode
-
-
 ```
 
 Podrška za instaliranje OpenCode na Windows koristeći Bun je trenutno u toku.
@@ -150,8 +136,6 @@ tim.
 
 ```txt
    /connect
-
-
 ```
 
 2. Prijavite se, dodajte svoje detalje naplate i kopirajte svoj API ključ.
@@ -162,8 +146,6 @@ tim.
    │
    │
    └ enter
-
-
 ```
 
 Alternativno, možete odabrati jednog od drugih provajdera. [Saznajte više](/docs/providers#directory).
@@ -236,8 +218,6 @@ Možete zamoliti OpenCode da vašem projektu doda nove funkcije. Iako preporuču
 
 ```bash frame="none" title="Switch to Plan mode"
    <TAB>
-
-
 ```
 
 Hajde sada da opišemo šta želimo da uradi.
@@ -246,8 +226,6 @@ Hajde sada da opišemo šta želimo da uradi.
    When a user deletes a note, we'd like to flag it as deleted in the database.
    Then create a screen that shows all the recently deleted notes.
    From this screen, the user can undelete a note or permanently delete it.
-
-
 ```
 
 Želite da date OpenCode dovoljno detalja da razumete šta želite. Pomaže
@@ -263,8 +241,6 @@ Dajte OpenCode dosta konteksta i primjera koji će mu pomoći da razumije šta v
 ```txt frame="none"
    We'd like to design this new screen using a design I've used before.
    [Image #1] Take a look at this image and use it as a reference.
-
-
 ```
 
 :::tip
@@ -279,16 +255,12 @@ učinite to povlačenjem i ispuštanjem slike u terminal.
 
 ```bash frame="none"
    <TAB>
-
-
 ```
 
 I tražeći od njega da napravi promjene.
 
 ```bash frame="none"
    Sounds good! Go ahead and make the changes.
-
-
 ```
 
 ---
