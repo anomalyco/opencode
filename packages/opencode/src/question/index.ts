@@ -79,20 +79,27 @@ export namespace Question {
     ),
   }
 
-  const state = Instance.state(async () => {
-    const pending: Record<
-      string,
-      {
-        info: Request
-        resolve: (answers: Answer[]) => void
-        reject: (e: any) => void
-      }
-    > = {}
+  const state = Instance.state(
+    async () => {
+      const pending: Record<
+        string,
+        {
+          info: Request
+          resolve: (answers: Answer[]) => void
+          reject: (e: any) => void
+        }
+      > = {}
 
-    return {
-      pending,
-    }
-  })
+      return {
+        pending,
+      }
+    },
+    async (current) => {
+      for (const item of Object.values(current.pending)) {
+        item.reject(new RejectedError())
+      }
+    },
+  )
 
   export async function ask(input: {
     sessionID: string

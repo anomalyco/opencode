@@ -21,7 +21,7 @@ import PROMPT_PLAN from "../session/prompt/plan.txt"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { defer } from "../util/defer"
-import { clone } from "remeda"
+
 import { ToolRegistry } from "../tool/registry"
 import { MCP } from "../mcp"
 import { LSP } from "../lsp"
@@ -574,7 +574,12 @@ export namespace SessionPrompt {
         })
       }
 
-      const sessionMessages = clone(msgs)
+      // Shallow copy messages and parts to allow ephemeral mutations
+      // without deep-cloning the entire (potentially large) message history
+      const sessionMessages = msgs.map((msg) => ({
+        ...msg,
+        parts: msg.parts.map((part) => ({ ...part })),
+      }))
 
       // Ephemerally wrap queued user messages with a reminder to stay on track
       if (step > 1 && lastFinished) {
@@ -1494,29 +1499,27 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       },
     })
 
-    let output = ""
+    const MAX_SHELL_OUTPUT = 10 * 1024 * 1024
+    const chunks: Buffer[] = []
+    let chunksSize = 0
 
-    proc.stdout?.on("data", (chunk) => {
-      output += chunk.toString()
+    const appendShell = (chunk: Buffer) => {
+      chunks.push(chunk)
+      chunksSize += chunk.length
+      while (chunksSize > MAX_SHELL_OUTPUT && chunks.length > 1) {
+        chunksSize -= chunks.shift()!.length
+      }
       if (part.state.status === "running") {
         part.state.metadata = {
-          output: output,
+          output: Buffer.concat(chunks).toString(),
           description: "",
         }
         Session.updatePart(part)
       }
-    })
+    }
 
-    proc.stderr?.on("data", (chunk) => {
-      output += chunk.toString()
-      if (part.state.status === "running") {
-        part.state.metadata = {
-          output: output,
-          description: "",
-        }
-        Session.updatePart(part)
-      }
-    })
+    proc.stdout?.on("data", appendShell)
+    proc.stderr?.on("data", appendShell)
 
     let aborted = false
     let exited = false
@@ -1543,6 +1546,7 @@ NOTE: At any point in time through this workflow you should feel free to ask the
       })
     })
 
+    let output = Buffer.concat(chunks).toString()
     if (aborted) {
       output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
     }

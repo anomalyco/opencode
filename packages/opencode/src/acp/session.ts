@@ -114,4 +114,8 @@ export class ACPSessionManager {
     this.sessions.set(sessionId, session)
     return session
   }
+
+  dispose() {
+    this.sessions.clear()
+  }
 }

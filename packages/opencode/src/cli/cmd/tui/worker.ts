@@ -32,6 +32,20 @@ process.on("uncaughtException", (e) => {
   })
 })
 
+let disposing = false
+const graceful = async (signal: string) => {
+  if (disposing) return
+  disposing = true
+  Log.Default.info("worker received signal, disposing", { signal })
+  await Instance.disposeAll().catch((e) => {
+    Log.Default.error("worker error during disposal", { e: e instanceof Error ? e.message : e })
+  })
+}
+
+for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
+  process.on(signal, () => void graceful(signal))
+}
+
 // Subscribe to global events and forward them via RPC
 GlobalBus.on("event", (event) => {
   Rpc.emit("global.event", event)

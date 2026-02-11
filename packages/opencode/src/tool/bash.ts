@@ -19,6 +19,7 @@ import { Truncate } from "./truncation"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
+const MAX_OUTPUT_BYTES = 10 * 1024 * 1024
 
 export const log = Log.create({ service: "bash-tool" })
 
@@ -168,7 +169,8 @@ export const BashTool = Tool.define("bash", async () => {
         detached: process.platform !== "win32",
       })
 
-      let output = ""
+      const chunks: Buffer[] = []
+      let size = 0
 
       // Initialize metadata with empty output
       ctx.metadata({
@@ -179,11 +181,19 @@ export const BashTool = Tool.define("bash", async () => {
       })
 
       const append = (chunk: Buffer) => {
-        output += chunk.toString()
+        chunks.push(chunk)
+        size += chunk.length
+        // Drop oldest chunks when exceeding cap
+        while (size > MAX_OUTPUT_BYTES && chunks.length > 1) {
+          size -= chunks.shift()!.length
+        }
+        const preview =
+          size > MAX_METADATA_LENGTH
+            ? chunks.slice(0, 1).toString().slice(0, MAX_METADATA_LENGTH) + "\n\n..."
+            : Buffer.concat(chunks).toString()
         ctx.metadata({
           metadata: {
-            // truncate the metadata to avoid GIANT blobs of data (has nothing to do w/ what agent can access)
-            output: output.length > MAX_METADATA_LENGTH ? output.slice(0, MAX_METADATA_LENGTH) + "\n\n..." : output,
+            output: preview,
             description: params.description,
           },
         })
@@ -243,6 +253,8 @@ export const BashTool = Tool.define("bash", async () => {
       if (aborted) {
         resultMetadata.push("User aborted the command")
       }
+
+      let output = Buffer.concat(chunks).toString()
 
       if (resultMetadata.length > 0) {
         output += "\n\n<bash_metadata>\n" + resultMetadata.join("\n") + "\n</bash_metadata>"
