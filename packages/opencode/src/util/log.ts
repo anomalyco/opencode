@@ -1,5 +1,6 @@
 import path from "path"
 import fs from "fs/promises"
+import { openSync, writeSync, closeSync } from "fs"
 import { Global } from "../global"
 import z from "zod"
 
@@ -67,8 +68,8 @@ export namespace Log {
     return msg.length
   }
 
+  let fd: number | undefined
   let deadline = 0
-  let writer: ReturnType<ReturnType<typeof Bun.file>["writer"]> | undefined
 
   function today() {
     const d = new Date()
@@ -83,23 +84,12 @@ export namespace Log {
     return d.getTime()
   }
 
-  async function createWriter(filepath: string, truncate?: boolean) {
-    if (writer) writer.end()
-    logpath = filepath
-    if (truncate) await fs.truncate(filepath).catch(() => {})
-    writer = Bun.file(filepath).writer()
-  }
-
-  function flushWriter(msg: any) {
-    const num = writer!.write(msg)
-    writer!.flush()
-    return num
-  }
-
-  async function rotate(dir: string) {
-    if (Date.now() < deadline && writer) return
+  function rotate(dir: string) {
+    if (Date.now() < deadline && fd !== undefined) return
+    if (fd !== undefined) closeSync(fd)
     deadline = midnight()
-    await createWriter(path.join(dir, `opencode-${today()}.log`))
+    logpath = path.join(dir, `opencode-${today()}.log`)
+    fd = openSync(logpath, "a")
   }
 
   const writeStrategies: Record<Rotate["kind"], (options: Options) => Promise<void>> = {
@@ -108,18 +98,24 @@ export namespace Log {
       const retention = options.rotate?.retention ?? 10
       cleanup(dir, retention)
       const name = options.dev ? "dev.log" : new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log"
-      await createWriter(path.join(dir, name), true)
-      write = flushWriter
+      logpath = path.join(dir, name)
+      await fs.truncate(logpath).catch(() => {})
+      const writer = Bun.file(logpath).writer()
+      write = (msg: any) => {
+        const num = writer.write(msg)
+        writer.flush()
+        return num
+      }
     },
     async daily(options) {
       const dir = options.path ?? Global.Path.log
       const retention = options.rotate?.retention ?? 7
       await fs.mkdir(dir, { recursive: true })
-      await rotate(dir)
+      rotate(dir)
       cleanup(dir, retention)
       write = (msg: any) => {
         rotate(dir)
-        return flushWriter(msg)
+        return writeSync(fd!, msg)
       }
     },
   }
