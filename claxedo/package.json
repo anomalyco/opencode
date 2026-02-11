@@ -32,7 +32,7 @@
     "@opentelemetry/sdk-node": "^0.57.0",
     "@opentelemetry/sdk-trace-node": "^1.28.0",
     "@opentelemetry/semantic-conventions": "^1.28.0",
-    "@sandbox-agent/cli-darwin-arm64": "^0.1.7",
+    "@sandbox-agent/cli-darwin-arm64": "^0.1.11",
     "@sentry/node": "^8.0.0",
     "@types/ws": "^8.18.1",
     "convex": "^1.17.4",
@@ -40,7 +40,7 @@
     "hono": "^4.11.5",
 
     "prom-client": "^15.1.0",
-    "sandbox-agent": "^0.1.7",
+    "sandbox-agent": "^0.1.11",
     "ws": "^8.19.0"
   },
   "devDependencies": {

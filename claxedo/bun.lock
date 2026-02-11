@@ -15,13 +15,14 @@
         "@opentelemetry/sdk-node": "^0.57.0",
         "@opentelemetry/sdk-trace-node": "^1.28.0",
         "@opentelemetry/semantic-conventions": "^1.28.0",
+        "@sandbox-agent/cli-darwin-arm64": "^0.1.11",
         "@sentry/node": "^8.0.0",
         "@types/ws": "^8.18.1",
         "convex": "^1.17.4",
         "dotenv": "^17.2.3",
         "hono": "^4.11.5",
-        "node-pty": "^1.1.0",
         "prom-client": "^15.1.0",
+        "sandbox-agent": "^0.1.11",
         "ws": "^8.19.0",
       },
       "devDependencies": {
@@ -328,6 +329,20 @@
 
     "@protobufjs/utf8": ["@protobufjs/utf8@1.1.0", "", {}, "sha512-Vvn3zZrhQZkkBE8LSuW3em98c0FwgO4nxzv6OdSxPKJIEKY2bGbHn+mhGIPerzI4twdxaP8/0+06HBpwf345Lw=="],
 
+    "@sandbox-agent/cli": ["@sandbox-agent/cli@0.1.11", "", { "dependencies": { "@sandbox-agent/cli-shared": "0.1.11" }, "optionalDependencies": { "@sandbox-agent/cli-darwin-arm64": "0.1.11", "@sandbox-agent/cli-darwin-x64": "0.1.11", "@sandbox-agent/cli-linux-arm64": "0.1.11", "@sandbox-agent/cli-linux-x64": "0.1.11", "@sandbox-agent/cli-win32-x64": "0.1.11" }, "bin": { "sandbox-agent": "bin/sandbox-agent" } }, "sha512-4nVH0dKC70zQjYSYhUagnn9bAy2mOXQovr77YlD4qATcjJHr6bbx/hgvtGYuaIGr/3SoZsPJMf8X6On81EnIxw=="],
+
+    "@sandbox-agent/cli-darwin-arm64": ["@sandbox-agent/cli-darwin-arm64@0.1.11", "", { "os": "darwin", "cpu": "arm64" }, "sha512-Xh59hSo/0xiPm1nscSTUXcc/naGlF3E7xIBG0XjFM5jEOI+tdpJn6hGx02s7Py9uZOmqyN2yCaytEgJc4p2klw=="],
+
+    "@sandbox-agent/cli-darwin-x64": ["@sandbox-agent/cli-darwin-x64@0.1.11", "", { "os": "darwin", "cpu": "x64" }, "sha512-h14t6qh+I2Tt68XzF5a44CGJ0/EyuK2GV46d+JyBPxGPhJanmgY0gnOvpI+AwWxg8ZeoOmOXXEYPMW5WogEhIw=="],
+
+    "@sandbox-agent/cli-linux-arm64": ["@sandbox-agent/cli-linux-arm64@0.1.11", "", { "os": "linux", "cpu": "arm64" }, "sha512-fq8gy34RVshxcU9FfHx0ZmfWwiDAIPCKyP6/k0GIhM/RlN2YMExar6VrFgeHMmboarHOAQQSN1XsfxVH6Ixlkg=="],
+
+    "@sandbox-agent/cli-linux-x64": ["@sandbox-agent/cli-linux-x64@0.1.11", "", { "os": "linux", "cpu": "x64" }, "sha512-sPpVIcXG2Gbb/IQWnzVFFwGRqaxPZ9o6qpa+AXha7fZ38Ey6ypbC4eWSU27r2114POmqaciupxVlDKR/yGsuZg=="],
+
+    "@sandbox-agent/cli-shared": ["@sandbox-agent/cli-shared@0.1.11", "", {}, "sha512-Rr0r0uK49rhlTJOcuXvMwlkG/DFtolpIkwx3Ob4hwmknFHkCX3fcfRJmRcW0XmmwFwIJCLJeYYYMw2Ltr8k4HQ=="],
+
+    "@sandbox-agent/cli-win32-x64": ["@sandbox-agent/cli-win32-x64@0.1.11", "", { "os": "win32", "cpu": "x64" }, "sha512-vvpwdHs3EoqD1kmCWuYWnvol0zGBiqwx64HSMgkGsE5Lc0DAULuXBaiR4ZElSeSCSWpIr2EhcO8AfHSyn91jDg=="],
+
     "@sentry/core": ["@sentry/core@8.55.0", "", {}, "sha512-6g7jpbefjHYs821Z+EBJ8r4Z7LT5h80YSWRJaylGS4nW5W5Z2KXzpdnyFarv37O7QjauzVC2E+PABmpkw5/JGA=="],
 
     "@sentry/node": ["@sentry/node@8.55.0", "", { "dependencies": { "@opentelemetry/api": "^1.9.0", "@opentelemetry/context-async-hooks": "^1.30.1", "@opentelemetry/core": "^1.30.1", "@opentelemetry/instrumentation": "^0.57.1", "@opentelemetry/instrumentation-amqplib": "^0.46.0", "@opentelemetry/instrumentation-connect": "0.43.0", "@opentelemetry/instrumentation-dataloader": "0.16.0", "@opentelemetry/instrumentation-express": "0.47.0", "@opentelemetry/instrumentation-fastify": "0.44.1", "@opentelemetry/instrumentation-fs": "0.19.0", "@opentelemetry/instrumentation-generic-pool": "0.43.0", "@opentelemetry/instrumentation-graphql": "0.47.0", "@opentelemetry/instrumentation-hapi": "0.45.1", "@opentelemetry/instrumentation-http": "0.57.1", "@opentelemetry/instrumentation-ioredis": "0.47.0", "@opentelemetry/instrumentation-kafkajs": "0.7.0", "@opentelemetry/instrumentation-knex": "0.44.0", "@opentelemetry/instrumentation-koa": "0.47.0", "@opentelemetry/instrumentation-lru-memoizer": "0.44.0", "@opentelemetry/instrumentation-mongodb": "0.51.0", "@opentelemetry/instrumentation-mongoose": "0.46.0", "@opentelemetry/instrumentation-mysql": "0.45.0", "@opentelemetry/instrumentation-mysql2": "0.45.0", "@opentelemetry/instrumentation-nestjs-core": "0.44.0", "@opentelemetry/instrumentation-pg": "0.50.0", "@opentelemetry/instrumentation-redis-4": "0.46.0", "@opentelemetry/instrumentation-tedious": "0.18.0", "@opentelemetry/instrumentation-undici": "0.10.0", "@opentelemetry/resources": "^1.30.1", "@opentelemetry/sdk-trace-base": "^1.30.1", "@opentelemetry/semantic-conventions": "^1.28.0", "@prisma/instrumentation": "5.22.0", "@sentry/core": "8.55.0", "@sentry/opentelemetry": "8.55.0", "import-in-the-middle": "^1.11.2" } }, "sha512-h10LJLDTRAzYgay60Oy7moMookqqSZSviCWkkmHZyaDn+4WURnPp5SKhhfrzPRQcXKrweiOwDSHBgn1tweDssg=="],
@@ -620,10 +635,6 @@
 
     "no-case": ["no-case@3.0.4", "", { "dependencies": { "lower-case": "^2.0.2", "tslib": "^2.0.3" } }, "sha512-fgAN3jGAh+RoxUGZHTSOLJIqUc2wmoBwGR4tbpNAKmmovFoWq0OdRkb0VkldReO2a2iBT/OEulG9XSUc10r3zg=="],
 
-    "node-addon-api": ["node-addon-api@7.1.1", "", {}, "sha512-5m3bsyrjFWE1xf7nz7YXdN4udnVtXK6/Yfgn5qnahL6bCkf2yKt4k3nuTKAtT4r3IG8JNR2ncsIMdZuAzJjHQQ=="],
-
-    "node-pty": ["node-pty@1.1.0", "", { "dependencies": { "node-addon-api": "^7.1.0" } }, "sha512-20JqtutY6JPXTUnL0ij1uad7Qe1baT46lyolh2sSENDd4sTzKZ4nmAFkeAARDKwmlLjPx6XKRlwRUxwjOy+lUg=="],
-
     "parse-passwd": ["parse-passwd@1.0.0", "", {}, "sha512-1Y1A//QUXEZK7YKz+rD9WydcE1+EuPr6ZBgKecAB8tmoW6UFv0NREVJe1p+jRxtThkcbbKkfwIbWJe/IeE6m2Q=="],
 
     "path-parse": ["path-parse@1.0.7", "", {}, "sha512-LDJzPVEEEPR+y48z93A0Ed0yXb8pAByGWo/k5YYdYgpY2/2EsOsksJrq7lOHxryrVOn1ejG6oAp8ahvOIQD8sw=="],
@@ -671,6 +682,8 @@
     "run-parallel": ["run-parallel@1.2.0", "", { "dependencies": { "queue-microtask": "^1.2.2" } }, "sha512-5l4VyZR86LZ/lDxZTR6jqL8AFE2S0IFLMP26AbjsLVADxHdhB/c0GUsH+y39UfCi3dzz8OlQuPmnaJOMoDHQBA=="],
 
     "safe-buffer": ["safe-buffer@5.2.1", "", {}, "sha512-rp3So07KcdmmKbGvgaNxQSJr7bGVSVk5S9Eq1F+ppbRo70+YeaDxkw5Dd8NPN+GD6bjnYm2VuPuCXmpuYvmCXQ=="],
+
+    "sandbox-agent": ["sandbox-agent@0.1.11", "", { "dependencies": { "@sandbox-agent/cli-shared": "0.1.11" }, "optionalDependencies": { "@sandbox-agent/cli": "0.1.11" } }, "sha512-xyQtCe2KXWbEM4QnLnDspWuh4vapJp129GiWB7aCOhsLFShiK5mobQYK8VevKUuidUjNLaQO9O9bDn318ha/yA=="],
 
     "semver": ["semver@7.7.4", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-vFKC2IEtQnVhpT78h1Yp8wzwrf8CM+MzKMHGJZfBtzhZNycRFnXsHk6E5TxIkkMsgNS7mdX3AGB7x2QM2di4lA=="],
 
