@@ -67,7 +67,7 @@ export namespace Log {
     return msg.length
   }
 
-  let current = ""
+  let deadline = 0
   let writer: ReturnType<ReturnType<typeof Bun.file>["writer"]> | undefined
 
   function today() {
@@ -75,6 +75,12 @@ export namespace Log {
     return (
       d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0")
     )
+  }
+
+  function midnight() {
+    const d = new Date()
+    d.setHours(24, 0, 0, 0)
+    return d.getTime()
   }
 
   async function createWriter(filepath: string, truncate?: boolean) {
@@ -91,17 +97,16 @@ export namespace Log {
   }
 
   async function rotate(dir: string) {
-    const date = today()
-    if (date === current && writer) return
-    current = date
-    await createWriter(path.join(dir, `opencode-${date}.log`))
+    if (Date.now() < deadline && writer) return
+    deadline = midnight()
+    await createWriter(path.join(dir, `opencode-${today()}.log`))
   }
 
   const writeStrategies: Record<Rotate["kind"], (options: Options) => Promise<void>> = {
     async startup(options) {
       const dir = options.path ?? Global.Path.log
       const retention = options.rotate?.retention ?? 10
-      cleanup(dir, "????-??-??T??????.log", retention)
+      cleanup(dir, retention)
       const name = options.dev ? "dev.log" : new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log"
       await createWriter(path.join(dir, name), true)
       write = flushWriter
@@ -111,7 +116,7 @@ export namespace Log {
       const retention = options.rotate?.retention ?? 7
       await fs.mkdir(dir, { recursive: true })
       await rotate(dir)
-      cleanup(dir, "opencode-????-??-??.log", retention)
+      cleanup(dir, retention)
       write = (msg: any) => {
         rotate(dir)
         return flushWriter(msg)
@@ -125,8 +130,8 @@ export namespace Log {
     return writeStrategies[options.rotate?.kind ?? "startup"](options)
   }
 
-  async function cleanup(dir: string, pattern: string, retention: number) {
-    const glob = new Bun.Glob(pattern)
+  async function cleanup(dir: string, retention: number) {
+    const glob = new Bun.Glob("*[0-9]*.log")
     const files = await Array.fromAsync(
       glob.scan({
         cwd: dir,
