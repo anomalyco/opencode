@@ -7,12 +7,6 @@ fn configure_display_backend() -> Option<String> {
     use opencode_lib::linux_windowing::{Backend, SessionEnv, select_backend};
     use std::env;
 
-    let set_env = |key: &str, value: &str| {
-        // Safety: called during startup before any threads are spawned, so mutating the
-        // process environment is safe.
-        unsafe { env::set_var(key, value) };
-    };
-
     let set_env_if_absent = |key: &str, value: &str| {
         if env::var_os(key).is_none() {
             // Safety: called during startup before any threads are spawned, so mutating the
@@ -27,13 +21,14 @@ fn configure_display_backend() -> Option<String> {
 
     match decision.backend {
         Backend::X11 => {
-            set_env("WINIT_UNIX_BACKEND", "x11");
-            set_env("GDK_BACKEND", "x11");
+            set_env_if_absent("WINIT_UNIX_BACKEND", "x11");
+            set_env_if_absent("GDK_BACKEND", "x11");
             set_env_if_absent("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
         Backend::Wayland => {
-            set_env("WINIT_UNIX_BACKEND", "wayland");
-            set_env("GDK_BACKEND", "wayland");
+            set_env_if_absent("WINIT_UNIX_BACKEND", "wayland");
+            set_env_if_absent("GDK_BACKEND", "wayland");
+            set_env_if_absent("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
         Backend::Auto => {
             set_env_if_absent("GDK_BACKEND", "wayland,x11");

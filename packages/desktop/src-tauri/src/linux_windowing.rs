@@ -109,13 +109,24 @@ pub fn use_decorations(env: &SessionEnv) -> bool {
 }
 
 fn default_use_decorations(env: &SessionEnv) -> bool {
-    if is_known_tiling_session(env) {
+    if is_i3_session(env) {
         return false;
     }
     if !is_wayland_session(env) {
         return true;
     }
+    if is_known_tiling_session(env) {
+        return false;
+    }
     is_full_desktop_session(env)
+}
+
+fn is_i3_session(env: &SessionEnv) -> bool {
+    if env.i3_sock {
+        return true;
+    }
+
+    desktop_tokens(env).any(|value| matches!(value.as_str(), "i3" | "i3wm" | "i3-gnome"))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
