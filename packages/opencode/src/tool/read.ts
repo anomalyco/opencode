@@ -17,7 +17,7 @@ const MAX_BYTES = 50 * 1024
 export const ReadTool = Tool.define("read", {
   description: DESCRIPTION,
   parameters: z.object({
-    filePath: z.string().describe("The absolute path to the file to read (directories are not yet supported)"),
+    filePath: z.string().describe("The absolute path to the file or directory to read"),
     offset: z.coerce.number().describe("The 0-based line offset to start reading from").optional(),
     limit: z.coerce.number().describe("The maximum number of lines to read (defaults to 2000)").optional(),
   }),
@@ -28,8 +28,12 @@ export const ReadTool = Tool.define("read", {
     }
     const title = path.relative(Instance.worktree, filepath)
 
+    const file = Bun.file(filepath)
+    const stat = await file.stat().catch(() => undefined)
+
     await assertExternalDirectory(ctx, filepath, {
       bypass: Boolean(ctx.extra?.["bypassCwdCheck"]),
+      kind: stat?.isDirectory() ? "directory" : "file",
     })
 
     await ctx.ask({
@@ -38,9 +42,6 @@ export const ReadTool = Tool.define("read", {
       always: ["*"],
       metadata: {},
     })
-
-    const file = Bun.file(filepath)
-    const stat = await file.stat().catch(() => undefined)
 
     if (!stat) {
       const dir = path.dirname(filepath)
@@ -79,7 +80,7 @@ export const ReadTool = Tool.define("read", {
       const limit = params.limit ?? DEFAULT_READ_LIMIT
       const offset = params.offset || 0
       const sliced = entries.slice(offset, offset + limit)
-      const truncated = sliced.length < entries.length
+      const truncated = offset + sliced.length < entries.length
 
       const output = [
         `<path>${filepath}</path>`,

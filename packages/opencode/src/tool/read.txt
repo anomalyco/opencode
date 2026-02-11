@@ -1,4 +1,4 @@
-Read a file from the local filesystem. If the file does not exist, an error is returned.
+Read a file or directory from the local filesystem. If the path does not exist, an error is returned.
 
 Usage:
 - The filePath parameter should be an absolute path.
