@@ -29,11 +29,11 @@ Você pode definir servidores MCP em sua [Configuração do opencode](https://op
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "mcp-server-name": {
+    "name-of-mcp-server": {
       // ...
       "enabled": true,
     },
-    "another-mcp-server-name": {
+    "name-of-other-mcp-server": {
       // ...
     },
   },
@@ -77,11 +77,11 @@ Adicione servidores MCP locais usando `type` como `"local"` dentro do objeto MCP
   "mcp": {
     "my-local-mcp-server": {
       "type": "local",
-      // Ou ["bun", "x", "my-mcp-command"]
+      // Or ["bun", "x", "my-mcp-command"]
       "command": ["npx", "-y", "my-mcp-command"],
       "enabled": true,
       "environment": {
-        "MY_ENV_VAR": "env_var_value",
+        "MY_ENV_VAR": "my_env_var_value",
       },
     },
   },
@@ -183,7 +183,7 @@ Para a maioria dos servidores MCP habilitados para OAuth, nenhuma configuração
   "mcp": {
     "my-oauth-server": {
       "type": "remote",
-      "url": "https://mcp.exemplo.com/mcp"
+      "url": "https://mcp.example.com/mcp"
     }
   }
 }
@@ -203,9 +203,9 @@ Se você tiver credenciais de cliente do provedor do servidor MCP, pode configur
   "mcp": {
     "my-oauth-server": {
       "type": "remote",
-      "url": "https://mcp.exemplo.com/mcp",
+      "url": "https://mcp.example.com/mcp",
       "oauth": {
-        "clientId": "{env:MY_MCP_CLIENT_KEY}",
+        "clientId": "{env:MY_MCP_CLIENT_ID}",
         "clientSecret": "{env:MY_MCP_CLIENT_SECRET}",
         "scope": "tools:read tools:execute"
       }
@@ -252,7 +252,7 @@ Se você quiser desabilitar o OAuth automático para um servidor (por exemplo, p
   "mcp": {
     "my-api-key-server": {
       "type": "remote",
-      "url": "https://mcp.exemplo.com/mcp",
+      "url": "https://mcp.example.com/mcp",
       "oauth": false,
       "headers": {
         "Authorization": "Bearer {env:MY_API_KEY}"
@@ -278,10 +278,10 @@ Se você quiser desabilitar o OAuth automático para um servidor (por exemplo, p
 Se um servidor MCP remoto estiver falhando na autenticação, você pode diagnosticar problemas com:
 
 ```bash
-# Ver status de autenticação para todos os servidores com capacidade OAuth
+# View auth status for all OAuth-capable servers
 opencode mcp auth list
 
-# Depurar conexão e fluxo OAuth para um servidor específico
+# Debug connection and OAuth flow for a specific server
 opencode mcp debug my-oauth-server
 ```
 
@@ -387,7 +387,7 @@ O padrão glob usa padrões simples de regex globbing:
 As ferramentas do servidor MCP são registradas com o nome do servidor como prefixo, então para desabilitar todas as ferramentas de um servidor, simplesmente use:
 
 ```
-"mynome_do_servidor_mcp_*": false
+"mymcpservername_*": false
 ```
 
 :::

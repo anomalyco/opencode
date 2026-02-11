@@ -169,7 +169,7 @@ Opzioni disponibili:
 
 - `scroll_acceleration.enabled` - Abilita l'accelerazione di scorrimento in stile macOS. **Ha precedenza su `scroll_speed`.**
 - `scroll_speed` - Moltiplicatore personalizzato della velocita di scorrimento (predefinito: `3`, minimo: `1`). Ignorato se `scroll_acceleration.enabled` e `true`.
-- `diff_style` - Controlla la resa delle diff. `"auto"` si adatta alla larghezza del terminal, `"stacked"` mostra sempre una singola colonna.
+- `diff_style` - Controlla la resa delle diff. `"auto"` si adatta alla larghezza del terminale, `"stacked"` mostra sempre una singola colonna.
 
 [Scopri di piu sull'uso della TUI](/docs/tui).
 
@@ -235,9 +235,9 @@ Puoi configurare provider e modelli da usare in OpenCode tramite le opzioni `pro
 }
 ```
 
-The `small_model` option configures a separate model for lightweight tasks like title generation. By default, OpenCode tries to use a cheaper model if one is available from your provider, otherwise it falls back to your main model.
+L'opzione `small_model` configura un modello separato per task leggeri come la generazione dei titoli. Per impostazione predefinita, OpenCode prova a usare un modello più economico se disponibile dal tuo provider, altrimenti fa fallback sul tuo modello principale.
 
-Provider options can include `timeout` and `setCacheKey`:
+Le opzioni del provider possono includere `timeout` e `setCacheKey`:
 
 ```json title="opencode.json"
 {

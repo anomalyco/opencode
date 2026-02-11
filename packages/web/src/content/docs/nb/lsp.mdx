@@ -3,13 +3,13 @@ title: LSP Servere
 description: opencode integreres med LSP-serverne dine.
 ---
 
-opencode integreres med din Language Server Protocol (LSP) for å hjelpe LLM med å samhandle med kodebasen din. Den bruker diagnostikk for å gi tilbakemelding til LLM.
+OpenCode integreres med din Language Server Protocol (LSP) for å hjelpe LLM med å samhandle med kodebasen din. Den bruker diagnostikk for å gi tilbakemelding til LLM.
 
 ---
 
 ## Innebygd
 
-opencode kommer med flere innebygde LSP-servere for populære språk:
+OpenCode kommer med flere innebygde LSP-servere for populære språk:
 
 | LSP Server         | Utvidelser                                                          | Krav                                                                    |
 | ------------------ | ------------------------------------------------------------------- | ----------------------------------------------------------------------- |
@@ -23,7 +23,7 @@ opencode kommer med flere innebygde LSP-servere for populære språk:
 | elixir-ls          | .ex, .exs                                                           | `elixir` kommando tilgjengelig                                          |
 | eslint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue                  | `eslint` avhengighet i prosjekt                                         |
 | fsharp             | .fs, .fsi, .fsx, .fsscript                                          | `.NET SDK` installert                                                   |
-| glimt              | .gleam                                                              | `gleam` kommando tilgjengelig                                           |
+| gleam              | .gleam                                                              | `gleam` kommando tilgjengelig                                           |
 | gopls              | .go                                                                 | `go` kommando tilgjengelig                                              |
 | hls                | .hs, .lhs                                                           | `haskell-language-server-wrapper` kommando tilgjengelig                 |
 | jdtls              | .java                                                               | `Java SDK (version 21+)` installert                                     |
@@ -34,14 +34,14 @@ opencode kommer med flere innebygde LSP-servere for populære språk:
 | oxlint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | `oxlint` avhengighet i prosjekt                                         |
 | php intelephense   | .php                                                                | Autoinstallasjoner for PHP-prosjekter                                   |
 | prisma             | .prisma                                                             | `prisma` kommando tilgjengelig                                          |
-| opphavsrett        | .py, .pyi                                                           | `pyright` avhengighet installert                                        |
+| pyright            | .py, .pyi                                                           | `pyright` avhengighet installert                                        |
 | ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                           | `ruby` og `gem` kommandoer tilgjengelig                                 |
 | rust               | .rs                                                                 | `rust-analyzer` kommando tilgjengelig                                   |
 | sourcekit-lsp      | .swift, .objc, .objcpp                                              | `swift` installert (`xcode` på macOS)                                   |
 | svelte             | .svelte                                                             | Autoinstallasjoner for Svelte-prosjekter                                |
 | terraform          | .tf, .tfvars                                                        | Automatiske installasjoner fra GitHub-utgivelser                        |
 | tinymist           | .typ, .typc                                                         | Automatiske installasjoner fra GitHub-utgivelser                        |
-| maskinskrift       | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts                        | `typescript` avhengighet i prosjekt                                     |
+| typescript         | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts                        | `typescript` avhengighet i prosjekt                                     |
 | vue                | .vue                                                                | Autoinstallasjoner for Vue-prosjekter                                   |
 | yaml-ls            | .yaml, .yml                                                         | Autoinstallerer Red Hat yaml-language-server                            |
 | zls                | .zig, .zon                                                          | `zig` kommando tilgjengelig                                             |
@@ -65,7 +65,7 @@ Når opencode åpner en fil, gjør den:
 
 ## Konfigurer
 
-Du kan tilpasse LSP-servere gjennom `lsp`-delen i opencode-konfigurasjonen.
+Du kan tilpasse LSP-servere gjennom `lsp`-delen i OpenCode-konfigurasjonen.
 
 ```json title="opencode.json"
 {
@@ -76,13 +76,13 @@ Du kan tilpasse LSP-servere gjennom `lsp`-delen i opencode-konfigurasjonen.
 
 Hver LSP-server støtter følgende:
 
-| Eiendom          | Skriv    | Beskrivelse                                              |
+| Property         | Type     | Beskrivelse                                              |
 | ---------------- | -------- | -------------------------------------------------------- |
-| `disabled`       | boolsk   | Sett dette til `true` for å deaktivere LSP-serveren      |
-| `command`        | streng[] | Kommandoen for å starte LSP-serveren                     |
-| `extensions`     | streng[] | Filutvidelser denne LSP-serveren skal håndtere           |
-| `env`            | objekt   | Miljøvariabler som skal angis når serveren startes       |
-| `initialization` | objekt   | Initialiseringsalternativer for å sende til LSP-serveren |
+| `disabled`       | boolean  | Sett dette til `true` for å deaktivere LSP-serveren      |
+| `command`        | string[] | Kommandoen for å starte LSP-serveren                     |
+| `extensions`     | string[] | Filutvidelser denne LSP-serveren skal håndtere           |
+| `env`            | object   | Miljøvariabler som skal angis når serveren startes       |
+| `initialization` | object   | Initialiseringsalternativer for å sende til LSP-serveren |
 
 La oss se på noen eksempler.
 
@@ -182,7 +182,7 @@ Du kan legge til egendefinerte LSP-servere ved å spesifisere kommandoen og filt
 
 PHP Intelephense tilbyr førsteklasses funksjoner gjennom en lisensnøkkel. Du kan oppgi en lisensnøkkel ved å plassere (bare) nøkkelen i en tekstfil på:
 
-- På macOS/Linux: `$HOME/intelephense/licence.txt`
-- På Windows: `%USERPROFILE%/intelephense/licence.txt`
+- På macOS/Linux: `$HOME/intelephense/license.txt`
+- På Windows: `%USERPROFILE%/intelephense/license.txt`
 
 Filen skal bare inneholde lisensnøkkelen uten ekstra innhold.
