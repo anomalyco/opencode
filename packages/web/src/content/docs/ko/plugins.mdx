@@ -192,7 +192,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 - `todo.updated`
 
-#### 포탄 사건
+#### Shell 이벤트
 
 - `shell.env`
 
@@ -260,7 +260,7 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
 
 ### Inject 환경 변수
 
-환경 변수를 모든 쉘 실행 (AI 도구 및 사용자 terminal)로 주사하십시오.
+환경 변수를 모든 shell 실행 (AI 도구 및 사용자 terminal)로 주사하십시오.
 
 ```javascript title=".opencode/plugins/inject-env.js"
 export const InjectEnvPlugin = async () => {
@@ -312,7 +312,7 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 
 ### 로깅
 
-구조화된 로깅을 위한 `console.log` 대신에 `client.app.log()`를 사용하십시오:
+구조화된 로깅을 위한 `client.app.log()` 대신에 `console.log`를 사용하십시오:
 
 ```ts title=".opencode/plugins/my-plugin.ts"
 export const MyPlugin = async ({ client }) => {

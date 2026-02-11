@@ -98,7 +98,12 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
     void shellOpen(url).catch(() => undefined)
   },
 
-  openPath(path: string, app?: string) {
+  async openPath(path: string, app?: string) {
+    const os = ostype()
+    if (os === "windows" && app) {
+      const resolvedApp = await commands.resolveAppPath(app)
+      return openerOpenPath(path, resolvedApp || app)
+    }
     return openerOpenPath(path, app)
   },
 
