@@ -1,70 +1,68 @@
-import { TextAttributes, RGBA } from "@opentui/core"
+import { RGBA } from "@opentui/core"
 import { For, type JSX } from "solid-js"
 import { useTheme, tint } from "@tui/context/theme"
-import { logo, marks } from "@/cli/logo"
+import { logo } from "@/cli/logo"
 
-// Shadow markers (rendered chars in parens):
-// _ = full shadow cell (space with bg=shadow)
-// ^ = letter top, shadow bottom (▀ with fg=letter, bg=shadow)
-// ~ = shadow top only (▀ with fg=shadow)
-const SHADOW_MARKER = new RegExp(`[${marks}]`)
+// Classic Lash gradient: pink (Dolly) → indigo (Charple)
+const GRAD_A = RGBA.fromHex("#FF60FF")
+const GRAD_B = RGBA.fromHex("#6B50FF")
+const STRIPE_COLOR = RGBA.fromHex("#6B50FF")
+const DIAG = "╱"
+
+const LEFT_STRIPES = 6
+const RIGHT_STRIPES_BASE = 15
+
+function lerpColor(a: RGBA, b: RGBA, t: number): RGBA {
+  return RGBA.fromInts(
+    Math.round((a.r + (b.r - a.r) * t) * 255),
+    Math.round((a.g + (b.g - a.g) * t) * 255),
+    Math.round((a.b + (b.b - a.b) * t) * 255),
+  )
+}
 
 export function Logo() {
   const { theme } = useTheme()
 
-  const renderLine = (line: string, fg: RGBA, bold: boolean): JSX.Element[] => {
-    const shadow = tint(theme.background, fg, 0.25)
-    const attrs = bold ? TextAttributes.BOLD : undefined
+  const renderGradientLine = (line: string): JSX.Element[] => {
+    const totalLen = line.length
     const elements: JSX.Element[] = []
-    let i = 0
 
-    while (i < line.length) {
-      const rest = line.slice(i)
-      const markerIndex = rest.search(SHADOW_MARKER)
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i]
+      const t = totalLen > 1 ? i / (totalLen - 1) : 0
+      const fg = lerpColor(GRAD_A, GRAD_B, t)
+      const shadow = tint(theme.background, fg, 0.25)
 
-      if (markerIndex === -1) {
-        elements.push(
-          <text fg={fg} attributes={attrs} selectable={false}>
-            {rest}
-          </text>,
-        )
-        break
-      }
-
-      if (markerIndex > 0) {
-        elements.push(
-          <text fg={fg} attributes={attrs} selectable={false}>
-            {rest.slice(0, markerIndex)}
-          </text>,
-        )
-      }
-
-      const marker = rest[markerIndex]
-      switch (marker) {
+      switch (char) {
         case "_":
           elements.push(
-            <text fg={fg} bg={shadow} attributes={attrs} selectable={false}>
+            <text fg={fg} bg={shadow} selectable={false}>
               {" "}
             </text>,
           )
           break
         case "^":
           elements.push(
-            <text fg={fg} bg={shadow} attributes={attrs} selectable={false}>
+            <text fg={fg} bg={shadow} selectable={false}>
               ▀
             </text>,
           )
           break
         case "~":
           elements.push(
-            <text fg={shadow} attributes={attrs} selectable={false}>
+            <text fg={shadow} selectable={false}>
               ▀
             </text>,
           )
           break
+        default:
+          elements.push(
+            <text fg={fg} selectable={false}>
+              {char}
+            </text>,
+          )
+          break
       }
-
-      i += markerIndex + 1
     }
 
     return elements
@@ -73,18 +71,26 @@ export function Logo() {
   return (
     <box flexDirection="column">
       <For each={logo.left}>
-        {(line, index) => (
-          <box flexDirection="row" gap={1}>
-            <box flexDirection="row">{renderLine(line, theme.textMuted, false)}</box>
-            <box flexDirection="row">{renderLine(logo.right[index()], theme.text, true)}</box>
-          </box>
-        )}
+        {(line, index) => {
+          const rightLine = logo.right[index()] ?? ""
+          const combined = line + " " + rightLine
+          const rightStripes = RIGHT_STRIPES_BASE - index()
+
+          return (
+            <box flexDirection="row">
+              <text fg={STRIPE_COLOR} selectable={false}>
+                {DIAG.repeat(LEFT_STRIPES)}
+              </text>
+              <text selectable={false}> </text>
+              <box flexDirection="row">{renderGradientLine(combined)}</box>
+              <text selectable={false}> </text>
+              <text fg={STRIPE_COLOR} selectable={false}>
+                {DIAG.repeat(Math.max(0, rightStripes))}
+              </text>
+            </box>
+          )
+        }}
       </For>
-      <box flexDirection="row" justifyContent="flex-end">
-        <text fg={theme.diffAdded}>
-          ›SHELL {/* ꜱʜᴇʟʟ */}
-        </text>
-      </box>
     </box>
   )
 }

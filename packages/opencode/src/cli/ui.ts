@@ -43,46 +43,54 @@ export namespace UI {
   export function logo(pad?: string) {
     const result: string[] = []
     const reset = "\x1b[0m"
-    const left = {
-      fg: Bun.color("gray", "ansi") ?? "",
-      shadow: "\x1b[38;5;235m",
-      bg: "\x1b[48;5;235m",
-    }
-    const right = {
-      fg: reset,
-      shadow: "\x1b[38;5;238m",
-      bg: "\x1b[48;5;238m",
-    }
-    const gap = " "
-    const draw = (line: string, fg: string, shadow: string, bg: string) => {
+
+    // Classic Lash gradient: pink (Dolly #FF60FF) → indigo (Charple #6B50FF)
+    const gradA = { r: 255, g: 96, b: 255 }
+    const gradB = { r: 107, g: 80, b: 255 }
+    const stripeColor = "\x1b[38;2;107;80;255m"
+    const diag = "╱"
+    const leftStripes = 6
+    const rightStripesBase = 15
+
+    const lerp = (a: number, b: number, t: number) => Math.round(a + (b - a) * t)
+
+    const drawGradient = (line: string) => {
+      const totalLen = line.length
       const parts: string[] = []
-      for (const char of line) {
+      for (let i = 0; i < line.length; i++) {
+        const t = totalLen > 1 ? i / (totalLen - 1) : 0
+        const r = lerp(gradA.r, gradB.r, t)
+        const g = lerp(gradA.g, gradB.g, t)
+        const b = lerp(gradA.b, gradB.b, t)
+        const fg = `\x1b[38;2;${r};${g};${b}m`
+        const sr = Math.round(r * 0.25)
+        const sg = Math.round(g * 0.25)
+        const sb = Math.round(b * 0.25)
+        const shadowFg = `\x1b[38;2;${sr};${sg};${sb}m`
+        const shadowBg = `\x1b[48;2;${sr};${sg};${sb}m`
+        const char = line[i]
         if (char === "_") {
-          parts.push(bg, " ", reset)
-          continue
-        }
-        if (char === "^") {
-          parts.push(fg, bg, "▀", reset)
-          continue
-        }
-        if (char === "~") {
-          parts.push(shadow, "▀", reset)
-          continue
-        }
-        if (char === " ") {
+          parts.push(fg, shadowBg, " ", reset)
+        } else if (char === "^") {
+          parts.push(fg, shadowBg, "▀", reset)
+        } else if (char === "~") {
+          parts.push(shadowFg, "▀", reset)
+        } else if (char === " ") {
           parts.push(" ")
-          continue
+        } else {
+          parts.push(fg, char, reset)
         }
-        parts.push(fg, char, reset)
       }
       return parts.join("")
     }
+
     glyphs.left.forEach((row, index) => {
       if (pad) result.push(pad)
-      result.push(draw(row, left.fg, left.shadow, left.bg))
-      result.push(gap)
-      const other = glyphs.right[index] ?? ""
-      result.push(draw(other, right.fg, right.shadow, right.bg))
+      result.push(stripeColor, diag.repeat(leftStripes), reset, " ")
+      const combined = row + " " + (glyphs.right[index] ?? "")
+      result.push(drawGradient(combined))
+      const rightStripes = rightStripesBase - index
+      result.push(" ", stripeColor, diag.repeat(rightStripes), reset)
       result.push(EOL)
     })
     return result.join("").trimEnd()
