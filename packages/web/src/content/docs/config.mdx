@@ -500,6 +500,36 @@ You can control context compaction behavior through the `compaction` option.
 - `prune` - Remove old tool outputs to save tokens (default: `true`).
 - `reserved` - Token buffer for compaction. Leaves enough window to avoid overflow during compaction
 
+Compaction and pruning are related but different:
+
+- **Compaction** creates a summary message when the context window is close to full.
+- **Pruning** drops older completed tool outputs from context to recover tokens while keeping recent context intact.
+
+If token usage appears to "jump" or "flicker", that is often pruning: old tool outputs were removed from active context, so reported usage can decrease between turns.
+
+You can disable pruning if you prefer fully stable context accounting:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "prune": false
+  }
+}
+```
+
+Or with an environment variable:
+
+```bash
+OPENCODE_DISABLE_PRUNE=true
+```
+
+If you want to disable automatic compaction entirely, set:
+
+```bash
+OPENCODE_DISABLE_AUTOCOMPACT=true
+```
+
 ---
 
 ### Watcher
