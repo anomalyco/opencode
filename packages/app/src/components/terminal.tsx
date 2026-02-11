@@ -91,7 +91,7 @@ export const Terminal = (props: TerminalProps) => {
   }
 
   const getTerminalColors = (): TerminalColors => {
-    const mode = theme.mode()
+    const mode = theme.mode() === "dark" ? "dark" : "light"
     const fallback = DEFAULT_TERMINAL_COLORS[mode]
     const currentTheme = theme.themes()[theme.themeId()]
     if (!currentTheme) return fallback
@@ -186,9 +186,23 @@ export const Terminal = (props: TerminalProps) => {
       }
       ws = socket
 
+      const restore = typeof local.pty.buffer === "string" ? local.pty.buffer : ""
+      const restoreSize =
+        restore &&
+        typeof local.pty.cols === "number" &&
+        Number.isSafeInteger(local.pty.cols) &&
+        local.pty.cols > 0 &&
+        typeof local.pty.rows === "number" &&
+        Number.isSafeInteger(local.pty.rows) &&
+        local.pty.rows > 0
+          ? { cols: local.pty.cols, rows: local.pty.rows }
+          : undefined
+
       const t = new mod.Terminal({
         cursorBlink: true,
         cursorStyle: "bar",
+        cols: restoreSize?.cols,
+        rows: restoreSize?.rows,
         fontSize: 14,
         fontFamily: monoFontFamily(settings.appearance.font()),
         allowTransparency: false,
@@ -277,18 +291,28 @@ export const Terminal = (props: TerminalProps) => {
 
       focusTerminal()
 
-      fit.fit()
-
-      if (local.pty.buffer) {
-        t.write(local.pty.buffer, () => {
-          if (local.pty.scrollY) t.scrollToLine(local.pty.scrollY)
-        })
+      const startResize = () => {
+        fit.observeResize()
+        handleResize = () => fit.fit()
+        window.addEventListener("resize", handleResize)
+        cleanups.push(() => window.removeEventListener("resize", handleResize))
       }
 
-      fit.observeResize()
-      handleResize = () => fit.fit()
-      window.addEventListener("resize", handleResize)
-      cleanups.push(() => window.removeEventListener("resize", handleResize))
+      if (restore && restoreSize) {
+        t.write(restore, () => {
+          fit.fit()
+          if (typeof local.pty.scrollY === "number") t.scrollToLine(local.pty.scrollY)
+          startResize()
+        })
+      } else {
+        fit.fit()
+        if (restore) {
+          t.write(restore, () => {
+            if (typeof local.pty.scrollY === "number") t.scrollToLine(local.pty.scrollY)
+          })
+        }
+        startResize()
+      }
 
       const onResize = t.onResize(async (size) => {
         if (socket.readyState === WebSocket.OPEN) {
