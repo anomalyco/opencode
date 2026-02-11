@@ -1,11 +1,11 @@
 ---
 title: GitLab
-description: Verwenden Sie OpenCode in GitLab-Problemen und Zusammenführungsanfragen.
+description: Verwenden Sie OpenCode in GitLab-Issues und Merge Requests.
 ---
 
 OpenCode lässt sich über Ihre GitLab CI/CD-Pipeline oder mit GitLab Duo in Ihren GitLab-Workflow integrieren.
 
-In beiden Fällen läuft OpenCode auf Ihren GitLab-Läufern.
+In beiden Fällen läuft OpenCode auf Ihren GitLab Runners.
 
 ---
 
@@ -53,10 +53,10 @@ Erwähnen Sie `@opencode` in einem Kommentar und OpenCode führt Aufgaben innerh
 
 ### Features
 
-- **Triage-Probleme**: Bitten Sie OpenCode, ein Problem zu untersuchen und es Ihnen zu erklären.
+- **Issue Triage**: Bitten Sie OpenCode, ein Problem zu untersuchen und es Ihnen zu erklären.
 - **Reparieren und implementieren**: Bitten Sie OpenCode, ein Problem zu beheben oder eine Funktion zu implementieren.
-  Es wird ein neuer Zweig erstellt und eine Zusammenführungsanforderung mit den Änderungen ausgelöst.
-- **Sicher**: OpenCode läuft auf Ihren GitLab-Läufern.
+  Es wird ein neuer Branch erstellt und eine Merge Request mit den Änderungen ausgelöst.
+- **Sicher**: OpenCode läuft auf Ihren GitLab Runners.
 
 ---
 
@@ -182,14 +182,14 @@ Sie können die Verwendung einer anderen Triggerphrase als `@opencode` konfiguri
   @opencode fix this
   ```
 
-  OpenCode erstellt einen neuen Zweig, implementiert die Änderungen und öffnet eine Zusammenführungsanforderung mit den Änderungen.
+  OpenCode erstellt einen neuen Branch, implementiert die Änderungen und öffnet eine Merge Request mit den Änderungen.
 
-- **Zusammenführungsanfragen prüfen**
+- **Merge Requests prüfen**
 
-  Hinterlassen Sie den folgenden Kommentar zu einer GitLab-Merge-Anfrage.
+  Hinterlassen Sie den folgenden Kommentar zu einer GitLab Merge Request.
 
   ```
   @opencode review this merge request
   ```
 
-  OpenCode prüft die Zusammenführungsanfrage und gibt Feedback.
+  OpenCode prüft die Merge Request und gibt Feedback.

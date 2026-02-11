@@ -5,6 +5,7 @@ import type { JSONSchema } from "zod/v4/core"
 import type { Provider } from "./provider"
 import type { ModelsDev } from "./models"
 import { iife } from "@/util/iife"
+import { Flag } from "@/flag/flag"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -17,6 +18,8 @@ function mimeToModality(mime: string): Modality | undefined {
 }
 
 export namespace ProviderTransform {
+  export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
+
   // Maps npm package to the key the AI SDK expects for providerOptions
   function sdkKey(npm: string): string | undefined {
     switch (npm) {
@@ -723,29 +726,8 @@ export namespace ProviderTransform {
     return { [key]: options }
   }
 
-  export function maxOutputTokens(
-    npm: string,
-    options: Record<string, any>,
-    modelLimit: number,
-    globalLimit: number,
-  ): number {
-    const modelCap = modelLimit || globalLimit
-    const standardLimit = Math.min(modelCap, globalLimit)
-
-    if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic") {
-      const thinking = options?.["thinking"]
-      const budgetTokens = typeof thinking?.["budgetTokens"] === "number" ? thinking["budgetTokens"] : 0
-      const enabled = thinking?.["type"] === "enabled"
-      if (enabled && budgetTokens > 0) {
-        // Return text tokens so that text + thinking <= model cap, preferring 32k text when possible.
-        if (budgetTokens + standardLimit <= modelCap) {
-          return standardLimit
-        }
-        return modelCap - budgetTokens
-      }
-    }
-
-    return standardLimit
+  export function maxOutputTokens(model: Provider.Model): number {
+    return Math.min(model.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
   }
 
   export function schema(model: Provider.Model, schema: JSONSchema.BaseSchema | JSONSchema7): JSONSchema7 {
