@@ -144,14 +144,15 @@ export namespace MCP {
             timeout,
           },
         )) as CallToolResult
-        const text = result.content
-          .filter((c): c is { type: "text"; text: string } => c.type === "text")
+        const content = Array.isArray(result?.content) ? result.content : []
+        const text = content
+          .filter((c): c is { type: "text"; text: string } => c.type === "text" && typeof c.text === "string")
           .map((c) => c.text)
           .join("\n")
         return {
-          output: text,
+          output: text || JSON.stringify(result ?? {}),
           title: mcpTool.name,
-          metadata: { isError: result.isError },
+          metadata: { isError: result?.isError },
         }
       },
     })
