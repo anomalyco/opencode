@@ -5,7 +5,7 @@ description: Utilisez OpenCode dans les problèmes GitLab et les demandes de fus
 
 OpenCode s'intègre à votre flux de travail GitLab via votre pipeline CI/CD GitLab ou avec GitLab Duo.
 
-Dans les deux cas, OpenCode fonctionnera sur vos coureurs GitLab.
+Dans les deux cas, OpenCode fonctionnera sur vos runners GitLab.
 
 ---
 
@@ -56,7 +56,7 @@ Mentionnez `@opencode` dans un commentaire et OpenCode exécutera les tâches au
 - **Problèmes de triage** : demandez à OpenCode d'examiner un problème et de vous l'expliquer.
 - **Réparer et implémenter** : demandez à OpenCode de résoudre un problème ou d'implémenter une fonctionnalité.
   Cela créera une nouvelle branche et déclenchera une demande de fusion avec les modifications.
-- **Sécurisé** : OpenCode fonctionne sur vos coureurs GitLab.
+- **Sécurisé** : OpenCode fonctionne sur vos runners GitLab.
 
 ---
 
@@ -169,7 +169,7 @@ Vous pouvez configurer pour utiliser une phrase de déclenchement différente de
 Ajoutez ce commentaire dans un numéro GitLab.
 
 ```
-@opencode explain this issue
+  @opencode explain this issue
 ```
 
 OpenCode lira le problème et répondra avec une explication claire.
@@ -179,7 +179,7 @@ OpenCode lira le problème et répondra avec une explication claire.
 Dans un numéro GitLab, dites :
 
 ```
-@opencode fix this
+  @opencode fix this
 ```
 
 OpenCode créera une nouvelle branche, mettra en œuvre les modifications et ouvrira une demande de fusion avec les modifications.
@@ -189,7 +189,7 @@ OpenCode créera une nouvelle branche, mettra en œuvre les modifications et ouv
 Laissez le commentaire suivant sur une demande de fusion GitLab.
 
 ```
-@opencode review this merge request
+  @opencode review this merge request
 ```
 
 OpenCode examinera la demande de fusion et fournira des commentaires.

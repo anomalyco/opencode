@@ -150,6 +150,44 @@ export const dict = {
   "provider.connect.toast.connected.title": "{{provider}} povezan",
   "provider.connect.toast.connected.description": "{{provider}} modeli su sada dostupni za korištenje.",
 
+  "provider.custom.title": "Prilagođeni provajder",
+  "provider.custom.description.prefix": "Konfiguriši OpenAI-kompatibilnog provajdera. Pogledaj ",
+  "provider.custom.description.link": "dokumentaciju za konfiguraciju provajdera",
+  "provider.custom.description.suffix": ".",
+  "provider.custom.field.providerID.label": "ID provajdera",
+  "provider.custom.field.providerID.placeholder": "mojprovajder",
+  "provider.custom.field.providerID.description": "Mala slova, brojevi, crtice ili donje crte",
+  "provider.custom.field.name.label": "Prikazano ime",
+  "provider.custom.field.name.placeholder": "Moj AI Provajder",
+  "provider.custom.field.baseURL.label": "Bazni URL",
+  "provider.custom.field.baseURL.placeholder": "https://api.mojprovajder.com/v1",
+  "provider.custom.field.apiKey.label": "API ključ",
+  "provider.custom.field.apiKey.placeholder": "API ključ",
+  "provider.custom.field.apiKey.description":
+    "Opcionalno. Ostavi prazno ako upravljaš autentifikacijom putem zaglavlja.",
+  "provider.custom.models.label": "Modeli",
+  "provider.custom.models.id.label": "ID",
+  "provider.custom.models.id.placeholder": "model-id",
+  "provider.custom.models.name.label": "Ime",
+  "provider.custom.models.name.placeholder": "Prikazano ime",
+  "provider.custom.models.remove": "Ukloni model",
+  "provider.custom.models.add": "Dodaj model",
+  "provider.custom.headers.label": "Zaglavlja (opcionalno)",
+  "provider.custom.headers.key.label": "Zaglavlje",
+  "provider.custom.headers.key.placeholder": "Ime-Zaglavlja",
+  "provider.custom.headers.value.label": "Vrijednost",
+  "provider.custom.headers.value.placeholder": "vrijednost",
+  "provider.custom.headers.remove": "Ukloni zaglavlje",
+  "provider.custom.headers.add": "Dodaj zaglavlje",
+  "provider.custom.error.providerID.required": "ID provajdera je obavezan",
+  "provider.custom.error.providerID.format": "Koristi mala slova, brojeve, crtice ili donje crte",
+  "provider.custom.error.providerID.exists": "Taj ID provajdera već postoji",
+  "provider.custom.error.name.required": "Prikazano ime je obavezno",
+  "provider.custom.error.baseURL.required": "Bazni URL je obavezan",
+  "provider.custom.error.baseURL.format": "Mora početi sa http:// ili https://",
+  "provider.custom.error.required": "Obavezno",
+  "provider.custom.error.duplicate": "Duplikat",
+
   "provider.disconnect.toast.disconnected.title": "{{provider}} odspojen",
   "provider.disconnect.toast.disconnected.description": "{{provider}} modeli više nisu dostupni.",
 
@@ -408,6 +446,7 @@ export const dict = {
     "Korijenski element nije pronađen. Da li si zaboravio da ga dodaš u index.html? Ili je možda id atribut pogrešno napisan?",
 
   "error.globalSync.connectFailed": "Nije moguće povezati se na server. Da li server radi na `{{url}}`?",
+  "directory.error.invalidUrl": "Nevažeći direktorij u URL-u.",
 
   "error.chain.unknown": "Nepoznata greška",
   "error.chain.causedBy": "Uzrok:",
@@ -417,7 +456,7 @@ export const dict = {
   "error.chain.responseBody": "Tijelo odgovora:\n{{body}}",
   "error.chain.didYouMean": "Da li si mislio: {{suggestions}}",
   "error.chain.modelNotFound": "Model nije pronađen: {{provider}}/{{model}}",
-  "error.chain.checkConfig": "Provjeri konfiguraciju (opencode.json) - nazive provajdera/modela",
+  "error.chain.checkConfig": "Provjeri konfiguraciju (opencode.json) provider/model names",
   "error.chain.mcpFailed": 'MCP server "{{name}}" nije uspio. Napomena: OpenCode još ne podržava MCP autentifikaciju.',
   "error.chain.providerAuthFailed": "Autentifikacija provajdera nije uspjela ({{provider}}): {{message}}",
   "error.chain.providerInitFailed":
@@ -474,6 +513,11 @@ export const dict = {
 
   "session.header.search.placeholder": "Pretraži {{project}}",
   "session.header.searchFiles": "Pretraži datoteke",
+  "session.header.openIn": "Otvori u",
+  "session.header.open.action": "Otvori {{app}}",
+  "session.header.open.ariaLabel": "Otvori u {{app}}",
+  "session.header.open.menu": "Opcije otvaranja",
+  "session.header.open.copyPath": "Kopiraj putanju",
 
   "status.popover.trigger": "Status",
   "status.popover.ariaLabel": "Konfiguracije servera",
@@ -539,11 +583,15 @@ export const dict = {
   "settings.section.server": "Server",
   "settings.tab.general": "Opšte",
   "settings.tab.shortcuts": "Prečice",
+  "settings.desktop.section.wsl": "WSL",
+  "settings.desktop.wsl.title": "WSL integracija",
+  "settings.desktop.wsl.description": "Pokreni OpenCode server unutar WSL-a na Windowsu.",
 
   "settings.general.section.appearance": "Izgled",
   "settings.general.section.notifications": "Sistemske obavijesti",
   "settings.general.section.updates": "Ažuriranja",
   "settings.general.section.sounds": "Zvučni efekti",
+  "settings.general.section.display": "Prikaz",
 
   "settings.general.row.language.title": "Jezik",
   "settings.general.row.language.description": "Promijeni jezik prikaza u OpenCode-u",
@@ -553,6 +601,11 @@ export const dict = {
   "settings.general.row.theme.description": "Prilagodi temu OpenCode-a.",
   "settings.general.row.font.title": "Font",
   "settings.general.row.font.description": "Prilagodi monospace font koji se koristi u blokovima koda",
+
+  "settings.general.row.wayland.title": "Koristi nativni Wayland",
+  "settings.general.row.wayland.description": "Onemogući X11 fallback na Waylandu. Zahtijeva restart.",
+  "settings.general.row.wayland.tooltip":
+    "Na Linuxu sa monitorima miješanih stopa osvježavanja, nativni Wayland može biti stabilniji.",
 
   "settings.general.row.releaseNotes.title": "Bilješke o izdanju",
   "settings.general.row.releaseNotes.description": 'Prikaži iskačuće prozore "Šta je novo" nakon ažuriranja',

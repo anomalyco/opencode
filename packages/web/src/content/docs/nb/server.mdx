@@ -1,12 +1,12 @@
 ---
 title: Server
-description: Samhandle med opencode-server over HTTP.
+description: Samhandle med OpenCode-server over HTTP.
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-Kommandoen `opencode serve` kjører en hodeløs HTTP-server som avslører et OpenAPI-endepunkt som en opencode-klient kan bruke.
+Kommandoen `opencode serve` kjører en hodeløs HTTP-server som avslører et OpenAPI-endepunkt som en OpenCode-klient kan bruke.
 
 ---
 
@@ -51,13 +51,13 @@ klient som snakker med serveren. Serveren viser en OpenAPI 3.1-spesifikasjon
 endepunkt. Dette endepunktet brukes også til å generere en [SDK](/docs/sdk).
 
 :::tip
-Bruk opencode-serveren til å samhandle med opencode programmatisk.
+Bruk OpenCode-serveren til å samhandle med OpenCode programmatisk.
 :::
 
-Denne arkitekturen lar opencode støtte flere klienter og lar deg samhandle med opencode programmatisk.
+Denne arkitekturen lar OpenCode støtte flere klienter og lar deg samhandle med OpenCode programmatisk.
 
 Du kan kjøre `opencode serve` for å starte en frittstående server. Hvis du har
-opencode TUI kjører, vil `opencode serve` starte en ny server.
+OpenCode TUI kjører, vil `opencode serve` starte en ny server.
 
 ---
 
@@ -65,7 +65,7 @@ opencode TUI kjører, vil `opencode serve` starte en ny server.
 
 Når du starter TUI, tildeler den tilfeldig en port og vertsnavn. Du kan i stedet sende inn `--hostname` og `--port` [flagg](/docs/cli). Bruk deretter denne til å koble til serveren.
 
-[`/tui`](#tui) endepunktet kan brukes til å kjøre TUI gjennom serveren. Du kan for eksempel forhåndsutfylle eller kjøre en forespørsel. Dette oppsettet brukes av opencode [IDE](/docs/ide) plugins.
+[`/tui`](#tui) endepunktet kan brukes til å kjøre TUI gjennom serveren. Du kan for eksempel forhåndsutfylle eller kjøre en forespørsel. Dette oppsettet brukes av OpenCode [IDE](/docs/ide) plugins.
 
 ---
 
@@ -143,7 +143,7 @@ opencode-serveren viser følgende APIer.
 
 ---
 
-### økter
+### Sesjoner
 
 | Metode   | Sti                                      | Beskrivelse                              | Merknader                                                                             |
 | -------- | ---------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------- |
@@ -280,7 +280,7 @@ opencode-serveren viser følgende APIer.
 
 ---
 
-### Dokumenter
+### Dokumentasjon
 
 | Metode | Sti    | Beskrivelse               | Svar                                |
 | ------ | ------ | ------------------------- | ----------------------------------- |
