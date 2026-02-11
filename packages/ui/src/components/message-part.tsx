@@ -1270,8 +1270,8 @@ ToolRegistry.register({
                       </Match>
                     </Switch>
                     <span data-slot="apply-patch-file-path">{file.relativePath}</span>
-                    <OpenInAppButton file={file.filePath} />
                     <Show when={file.type !== "delete"}>
+                      <OpenInAppButton file={file.filePath} />
                       <DiffChanges changes={{ additions: file.additions, deletions: file.deletions }} />
                     </Show>
                     <Show when={file.type === "delete"}>

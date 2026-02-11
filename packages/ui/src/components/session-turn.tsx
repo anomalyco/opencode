@@ -297,7 +297,7 @@ export function SessionTurn(
   const errorText = createMemo(() => {
     const msg = error()?.data?.message
     if (typeof msg === "string") return unwrap(msg)
-    if (msg == null) return ""
+    if (msg === undefined || msg === null) return ""
     return unwrap(String(msg))
   })
 
@@ -546,7 +546,7 @@ export function SessionTurn(
   let errorLog = ""
   createEffect(() => {
     const value = error()?.data?.message
-    if (value == null) return
+    if (value === undefined || value === null) return
     const raw = typeof value === "string" ? value : String(value)
     if (!raw) return
     if (raw === errorLog) return

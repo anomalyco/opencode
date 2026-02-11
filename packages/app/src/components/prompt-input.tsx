@@ -834,7 +834,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       }
     }
 
-    // Shift+Enter must come before the IME check since it's never IME input
+    // Handle Shift+Enter BEFORE IME check - Shift+Enter is never used for IME input
+    // and should always insert a newline regardless of composition state
     if (event.key === "Enter" && event.shiftKey) {
       addPart({ type: "text", content: "\n", start: 0, end: 0 })
       event.preventDefault()
