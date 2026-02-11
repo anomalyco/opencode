@@ -8,8 +8,19 @@ use tokio::task::JoinHandle;
 
 use crate::{
     cli,
-    constants::{DEFAULT_SERVER_URL_KEY, SETTINGS_STORE},
+    constants::{DEFAULT_SERVER_URL_KEY, SETTINGS_STORE, WSL_ENABLED_KEY},
 };
+
+#[derive(Clone, serde::Serialize, serde::Deserialize, specta::Type, Debug)]
+pub struct WslConfig {
+    pub enabled: bool,
+}
+
+impl Default for WslConfig {
+    fn default() -> Self {
+        Self { enabled: false }
+    }
+}
 
 #[tauri::command]
 #[specta::specta]
@@ -48,16 +59,48 @@ pub async fn set_default_server_url(app: AppHandle, url: Option<String>) -> Resu
     Ok(())
 }
 
+#[tauri::command]
+#[specta::specta]
+pub fn get_wsl_config(app: AppHandle) -> Result<WslConfig, String> {
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("Failed to open settings store: {}", e))?;
+
+    let enabled = store
+        .get(WSL_ENABLED_KEY)
+        .as_ref()
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    Ok(WslConfig { enabled })
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn set_wsl_config(app: AppHandle, config: WslConfig) -> Result<(), String> {
+    let store = app
+        .store(SETTINGS_STORE)
+        .map_err(|e| format!("Failed to open settings store: {}", e))?;
+
+    store.set(WSL_ENABLED_KEY, serde_json::Value::Bool(config.enabled));
+
+    store
+        .save()
+        .map_err(|e| format!("Failed to save settings: {}", e))?;
+
+    Ok(())
+}
+
 pub async fn get_saved_server_url(app: &tauri::AppHandle) -> Option<String> {
     if let Some(url) = get_default_server_url(app.clone()).ok().flatten() {
-        println!("Using desktop-specific custom URL: {url}");
+        tracing::info!(%url, "Using desktop-specific custom URL");
         return Some(url);
     }
 
     if let Some(cli_config) = cli::get_config(app).await
         && let Some(url) = get_server_url_from_config(&cli_config)
     {
-        println!("Using custom server URL from config: {url}");
+        tracing::info!(%url, "Using custom server URL from config");
         return Some(url);
     }
 
@@ -70,26 +113,43 @@ pub fn spawn_local_server(
     port: u32,
     password: String,
 ) -> (CommandChild, HealthCheck) {
-    let child = cli::serve(&app, &hostname, port, &password);
+    let (child, exit) = cli::serve(&app, &hostname, port, &password);
 
     let health_check = HealthCheck(tokio::spawn(async move {
         let url = format!("http://{hostname}:{port}");
-
         let timestamp = Instant::now();
-        loop {
-            tokio::time::sleep(Duration::from_millis(100)).await;
 
-            if check_health(&url, Some(&password)).await {
-                println!("Server ready after {:?}", timestamp.elapsed());
-                break;
+        let ready = async {
+            loop {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+
+                if check_health(&url, Some(&password)).await {
+                    tracing::info!(elapsed = ?timestamp.elapsed(), "Server ready");
+                    return Ok(());
+                }
             }
+        };
+
+        let terminated = async {
+            match exit.await {
+                Ok(payload) => Err(format!(
+                    "Sidecar terminated before becoming healthy (code={:?} signal={:?})",
+                    payload.code, payload.signal
+                )),
+                Err(_) => Err("Sidecar terminated before becoming healthy".to_string()),
+            }
+        };
+
+        tokio::select! {
+            res = ready => res,
+            res = terminated => res,
         }
     }));
 
     (child, health_check)
 }
 
-pub struct HealthCheck(pub JoinHandle<()>);
+pub struct HealthCheck(pub JoinHandle<Result<(), String>>);
 
 pub async fn check_health(url: &str, password: Option<&str>) -> bool {
     let Ok(url) = reqwest::Url::parse(url) else {
@@ -156,7 +216,7 @@ fn normalize_hostname_for_url(hostname: &str) -> String {
 fn get_server_url_from_config(config: &cli::Config) -> Option<String> {
     let server = config.server.as_ref()?;
     let port = server.port?;
-    println!("server.port found in OC config: {port}");
+    tracing::debug!(port, "server.port found in OC config");
     let hostname = server
         .hostname
         .as_ref()
@@ -167,7 +227,7 @@ fn get_server_url_from_config(config: &cli::Config) -> Option<String> {
 }
 
 pub async fn check_health_or_ask_retry(app: &AppHandle, url: &str) -> bool {
-    println!("Checking health for {url}");
+    tracing::debug!(%url, "Checking health");
     loop {
         if check_health(url, None).await {
             return true;

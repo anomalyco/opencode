@@ -112,21 +112,35 @@ export function SessionHeader() {
 
   const [exists, setExists] = createStore<Partial<Record<OpenApp, boolean>>>({ finder: true })
 
+  const apps = createMemo(() => {
+    if (os() === "macos") return MAC_APPS
+    if (os() === "windows") return WINDOWS_APPS
+    return LINUX_APPS
+  })
+
+  const fileManager = createMemo(() => {
+    if (os() === "macos") return { label: "Finder", icon: "finder" as const }
+    if (os() === "windows") return { label: "File Explorer", icon: "file-explorer" as const }
+    return { label: "File Manager", icon: "finder" as const }
+  })
+
   createEffect(() => {
     if (platform.platform !== "desktop") return
     if (!platform.checkAppExists) return
 
-    const list = os()
-    const apps = list === "macos" ? MAC_APPS : list === "windows" ? WINDOWS_APPS : list === "linux" ? LINUX_APPS : []
-    if (apps.length === 0) return
+    const list = apps()
+
+    setExists(Object.fromEntries(list.map((app) => [app.id, undefined])) as Partial<Record<OpenApp, boolean>>)
 
     void Promise.all(
-      apps.map((app) =>
-        Promise.resolve(platform.checkAppExists?.(app.openWith)).then((value) => {
-          const ok = Boolean(value)
-          console.debug(`[session-header] App "${app.label}" (${app.openWith}): ${ok ? "exists" : "does not exist"}`)
-          return [app.id, ok] as const
-        }),
+      list.map((app) =>
+        Promise.resolve(platform.checkAppExists?.(app.openWith))
+          .then((value) => Boolean(value))
+          .catch(() => false)
+          .then((ok) => {
+            console.debug(`[session-header] App "${app.label}" (${app.openWith}): ${ok ? "exists" : "does not exist"}`)
+            return [app.id, ok] as const
+          }),
       ),
     ).then((entries) => {
       setExists(Object.fromEntries(entries) as Partial<Record<OpenApp, boolean>>)
@@ -134,30 +148,32 @@ export function SessionHeader() {
   })
 
   const options = createMemo(() => {
-    if (os() === "macos") {
-      return [{ id: "finder", label: "Finder", icon: "finder" }, ...MAC_APPS.filter((app) => exists[app.id])] as const
-    }
-
-    if (os() === "windows") {
-      return [
-        { id: "finder", label: "File Explorer", icon: "file-explorer" },
-        ...WINDOWS_APPS.filter((app) => exists[app.id]),
-      ] as const
-    }
-
     return [
-      { id: "finder", label: "File Manager", icon: "finder" },
-      ...LINUX_APPS.filter((app) => exists[app.id]),
+      { id: "finder", label: fileManager().label, icon: fileManager().icon },
+      ...apps().filter((app) => exists[app.id]),
     ] as const
   })
 
+  type OpenIcon = OpenApp | "file-explorer"
+  const base = new Set<OpenIcon>(["finder", "vscode", "cursor", "zed"])
+  const size = (id: OpenIcon) => (base.has(id) ? "size-4" : "size-[19px]")
+
+  const checksReady = createMemo(() => {
+    if (platform.platform !== "desktop") return true
+    if (!platform.checkAppExists) return true
+    const list = apps()
+    return list.every((app) => exists[app.id] !== undefined)
+  })
+
   const [prefs, setPrefs] = persisted(Persist.global("open.app"), createStore({ app: "finder" as OpenApp }))
+  const [menu, setMenu] = createStore({ open: false })
 
   const canOpen = createMemo(() => platform.platform === "desktop" && !!platform.openPath && server.isLocal())
   const current = createMemo(() => options().find((o) => o.id === prefs.app) ?? options()[0])
 
   createEffect(() => {
     if (platform.platform !== "desktop") return
+    if (!checksReady()) return
     const value = prefs.app
     if (options().some((o) => o.id === value)) return
     setPrefs("app", options()[0]?.id ?? "finder")
@@ -283,7 +299,7 @@ export function SessionHeader() {
           <Portal mount={mount()}>
             <button
               type="button"
-              class="hidden md:flex w-[320px] max-w-full min-w-0 p-1 pl-1.5 items-center gap-2 justify-between rounded-md border border-border-weak-base bg-surface-raised-base transition-colors cursor-default hover:bg-surface-raised-base-hover focus-visible:bg-surface-raised-base-hover active:bg-surface-raised-base-active"
+              class="hidden md:flex w-[320px] max-w-full min-w-0 h-[24px] px-2 pl-1.5 items-center gap-2 justify-between rounded-md border border-border-base bg-surface-panel transition-colors cursor-default hover:bg-surface-raised-base-hover focus-visible:bg-surface-raised-base-hover active:bg-surface-raised-base-active"
               onClick={() => command.trigger("file.open")}
               aria-label={language.t("session.header.searchFiles")}
             >
@@ -294,7 +310,11 @@ export function SessionHeader() {
                 </span>
               </div>
 
-              <Show when={hotkey()}>{(keybind) => <Keybind class="shrink-0">{keybind()}</Keybind>}</Show>
+              <Show when={hotkey()}>
+                {(keybind) => (
+                  <Keybind class="shrink-0 !border-0 !bg-transparent !shadow-none px-0">{keybind()}</Keybind>
+                )}
+              </Show>
             </button>
           </Portal>
         )}
@@ -303,81 +323,106 @@ export function SessionHeader() {
         {(mount) => (
           <Portal mount={mount()}>
             <div class="flex items-center gap-3">
+              <StatusPopover />
               <Show when={projectDirectory()}>
                 <div class="hidden xl:flex items-center">
                   <Show
                     when={canOpen()}
                     fallback={
-                      <Button
-                        variant="ghost"
-                        class="rounded-sm h-[24px] py-1.5 pr-3 pl-2 gap-2 border-none shadow-none"
-                        onClick={copyPath}
-                        aria-label={language.t("session.header.open.copyPath")}
-                      >
-                        <Icon name="copy" size="small" class="text-icon-base" />
-                        <span class="text-12-regular text-text-strong">
-                          {language.t("session.header.open.copyPath")}
-                        </span>
-                      </Button>
+                      <div class="flex h-[24px] box-border items-center rounded-md border border-border-base bg-surface-panel overflow-hidden">
+                        <Button
+                          variant="ghost"
+                          class="rounded-none h-full py-0 pr-3 pl-2 gap-2 border-none shadow-none"
+                          onClick={copyPath}
+                          aria-label={language.t("session.header.open.copyPath")}
+                        >
+                          <Icon name="copy" size="small" class="text-icon-base" />
+                          <span class="text-12-regular text-text-strong">
+                            {language.t("session.header.open.copyPath")}
+                          </span>
+                        </Button>
+                      </div>
                     }
                   >
                     <div class="flex items-center">
-                      <Button
-                        variant="ghost"
-                        class="rounded-sm h-[24px] py-1.5 pr-3 pl-2 gap-2 border-none shadow-none rounded-r-none"
-                        onClick={() => openDir(current().id)}
-                        aria-label={language.t("session.header.open.ariaLabel", { app: current().label })}
-                      >
-                        <AppIcon id={current().icon} class="size-5" />
-                        <span class="text-12-regular text-text-strong">
-                          {language.t("session.header.open.action", { app: current().label })}
-                        </span>
-                      </Button>
-                      <DropdownMenu>
-                        <DropdownMenu.Trigger
-                          as={IconButton}
-                          icon="chevron-down"
+                      <div class="flex h-[24px] box-border items-center rounded-md border border-border-base bg-surface-panel overflow-hidden">
+                        <Button
                           variant="ghost"
-                          class="rounded-sm h-[24px] w-auto px-1.5 border-none shadow-none rounded-l-none data-[expanded]:bg-surface-raised-base-active"
-                          aria-label={language.t("session.header.open.menu")}
-                        />
-                        <DropdownMenu.Portal>
-                          <DropdownMenu.Content placement="bottom-end" gutter={6}>
-                            <DropdownMenu.Group>
-                              <DropdownMenu.GroupLabel>{language.t("session.header.openIn")}</DropdownMenu.GroupLabel>
-                              <DropdownMenu.RadioGroup
-                                value={prefs.app}
-                                onChange={(value) => {
-                                  if (!OPEN_APPS.includes(value as OpenApp)) return
-                                  setPrefs("app", value as OpenApp)
+                          class="rounded-none h-full py-0 pr-3 pl-2 gap-1.5 border-none shadow-none"
+                          onClick={() => openDir(current().id)}
+                          aria-label={language.t("session.header.open.ariaLabel", { app: current().label })}
+                        >
+                          <div class="flex size-5 shrink-0 items-center justify-center">
+                            <AppIcon id={current().icon} class="size-4" />
+                          </div>
+                          <span class="text-12-regular text-text-strong">Open</span>
+                        </Button>
+                        <div class="self-stretch w-px bg-border-base/70" />
+                        <DropdownMenu
+                          gutter={6}
+                          placement="bottom-end"
+                          open={menu.open}
+                          onOpenChange={(open) => setMenu("open", open)}
+                        >
+                          <DropdownMenu.Trigger
+                            as={IconButton}
+                            icon="chevron-down"
+                            variant="ghost"
+                            class="rounded-none h-full w-[24px] p-0 border-none shadow-none data-[expanded]:bg-surface-raised-base-active"
+                            aria-label={language.t("session.header.open.menu")}
+                          />
+                          <DropdownMenu.Portal>
+                            <DropdownMenu.Content>
+                              <DropdownMenu.Group>
+                                <DropdownMenu.GroupLabel>{language.t("session.header.openIn")}</DropdownMenu.GroupLabel>
+                                <DropdownMenu.RadioGroup
+                                  value={prefs.app}
+                                  onChange={(value) => {
+                                    if (!OPEN_APPS.includes(value as OpenApp)) return
+                                    setPrefs("app", value as OpenApp)
+                                  }}
+                                >
+                                  {options().map((o) => (
+                                    <DropdownMenu.RadioItem
+                                      value={o.id}
+                                      onSelect={() => {
+                                        setMenu("open", false)
+                                        openDir(o.id)
+                                      }}
+                                    >
+                                      <div class="flex size-5 shrink-0 items-center justify-center">
+                                        <AppIcon id={o.icon} class={size(o.icon)} />
+                                      </div>
+                                      <DropdownMenu.ItemLabel>{o.label}</DropdownMenu.ItemLabel>
+                                      <DropdownMenu.ItemIndicator>
+                                        <Icon name="check-small" size="small" class="text-icon-weak" />
+                                      </DropdownMenu.ItemIndicator>
+                                    </DropdownMenu.RadioItem>
+                                  ))}
+                                </DropdownMenu.RadioGroup>
+                              </DropdownMenu.Group>
+                              <DropdownMenu.Separator />
+                              <DropdownMenu.Item
+                                onSelect={() => {
+                                  setMenu("open", false)
+                                  copyPath()
                                 }}
                               >
-                                {options().map((o) => (
-                                  <DropdownMenu.RadioItem value={o.id} onSelect={() => openDir(o.id)}>
-                                    <AppIcon id={o.icon} class="size-5" />
-                                    <DropdownMenu.ItemLabel>{o.label}</DropdownMenu.ItemLabel>
-                                    <DropdownMenu.ItemIndicator>
-                                      <Icon name="check-small" size="small" class="text-icon-weak" />
-                                    </DropdownMenu.ItemIndicator>
-                                  </DropdownMenu.RadioItem>
-                                ))}
-                              </DropdownMenu.RadioGroup>
-                            </DropdownMenu.Group>
-                            <DropdownMenu.Separator />
-                            <DropdownMenu.Item onSelect={copyPath}>
-                              <Icon name="copy" size="small" class="text-icon-weak" />
-                              <DropdownMenu.ItemLabel>
-                                {language.t("session.header.open.copyPath")}
-                              </DropdownMenu.ItemLabel>
-                            </DropdownMenu.Item>
-                          </DropdownMenu.Content>
-                        </DropdownMenu.Portal>
-                      </DropdownMenu>
+                                <div class="flex size-5 shrink-0 items-center justify-center">
+                                  <Icon name="copy" size="small" class="text-icon-weak" />
+                                </div>
+                                <DropdownMenu.ItemLabel>
+                                  {language.t("session.header.open.copyPath")}
+                                </DropdownMenu.ItemLabel>
+                              </DropdownMenu.Item>
+                            </DropdownMenu.Content>
+                          </DropdownMenu.Portal>
+                        </DropdownMenu>
+                      </div>
                     </div>
                   </Show>
                 </div>
               </Show>
-              <StatusPopover />
               <Show when={showShare()}>
                 <div class="flex items-center">
                   <Popover
@@ -393,8 +438,9 @@ export function SessionHeader() {
                     class="rounded-xl [&_[data-slot=popover-close-button]]:hidden"
                     triggerAs={Button}
                     triggerProps={{
-                      variant: "secondary",
-                      class: "rounded-sm h-[24px] px-3",
+                      variant: "ghost",
+                      class:
+                        "rounded-md h-[24px] px-3 border border-border-base bg-surface-panel shadow-none data-[expanded]:bg-surface-raised-base-active",
                       classList: { "rounded-r-none": shareUrl() !== undefined },
                       style: { scale: 1 },
                     }}
@@ -420,7 +466,14 @@ export function SessionHeader() {
                         }
                       >
                         <div class="flex flex-col gap-2">
-                          <TextField value={shareUrl() ?? ""} readOnly copyable tabIndex={-1} class="w-full" />
+                          <TextField
+                            value={shareUrl() ?? ""}
+                            readOnly
+                            copyable
+                            copyKind="link"
+                            tabIndex={-1}
+                            class="w-full"
+                          />
                           <div class="grid grid-cols-2 gap-2">
                             <Button
                               size="large"
@@ -459,8 +512,8 @@ export function SessionHeader() {
                     >
                       <IconButton
                         icon={state.copied ? "check" : "link"}
-                        variant="secondary"
-                        class="rounded-l-none"
+                        variant="ghost"
+                        class="rounded-l-none h-[24px] border border-border-base bg-surface-panel shadow-none"
                         onClick={copyLink}
                         disabled={state.unshare}
                         aria-label={
@@ -544,11 +597,7 @@ export function SessionHeader() {
                   <Button
                     variant="ghost"
                     class="group/file-tree-toggle size-6 p-0"
-                    onClick={() => {
-                      const opening = !layout.fileTree.opened()
-                      if (opening && !view().reviewPanel.opened()) view().reviewPanel.open()
-                      layout.fileTree.toggle()
-                    }}
+                    onClick={() => layout.fileTree.toggle()}
                     aria-label={language.t("command.fileTree.toggle")}
                     aria-expanded={layout.fileTree.opened()}
                     aria-controls="file-tree-panel"

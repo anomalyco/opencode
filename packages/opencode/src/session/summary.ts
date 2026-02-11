@@ -9,8 +9,6 @@ import { Identifier } from "@/id/id"
 import { Snapshot } from "@/snapshot"
 
 import { Log } from "@/util/log"
-import path from "path"
-import { Instance } from "@/project/instance"
 import { Storage } from "@/storage/storage"
 import { Bus } from "@/bus"
 
@@ -91,18 +89,7 @@ export namespace SessionSummary {
   )
 
   async function summarizeSession(input: { sessionID: string; messages: MessageV2.WithParts[] }) {
-    const files = new Set(
-      input.messages
-        .flatMap((x) => x.parts)
-        .filter((x) => x.type === "patch")
-        .flatMap((x) => x.files)
-        .map((x) => path.relative(Instance.worktree, x).replaceAll("\\", "/")),
-    )
-    const diffs = await computeDiff({ messages: input.messages }).then((x) =>
-      x.filter((x) => {
-        return files.has(x.file)
-      }),
-    )
+    const diffs = await computeDiff({ messages: input.messages })
     await Session.update(input.sessionID, (draft) => {
       draft.summary = {
         additions: diffs.reduce((sum, x) => sum + x.additions, 0),
@@ -206,7 +193,6 @@ export namespace SessionSummary {
       for (const part of item.parts) {
         if (part.type === "step-finish" && part.snapshot) {
           to = part.snapshot
-          break
         }
       }
     }
