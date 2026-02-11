@@ -775,6 +775,8 @@ export namespace MessageV2 {
           },
           { cause: e },
         ).toObject()
+      case e instanceof Error && e.name === "FirstTokenTimeoutError":
+        return new NamedError.Unknown({ message: e.message }, { cause: e }).toObject()
       case e instanceof Error:
         return new NamedError.Unknown({ message: e.toString() }, { cause: e }).toObject()
       default:

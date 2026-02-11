@@ -572,6 +572,9 @@ export namespace SessionPrompt {
         sessionID: sessionID,
         model,
         abort,
+        fallbackModels: agent.fallbackModels,
+        firstTokenTimeout: agent.firstTokenTimeout,
+        agentName: agent.name,
       })
       using _ = defer(() => InstructionPrompt.clear(processor.message.id))
 

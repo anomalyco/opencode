@@ -38,6 +38,15 @@ export namespace Agent {
           providerID: z.string(),
         })
         .optional(),
+      fallbackModels: z
+        .array(
+          z.object({
+            modelID: z.string(),
+            providerID: z.string(),
+          }),
+        )
+        .optional(),
+      firstTokenTimeout: z.number().int().positive().optional(),
       variant: z.string().optional(),
       prompt: z.string().optional(),
       options: z.record(z.string(), z.any()),
@@ -216,6 +225,12 @@ export namespace Agent {
           native: false,
         }
       if (value.model) item.model = Provider.parseModel(value.model)
+      if (value.fallback_models) {
+        item.fallbackModels = value.fallback_models.map((m: string) => Provider.parseModel(m))
+      }
+      if (value.first_token_timeout !== undefined) {
+        item.firstTokenTimeout = value.first_token_timeout
+      }
       item.variant = value.variant ?? item.variant
       item.prompt = value.prompt ?? item.prompt
       item.description = value.description ?? item.description

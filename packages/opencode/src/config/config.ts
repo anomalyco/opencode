@@ -672,6 +672,18 @@ export namespace Config {
   export const Agent = z
     .object({
       model: ModelId.optional(),
+      fallback_models: z
+        .array(ModelId)
+        .optional()
+        .describe("Fallback models to try when the primary model fails, in priority order"),
+      first_token_timeout: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe(
+          "First token timeout base in ms. Actual timeout = base + inputChars * 0.5. Only effective when fallback_models is also configured.",
+        ),
       variant: z
         .string()
         .optional()
@@ -709,6 +721,8 @@ export namespace Config {
       const knownKeys = new Set([
         "name",
         "model",
+        "fallback_models",
+        "first_token_timeout",
         "variant",
         "prompt",
         "description",
