@@ -3,9 +3,10 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Icon } from "@opencode-ai/ui/icon"
-import { createMemo, createSignal, For, Show } from "solid-js"
+import { createMemo, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useGlobalSDK } from "@/context/global-sdk"
+import { useGlobalSync } from "@/context/global-sync"
 import { type LocalProject, getAvatarColors } from "@/context/layout"
 import { getFilename } from "@opencode-ai/util/path"
 import { Avatar } from "@opencode-ai/ui/avatar"
@@ -16,6 +17,7 @@ const AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] a
 export function DialogEditProject(props: { project: LocalProject }) {
   const dialog = useDialog()
   const globalSDK = useGlobalSDK()
+  const globalSync = useGlobalSync()
   const language = useLanguage()
 
   const folderName = createMemo(() => getFilename(props.project.worktree))
@@ -27,35 +29,34 @@ export function DialogEditProject(props: { project: LocalProject }) {
     iconUrl: props.project.icon?.override || "",
     startup: props.project.commands?.start ?? "",
     saving: false,
+    dragOver: false,
+    iconHover: false,
   })
-
-  const [dragOver, setDragOver] = createSignal(false)
-  const [iconHover, setIconHover] = createSignal(false)
 
   function handleFileSelect(file: File) {
     if (!file.type.startsWith("image/")) return
     const reader = new FileReader()
     reader.onload = (e) => {
       setStore("iconUrl", e.target?.result as string)
-      setIconHover(false)
+      setStore("iconHover", false)
     }
     reader.readAsDataURL(file)
   }
 
   function handleDrop(e: DragEvent) {
     e.preventDefault()
-    setDragOver(false)
+    setStore("dragOver", false)
     const file = e.dataTransfer?.files[0]
     if (file) handleFileSelect(file)
   }
 
   function handleDragOver(e: DragEvent) {
     e.preventDefault()
-    setDragOver(true)
+    setStore("dragOver", true)
   }
 
   function handleDragLeave() {
-    setDragOver(false)
+    setStore("dragOver", false)
   }
 
   function handleInputChange(e: Event) {
@@ -71,17 +72,28 @@ export function DialogEditProject(props: { project: LocalProject }) {
   async function handleSubmit(e: SubmitEvent) {
     e.preventDefault()
 
-    if (!props.project.id) return
-
     setStore("saving", true)
     const name = store.name.trim() === folderName() ? "" : store.name.trim()
     const start = store.startup.trim()
-    await globalSDK.client.project.update({
-      projectID: props.project.id,
-      directory: props.project.worktree,
+
+    if (props.project.id && props.project.id !== "global") {
+      await globalSDK.client.project.update({
+        projectID: props.project.id,
+        directory: props.project.worktree,
+        name,
+        icon: { color: store.color, override: store.iconUrl },
+        commands: { start },
+      })
+      globalSync.project.icon(props.project.worktree, store.iconUrl || undefined)
+      setStore("saving", false)
+      dialog.close()
+      return
+    }
+
+    globalSync.project.meta(props.project.worktree, {
       name,
-      icon: { color: store.color, override: store.iconUrl },
-      commands: { start },
+      icon: { color: store.color, override: store.iconUrl || undefined },
+      commands: { start: start || undefined },
     })
     setStore("saving", false)
     dialog.close()
@@ -103,19 +115,23 @@ export function DialogEditProject(props: { project: LocalProject }) {
           <div class="flex flex-col gap-2">
             <label class="text-12-medium text-text-weak">{language.t("dialog.project.edit.icon")}</label>
             <div class="flex gap-3 items-start">
-              <div class="relative" onMouseEnter={() => setIconHover(true)} onMouseLeave={() => setIconHover(false)}>
+              <div
+                class="relative"
+                onMouseEnter={() => setStore("iconHover", true)}
+                onMouseLeave={() => setStore("iconHover", false)}
+              >
                 <div
                   class="relative size-16 rounded-md transition-colors cursor-pointer"
                   classList={{
-                    "border-text-interactive-base bg-surface-info-base/20": dragOver(),
-                    "border-border-base hover:border-border-strong": !dragOver(),
+                    "border-text-interactive-base bg-surface-info-base/20": store.dragOver,
+                    "border-border-base hover:border-border-strong": !store.dragOver,
                     "overflow-hidden": !!store.iconUrl,
                   }}
                   onDrop={handleDrop}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onClick={() => {
-                    if (store.iconUrl && iconHover()) {
+                    if (store.iconUrl && store.iconHover) {
                       clearIcon()
                     } else {
                       document.getElementById("icon-upload")?.click()
@@ -129,8 +145,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
                         <Avatar
                           fallback={store.name || defaultName()}
                           {...getAvatarColors(store.color)}
-                          class="size-full"
-                          style={{ "font-size": "32px" }}
+                          class="size-full text-[32px]"
                         />
                       </div>
                     }
@@ -143,42 +158,22 @@ export function DialogEditProject(props: { project: LocalProject }) {
                   </Show>
                 </div>
                 <div
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "64px",
-                    height: "64px",
-                    background: "rgba(0,0,0,0.6)",
-                    "border-radius": "6px",
-                    "z-index": 10,
-                    "pointer-events": "none",
-                    opacity: iconHover() && !store.iconUrl ? 1 : 0,
-                    display: "flex",
-                    "align-items": "center",
-                    "justify-content": "center",
+                  class="absolute inset-0 size-16 bg-surface-raised-stronger-non-alpha/90 rounded-[6px] z-10 pointer-events-none flex items-center justify-center transition-opacity"
+                  classList={{
+                    "opacity-100": store.iconHover && !store.iconUrl,
+                    "opacity-0": !(store.iconHover && !store.iconUrl),
                   }}
                 >
-                  <Icon name="cloud-upload" size="large" class="text-icon-invert-base" />
+                  <Icon name="cloud-upload" size="large" class="text-icon-on-interactive-base drop-shadow-sm" />
                 </div>
                 <div
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "64px",
-                    height: "64px",
-                    background: "rgba(0,0,0,0.6)",
-                    "border-radius": "6px",
-                    "z-index": 10,
-                    "pointer-events": "none",
-                    opacity: iconHover() && store.iconUrl ? 1 : 0,
-                    display: "flex",
-                    "align-items": "center",
-                    "justify-content": "center",
+                  class="absolute inset-0 size-16 bg-surface-raised-stronger-non-alpha/90 rounded-[6px] z-10 pointer-events-none flex items-center justify-center transition-opacity"
+                  classList={{
+                    "opacity-100": store.iconHover && !!store.iconUrl,
+                    "opacity-0": !(store.iconHover && !!store.iconUrl),
                   }}
                 >
-                  <Icon name="trash" size="large" class="text-icon-invert-base" />
+                  <Icon name="trash" size="large" class="text-icon-on-interactive-base drop-shadow-sm" />
                 </div>
               </div>
               <input id="icon-upload" type="file" accept="image/*" class="hidden" onChange={handleInputChange} />
@@ -228,7 +223,7 @@ export function DialogEditProject(props: { project: LocalProject }) {
             value={store.startup}
             onChange={(v) => setStore("startup", v)}
             spellcheck={false}
-            class="max-h-40 w-full font-mono text-xs no-scrollbar"
+            class="max-h-14 w-full overflow-y-auto font-mono text-xs"
           />
         </div>
 

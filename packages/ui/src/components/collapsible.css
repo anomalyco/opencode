@@ -32,6 +32,7 @@
     /* } */
     &:focus-visible {
       outline: none;
+      background-color: var(--surface-raised-base-hover);
     }
     &[data-disabled] {
       cursor: not-allowed;
@@ -70,10 +71,17 @@
       /* } */
       &:focus-visible {
         outline: none;
+        background-color: var(--surface-raised-base-hover);
       }
       &[data-disabled] {
         cursor: not-allowed;
       }
+    }
+  }
+
+  &[data-variant="ghost"][data-scope="filetree"] {
+    > [data-slot="collapsible-trigger"] {
+      height: 24px;
     }
   }
 }

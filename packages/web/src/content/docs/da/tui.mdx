@@ -1,0 +1,390 @@
+---
+title: TUI
+description: Bruge OpenCode-terminalbrugergrænsefladeet.
+---
+
+import { Tabs, TabItem } from "@astrojs/starlight/components"
+
+OpenCode gir et interaktivt terminalgrænseflade eller TUI for at jobbe med prosjektene dine med en LLM.
+
+Å køre OpenCode starter TUI for nuværende mappe.
+
+```bash
+opencode
+```
+
+Eller du kan starte den for en bestemt arbejdsmappe.
+
+```bash
+opencode /path/to/project
+```
+
+Når du er i TUI, kan du spørge den med en besked.
+
+```text
+Give me a quick summary of the codebase.
+```
+
+---
+
+## Filreferencer
+
+Du kan referere til filer i dine meddelelser med `@`. Det laver en fuzzy filsøgning i det nuværende arbejdsmappe.
+
+:::tip
+Du kan også bruge `@` til at referere til filer i dine meddelelser.
+:::
+
+```text "@packages/functions/src/api/index.ts"
+How is auth handled in @packages/functions/src/api/index.ts?
+```
+
+Indholdet i filen tilføjes automatisk til samtalen.
+
+---
+
+## Bash-kommandoer
+
+Start en besked med `!` for at køre en shell-kommando.
+
+```bash frame="none"
+!ls -la
+```
+
+Outputtet fra kommandoen tilføjes til samtalen som et værktøjresultat.
+
+---
+
+## Kommandoer
+
+Når du bruger OpenCode TUI, kan du skrive `/` etterfulgt av et kommandonavn for raskt at utføre handlinger. For eksempel:
+
+```bash frame="none"
+/help
+```
+
+De fleste kommandoer har også genvejstast som bruger `ctrl+x` som Leader-tast, der `ctrl+x` er standard Leader-tast. [Læs mere](/docs/keybinds).
+
+Her er alle tilgængelige skråstregskommandoer:
+
+---
+
+### connect
+
+Tilføj en leverandør til OpenCode. Lar deg velge fra tilgængelige leverandører og tilføje til deres API-nøgler.
+
+```bash frame="none"
+/connect
+```
+
+---
+
+### compact
+
+Komprimer nuværende session. _Alias_: `/summarize`
+
+```bash frame="none"
+/compact
+```
+
+**Genvejstast:** `ctrl+x c`
+
+---
+
+### details
+
+Veksle værktøjutførelsesdetaljer.
+
+```bash frame="none"
+/details
+```
+
+**Genvejstast:** `ctrl+x d`
+
+---
+
+### editor
+
+Åbn eksternt redigeringsprogram for at skrive beskeder. Bruger redigeringsprogrammet i miljøvariabelen `EDITOR`. [Læs mere](#editor-setup).
+
+```bash frame="none"
+/editor
+```
+
+**Genvejstast:** `ctrl+x e`
+
+---
+
+### exit
+
+Afslut OpenCode. _Aliaser_: `/quit`, `/q`
+
+```bash frame="none"
+/exit
+```
+
+**Genvejstast:** `ctrl+x q`
+
+---
+
+### export
+
+Eksporter nuværende samtale til Markdown og åpne i standardredigeringsprogrammet. Bruger redigeringsprogrammet i miljøvariabelen `EDITOR`. [Læs mere](#editor-setup).
+
+```bash frame="none"
+/export
+```
+
+**Genvejstast:** `ctrl+x x`
+
+---
+
+### help
+
+Vis hjælpedialogen.
+
+```bash frame="none"
+/help
+```
+
+**Genvejstast:** `ctrl+x h`
+
+---
+
+### init
+
+Opret eller opdater `AGENTS.md`-fil. [Læs mere](/docs/rules).
+
+```bash frame="none"
+/init
+```
+
+**Genvejstast:** `ctrl+x i`
+
+---
+
+### models
+
+Liste over tilgængelige modeller.
+
+```bash frame="none"
+/models
+```
+
+**Genvejstast:** `ctrl+x m`
+
+---
+
+### new
+
+Start en ny session. _Alias_: `/clear`
+
+```bash frame="none"
+/new
+```
+
+**Genvejstast:** `ctrl+x n`
+
+---
+
+### redo
+
+Gentag en tidligere fortrudt besked. Kun tilgængelig etter brug av `/undo`.
+
+:::tip
+Eventuelle filændringer vil også bli genoprettet.
+:::
+
+Internt bruger dette Git til at administrere filændringerne. Så dit prosjekt **må
+være et Git-depot**.
+
+```bash frame="none"
+/redo
+```
+
+**Genvejstast:** `ctrl+x r`
+
+---
+
+### sessions
+
+List opp og bytt mellom sessioner. _Aliaser_: `/resume`, `/continue`
+
+```bash frame="none"
+/sessions
+```
+
+**Genvejstast:** `ctrl+x l`
+
+---
+
+### share
+
+Del nuværende session. [Læs mere](/docs/share).
+
+```bash frame="none"
+/share
+```
+
+**Genvejstast:** `ctrl+x s`
+
+---
+
+### themes
+
+Liste over tilgængelige temaer.
+
+```bash frame="none"
+/theme
+```
+
+**Genvejstast:** `ctrl+x t`
+
+---
+
+### thinking
+
+Veksle mellom synligheten av tenke-/resonneringsblokker i samtalen. Når den er aktiveret, kan du se modellens resonneringsprosess for modeller som støtter utvidet tenkning.
+
+:::note
+Denne kommandoen kontrollerer bare om tenkeblokker **vises** - den aktiverer eller deaktiverer ikke modellens resonneringsmuligheter. For at veksle mellom faktiske resonneringsmuligheter, brug `ctrl+t` for at bla gennem modellvarianter.
+:::
+
+```bash frame="none"
+/thinking
+```
+
+---
+
+### undo
+
+Angre siste besked i samtalen. Fjerner den siste brugerbeskeden, alle påfølgende svar og eventuelle filændringer.
+
+:::tip
+Eventuelle filændringer vil også bli nullstillet.
+:::
+
+Internt bruger dette Git til at administrere filændringerne. Så dit prosjekt **må
+være et Git-depot**.
+
+```bash frame="none"
+/undo
+```
+
+**Genvejstast:** `ctrl+x u`
+
+---
+
+### unshare
+
+Ophæv deling av nuværende session. [Læs mere](/docs/share#un-sharing).
+
+```bash frame="none"
+/unshare
+```
+
+---
+
+## Opsætning af editor
+
+Både kommandoerne `/editor` og `/export` bruger editoren som er spesifisert i miljøvariabelen `EDITOR`.
+
+<Tabs>
+  <TabItem label="Linux/macOS">
+    ```bash
+    # Example for nano or vim
+    export EDITOR=nano
+    export EDITOR=vim
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    export EDITOR="code --wait"
+    ```
+
+    For at gøre det permanent, tilføj dette til i shellprofilen din;
+    `~/.bashrc`, `~/.zshrc` osv.
+
+  </TabItem>
+
+  <TabItem label="Windows (CMD)">
+    ```bash
+    set EDITOR=notepad
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    set EDITOR=code --wait
+    ```
+
+    For at gøre det permanent, brug **Systemegenskaber** > **Miljø
+    Variabler**.
+
+  </TabItem>
+
+  <TabItem label="Windows (PowerShell)">
+    ```powershell
+    $env:EDITOR = "notepad"
+
+    # For GUI editors, VS Code, Cursor, VSCodium, Windsurf, Zed, etc.
+    # include --wait
+    $env:EDITOR = "code --wait"
+    ```
+
+    For at gøre det permanent, tilføj dette til i PowerShell-profilen din.
+
+  </TabItem>
+</Tabs>
+
+Populære redigeringsalternativer inkluderer:
+
+- `code` - Visual Studio Code
+- `cursor` - Cursor
+- `windsurf` - Windsurf
+- `nvim` - Neovim-editor
+- `vim` - Vim editor
+- `nano` - Nano-editor
+- `notepad` - Windows Notesblok
+- `subl` - Sublime Text
+
+:::note
+Nogle editorer som VS Code må startes med flaget `--wait`.
+:::
+
+Nogle editorer kræver kommandolinjeargumenter for at køre i blokeringstilstand. `--wait`-flaget gør at redigeringsprocessen blokeres til den lukkes.
+
+---
+
+## Konfigurer
+
+Du kan tilpasse TUI-adfærden gennem OpenCode-konfigurationsfilen.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tui": {
+    "scroll_speed": 3,
+    "scroll_acceleration": {
+      "enabled": true
+    }
+  }
+}
+```
+
+### Indstillinger
+
+- `scroll_acceleration` - Aktiver rulleacceleration i macOS-stil for jævn, naturlig rulning. Når aktiveret, øger rullehastigheden med raske rullebevægelser og forblir presis for langsommere bevægelser. **Denne indstillingen har forrang over `scroll_speed` og tilsidesætter den når den er aktiveret.**
+- `scroll_speed` - Styrer hvor raskt TUI ruller når du bruger rullekommandoer (minimum: `1`). Standard er `3`. **Bemærk: Dette ignoreres hvis `scroll_acceleration.enabled` er sat til `true`.**
+
+---
+
+## Tilpasning
+
+Du kan tilpasse forskellige aspekter av TUI-visningen ved at bruge kommandopaletten (`ctrl+x h` eller `/help`). Disse indstillingene gemmes ved omstarter.
+
+---
+
+#### Username display
+
+Veksle om brugernavnet dit vises i chat-beskeder. Få adgang til dette gennem:
+
+- Kommandopalet: Søg efter "brugernavn" eller "skjul brugernavn"
+- Innstillingen gemmes automatisk og vil bli husket over TUI sessioner

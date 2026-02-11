@@ -133,7 +133,51 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "ZEN_MODELS10": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS11": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS12": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS13": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS14": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS15": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS16": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS17": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS18": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS19": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "ZEN_MODELS2": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS20": {
       "type": "sst.sst.Secret"
       "value": string
     }
@@ -158,6 +202,10 @@ declare module "sst" {
       "value": string
     }
     "ZEN_MODELS8": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "ZEN_MODELS9": {
       "type": "sst.sst.Secret"
       "value": string
     }

@@ -141,8 +141,6 @@ export async function POST(input: APIEvent) {
         return couponID
       })()
 
-      // get user
-
       await Actor.provide("system", { workspaceID }, async () => {
         // look up current billing
         const billing = await Billing.get()
@@ -398,32 +396,22 @@ export async function POST(input: APIEvent) {
 }
   */
     }
+    if (body.type === "customer.subscription.updated" && body.data.object.status === "incomplete_expired") {
+      const subscriptionID = body.data.object.id
+      if (!subscriptionID) throw new Error("Subscription ID not found")
+
+      await Billing.unsubscribe({ subscriptionID })
+    }
     if (body.type === "customer.subscription.deleted") {
       const subscriptionID = body.data.object.id
       if (!subscriptionID) throw new Error("Subscription ID not found")
 
-      const workspaceID = await Database.use((tx) =>
-        tx
-          .select({ workspaceID: BillingTable.workspaceID })
-          .from(BillingTable)
-          .where(eq(BillingTable.subscriptionID, subscriptionID))
-          .then((rows) => rows[0]?.workspaceID),
-      )
-      if (!workspaceID) throw new Error("Workspace ID not found for subscription")
-
-      await Database.transaction(async (tx) => {
-        await tx
-          .update(BillingTable)
-          .set({ subscriptionID: null, subscription: null })
-          .where(eq(BillingTable.workspaceID, workspaceID))
-
-        await tx.delete(SubscriptionTable).where(eq(SubscriptionTable.workspaceID, workspaceID))
-      })
+      await Billing.unsubscribe({ subscriptionID })
     }
     if (body.type === "invoice.payment_succeeded") {
       if (
-        body.data.object.billing_reason === "subscription_cycle" ||
-        body.data.object.billing_reason === "subscription_create"
+        body.data.object.billing_reason === "subscription_create" ||
+        body.data.object.billing_reason === "subscription_cycle"
       ) {
         const invoiceID = body.data.object.id as string
         const amountInCents = body.data.object.amount_paid
@@ -476,6 +464,70 @@ export async function POST(input: APIEvent) {
             },
           }),
         )
+      } else if (body.data.object.billing_reason === "manual") {
+        const workspaceID = body.data.object.metadata?.workspaceID
+        const amountInCents = body.data.object.metadata?.amount && parseInt(body.data.object.metadata?.amount)
+        const invoiceID = body.data.object.id as string
+        const customerID = body.data.object.customer as string
+
+        if (!workspaceID) throw new Error("Workspace ID not found")
+        if (!customerID) throw new Error("Customer ID not found")
+        if (!amountInCents) throw new Error("Amount not found")
+        if (!invoiceID) throw new Error("Invoice ID not found")
+
+        await Actor.provide("system", { workspaceID }, async () => {
+          // get payment id from invoice
+          const invoice = await Billing.stripe().invoices.retrieve(invoiceID, {
+            expand: ["payments"],
+          })
+          await Database.transaction(async (tx) => {
+            await tx
+              .update(BillingTable)
+              .set({
+                balance: sql`${BillingTable.balance} + ${centsToMicroCents(amountInCents)}`,
+                reloadError: null,
+                timeReloadError: null,
+              })
+              .where(eq(BillingTable.workspaceID, Actor.workspace()))
+            await tx.insert(PaymentTable).values({
+              workspaceID: Actor.workspace(),
+              id: Identifier.create("payment"),
+              amount: centsToMicroCents(amountInCents),
+              invoiceID,
+              paymentID: invoice.payments?.data[0].payment.payment_intent as string,
+              customerID,
+            })
+          })
+        })
+      }
+    }
+    if (body.type === "invoice.payment_failed" || body.type === "invoice.payment_action_required") {
+      if (body.data.object.billing_reason === "manual") {
+        const workspaceID = body.data.object.metadata?.workspaceID
+        const invoiceID = body.data.object.id
+
+        if (!workspaceID) throw new Error("Workspace ID not found")
+        if (!invoiceID) throw new Error("Invoice ID not found")
+
+        const paymentIntent = await Billing.stripe().paymentIntents.retrieve(invoiceID)
+        console.log(JSON.stringify(paymentIntent))
+        const errorMessage =
+          typeof paymentIntent === "object" && paymentIntent !== null
+            ? paymentIntent.last_payment_error?.message
+            : undefined
+
+        await Actor.provide("system", { workspaceID }, async () => {
+          await Database.use((tx) =>
+            tx
+              .update(BillingTable)
+              .set({
+                reload: false,
+                reloadError: errorMessage ?? "Payment failed.",
+                timeReloadError: sql`now()`,
+              })
+              .where(eq(BillingTable.workspaceID, Actor.workspace())),
+          )
+        })
       }
     }
     if (body.type === "charge.refunded") {

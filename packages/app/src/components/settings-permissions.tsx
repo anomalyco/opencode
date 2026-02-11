@@ -175,20 +175,14 @@ export const SettingsPermissions: Component = () => {
 
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar">
-      <div
-        class="sticky top-0 z-10"
-        style={{
-          background:
-            "linear-gradient(to bottom, var(--surface-raised-stronger-non-alpha) calc(100% - 24px), transparent)",
-        }}
-      >
-        <div class="flex flex-col gap-1 p-8 max-w-[720px]">
+      <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-raised-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
+        <div class="flex flex-col gap-1 px-4 py-8 sm:p-8 max-w-[720px]">
           <h2 class="text-16-medium text-text-strong">{language.t("settings.permissions.title")}</h2>
           <p class="text-14-regular text-text-weak">{language.t("settings.permissions.description")}</p>
         </div>
       </div>
 
-      <div class="flex flex-col gap-6 p-8 pt-6 max-w-[720px]">
+      <div class="flex flex-col gap-6 px-4 py-6 sm:p-8 sm:pt-6 max-w-[720px]">
         <div class="flex flex-col gap-2">
           <h3 class="text-14-medium text-text-strong">{language.t("settings.permissions.section.tools")}</h3>
           <div class="border border-border-weak-base rounded-lg overflow-hidden">
@@ -223,8 +217,8 @@ interface SettingsRowProps {
 
 const SettingsRow: Component<SettingsRowProps> = (props) => {
   return (
-    <div class="flex items-center justify-between gap-4 px-4 py-3 border-b border-border-weak-base last:border-none">
-      <div class="flex flex-col gap-0.5">
+    <div class="flex flex-wrap items-center justify-between gap-4 px-4 py-3 border-b border-border-weak-base last:border-none">
+      <div class="flex flex-col gap-0.5 min-w-0">
         <span class="text-14-medium text-text-strong">{props.title}</span>
         <span class="text-12-regular text-text-weak">{props.description}</span>
       </div>

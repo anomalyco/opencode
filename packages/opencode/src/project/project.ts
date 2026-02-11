@@ -338,6 +338,22 @@ export namespace Project {
     return valid
   }
 
+  export async function addSandbox(projectID: string, directory: string) {
+    const result = await Storage.update<Info>(["project", projectID], (draft) => {
+      const sandboxes = draft.sandboxes ?? []
+      if (!sandboxes.includes(directory)) sandboxes.push(directory)
+      draft.sandboxes = sandboxes
+      draft.time.updated = Date.now()
+    })
+    GlobalBus.emit("event", {
+      payload: {
+        type: Event.Updated.type,
+        properties: result,
+      },
+    })
+    return result
+  }
+
   export async function removeSandbox(projectID: string, directory: string) {
     const result = await Storage.update<Info>(["project", projectID], (draft) => {
       const sandboxes = draft.sandboxes ?? []

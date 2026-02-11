@@ -1,9 +1,9 @@
-import { createOpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
 import { Persist, persisted } from "@/utils/persist"
+import { checkServerHealth } from "@/utils/server-health"
 
 type StoredProject = { worktree: string; expanded: boolean }
 
@@ -28,24 +28,30 @@ function projectsKey(url: string) {
 
 export const { use: useServer, provider: ServerProvider } = createSimpleContext({
   name: "Server",
-  init: (props: { defaultUrl: string }) => {
+  init: (props: { defaultUrl: string; isSidecar?: boolean }) => {
     const platform = usePlatform()
 
     const [store, setStore, _, ready] = persisted(
       Persist.global("server", ["server.v3"]),
       createStore({
         list: [] as string[],
+        currentSidecarUrl: "",
         projects: {} as Record<string, StoredProject[]>,
         lastProject: {} as Record<string, string>,
       }),
     )
 
-    const [active, setActiveRaw] = createSignal("")
+    const [state, setState] = createStore({
+      active: "",
+      healthy: undefined as boolean | undefined,
+    })
+
+    const healthy = () => state.healthy
 
     function setActive(input: string) {
       const url = normalizeServerUrl(input)
       if (!url) return
-      setActiveRaw(url)
+      setState("active", url)
     }
 
     function add(input: string) {
@@ -54,7 +60,13 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
       const fallback = normalizeServerUrl(props.defaultUrl)
       if (fallback && url === fallback) {
-        setActiveRaw(url)
+        batch(() => {
+          if (!store.list.includes(url)) {
+            // Add the fallback url to the list if it's not already in the list
+            setStore("list", store.list.length, url)
+          }
+          setState("active", url)
+        })
         return
       }
 
@@ -62,7 +74,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         if (!store.list.includes(url)) {
           setStore("list", store.list.length, url)
         }
-        setActiveRaw(url)
+        setState("active", url)
       })
     }
 
@@ -71,43 +83,45 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       if (!url) return
 
       const list = store.list.filter((x) => x !== url)
-      const next = active() === url ? (list[0] ?? normalizeServerUrl(props.defaultUrl) ?? "") : active()
+      const next = state.active === url ? (list[0] ?? normalizeServerUrl(props.defaultUrl) ?? "") : state.active
 
       batch(() => {
         setStore("list", list)
-        setActiveRaw(next)
+        setState("active", next)
       })
     }
 
     createEffect(() => {
       if (!ready()) return
-      if (active()) return
+      if (state.active) return
       const url = normalizeServerUrl(props.defaultUrl)
       if (!url) return
-      setActiveRaw(url)
+      batch(() => {
+        // Remove the previous startup sidecar url
+        if (store.currentSidecarUrl) {
+          remove(store.currentSidecarUrl)
+        }
+
+        // Add the new sidecar url
+        if (props.isSidecar && props.defaultUrl) {
+          add(props.defaultUrl)
+          setStore("currentSidecarUrl", props.defaultUrl)
+        }
+
+        setState("active", url)
+      })
     })
 
-    const isReady = createMemo(() => ready() && !!active())
+    const isReady = createMemo(() => ready() && !!state.active)
 
-    const [healthy, setHealthy] = createSignal<boolean | undefined>(undefined)
-
-    const check = (url: string) => {
-      const sdk = createOpencodeClient({
-        baseUrl: url,
-        fetch: platform.fetch,
-        signal: AbortSignal.timeout(3000),
-      })
-      return sdk.global
-        .health()
-        .then((x) => x.data?.healthy === true)
-        .catch(() => false)
-    }
+    const fetcher = platform.fetch ?? globalThis.fetch
+    const check = (url: string) => checkServerHealth(url, fetcher).then((x) => x.healthy)
 
     createEffect(() => {
-      const url = active()
+      const url = state.active
       if (!url) return
 
-      setHealthy(undefined)
+      setState("healthy", undefined)
 
       let alive = true
       let busy = false
@@ -118,7 +132,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         void check(url)
           .then((next) => {
             if (!alive) return
-            setHealthy(next)
+            setState("healthy", next)
           })
           .finally(() => {
             busy = false
@@ -134,7 +148,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       })
     })
 
-    const origin = createMemo(() => projectsKey(active()))
+    const origin = createMemo(() => projectsKey(state.active))
     const projectsList = createMemo(() => store.projects[origin()] ?? [])
     const isLocal = createMemo(() => origin() === "local")
 
@@ -143,10 +157,10 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       healthy,
       isLocal,
       get url() {
-        return active()
+        return state.active
       },
       get name() {
-        return serverDisplayName(active())
+        return serverDisplayName(state.active)
       },
       get list() {
         return store.list

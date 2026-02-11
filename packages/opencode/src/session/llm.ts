@@ -1,4 +1,3 @@
-import os from "os"
 import { Installation } from "@/installation"
 import { Provider } from "@/provider/provider"
 import { Log } from "@/util/log"
@@ -9,7 +8,6 @@ import {
   type StreamTextResult,
   type Tool,
   type ToolSet,
-  extractReasoningMiddleware,
   tool,
   jsonSchema,
 } from "ai"
@@ -27,8 +25,7 @@ import { Auth } from "@/auth"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
-
-  export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
+  export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 
   export type StreamInput = {
     user: MessageV2.User
@@ -66,7 +63,7 @@ export namespace LLM {
     ])
     const isCodex = provider.id === "openai" && auth?.type === "oauth"
 
-    const system = SystemPrompt.header(input.model.providerID)
+    const system = []
     system.push(
       [
         // use agent prompt otherwise provider prompt
@@ -83,7 +80,11 @@ export namespace LLM {
 
     const header = system[0]
     const original = clone(system)
-    await Plugin.trigger("experimental.chat.system.transform", { sessionID: input.sessionID }, { system })
+    await Plugin.trigger(
+      "experimental.chat.system.transform",
+      { sessionID: input.sessionID, model: input.model },
+      { system },
+    )
     if (system.length === 0) {
       system.push(...original)
     }
@@ -146,14 +147,8 @@ export namespace LLM {
       },
     )
 
-    const maxOutputTokens = isCodex
-      ? undefined
-      : ProviderTransform.maxOutputTokens(
-          input.model.api.npm,
-          params.options,
-          input.model.limit.output,
-          OUTPUT_TOKEN_MAX,
-        )
+    const maxOutputTokens =
+      isCodex || provider.id.includes("github-copilot") ? undefined : ProviderTransform.maxOutputTokens(input.model)
 
     const tools = await resolveTools(input)
 
@@ -230,19 +225,12 @@ export namespace LLM {
       },
       maxRetries: input.retries ?? 0,
       messages: [
-        ...(isCodex
-          ? [
-              {
-                role: "user",
-                content: system.join("\n\n"),
-              } as ModelMessage,
-            ]
-          : system.map(
-              (x): ModelMessage => ({
-                role: "system",
-                content: x,
-              }),
-            )),
+        ...system.map(
+          (x): ModelMessage => ({
+            role: "system",
+            content: x,
+          }),
+        ),
         ...input.messages,
       ],
       model: wrapLanguageModel({
@@ -257,10 +245,15 @@ export namespace LLM {
               return args.params
             },
           },
-          extractReasoningMiddleware({ tagName: "think", startWithReasoning: false }),
         ],
       }),
-      experimental_telemetry: { isEnabled: cfg.experimental?.openTelemetry },
+      experimental_telemetry: {
+        isEnabled: cfg.experimental?.openTelemetry,
+        metadata: {
+          userId: cfg.username ?? "unknown",
+          sessionId: input.sessionID,
+        },
+      },
     })
   }
 

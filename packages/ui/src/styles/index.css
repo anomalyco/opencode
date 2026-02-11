@@ -7,6 +7,7 @@
 @import "katex/dist/katex.min.css" layer(base);
 
 @import "../components/accordion.css" layer(components);
+@import "../components/app-icon.css" layer(components);
 @import "../components/avatar.css" layer(components);
 @import "../components/basic-tool.css" layer(components);
 @import "../components/button.css" layer(components);
@@ -16,6 +17,7 @@
 @import "../components/collapsible.css" layer(components);
 @import "../components/diff.css" layer(components);
 @import "../components/diff-changes.css" layer(components);
+@import "../components/context-menu.css" layer(components);
 @import "../components/dropdown-menu.css" layer(components);
 @import "../components/dialog.css" layer(components);
 @import "../components/file-icon.css" layer(components);
@@ -25,6 +27,7 @@
 @import "../components/icon-button.css" layer(components);
 @import "../components/image-preview.css" layer(components);
 @import "../components/keybind.css" layer(components);
+@import "../components/line-comment.css" layer(components);
 @import "../components/text-field.css" layer(components);
 @import "../components/inline-input.css" layer(components);
 @import "../components/list.css" layer(components);

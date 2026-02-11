@@ -5,7 +5,6 @@ import path from "path"
 import fs from "fs/promises"
 import fsSync from "fs"
 import { afterAll } from "bun:test"
-const { Global } = await import("../src/global")
 
 const dir = path.join(os.tmpdir(), "opencode-test-data-" + process.pid)
 await fs.mkdir(dir, { recursive: true })
@@ -18,23 +17,20 @@ const testHome = path.join(dir, "home")
 await fs.mkdir(testHome, { recursive: true })
 process.env["OPENCODE_TEST_HOME"] = testHome
 
+// Set test managed config directory to isolate tests from system managed settings
+const testManagedConfigDir = path.join(dir, "managed")
+process.env["OPENCODE_TEST_MANAGED_CONFIG_DIR"] = testManagedConfigDir
+
 process.env["XDG_DATA_HOME"] = path.join(dir, "share")
 process.env["XDG_CACHE_HOME"] = path.join(dir, "cache")
 process.env["XDG_CONFIG_HOME"] = path.join(dir, "config")
 process.env["XDG_STATE_HOME"] = path.join(dir, "state")
+process.env["OPENCODE_MODELS_PATH"] = path.join(import.meta.dir, "tool", "fixtures", "models-api.json")
 
-// Pre-fetch models.json so tests don't need the macro fallback
-// Also write the cache version file to prevent global/index.ts from clearing the cache
+// Write the cache version file to prevent global/index.ts from clearing the cache
 const cacheDir = path.join(dir, "cache", "opencode")
 await fs.mkdir(cacheDir, { recursive: true })
 await fs.writeFile(path.join(cacheDir, "version"), "14")
-const url = Global.Path.modelsDevUrl
-const response = await fetch(`${url}/api.json`)
-if (response.ok) {
-  await fs.writeFile(path.join(cacheDir, "models.json"), await response.text())
-}
-// Disable models.dev refresh to avoid race conditions during tests
-process.env["OPENCODE_DISABLE_MODELS_FETCH"] = "true"
 
 // Clear provider env vars to ensure clean test state
 delete process.env["ANTHROPIC_API_KEY"]

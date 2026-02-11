@@ -1,9 +1,10 @@
 import "./index.css"
-import { Title, Meta, Link } from "@solidjs/meta"
+import { Title, Meta } from "@solidjs/meta"
 import { Header } from "~/component/header"
-import { config } from "~/config"
 import { Footer } from "~/component/footer"
 import { Legal } from "~/component/legal"
+import { useI18n } from "~/context/i18n"
+import { LocaleLinks } from "~/component/locale-links"
 import previewLogoLight from "../../asset/brand/preview-opencode-logo-light.png"
 import previewLogoDark from "../../asset/brand/preview-opencode-logo-dark.png"
 import previewWordmarkLight from "../../asset/brand/preview-opencode-wordmark-light.png"
@@ -25,6 +26,7 @@ import wordmarkSimpleDarkSvg from "../../asset/brand/opencode-wordmark-simple-da
 const brandAssets = "/opencode-brand-assets.zip"
 
 export default function Brand() {
+  const i18n = useI18n()
   const downloadFile = async (url: string, filename: string) => {
     try {
       const response = await fetch(url)
@@ -53,21 +55,21 @@ export default function Brand() {
 
   return (
     <main data-page="enterprise">
-      <Title>OpenCode | Brand</Title>
-      <Link rel="canonical" href={`${config.baseUrl}/brand`} />
-      <Meta name="description" content="OpenCode brand guidelines" />
+      <Title>{i18n.t("brand.title")}</Title>
+      <LocaleLinks path="/brand" />
+      <Meta name="description" content={i18n.t("brand.meta.description")} />
       <div data-component="container">
         <Header />
 
         <div data-component="content">
           <section data-component="brand-content">
-            <h1>Brand guidelines</h1>
-            <p>Resources and assets to help you work with the OpenCode brand.</p>
+            <h1>{i18n.t("brand.heading")}</h1>
+            <p>{i18n.t("brand.subtitle")}</p>
             <button
               data-component="download-button"
               onClick={() => downloadFile(brandAssets, "opencode-brand-assets.zip")}
             >
-              Download all assets
+              {i18n.t("brand.downloadAll")}
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path
                   d="M13.9583 10.6247L10 14.583L6.04167 10.6247M10 2.08301V13.958M16.25 17.9163H3.75"
