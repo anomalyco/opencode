@@ -258,7 +258,7 @@ describe("tool.read truncation", () => {
   test("respects offset parameter", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
-        const lines = Array.from({ length: 20 }, (_, i) => `line${i}`).join("\n")
+        const lines = Array.from({ length: 20 }, (_, i) => `line${i + 1}`).join("\n")
         await Bun.write(path.join(dir, "offset.txt"), lines)
       },
     })
@@ -275,11 +275,29 @@ describe("tool.read truncation", () => {
     })
   })
 
+  test("throws when offset is beyond end of file", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const lines = Array.from({ length: 3 }, (_, i) => `line${i + 1}`).join("\n")
+        await Bun.write(path.join(dir, "short.txt"), lines)
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        await expect(
+          read.execute({ filePath: path.join(tmp.path, "short.txt"), offset: 4, limit: 5 }, ctx),
+        ).rejects.toThrow("Offset 4 is out of range for this file (3 lines)")
+      },
+    })
+  })
+
   test("does not mark final directory page as truncated", async () => {
     await using tmp = await tmpdir({
       init: async (dir) => {
         await Promise.all(
-          Array.from({ length: 10 }, (_, i) => Bun.write(path.join(dir, "dir", `file-${i}.txt`), `line${i}`)),
+          Array.from({ length: 10 }, (_, i) => Bun.write(path.join(dir, "dir", `file-${i + 1}.txt`), `line${i}`)),
         )
       },
     })
@@ -287,7 +305,7 @@ describe("tool.read truncation", () => {
       directory: tmp.path,
       fn: async () => {
         const read = await ReadTool.init()
-        const result = await read.execute({ filePath: path.join(tmp.path, "dir"), offset: 5, limit: 5 }, ctx)
+        const result = await read.execute({ filePath: path.join(tmp.path, "dir"), offset: 6, limit: 5 }, ctx)
         expect(result.metadata.truncated).toBe(false)
         expect(result.output).not.toContain("Showing 5 of 10 entries")
       },

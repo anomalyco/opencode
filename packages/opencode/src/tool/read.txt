@@ -3,6 +3,7 @@ Read a file or directory from the local filesystem. If the path does not exist, 
 Usage:
 - The filePath parameter should be an absolute path.
 - By default, this tool returns up to 2000 lines from the start of the file.
+- The offset parameter is the line number to start from (1-indexed).
 - To read later sections, call this tool again with a larger offset.
 - Use the grep tool to find specific content in large files or files with long lines.
 - If you are unsure of the correct file path, use the glob tool to look up filenames by glob pattern.
