@@ -57,7 +57,7 @@ opencode 支持 **JSON** 和 **JSONC**（帶註釋的 JSON）格式。
 
 ---
 
-### 偏僻的
+### 遠程
 
 組織可以通過 `.well-known/opencode` 端點提供默認配置。當您向支持它的提供商進行身份驗證時，會自動獲取該信息。
 
@@ -181,7 +181,7 @@ opencode run "Hello world"
 
 ### 伺服器
 
-您可以通過`server` 選項為`opencode serve` 和`opencode web` 命令配置服務器設置。
+您可以通過`opencode serve` 選項為`opencode web` 和`server` 命令配置服務器設置。
 
 ```json title="opencode.json"
 {

@@ -166,6 +166,7 @@ export function SessionHeader() {
   })
 
   const [prefs, setPrefs] = persisted(Persist.global("open.app"), createStore({ app: "finder" as OpenApp }))
+  const [menu, setMenu] = createStore({ open: false })
 
   const canOpen = createMemo(() => platform.platform === "desktop" && !!platform.openPath && server.isLocal())
   const current = createMemo(() => options().find((o) => o.id === prefs.app) ?? options()[0])
@@ -328,17 +329,19 @@ export function SessionHeader() {
                   <Show
                     when={canOpen()}
                     fallback={
-                      <Button
-                        variant="ghost"
-                        class="rounded-sm h-[24px] py-1.5 pr-3 pl-2 gap-2 border-none shadow-none"
-                        onClick={copyPath}
-                        aria-label={language.t("session.header.open.copyPath")}
-                      >
-                        <Icon name="copy" size="small" class="text-icon-base" />
-                        <span class="text-12-regular text-text-strong">
-                          {language.t("session.header.open.copyPath")}
-                        </span>
-                      </Button>
+                      <div class="flex h-[24px] box-border items-center rounded-md border border-border-base bg-surface-panel overflow-hidden">
+                        <Button
+                          variant="ghost"
+                          class="rounded-none h-full py-0 pr-3 pl-2 gap-2 border-none shadow-none"
+                          onClick={copyPath}
+                          aria-label={language.t("session.header.open.copyPath")}
+                        >
+                          <Icon name="copy" size="small" class="text-icon-base" />
+                          <span class="text-12-regular text-text-strong">
+                            {language.t("session.header.open.copyPath")}
+                          </span>
+                        </Button>
+                      </div>
                     }
                   >
                     <div class="flex items-center">
@@ -355,7 +358,12 @@ export function SessionHeader() {
                           <span class="text-12-regular text-text-strong">Open</span>
                         </Button>
                         <div class="self-stretch w-px bg-border-base/70" />
-                        <DropdownMenu gutter={6} placement="bottom-end">
+                        <DropdownMenu
+                          gutter={6}
+                          placement="bottom-end"
+                          open={menu.open}
+                          onOpenChange={(open) => setMenu("open", open)}
+                        >
                           <DropdownMenu.Trigger
                             as={IconButton}
                             icon="chevron-down"
@@ -375,7 +383,13 @@ export function SessionHeader() {
                                   }}
                                 >
                                   {options().map((o) => (
-                                    <DropdownMenu.RadioItem value={o.id} onSelect={() => openDir(o.id)}>
+                                    <DropdownMenu.RadioItem
+                                      value={o.id}
+                                      onSelect={() => {
+                                        setMenu("open", false)
+                                        openDir(o.id)
+                                      }}
+                                    >
                                       <div class="flex size-5 shrink-0 items-center justify-center">
                                         <AppIcon id={o.icon} class={size(o.icon)} />
                                       </div>
@@ -388,7 +402,12 @@ export function SessionHeader() {
                                 </DropdownMenu.RadioGroup>
                               </DropdownMenu.Group>
                               <DropdownMenu.Separator />
-                              <DropdownMenu.Item onSelect={copyPath}>
+                              <DropdownMenu.Item
+                                onSelect={() => {
+                                  setMenu("open", false)
+                                  copyPath()
+                                }}
+                              >
                                 <div class="flex size-5 shrink-0 items-center justify-center">
                                   <Icon name="copy" size="small" class="text-icon-weak" />
                                 </div>

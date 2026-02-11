@@ -3,13 +3,13 @@ title: Nettverk
 description: Konfigurer proxyer og tilpassede sertifikater.
 ---
 
-opencode støtter standard proxy-miljøvariabler og tilpassede sertifikater for bedriftsnettverksmiljøer.
+OpenCode støtter standard proxy-miljøvariabler og tilpassede sertifikater for bedriftsnettverksmiljøer.
 
 ---
 
 ## Proxy
 
-opencode respekterer standard proxy-miljøvariabler.
+OpenCode respekterer standard proxy-miljøvariabler.
 
 ```bash
 # HTTPS proxy (recommended)
@@ -32,7 +32,7 @@ Du kan konfigurere serverens port og vertsnavn ved å bruke [CLI flagg](/docs/cl
 
 ### Autentiser
 
-Hvis proxyen din krever grunnleggende autentisering, inkluderer legitimasjon i URL.
+Hvis proxyen din krever grunnleggende autentisering, inkluder legitimasjon i URL.
 
 ```bash
 export HTTPS_PROXY=http://username:password@proxy.example.com:8080
@@ -48,7 +48,7 @@ For proxyer som krever avansert autentisering som NTLM eller Kerberos, bør du v
 
 ## Egendefinerte sertifikater
 
-Hvis bedriften din bruker egendefinerte CA-er for HTTPS-tilkoblinger, konfigurer opencode til å stole på dem.
+Hvis bedriften din bruker egendefinerte CA-er for HTTPS-tilkoblinger, konfigurer OpenCode til å stole på dem.
 
 ```bash
 export NODE_EXTRA_CA_CERTS=/path/to/ca-cert.pem

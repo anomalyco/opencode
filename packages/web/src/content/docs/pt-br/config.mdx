@@ -14,7 +14,7 @@ O opencode suporta os formatos **JSON** e **JSONC** (JSON com Comentários).
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
-  // Configuração do tema
+  // Theme configuration
   "theme": "opencode",
   "model": "anthropic/claude-sonnet-4-5",
   "autoupdate": true,
@@ -65,7 +65,7 @@ A configuração remota é carregada primeiro, servindo como a camada base. Toda
 
 Por exemplo, se sua organização fornece servidores MCP que estão desativados por padrão:
 
-```json title="Configuração remota de .well-known/opencode"
+```json title="Remote config from .well-known/opencode"
 {
   "mcp": {
     "jira": {
@@ -320,11 +320,11 @@ Você pode configurar agentes especializados para tarefas específicas através 
   "$schema": "https://opencode.ai/config.json",
   "agent": {
     "code-reviewer": {
-      "description": "Revisa o código em busca de melhores práticas e problemas potenciais",
+      "description": "Reviews code for best practices and potential issues",
       "model": "anthropic/claude-sonnet-4-5",
-      "prompt": "Você é um revisor de código. Foque em segurança, desempenho e manutenibilidade.",
+      "prompt": "You are a code reviewer. Focus on security, performance, and maintainability.",
       "tools": {
-        // Desabilitar ferramentas de modificação de arquivos para agente somente de revisão
+        // Disable file modification tools for review-only agent
         "write": false,
         "edit": false,
       },
@@ -384,14 +384,14 @@ Você pode configurar comandos personalizados para tarefas repetitivas através 
   "$schema": "https://opencode.ai/config.json",
   "command": {
     "test": {
-      "template": "Execute a suíte de testes completa com relatório de cobertura e mostre quaisquer falhas.\nFoque nos testes que falharam e sugira correções.",
-      "description": "Executar testes com cobertura",
+      "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
+      "description": "Run tests with coverage",
       "agent": "build",
       "model": "anthropic/claude-haiku-4-5",
     },
     "component": {
-      "template": "Crie um novo componente React chamado $ARGUMENTS com suporte a TypeScript.\nInclua tipagem adequada e estrutura básica.",
-      "description": "Criar um novo componente",
+      "template": "Create a new React component named $ARGUMENTS with TypeScript support.\nInclude proper typing and basic structure.",
+      "description": "Create a new component",
     },
   },
 }

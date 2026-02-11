@@ -65,7 +65,7 @@ opencode は、複数の場所からの `AGENTS.md` ファイルの読み取り�
 
 これは Git にコミットされておらず、チームと共有されていないため、LLM が従うべき個人ルールを指定するためにこれを使用することをお勧めします。
 
-### クロードコードの互換性
+### Claude Code Compatibility
 
 Claude Code から移行するユーザーのために、OpenCode はフォールバックとして Claude Code のファイル規則をサポートしています。
 
@@ -129,7 +129,7 @@ opencode は `AGENTS.md` のファイル参照を自動的に解析しません�
 
 ### opencode.json の使用
 
-推奨されるアプローチは、`opencode.json` の `instructions` フィールドを使用することです。
+推奨されるアプローチは、`instructions` の `opencode.json` フィールドを使用することです。
 
 ```json title="opencode.json"
 {
@@ -175,5 +175,5 @@ Read the following file immediately as it's relevant to all workflows: @rules/ge
 - opencode が特定のタスクに必要な場合にのみファイルをロードするようにする
 
 :::tip
-モノリポジトリまたは共有標準を使用するプロジェクトの場合、グロブ パターン (`packages/*/AGENTS.md` など) で `opencode.json` を使用する方が、手動で指示するよりも保守しやすくなります。
+モノリポジトリまたは共有標準を使用するプロジェクトの場合、グロブ パターン (`opencode.json` など) で `packages/*/AGENTS.md` を使用する方が、手動で指示するよりも保守しやすくなります。
 :::
