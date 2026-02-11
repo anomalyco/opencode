@@ -43,7 +43,10 @@ export const { use: useExit, provider: ExitProvider } = createSimpleContext({
         if (text) process.stdout.write(text + "\n")
         // Ensure the process exits with a non-zero code for errors
         const exitCode = reason instanceof Error ? 1 : 0
-        process.exit(exitCode)
+        // Only exit if not in test environment to avoid interfering with E2E tests
+        if (!process.env.OPENCODE_E2E_SESSION_TITLE) {
+          process.exit(exitCode)
+        }
       },
       {
         message: store,

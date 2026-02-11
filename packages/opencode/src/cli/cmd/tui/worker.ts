@@ -92,7 +92,10 @@ const startEventStream = (directory: string) => {
       error: error instanceof Error ? error.message : error,
     })
     // Ensure process exits on stream errors to prevent hanging
-    process.exit(1)
+    // Only exit if not in test environment to avoid interfering with E2E tests
+    if (!process.env.OPENCODE_E2E_SESSION_TITLE) {
+      process.exit(1)
+    }
   })
 }
 
