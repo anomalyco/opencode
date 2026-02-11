@@ -290,6 +290,7 @@ export type SubtaskPart = {
     modelID: string
   }
   command?: string
+  background?: boolean
 }
 
 export type ReasoningPart = {
@@ -882,6 +883,24 @@ export type EventSessionError = {
   }
 }
 
+export type EventSessionBackgroundTaskCompleted = {
+  type: "session.background_task_completed"
+  properties: {
+    sessionID: string
+    task: {
+      sessionID: string
+      result: string
+      status: "success" | "error"
+      description: string
+      agent: string
+      model: {
+        providerID: string
+        modelID: string
+      }
+    }
+  }
+}
+
 export type EventVcsBranchUpdated = {
   type: "vcs.branch.updated"
   properties: {
@@ -994,6 +1013,7 @@ export type Event =
   | EventSessionDeleted
   | EventSessionDiff
   | EventSessionError
+  | EventSessionBackgroundTaskCompleted
   | EventVcsBranchUpdated
   | EventWorkspaceReady
   | EventWorkspaceFailed
@@ -1764,6 +1784,7 @@ export type SubtaskPartInput = {
     modelID: string
   }
   command?: string
+  background?: boolean
 }
 
 export type ProviderAuthMethod = {

@@ -406,6 +406,7 @@ export namespace SessionPrompt {
           description: task.description,
           subagent_type: task.agent,
           command: task.command,
+          background: task.background,
         }
         await Plugin.trigger(
           "tool.execute.before",

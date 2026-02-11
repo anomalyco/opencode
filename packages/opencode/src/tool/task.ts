@@ -11,6 +11,7 @@ import { iife } from "@/util/iife"
 import { defer } from "@/util/defer"
 import { Config } from "../config/config"
 import { Permission } from "@/permission"
+import { Bus } from "@/bus"
 
 const parameters = z.object({
   description: z.string().describe("A short (3-5 words) description of the task"),
@@ -23,6 +24,13 @@ const parameters = z.object({
     )
     .optional(),
   command: z.string().describe("The command that triggered this task").optional(),
+  background: z
+    .boolean()
+    .default(false)
+    .describe(
+      "If true, the task runs in the background and the main agent can continue working. Results will be reported back when done.",
+    )
+    .optional(),
 })
 
 export const TaskTool = Tool.define("task", async (ctx) => {
@@ -119,21 +127,11 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       })
 
       const messageID = MessageID.ascending()
-
-      function cancel() {
-        SessionPrompt.cancel(session.id)
-      }
-      ctx.abort.addEventListener("abort", cancel)
-      using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
       const promptParts = await SessionPrompt.resolvePromptParts(params.prompt)
-
-      const result = await SessionPrompt.prompt({
+      const promptInput = {
         messageID,
         sessionID: session.id,
-        model: {
-          modelID: model.modelID,
-          providerID: model.providerID,
-        },
+        model,
         agent: agent.name,
         tools: {
           todowrite: false,
@@ -142,7 +140,55 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           ...Object.fromEntries((config.experimental?.primary_tools ?? []).map((t) => [t, false])),
         },
         parts: promptParts,
-      })
+      }
+
+      if (params.background) {
+        iife(async () => {
+          const result = await SessionPrompt.prompt(promptInput)
+          const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
+
+          Bus.publish(Session.Event.BackgroundTaskCompleted, {
+            sessionID: ctx.sessionID,
+            task: {
+              sessionID: session.id,
+              result: text,
+              status: "success",
+              description: params.description,
+              agent: agent.name,
+              model,
+            },
+          })
+        }).catch((err) => {
+          Bus.publish(Session.Event.BackgroundTaskCompleted, {
+            sessionID: ctx.sessionID,
+            task: {
+              sessionID: session.id,
+              result: String(err),
+              status: "error",
+              description: params.description,
+              agent: agent.name,
+              model,
+            },
+          })
+        })
+
+        return {
+          title: params.description,
+          metadata: {
+            sessionId: session.id,
+            model,
+          },
+          output: `Background task started.\nSession ID: ${session.id}\n\nYou will be notified when it completes.`,
+        }
+      }
+
+      function cancel() {
+        SessionPrompt.cancel(session.id)
+      }
+      ctx.abort.addEventListener("abort", cancel)
+      using _ = defer(() => ctx.abort.removeEventListener("abort", cancel))
+
+      const result = await SessionPrompt.prompt(promptInput)
 
       const text = result.parts.findLast((x) => x.type === "text")?.text ?? ""
 
