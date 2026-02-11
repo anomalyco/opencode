@@ -26,6 +26,7 @@ import { SkillTool } from "../../tool/skill"
 import { BashTool } from "../../tool/bash"
 import { TodoWriteTool } from "../../tool/todo"
 import { Locale } from "../../util/locale"
+import { createInternalFetch } from "./internal-fetch"
 
 type ToolProps<T extends Tool.Info> = {
   input: Tool.InferParameters<T>
@@ -587,10 +588,17 @@ export const RunCommand = cmd({
     }
 
     await bootstrap(process.cwd(), async () => {
-      const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const password = process.env.OPENCODE_SERVER_PASSWORD
+      const auth = password
+        ? {
+            username: process.env.OPENCODE_SERVER_USERNAME ?? "opencode",
+            password,
+          }
+        : undefined
+      const fetchFn = createInternalFetch((input: RequestInfo | URL, init?: RequestInit) => {
         const request = new Request(input, init)
         return Server.App().fetch(request)
-      }) as typeof globalThis.fetch
+      }, auth)
       const sdk = createOpencodeClient({ baseUrl: "http://opencode.internal", fetch: fetchFn })
       await execute(sdk)
     })
