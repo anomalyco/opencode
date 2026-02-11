@@ -59,9 +59,8 @@ export namespace SessionRetry {
   }
 
   export function retryable(error: ReturnType<NamedError["toObject"]>) {
-    // DO NOT retry context overflow errors
+    // context overflow errors should not be retried
     if (MessageV2.ContextOverflowError.isInstance(error)) return undefined
-
     if (MessageV2.APIError.isInstance(error)) {
       if (!error.data.isRetryable) return undefined
       if (error.data.responseBody?.includes("FreeUsageLimitError"))
