@@ -79,6 +79,8 @@ export const dict = {
   "ui.common.dismiss": "Odrzuć",
   "ui.common.close": "Zamknij",
   "ui.common.next": "Dalej",
+  "ui.common.edit": "Edytuj",
+  "ui.common.save": "Zapisz",
   "ui.common.submit": "Prześlij",
 
   "ui.permission.deny": "Odmów",

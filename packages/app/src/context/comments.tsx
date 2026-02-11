@@ -67,6 +67,15 @@ function createCommentSessionState(store: Store<CommentStore>, setStore: SetStor
     return next
   }
 
+  const update = (file: string, id: string, comment: string) => {
+    batch(() => {
+      setStore("comments", file, (items) => (items ?? []).map((item) => (item.id === id ? { ...item, comment } : item)))
+      setState("all", (items) =>
+        items.map((item) => (item.file === file && item.id === id ? { ...item, comment } : item)),
+      )
+    })
+  }
+
   const remove = (file: string, id: string) => {
     batch(() => {
       setStore("comments", file, (items) => (items ?? []).filter((item) => item.id !== id))
@@ -88,6 +97,7 @@ function createCommentSessionState(store: Store<CommentStore>, setStore: SetStor
     list,
     all: () => state.all,
     add,
+    update,
     remove,
     clear,
     focus: () => state.focus,
@@ -126,6 +136,7 @@ function createCommentSession(dir: string, id: string | undefined) {
     list: session.list,
     all: session.all,
     add: session.add,
+    update: session.update,
     remove: session.remove,
     clear: session.clear,
     focus: session.focus,
@@ -172,6 +183,7 @@ export const { use: useComments, provider: CommentsProvider } = createSimpleCont
       list: (file: string) => session().list(file),
       all: () => session().all(),
       add: (input: Omit<LineComment, "id" | "time">) => session().add(input),
+      update: (file: string, id: string, comment: string) => session().update(file, id, comment),
       remove: (file: string, id: string) => session().remove(file, id),
       clear: () => session().clear(),
       focus: () => session().focus(),

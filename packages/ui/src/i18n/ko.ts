@@ -79,6 +79,8 @@ export const dict = {
   "ui.common.dismiss": "닫기",
   "ui.common.close": "닫기",
   "ui.common.next": "다음",
+  "ui.common.edit": "편집",
+  "ui.common.save": "저장",
   "ui.common.submit": "제출",
 
   "ui.permission.deny": "거부",

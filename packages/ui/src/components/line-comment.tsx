@@ -1,5 +1,7 @@
 import { onMount, Show, splitProps, type JSX } from "solid-js"
 import { Button } from "./button"
+import { IconButton } from "./icon-button"
+import { Tooltip } from "./tooltip"
 import { Icon } from "./icon"
 import { useI18n } from "../context/i18n"
 
@@ -58,20 +60,36 @@ export const LineCommentAnchor = (props: LineCommentAnchorProps) => {
 export type LineCommentProps = Omit<LineCommentAnchorProps, "children" | "variant"> & {
   comment: JSX.Element
   selection: JSX.Element
+  onEdit?: VoidFunction
 }
 
 export const LineComment = (props: LineCommentProps) => {
   const i18n = useI18n()
-  const [split, rest] = splitProps(props, ["comment", "selection"])
+  const [split, rest] = splitProps(props, ["comment", "selection", "onEdit"])
 
   return (
     <LineCommentAnchor {...rest} variant="default">
       <div data-slot="line-comment-content">
         <div data-slot="line-comment-text">{split.comment}</div>
-        <div data-slot="line-comment-label">
-          {i18n.t("ui.lineComment.label.prefix")}
-          {split.selection}
-          {i18n.t("ui.lineComment.label.suffix")}
+        <div data-slot="line-comment-footer">
+          <div data-slot="line-comment-label">
+            {i18n.t("ui.lineComment.label.prefix")}
+            {split.selection}
+            {i18n.t("ui.lineComment.label.suffix")}
+          </div>
+          <Show when={split.onEdit}>
+            <Tooltip value={i18n.t("ui.common.edit")} placement="top">
+              <IconButton
+                size="small"
+                variant="ghost"
+                icon="edit"
+                onClick={(e: MouseEvent) => {
+                  e.stopPropagation()
+                  split.onEdit?.()
+                }}
+              />
+            </Tooltip>
+          </Show>
         </div>
       </div>
     </LineCommentAnchor>

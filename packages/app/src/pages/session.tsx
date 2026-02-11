@@ -996,6 +996,10 @@ export default function Page() {
           onScrollRef={(el) => setTree("reviewScroll", el)}
           focusedFile={tree.activeDiff}
           onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+          onEditComment={(edit) => {
+            comments.update(edit.file, edit.id, edit.comment)
+            prompt.context.updateComment(edit.id, edit.comment)
+          }}
           comments={comments.all()}
           focusedComment={comments.focus()}
           onFocusedCommentChange={comments.setFocus}
@@ -1017,6 +1021,10 @@ export default function Page() {
             onScrollRef={(el) => setTree("reviewScroll", el)}
             focusedFile={tree.activeDiff}
             onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+            onEditComment={(edit) => {
+              comments.update(edit.file, edit.id, edit.comment)
+              prompt.context.updateComment(edit.id, edit.comment)
+            }}
             comments={comments.all()}
             focusedComment={comments.focus()}
             onFocusedCommentChange={comments.setFocus}
@@ -1045,6 +1053,10 @@ export default function Page() {
           onScrollRef={(el) => setTree("reviewScroll", el)}
           focusedFile={tree.activeDiff}
           onLineComment={(comment) => addCommentToContext({ ...comment, origin: "review" })}
+          onEditComment={(edit) => {
+            comments.update(edit.file, edit.id, edit.comment)
+            prompt.context.updateComment(edit.id, edit.comment)
+          }}
           comments={comments.all()}
           focusedComment={comments.focus()}
           onFocusedCommentChange={comments.setFocus}

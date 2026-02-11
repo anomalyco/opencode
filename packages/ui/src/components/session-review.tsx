@@ -35,6 +35,12 @@ export type SessionReviewLineComment = {
 
 export type SessionReviewFocus = { file: string; id: string }
 
+export type SessionReviewEditComment = {
+  file: string
+  id: string
+  comment: string
+}
+
 export interface SessionReviewProps {
   title?: JSX.Element
   empty?: JSX.Element
@@ -43,6 +49,7 @@ export interface SessionReviewProps {
   onDiffStyleChange?: (diffStyle: SessionReviewDiffStyle) => void
   onDiffRendered?: () => void
   onLineComment?: (comment: SessionReviewLineComment) => void
+  onEditComment?: (edit: SessionReviewEditComment) => void
   comments?: SessionReviewComment[]
   focusedComment?: SessionReviewFocus | null
   onFocusedCommentChange?: (focus: SessionReviewFocus | null) => void
@@ -183,6 +190,7 @@ export const SessionReview = (props: SessionReviewProps) => {
   const [selection, setSelection] = createSignal<SessionReviewSelection | null>(null)
   const [commenting, setCommenting] = createSignal<SessionReviewSelection | null>(null)
   const [opened, setOpened] = createSignal<SessionReviewFocus | null>(null)
+  const [editing, setEditing] = createSignal<SessionReviewFocus | null>(null)
 
   const open = () => props.open ?? store.open
   const diffStyle = () => props.diffStyle ?? (props.split ? "split" : "unified")
@@ -360,8 +368,35 @@ export const SessionReview = (props: SessionReviewProps) => {
                 })
 
                 const [draft, setDraft] = createSignal("")
+                const [editDraft, setEditDraft] = createSignal("")
                 const [positions, setPositions] = createSignal<Record<string, number>>({})
                 const [draftTop, setDraftTop] = createSignal<number | undefined>(undefined)
+
+                const isEditing = (comment: SessionReviewComment) => {
+                  const current = editing()
+                  if (!current) return false
+                  return current.file === comment.file && current.id === comment.id
+                }
+
+                const startEditing = (comment: SessionReviewComment) => {
+                  setEditDraft(comment.comment)
+                  setEditing({ file: comment.file, id: comment.id })
+                }
+
+                const cancelEditing = () => {
+                  setEditing(null)
+                  setEditDraft("")
+                }
+
+                const submitEdit = (comment: SessionReviewComment, text: string) => {
+                  props.onEditComment?.({
+                    file: comment.file,
+                    id: comment.id,
+                    comment: text,
+                  })
+                  setEditing(null)
+                  setEditDraft("")
+                }
 
                 const getRoot = () => {
                   const el = wrapper
@@ -619,22 +654,39 @@ export const SessionReview = (props: SessionReviewProps) => {
 
                         <For each={comments()}>
                           {(comment) => (
-                            <LineComment
-                              id={comment.id}
-                              top={positions()[comment.id]}
-                              onMouseEnter={() => setSelection({ file: comment.file, range: comment.selection })}
-                              onClick={() => {
-                                if (isCommentOpen(comment)) {
-                                  setOpened(null)
-                                  return
-                                }
+                            <Switch>
+                              <Match when={isEditing(comment)}>
+                                <LineCommentEditor
+                                  id={comment.id}
+                                  top={positions()[comment.id]}
+                                  value={editDraft()}
+                                  selection={selectionLabel(comment.selection)}
+                                  onInput={setEditDraft}
+                                  onCancel={cancelEditing}
+                                  onSubmit={(text) => submitEdit(comment, text)}
+                                  submitLabel={i18n.t("ui.common.save")}
+                                />
+                              </Match>
+                              <Match when={true}>
+                                <LineComment
+                                  id={comment.id}
+                                  top={positions()[comment.id]}
+                                  onMouseEnter={() => setSelection({ file: comment.file, range: comment.selection })}
+                                  onClick={() => {
+                                    if (isCommentOpen(comment)) {
+                                      setOpened(null)
+                                      return
+                                    }
 
-                                openComment(comment)
-                              }}
-                              open={isCommentOpen(comment)}
-                              comment={comment.comment}
-                              selection={selectionLabel(comment.selection)}
-                            />
+                                    openComment(comment)
+                                  }}
+                                  open={isCommentOpen(comment)}
+                                  comment={comment.comment}
+                                  selection={selectionLabel(comment.selection)}
+                                  onEdit={props.onEditComment ? () => startEditing(comment) : undefined}
+                                />
+                              </Match>
+                            </Switch>
                           )}
                         </For>
 

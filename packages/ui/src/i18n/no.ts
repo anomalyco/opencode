@@ -82,6 +82,8 @@ export const dict: Record<Keys, string> = {
   "ui.common.dismiss": "Avvis",
   "ui.common.close": "Lukk",
   "ui.common.next": "Neste",
+  "ui.common.edit": "Rediger",
+  "ui.common.save": "Lagre",
   "ui.common.submit": "Send inn",
 
   "ui.permission.deny": "Avslå",

@@ -84,6 +84,8 @@ export const dict = {
   "ui.common.dismiss": "Odbaci",
   "ui.common.close": "Zatvori",
   "ui.common.next": "Dalje",
+  "ui.common.edit": "Uredi",
+  "ui.common.save": "Spremi",
   "ui.common.submit": "Pošalji",
 
   "ui.permission.deny": "Zabrani",

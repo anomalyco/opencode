@@ -17,6 +17,7 @@ export interface SessionReviewTabProps {
   onDiffStyleChange?: (style: DiffStyle) => void
   onViewFile?: (file: string) => void
   onLineComment?: (comment: { file: string; selection: SelectedLineRange; comment: string; preview?: string }) => void
+  onEditComment?: (edit: { file: string; id: string; comment: string }) => void
   comments?: LineComment[]
   focusedComment?: { file: string; id: string } | null
   onFocusedCommentChange?: (focus: { file: string; id: string } | null) => void
@@ -150,6 +151,7 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
       focusedFile={props.focusedFile}
       readFile={readFile}
       onLineComment={props.onLineComment}
+      onEditComment={props.onEditComment}
       comments={props.comments}
       focusedComment={props.focusedComment}
       onFocusedCommentChange={props.onFocusedCommentChange}

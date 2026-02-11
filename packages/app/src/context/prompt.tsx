@@ -165,6 +165,9 @@ function createPromptSession(dir: string, id: string | undefined) {
       remove(key: string) {
         setStore("context", "items", (items) => items.filter((x) => x.key !== key))
       },
+      updateComment(commentID: string, comment: string) {
+        setStore("context", "items", (item) => item.commentID === commentID, "comment", comment)
+      },
     },
     set(prompt: Prompt, cursorPosition?: number) {
       const next = clonePrompt(prompt)
@@ -238,6 +241,7 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
         items: () => session().context.items(),
         add: (item: ContextItem) => session().context.add(item),
         remove: (key: string) => session().context.remove(key),
+        updateComment: (commentID: string, comment: string) => session().context.updateComment(commentID, comment),
       },
       set: (prompt: Prompt, cursorPosition?: number) => session().set(prompt, cursorPosition),
       reset: () => session().reset(),

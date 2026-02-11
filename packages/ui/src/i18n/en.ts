@@ -80,6 +80,8 @@ export const dict = {
   "ui.common.dismiss": "Dismiss",
   "ui.common.close": "Close",
   "ui.common.next": "Next",
+  "ui.common.edit": "Edit",
+  "ui.common.save": "Save",
   "ui.common.submit": "Submit",
 
   "ui.permission.deny": "Deny",

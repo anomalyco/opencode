@@ -83,6 +83,8 @@ export const dict = {
   "ui.common.dismiss": "忽略",
   "ui.common.close": "關閉",
   "ui.common.next": "下一步",
+  "ui.common.edit": "編輯",
+  "ui.common.save": "儲存",
   "ui.common.submit": "提交",
 
   "ui.permission.deny": "拒絕",

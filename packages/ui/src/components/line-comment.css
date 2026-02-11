@@ -69,6 +69,13 @@
   white-space: pre-wrap;
 }
 
+[data-component="line-comment"] [data-slot="line-comment-footer"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 [data-component="line-comment"] [data-slot="line-comment-label"],
 [data-component="line-comment"] [data-slot="line-comment-editor-label"] {
   font-family: var(--font-family-sans);
