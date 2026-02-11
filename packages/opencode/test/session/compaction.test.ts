@@ -70,7 +70,7 @@ describe("session.compaction.isOverflow", () => {
       directory: tmp.path,
       fn: async () => {
         const model = createModel({ context: 100_000, output: 32_000 })
-        const tokens = { input: 50_000, output: 10_000, reasoning: 0, cache: { read: 10_000, write: 0 } }
+        const tokens = { input: 60_000, output: 10_000, reasoning: 0, cache: { read: 10_000, write: 0 } }
         expect(await SessionCompaction.isOverflow({ tokens, model })).toBe(true)
       },
     })
@@ -180,13 +180,13 @@ describe("session.compaction.isOverflow", () => {
         const withoutInputLimit = createModel({ context: 200_000, output: 32_000 })
 
         // 170K total tokens — well above context-output (168K) but below input limit (200K)
-        const tokens = { input: 155_000, output: 10_000, reasoning: 0, cache: { read: 5_000, write: 0 } }
+        const tokens = { input: 166_000, output: 10_000, reasoning: 0, cache: { read: 5_000, write: 0 } }
 
         const withLimit = await SessionCompaction.isOverflow({ tokens, model: withInputLimit })
         const withoutLimit = await SessionCompaction.isOverflow({ tokens, model: withoutInputLimit })
 
         // Both models have identical real capacity — they should agree:
-        expect(withLimit).toBe(true)    // should compact (170K leaves no room for 32K output)
+        expect(withLimit).toBe(true) // should compact (170K leaves no room for 32K output)
         expect(withoutLimit).toBe(true) // correctly compacts (170K > 168K)
       },
     })
