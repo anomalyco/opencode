@@ -499,12 +499,12 @@ opencode uninstall
 
 #### Flagi
 
-| Flaga           | Krótkie | Opis                                |
-| --------------- | ------- | ----------------------------------- |
-| `--keep-config` | `-c`    | Zachowaj pliki konfiguracyjne       |
-| `--keep-data`   | `-d`    | Przechowuj dane sesji i szczepionek |
-| `--dry-run`     |         | Pokaż, wykluczy bez usuwania        |
-| `--force`       | `-f`    | Pomiń monity o potwierdzenie        |
+| Flaga           | Krótkie | Opis                              |
+| --------------- | ------- | --------------------------------- |
+| `--keep-config` | `-c`    | Zachowaj pliki konfiguracyjne     |
+| `--keep-data`   | `-d`    | Przechowuj dane sesji i snapshots |
+| `--dry-run`     |         | Pokaż, wykluczy bez usuwania      |
+| `--force`       | `-f`    | Pomiń monity o potwierdzenie      |
 
 ---
 
@@ -530,9 +530,9 @@ opencode upgrade v0.1.48
 
 #### Flagi
 
-| Flaga      | Krótkie | Opis                                                       |
-| ---------- | ------- | ---------------------------------------------------------- |
-| `--method` | `-m`    | Zastosowana metoda instalacji; curl, npm, pnpm, kok, napar |
+| Flaga      | Krótkie | Opis                                                      |
+| ---------- | ------- | --------------------------------------------------------- |
+| `--method` | `-m`    | Zastosowana metoda instalacji; curl, npm, pnpm, bun, brew |
 
 ---
 
@@ -540,18 +540,18 @@ opencode upgrade v0.1.48
 
 Interfejs CLI kod opencode przyjmuje flagi globalne.
 
-| Flaga          | Krótkie | Opis                                          |
-| -------------- | ------- | --------------------------------------------- |
-| `--help`       | `-h`    | Wyświetl pomoc                                |
-| `--version`    | `-v`    | Drukuj numer wersji                           |
-| `--print-logs` |         | Wydrukuj logi na stderr                       |
-| `--log-level`  |         | Poziom dziennika (DEBUG, INFO, OSTRZEŻ, BŁĄD) |
+| Flaga          | Krótkie | Opis                                        |
+| -------------- | ------- | ------------------------------------------- |
+| `--help`       | `-h`    | Wyświetl pomoc                              |
+| `--version`    | `-v`    | Drukuj numer wersji                         |
+| `--print-logs` |         | Wydrukuj logi na stderr                     |
+| `--log-level`  |         | Poziom dziennika (DEBUG, INFO, WARN, ERROR) |
 
 ---
 
 ## Zmienne środowiskowe
 
-opencode można wykryć za pomocą czyszczenia alternatywnych.
+opencode można skonfigurować za pomocą zmiennych środowiskowych.
 
 | Zmienna                               | Wpisz   | Opis                                                                    |
 | ------------------------------------- | ------- | ----------------------------------------------------------------------- |
@@ -599,5 +599,5 @@ Te zmienne możliwości użycia funkcji eksperymentalnych, które mogą zostać 
 | `OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER`     | boolean | Wyłącz obserwatora plików                      |
 | `OPENCODE_EXPERIMENTAL_EXA`                     | boolean | Włącz funkcje eksperymentalne Exa              |
 | `OPENCODE_EXPERIMENTAL_LSP_TY`                  | boolean | Włącz eksperymentalne sprawdzanie typu LSP     |
-| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolean | Włącz funkcje eksperymentalne przecen          |
+| `OPENCODE_EXPERIMENTAL_MARKDOWN`                | boolean | Włącz funkcje eksperymentalne Markdown         |
 | `OPENCODE_EXPERIMENTAL_PLAN_MODE`               | boolean | Włącz tryb planu                               |

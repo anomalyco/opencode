@@ -69,10 +69,10 @@ opencode attach [url]
 Bu, TUI öğesinin uzak bir opencode arka ucuyla kullanılmasına olanak tanır. Örneğin:
 
 ```bash
-# Web/mobil erişim için backend sunucusunu başlat
+# Start the backend server for web/mobile access
 opencode web --port 4096 --hostname 0.0.0.0
 
-# Başka bir terminalde çalışan backend'e TUI ile bağlan
+# In another terminal, attach the TUI to the running backend
 opencode attach http://10.20.30.40:4096
 ```
 
@@ -326,10 +326,10 @@ opencode run Explain the use of context in Go
 Ayrıca, her çalıştırmada MCP sunucusunun soğuk önyükleme sürelerini önlemek için çalışan bir `opencode serve` örneğine de ekleyebilirsiniz:
 
 ```bash
-# Bir terminalde headless sunucuyu başlat
+# Start a headless server in one terminal
 opencode serve
 
-# Başka bir terminalde buna bağlanan komutları çalıştır
+# In another terminal, run commands that attach to it
 opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 

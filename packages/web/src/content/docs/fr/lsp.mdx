@@ -11,40 +11,40 @@ OpenCode s'intègre à votre protocole de serveur de langue (LSP) pour aider le 
 
 OpenCode est livré avec plusieurs serveurs LSP intégrés pour les langues populaires :
 
-| Serveur LSP         | Rallonges                                                           | Exigences                                                               |
-| ------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| astro               | .astro                                                              | Installations automatiques pour les projets Astro                       |
-| coup                | .sh, .bash, .zsh, .ksh                                              | Installe automatiquement le serveur bash-langage                        |
-| clangd              | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++                | Installations automatiques pour les projets C/C++                       |
-| cpointu             | .cs                                                                 | `.NET SDK` installé                                                     |
-| clojure-lsp         | .clj, .cljs, .cljc, .edn                                            | Commande `clojure-lsp` disponible                                       |
-| fléchette           | .dart                                                               | Commande `dart` disponible                                              |
-| déno                | .ts, .tsx, .js, .jsx, .mjs                                          | Commande `deno` disponible (détection automatique deno.json/deno.jsonc) |
-| élixir-ls           | .ex, .ex                                                            | Commande `elixir` disponible                                            |
-| eslint              | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue                  | Dépendance `eslint` dans le projet                                      |
-| fsharp              | .fs, .fsi, .fsx, .fsscript                                          | `.NET SDK` installé                                                     |
-| lueur               | .lueur                                                              | Commande `gleam` disponible                                             |
-| gopls               | .aller                                                              | Commande `go` disponible                                                |
-| hls                 | .hs, .lhs                                                           | Commande `haskell-language-server-wrapper` disponible                   |
-| jdtls               | .java                                                               | `Java SDK (version 21+)` installé                                       |
-| kotlin-ls           | .kt, .kts                                                           | Installations automatiques pour les projets Kotlin                      |
-| lua-ls              | .lua                                                                | Installations automatiques pour les projets Lua                         |
-| rien                | .nix                                                                | Commande `nixd` disponible                                              |
-| ocaml-lsp           | .ml, .mli                                                           | Commande `ocamllsp` disponible                                          |
-| plinthe de boeuf    | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | Dépendance `oxlint` dans le projet                                      |
-| php intelligence    | .php                                                                | Installations automatiques pour les projets PHP                         |
-| prisme              | .prisma                                                             | Commande `prisma` disponible                                            |
-| droit d'auteur      | .py, .pyi                                                           | Dépendance `pyright` installée                                          |
-| rubis-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                           | Commandes `ruby` et `gem` disponibles                                   |
-| rouille             | .rs                                                                 | Commande `rust-analyzer` disponible                                     |
-| sourcekit-lsp       | .swift, .objc, .objcpp                                              | `swift` installé (`xcode` sur macOS)                                    |
-| svelte              | .svelte                                                             | Installations automatiques pour les projets Svelte                      |
-| terraformer         | .tf, .tfvars                                                        | Installations automatiques à partir des versions GitHub                 |
-| petite brume        | .typ, .typc                                                         | Installations automatiques à partir des versions GitHub                 |
-| dactylographié      | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts                        | Dépendance `typescript` dans le projet                                  |
-| vue                 | .vue                                                                | Installations automatiques pour les projets Vue                         |
-| yaml-ls             | .yaml, .yml                                                         | Installe automatiquement le serveur yaml-langage-Red Hat                |
-| zls                 | .zig, .zon                                                          | Commande `zig` disponible                                               |
+| Serveur LSP        | Rallonges                                                           | Exigences                                                               |
+| ------------------ | ------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| astro              | .astro                                                              | Installations automatiques pour les projets Astro                       |
+| bash               | .sh, .bash, .zsh, .ksh                                              | Installe automatiquement le serveur bash-langage                        |
+| clangd             | .c, .cpp, .cc, .cxx, .c++, .h, .hpp, .hh, .hxx, .h++                | Installations automatiques pour les projets C/C++                       |
+| csharp             | .cs                                                                 | `.NET SDK` installé                                                     |
+| clojure-lsp        | .clj, .cljs, .cljc, .edn                                            | Commande `clojure-lsp` disponible                                       |
+| dart               | .dart                                                               | Commande `dart` disponible                                              |
+| deno               | .ts, .tsx, .js, .jsx, .mjs                                          | Commande `deno` disponible (détection automatique deno.json/deno.jsonc) |
+| elixir-ls          | .ex, .ex                                                            | Commande `elixir` disponible                                            |
+| eslint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue                  | Dépendance `eslint` dans le projet                                      |
+| fsharp             | .fs, .fsi, .fsx, .fsscript                                          | `.NET SDK` installé                                                     |
+| gleam              | .gleam                                                              | Commande `gleam` disponible                                             |
+| gopls              | .go                                                                 | Commande `go` disponible                                                |
+| hls                | .hs, .lhs                                                           | Commande `haskell-language-server-wrapper` disponible                   |
+| jdtls              | .java                                                               | `Java SDK (version 21+)` installé                                       |
+| kotlin-ls          | .kt, .kts                                                           | Installations automatiques pour les projets Kotlin                      |
+| lua-ls             | .lua                                                                | Installations automatiques pour les projets Lua                         |
+| nixd               | .nix                                                                | Commande `nixd` disponible                                              |
+| ocaml-lsp          | .ml, .mli                                                           | Commande `ocamllsp` disponible                                          |
+| oxlint             | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts, .vue, .astro, .svelte | Dépendance `oxlint` dans le projet                                      |
+| php intelephense   | .php                                                                | Installations automatiques pour les projets PHP                         |
+| prisma             | .prisma                                                             | Commande `prisma` disponible                                            |
+| pyright            | .py, .pyi                                                           | Dépendance `pyright` installée                                          |
+| ruby-lsp (rubocop) | .rb, .rake, .gemspec, .ru                                           | Commandes `ruby` et `gem` disponibles                                   |
+| rust               | .rs                                                                 | Commande `rust-analyzer` disponible                                     |
+| sourcekit-lsp      | .swift, .objc, .objcpp                                              | `swift` installé (`xcode` sur macOS)                                    |
+| svelte             | .svelte                                                             | Installations automatiques pour les projets Svelte                      |
+| terraform          | .tf, .tfvars                                                        | Installations automatiques à partir des versions GitHub                 |
+| tinymist           | .typ, .typc                                                         | Installations automatiques à partir des versions GitHub                 |
+| typescript         | .ts, .tsx, .js, .jsx, .mjs, .cjs, .mts, .cts                        | Dépendance `typescript` dans le projet                                  |
+| vue                | .vue                                                                | Installations automatiques pour les projets Vue                         |
+| yaml-ls            | .yaml, .yml                                                         | Installe automatiquement le serveur yaml-langage-Red Hat                |
+| zls                | .zig, .zon                                                          | Commande `zig` disponible                                               |
 
 Les serveurs LSP sont automatiquement activés lorsque l'une des extensions de fichier ci-dessus est détectée et que les exigences sont remplies.
 
@@ -178,11 +178,11 @@ Vous pouvez ajouter des serveurs LSP personnalisés en spécifiant les extension
 
 ## Informations Complémentaires
 
-### PHP Intelligence
+### PHP Intelephense
 
-PHP Intelephense offre des fonctionnalités premium via une clé de licence. Vous pouvez fournir une clé de licence en plaçant (uniquement) la clé dans un fichier texte à l'adresse :
+PHP Intelephense offre des fonctionnalités premium via une clé de licence. Vous pouvez fournir une clé de licence en plaçant (uniquement) la clé dans un fichier texte à l'adresse :
 
-- Le macOS/Linux : `$HOME/intelephense/licence.txt`
-- Le Windows : `%USERPROFILE%/intelephense/licence.txt`
+- Le macOS/Linux : `$HOME/intelephense/license.txt`
+- Le Windows : `%USERPROFILE%/intelephense/license.txt`
 
 Le fichier doit contenir uniquement la clé de licence sans contenu supplémentaire.

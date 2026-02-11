@@ -105,7 +105,7 @@ use the mcp_everything tool to add the number 3 and 4
 #### Opcije
 
 Ovdje su sve opcije za konfiguriranje lokalnog MCP servera.
-| Opcija | Vrsta | Obavezno | Opis
+| Opcija | Tip | Obavezno | Opis
 |------------- | ------- | -------- | ----------------------------------------------------------------------------------- |
 | `type` | String | Y | Tip veze sa MCP serverom, mora biti `"local"`. |
 | `command` | Niz | Y | Naredba i argumenti za pokretanje MCP servera. |
@@ -139,7 +139,7 @@ Dodajte udaljene MCP servere postavljanjem `type` na `"remote"`.
 
 #### Opcije
 
-| Opcija    | Vrsta   | Obavezno | Opis                                                                                               |
+| Opcija    | Tip     | Obavezno | Opis                                                                                               |
 | --------- | ------- | -------- | -------------------------------------------------------------------------------------------------- |
 | `type`    | String  | Y        | Tip veze sa MCP serverom, mora biti `"remote"`.                                                    |
 | `url`     | String  | Y        | URL udaljenog MCP servera.                                                                         |
@@ -248,7 +248,7 @@ Ako želite onemogućiti automatski OAuth za server (npr. za servere koji umjest
 
 #### OAuth opcije
 
-| Opcija         | Vrsta           | Opis                                                                                          |
+| Opcija         | Tip             | Opis                                                                                          |
 | -------------- | --------------- | --------------------------------------------------------------------------------------------- |
 | `oauth`        | Objekt \| false | OAuth konfiguracijski objekt, ili `false` da onemogućite automatsko otkrivanje OAuth.         |
 | `clientId`     | String          | ID OAuth klijenta. Ako nije navedeno, pokušat će se izvršiti dinamička registracija klijenta. |
@@ -269,7 +269,7 @@ opencode mcp debug my-oauth-server
 
 Komanda `mcp debug` prikazuje trenutni auth status, testira HTTP povezanost i pokušava OAuth discovery flow.
 
-## Upravljaj
+## Manage
 
 Vaši MCP serveri su dostupni kao alati u OpenCode, zajedno s ugrađenim alatima. Možete njima upravljati kroz OpenCode konfiguraciju kao i bilo kojim drugim alatom.
 

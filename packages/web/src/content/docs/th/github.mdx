@@ -9,7 +9,7 @@ OpenCode ผสานรวมกับเวิร์กโฟลว์ GitHub 
 
 ## คุณสมบัติ
 
-- **ปัญหาการคัดแยก**: ขอให้ OpenCode ตรวจสอบปัญหาและอธิบายให้คุณทราบ
+- **Issue Triage**: ขอให้ OpenCode ตรวจสอบปัญหาและอธิบายให้คุณทราบ
 - **แก้ไขและนำไปใช้**: ขอให้ OpenCode แก้ไขปัญหาหรือใช้ฟีเจอร์ และมันจะทำงานในสาขาใหม่และส่ง PR พร้อมการเปลี่ยนแปลงทั้งหมด
 - **ปลอดภัย**: OpenCode ทำงานภายในรันเนอร์ของ GitHub ของคุณ
 
@@ -85,7 +85,7 @@ opencode github install
 - `agent`: ตัวแทนที่จะใช้ จะต้องเป็นตัวแทนหลัก ย้อนกลับไปที่ `default_agent` จาก config หรือ `"build"` หากไม่พบ
 - `share`: ไม่ว่าจะแชร์เซสชัน OpenCode หรือไม่ ค่าเริ่มต้นเป็น **จริง** สำหรับที่เก็บข้อมูลสาธารณะ
 - `prompt`: ตัวเลือกที่กำหนดเองพร้อมท์เพื่อแทนที่การทำงานเริ่มต้น ใช้สิ่งนี้เพื่อปรับแต่งวิธีที่ OpenCode ประมวลผลคำขอ
-- `token`: โทเค็นการเข้าถึง GitHub เสริมสำหรับการดำเนินการ เช่น การสร้างความคิดเห็น การยอมรับการเปลี่ยนแปลง และการเปิดคำขอดึง ตามค่าเริ่มต้น OpenCode จะใช้โทเค็นการเข้าถึงการติดตั้งจากแอป OpenCode GitHub ดังนั้นคอมมิต แสดงความคิดเห็น และคำขอดึงข้อมูลจะปรากฏว่ามาจากแอป
+- `token`: GitHub Access Token เสริมสำหรับการดำเนินการ เช่น การสร้างความคิดเห็น การยอมรับการเปลี่ยนแปลง และการเปิดคำขอดึง ตามค่าเริ่มต้น OpenCode จะใช้โทเค็นการเข้าถึงการติดตั้งจาก OpenCode GitHub App ดังนั้นคอมมิต แสดงความคิดเห็น และคำขอดึงข้อมูลจะปรากฏว่ามาจากแอป
 
   หรือคุณสามารถใช้ [ในตัว `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) ของ GitHub Action runner ได้โดยไม่ต้องติดตั้งแอป OpenCode GitHub เพียงตรวจสอบให้แน่ใจว่าได้ให้สิทธิ์ที่จำเป็นในขั้นตอนการทำงานของคุณ:
 
@@ -97,7 +97,7 @@ opencode github install
     issues: write
   ```
 
-  คุณยังสามารถใช้ [โทเค็นการเข้าถึงส่วนบุคคล](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)(PAT) ได้หากต้องการ
+  คุณยังสามารถใช้ [Personal Access Token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)(PAT) ได้หากต้องการ
 
 ---
 
