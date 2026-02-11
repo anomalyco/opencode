@@ -12,12 +12,19 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     const platform = usePlatform()
     const abort = new AbortController()
 
-    // Prefer the WebView fetch implementation for streaming responses.
-    // @tauri-apps/plugin-http 2.5.x has known issues with streaming/cancellation that can
-    // retain native resources in the Rust process.
+    const auth = (() => {
+      if (typeof window === "undefined") return
+      const password = window.__OPENCODE__?.serverPassword
+      if (!password) return
+      return {
+        Authorization: `Basic ${btoa(`opencode:${password}`)}`,
+      }
+    })()
+
     const eventSdk = createOpencodeClient({
       baseUrl: server.url,
       signal: abort.signal,
+      headers: auth,
     })
     const emitter = createGlobalEmitter<{
       [key: string]: Event

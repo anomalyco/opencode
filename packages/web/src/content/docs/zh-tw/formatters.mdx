@@ -15,7 +15,7 @@ opencode 附帶了多個適用於流行語言和框架的內置格式化程序�
 | -------------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | gofmt                | .go                                                                                                     | `gofmt` 命令可用                                                                  |
 | mix                  | .ex, .exs, .eex, .heex, .leex, .neex, .sface                                                            | `mix` 命令可用                                                                    |
-| prettier             | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml, 和 [更多](https://prettier.io/docs/en/index.html) | `package.json` 中有 `prettier` 依賴                                               |
+| prettier             | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml, 和 [更多](https://prettier.io/docs/en/index.html) | `prettier` 中有 `package.json` 依賴                                               |
 | biome                | .js, .jsx, .ts, .tsx, .html, .css, .md, .json, .yaml, 和 [更多](https://biomejs.dev/)                   | `biome.json(c)` 配置文件                                                          |
 | zig                  | .zig, .zon                                                                                              | `zig` 命令可用                                                                    |
 | clang-format         | .c, .cpp, .h, .hpp, .ino, 和 [更多](https://clang.llvm.org/docs/ClangFormat.html)                       | `.clang-format` 配置文件                                                          |
@@ -34,11 +34,11 @@ opencode 附帶了多個適用於流行語言和框架的內置格式化程序�
 | gleam                | .gleam                                                                                                  | `gleam` 命令可用                                                                  |
 | nixfmt               | .nix                                                                                                    | `nixfmt` 命令可用                                                                 |
 | shfmt                | .sh, .bash                                                                                              | `shfmt` 命令可用                                                                  |
-| pint                 | .php                                                                                                    | `composer.json` 中有 `laravel/pint` 依賴                                          |
-| oxfmt (Experimental) | .js, .jsx, .ts, .tsx                                                                                    | `package.json` 中有 `oxfmt` 依賴且啟用[實驗環境變量旗標](/docs/cli/#experimental) |
+| pint                 | .php                                                                                                    | `laravel/pint` 中有 `composer.json` 依賴                                          |
+| oxfmt (Experimental) | .js, .jsx, .ts, .tsx                                                                                    | `oxfmt` 中有 `package.json` 依賴且啟用[實驗環境變量旗標](/docs/cli/#experimental) |
 | ormolu               | .hs                                                                                                     | `ormolu` 命令可用                                                                 |
 
-因此，如果您的項目的`package.json`中有`prettier`，opencode將自動使用它。
+因此，如果您的項目的`prettier`中有`package.json`，opencode將自動使用它。
 
 ---
 

@@ -30,12 +30,12 @@ A maneira mais fácil de criar ferramentas é usando o helper `tool()`, que forn
 import { tool } from "@opencode-ai/plugin"
 
 export default tool({
-  description: "Consultar o banco de dados do projeto",
+  description: "Query the project database",
   args: {
-    query: tool.schema.string().describe("Consulta SQL a ser executada"),
+    query: tool.schema.string().describe("SQL query to execute"),
   },
   async execute(args) {
-    // Sua lógica de banco de dados aqui
+    // Your database logic here
     return `Executed query: ${args.query}`
   },
 })
@@ -53,10 +53,10 @@ Você também pode exportar várias ferramentas de um único arquivo. Cada expor
 import { tool } from "@opencode-ai/plugin"
 
 export const add = tool({
-  description: "Adicionar dois números",
+  description: "Add two numbers",
   args: {
-    a: tool.schema.number().describe("Primeiro número"),
-    b: tool.schema.number().describe("Segundo número"),
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
   },
   async execute(args) {
     return args.a + args.b
@@ -64,10 +64,10 @@ export const add = tool({
 })
 
 export const multiply = tool({
-  description: "Multiplicar dois números",
+  description: "Multiply two numbers",
   args: {
-    a: tool.schema.number().describe("Primeiro número"),
-    b: tool.schema.number().describe("Segundo número"),
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
   },
   async execute(args) {
     return args.a * args.b
@@ -85,7 +85,7 @@ Você pode usar `tool.schema`, que é apenas [Zod](https://zod.dev), para defini
 
 ```ts "tool.schema"
 args: {
-  query: tool.schema.string().describe("Consulta SQL a ser executada")
+  query: tool.schema.string().describe("SQL query to execute")
 }
 ```
 
@@ -95,13 +95,13 @@ Você também pode importar [Zod](https://zod.dev) diretamente e retornar um obj
 import { z } from "zod"
 
 export default {
-  description: "Descrição da ferramenta",
+  description: "Tool description",
   args: {
-    param: z.string().describe("Descrição do parâmetro"),
+    param: z.string().describe("Parameter description"),
   },
   async execute(args, context) {
-    // Implementação da ferramenta
-    return "resultado"
+    // Tool implementation
+    return "result"
   },
 }
 ```
@@ -116,10 +116,10 @@ As ferramentas recebem contexto sobre a sessão atual:
 import { tool } from "@opencode-ai/plugin"
 
 export default tool({
-  description: "Obter informações do projeto",
+  description: "Get project information",
   args: {},
   async execute(args, context) {
-    // Acessar informações do contexto
+    // Access context information
     const { agent, sessionID, messageID, directory, worktree } = context
     return `Agent: ${agent}, Session: ${sessionID}, Message: ${messageID}, Directory: ${directory}, Worktree: ${worktree}`
   },
@@ -154,10 +154,10 @@ import { tool } from "@opencode-ai/plugin"
 import path from "path"
 
 export default tool({
-  description: "Adicionar dois números usando Python",
+  description: "Add two numbers using Python",
   args: {
-    a: tool.schema.number().describe("Primeiro número"),
-    b: tool.schema.number().describe("Segundo número"),
+    a: tool.schema.number().describe("First number"),
+    b: tool.schema.number().describe("Second number"),
   },
   async execute(args, context) {
     const script = path.join(context.worktree, ".opencode/tools/add.py")
