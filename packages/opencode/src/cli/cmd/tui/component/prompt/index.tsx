@@ -44,7 +44,7 @@ import { DialogWorkspaceCreate, restoreWorkspaceSession } from "../dialog-worksp
 import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
 import { useArgs } from "@tui/context/args"
 import { useVimEnabled } from "../vim"
-import { createVimState } from "../vim/vim-state"
+import { createVimState, type VimMode } from "../vim/vim-state"
 import { createVimHandler } from "../vim/vim-handler"
 import { vimScroll } from "../vim/vim-scroll"
 import { useVimIndicator } from "../vim/vim-indicator"
@@ -84,6 +84,7 @@ function randomIndex(count: number) {
   if (count <= 0) return 0
   return Math.floor(Math.random() * count)
 }
+let lastVimMode: VimMode = "insert"
 
 function fadeColor(color: RGBA, alpha: number) {
   return RGBA.fromValues(color.r, color.g, color.b, color.a * alpha)
@@ -238,6 +239,10 @@ export function Prompt(props: PromptProps) {
   })
   const vimState = createVimState({
     enabled: vimEnabled,
+    initial: () => lastVimMode,
+  })
+  onCleanup(() => {
+    if (vimEnabled()) lastVimMode = vimState.mode()
   })
   const vimIndicator = useVimIndicator({
     enabled: vimEnabled,
