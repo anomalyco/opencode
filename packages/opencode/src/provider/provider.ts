@@ -25,7 +25,7 @@ import { createVertexAnthropic } from "@ai-sdk/google-vertex/anthropic"
 import { createOpenAI } from "@ai-sdk/openai"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import { createOpenRouter, type LanguageModelV2 } from "@openrouter/ai-sdk-provider"
-import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/copilot"
+import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/openai-compatible/src"
 import { createXai } from "@ai-sdk/xai"
 import { createMistral } from "@ai-sdk/mistral"
 import { createGroq } from "@ai-sdk/groq"
@@ -134,7 +134,6 @@ export namespace Provider {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          if (sdk.responses === undefined && sdk.chat === undefined) return sdk.languageModel(modelID)
           return shouldUseCopilotResponsesApi(modelID) ? sdk.responses(modelID) : sdk.chat(modelID)
         },
         options: {},
@@ -144,7 +143,6 @@ export namespace Provider {
       return {
         autoload: false,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          if (sdk.responses === undefined && sdk.chat === undefined) return sdk.languageModel(modelID)
           return shouldUseCopilotResponsesApi(modelID) ? sdk.responses(modelID) : sdk.chat(modelID)
         },
         options: {},
@@ -630,7 +628,10 @@ export namespace Provider {
       api: {
         id: model.id,
         url: provider.api!,
-        npm: model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible",
+        npm: iife(() => {
+          if (provider.id.startsWith("github-copilot")) return "@ai-sdk/github-copilot"
+          return model.provider?.npm ?? provider.npm ?? "@ai-sdk/openai-compatible"
+        }),
       },
       status: model.status ?? "active",
       headers: model.headers ?? {},
@@ -815,7 +816,10 @@ export namespace Provider {
               write: model?.cost?.cache_write ?? existingModel?.cost?.cache.write ?? 0,
             },
           },
-          options: mergeDeep(existingModel?.options ?? {}, model.options ?? {}),
+          options: mergeDeep(
+            mergeDeep(existingModel?.options ?? {}, parsed.options?.snowflakeCortex ? { snowflakeCortex: true } : {}),
+            model.options ?? {},
+          ),
           limit: {
             context: model.limit?.context ?? existingModel?.limit?.context ?? 0,
             output: model.limit?.output ?? existingModel?.limit?.output ?? 0,
@@ -880,9 +884,10 @@ export namespace Provider {
       // Load for the main provider if auth exists
       if (auth) {
         const options = await plugin.auth.loader(() => Auth.get(providerID) as any, database[plugin.auth.provider])
-        const opts = options ?? {}
-        const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
-        mergeProvider(providerID, patch)
+        mergeProvider(plugin.auth.provider, {
+          source: "custom",
+          options: options,
+        })
       }
 
       // If this is github-copilot plugin, also register for github-copilot-enterprise if auth exists
@@ -895,11 +900,10 @@ export namespace Provider {
               () => Auth.get(enterpriseProviderID) as any,
               database[enterpriseProviderID],
             )
-            const opts = enterpriseOptions ?? {}
-            const patch: Partial<Info> = providers[enterpriseProviderID]
-              ? { options: opts }
-              : { source: "custom", options: opts }
-            mergeProvider(enterpriseProviderID, patch)
+            mergeProvider(enterpriseProviderID, {
+              source: "custom",
+              options: enterpriseOptions,
+            })
           }
         }
       }
@@ -915,9 +919,10 @@ export namespace Provider {
       const result = await fn(data)
       if (result && (result.autoload || providers[providerID])) {
         if (result.getModel) modelLoaders[providerID] = result.getModel
-        const opts = result.options ?? {}
-        const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
-        mergeProvider(providerID, patch)
+        mergeProvider(providerID, {
+          source: "custom",
+          options: result.options,
+        })
       }
     }
 
@@ -949,8 +954,6 @@ export namespace Provider {
           (configProvider?.whitelist && !configProvider.whitelist.includes(modelID))
         )
           delete provider.models[modelID]
-
-        model.variants = mapValues(ProviderTransform.variants(model), (v) => v)
 
         // Filter out disabled variants from config
         const configVariants = configProvider?.models?.[modelID]?.variants
@@ -1004,7 +1007,7 @@ export namespace Provider {
           ...model.headers,
         }
 
-      const key = Bun.hash.xxHash32(JSON.stringify({ providerID: model.providerID, npm: model.api.npm, options }))
+      const key = Bun.hash.xxHash32(JSON.stringify({ npm: model.api.npm, options }))
       const existing = s.sdk.get(key)
       if (existing) return existing
 
@@ -1043,6 +1046,21 @@ export namespace Provider {
           }
         }
 
+        // Snowflake Cortex compatibility: transform max_tokens to max_completion_tokens
+        // Snowflake's OpenAI-compatible API requires max_completion_tokens instead of max_tokens
+        if (options["snowflakeCortex"] === true && opts.body && opts.method === "POST") {
+          try {
+            const body = JSON.parse(opts.body as string)
+            if (body.max_tokens !== undefined && body.max_completion_tokens === undefined) {
+              body.max_completion_tokens = body.max_tokens
+              delete body.max_tokens
+              opts.body = JSON.stringify(body)
+            }
+          } catch {
+            // If body parsing fails, continue with original request
+          }
+        }
+
         return fetchFn(input, {
           ...opts,
           // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
@@ -1050,9 +1068,12 @@ export namespace Provider {
         })
       }
 
-      const bundledFn = BUNDLED_PROVIDERS[model.api.npm]
+      // Special case: google-vertex-anthropic uses a subpath import
+      const bundledKey =
+        model.providerID === "google-vertex-anthropic" ? "@ai-sdk/google-vertex/anthropic" : model.api.npm
+      const bundledFn = BUNDLED_PROVIDERS[bundledKey]
       if (bundledFn) {
-        log.info("using bundled provider", { providerID: model.providerID, pkg: model.api.npm })
+        log.info("using bundled provider", { providerID: model.providerID, pkg: bundledKey })
         const loaded = bundledFn({
           name: model.providerID,
           ...options,

@@ -59,6 +59,21 @@ nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev
 > [!TIP]
 > Remove versions older than 0.1.x before installing.
 
+### Cortex Patch (Snowflake Compatibility)
+
+This fork includes a Snowflake Cortex compatibility patch (tool-use handling and `max_completion_tokens` mapping).
+
+Quick start:
+
+```bash
+git clone https://github.com/sfc-gh-kkeller/opencode-cortex-patch.git
+cd opencode-cortex-patch
+bun install
+bun dev
+```
+
+See the full guide: [PATCHING.md](./PATCHING.md)
+
 ### Desktop App (BETA)
 
 OpenCode is also available as a desktop application. Download directly from the [releases page](https://github.com/anomalyco/opencode/releases) or [opencode.ai/download](https://opencode.ai/download).

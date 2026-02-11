@@ -1,5 +1,7 @@
 #!/bin/sh
 set -e
+# Ensure bun is on PATH for git hooks
+export PATH="/Users/kevin/.bun/bin:$PATH"
 # Check if bun version matches package.json
 # keep in sync with packages/script/src/index.ts semver qualifier
 bun -e '
