@@ -90,17 +90,13 @@ git rebase upstream/dev
 
 #### Case A: Clean Rebase (No Conflicts)
 
-```bash
-# Run validation checks
-bun install
-bun run typecheck
-
-# If all pass, proceed to Step 4
-```
+**Do NOT skip to validation.** Proceed to the **Upstream Drift Review** section below — clean rebases can still introduce silent breakage.
 
 #### Case B: Merge Conflicts Detected
 
 **STOP and analyze using the Decision Tree below.**
+
+After all conflicts are resolved and `git rebase --continue` finishes, proceed to the **Upstream Drift Review** section.
 
 ---
 
@@ -269,9 +265,101 @@ git rebase --continue
 
 ---
 
+## Upstream Drift Review (Critical)
+
+**After the rebase completes but BEFORE validation**, review upstream changes to catch silent breakage that doesn't produce merge conflicts. Conflicts only surface when both sides modify the same lines — but upstream can break our code by changing APIs, adding/removing exports, restructuring files, or adding dependencies that we never touch in our commits.
+
+### Why This Step Exists
+
+Real examples from past rebases:
+- Upstream extracted inline components from `layout.tsx` into `./layout/*.tsx` files. Our modified `layout.tsx` kept the inline versions but was missing the new imports (`Switch`, `Match`, `Spinner`, `HoverCard`, `Collapsible`, `MessageNav`) that upstream's extracted files import separately — **no conflict**, just broken code.
+- Upstream added `focusInput` to a function signature in `session.tsx`. Our override calls that function but didn't pass the new param — **no conflict**, just a type error.
+- Upstream changed `LocalPTY` from an exported type to a local one, then re-exported it differently. Our override imported it but didn't re-export — **no conflict**, downstream code broke silently.
+- Upstream added `@tauri-apps/plugin-clipboard-manager` to `desktop/package.json`. Our commit modified the same `package.json` for other reasons but the dep wasn't in our version — **no conflict** because different lines.
+- Upstream added `flushResize()` to an interface. Our code implements that interface in a different file — **no conflict**, just a missing method.
+
+### What To Review
+
+#### 1. Diff upstream changes against files we override or modify
+
+```bash
+# List files changed in upstream since last sync
+git diff <previous-upstream-commit>..upstream/dev --name-only
+
+# Cross-reference with our overrides
+ls packages/claxedo-app/src/overrides/
+
+# For each upstream file that has a corresponding override, review what changed:
+git diff <previous-upstream-commit>..upstream/dev -- packages/app/src/context/terminal.tsx
+git diff <previous-upstream-commit>..upstream/dev -- packages/app/src/pages/session.tsx
+# ... etc.
+```
+
+**Key question:** Did upstream change any API surface (exports, function signatures, interfaces, types) that our overrides or extension code depends on?
+
+#### 2. Check for new/removed exports in upstream modules we import from
+
+```bash
+# Find all upstream modules our code imports
+grep -rh "from ['\"]@/" packages/claxedo-app/src/ | sort -u
+
+# For each critical module, compare exports
+git show <previous-upstream-commit>:packages/app/src/context/terminal.tsx | grep "^export"
+git show upstream/dev:packages/app/src/context/terminal.tsx | grep "^export"
+```
+
+**Key question:** Did any type/function we import get renamed, removed, or have its signature changed?
+
+#### 3. Check upstream dependency changes
+
+```bash
+# Compare package.json files we also modify
+diff <(git show <previous-upstream-commit>:packages/desktop/package.json) \
+     <(git show upstream/dev:packages/desktop/package.json)
+
+diff <(git show <previous-upstream-commit>:packages/app/package.json) \
+     <(git show upstream/dev:packages/app/package.json)
+```
+
+**Key question:** Did upstream add dependencies that our version of the same `package.json` is now missing?
+
+#### 4. Look for structural changes (file moves, extractions, renames)
+
+```bash
+# Files added or removed upstream
+git diff <previous-upstream-commit>..upstream/dev --diff-filter=AD --name-only
+
+# Check if any of these overlap with code we reference
+```
+
+**Key question:** Did upstream extract code into new files, or delete files we reference?
+
+#### 5. Review upstream interface/type changes in files we implement
+
+```bash
+# Check types.ts, interfaces, and shared contracts
+git diff <previous-upstream-commit>..upstream/dev -- "*.ts" | grep -A5 -B5 "interface\|type.*=\|export.*type"
+```
+
+**Key question:** Did upstream add required properties to interfaces our code implements?
+
+### Resolution Pattern
+
+For each drift issue found:
+
+1. **Missing import/export** → Add the import/export to our file
+2. **Changed function signature** → Update our call sites to match
+3. **New required interface property** → Implement the property (no-op if not applicable)
+4. **Missing dependency** → Add to our `package.json`
+5. **Structural change** → Update our imports/references to match new file locations
+
+Commit all drift fixes as a single commit: `fix: resolve upstream drift after YYYY-MM-DD rebase`
+
+---
+
 ## Validation After Rebase
 
-After resolving all conflicts:
+After resolving all conflicts and reviewing upstream drift:
 
 ### Step 1: Install Dependencies
 
@@ -381,6 +469,12 @@ Add to "Upstream Modifications Registry" in CLAXEDO_UPSTREAM_SYNC.md with approp
 7. **Build fails after resolution**
    - Type errors
    - Runtime errors in dev server
+
+8. **Upstream restructured files we override or depend on**
+   - Components extracted into new files
+   - Modules split or merged
+   - These won't cause conflicts but WILL cause silent breakage
+   - The Upstream Drift Review section catches these
 
 ---
 
