@@ -27,7 +27,7 @@ export const { use: useExit, provider: ExitProvider } = createSimpleContext({
       },
       get: () => message,
     }
-    const exit: Exit = Object.assign(
+    const exit = Exit = Object.assign(
       async (reason?: unknown) => {
         // Reset window title before destroying renderer
         renderer.setTerminalTitle("")
@@ -41,12 +41,14 @@ export const { use: useExit, provider: ExitProvider } = createSimpleContext({
         }
         const text = store.get()
         if (text) process.stdout.write(text + "\n")
-        process.exit(0)
+        // Ensure the process exits with a non-zero code for errors
+        const exitCode = reason instanceof Error ? 1 : 0
+        process.exit(exitCode)
       },
       {
         message: store,
       },
-    )
+    },
     return exit
   },
 })

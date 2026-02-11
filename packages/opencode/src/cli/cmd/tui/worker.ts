@@ -88,9 +88,11 @@ const startEventStream = (directory: string) => {
       }
     }
   })().catch((error) => {
-    Log.Default.error("event stream error", {
+      Log.Default.error("event stream error", {
       error: error instanceof Error ? error.message : error,
     })
+      // Ensure process exits on stream errors to prevent hanging
+      process.exit(1)
   })
 }
 
