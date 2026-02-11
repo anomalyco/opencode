@@ -22,38 +22,52 @@ export function activate(context: vscode.ExtensionContext) {
   })
 
   let addFilepathDisposable = vscode.commands.registerCommand("opencode.addFilepathToTerminal", async () => {
-    const terminal = vscode.window.activeTerminal
-    if (!terminal) {
+    // Step 1: Active terminal is a native opencode terminal
+    const active = vscode.window.activeTerminal
+    if (active) {
+      const port = terminalPort(active)
+      if (port) {
+        const fileRef = getActiveFile()
+        if (!fileRef) return
+        try {
+          await appendPrompt(port, fileRef)
+        } catch {
+          active.sendText(fileRef, false)
+        }
+        active.show()
+        return
+      }
+    }
+
+    // Step 2: Any opencode terminal in VS Code
+    for (const t of vscode.window.terminals) {
+      const port = terminalPort(t)
+      if (!port) continue
+      const fileRef = getActiveFile()
+      if (!fileRef) return
+      try {
+        await appendPrompt(port, fileRef)
+      } catch {
+        t.sendText(fileRef, false)
+      }
+      t.show()
       return
     }
 
-    const port = (terminal.creationOptions as { env?: Record<string, string> }).env?.["_EXTENSION_OPENCODE_PORT"]
-
-    if (port) {
-      // Native opencode terminal - use relative path with HTTP
-      const fileRef = getActiveFile(false)
-      if (!fileRef) {
+    // Step 3: External opencode instance (e.g. tmux) with same CWD
+    const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+    if (folder) {
+      const port = await discover(folder)
+      if (port) {
+        const fileRef = getActiveFile(true)
+        if (!fileRef) return
+        await appendPrompt(port, fileRef)
         return
       }
-
-      try {
-        await appendPrompt(parseInt(port), fileRef)
-      } catch {
-        terminal.sendText(fileRef, false)
-      }
-    } else {
-      // External terminal - use absolute path with text paste
-      const fileRef = getActiveFile(true)
-      if (!fileRef) {
-        return
-      }
-
-      // Wrap paths with spaces in quotes
-      const text = fileRef.includes(" ") ? `"${fileRef}"` : fileRef
-      terminal.sendText(text, false)
     }
 
-    terminal.show()
+    // Step 4: No opencode found — spawn new terminal
+    await openTerminal()
   })
 
   context.subscriptions.push(openTerminalDisposable, addFilepathDisposable)
@@ -114,6 +128,23 @@ export function activate(context: vscode.ExtensionContext) {
       },
       body: JSON.stringify({ text }),
     })
+  }
+
+  function terminalPort(t: vscode.Terminal) {
+    const raw = (t.creationOptions as { env?: Record<string, string> }).env?.["_EXTENSION_OPENCODE_PORT"]
+    return raw ? parseInt(raw) : undefined
+  }
+
+  async function discover(workspace: string) {
+    try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 1000)
+      const res = await fetch("http://localhost:4096/path", { signal: controller.signal })
+      clearTimeout(timeout)
+      const data = (await res.json()) as { directory: string; worktree: string }
+      if (data.directory === workspace || data.worktree === workspace) return 4096
+    } catch {}
+    return undefined
   }
 
   function getActiveFile(absolute: boolean = false) {
