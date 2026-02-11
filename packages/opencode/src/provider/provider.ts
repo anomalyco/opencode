@@ -755,13 +755,16 @@ export namespace Provider {
   }
 
   export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
+    const models = mapValues(provider.models, (model) => fromModelsDevModel(provider, model))
+    splitBedrockOpus46(provider.id, models)
+
     return {
       id: provider.id,
       source: "custom",
       name: provider.name,
       env: provider.env ?? [],
       options: {},
-      models: mapValues(provider.models, (model) => fromModelsDevModel(provider, model)),
+      models,
     }
   }
 
@@ -1001,8 +1004,6 @@ export namespace Provider {
         delete providers[providerID]
         continue
       }
-
-      splitBedrockOpus46(providerID, provider.models)
 
       const configProvider = config.provider?.[providerID]
 

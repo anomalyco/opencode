@@ -1407,7 +1407,48 @@ test("model headers are preserved", async () => {
   })
 })
 
-test("bedrock opus 4.6 is split into 200K and 1M variants", async () => {
+test("fromModelsDevProvider splits bedrock opus 4.6 into 200K and 1M variants", () => {
+  const provider = Provider.fromModelsDevProvider({
+    id: "amazon-bedrock",
+    name: "Amazon Bedrock",
+    env: [],
+    models: {
+      "us.anthropic.claude-opus-4-6-v1:0": {
+        id: "us.anthropic.claude-opus-4-6-v1:0",
+        name: "Claude Opus 4.6",
+        attachment: true,
+        reasoning: true,
+        tool_call: true,
+        temperature: true,
+        release_date: "2025-12-01",
+        limit: { context: 1_000_000, output: 64_000 },
+        options: {
+          anthropicBeta: ["existing-beta"],
+        },
+      },
+    },
+  })
+
+  const base = provider.models["us.anthropic.claude-opus-4-6-v1:0"]
+  const extended = provider.models["us.anthropic.claude-opus-4-6-v1:0-1m"]
+
+  expect(base).toBeDefined()
+  expect(extended).toBeDefined()
+
+  expect(base.name).toContain("(200K)")
+  expect(extended.name).toContain("(1M Experimental)")
+
+  expect(base.limit.context).toBe(200_000)
+  expect(extended.limit.context).toBe(1_000_000)
+
+  expect(base.options.anthropicBeta).toBeUndefined()
+  expect(extended.options.anthropicBeta).toEqual(expect.arrayContaining(["existing-beta", "context-1m-2025-08-07"]))
+
+  expect(extended.api.id).toBe(base.api.id)
+  expect(extended.status).toBe("beta")
+})
+
+test("bedrock custom opus 4.6 model is not auto-split", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(
@@ -1441,19 +1482,10 @@ test("bedrock opus 4.6 is split into 200K and 1M variants", async () => {
       const extended = providers["amazon-bedrock"].models["anthropic.claude-opus-4-6-v1:0-1m"]
 
       expect(base).toBeDefined()
-      expect(extended).toBeDefined()
-
-      expect(base.name).toContain("(200K)")
-      expect(extended.name).toContain("(1M Experimental)")
-
-      expect(base.limit.context).toBe(200_000)
-      expect(extended.limit.context).toBe(1_000_000)
-
+      expect(extended).toBeUndefined()
+      expect(base.name).toBe("Claude Opus 4.6")
+      expect(base.limit.context).toBe(1_000_000)
       expect(base.options.anthropicBeta).toBeUndefined()
-      expect(extended.options.anthropicBeta).toContain("context-1m-2025-08-07")
-
-      expect(extended.api.id).toBe(base.api.id)
-      expect(extended.status).toBe("beta")
     },
   })
 })
