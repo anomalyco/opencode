@@ -43,8 +43,10 @@ export namespace Skill {
 
   // External skill directories to search for (project-level and global)
   // These follow the directory layout used by Claude Code and other agents.
+  // Priority order: .claude (legacy), agents (XDG-compliant ~/.config/agents, fallback to ~/.agents)
   const EXTERNAL_DIRS = [".claude", ".agents"]
   const EXTERNAL_SKILL_GLOB = new Bun.Glob("skills/**/SKILL.md")
+  const XDG_AGENTS_DIR = "agents" // XDG-compliant location in config dir
 
   const OPENCODE_SKILL_GLOB = new Bun.Glob("{skill,skills}/**/SKILL.md")
   const SKILL_GLOB = new Bun.Glob("**/SKILL.md")
@@ -106,10 +108,17 @@ export namespace Skill {
     // Scan external skill directories (.claude/skills/, .agents/skills/, etc.)
     // Load global (home) first, then project-level (so project-level overwrites)
     if (!Flag.OPENCODE_DISABLE_EXTERNAL_SKILLS) {
+      // Scan legacy locations (~/.claude, ~/.agents) first
       for (const dir of EXTERNAL_DIRS) {
         const root = path.join(Global.Path.home, dir)
         if (!(await Filesystem.isDir(root))) continue
         await scanExternal(root, "global")
+      }
+
+      // Then scan XDG-compliant ~/.config/agents/skills (takes priority over legacy)
+      const xdgAgentsRoot = path.join(Global.Path.config, XDG_AGENTS_DIR)
+      if (await Filesystem.isDir(xdgAgentsRoot)) {
+        await scanExternal(xdgAgentsRoot, "global")
       }
 
       for await (const root of Filesystem.up({

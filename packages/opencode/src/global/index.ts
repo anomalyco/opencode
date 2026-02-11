@@ -5,10 +5,18 @@ import os from "os"
 
 const app = "opencode"
 
-const data = path.join(xdgData!, app)
-const cache = path.join(xdgCache!, app)
-const config = path.join(xdgConfig!, app)
-const state = path.join(xdgState!, app)
+// Allow tests to override XDG paths
+let configOverride: string | undefined
+
+function getXdgDir(xdgValue: string | undefined, xdgFallback: string, override?: string) {
+  // Prefer explicit override for test isolation
+  if (override) return override
+  // Then prefer explicit XDG env var
+  if (xdgValue) return path.join(xdgValue, app)
+  // Fall back to test home
+  const home = process.env.OPENCODE_TEST_HOME || os.homedir()
+  return path.join(home, xdgFallback, app)
+}
 
 export namespace Global {
   export const Path = {
@@ -16,12 +24,27 @@ export namespace Global {
     get home() {
       return process.env.OPENCODE_TEST_HOME || os.homedir()
     },
-    data,
-    bin: path.join(data, "bin"),
-    log: path.join(data, "log"),
-    cache,
-    config,
-    state,
+    get data() {
+      return getXdgDir(xdgData, ".local/share")
+    },
+    get bin() {
+      return path.join(this.data, "bin")
+    },
+    get log() {
+      return path.join(this.data, "log")
+    },
+    get cache() {
+      return getXdgDir(xdgCache, ".cache")
+    },
+    get config() {
+      return getXdgDir(xdgConfig, ".config", configOverride)
+    },
+    set config(value: string) {
+      configOverride = value
+    },
+    get state() {
+      return getXdgDir(xdgState, ".local/state")
+    },
   }
 }
 
