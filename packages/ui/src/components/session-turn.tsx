@@ -1,17 +1,12 @@
-import { AssistantMessage, Message as MessageType, Part as PartType, ToolPart } from "@opencode-ai/sdk/v2/client"
+import { AssistantMessage, Message as MessageType, Part as PartType } from "@opencode-ai/sdk/v2/client"
 import { useData } from "../context"
-import { type UiI18nKey, type UiI18nParams, useI18n } from "../context/i18n"
 
 import { Binary } from "@opencode-ai/util/binary"
-import { createEffect, createMemo, For, Match, onCleanup, ParentProps, Show, Switch } from "solid-js"
+import { createMemo, For, ParentProps, Show } from "solid-js"
 import { Message } from "./message-part"
 import { Card } from "./card"
 import { Spinner } from "./spinner"
-import { createStore } from "solid-js/store"
-import { DateTime, DurationUnit, Interval } from "luxon"
 import { createAutoScroll } from "../hooks"
-
-type Translator = (key: UiI18nKey, params?: UiI18nParams) => string
 
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value)
@@ -66,45 +61,6 @@ function unwrap(message: string) {
   return message
 }
 
-function computeStatusFromPart(part: PartType | undefined, t: Translator): string | undefined {
-  if (!part) return undefined
-
-  if (part.type === "tool") {
-    switch (part.tool) {
-      case "task":
-        return t("ui.sessionTurn.status.delegating")
-      case "todowrite":
-      case "todoread":
-        return t("ui.sessionTurn.status.planning")
-      case "read":
-        return t("ui.sessionTurn.status.gatheringContext")
-      case "list":
-      case "grep":
-      case "glob":
-        return t("ui.sessionTurn.status.searchingCodebase")
-      case "webfetch":
-        return t("ui.sessionTurn.status.searchingWeb")
-      case "edit":
-      case "write":
-        return t("ui.sessionTurn.status.makingEdits")
-      case "bash":
-        return t("ui.sessionTurn.status.runningCommands")
-      default:
-        return undefined
-    }
-  }
-  if (part.type === "reasoning") {
-    const text = part.text ?? ""
-    const match = text.trimStart().match(/^\*\*(.+?)\*\*/)
-    if (match) return t("ui.sessionTurn.status.thinkingWithTopic", { topic: match[1].trim() })
-    return t("ui.sessionTurn.status.thinking")
-  }
-  if (part.type === "text") {
-    return t("ui.sessionTurn.status.gatheringThoughts")
-  }
-  return undefined
-}
-
 function same<T>(a: readonly T[], b: readonly T[]) {
   if (a === b) return true
   if (a.length !== b.length) return false
@@ -136,7 +92,6 @@ export function SessionTurn(
     }
   }>,
 ) {
-  const i18n = useI18n()
   const data = useData()
 
   const emptyMessages: MessageType[] = []
@@ -211,8 +166,6 @@ export function SessionTurn(
     { equals: same },
   )
 
-  const lastAssistantMessage = createMemo(() => assistantMessages().at(-1))
-
   const error = createMemo(() => assistantMessages().find((m) => m.error)?.error)
   const errorText = createMemo(() => {
     const msg = error()?.data?.message
@@ -221,185 +174,19 @@ export function SessionTurn(
     return unwrap(String(msg))
   })
 
-  const rawStatus = createMemo(() => {
-    const msgs = assistantMessages()
-    let last: PartType | undefined
-    let currentTask: ToolPart | undefined
-
-    for (let mi = msgs.length - 1; mi >= 0; mi--) {
-      const msgParts = list(data.store.part?.[msgs[mi].id], emptyParts)
-      for (let pi = msgParts.length - 1; pi >= 0; pi--) {
-        const part = msgParts[pi]
-        if (!part) continue
-        if (!last) last = part
-
-        if (
-          part.type === "tool" &&
-          part.tool === "task" &&
-          part.state &&
-          "metadata" in part.state &&
-          part.state.metadata?.sessionId &&
-          part.state.status === "running"
-        ) {
-          currentTask = part as ToolPart
-          break
-        }
-      }
-      if (currentTask) break
-    }
-
-    const taskSessionId =
-      currentTask?.state && "metadata" in currentTask.state
-        ? (currentTask.state.metadata?.sessionId as string | undefined)
-        : undefined
-
-    if (taskSessionId) {
-      const taskMessages = list(data.store.message?.[taskSessionId], emptyMessages)
-      for (let mi = taskMessages.length - 1; mi >= 0; mi--) {
-        const msg = taskMessages[mi]
-        if (!msg || msg.role !== "assistant") continue
-
-        const msgParts = list(data.store.part?.[msg.id], emptyParts)
-        for (let pi = msgParts.length - 1; pi >= 0; pi--) {
-          const part = msgParts[pi]
-          if (part) return computeStatusFromPart(part, i18n.t)
-        }
-      }
-    }
-
-    return computeStatusFromPart(last, i18n.t)
-  })
-
   const status = createMemo(() => data.store.session_status[props.sessionID] ?? idle)
   const working = createMemo(() => status().type !== "idle" && isLastUserMessage())
-  const retry = createMemo(() => {
-    // session_status is session-scoped; only show retry on the active (last) turn
-    if (!isLastUserMessage()) return
-    const s = status()
-    if (s.type !== "retry") return
-    return s
-  })
-
-  function duration() {
-    const msg = message()
-    if (!msg) return ""
-    const completed = lastAssistantMessage()?.time.completed
-    const from = DateTime.fromMillis(msg.time.created)
-    const to = completed ? DateTime.fromMillis(completed) : DateTime.now()
-    const interval = Interval.fromDateTimes(from, to)
-    const unit: DurationUnit[] = interval.length("seconds") > 60 ? ["minutes", "seconds"] : ["seconds"]
-
-    const locale = i18n.locale()
-    const human = interval.toDuration(unit).normalize().reconfigure({ locale }).toHuman({
-      notation: "compact",
-      unitDisplay: "narrow",
-      compactDisplay: "short",
-      showZeros: false,
-    })
-    return locale.startsWith("zh") ? human.replaceAll("、", "") : human
-  }
+  const assistantPartCount = createMemo(() =>
+    assistantMessages().reduce((count, message) => {
+      const parts = list(data.store.part?.[message.id], emptyParts)
+      return count + parts.filter(Boolean).length
+    }, 0),
+  )
 
   const autoScroll = createAutoScroll({
     working,
     onUserInteracted: props.onUserInteracted,
     overflowAnchor: "auto",
-  })
-
-  const [store, setStore] = createStore({
-    retrySeconds: 0,
-    status: rawStatus(),
-    duration: duration(),
-  })
-
-  createEffect(() => {
-    const r = retry()
-    if (!r) {
-      setStore("retrySeconds", 0)
-      return
-    }
-    const updateSeconds = () => {
-      const next = r.next
-      if (next) setStore("retrySeconds", Math.max(0, Math.round((next - Date.now()) / 1000)))
-    }
-    updateSeconds()
-    const timer = setInterval(updateSeconds, 1000)
-    onCleanup(() => clearInterval(timer))
-  })
-
-  let retryLog = ""
-  createEffect(() => {
-    const r = retry()
-    if (!r) return
-    const key = `${r.attempt}:${r.next}:${r.message}`
-    if (key === retryLog) return
-    retryLog = key
-    console.warn("[session-turn] retry", {
-      sessionID: props.sessionID,
-      messageID: props.messageID,
-      attempt: r.attempt,
-      next: r.next,
-      raw: r.message,
-      parsed: unwrap(r.message),
-    })
-  })
-
-  let errorLog = ""
-  createEffect(() => {
-    const value = error()?.data?.message
-    if (value === undefined || value === null) return
-    const raw = typeof value === "string" ? value : String(value)
-    if (!raw) return
-    if (raw === errorLog) return
-    errorLog = raw
-    console.warn("[session-turn] assistant-error", {
-      sessionID: props.sessionID,
-      messageID: props.messageID,
-      raw,
-      parsed: unwrap(raw),
-    })
-  })
-
-  createEffect(() => {
-    const update = () => {
-      setStore("duration", duration())
-    }
-
-    update()
-
-    // Only keep ticking while the active (in-progress) turn is running.
-    if (!working()) return
-
-    const timer = setInterval(update, 1000)
-    onCleanup(() => clearInterval(timer))
-  })
-
-  let lastStatusChange = Date.now()
-  let statusTimeout: number | undefined
-  createEffect(() => {
-    const newStatus = rawStatus()
-    if (newStatus === store.status || !newStatus) return
-
-    const timeSinceLastChange = Date.now() - lastStatusChange
-    if (timeSinceLastChange >= 2500) {
-      setStore("status", newStatus)
-      lastStatusChange = Date.now()
-      if (statusTimeout) {
-        clearTimeout(statusTimeout)
-        statusTimeout = undefined
-      }
-    } else {
-      if (statusTimeout) clearTimeout(statusTimeout)
-      statusTimeout = setTimeout(() => {
-        setStore("status", rawStatus())
-        lastStatusChange = Date.now()
-        statusTimeout = undefined
-      }, 2500 - timeSinceLastChange) as unknown as number
-    }
-  })
-
-  onCleanup(() => {
-    if (!statusTimeout) return
-    clearTimeout(statusTimeout)
   })
 
   return (
@@ -422,37 +209,10 @@ export function SessionTurn(
                 <div data-slot="session-turn-message-content" aria-live="off">
                   <Message message={msg()} parts={parts()} />
                 </div>
-                <Show when={working() || retry()}>
-                  <div data-slot="session-turn-status-row">
-                    <Show when={working()}>
-                      <Spinner />
-                    </Show>
-                    <Switch>
-                      <Match when={retry()}>
-                        <span data-slot="session-turn-retry-message">
-                          {(() => {
-                            const r = retry()
-                            if (!r) return ""
-                            const msg = unwrap(r.message)
-                            return msg.length > 60 ? msg.slice(0, 60) + "..." : msg
-                          })()}
-                        </span>
-                        <span data-slot="session-turn-retry-seconds">
-                          · {i18n.t("ui.sessionTurn.retry.retrying")}
-                          {store.retrySeconds > 0
-                            ? " " + i18n.t("ui.sessionTurn.retry.inSeconds", { seconds: store.retrySeconds })
-                            : ""}
-                        </span>
-                        <span data-slot="session-turn-retry-attempt">(#{retry()?.attempt})</span>
-                      </Match>
-                      <Match when={working()}>
-                        <span data-slot="session-turn-status-text">
-                          {store.status ?? i18n.t("ui.sessionTurn.status.consideringNextSteps")}
-                        </span>
-                      </Match>
-                    </Switch>
-                    <span aria-hidden="true">·</span>
-                    <span aria-live="off">{store.duration}</span>
+                <Show when={working() && assistantPartCount() === 0 && !error()}>
+                  <div data-slot="session-turn-thinking">
+                    <Spinner style={{ width: "16px" }} />
+                    <span>Thinking</span>
                   </div>
                 </Show>
                 <Show when={assistantMessages().length > 0}>

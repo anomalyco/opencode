@@ -1,6 +1,7 @@
 import { createEffect, createSignal, For, Match, Show, Switch, type JSX } from "solid-js"
 import { Collapsible } from "./collapsible"
 import { Icon, IconProps } from "./icon"
+import { Spinner } from "./spinner"
 
 export type TriggerTitle = {
   title: string
@@ -22,6 +23,7 @@ export interface BasicToolProps {
   icon: IconProps["name"]
   trigger: TriggerTitle | JSX.Element
   children?: JSX.Element
+  status?: string
   hideDetails?: boolean
   defaultOpen?: boolean
   forceOpen?: boolean
@@ -31,6 +33,7 @@ export interface BasicToolProps {
 
 export function BasicTool(props: BasicToolProps) {
   const [open, setOpen] = createSignal(props.defaultOpen ?? false)
+  const pending = () => props.status === "pending" || props.status === "running"
 
   createEffect(() => {
     if (props.forceOpen) setOpen(true)
@@ -46,7 +49,11 @@ export function BasicTool(props: BasicToolProps) {
       <Collapsible.Trigger>
         <div data-component="tool-trigger">
           <div data-slot="basic-tool-tool-trigger-content">
-            <Icon name={props.icon} size="small" />
+            <div data-slot="basic-tool-tool-indicator">
+              <Show when={pending()} fallback={<Icon name={props.icon} size="small" />}>
+                <Spinner style={{ width: "16px" }} />
+              </Show>
+            </div>
             <div data-slot="basic-tool-tool-info">
               <Switch>
                 <Match when={isTriggerTitle(props.trigger) && props.trigger}>
@@ -113,6 +120,6 @@ export function BasicTool(props: BasicToolProps) {
   )
 }
 
-export function GenericTool(props: { tool: string; hideDetails?: boolean }) {
-  return <BasicTool icon="mcp" trigger={{ title: props.tool }} hideDetails={props.hideDetails} />
+export function GenericTool(props: { tool: string; status?: string; hideDetails?: boolean }) {
+  return <BasicTool icon="mcp" status={props.status} trigger={{ title: props.tool }} hideDetails={props.hideDetails} />
 }

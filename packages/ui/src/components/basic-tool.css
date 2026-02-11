@@ -15,6 +15,20 @@
     gap: 20px;
   }
 
+  [data-slot="basic-tool-tool-indicator"] {
+    width: 16px;
+    height: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+
+    [data-component="spinner"] {
+      width: 16px;
+      height: 16px;
+    }
+  }
+
   [data-slot="icon-svg"] {
     flex-shrink: 0;
   }

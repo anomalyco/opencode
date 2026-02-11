@@ -37,6 +37,7 @@ import { BasicTool } from "./basic-tool"
 import { GenericTool } from "./basic-tool"
 import { Button } from "./button"
 import { Card } from "./card"
+import { Collapsible } from "./collapsible"
 import { Icon } from "./icon"
 import { Checkbox } from "./checkbox"
 import { DiffChanges } from "./diff-changes"
@@ -47,6 +48,7 @@ import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/util/pa
 import { checksum } from "@opencode-ai/util/encode"
 import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
+import { Spinner } from "./spinner"
 import { createAutoScroll } from "../hooks"
 
 interface Diagnostic {
@@ -262,6 +264,23 @@ export function getToolInfo(tool: string, input: any = {}): ToolInfo {
   }
 }
 
+const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
+
+function isContextGroupTool(part: PartType): part is ToolPart {
+  return part.type === "tool" && CONTEXT_GROUP_TOOLS.has(part.tool)
+}
+
+function contextToolDetail(part: ToolPart): string | undefined {
+  const info = getToolInfo(part.tool, part.state.input ?? {})
+  if (info.subtitle) return info.subtitle
+  if (part.state.status === "error") return part.state.error
+  if ((part.state.status === "running" || part.state.status === "completed") && part.state.title)
+    return part.state.title
+  const description = part.state.input?.description
+  if (typeof description === "string") return description
+  return undefined
+}
+
 export function registerPartComponent(type: string, component: PartComponent) {
   PART_MAPPING[type] = component
 }
@@ -282,7 +301,67 @@ export function Message(props: MessageProps) {
 }
 
 export function AssistantMessageDisplay(props: { message: AssistantMessage; parts: PartType[] }) {
-  return <For each={props.parts}>{(part) => <Part part={part} message={props.message} />}</For>
+  const grouped = createMemo(() =>
+    props.parts.reduce<({ type: "part"; part: PartType } | { type: "context"; parts: ToolPart[] })[]>((acc, part) => {
+      if (!isContextGroupTool(part)) {
+        acc.push({ type: "part", part })
+        return acc
+      }
+
+      const last = acc[acc.length - 1]
+      if (last && last.type === "context") {
+        last.parts.push(part)
+        return acc
+      }
+
+      acc.push({ type: "context", parts: [part] })
+      return acc
+    }, []),
+  )
+
+  return (
+    <For each={grouped()}>
+      {(item) => {
+        if (item.type === "context") return <ContextToolGroup parts={item.parts} />
+        return <Part part={item.part} message={props.message} />
+      }}
+    </For>
+  )
+}
+
+function ContextToolGroup(props: { parts: ToolPart[] }) {
+  const [open, setOpen] = createSignal(false)
+  const pending = createMemo(() =>
+    props.parts.some((part) => part.state.status === "pending" || part.state.status === "running"),
+  )
+
+  return (
+    <Collapsible open={open()} onOpenChange={setOpen} variant="ghost">
+      <Collapsible.Trigger>
+        <div data-component="context-tool-group-trigger">
+          <span data-slot="context-tool-group-title">{pending() ? "Gathering context" : "Gathered context"}</span>
+        </div>
+      </Collapsible.Trigger>
+      <Collapsible.Content>
+        <div data-component="context-tool-group-list">
+          <For each={props.parts}>
+            {(part) => {
+              const info = getToolInfo(part.tool, part.state.input ?? {})
+              const detail = contextToolDetail(part)
+              return (
+                <div data-slot="context-tool-group-item">
+                  <div data-slot="context-tool-group-item-title">{info.title}</div>
+                  <Show when={detail}>
+                    <div data-slot="context-tool-group-item-detail">{detail}</div>
+                  </Show>
+                </div>
+              )
+            }}
+          </For>
+        </div>
+      </Collapsible.Content>
+    </Collapsible>
+  )
 }
 
 export function UserMessageDisplay(props: { message: UserMessage; parts: PartType[] }) {
@@ -620,6 +699,12 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
   const part = props.part as TextPart
   const displayText = () => relativizeProjectPaths((part.text ?? "").trim(), data.directory)
   const throttledText = createThrottledValue(displayText)
+  const isLastTextPart = createMemo(() => {
+    const last = (data.store.part?.[props.message.id] ?? [])
+      .filter((item): item is TextPart => item?.type === "text" && !!item.text?.trim())
+      .at(-1)
+    return last?.id === part.id
+  })
   const [copied, setCopied] = createSignal(false)
 
   const handleCopy = async () => {
@@ -636,22 +721,24 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
         <div data-slot="text-part-body">
           <Markdown text={throttledText()} cacheKey={part.id} />
         </div>
-        <div data-slot="text-part-copy-wrapper">
-          <Tooltip
-            value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
-            placement="top"
-            gutter={8}
-          >
-            <IconButton
-              icon={copied() ? "check" : "copy"}
-              size="small"
-              variant="ghost"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={handleCopy}
-              aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
-            />
-          </Tooltip>
-        </div>
+        <Show when={isLastTextPart()}>
+          <div data-slot="text-part-copy-wrapper">
+            <Tooltip
+              value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+              placement="top"
+              gutter={8}
+            >
+              <IconButton
+                icon={copied() ? "check" : "copy"}
+                size="small"
+                variant="ghost"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={handleCopy}
+                aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+              />
+            </Tooltip>
+          </div>
+        </Show>
       </div>
     </Show>
   )
@@ -967,7 +1054,10 @@ ToolRegistry.register({
         <Switch>
           <Match when={childPermission()}>
             <>
-              <Show when={childToolPart()} fallback={<BasicTool icon="task" defaultOpen={true} trigger={trigger()} />}>
+              <Show
+                when={childToolPart()}
+                fallback={<BasicTool icon="task" status={props.status} defaultOpen={true} trigger={trigger()} />}
+              >
                 {renderChildToolPart()}
               </Show>
               <div data-component="permission-prompt">
@@ -986,7 +1076,7 @@ ToolRegistry.register({
             </>
           </Match>
           <Match when={true}>
-            <BasicTool icon="task" defaultOpen={true} trigger={trigger()}>
+            <BasicTool icon="task" status={props.status} defaultOpen={true} trigger={trigger()}>
               <div
                 ref={autoScroll.scrollRef}
                 onScroll={autoScroll.handleScroll}
@@ -1005,7 +1095,14 @@ ToolRegistry.register({
                       })
                       return (
                         <div data-slot="task-tool-item">
-                          <Icon name={info().icon} size="small" />
+                          <div data-slot="task-tool-indicator">
+                            <Show
+                              when={item.state.status === "pending" || item.state.status === "running"}
+                              fallback={<Icon name={info().icon} size="small" />}
+                            >
+                              <Spinner style={{ width: "16px" }} />
+                            </Show>
+                          </div>
                           <span data-slot="task-tool-title">{info().title}</span>
                           <Show when={subtitle()}>
                             <span data-slot="task-tool-subtitle">{subtitle()}</span>

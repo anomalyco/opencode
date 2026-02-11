@@ -37,41 +37,21 @@
     max-width: 100%;
   }
 
-  [data-slot="session-turn-status-row"] {
-    max-width: 100%;
-    min-width: 0;
+  [data-slot="session-turn-thinking"] {
     display: flex;
     align-items: center;
     gap: 8px;
     color: var(--text-weak);
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large);
+    min-height: 20px;
 
     [data-component="spinner"] {
-      width: 12px;
-      height: 12px;
-      margin-right: 4px;
+      width: 16px;
+      height: 16px;
     }
-  }
-
-  [data-slot="session-turn-retry-message"] {
-    font-weight: 500;
-    color: var(--syntax-critical);
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  [data-slot="session-turn-retry-seconds"] {
-    color: var(--text-weak);
-  }
-
-  [data-slot="session-turn-retry-attempt"] {
-    color: var(--text-weak);
-  }
-
-  [data-slot="session-turn-status-text"] {
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   .error-card {

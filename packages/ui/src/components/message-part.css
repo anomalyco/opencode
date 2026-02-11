@@ -21,7 +21,7 @@
   align-self: flex-end;
   margin-left: auto;
   width: fit-content;
-  max-width: min(90%, 72ch);
+  max-width: min(82%, 64ch);
   gap: 8px;
 
   [data-slot="user-message-attachments"] {
@@ -396,6 +396,20 @@
     }
   }
 
+  [data-slot="task-tool-indicator"] {
+    width: 16px;
+    height: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+
+    [data-component="spinner"] {
+      width: 16px;
+      height: 16px;
+    }
+  }
+
   [data-slot="task-tool-title"] {
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
@@ -405,6 +419,55 @@
   }
 
   [data-slot="task-tool-subtitle"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-large);
+    color: var(--text-weaker);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+[data-component="context-tool-group-trigger"] {
+  width: 100%;
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+
+  [data-slot="context-tool-group-title"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large);
+    color: var(--text-weak);
+  }
+}
+
+[data-component="context-tool-group-list"] {
+  padding: 6px 0 4px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  [data-slot="context-tool-group-item"] {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  [data-slot="context-tool-group-item-title"] {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large);
+    color: var(--text-base);
+  }
+
+  [data-slot="context-tool-group-item-detail"] {
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);
     font-weight: var(--font-weight-regular);
