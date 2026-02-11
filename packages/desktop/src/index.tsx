@@ -58,11 +58,7 @@ const listenForDeepLinks = async () => {
   await onOpenUrl((urls) => emitDeepLinks(urls)).catch(() => undefined)
 }
 
-const createPlatform = (
-  password: Accessor<string | null>,
-  wsl: Accessor<boolean>,
-  setWsl: (next: WslConfig) => void,
-): Platform => {
+const createPlatform = (password: Accessor<string | null>): Platform => {
   const os = (() => {
     const type = ostype()
     if (type === "macos" || type === "windows" || type === "linux") return type
@@ -105,7 +101,7 @@ const createPlatform = (
     },
 
     async openPath(path: string, app?: string) {
-      if (wsl() && os === "windows") {
+      if (os === "windows" && window.__OPENCODE__?.wsl) {
         const converted = await commands.wslPath(path, "windows").catch(() => null)
         return openerOpenPath(converted && converted.length > 0 ? converted : path, app)
       }
@@ -350,7 +346,7 @@ const createPlatform = (
     getWslEnabled: async () => {
       const next = await commands.getWslConfig().catch(() => null)
       if (next) return next.enabled
-      return wsl()
+      return window.__OPENCODE__!.wsl ?? false
     },
 
     setWslEnabled: async (enabled) => {
@@ -416,9 +412,8 @@ void listenForDeepLinks()
 
 render(() => {
   const [serverPassword, setServerPassword] = createSignal<string | null>(null)
-  const [wsl, setWsl] = createSignal(window.__OPENCODE__?.wsl ?? false)
 
-  const platform = createPlatform(() => serverPassword(), wsl, setWsl)
+  const platform = createPlatform(() => serverPassword())
 
   function handleClick(e: MouseEvent) {
     const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
