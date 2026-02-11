@@ -93,14 +93,14 @@ pub fn set_wsl_config(app: AppHandle, config: WslConfig) -> Result<(), String> {
 
 pub async fn get_saved_server_url(app: &tauri::AppHandle) -> Option<String> {
     if let Some(url) = get_default_server_url(app.clone()).ok().flatten() {
-        println!("Using desktop-specific custom URL: {url}");
+        tracing::info!(%url, "Using desktop-specific custom URL");
         return Some(url);
     }
 
     if let Some(cli_config) = cli::get_config(app).await
         && let Some(url) = get_server_url_from_config(&cli_config)
     {
-        println!("Using custom server URL from config: {url}");
+        tracing::info!(%url, "Using custom server URL from config");
         return Some(url);
     }
 
@@ -124,7 +124,7 @@ pub fn spawn_local_server(
                 tokio::time::sleep(Duration::from_millis(100)).await;
 
                 if check_health(&url, Some(&password)).await {
-                    println!("Server ready after {:?}", timestamp.elapsed());
+                    tracing::info!(elapsed = ?timestamp.elapsed(), "Server ready");
                     return Ok(());
                 }
             }
@@ -216,7 +216,7 @@ fn normalize_hostname_for_url(hostname: &str) -> String {
 fn get_server_url_from_config(config: &cli::Config) -> Option<String> {
     let server = config.server.as_ref()?;
     let port = server.port?;
-    println!("server.port found in OC config: {port}");
+    tracing::debug!(port, "server.port found in OC config");
     let hostname = server
         .hostname
         .as_ref()
@@ -227,7 +227,7 @@ fn get_server_url_from_config(config: &cli::Config) -> Option<String> {
 }
 
 pub async fn check_health_or_ask_retry(app: &AppHandle, url: &str) -> bool {
-    println!("Checking health for {url}");
+    tracing::debug!(%url, "Checking health");
     loop {
         if check_health(url, None).await {
             return true;
