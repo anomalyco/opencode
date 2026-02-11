@@ -15,6 +15,21 @@ To add a provider you need to:
 
 ---
 
+### Pricing and usage
+
+OpenCode routes requests to the provider/model you select. Billing depends on that provider:
+
+- If you use your own provider API key (OpenAI, Anthropic, OpenRouter, etc.), usage is billed by that provider.
+- If you use OpenCode-hosted models (OpenCode Zen), usage is billed in your OpenCode account.
+
+To inspect token and cost usage from the CLI, run:
+
+```bash
+opencode stats
+```
+
+---
+
 ### Credentials
 
 When you add a provider's API keys with the `/connect` command, they are stored
