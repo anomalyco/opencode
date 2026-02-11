@@ -82,7 +82,7 @@ export namespace ProviderTransform {
               }
             }
             return part
-          })
+          }) as typeof msg.content
         }
         return msg
       })
@@ -112,7 +112,7 @@ export namespace ProviderTransform {
               }
             }
             return part
-          })
+          }) as typeof msg.content
         }
 
         result.push(msg)
@@ -199,8 +199,8 @@ export namespace ProviderTransform {
 
       if (shouldUseContentOptions) {
         const lastContent = msg.content[msg.content.length - 1]
-        if (lastContent && typeof lastContent === "object") {
-          lastContent.providerOptions = mergeDeep(lastContent.providerOptions ?? {}, providerOptions)
+        if (lastContent && typeof lastContent === "object" && "providerOptions" in lastContent) {
+          ;(lastContent as any).providerOptions = mergeDeep((lastContent as any).providerOptions ?? {}, providerOptions)
           continue
         }
       }
@@ -280,7 +280,7 @@ export namespace ProviderTransform {
         return {
           ...msg,
           providerOptions: remap(msg.providerOptions),
-          content: msg.content.map((part) => ({ ...part, providerOptions: remap(part.providerOptions) })),
+          content: msg.content.map((part) => ({ ...part, providerOptions: remap((part as any).providerOptions) })),
         } as typeof msg
       })
     }
@@ -456,6 +456,26 @@ export namespace ProviderTransform {
       // https://v5.ai-sdk.dev/providers/ai-sdk-providers/anthropic
       case "@ai-sdk/google-vertex/anthropic":
         // https://v5.ai-sdk.dev/providers/ai-sdk-providers/google-vertex#anthropic-provider
+
+        // Opus 4.6+ supports adaptive thinking, effort levels, and fast mode
+        if (id.includes("opus-4-6") || id.includes("opus-4.6")) {
+          return {
+            high: {
+              thinking: { type: "adaptive" },
+              effort: "high",
+            },
+            max: {
+              thinking: { type: "adaptive" },
+              effort: "max",
+            },
+            fast: {
+              thinking: { type: "adaptive" },
+              effort: "high",
+              speed: "fast",
+            },
+          }
+        }
+
         return {
           high: {
             thinking: {
