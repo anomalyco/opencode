@@ -41,7 +41,7 @@ const caches = new Set<Map<string, TerminalCacheEntry>>()
 export function clearWorkspaceTerminals(
   dir: string,
   sessionIDs?: string[],
-  platform?: Pick<Platform, "platform" | "storage">,
+  platform?: Platform,
 ) {
   const key = getWorkspaceTerminalCacheKey(dir)
   for (const cache of caches) {
