@@ -286,20 +286,20 @@ No additional auth middleware is needed for control-plane routes. The existing `
 10. `POST /pm/processes/:processID/trust`
 11. `GET /pm/processes/:processID/logs` (for process-run logs).
 
-### 8.2 Live Pane Observability APIs
+### 8.2 Live Terminal Observability APIs
 
-`tabID` refers to a **workspace tab** (from split workspace groups). Each workspace tab can contain multiple panes (PTY instances). Pane discovery and summary are scoped to the workspace tab.
+`tabID` refers to a **workspace tab** (from split workspace groups). Each workspace tab can contain multiple terminals (PTY instances). Terminal discovery and summary are scoped to the workspace tab.
 
 1. `GET /pm/tabs/:tabID/live`
-2. `GET /pm/panes/:paneID/logs?cursor=<n>&limit_bytes=<n>`
-3. `GET /pm/panes/:paneID/messages?cursor=<n>&limit=<n>`
+2. `GET /pm/terminals/:terminalID/logs?cursor=<n>&limit_bytes=<n>`
+3. `GET /pm/terminals/:terminalID/messages?cursor=<n>&limit=<n>`
 4. `POST /pm/tabs/:tabID/summarize-live`
 
 ### 8.3 Error Codes
 
 1. `CP_TAB_NOT_FOUND` (404)
-2. `CP_PANE_NOT_FOUND` (404)
-3. `CP_PANE_IDLE` (409)
+2. `CP_TERMINAL_NOT_FOUND` (404)
+3. `CP_TERMINAL_IDLE` (409)
 4. `CP_PROCESS_NOT_FOUND` (404)
 5. `CP_TRUST_REQUIRED` (403)
 6. `CP_CURSOR_INVALID` (400)
@@ -595,17 +595,17 @@ After an unclean shutdown, ports may remain bound by zombie processes. On contro
 3. `GET /pm/projects/:projectID/group-status` — status of all process instances across worktrees,
 4. `GET /pm/ports` — full global port registry.
 
-## 10) Live Pane Runtime Model
+## 10) Live Terminal Runtime Model
 
-### 10.1 Pane = PTY
+### 10.1 Terminal = PTY
 
-Every PTY instance is a pane. Panes are not declared upfront — they are discovered from live PTY activity. A workspace tab (split workspace group) can contain multiple panes.
+Every PTY instance is a terminal. Terminals are not declared upfront — they are discovered from live PTY activity. A workspace tab (split workspace group) can contain multiple terminals.
 
-### 10.2 Pane Runtime
+### 10.2 Terminal Runtime
 
-`PaneRuntime` fields:
+`TerminalRuntime` fields:
 
-1. `pane_id` (= PTY id)
+1. `terminal_id` (= PTY id)
 2. `workspace_tab_id` (parent workspace tab)
 3. `status`
 4. `agent_kind`
@@ -622,10 +622,10 @@ Every PTY instance is a pane. Panes are not declared upfront — they are discov
 ### 10.3 Rules
 
 1. no active process means `status=idle` and `agent_kind=null`,
-2. `run_id` changes for each new run in same pane,
-3. logs/messages are always scoped by `(pane_id, run_id)`,
-4. stale identity is cleared when pane returns to idle,
-5. pane lifecycle follows PTY lifecycle — pane is created when PTY opens, transitions when process runs/exits.
+2. `run_id` changes for each new run in same terminal,
+3. logs/messages are always scoped by `(terminal_id, run_id)`,
+4. stale identity is cleared when terminal returns to idle,
+5. terminal lifecycle follows PTY lifecycle — terminal is created when PTY opens, transitions when process runs/exits.
 
 ## 11) Agent Detection and Message Extraction
 
@@ -636,8 +636,8 @@ Agent detection is **AI-driven**, not deterministic heuristic rules.
 Flow:
 
 1. A `.md` instruction file describes what to look for (command signatures, output patterns, known agent CLIs).
-2. An AI agent reads the instruction file + recent pane output and generates a `.yaml` or `.json` config file describing the detected agent kind, confidence, and message extraction hints.
-3. The generated config is persisted per pane/run and used for subsequent message parsing.
+2. An AI agent reads the instruction file + recent terminal output and generates a `.yaml` or `.json` config file describing the detected agent kind, confidence, and message extraction hints.
+3. The generated config is persisted per terminal/run and used for subsequent message parsing.
 4. On first detection, user is prompted to review (see Section 7 trust model).
 
 Initial agent labels:
@@ -646,14 +646,14 @@ Initial agent labels:
 2. `claude`
 3. `amp`
 4. `unknown`
-5. `null` (idle pane)
+5. `null` (idle terminal)
 
 ### 11.2 Message Parsing
 
 Parser behavior follows the AI-generated config rather than hardcoded parser adapters:
 
 1. config specifies message boundaries, role markers, and extraction patterns,
-2. a generic parser applies the config to pane output incrementally,
+2. a generic parser applies the config to terminal output incrementally,
 3. parser failures degrade to raw log slices,
 4. parser never blocks log delivery,
 5. confidence (from detection config) exposed to UI,
@@ -661,36 +661,36 @@ Parser behavior follows the AI-generated config rather than hardcoded parser ada
 
 ## 12) Tab Summary Contract
 
-Summary operates at the **workspace tab level** — a workspace tab is the parent of its panes. `POST /control-plane/tabs/:tabID/summarize-live` produces a summary across all panes in that workspace tab.
+Summary operates at the **workspace tab level** — a workspace tab is the parent of its terminals. `POST /pm/tabs/:tabID/summarize-live` produces a summary across all terminals in that workspace tab.
 
 Response shape:
 
-1. `panes[]` with per-pane gist,
+1. `terminals[]` with per-terminal gist,
 2. `tab_summary` for whole workspace tab,
 3. `blockers[]`,
 4. `next_actions[]`,
 5. `confidence`.
 
-### 12.1 Per-Pane Summary Strategy
+### 12.1 Per-Terminal Summary Strategy
 
-The summary strategy varies by what the pane is doing:
+The summary strategy varies by what the terminal is doing:
 
 1. **Normal terminal (no agent detected):** summarize scroll-back history with AI — feed recent terminal output to an AI summarizer.
 2. **Agent running (codex/claude/amp):** extract and summarize last N agent messages from the parsed message stream.
-3. **Closed and restarted session:** use the last session's summary as context. When a user closes an agent session and starts a new one in the same pane, carry forward the prior session summary so the tab-level summary has continuity.
+3. **Closed and restarted session:** use the last session's summary as context. When a user closes an agent session and starts a new one in the same terminal, carry forward the prior session summary so the tab-level summary has continuity.
 
 ### 12.2 Summary Input
 
-Per-pane input combines:
+Per-terminal input combines:
 
 1. recent normalized messages (if agent detected),
 2. recent raw terminal output / scroll-back (if normal terminal),
 3. prior session summary (if session was restarted),
-4. pane state + recency.
+4. terminal state + recency.
 
-### 12.3 Idle Panes
+### 12.3 Idle Terminals
 
-When all panes are idle:
+When all terminals are idle:
 
 1. return explicit no-active-runs summary,
 2. include recent ended-run context and prior session summaries if still in memory.
@@ -705,13 +705,13 @@ When all panes are idle:
    - live pane grid/list,
    - selected pane logs/messages,
    - workspace tab summary panel,
-3. preserve keyboard-first navigation between list/pane/log panes.
+3. preserve keyboard-first navigation between list/terminal/log panes.
 
-### 13.2 Pane UX Requirements
+### 13.2 Terminal UX Requirements
 
-Per pane:
+Per terminal:
 
-1. pane label,
+1. terminal label,
 2. status chip,
 3. agent chip + confidence,
 4. command/cwd preview,
@@ -727,11 +727,11 @@ Per pane:
 4. process logs endpoint,
 5. process status wiring in UI.
 
-### Phase 2: Live Pane Discovery + Logs
+### Phase 2: Live Terminal Discovery + Logs
 
-1. workspace tab live endpoint (pane = PTY discovery),
-2. pane logs tail endpoint,
-3. pane identity/status chips.
+1. workspace tab live endpoint (terminal = PTY discovery),
+2. terminal logs tail endpoint,
+3. terminal identity/status chips.
 
 ### Phase 3: Message Extraction + Summary
 
@@ -753,12 +753,12 @@ V1 is complete when all are true:
 1. process definitions and lifecycle operations work end-to-end,
 2. auto-detected processes prompt user for first-run review before execution,
 3. process groups can run in parallel across different worktrees — `get_port("name")` returns unique ports per worktree via the global registry,
-4. each workspace tab pane (PTY) correctly shows idle/running state,
-5. each running pane shows best-effort agent identity and confidence (AI-driven detection),
-6. pane logs tail incrementally via cursor without duplication,
-7. pane messages endpoint returns normalized output with raw fallback,
-8. workspace tab summary uses correct strategy per pane (scroll-back / agent messages / session carry-forward),
-9. pane can transition back to idle cleanly with no stale run leakage,
+4. each workspace tab terminal (PTY) correctly shows idle/running state,
+5. each running terminal shows best-effort agent identity and confidence (AI-driven detection),
+6. terminal logs tail incrementally via cursor without duplication,
+7. terminal messages endpoint returns normalized output with raw fallback,
+8. workspace tab summary uses correct strategy per terminal (scroll-back / agent messages / session carry-forward),
+9. terminal can transition back to idle cleanly with no stale run leakage,
 10. UI relies on `/pm/*` for identity/logs/messages/summary flows,
 11. control-plane routes and storage are decoupled from OpenCode internals (gateway-owned).
 
@@ -767,7 +767,7 @@ V1 is complete when all are true:
 1. unit tests:
    - lifecycle reducer transitions,
    - first-run review gating logic,
-   - pane state transitions (`idle -> running -> idle`),
+   - terminal state transitions (`idle -> running -> idle`),
    - `get_port("name")` resolution algorithm (preferred hint, reclaim, next-free),
    - `${port.*}` template substitution in command, env, and string fields,
    - global port registry invariant (no double-assign),
@@ -782,14 +782,14 @@ V1 is complete when all are true:
    - worktree isolation (same port name → different ports),
    - external conflict detection and fallback assignment,
    - post-crash stale port cleanup and registry reconciliation,
-   - pane discovery from live PTY activity,
+   - terminal discovery from live PTY activity,
    - logs tail cursor correctness,
    - messages incremental retrieval,
    - AI-driven detection config generation,
    - summarize-live endpoint behavior,
 3. e2e desktop checks:
-   - multi-pane mixed states (running + idle),
-   - rapid pane churn without stale identity bleed,
+   - multi-terminal mixed states (running + idle),
+   - rapid terminal churn without stale identity bleed,
    - workspace tab summary updates after new activity,
    - same process group running in two worktrees simultaneously,
    - port dashboard reflects live registry state,
@@ -805,13 +805,13 @@ V1 is complete when all are true:
 5. Implement process group start/stop with atomic port reservation and cross-process injection.
 6. Add port auto-detection from framework configs (vite, next, package.json, .env).
 7. Add port dashboard endpoint, external conflict probing, and post-crash cleanup.
-8. Add live pane discovery service (PTY → pane mapping).
-9. Add pane logs tail endpoint and cursor validation.
+8. Add live terminal discovery service (PTY → terminal mapping).
+9. Add terminal logs tail endpoint and cursor validation.
 10. Add AI-driven agent detection service (`.md` instructions → config generation).
 11. Add generic message parser driven by detection config.
-12. Add summarize-live service with three pane strategies.
-13. Add Control Plane UI sections for process + live pane views.
-14. Add per-pane logs/messages UI and workspace tab summary panel.
+12. Add summarize-live service with three terminal strategies.
+13. Add Control Plane UI sections for process + live terminal views.
+14. Add per-terminal logs/messages UI and workspace tab summary panel.
 15. Add port dashboard UI and conflict resolution UX.
 16. Add error-code mapping with HTTP status alignment.
 17. Add test matrix coverage and stress validation.
@@ -824,13 +824,13 @@ V1 is complete when all are true:
 2. control-plane-owned storage layer,
 3. process lifecycle APIs,
 4. global port registry + `get_port("name")` resolution + process group APIs,
-5. live pane APIs,
+5. live terminal APIs,
 6. error-code contracts.
 
 ### Workstream B: Transport Isolation
 
 1. document PTY isolation boundary in code,
-2. PTY-based pane discovery implementation,
+2. PTY-based terminal discovery implementation,
 3. prepare for future adapter extraction (Phase 4).
 
 ### Workstream C: Detection + Parsing
@@ -842,7 +842,7 @@ V1 is complete when all are true:
 ### Workstream D: Frontend
 
 1. control-plane state contexts,
-2. pane identity/log/message UI,
+2. terminal identity/log/message UI,
 3. workspace tab summary panel with strategy selection,
 4. process group management UI.
 
