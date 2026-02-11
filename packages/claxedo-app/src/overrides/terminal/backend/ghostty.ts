@@ -31,7 +31,7 @@ export const createBackend: CreateBackendFn = async (
     cursorStyle: "bar",
     fontSize: 14,
     fontFamily: options.fontFamily,
-    allowTransparency: true,
+    allowTransparency: false,
     convertEol: true,
     theme: options.theme,
     scrollback: 10_000,

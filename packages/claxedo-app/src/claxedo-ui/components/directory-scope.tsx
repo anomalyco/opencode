@@ -32,6 +32,8 @@ function wrapProviders(providers: ParentComponent[] | undefined, children: JSX.E
 export function DirectoryScope(props: ParentProps<{
   directory: string
   onNavigateToSession?: (sessionID: string) => void
+  onSessionHref?: (sessionID: string) => string
+  onSyncSession?: (sessionID: string) => void | Promise<void>
 }>) {
   return (
     <SDKProvider directory={() => props.directory}>
@@ -57,6 +59,15 @@ export function DirectoryScope(props: ParentProps<{
             }
           }
 
+          const sessionHref = props.onSessionHref
+            ? (sessionID: string) => props.onSessionHref!(sessionID)
+            : (sessionID: string) => {
+                const dir = base64Encode(props.directory)
+                return `/${dir}/session/${sessionID}`
+              }
+
+          const syncSession = (sessionID: string) => sync.session.sync(sessionID)
+
           const ext = getExtensions()
 
           return (
@@ -67,6 +78,8 @@ export function DirectoryScope(props: ParentProps<{
               onQuestionReply={replyToQuestion}
               onQuestionReject={rejectQuestion}
               onNavigateToSession={navigateToSession}
+              onSessionHref={sessionHref}
+              onSyncSession={props.onSyncSession ?? syncSession}
             >
               <TerminalProvider>
                 <FileProvider>
