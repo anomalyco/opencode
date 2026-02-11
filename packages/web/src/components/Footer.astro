@@ -110,7 +110,8 @@ const discord = config.social?.find((item) => item.icon === "discord")
   }
 
   .doc :global(starlight-lang-select select) {
-    min-width: 7em;
+    min-width: 18ch;
+    max-width: min(100%, 20rem);
   }
 
   @media (min-width: 30rem) {
