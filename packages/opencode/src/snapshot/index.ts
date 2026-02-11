@@ -41,6 +41,7 @@ export namespace Snapshot {
   async function gitAddFiltered() {
     const env = gitenv()
 
+    // -N (`--intent-to-add`) records new paths without staging file contents.
     const intent = await $`git add -N .`.cwd(Instance.directory).env(env).quiet().nothrow()
     if (intent.exitCode !== 0) {
       log.warn("git add -N failed", { exitCode: intent.exitCode, stderr: intent.stderr.toString() })
@@ -118,32 +119,45 @@ export namespace Snapshot {
         cwd: Instance.directory,
         env,
         stdout: "pipe",
-        stderr: "pipe",
+        stderr: "ignore",
       },
     )
-    const out = await Bun.readableStreamToText(proc.stdout)
-    const err = await Bun.readableStreamToText(proc.stderr)
-    const code = await proc.exited
+    let count = 0
+    const sample: string[] = []
 
+    const read = async (stream: ReadableStream<Uint8Array>, onLine: (line: string) => void) => {
+      const reader = stream.getReader()
+      const decoder = new TextDecoder()
+      let rest = ""
+      while (true) {
+        const chunk = await reader.read()
+        if (chunk.done) break
+        const lines = `${rest}${decoder.decode(chunk.value, { stream: true })}`.split("\n")
+        rest = lines.pop() ?? ""
+        lines.forEach(onLine)
+      }
+      rest = `${rest}${decoder.decode()}`
+      if (rest) onLine(rest)
+    }
+
+    await read(proc.stdout, (line) => {
+      if (!line) return
+      const [hash, type, raw] = line.trim().split(" ")
+      if (!hash || type !== "blob" || !raw) return
+      const size = Number.parseInt(raw, 10)
+      if (!Number.isFinite(size) || size <= sizeThreshold) return
+      count += 1
+      if (sample.length < 5) sample.push(`${hash}:${size}`)
+    })
+
+    const code = await proc.exited
     if (code !== 0) {
-      log.warn("git cat-file failed", { exitCode: code, stderr: err })
+      log.warn("git cat-file failed", { exitCode: code })
       return {
         failed: true,
         count: 0,
         sample: [] as string[],
       }
-    }
-
-    let count = 0
-    const sample: string[] = []
-    for (const line of out.split("\n")) {
-      if (!line) continue
-      const [hash, type, raw] = line.trim().split(" ")
-      if (!hash || type !== "blob" || !raw) continue
-      const size = Number.parseInt(raw, 10)
-      if (!Number.isFinite(size) || size <= sizeThreshold) continue
-      count += 1
-      if (sample.length < 5) sample.push(`${hash}:${size}`)
     }
 
     return {
