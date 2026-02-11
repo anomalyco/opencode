@@ -23,6 +23,7 @@ import { useSync } from "@/context/sync"
 import { useTerminal, type LocalPTY } from "@/context/terminal"
 import { useLayout } from "@/context/layout"
 import { checksum, base64Encode } from "@opencode-ai/util/encode"
+import { findLast } from "@opencode-ai/util/array"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { DialogSelectFile } from "@/components/dialog-select-file"
 import FileTree from "@/components/file-tree"
@@ -34,6 +35,7 @@ import { useSDK } from "@/context/sdk"
 import { usePrompt } from "@/context/prompt"
 import { useComments } from "@/context/comments"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
+import { usePermission } from "@/context/permission"
 import { showToast } from "@opencode-ai/ui/toast"
 import { SessionHeader, SessionContextTab, SortableTab, FileVisual, NewSessionView } from "@/components/session"
 import { navMark, navParams } from "@/utils/perf"
@@ -99,6 +101,7 @@ export default function Page() {
   const sdk = useSDK()
   const prompt = usePrompt()
   const comments = useComments()
+  const permission = usePermission()
 
   const permRequest = createMemo(() => {
     const sessionID = params.id
@@ -229,7 +232,7 @@ export default function Page() {
     })
   }
 
-  const isDesktop = createMediaQuery("(min-width: 1024px)")
+  const isDesktop = createMediaQuery("(min-width: 768px)")
   const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
   const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened())
   const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
@@ -269,7 +272,6 @@ export default function Page() {
     if (!path) return
     file.load(path)
     openReviewPanel()
-    tabs().setActive(next)
   }
 
   createEffect(() => {
@@ -554,7 +556,6 @@ export default function Page() {
   const [store, setStore] = createStore({
     activeDraggable: undefined as string | undefined,
     activeTerminalDraggable: undefined as string | undefined,
-    expanded: {} as Record<string, boolean>,
     messageId: undefined as string | undefined,
     turnStart: 0,
     mobileTab: "session" as "session" | "changes",
@@ -732,7 +733,6 @@ export default function Page() {
       sessionKey,
       () => {
         setStore("messageId", undefined)
-        setStore("expanded", {})
         setStore("changes", "session")
         setUi("autoCreated", false)
       },
@@ -751,12 +751,6 @@ export default function Page() {
     ),
   )
 
-  createEffect(() => {
-    const id = lastUserMessage()?.id
-    if (!id) return
-    setStore("expanded", id, status().type !== "idle")
-  })
-
   const selectionPreview = (path: string, selection: FileSelection) => {
     const content = file.get(path)?.content?.content
     if (!content) return undefined
@@ -765,6 +759,11 @@ export default function Page() {
     const lines = content.split("\n").slice(start - 1, end)
     if (lines.length === 0) return undefined
     return lines.slice(0, 2).join("\n")
+  }
+
+  const addSelectionToContext = (path: string, selection: FileSelection) => {
+    const preview = selectionPreview(path, selection)
+    prompt.context.add({ type: "file", path, selection, preview })
   }
 
   const addCommentToContext = (input: {
@@ -905,11 +904,29 @@ export default function Page() {
   const focusInput = () => inputRef?.focus()
 
   useSessionCommands({
-    activeMessage,
+    command,
+    dialog,
+    file,
+    language,
+    local,
+    permission,
+    prompt,
+    sdk,
+    sync,
+    terminal,
+    layout,
+    params,
+    navigate,
+    tabs,
+    view,
+    info,
+    status,
+    userMessages,
+    visibleUserMessages,
     showAllFiles,
     navigateMessageByOffset,
-    setExpanded: (id, fn) => setStore("expanded", id, fn),
     setActiveMessage,
+    addSelectionToContext,
     focusInput,
   })
 
@@ -1524,13 +1541,7 @@ export default function Page() {
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <SessionHeader />
-      <div
-        class="flex-1 min-h-0 flex"
-        classList={{
-          "flex-col": !isDesktop(),
-          "flex-row": isDesktop(),
-        }}
-      >
+      <div class="flex-1 min-h-0 flex flex-col md:flex-row">
         <SessionMobileTabs
           open={!isDesktop() && !!params.id}
           mobileTab={store.mobileTab}
@@ -1627,8 +1638,6 @@ export default function Page() {
                       navMark({ dir: params.dir, to: id, name: "session:first-turn-mounted" })
                     }}
                     lastUserMessageID={lastUserMessage()?.id}
-                    expanded={store.expanded}
-                    onToggleExpanded={(id) => setStore("expanded", id, (open: boolean | undefined) => !open)}
                   />
                 </Show>
               </Match>
@@ -1731,7 +1740,7 @@ export default function Page() {
       </div>
 
       <TerminalPanel
-        open={view().terminal.opened()}
+        open={isDesktop() && view().terminal.opened()}
         height={layout.terminal.height()}
         resize={layout.terminal.resize}
         close={view().terminal.close}

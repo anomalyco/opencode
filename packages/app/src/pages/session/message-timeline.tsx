@@ -88,8 +88,6 @@ export function MessageTimeline(props: {
   onUnregisterMessage: (id: string) => void
   onFirstTurnMount?: () => void
   lastUserMessageID?: string
-  expanded: Record<string, boolean>
-  onToggleExpanded: (id: string) => void
 }) {
   let touchGesture: number | undefined
 
@@ -316,8 +314,6 @@ export function MessageTimeline(props: {
                       sessionID={props.sessionID}
                       messageID={message.id}
                       lastUserMessageID={props.lastUserMessageID}
-                      stepsExpanded={props.expanded[message.id] ?? false}
-                      onStepsExpandedToggle={() => props.onToggleExpanded(message.id)}
                       classes={{
                         root: "min-w-0 w-full relative",
                         content: "flex flex-col justify-between !overflow-visible",

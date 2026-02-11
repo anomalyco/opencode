@@ -48,7 +48,6 @@ import { checksum } from "@opencode-ai/util/encode"
 import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
 import { createAutoScroll } from "../hooks"
-import { createResizeObserver } from "@solid-primitives/resize-observer"
 
 interface Diagnostic {
   range: {
@@ -106,12 +105,6 @@ export type PartComponent = Component<MessagePartProps>
 export const PART_MAPPING: Record<string, PartComponent | undefined> = {}
 
 const TEXT_RENDER_THROTTLE_MS = 100
-
-function same<T>(a: readonly T[], b: readonly T[]) {
-  if (a === b) return true
-  if (a.length !== b.length) return false
-  return a.every((x, i) => x === b[i])
-}
 
 function createThrottledValue(getValue: () => string) {
   const [value, setValue] = createSignal(getValue())
@@ -289,50 +282,19 @@ export function Message(props: MessageProps) {
 }
 
 export function AssistantMessageDisplay(props: { message: AssistantMessage; parts: PartType[] }) {
-  const emptyParts: PartType[] = []
-  const filteredParts = createMemo(
-    () =>
-      props.parts.filter((x) => {
-        return x.type !== "tool" || (x as ToolPart).tool !== "todoread"
-      }),
-    emptyParts,
-    { equals: same },
-  )
-  return <For each={filteredParts()}>{(part) => <Part part={part} message={props.message} />}</For>
+  return <For each={props.parts}>{(part) => <Part part={part} message={props.message} />}</For>
 }
 
 export function UserMessageDisplay(props: { message: UserMessage; parts: PartType[] }) {
   const dialog = useDialog()
   const i18n = useI18n()
   const [copied, setCopied] = createSignal(false)
-  const [expanded, setExpanded] = createSignal(false)
-  const [canExpand, setCanExpand] = createSignal(false)
-  let textRef: HTMLDivElement | undefined
-
-  const updateCanExpand = () => {
-    const el = textRef
-    if (!el) return
-    if (expanded()) return
-    setCanExpand(el.scrollHeight > el.clientHeight + 2)
-  }
-
-  createResizeObserver(
-    () => textRef,
-    () => {
-      updateCanExpand()
-    },
-  )
 
   const textPart = createMemo(
     () => props.parts?.find((p) => p.type === "text" && !(p as TextPart).synthetic) as TextPart | undefined,
   )
 
   const text = createMemo(() => textPart()?.text || "")
-
-  createEffect(() => {
-    text()
-    updateCanExpand()
-  })
 
   const files = createMemo(() => (props.parts?.filter((p) => p.type === "file") as FilePart[]) ?? [])
 
@@ -364,13 +326,8 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const toggleExpanded = () => {
-    if (!canExpand()) return
-    setExpanded((value) => !value)
-  }
-
   return (
-    <div data-component="user-message" data-expanded={expanded()} data-can-expand={canExpand()}>
+    <div data-component="user-message">
       <Show when={attachments().length > 0}>
         <div data-slot="user-message-attachments">
           <For each={attachments()}>
@@ -404,19 +361,8 @@ export function UserMessageDisplay(props: { message: UserMessage; parts: PartTyp
         </div>
       </Show>
       <Show when={text()}>
-        <div data-slot="user-message-text" ref={(el) => (textRef = el)} onClick={toggleExpanded}>
+        <div data-slot="user-message-text">
           <HighlightedText text={text()} references={inlineFiles()} agents={agents()} />
-          <button
-            data-slot="user-message-expand"
-            type="button"
-            aria-label={expanded() ? i18n.t("ui.message.collapse") : i18n.t("ui.message.expand")}
-            onClick={(event) => {
-              event.stopPropagation()
-              toggleExpanded()
-            }}
-          >
-            <Icon name="chevron-down" size="small" />
-          </button>
           <div data-slot="user-message-copy-wrapper">
             <Tooltip
               value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
