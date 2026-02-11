@@ -8,18 +8,27 @@ import z from "zod"
 import { Config } from "../config/config"
 import { Instance } from "../project/instance"
 import { Scheduler } from "../scheduler"
+import { EOL } from "os"
+import { readNull } from "../util/stream"
 
 export namespace Snapshot {
   const log = Log.create({ service: "snapshot" })
   const hour = 60 * 60 * 1000
   const prune = "7.days"
   const sizeThreshold = 1 * 1024 * 1024 * 1024 // 1 GB
+
   type Env = Record<string, string | undefined>
   type Oversized = {
     failed: boolean
     count: number
     sample: string[]
   }
+  type Spawned = {
+    exitCode: number
+    stderr: string
+    signalCode: number | string | null
+  }
+
   export type Cleanup = {
     status: "gc" | "reset" | "skipped" | "failed"
     reason?: "vcs" | "client" | "disabled" | "missing" | "reset" | "gc"
@@ -32,14 +41,6 @@ export namespace Snapshot {
     error?: string
   }
 
-  function gitenv(git = gitdir()): Env {
-    return {
-      ...process.env,
-      GIT_DIR: git,
-      GIT_WORK_TREE: Instance.worktree,
-    }
-  }
-
   export function init() {
     Scheduler.register({
       id: "snapshot.cleanup",
@@ -49,148 +50,6 @@ export namespace Snapshot {
       },
       scope: "instance",
     })
-  }
-
-  async function gitAddFiltered() {
-    const env = gitenv()
-
-    // -N (`--intent-to-add`) records new paths without staging file contents.
-    const intent = await $`git add -N .`.cwd(Instance.directory).env(env).quiet().nothrow()
-    if (intent.exitCode !== 0) {
-      log.warn("git add -N failed", { exitCode: intent.exitCode, stderr: intent.stderr.toString() })
-      return intent
-    }
-
-    const stagedFiles = await listStagedFiles(env)
-    if (stagedFiles) {
-      const largeFiles = await findLargeFiles(stagedFiles)
-      await unstageAndExclude(env, largeFiles)
-    }
-
-    const addOutput = await $`git add .`.cwd(Instance.directory).env(env).quiet().nothrow()
-    if (addOutput.exitCode !== 0) {
-      log.warn("git add failed", { exitCode: addOutput.exitCode, stderr: addOutput.stderr.toString() })
-    }
-    return addOutput
-  }
-
-  async function listStagedFiles(env: Env) {
-    const output = await $`git ls-files -z --cached --others --exclude-standard`
-      .cwd(Instance.directory)
-      .env(env)
-      .quiet()
-      .nothrow()
-    if (output.exitCode !== 0) {
-      log.warn("git ls-files failed", { exitCode: output.exitCode, stderr: output.stderr.toString() })
-      return undefined
-    }
-    return output.stdout.toString().split("\0").filter(Boolean)
-  }
-
-  async function findLargeFiles(files: string[]) {
-    const checks = await Promise.all(
-      files.map(async (file) => {
-        const full = path.join(Instance.worktree, file)
-        // Keep symlinks by checking link size, not target size.
-        const stat = await fs.lstat(full).catch(() => null)
-        return { file, large: stat ? stat.size > sizeThreshold : false }
-      }),
-    )
-    return checks.filter((item) => item.large).map((item) => item.file)
-  }
-
-  async function unstageAndExclude(env: Env, files: string[]) {
-    if (files.length === 0) return
-    log.info("removing large files from snapshot", { files })
-    const signal = AbortSignal.timeout(3_000)
-    const proc = Bun.spawn(["git", "rm", "--cached", "--ignore-unmatch", "--", ...files], {
-      cwd: Instance.directory,
-      env,
-      signal,
-      stdout: "ignore",
-      stderr: "ignore",
-    })
-    const code = await proc.exited
-    if (code !== 0) {
-      log.warn("git rm --cached failed", { code, timeout: signal.aborted })
-    }
-
-    const exclude = path.join(gitdir(), "info", "exclude")
-    await fs.mkdir(path.dirname(exclude), { recursive: true })
-    const current = await fs.readFile(exclude, "utf8").catch(() => "")
-    const existing = new Set(current.split("\n").filter(Boolean))
-    const added = files.map(ignoreEscape).filter((file) => !existing.has(file))
-    if (added.length === 0) return
-    const base = current.length === 0 || current.endsWith("\n") ? current : `${current}\n`
-    await fs.writeFile(exclude, `${base}${added.join("\n")}\n`)
-  }
-
-  async function findOversizedObjects(env: Env): Promise<Oversized> {
-    const proc = Bun.spawn(
-      ["git", "cat-file", "--batch-all-objects", "--batch-check=%(objectname) %(objecttype) %(objectsize)"],
-      {
-        cwd: Instance.directory,
-        env,
-        stdout: "pipe",
-        stderr: "ignore",
-      },
-    )
-    let count = 0
-    const sample: string[] = []
-
-    const read = async (stream: ReadableStream<Uint8Array>, onLine: (line: string) => void) => {
-      const reader = stream.getReader()
-      const decoder = new TextDecoder()
-      let rest = ""
-      while (true) {
-        const chunk = await reader.read()
-        if (chunk.done) break
-        const lines = `${rest}${decoder.decode(chunk.value, { stream: true })}`.split("\n")
-        rest = lines.pop() ?? ""
-        lines.forEach(onLine)
-      }
-      rest = `${rest}${decoder.decode()}`
-      if (rest) onLine(rest)
-    }
-
-    await read(proc.stdout, (line) => {
-      if (!line) return
-      const [hash, type, raw] = line.trim().split(" ")
-      if (!hash || type !== "blob" || !raw) return
-      const size = Number.parseInt(raw, 10)
-      if (!Number.isFinite(size) || size <= sizeThreshold) return
-      count += 1
-      if (sample.length < 5) sample.push(`${hash}:${size}`)
-    })
-
-    const code = await proc.exited
-    if (code !== 0) {
-      log.warn("git cat-file failed", { exitCode: code })
-      return {
-        failed: true,
-        count: 0,
-        sample: [] as string[],
-      }
-    }
-
-    return {
-      failed: false,
-      count,
-      sample,
-    }
-  }
-
-  /**
-   * Escape gitignore metacharacters so file paths are matched literally.
-   * Replaces backslashes, glob chars (* ? [ ]), trailing spaces, and leading #/!.
-   */
-  function ignoreEscape(file: string) {
-    const escaped = file
-      .replaceAll("\\", "\\\\")
-      .replace(/([*?\[\]])/g, "\\$1")
-      .replace(/ +$/g, (spaces) => "\\ ".repeat(spaces.length))
-    if (escaped.startsWith("#") || escaped.startsWith("!")) return `\\${escaped}`
-    return escaped
   }
 
   export async function cleanup(input?: { findOversized?: (env: Env) => Promise<Oversized> }): Promise<Cleanup> {
@@ -256,29 +115,23 @@ export namespace Snapshot {
         sample: oversized.sample,
       }
     }
-    const proc = Bun.spawn(["git", "gc", `--prune=${prune}`], {
-      cwd: Instance.directory,
-      env,
-      stdout: "ignore",
-      stderr: "pipe",
-      // git gc --prune can run very slowly and use lots of memory when snapshot repos bloat with unfiltered large files.
-      timeout: 120_000,
+    const output = await spawn(["git", "gc", `--prune=${prune}`], env, {
+      // git gc --prune can run very slowly and use lots of memory
+      // when snapshot repos bloat with unfiltered large files.
+      timeout: 60_000,
     })
-    const stderrText = proc.stderr ? new Response(proc.stderr).text() : Promise.resolve("")
-    const exitCode = await proc.exited
-    const stderr = (await stderrText).trim()
-    if (exitCode !== 0) {
+    if (output.exitCode !== 0) {
       log.warn("cleanup failed", {
-        exitCode,
-        signalCode: proc.signalCode,
-        stderr,
+        exitCode: output.exitCode,
+        signalCode: output.signalCode,
+        stderr: output.stderr,
       })
       return {
         status: "failed",
         reason: "gc",
-        exitCode,
+        exitCode: output.exitCode,
         prune,
-        stderr,
+        stderr: output.stderr,
       }
     }
     log.info("cleanup", { prune })
@@ -303,7 +156,7 @@ export namespace Snapshot {
       await $`git config core.fsmonitor false`.env(env).quiet().nothrow()
       log.info("initialized")
     }
-    await gitAddFiltered()
+    await gitAddFiltered(git)
     const hash = await $`git write-tree`.env(env).quiet().cwd(Instance.directory).nothrow().text()
     log.info("tracking", { hash, cwd: Instance.directory, git })
     return hash.trim()
@@ -318,7 +171,7 @@ export namespace Snapshot {
   export async function patch(hash: string): Promise<Patch> {
     const git = gitdir()
     const env = gitenv(git)
-    await gitAddFiltered()
+    await gitAddFiltered(git)
     const result =
       await $`git -c core.autocrlf=false -c core.longpaths=true -c core.symlinks=true -c core.quotepath=false diff --no-ext-diff --name-only ${hash} -- .`
         .env(env)
@@ -403,7 +256,7 @@ export namespace Snapshot {
   export async function diff(hash: string) {
     const git = gitdir()
     const env = gitenv(git)
-    await gitAddFiltered()
+    await gitAddFiltered(git)
     const result =
       await $`git -c core.autocrlf=false -c core.longpaths=true -c core.symlinks=true -c core.quotepath=false diff --no-ext-diff ${hash} -- .`
         .env(env)
@@ -501,40 +354,199 @@ export namespace Snapshot {
     return path.join(Global.Path.data, "snapshot", project.id)
   }
 
-  async function add(git: string) {
-    await syncExclude(git)
-    await $`git -c core.autocrlf=false -c core.longpaths=true -c core.symlinks=true --git-dir ${git} --work-tree ${Instance.worktree} add .`
-      .quiet()
-      .cwd(Instance.directory)
-      .nothrow()
-  }
-
-  async function syncExclude(git: string) {
-    const file = await excludes()
-    const target = path.join(git, "info", "exclude")
-    await fs.mkdir(path.join(git, "info"), { recursive: true })
-    if (!file) {
-      await Bun.write(target, "")
-      return
+  function gitenv(git: string): Env {
+    return {
+      ...process.env,
+      GIT_DIR: git,
+      GIT_WORK_TREE: Instance.worktree,
     }
-    const text = await Bun.file(file)
-      .text()
-      .catch(() => "")
-    await Bun.write(target, text)
   }
 
-  async function excludes() {
-    const file = await $`git rev-parse --path-format=absolute --git-path info/exclude`
+  async function spawn(cmds: string[], env: Env, options?: Parameters<typeof Bun.spawn>[1]): Promise<Spawned> {
+    const proc = Bun.spawn(cmds, {
+      cwd: Instance.directory,
+      env,
+      stdout: "ignore",
+      stderr: "pipe",
+      ...options,
+    })
+
+    const stderr = proc.stderr instanceof ReadableStream ? new Response(proc.stderr).text() : Promise.resolve("")
+    const exitCode = await proc.exited
+
+    return {
+      exitCode,
+      stderr: (await stderr).trim(),
+      signalCode: proc.signalCode,
+    }
+  }
+
+  async function gitAddFiltered(git: string): Promise<string[]> {
+    const env = gitenv(git)
+
+    // -N (`--intent-to-add`) records new paths without staging file contents.
+    const intent = await $`git -c core.autocrlf=false -c core.longpaths=true -c core.symlinks=true add -N -- .`
+      .cwd(Instance.directory)
+      .env(env)
       .quiet()
-      .cwd(Instance.worktree)
       .nothrow()
-      .text()
-    if (!file.trim()) return
-    const exists = await fs
-      .stat(file.trim())
-      .then(() => true)
-      .catch(() => false)
-    if (!exists) return
-    return file.trim()
+    if (intent.exitCode !== 0) {
+      log.warn("git add -N failed", { exitCode: intent.exitCode, stderr: intent.stderr.toString() })
+      return []
+    }
+
+    const stagedFiles = await listStagedFiles(env).catch((err) => {
+      log.warn("failed to list staged files", { error: err })
+      return [] as string[]
+    })
+
+    if (stagedFiles.length === 0) {
+      log.info("no files to stage")
+      return []
+    }
+
+    const largeFiles = await findLargeFiles(stagedFiles)
+    await unstageAndExclude(env, largeFiles)
+
+    const filesWithoutLarge = stagedFiles.filter((file) => !largeFiles.includes(file))
+    const addOutput = await spawn(
+      [
+        "git",
+        "-c",
+        "core.autocrlf=false",
+        "-c",
+        "core.longpaths=true",
+        "-c",
+        "core.symlinks=true",
+        "add",
+        "--",
+        ...filesWithoutLarge,
+      ],
+      env,
+    )
+    if (addOutput.exitCode !== 0) {
+      log.warn("git add failed", { exitCode: addOutput.exitCode, stderr: addOutput.stderr })
+    }
+
+    return filesWithoutLarge
+  }
+
+  async function listStagedFiles(env: Env): Promise<string[]> {
+    const output =
+      await $`git -c core.autocrlf=false -c core.longpaths=true -c core.symlinks=true diff --name-only -z --diff-filter=AMD -- .`
+        .cwd(Instance.directory)
+        .env(env)
+        .quiet()
+
+    return output.stdout.toString().split("\0").filter(Boolean)
+  }
+
+  async function findLargeFiles(files: string[]) {
+    const checks = await Promise.all(
+      files.map(async (file) => {
+        const full = path.join(Instance.worktree, file)
+        // Keep symlinks by checking link size, not target size.
+        const stat = await fs.lstat(full).catch(() => null)
+        return { file, large: stat ? stat.size > sizeThreshold : false }
+      }),
+    )
+    return checks.filter((item) => item.large).map((item) => item.file)
+  }
+
+  async function unstageAndExclude(env: Env, files: string[]) {
+    if (files.length === 0) return
+
+    async function execGitRmCached() {
+      const output = await spawn(
+        [
+          "git",
+          "-c",
+          "core.autocrlf=false",
+          "-c",
+          "core.longpaths=true",
+          "-c",
+          "core.symlinks=true",
+          "rm",
+          "--cached",
+          "--ignore-unmatch",
+          "--",
+          ...files,
+        ],
+        env,
+        {
+          stderr: "ignore",
+        },
+      )
+
+      if (output.exitCode !== 0) {
+        log.warn("git rm --cached failed", { code: output.exitCode })
+      }
+    }
+
+    async function updateGitExclude() {
+      const exclude = path.join(gitdir(), "info", "exclude")
+      await fs.mkdir(path.dirname(exclude), { recursive: true })
+      const current = await fs.readFile(exclude, "utf8").catch(() => "")
+      const existing = new Set(current.split(EOL).filter(Boolean))
+      const added = files.map(ignoreEscape).filter((file) => !existing.has(file))
+      if (added.length === 0) return
+      const base = current.length === 0 || current.endsWith(EOL) ? current : `${current}${EOL}`
+      await fs.writeFile(exclude, `${base}${added.join(EOL)}${EOL}`)
+    }
+
+    log.info("removing large files from snapshot", { files })
+    await Promise.all([execGitRmCached(), updateGitExclude()])
+  }
+
+  async function findOversizedObjects(env: Env): Promise<Oversized> {
+    const proc = Bun.spawn(
+      ["git", "cat-file", "-Z", "--batch-all-objects", "--batch-check=%(objectname) %(objecttype) %(objectsize)"],
+      {
+        cwd: Instance.directory,
+        env,
+        stdout: "pipe",
+        stderr: "ignore",
+      },
+    )
+    let count = 0
+    const sample: string[] = []
+
+    for await (const line of readNull(proc.stdout)) {
+      const [hash, type, raw] = line.split(" ")
+      if (!hash || type !== "blob" || !raw) continue
+      const size = Number.parseInt(raw, 10)
+      if (!Number.isFinite(size) || size <= sizeThreshold) continue
+      count += 1
+      if (sample.length < 5) sample.push(`${hash}:${size}`)
+    }
+
+    const code = await proc.exited
+    if (code !== 0) {
+      log.warn("git cat-file failed", { exitCode: code })
+      return {
+        failed: true,
+        count: 0,
+        sample: [] as string[],
+      }
+    }
+
+    return {
+      failed: false,
+      count,
+      sample,
+    }
+  }
+
+  /**
+   * Escape gitignore metacharacters so file paths are matched literally.
+   * Replaces backslashes, glob chars (* ? [ ]), trailing spaces, and leading #/!.
+   */
+  function ignoreEscape(file: string) {
+    const escaped = file
+      .replaceAll("\\", "\\\\")
+      .replace(/([*?\[\]])/g, "\\$1")
+      .replace(/ +$/g, (spaces) => "\\ ".repeat(spaces.length))
+    if (escaped.startsWith("#") || escaped.startsWith("!")) return `\\${escaped}`
+    return escaped
   }
 }
