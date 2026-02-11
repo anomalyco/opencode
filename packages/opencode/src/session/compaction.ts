@@ -35,7 +35,7 @@ export namespace SessionCompaction {
     const context = input.model.limit.context
     if (context === 0) return false
 
-    const count = input.tokens.input + input.tokens.cache.read + input.tokens.output
+    const count = input.tokens.total || input.tokens.input + input.tokens.cache.read + input.tokens.output
 
     const modelKey = `${input.model.providerID}/${input.model.id}`
     const modelConfig = config.compaction?.models?.[modelKey]
@@ -48,9 +48,9 @@ export namespace SessionCompaction {
     const contextThreshold = modelConfig?.context_threshold ?? config.compaction?.context_threshold
     if (contextThreshold && count > context * contextThreshold) return true
 
-    const output = Math.min(input.model.limit.output, SessionPrompt.OUTPUT_TOKEN_MAX) || SessionPrompt.OUTPUT_TOKEN_MAX
-    const usable = input.model.limit.input || context - output
-    return count > usable
+    const reserved = config.compaction?.reserved ?? Math.min(COMPACTION_BUFFER, ProviderTransform.maxOutputTokens(input.model))
+    const usable = input.model.limit.input ? input.model.limit.input - reserved : context - reserved
+    return count >= usable
   }
 
   export const PRUNE_MINIMUM = 20_000
