@@ -43,7 +43,7 @@ export function Header() {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
-    }).format(total)
+    }).format(Number.isFinite(total) ? total : 0)
   })
 
   const context = createMemo(() => {
