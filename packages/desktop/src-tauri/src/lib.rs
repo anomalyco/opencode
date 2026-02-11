@@ -52,6 +52,13 @@ enum InitStep {
     Done,
 }
 
+#[derive(serde::Deserialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+enum WslPathMode {
+    Windows,
+    Linux,
+}
+
 struct InitState {
     current: watch::Receiver<InitStep>,
 }
@@ -155,211 +162,28 @@ fn check_app_exists(app_name: &str) -> bool {
 }
 
 #[cfg(target_os = "windows")]
-fn check_windows_app(app_name: &str) -> bool {
-    resolve_windows_app_path(app_name).is_some()
+fn check_windows_app(_app_name: &str) -> bool {
+    // Check if command exists in PATH, including .exe
+    return true;
 }
 
 #[cfg(target_os = "windows")]
 fn resolve_windows_app_path(app_name: &str) -> Option<String> {
     use std::path::{Path, PathBuf};
 
-    fn expand_env(value: &str) -> String {
-        let mut out = String::with_capacity(value.len());
-        let mut index = 0;
+    // Try to find the command using 'where'
+    let output = Command::new("where").arg(app_name).output().ok()?;
 
-        while let Some(start) = value[index..].find('%') {
-            let start = index + start;
-            out.push_str(&value[index..start]);
-
-            let Some(end_rel) = value[start + 1..].find('%') else {
-                out.push_str(&value[start..]);
-                return out;
-            };
-
-            let end = start + 1 + end_rel;
-            let key = &value[start + 1..end];
-            if key.is_empty() {
-                out.push('%');
-                index = end + 1;
-                continue;
-            }
-
-            if let Ok(v) = std::env::var(key) {
-                out.push_str(&v);
-                index = end + 1;
-                continue;
-            }
-
-            out.push_str(&value[start..=end]);
-            index = end + 1;
-        }
-
-        out.push_str(&value[index..]);
-        out
-    }
-
-    fn extract_exe(value: &str) -> Option<String> {
-        let value = value.trim();
-        if value.is_empty() {
-            return None;
-        }
-
-        if let Some(rest) = value.strip_prefix('"') {
-            if let Some(end) = rest.find('"') {
-                let inner = rest[..end].trim();
-                if inner.to_ascii_lowercase().contains(".exe") {
-                    return Some(inner.to_string());
-                }
-            }
-        }
-
-        let lower = value.to_ascii_lowercase();
-        let end = lower.find(".exe")?;
-        Some(value[..end + 4].trim().trim_matches('"').to_string())
-    }
-
-    fn candidates(app_name: &str) -> Vec<String> {
-        let app_name = app_name.trim().trim_matches('"');
-        if app_name.is_empty() {
-            return vec![];
-        }
-
-        let mut out = Vec::<String>::new();
-        let mut push = |value: String| {
-            let value = value.trim().trim_matches('"').to_string();
-            if value.is_empty() {
-                return;
-            }
-            if out.iter().any(|v| v.eq_ignore_ascii_case(&value)) {
-                return;
-            }
-            out.push(value);
-        };
-
-        push(app_name.to_string());
-
-        let lower = app_name.to_ascii_lowercase();
-        if !lower.ends_with(".exe") {
-            push(format!("{app_name}.exe"));
-        }
-
-        let snake = {
-            let mut s = String::new();
-            let mut underscore = false;
-            for c in lower.chars() {
-                if c.is_ascii_alphanumeric() {
-                    s.push(c);
-                    underscore = false;
-                    continue;
-                }
-                if underscore {
-                    continue;
-                }
-                s.push('_');
-                underscore = true;
-            }
-            s.trim_matches('_').to_string()
-        };
-
-        if !snake.is_empty() {
-            push(snake.clone());
-            if !snake.ends_with(".exe") {
-                push(format!("{snake}.exe"));
-            }
-        }
-
-        let alnum = lower
-            .chars()
-            .filter(|c| c.is_ascii_alphanumeric())
-            .collect::<String>();
-
-        if !alnum.is_empty() {
-            push(alnum.clone());
-            push(format!("{alnum}.exe"));
-        }
-
-        match lower.as_str() {
-            "sublime text" | "sublime-text" | "sublime_text" | "sublime text.exe" => {
-                push("subl".to_string());
-                push("subl.exe".to_string());
-                push("sublime_text".to_string());
-                push("sublime_text.exe".to_string());
-            }
-            _ => {}
-        }
-
-        out
-    }
-
-    fn reg_app_path(exe: &str) -> Option<String> {
-        let exe = exe.trim().trim_matches('"');
-        if exe.is_empty() {
-            return None;
-        }
-
-        let keys = [
-            format!(
-                r"HKCU\Software\Microsoft\Windows\CurrentVersion\App Paths\{exe}"
-            ),
-            format!(
-                r"HKLM\Software\Microsoft\Windows\CurrentVersion\App Paths\{exe}"
-            ),
-            format!(
-                r"HKLM\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\App Paths\{exe}"
-            ),
-        ];
-
-        for key in keys {
-            let Some(output) = Command::new("reg")
-                .args(["query", &key, "/ve"])
-                .output()
-                .ok()
-            else {
-                continue;
-            };
-
-            if !output.status.success() {
-                continue;
-            }
-
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            for line in stdout.lines() {
-                let tokens = line.split_whitespace().collect::<Vec<_>>();
-                let Some(index) = tokens.iter().position(|v| v.starts_with("REG_")) else {
-                    continue;
-                };
-
-                let value = tokens[index + 1..].join(" ");
-                let Some(exe) = extract_exe(&value) else {
-                    continue;
-                };
-
-                let exe = expand_env(&exe);
-                let path = Path::new(exe.trim().trim_matches('"'));
-                if path.exists() {
-                    return Some(path.to_string_lossy().to_string());
-                }
-            }
-        }
-
-        None
-    }
-
-    let app_name = app_name.trim().trim_matches('"');
-    if app_name.is_empty() {
+    if !output.status.success() {
         return None;
     }
 
-    let direct = Path::new(app_name);
-    if direct.is_absolute() && direct.exists() {
-        return Some(direct.to_string_lossy().to_string());
-    }
-
-    let key = app_name
-        .chars()
-        .filter(|v| v.is_ascii_alphanumeric())
-        .flat_map(|v| v.to_lowercase())
-        .collect::<String>();
+    let paths = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(PathBuf::from)
+        .collect::<Vec<_>>();
 
     let has_ext = |path: &Path, ext: &str| {
         path.extension()
@@ -368,19 +192,22 @@ fn resolve_windows_app_path(app_name: &str) -> Option<String> {
             .unwrap_or(false)
     };
 
+    if let Some(path) = paths.iter().find(|path| has_ext(path, "exe")) {
+        return Some(path.to_string_lossy().to_string());
+    }
+
     let resolve_cmd = |path: &Path| -> Option<String> {
-        let bytes = std::fs::read(path).ok()?;
-        let content = String::from_utf8_lossy(&bytes);
+        let content = std::fs::read_to_string(path).ok()?;
 
         for token in content.split('"') {
-            let Some(exe) = extract_exe(token) else {
+            let lower = token.to_ascii_lowercase();
+            if !lower.contains(".exe") {
                 continue;
-            };
+            }
 
-            let lower = exe.to_ascii_lowercase();
             if let Some(index) = lower.find("%~dp0") {
                 let base = path.parent()?;
-                let suffix = &exe[index + 5..];
+                let suffix = &token[index + 5..];
                 let mut resolved = PathBuf::from(base);
 
                 for part in suffix.replace('/', "\\").split('\\') {
@@ -397,11 +224,9 @@ fn resolve_windows_app_path(app_name: &str) -> Option<String> {
                 if resolved.exists() {
                     return Some(resolved.to_string_lossy().to_string());
                 }
-
-                continue;
             }
 
-            let resolved = PathBuf::from(expand_env(&exe));
+            let resolved = PathBuf::from(token);
             if resolved.exists() {
                 return Some(resolved.to_string_lossy().to_string());
             }
@@ -410,130 +235,74 @@ fn resolve_windows_app_path(app_name: &str) -> Option<String> {
         None
     };
 
-    let resolve_where = |query: &str| -> Option<String> {
-        let output = Command::new("where").arg(query).output().ok()?;
-        if !output.status.success() {
-            return None;
+    for path in &paths {
+        if has_ext(path, "cmd") || has_ext(path, "bat") {
+            if let Some(resolved) = resolve_cmd(path) {
+                return Some(resolved);
+            }
         }
 
-        let paths = String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .map(str::trim)
-            .filter(|line| !line.is_empty())
-            .map(PathBuf::from)
-            .collect::<Vec<_>>();
-
-        if paths.is_empty() {
-            return None;
-        }
-
-        if let Some(path) = paths.iter().find(|path| has_ext(path, "exe")) {
-            return Some(path.to_string_lossy().to_string());
-        }
-
-        for path in &paths {
-            if has_ext(path, "cmd") || has_ext(path, "bat") {
-                if let Some(resolved) = resolve_cmd(path) {
+        if path.extension().is_none() {
+            let cmd = path.with_extension("cmd");
+            if cmd.exists() {
+                if let Some(resolved) = resolve_cmd(&cmd) {
                     return Some(resolved);
                 }
             }
 
-            if path.extension().is_none() {
-                let cmd = path.with_extension("cmd");
-                if cmd.exists() {
-                    if let Some(resolved) = resolve_cmd(&cmd) {
-                        return Some(resolved);
-                    }
-                }
-
-                let bat = path.with_extension("bat");
-                if bat.exists() {
-                    if let Some(resolved) = resolve_cmd(&bat) {
-                        return Some(resolved);
-                    }
+            let bat = path.with_extension("bat");
+            if bat.exists() {
+                if let Some(resolved) = resolve_cmd(&bat) {
+                    return Some(resolved);
                 }
             }
         }
+    }
 
-        if !key.is_empty() {
-            for path in &paths {
-                let dirs = [
-                    path.parent(),
-                    path.parent().and_then(|dir| dir.parent()),
-                    path.parent()
-                        .and_then(|dir| dir.parent())
-                        .and_then(|dir| dir.parent()),
-                ];
+    let key = app_name
+        .chars()
+        .filter(|v| v.is_ascii_alphanumeric())
+        .flat_map(|v| v.to_lowercase())
+        .collect::<String>();
 
-                for dir in dirs.into_iter().flatten() {
-                    if let Ok(entries) = std::fs::read_dir(dir) {
-                        for entry in entries.flatten() {
-                            let candidate = entry.path();
-                            if !has_ext(&candidate, "exe") {
-                                continue;
-                            }
+    if !key.is_empty() {
+        for path in &paths {
+            let dirs = [
+                path.parent(),
+                path.parent().and_then(|dir| dir.parent()),
+                path.parent()
+                    .and_then(|dir| dir.parent())
+                    .and_then(|dir| dir.parent()),
+            ];
 
-                            let Some(stem) = candidate.file_stem().and_then(|v| v.to_str()) else {
-                                continue;
-                            };
+            for dir in dirs.into_iter().flatten() {
+                if let Ok(entries) = std::fs::read_dir(dir) {
+                    for entry in entries.flatten() {
+                        let candidate = entry.path();
+                        if !has_ext(&candidate, "exe") {
+                            continue;
+                        }
 
-                            let name = stem
-                                .chars()
-                                .filter(|v| v.is_ascii_alphanumeric())
-                                .flat_map(|v| v.to_lowercase())
-                                .collect::<String>();
+                        let Some(stem) = candidate.file_stem().and_then(|v| v.to_str()) else {
+                            continue;
+                        };
 
-                            if name.contains(&key) || key.contains(&name) {
-                                return Some(candidate.to_string_lossy().to_string());
-                            }
+                        let name = stem
+                            .chars()
+                            .filter(|v| v.is_ascii_alphanumeric())
+                            .flat_map(|v| v.to_lowercase())
+                            .collect::<String>();
+
+                        if name.contains(&key) || key.contains(&name) {
+                            return Some(candidate.to_string_lossy().to_string());
                         }
                     }
                 }
             }
         }
-
-        paths.first().map(|path| path.to_string_lossy().to_string())
-    };
-
-    let list = candidates(app_name);
-    for query in &list {
-        if let Some(path) = resolve_where(query) {
-            return Some(path);
-        }
     }
 
-    let mut exes = Vec::<String>::new();
-    for query in &list {
-        let query = query.trim().trim_matches('"');
-        if query.is_empty() {
-            continue;
-        }
-
-        let name = Path::new(query)
-            .file_name()
-            .and_then(|v| v.to_str())
-            .unwrap_or(query);
-
-        let exe = if name.to_ascii_lowercase().ends_with(".exe") {
-            name.to_string()
-        } else {
-            format!("{name}.exe")
-        };
-
-        if exes.iter().any(|v| v.eq_ignore_ascii_case(&exe)) {
-            continue;
-        }
-
-        exes.push(exe);
-    }
-
-    for exe in exes {
-        if let Some(path) = reg_app_path(&exe) {
-            return Some(path);
-        }
-    }
-
-    None
+    paths.first().map(|path| path.to_string_lossy().to_string())
 }
 
 #[tauri::command]
@@ -620,32 +389,50 @@ fn check_linux_app(app_name: &str) -> bool {
     return true;
 }
 
+#[tauri::command]
+#[specta::specta]
+fn wsl_path(path: String, mode: Option<WslPathMode>) -> Result<String, String> {
+    if !cfg!(windows) {
+        return Ok(path);
+    }
+
+    let flag = match mode.unwrap_or(WslPathMode::Linux) {
+        WslPathMode::Windows => "-w",
+        WslPathMode::Linux => "-u",
+    };
+
+    let output = if path.starts_with('~') {
+        let suffix = path.strip_prefix('~').unwrap_or("");
+        let escaped = suffix.replace('"', "\\\"");
+        let cmd = format!("wslpath {flag} \"$HOME{escaped}\"");
+        Command::new("wsl")
+            .args(["-e", "sh", "-lc", &cmd])
+            .output()
+            .map_err(|e| format!("Failed to run wslpath: {e}"))?
+    } else {
+        Command::new("wsl")
+            .args(["-e", "wslpath", flag, &path])
+            .output()
+            .map_err(|e| format!("Failed to run wslpath: {e}"))?
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        if stderr.is_empty() {
+            return Err("wslpath failed".to_string());
+        }
+        return Err(stderr);
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let builder = tauri_specta::Builder::<tauri::Wry>::new()
-        // Then register them (separated by a comma)
-        .commands(tauri_specta::collect_commands![
-            kill_sidecar,
-            cli::install_cli,
-            await_initialization,
-            server::get_default_server_url,
-            server::set_default_server_url,
-            get_display_backend,
-            set_display_backend,
-            markdown::parse_markdown_command,
-            check_app_exists,
-            resolve_app_path
-        ])
-        .events(tauri_specta::collect_events![LoadingWindowComplete])
-        .error_handling(tauri_specta::ErrorHandlingMode::Throw);
+    let builder = make_specta_builder();
 
     #[cfg(debug_assertions)] // <- Only export on non-release builds
-    builder
-        .export(
-            specta_typescript::Typescript::default(),
-            "../src/bindings.ts",
-        )
-        .expect("Failed to export typescript bindings");
+    export_types(&builder);
 
     #[cfg(all(target_os = "macos", not(debug_assertions)))]
     let _ = std::process::Command::new("killall")
@@ -710,6 +497,44 @@ pub fn run() {
                 kill_sidecar(app.clone());
             }
         });
+}
+
+fn make_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
+    tauri_specta::Builder::<tauri::Wry>::new()
+        // Then register them (separated by a comma)
+        .commands(tauri_specta::collect_commands![
+            kill_sidecar,
+            cli::install_cli,
+            await_initialization,
+            server::get_default_server_url,
+            server::set_default_server_url,
+            server::get_wsl_config,
+            server::set_wsl_config,
+            get_display_backend,
+            set_display_backend,
+            markdown::parse_markdown_command,
+            check_app_exists,
+            wsl_path,
+            resolve_app_path
+        ])
+        .events(tauri_specta::collect_events![LoadingWindowComplete])
+        .error_handling(tauri_specta::ErrorHandlingMode::Throw)
+}
+
+fn export_types(builder: &tauri_specta::Builder<tauri::Wry>) {
+    builder
+        .export(
+            specta_typescript::Typescript::default(),
+            "../src/bindings.ts",
+        )
+        .expect("Failed to export typescript bindings");
+}
+
+#[cfg(test)]
+#[test]
+fn test_export_types() {
+    let builder = make_specta_builder();
+    export_types(&builder);
 }
 
 #[derive(tauri_specta::Event, serde::Deserialize, specta::Type)]
