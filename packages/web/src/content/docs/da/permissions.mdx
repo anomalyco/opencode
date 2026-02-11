@@ -1,0 +1,237 @@
+---
+title: Tilladelser
+description: Kontroller, hvilke handlinger der kræver godkendelse for at køre.
+---
+
+OpenCode bruger `permission`-konfigurationen til at bestemme, om en given handling skal køre automatisk, bede dig om eller blokeres.
+
+Fra `v1.1.1` er den ældre `tools` booleske konfiguration forældet og er blevet flettet ind i `permission`. Den gamle `tools`-konfiguration er stadig understøttet for bagudkompatibilitet.
+
+---
+
+## Handlinger
+
+Hver tilladelsesregel løses til en af:
+
+- `"allow"` — køre uden godkendelse
+- `"ask"` — prompt om godkendelse
+- `"deny"` — bloker handlingen
+
+---
+
+## Konfiguration
+
+Du kan indstille tilladelser globalt (med `*`) og tilsidesætte specifikke værktøjer.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "*": "ask",
+    "bash": "allow",
+    "edit": "deny"
+  }
+}
+```
+
+Du kan også indstille alle tilladelser på én gang:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": "allow"
+}
+```
+
+---
+
+## Granulære regler (objektsyntaks)
+
+For de fleste tilladelser kan du bruge et objekt til at anvende forskellige handlinger baseret på værktøjsinputtet.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "ask",
+      "git *": "allow",
+      "npm *": "allow",
+      "rm *": "deny",
+      "grep *": "allow"
+    },
+    "edit": {
+      "*": "deny",
+      "packages/web/src/content/docs/*.mdx": "allow"
+    }
+  }
+}
+```
+
+Regler evalueres efter mønstermatch, hvor den **sidste matchende regel vinder**. Et almindeligt mønster er at sætte catch-all `"*"` reglen først og mere specifikke regler efter den.
+
+### Jokertegn
+
+Tilladelsesmønstre bruger simpel jokertegn-matchning:
+
+- `*` matcher nul eller flere af et hvilket som helst tegn
+- `?` matcher nøjagtigt ét tegn
+- Alle andre karakterer matcher bogstaveligt talt
+
+### Udvidelse af hjemmemappe
+
+Du kan bruge `~` eller `$HOME` i starten af ​​et mønster til at referere til din hjemmemappe. Dette er især nyttigt for [`external_directory`](#external-directories) regler.
+
+- `~/projects/*` -> `/Users/username/projects/*`
+- `$HOME/projects/*` -> `/Users/username/projects/*`
+- `~` -> `/Users/username`
+
+### Eksterne mapper
+
+Brug `external_directory` til at tillade værktøjsopkald, der berører stier uden for den arbejdsmappe, hvor OpenCode blev startet. Dette gælder for ethvert værktøj, der tager en sti som input (for eksempel `read`, `edit`, `list`, `glob`, `grep` og mange `bash` kommandoer).
+
+Hjemmeudvidelse (som `~/...`) påvirker kun, hvordan et mønster skrives. Det gør ikke en ekstern sti til en del af det aktuelle arbejdsområde, så stier uden for arbejdsbiblioteket skal stadig være tilladt via `external_directory`.
+
+For eksempel giver dette adgang til alt under `~/projects/personal/`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "~/projects/personal/**": "allow"
+    }
+  }
+}
+```
+
+Enhver mappe, der er tilladt her, arver de samme standarder som det aktuelle arbejdsområde. Siden [`read` defaults to `allow`](#defaults), er læsninger også tilladt for poster under `external_directory`, medmindre de tilsidesættes. Tilføj eksplicitte regler, når et værktøj skal begrænses i disse stier, såsom blokering af redigeringer, mens læsninger bevares:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "~/projects/personal/**": "allow"
+    },
+    "edit": {
+      "~/projects/personal/**": "deny"
+    }
+  }
+}
+```
+
+Hold listen fokuseret på betroede stier, og lag ekstra tillad eller afvis regler efter behov for andre værktøjer (for eksempel `bash`).
+
+---
+
+## Tilgængelige tilladelser
+
+OpenCode tilladelser indtastes efter værktøjsnavn plus et par sikkerhedsafskærmninger:
+
+- `read` — læser en fil (matcher filstien)
+- `edit` — alle filændringer (dækker `edit`, `write`, `patch`, `multiedit`)
+- `glob` — fil-globing (matcher glob-mønsteret)
+- `grep` — indholdssøgning (matcher regex-mønsteret)
+- `list` — viser filer i en mappe (matcher mappestien)
+- `bash` — kører shell-kommandoer (matcher parsede kommandoer som `git status --porcelain`)
+- `task` — lancering af underagenter (matcher underagenttypen)
+- `skill` — indlæsning af en færdighed (matcher færdighedsnavnet)
+- `lsp` — kører LSP forespørgsler (i øjeblikket ikke-granulære)
+- `todoread`, `todowrite` — reading/updating todo-listen
+- `webfetch` — henter en URL (matcher URL)
+- `websearch`, `codesearch` — web/code søgning (matcher forespørgslen)
+- `external_directory` — udløses, når et værktøj berører stier uden for projektets arbejdsmappe
+- `doom_loop` — udløses, når det samme værktøjskald gentages 3 gange med identisk input
+
+---
+
+## Standarder
+
+Hvis du ikke angiver noget, starter OpenCode fra tilladelige standardindstillinger:
+
+- De fleste tilladelser er som standard `"allow"`.
+- `doom_loop` og `external_directory` er som standard `"ask"`.
+- `read` er `"allow"`, men `.env` filer nægtes som standard:
+
+```json title="opencode.json"
+{
+  "permission": {
+    "read": {
+      "*": "allow",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow"
+    }
+  }
+}
+```
+
+---
+
+## Hvad "Spørg" gør
+
+Når OpenCode beder om godkendelse, tilbyder brugergrænsefladen tre resultater:
+
+- `once` — godkend netop denne anmodning
+- `always` — godkend fremtidige anmodninger, der matcher de foreslåede mønstre (for resten af ​​den nuværende OpenCode session)
+- `reject` — afvis anmodningen
+
+Sættet af mønstre, som `always` ville godkende, leveres af værktøjet (f.eks. hvidlister bash-godkendelser typisk et sikkert kommandopræfiks som `git status*`).
+
+---
+
+## Agenter
+
+Du kan tilsidesætte tilladelser pr. agent. Agenttilladelser flettes med den globale konfiguration, og agentregler har forrang. [Learn more](/docs/agents#permissions) om agenttilladelser.
+
+:::note
+Se afsnittet [Granular Rules (Object Syntax)](#granular-rules-object-syntax) ovenfor for mere detaljerede mønstermatchningseksempler.
+:::
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "bash": {
+      "*": "ask",
+      "git *": "allow",
+      "git commit *": "deny",
+      "git push *": "deny",
+      "grep *": "allow"
+    }
+  },
+  "agent": {
+    "build": {
+      "permission": {
+        "bash": {
+          "*": "ask",
+          "git *": "allow",
+          "git commit *": "ask",
+          "git push *": "deny",
+          "grep *": "allow"
+        }
+      }
+    }
+  }
+}
+```
+
+Du kan også konfigurere agenttilladelser i Markdown:
+
+```markdown title="~/.config/opencode/agents/review.md"
+---
+description: Code review without edits
+mode: subagent
+permission:
+  edit: deny
+  bash: ask
+  webfetch: deny
+---
+
+Only analyze code and suggest changes.
+```
+
+:::tip
+Brug mønstermatchning til kommandoer med argumenter. `"grep *"` tillader `grep pattern file.txt`, mens `"grep"` alene ville blokere det. Kommandoer som `git status` fungerer for standardadfærd, men kræver eksplicit tilladelse (som `"git status *"`), når argumenter sendes.
+:::
