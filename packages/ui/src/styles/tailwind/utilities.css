@@ -49,6 +49,19 @@
   text-align: left;
 }
 
+@utility marquee {
+  animation: marquee var(--marquee-duration, 2s) linear infinite alternate;
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(-1 * var(--overflow-width, 0px)));
+  }
+}
+
 @utility fade-up-text {
   animation: fadeUp 0.4s ease-out forwards;
   opacity: 0;

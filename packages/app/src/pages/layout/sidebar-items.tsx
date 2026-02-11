@@ -14,7 +14,7 @@ import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { getFilename } from "@opencode-ai/util/path"
 import { type Message, type Session, type TextPart } from "@opencode-ai/sdk/v2/client"
-import { For, Match, Show, Switch, createMemo, onCleanup, type Accessor, type JSX } from "solid-js"
+import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup, type Accessor, type JSX } from "solid-js"
 import { agentColor } from "@/utils/agent"
 
 const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
@@ -142,14 +142,44 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
     return text?.text
   }
 
+  const [itemHovered, setItemHovered] = createSignal(false)
+  const [overflows, setOverflows] = createSignal(false)
+  const marquee = createMemo(() => itemHovered() && overflows())
+
+  let titleRef: HTMLSpanElement | undefined
+  let containerRef: HTMLDivElement | undefined
+  createEffect(() => {
+    if (!titleRef || !containerRef || !itemHovered()) return
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!titleRef || !containerRef) return
+        const titleWidth = titleRef.scrollWidth
+        const containerWidth = containerRef.offsetWidth
+        if (titleWidth <= containerWidth) {
+          setOverflows(false)
+          return
+        }
+        const overflowWidth = titleWidth - containerWidth + 8
+        const duration = overflowWidth / 40
+        titleRef.style.setProperty("--overflow-width", `${overflowWidth}px`)
+        titleRef.style.setProperty("--marquee-duration", `${duration}s`)
+        setOverflows(true)
+      })
+    })
+  })
+
   const item = (
     <A
       href={`/${props.slug}/session/${props.session.id}`}
       class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none transition-[padding] ${props.mobile ? "pr-7" : ""} group-hover/session:pr-7 group-focus-within/session:pr-7 group-active/session:pr-7 ${props.dense ? "py-0.5" : "py-1"}`}
-      onPointerEnter={scheduleHoverPrefetch}
-      onPointerLeave={cancelHoverPrefetch}
-      onMouseEnter={scheduleHoverPrefetch}
-      onMouseLeave={cancelHoverPrefetch}
+      onPointerEnter={() => {
+        setItemHovered(true)
+        scheduleHoverPrefetch()
+      }}
+      onPointerLeave={() => {
+        setItemHovered(false)
+        cancelHoverPrefetch()
+      }}
       onFocus={() => props.prefetchSession(props.session, "high")}
       onClick={() => {
         props.setHoverSession(undefined)
@@ -177,9 +207,18 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
             </Match>
           </Switch>
         </div>
-        <span class="text-14-regular text-text-strong grow-1 min-w-0 overflow-hidden text-ellipsis truncate">
-          {props.session.title}
-        </span>
+        <div ref={containerRef} class="grow-1 min-w-0 overflow-hidden">
+          <span
+            ref={titleRef}
+            class="text-14-regular text-text-strong whitespace-nowrap"
+            classList={{
+              "inline-block marquee": marquee(),
+              "block overflow-hidden text-ellipsis": !marquee(),
+            }}
+          >
+            {props.session.title}
+          </span>
+        </div>
         <Show when={props.session.summary}>
           {(summary) => (
             <div class="group-hover/session:hidden group-active/session:hidden group-focus-within/session:hidden">
