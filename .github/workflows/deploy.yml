@@ -21,6 +21,15 @@ jobs:
         with:
           node-version: "24"
 
+      # Workaround for Pulumi version conflict:
+      # GitHub runners have Pulumi 3.212.0+ pre-installed, which removed the -root flag
+      # from pulumi-language-nodejs (see https://github.com/pulumi/pulumi/pull/21065).
+      # SST 3.17.x uses Pulumi SDK 3.210.0 which still passes -root, causing a conflict.
+      # Removing the system language plugin forces SST to use its bundled compatible version.
+      # TODO: Remove when sst supports Pulumi >3.210.0
+      - name: Fix Pulumi version conflict
+        run: sudo rm -f /usr/local/bin/pulumi-language-nodejs
+
       - run: bun sst deploy --stage=${{ github.ref_name }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

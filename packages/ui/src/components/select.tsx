@@ -11,6 +11,7 @@ export type SelectProps<T> = Omit<ComponentProps<typeof Kobalte<T>>, "value" | "
   value?: (x: T) => string
   label?: (x: T) => string
   groupBy?: (x: T) => string
+  valueClass?: ComponentProps<"div">["class"]
   onSelect?: (value: T | undefined) => void
   onHighlight?: (value: T | undefined) => (() => void) | void
   class?: ComponentProps<"div">["class"]
@@ -30,6 +31,7 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
     "value",
     "label",
     "groupBy",
+    "valueClass",
     "onSelect",
     "onHighlight",
     "onOpenChange",
@@ -140,7 +142,7 @@ export function Select<T>(props: SelectProps<T> & Omit<ButtonProps, "children">)
           [local.class ?? ""]: !!local.class,
         }}
       >
-        <Kobalte.Value<T> data-slot="select-select-trigger-value">
+        <Kobalte.Value<T> data-slot="select-select-trigger-value" class={local.valueClass}>
           {(state) => {
             const selected = state.selectedOption() ?? local.current
             if (!selected) return local.placeholder || ""

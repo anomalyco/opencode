@@ -28,6 +28,8 @@ export const dict = {
   "command.settings.open": "Open settings",
   "command.session.previous": "Previous session",
   "command.session.next": "Next session",
+  "command.session.previous.unseen": "Previous unread session",
+  "command.session.next.unseen": "Next unread session",
   "command.session.archive": "Archive session",
 
   "command.palette": "Command palette",
@@ -42,9 +44,10 @@ export const dict = {
 
   "command.session.new": "New session",
   "command.file.open": "Open file",
-  "command.file.open.description": "Search files and commands",
+  "command.tab.close": "Close tab",
   "command.context.addSelection": "Add selection to context",
   "command.context.addSelection.description": "Add selected lines from the current file",
+  "command.input.focus": "Focus input",
   "command.terminal.toggle": "Toggle terminal",
   "command.fileTree.toggle": "Toggle file tree",
   "command.review.toggle": "Toggle review",
@@ -68,6 +71,8 @@ export const dict = {
   "command.model.variant.cycle.description": "Switch to the next effort level",
   "command.permissions.autoaccept.enable": "Auto-accept edits",
   "command.permissions.autoaccept.disable": "Stop auto-accepting edits",
+  "command.workspace.toggle": "Toggle workspaces",
+  "command.workspace.toggle.description": "Enable or disable multiple workspaces in the sidebar",
   "command.session.undo": "Undo",
   "command.session.undo.description": "Undo the last message",
   "command.session.redo": "Redo",
@@ -81,7 +86,7 @@ export const dict = {
   "command.session.unshare": "Unshare session",
   "command.session.unshare.description": "Stop sharing this session",
 
-  "palette.search.placeholder": "Search files and commands",
+  "palette.search.placeholder": "Search files, commands, and sessions",
   "palette.empty": "No results found",
   "palette.group.commands": "Commands",
   "palette.group.files": "Files",
@@ -145,6 +150,43 @@ export const dict = {
   "provider.connect.toast.connected.title": "{{provider}} connected",
   "provider.connect.toast.connected.description": "{{provider}} models are now available to use.",
 
+  "provider.custom.title": "Custom provider",
+  "provider.custom.description.prefix": "Configure an OpenAI-compatible provider. See the ",
+  "provider.custom.description.link": "provider config docs",
+  "provider.custom.description.suffix": ".",
+  "provider.custom.field.providerID.label": "Provider ID",
+  "provider.custom.field.providerID.placeholder": "myprovider",
+  "provider.custom.field.providerID.description": "Lowercase letters, numbers, hyphens, or underscores",
+  "provider.custom.field.name.label": "Display name",
+  "provider.custom.field.name.placeholder": "My AI Provider",
+  "provider.custom.field.baseURL.label": "Base URL",
+  "provider.custom.field.baseURL.placeholder": "https://api.myprovider.com/v1",
+  "provider.custom.field.apiKey.label": "API key",
+  "provider.custom.field.apiKey.placeholder": "API key",
+  "provider.custom.field.apiKey.description": "Optional. Leave empty if you manage auth via headers.",
+  "provider.custom.models.label": "Models",
+  "provider.custom.models.id.label": "ID",
+  "provider.custom.models.id.placeholder": "model-id",
+  "provider.custom.models.name.label": "Name",
+  "provider.custom.models.name.placeholder": "Display Name",
+  "provider.custom.models.remove": "Remove model",
+  "provider.custom.models.add": "Add model",
+  "provider.custom.headers.label": "Headers (optional)",
+  "provider.custom.headers.key.label": "Header",
+  "provider.custom.headers.key.placeholder": "Header-Name",
+  "provider.custom.headers.value.label": "Value",
+  "provider.custom.headers.value.placeholder": "value",
+  "provider.custom.headers.remove": "Remove header",
+  "provider.custom.headers.add": "Add header",
+  "provider.custom.error.providerID.required": "Provider ID is required",
+  "provider.custom.error.providerID.format": "Use lowercase letters, numbers, hyphens, or underscores",
+  "provider.custom.error.providerID.exists": "That provider ID already exists",
+  "provider.custom.error.name.required": "Display name is required",
+  "provider.custom.error.baseURL.required": "Base URL is required",
+  "provider.custom.error.baseURL.format": "Must start with http:// or https://",
+  "provider.custom.error.required": "Required",
+  "provider.custom.error.duplicate": "Duplicate",
+
   "provider.disconnect.toast.disconnected.title": "{{provider}} disconnected",
   "provider.disconnect.toast.disconnected.description": "{{provider}} models are no longer available.",
 
@@ -166,8 +208,8 @@ export const dict = {
   "model.tooltip.context": "Context limit {{limit}}",
 
   "common.search.placeholder": "Search",
-  "common.goBack": "Back",
-  "common.goForward": "Forward",
+  "common.goBack": "Navigate back",
+  "common.goForward": "Navigate forward",
   "common.loading": "Loading",
   "common.loading.ellipsis": "...",
   "common.cancel": "Cancel",
@@ -215,7 +257,10 @@ export const dict = {
   "prompt.popover.emptyResults": "No matching results",
   "prompt.popover.emptyCommands": "No matching commands",
   "prompt.dropzone.label": "Drop images or PDFs here",
+  "prompt.dropzone.file.label": "Drop to @mention file",
   "prompt.slash.badge.custom": "custom",
+  "prompt.slash.badge.skill": "skill",
+  "prompt.slash.badge.mcp": "mcp",
   "prompt.context.active": "active",
   "prompt.context.includeActiveFile": "Include active file",
   "prompt.context.removeActiveFile": "Remove active file from context",
@@ -234,6 +279,7 @@ export const dict = {
   "prompt.toast.shellSendFailed.title": "Failed to send shell command",
   "prompt.toast.commandSendFailed.title": "Failed to send command",
   "prompt.toast.promptSendFailed.title": "Failed to send prompt",
+  "prompt.toast.promptSendFailed.description": "Unable to retrieve session",
 
   "dialog.mcp.title": "MCPs",
   "dialog.mcp.description": "{{enabled}} of {{total}} enabled",
@@ -337,6 +383,7 @@ export const dict = {
   "language.ar": "العربية",
   "language.no": "Norsk",
   "language.br": "Português (Brasil)",
+  "language.bs": "Bosanski",
   "language.th": "ไทย",
 
   "toast.language.title": "Language",
@@ -344,6 +391,11 @@ export const dict = {
 
   "toast.theme.title": "Theme switched",
   "toast.scheme.title": "Color scheme",
+
+  "toast.workspace.enabled.title": "Workspaces enabled",
+  "toast.workspace.enabled.description": "Multiple worktrees are now shown in the sidebar",
+  "toast.workspace.disabled.title": "Workspaces disabled",
+  "toast.workspace.disabled.description": "Only the main worktree is shown in the sidebar",
 
   "toast.permissions.autoaccept.on.title": "Auto-accepting edits",
   "toast.permissions.autoaccept.on.description": "Edit and write permissions will be automatically approved",
@@ -392,6 +444,7 @@ export const dict = {
     "Root element not found. Did you forget to add it to your index.html? Or maybe the id attribute got misspelled?",
 
   "error.globalSync.connectFailed": "Could not connect to server. Is there a server running at `{{url}}`?",
+  "directory.error.invalidUrl": "Invalid directory in URL.",
 
   "error.chain.unknown": "Unknown error",
   "error.chain.causedBy": "Caused by:",
@@ -441,6 +494,7 @@ export const dict = {
 
   "session.files.selectToOpen": "Select a file to open",
   "session.files.all": "All files",
+  "session.files.binaryContent": "Binary file (content cannot be displayed)",
 
   "session.messages.renderEarlier": "Render earlier messages",
   "session.messages.loadingEarlier": "Loading earlier messages...",
@@ -457,6 +511,11 @@ export const dict = {
 
   "session.header.search.placeholder": "Search {{project}}",
   "session.header.searchFiles": "Search files",
+  "session.header.openIn": "Open in",
+  "session.header.open.action": "Open {{app}}",
+  "session.header.open.ariaLabel": "Open in {{app}}",
+  "session.header.open.menu": "Open options",
+  "session.header.open.copyPath": "Copy Path",
 
   "status.popover.trigger": "Status",
   "status.popover.ariaLabel": "Server configurations",
@@ -524,11 +583,15 @@ export const dict = {
   "settings.section.server": "Server",
   "settings.tab.general": "General",
   "settings.tab.shortcuts": "Shortcuts",
+  "settings.desktop.section.wsl": "WSL",
+  "settings.desktop.wsl.title": "WSL integration",
+  "settings.desktop.wsl.description": "Run the OpenCode server inside WSL on Windows.",
 
   "settings.general.section.appearance": "Appearance",
   "settings.general.section.notifications": "System notifications",
   "settings.general.section.updates": "Updates",
   "settings.general.section.sounds": "Sound effects",
+  "settings.general.section.display": "Display",
 
   "settings.general.row.language.title": "Language",
   "settings.general.row.language.description": "Change the display language for OpenCode",
@@ -538,6 +601,11 @@ export const dict = {
   "settings.general.row.theme.description": "Customise how OpenCode is themed.",
   "settings.general.row.font.title": "Font",
   "settings.general.row.font.description": "Customise the mono font used in code blocks",
+
+  "settings.general.row.wayland.title": "Use native Wayland",
+  "settings.general.row.wayland.description": "Disable X11 fallback on Wayland. Requires restart.",
+  "settings.general.row.wayland.tooltip":
+    "On Linux with mixed refresh-rate monitors, native Wayland can be more stable.",
 
   "settings.general.row.releaseNotes.title": "Release notes",
   "settings.general.row.releaseNotes.description": "Show What's New popups after updates",

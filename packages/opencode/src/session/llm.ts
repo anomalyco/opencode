@@ -25,8 +25,7 @@ import { Auth } from "@/auth"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
-
-  export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
+  export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 
   export type StreamInput = {
     user: MessageV2.User
@@ -149,14 +148,7 @@ export namespace LLM {
     )
 
     const maxOutputTokens =
-      isCodex || provider.id.includes("github-copilot")
-        ? undefined
-        : ProviderTransform.maxOutputTokens(
-            input.model.api.npm,
-            params.options,
-            input.model.limit.output,
-            OUTPUT_TOKEN_MAX,
-          )
+      isCodex || provider.id.includes("github-copilot") ? undefined : ProviderTransform.maxOutputTokens(input.model)
 
     const tools = await resolveTools(input)
 
@@ -233,19 +225,12 @@ export namespace LLM {
       },
       maxRetries: input.retries ?? 0,
       messages: [
-        ...(isCodex
-          ? [
-              {
-                role: "user",
-                content: system.join("\n\n"),
-              } as ModelMessage,
-            ]
-          : system.map(
-              (x): ModelMessage => ({
-                role: "system",
-                content: x,
-              }),
-            )),
+        ...system.map(
+          (x): ModelMessage => ({
+            role: "system",
+            content: x,
+          }),
+        ),
         ...input.messages,
       ],
       model: wrapLanguageModel({

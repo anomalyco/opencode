@@ -1,18 +1,21 @@
 export const dict = {
   "ui.sessionReview.title": "세션 변경 사항",
+  "ui.sessionReview.title.lastTurn": "마지막 턴 변경 사항",
   "ui.sessionReview.diffStyle.unified": "통합 보기",
   "ui.sessionReview.diffStyle.split": "분할 보기",
   "ui.sessionReview.expandAll": "모두 펼치기",
   "ui.sessionReview.collapseAll": "모두 접기",
-
   "ui.sessionReview.change.added": "추가됨",
   "ui.sessionReview.change.removed": "삭제됨",
+  "ui.sessionReview.change.modified": "수정됨",
+
   "ui.lineComment.label.prefix": "",
   "ui.lineComment.label.suffix": "에 댓글 달기",
   "ui.lineComment.editorLabel.prefix": "",
   "ui.lineComment.editorLabel.suffix": "에 댓글 작성 중",
   "ui.lineComment.placeholder": "댓글 추가",
   "ui.lineComment.submit": "댓글",
+
   "ui.sessionTurn.steps.show": "단계 표시",
   "ui.sessionTurn.steps.hide": "단계 숨기기",
   "ui.sessionTurn.summary.response": "응답",

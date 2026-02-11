@@ -57,6 +57,14 @@ const unsafeCSS = `
   background-color: var(--diffs-bg-selection-text);
 }
 
+::highlight(opencode-find) {
+  background-color: rgb(from var(--surface-warning-base) r g b / 0.35);
+}
+
+::highlight(opencode-find-current) {
+  background-color: rgb(from var(--surface-warning-strong) r g b / 0.55);
+}
+
 [data-diffs] [data-comment-selected]:not([data-selected-line]) [data-column-content] {
   box-shadow: inset 0 0 0 9999px var(--diffs-bg-selection);
 }
